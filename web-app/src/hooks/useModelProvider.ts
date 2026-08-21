@@ -13,6 +13,9 @@ import { turboquantDefaultActive } from '@/lib/turboquantDefaultMigration'
  */
 const LEGACY_LLAMACPP_PROVIDER = 'llamacpp'
 
+/** The local provider selected by default on fresh installs. */
+const GINFER_DEFAULT_PROVIDER = 'ginfer'
+
 /**
  * Identity mapping for a local llama.cpp provider id.
  *
@@ -49,9 +52,13 @@ export const useModelProvider = create<ModelProviderState>()(
   persist(
     (set, get) => ({
       providers: [],
-      // Upstream is the fresh-install default on every desktop platform.
-      // TurboQuant remains separately selectable and persisted when chosen.
-      selectedProvider: LOCAL_LLAMACPP_PROVIDER,
+      // Fresh installs default to the ginfer local provider. This initial
+      // value only applies when no state has been persisted yet — existing
+      // installs keep their stored `selectedProvider` (the migrations below
+      // never rewrite it). Unsupported machines (no NVIDIA GPU / wrong OS)
+      // still register the provider but surface a clear hardware error when a
+      // model is actually loaded or imported, so the default is safe.
+      selectedProvider: GINFER_DEFAULT_PROVIDER,
       selectedModel: null,
       deletedModels: [],
       getModelBy: (modelId: string) => {

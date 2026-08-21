@@ -23,8 +23,13 @@ import type { CatalogModel } from '@/services/models/types'
  */
 export const LLAMACPP_PROVIDERS = ['llamacpp-upstream', 'llamacpp'] as const
 export const MLX_PROVIDER = 'mlx'
+export const GINFER_PROVIDER = 'ginfer'
 /** Every provider that keeps model files on this device. */
-export const LOCAL_PROVIDERS = [...LLAMACPP_PROVIDERS, MLX_PROVIDER] as const
+export const LOCAL_PROVIDERS = [
+  ...LLAMACPP_PROVIDERS,
+  MLX_PROVIDER,
+  GINFER_PROVIDER,
+] as const
 
 /**
  * The MLX engine sanitizes ids with its own rules (dots survive, spaces become
@@ -61,6 +66,7 @@ function collectLocalModels(
 
   for (const name of LLAMACPP_PROVIDERS) add(modelsOf(name), false)
   add(modelsOf(MLX_PROVIDER), true)
+  add(modelsOf(GINFER_PROVIDER), false)
 
   return out
 }

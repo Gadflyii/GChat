@@ -19,6 +19,8 @@ export interface DownloadResumeParams {
   mmprojPath?: string
   hfToken?: string
   skipVerification?: boolean
+  /** Engine the download routes to (e.g. `ginfer`); undefined = default. */
+  provider?: string
 }
 
 // Zustand store for thinking block state

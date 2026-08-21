@@ -47,7 +47,7 @@ import {
 // silently no-op because the EngineManager has no 'llamacpp' entry.
 const defaultProvider = LOCAL_LLAMACPP_PROVIDER
 const HUGGING_FACE_SEARCH_LIMIT = 10
-const localProviders = ['llamacpp', 'llamacpp-upstream', 'mlx'] as const
+const localProviders = ['llamacpp', 'llamacpp-upstream', 'mlx', 'ginfer'] as const
 type LocalProviderName = (typeof localProviders)[number]
 
 type HuggingFaceRepoSearchResult = Pick<
@@ -417,9 +417,12 @@ export class DefaultModelsService implements ModelsService {
     mmprojPath?: string,
     mmprojSha256?: string,
     mmprojSize?: number,
-    resume: boolean = false
+    resume: boolean = false,
+    provider?: string
   ): Promise<void> {
-    return this.getEngine()?.import(id, {
+    // `provider` routes the import to a specific engine (e.g. `ginfer`);
+    // undefined keeps the platform-default llama.cpp engine.
+    return this.getEngine(provider)?.import(id, {
       modelPath,
       mmprojPath,
       modelSha256,
@@ -436,7 +439,8 @@ export class DefaultModelsService implements ModelsService {
     mmprojPath?: string,
     hfToken?: string,
     skipVerification: boolean = true,
-    resume: boolean = false
+    resume: boolean = false,
+    provider?: string
   ): Promise<void> {
     let modelSha256: string | undefined
     let modelSize: number | undefined
@@ -501,6 +505,7 @@ export class DefaultModelsService implements ModelsService {
       mmprojPath,
       hfToken,
       skipVerification,
+      provider,
     })
 
     // ATO-109: model_download funnel entry. Terminal events are emitted from
@@ -534,7 +539,8 @@ export class DefaultModelsService implements ModelsService {
         mmprojPath,
         mmprojSha256,
         mmprojSize,
-        resume
+        resume,
+        provider
       )
     } catch (error) {
       // ATO-154: a paused download stops the underlying transfer (which rejects
@@ -558,11 +564,14 @@ export class DefaultModelsService implements ModelsService {
   async abortDownload(id: string): Promise<void> {
     const llamacppEngine = this.getEngine(LOCAL_LLAMACPP_PROVIDER)
     const mlxEngine = this.getEngine('mlx')
+    const ginferEngine = this.getEngine('ginfer')
     try {
       await Promise.allSettled(
-        [llamacppEngine?.abortImport(id), mlxEngine?.abortImport(id)].filter(
-          Boolean
-        )
+        [
+          llamacppEngine?.abortImport(id),
+          mlxEngine?.abortImport(id),
+          ginferEngine?.abortImport(id),
+        ].filter(Boolean)
       )
     } finally {
       events.emit(DownloadEvent.onFileDownloadStopped, {

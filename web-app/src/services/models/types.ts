@@ -32,6 +32,13 @@ export interface SafetensorsFile {
 
 export interface CatalogModel {
   model_name: string
+  /**
+   * Curated display name for the entry. `model_name` carries the HuggingFace
+   * repo id, which doubles as the download identity; this field is purely
+   * cosmetic and the Hub falls back to deriving a name from `model_name`
+   * when it is absent.
+   */
+  name?: string
   description: string
   library_name?: string
   developer?: string
@@ -138,7 +145,8 @@ export interface ModelsService {
     mmprojPath?: string,
     mmprojSha256?: string,
     mmprojSize?: number,
-    resume?: boolean
+    resume?: boolean,
+    provider?: string
   ): Promise<void>
   pullModelWithMetadata(
     id: string,
@@ -146,7 +154,8 @@ export interface ModelsService {
     mmprojPath?: string,
     hfToken?: string,
     skipVerification?: boolean,
-    resume?: boolean
+    resume?: boolean,
+    provider?: string
   ): Promise<void>
   abortDownload(id: string): Promise<void>
   deleteModel(id: string, provider?: string): Promise<void>

@@ -158,7 +158,8 @@ export function ModelDetailPanel({
     )
   }
 
-  const name = pick?.title || extractModelName(model.model_name) || model.model_name
+  const name =
+    pick?.title || model.name || extractModelName(model.model_name) || model.model_name
   const repoId = model.model_name.includes('/')
     ? model.model_name
     : `${model.developer ? `${model.developer}/` : ''}${model.model_name}`

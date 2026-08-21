@@ -30,7 +30,7 @@ export function ModelListRow({
   onSelect,
 }: ModelListRowProps) {
   const name =
-    pick?.title || extractModelName(model.model_name) || model.model_name
+    pick?.title || model.name || extractModelName(model.model_name) || model.model_name
   const summary = pick?.summary || model.developer || ''
   const format = modelFormat(model)
 

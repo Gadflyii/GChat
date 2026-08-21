@@ -1,0 +1,108 @@
+[
+  {
+    "key": "model_path",
+    "title": "Model Directory",
+    "description": "Override the models base directory. Leave empty to use the default data folder (<data>/ginfer/models).",
+    "controllerType": "input",
+    "controllerProps": { "value": "", "placeholder": "e.g /path/to/ginfer/models" }
+  },
+  {
+    "key": "binary_path",
+    "title": "ginfer-serve Binary",
+    "description": "Path to the ginfer-serve executable. Leave empty to use the default location (<data>/ginfer/bin/ginfer-serve).",
+    "controllerType": "input",
+    "controllerProps": { "value": "", "placeholder": "e.g /path/to/ginfer-serve" }
+  },
+  {
+    "key": "vision",
+    "title": "Vision",
+    "description": "Launch the server with --vision so image inputs are accepted. Startup-only: requires a reload to change.",
+    "controllerType": "checkbox",
+    "controllerProps": { "value": false }
+  },
+  {
+    "key": "spec",
+    "title": "Speculative Decoding",
+    "description": "Draft backend: auto, none, mtp, or dflash. Startup-only.",
+    "controllerType": "dropdown",
+    "controllerProps": {
+      "value": "auto",
+      "options": ["auto", "none", "mtp", "dflash"],
+      "recommended": "auto"
+    }
+  },
+  {
+    "key": "draft_tokens",
+    "title": "Draft Tokens",
+    "description": "Number of speculative draft tokens (--draft-tokens). 0 leaves the server default.",
+    "controllerType": "input",
+    "controllerProps": { "value": 0, "placeholder": "e.g 3", "type": "number", "textAlign": "right" }
+  },
+  {
+    "key": "kv_dtype",
+    "title": "KV Cache Dtype",
+    "description": "KV cache storage: bf16 or int8. Empty leaves the server default. Startup-only.",
+    "controllerType": "dropdown",
+    "controllerProps": {
+      "value": "",
+      "options": ["", "bf16", "int8"],
+      "recommended": ""
+    }
+  },
+  {
+    "key": "lm_head_draft",
+    "title": "LM Head Draft",
+    "description": "Use the LM head for drafting (--lm-head-draft). Startup-only.",
+    "controllerType": "checkbox",
+    "controllerProps": { "value": false }
+  },
+  {
+    "key": "max_context",
+    "title": "Max Context",
+    "description": "Maximum context window (--max-context). 0 leaves the server default (2048).",
+    "controllerType": "input",
+    "controllerProps": { "value": 0, "placeholder": "e.g 16384", "type": "number", "textAlign": "right" }
+  },
+  {
+    "key": "kv_capacity",
+    "title": "KV Capacity",
+    "description": "Shared KV capacity (--kv-capacity). A number or 'auto'. Empty follows max-context.",
+    "controllerType": "input",
+    "controllerProps": { "value": "", "placeholder": "e.g auto" }
+  },
+  {
+    "key": "prefill_chunk",
+    "title": "Prefill Chunk",
+    "description": "Prefill chunk size (--prefill-chunk). Must be a multiple of 128. 0 leaves the server default.",
+    "controllerType": "input",
+    "controllerProps": { "value": 0, "placeholder": "e.g 2048", "type": "number", "textAlign": "right" }
+  },
+  {
+    "key": "max_concurrency",
+    "title": "Max Concurrency",
+    "description": "Maximum concurrent generations (--max-concurrency, 1-8). 0 leaves the server default.",
+    "controllerType": "input",
+    "controllerProps": { "value": 0, "placeholder": "e.g 4", "type": "number", "textAlign": "right" }
+  },
+  {
+    "key": "no_cuda_graph",
+    "title": "Disable CUDA Graph",
+    "description": "Start the server with --no-cuda-graph. Startup-only.",
+    "controllerType": "checkbox",
+    "controllerProps": { "value": false }
+  },
+  {
+    "key": "auto_unload",
+    "title": "Auto Unload",
+    "description": "Unload any other loaded GInfer model before loading a new one.",
+    "controllerType": "checkbox",
+    "controllerProps": { "value": true }
+  },
+  {
+    "key": "timeout",
+    "title": "Timeout for GInfer",
+    "description": "Model load timeout in seconds.",
+    "controllerType": "input",
+    "controllerProps": { "value": "600", "placeholder": "e.g 600", "type": "number", "textAlign": "right" }
+  }
+]

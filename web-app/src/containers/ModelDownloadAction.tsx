@@ -9,10 +9,15 @@ import { DeleteModelAction } from '@/containers/hub/DeleteModelAction'
 import { markDownloadCancellationRequested } from '@/lib/downloadCancellation'
 import {
   findInstalledLocalModel,
+  GINFER_PROVIDER,
   LLAMACPP_PROVIDERS,
   quantModelIds,
 } from '@/lib/hub-installed'
 import { CatalogModel } from '@/services/models/types'
+
+// Stable module-level reference so `providerNames` below never allocates a new
+// array per render (it feeds a useMemo dependency array).
+const GINFER_PROVIDER_NAMES = [GINFER_PROVIDER] as const
 import { switchToModel } from '@/utils/switchModel'
 import { IconDownload, IconX } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -64,8 +69,38 @@ export const ModelDownloadAction = ({
 
   const navigate = useNavigate()
 
+  // Ginfer catalog entries download through the generic GGUF mechanism but
+  // register on the `ginfer` engine, not a llama.cpp one. Route install
+  // detection, the download target and the post-download "use" action to the
+  // matching provider so the row flips to "New chat" once on disk.
+  const isGinfer = model.library_name === 'ginfer'
+  const providerNames = isGinfer ? GINFER_PROVIDER_NAMES : LLAMACPP_PROVIDERS
+
   const handleUseModel = useCallback(
     (modelId: string) => {
+      if (isGinfer) {
+        useModelProvider
+          .getState()
+          .selectModelProvider(GINFER_PROVIDER, modelId)
+        switchToModel({
+          modelId,
+          providerName: GINFER_PROVIDER,
+          serviceHub,
+        }).catch((error) => {
+          console.error('[ModelDownloadAction] switchToModel failed:', error)
+        })
+        navigate({
+          to: route.home,
+          params: {},
+          search: {
+            threadModel: {
+              id: modelId,
+              provider: GINFER_PROVIDER,
+            },
+          },
+        })
+        return
+      }
       // Resolve the target provider at click-time so we always see the
       // freshest providers/models snapshot — not whatever was captured at
       // render. Prefer the vanilla upstream `llama.cpp` provider when it
@@ -126,7 +161,7 @@ export const ModelDownloadAction = ({
         },
       })
     },
-    [navigate, serviceHub]
+    [navigate, serviceHub, isGinfer]
   )
 
   const handleDownloadModel = useCallback(async () => {
@@ -144,10 +179,11 @@ export const ModelDownloadAction = ({
               (e) => e.model_id.toLowerCase() === 'mmproj-f16'
             ) || model.mmproj_models?.[0]
           )?.path,
-          huggingfaceToken,
-          true,
-          resumableDownloads.has(variant.model_id)
-        )
+           huggingfaceToken,
+           true,
+           resumableDownloads.has(variant.model_id),
+           isGinfer ? GINFER_PROVIDER : undefined
+         )
     } catch (error) {
       // If pull rejects before any DownloadEvent fires, the global listener in
       // DownloadManegement.tsx never clears localDownloadingModels and the row
@@ -178,6 +214,7 @@ export const ModelDownloadAction = ({
     clearDownloadOrigin,
     resumableDownloads,
     t,
+    isGinfer,
   ])
 
   const handleCancelDownload = useCallback(() => {
@@ -208,9 +245,9 @@ export const ModelDownloadAction = ({
       findInstalledLocalModel(
         providers,
         quantModelIds(model, variant.model_id),
-        LLAMACPP_PROVIDERS
+        providerNames
       ),
-    [providers, model, variant.model_id]
+    [providers, model, variant.model_id, providerNames]
   )
   const isDownloaded = installed !== null
 

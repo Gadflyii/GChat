@@ -9,12 +9,16 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-215 records, 2026-05-19 → 2026-08-21.
+218 records, 2026-05-19 → 2026-08-21.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-08-21** — [Route ginfer sessions through the 1337 proxy like the other local backends](2026-08-21-ginfer-sessions-route-through-the-1337-proxy.md)
+- **2026-08-21** — [Use ginfer as the sole inference backend in the gchat fork](2026-08-21-use-ginfer-as-the-sole-inference-backend-in-the-gchat-fork.md)
+- **2026-08-21** — [Gate ginfer on NVIDIA hardware and route its catalog downloads to the ginfer engine](2026-08-21-gate-ginfer-on-nvidia-hardware-and-route-its-catalog-downloads.md)
+- **2026-08-21** — [Brand the fork GChat and rename every legacy jan / Atomic identifier](2026-08-21-brand-the-fork-gchat-and-rename-every-legacy-jan-atomic-identifier.md)
 - **2026-08-13** — [Mirror and sign upstream llama.cpp releases in atomic-chat-conf](2026-08-13-mirror-and-sign-upstream-llama-cpp-in-atomic-chat-conf.md)
 - **2026-08-13** — [Add Windows ROCm to the upstream backend matrix](2026-08-13-add-windows-rocm-to-the-upstream-backend-matrix.md)
 - **2026-07-28** — [Ship dual llama providers on Windows and Linux](2026-07-28-ship-dual-llama-providers-on-windows-and-linux.md)

@@ -259,6 +259,47 @@ export const RECOMMENDED_MODEL_FALLBACKS: Readonly<
  * Keep it small (~10 entries) — the goal is for Hub to render something
  * useful before the real catalog lands, not to mirror the full curated set.
  */
+
+/**
+ * One `.ginfer` weights file per repo. File sizes and hashes are unknown
+ * until the repos are published, so the download resolves them from the live
+ * HuggingFace repo at download time (the same deferral GGUF entries use via
+ * `fetchHuggingFaceRepo`) — an unpublished repo degrades to a clean download
+ * error, never a crash.
+ */
+const ginferEntry = ({
+  id,
+  name,
+  repo,
+  tags,
+}: {
+  id: string
+  name: string
+  repo: string
+  tags: string
+}): CatalogModel => ({
+  model_name: repo,
+  name,
+  developer: 'GadflyII',
+  library_name: 'ginfer',
+  description: `**Tags**: ${tags}`,
+  downloads: 0,
+  num_quants: 1,
+  quants: [
+    {
+      model_id: id,
+      path: `https://huggingface.co/${repo}/resolve/main/model.ginfer`,
+      file_size: '',
+    },
+  ],
+  num_mmproj: 0,
+  mmproj_models: [],
+  num_safetensors: 0,
+  safetensors_files: [],
+  is_mlx: false,
+  readme: `https://huggingface.co/${repo}/resolve/main/README.md`,
+})
+
 export const BASELINE_MODEL_CATALOG: ReadonlyArray<CatalogModel> = [
   {
     model_name: 'AtomicChat/gemma4-e4b-it-GGUF',
@@ -382,6 +423,30 @@ export const BASELINE_MODEL_CATALOG: ReadonlyArray<CatalogModel> = [
     readme:
       'https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit/resolve/main/README.md',
   },
+  ginferEntry({
+    id: 'qwen3.8-27b-int-autoround',
+    name: 'Qwen3.8 27B (int autoround)',
+    repo: 'GadflyII/Qwen3.8-27B-NInfer',
+    tags: 'ginfer, qwen3, nvidia, cuda, conversational',
+  }),
+  ginferEntry({
+    id: 'qwen3.8-27b-nvfp4',
+    name: 'Qwen3.8 27B (NVFP4)',
+    repo: 'GadflyII/Qwen3.8-27B-nvfp4-NInfer',
+    tags: 'ginfer, qwen3, nvidia, cuda, conversational',
+  }),
+  ginferEntry({
+    id: 'muse-glimmer-30b-int-autoround',
+    name: 'Muse Glimmer 30B (int autoround)',
+    repo: 'GadflyII/Muse-Glimmer-30B-NInfer',
+    tags: 'ginfer, nvidia, cuda, conversational',
+  }),
+  ginferEntry({
+    id: 'muse-glimmer-30b-nvfp4',
+    name: 'Muse Glimmer 30B (NVFP4)',
+    repo: 'GadflyII/Muse-Glimmer-30B-nvfp4-NInfer',
+    tags: 'ginfer, nvidia, cuda, conversational',
+  }),
 ]
 
 export const JAN_V2_VL_MODEL_HF_REPO = 'janhq/Jan-v2-VL-high-gguf'

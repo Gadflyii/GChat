@@ -653,7 +653,8 @@ export function DownloadManagement() {
           params.mmprojPath,
           params.hfToken,
           params.skipVerification ?? true,
-          true
+          true,
+          params.provider
         )
         .catch((error) => {
           console.error('[DownloadManagement] resume failed:', error)
