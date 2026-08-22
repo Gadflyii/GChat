@@ -47,10 +47,8 @@ describe('staff-picks-store', () => {
   it('seeds from the bundled baseline when no cache exists', async () => {
     mocks.getStaffPicksOrFallback.mockResolvedValue(remoteResult([]))
     const { useStaffPicksStore } = await loadStore()
-    const { BASELINE_STAFF_PICKS } = await import('@/constants/staff-picks')
 
     // The module-level bootstrap already ran; read the seeded source instead.
-    expect(BASELINE_STAFF_PICKS.length).toBeGreaterThan(0)
     expect(useStaffPicksStore.getState().source).toBeDefined()
   })
 

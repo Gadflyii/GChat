@@ -4,7 +4,7 @@ import {
   isEnabled as isAutostartEnabled,
 } from '@tauri-apps/plugin-autostart'
 import type { AppService } from '@/services/app/types'
-import type { AutostartPreference } from '@janhq/core'
+import type { AutostartPreference } from '@gchat/core'
 
 type AutostartPreferenceStore = Pick<
   AppService,

@@ -43,10 +43,6 @@ vi.mock('@/containers/ModelDownloadAction', () => ({
   ),
 }))
 
-vi.mock('@/containers/MlxModelDownloadAction', () => ({
-  MlxModelDownloadAction: () => <button type="button">download mlx</button>,
-}))
-
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { DownloadOptionsSelect } from '../DownloadOptionsSelect'
 
@@ -94,7 +90,7 @@ const installQuant = (modelId: string) =>
     providers: [
       {
         active: true,
-        provider: 'llamacpp',
+        provider: 'ginfer',
         settings: [],
         models: [{ id: modelId }],
       } as ModelProvider,
@@ -208,30 +204,6 @@ describe('DownloadOptionsSelect', () => {
     expect(screen.queryByLabelText('Good fit')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Should run')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Too large')).not.toBeInTheDocument()
-  })
-
-  it('sends an MLX repo straight to the MLX download action', () => {
-    const mlx = {
-      model_name: 'mlx-community/Qwen3.5-9B-MLX-4bit',
-      developer: 'mlx-community',
-      is_mlx: true,
-      num_quants: 0,
-      quants: [],
-      mmproj_models: [],
-      safetensors_files: [
-        { rfilename: 'model-00001-of-00002.safetensors', file_size: '3.00 GB' },
-        { rfilename: 'model-00002-of-00002.safetensors', file_size: '2.00 GB' },
-      ],
-    } as unknown as CatalogModel
-
-    render(<DownloadOptionsSelect model={mlx} budgetBytes={16 * GB} />)
-
-    expect(screen.getByText('download mlx')).toBeInTheDocument()
-    expect(screen.getByText('MLX')).toBeInTheDocument()
-    // Sharded safetensors are summed, not reported one shard at a time.
-    expect(screen.getByText('5.0 GB')).toBeInTheDocument()
-    expect(screen.getByLabelText('Good fit')).toBeInTheDocument()
-    expect(screen.queryByText('Good fit')).not.toBeInTheDocument()
   })
 })
 

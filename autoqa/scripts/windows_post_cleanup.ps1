@@ -7,68 +7,68 @@ param(
 
 Write-Host "Cleaning up after tests..."
 
-# Kill any running Jan processes (both regular and nightly)
-Get-Process -Name "Jan" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Get-Process -Name "jan" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Get-Process -Name "Jan-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Get-Process -Name "jan-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Kill any running GChat processes (both regular and nightly)
+Get-Process -Name "GChat" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "gchat" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "GChat-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "gchat-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-# Remove Jan data folders (both regular and nightly)
-$janAppData = "$env:APPDATA\Jan"
-$janNightlyAppData = "$env:APPDATA\Jan-nightly"
-$janLocalAppData = "$env:LOCALAPPDATA\jan.ai.app"
-$janNightlyLocalAppData = "$env:LOCALAPPDATA\jan-nightly.ai.app"
-$janProgramsPath = "$env:LOCALAPPDATA\Programs\Jan"
-$janNightlyProgramsPath = "$env:LOCALAPPDATA\Programs\Jan-nightly"
+# Remove GChat data folders (both regular and nightly)
+$gchatAppData = "$env:APPDATA\GChat"
+$gchatNightlyAppData = "$env:APPDATA\GChat-nightly"
+$gchatLocalAppData = "$env:LOCALAPPDATA\app.gchat"
+$gchatNightlyLocalAppData = "$env:LOCALAPPDATA\app.gchat-nightly"
+$gchatProgramsPath = "$env:LOCALAPPDATA\Programs\gchat"
+$gchatNightlyProgramsPath = "$env:LOCALAPPDATA\Programs\gchat-nightly"
 
-if (Test-Path $janAppData) {
-    Write-Host "Removing $janAppData"
-    Remove-Item -Path $janAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatAppData) {
+    Write-Host "Removing $gchatAppData"
+    Remove-Item -Path $gchatAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janNightlyAppData) {
-    Write-Host "Removing $janNightlyAppData"
-    Remove-Item -Path $janNightlyAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatNightlyAppData) {
+    Write-Host "Removing $gchatNightlyAppData"
+    Remove-Item -Path $gchatNightlyAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janLocalAppData) {
-    Write-Host "Removing $janLocalAppData"
-    Remove-Item -Path $janLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatLocalAppData) {
+    Write-Host "Removing $gchatLocalAppData"
+    Remove-Item -Path $gchatLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janNightlyLocalAppData) {
-    Write-Host "Removing $janNightlyLocalAppData"
-    Remove-Item -Path $janNightlyLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatNightlyLocalAppData) {
+    Write-Host "Removing $gchatNightlyLocalAppData"
+    Remove-Item -Path $gchatNightlyLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janProgramsPath) {
-    Write-Host "Removing $janProgramsPath"
-    Remove-Item -Path $janProgramsPath -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatProgramsPath) {
+    Write-Host "Removing $gchatProgramsPath"
+    Remove-Item -Path $gchatProgramsPath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janNightlyProgramsPath) {
-    Write-Host "Removing $janNightlyProgramsPath"
-    Remove-Item -Path $janNightlyProgramsPath -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatNightlyProgramsPath) {
+    Write-Host "Removing $gchatNightlyProgramsPath"
+    Remove-Item -Path $gchatNightlyProgramsPath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# Remove Jan extensions folder
-$janExtensionsPath = "$env:USERPROFILE\jan\extensions"
-if (Test-Path $janExtensionsPath) {
-    Write-Host "Removing $janExtensionsPath"
-    Remove-Item -Path $janExtensionsPath -Recurse -Force -ErrorAction SilentlyContinue
+# Remove GChat extensions folder
+$gchatExtensionsPath = "$env:USERPROFILE\gchat\extensions"
+if (Test-Path $gchatExtensionsPath) {
+    Write-Host "Removing $gchatExtensionsPath"
+    Remove-Item -Path $gchatExtensionsPath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# Try to uninstall Jan app silently
+# Try to uninstall GChat app silently
 try {
     $isNightly = [System.Convert]::ToBoolean($IsNightly)
 
     # Determine uninstaller path based on nightly flag
     if ($isNightly) {
-        $uninstallerPath = "$env:LOCALAPPDATA\Programs\jan-nightly\uninstall.exe"
-        $installPath = "$env:LOCALAPPDATA\Programs\jan-nightly"
+        $uninstallerPath = "$env:LOCALAPPDATA\Programs\gchat-nightly\uninstall.exe"
+        $installPath = "$env:LOCALAPPDATA\Programs\gchat-nightly"
     } else {
-        $uninstallerPath = "$env:LOCALAPPDATA\Programs\jan\uninstall.exe"
-        $installPath = "$env:LOCALAPPDATA\Programs\jan"
+        $uninstallerPath = "$env:LOCALAPPDATA\Programs\gchat\uninstall.exe"
+        $installPath = "$env:LOCALAPPDATA\Programs\gchat"
     }
 
     Write-Host "Looking for uninstaller at: $uninstallerPath"
@@ -86,15 +86,15 @@ try {
         }
     }
 
-    Write-Host "Jan app cleanup completed"
+    Write-Host "GChat app cleanup completed"
 }
 catch {
-    Write-Warning "Failed to uninstall Jan app cleanly: $_"
+    Write-Warning "Failed to uninstall GChat app cleanly: $_"
     Write-Host "Manual cleanup may be required"
 }
 
 # Clean up downloaded installer
-$installerPath = "$env:TEMP\jan-installer.exe"
+$installerPath = "$env:TEMP\gchat-installer.exe"
 if (Test-Path $installerPath) {
     Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
 }

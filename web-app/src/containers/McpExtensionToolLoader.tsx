@@ -1,5 +1,5 @@
 import { ComponentType } from 'react'
-import { MCPTool, MCPToolComponentProps } from '@janhq/core'
+import { MCPTool, MCPToolComponentProps } from '@gchat/core'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { useThreads } from '@/hooks/useThreads'
 

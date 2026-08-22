@@ -1,7 +1,7 @@
 import { agentPathBasename, isAbsoluteAgentPath } from './agent-path'
 
 const FILE_LINK_OR_CODE = /(```[\s\S]*?```|`[^`\n]+`|\[[^\]]*\]\([^)]+\))/g
-const FILE_LINK_PREFIX = 'https://atomic.local/open-file?path='
+const FILE_LINK_PREFIX = 'https://gchat.local/open-file?path='
 
 export type AgentFileReference = {
   path: string

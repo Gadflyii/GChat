@@ -210,7 +210,7 @@ describe('recommended-models-registry loader', () => {
     await getRecommendationsOrFallback({ url: REMOTE_URL })
 
     // Backdate the cache so isCacheFresh returns false.
-    const tsKey = 'jan_recommended_models_cache_ts_v1'
+    const tsKey = 'gchat_recommended_models_cache_ts_v1'
     window.localStorage.setItem(
       tsKey,
       String(Date.now() - CACHE_TTL_MS - 1000)

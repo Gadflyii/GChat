@@ -3,7 +3,7 @@
  */
 
 import type { AppService, LogEntry } from './types'
-import type { AutostartPreference } from '@janhq/core'
+import type { AutostartPreference } from '@gchat/core'
 
 export class DefaultAppService implements AppService {
   async factoryReset(): Promise<void> {
@@ -23,12 +23,12 @@ export class DefaultAppService implements AppService {
     }
   }
 
-  async getJanDataFolder(): Promise<string | undefined> {
+  async getGchatDataFolder(): Promise<string | undefined> {
     return undefined
   }
 
-  async relocateJanDataFolder(path: string): Promise<void> {
-    console.log('relocateJanDataFolder called with path:', path)
+  async relocateGchatDataFolder(path: string): Promise<void> {
+    console.log('relocateGchatDataFolder called with path:', path)
     // No-op - not implemented in default service
   }
 

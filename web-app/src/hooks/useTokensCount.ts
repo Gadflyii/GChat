@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect, useMemo } from 'react'
-import { ThreadMessage, ContentType } from '@janhq/core'
+import { ThreadMessage, ContentType } from '@gchat/core'
 import { useServiceHub } from './useServiceHub'
 import { useModelProvider } from './useModelProvider'
 import { usePrompt } from './usePrompt'

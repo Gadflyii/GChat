@@ -2,16 +2,16 @@
 //! Chat Completions API (`/v1/chat/completions`).
 //!
 //! Codex CLI speaks only the Responses wire protocol — `wire_api = "responses"`
-//! is its sole supported value as of v0.135 — but our llama.cpp backends
-//! implement only Chat Completions. This module converts a Responses request
+//! is its sole supported value as of v0.135 — but our ginfer backend
+//! implements only Chat Completions. This module converts a Responses request
 //! into a Chat Completions request and converts the Chat Completions reply
 //! (both the single-shot JSON form and the streamed SSE form) back into
 //! Responses objects/events, so Codex — and any other Responses-only client —
-//! works against a local GGUF model.
+//! works against a local model.
 //!
-//! MLX sessions and remote providers serve `/v1/responses` natively, so the
-//! proxy forwards those untouched (see the passthrough branch in `proxy.rs`);
-//! only the turboquant / upstream llama.cpp backends go through this shim.
+//! Remote providers serve `/v1/responses` natively, so the proxy forwards
+//! those untouched (see the passthrough branch in `proxy.rs`); ginfer sessions
+//! go through this shim.
 
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -106,7 +106,7 @@ pub fn responses_request_to_chat(body: &Value) -> Value {
 }
 
 /// Collapse every `system`/`developer` message into a single leading `system`
-/// message. Strict chat templates (notably the Qwen3-family GGUFs) `raise`
+/// message. Strict chat templates (notably the Qwen3-family models) `raise`
 /// "System message must be at the beginning" whenever a request carries more
 /// than one system message or places one after the first turn — which Codex
 /// readily does by combining `instructions` with developer/system input items.

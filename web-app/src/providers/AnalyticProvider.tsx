@@ -164,33 +164,6 @@ async function collectHardwareSuperProps(
   return props
 }
 
-/**
- * ATO-111: `device_parse_ok` reflects whether `llama-server --list-devices`
- * could be parsed (the `DeviceListParseFailed` flag). The probe spawns the
- * backend binary and can be slow, so it runs detached from `app_opened`.
- */
-async function collectDeviceParseOk(
-  serviceHub: ServiceHub
-): Promise<boolean | undefined> {
-  if (typeof IS_TAURI === 'undefined' || !IS_TAURI) return undefined
-  try {
-    await withTimeout(serviceHub.hardware().getLlamacppDevices(), 8000)
-    return true
-  } catch (error) {
-    const code = (error as { code?: string } | undefined)?.code
-    const message = (
-      (error as { message?: string } | undefined)?.message ?? ''
-    ).toLowerCase()
-    if (
-      code === 'DEVICE_LIST_PARSE_FAILED' ||
-      code === 'DeviceListParseFailed' ||
-      message.includes('available devices')
-    )
-      return false
-    return undefined
-  }
-}
-
 export function AnalyticProvider() {
   const { productAnalytic } = useAnalytic()
   const serviceHub = useServiceHub()
@@ -291,13 +264,6 @@ export function AnalyticProvider() {
             // Derived from persisted state rather than a counter so it stays
             // correct for users who upgraded from a build without it.
             is_first_launch: isFirstLaunch(),
-          })
-
-          // Detached: the device-list probe spawns the backend and can be slow,
-          // so it must never delay app_opened. It attaches to later events.
-          void collectDeviceParseOk(serviceHub).then((value) => {
-            if (value !== undefined && !cancelled)
-              posthog.register({ device_parse_ok: value })
           })
 
           // Forward Local API Server proxy telemetry emitted by the Rust

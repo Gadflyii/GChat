@@ -32,14 +32,14 @@ import {
   events,
   ModelEvent,
   type Assistant as CoreAssistant,
-} from '@janhq/core'
+} from '@gchat/core'
 import { migrateGlobalSamplingToAssistants } from '@/lib/samplingParams'
 import { createSafeUnlisten } from '@/lib/tauriEvent'
 import { toast } from 'sonner'
 import { SystemEvent } from '@/types/events'
 import {
-  parseAtomicChatDeepLink,
-  type AtomicChatDeepLinkTarget,
+  parseGChatDeepLink,
+  type GChatDeepLinkTarget,
 } from '@/services/deeplink/parse'
 import {
   isKeylessRemoteProvider,
@@ -68,12 +68,9 @@ const syncRemoteProviders = () => {
   const currentActive = new Set<string>()
 
   providers.forEach((provider) => {
-    // Only cloud providers should be registered with the backend proxy. Local
-    // engines (`llamacpp`, `llamacpp-upstream`, `mlx`, `foundation-models`)
-    // run in-process and must never be treated as remote. Both local llama.cpp
-    // provider ids are packaged on every desktop platform.
-    // The pre-fix check excluded only `'llamacpp'`, which silently leaked
-    // `'llamacpp-upstream'` into the remote-registration path on Windows.
+    // Only cloud providers should be registered with the backend proxy. The
+    // local engine (GInfer) runs in-process and must never be treated as
+    // remote.
     if (
       provider.active &&
       !isLocalProvider(provider.provider) &&
@@ -202,7 +199,7 @@ export function DataProvider() {
         if (data && Array.isArray(data) && data.length > 0) {
           // Keep built-in branding current without overwriting user settings.
           const migrated = (data as unknown as Assistant[]).map((a) =>
-            a.id === 'jan'
+            a.id === 'gchat'
               ? {
                   ...a,
                   name: defaultAssistant.name,
@@ -436,10 +433,10 @@ export function DataProvider() {
   // the live backend session.
   //
   // We subscribe on TWO redundant channels to guarantee delivery:
-  //   1) `ModelEvent.OnAutoIncreasedCtxLen` on `@janhq/core::events`
+  //   1) `ModelEvent.OnAutoIncreasedCtxLen` on `@gchat/core::events`
   //      (in-process EventEmitter singleton hanging off `window.core.events`).
   //   2) `local_backend://auto_increase_ctx_notify` on the native Tauri
-  //      event bus (bypasses any @janhq/core bundling quirks).
+  //      event bus (bypasses any @gchat/core bundling quirks).
   //
   // The handler is idempotent: applying the same `newCtxLen` twice simply
   // writes the same value back, so double-delivery is harmless.
@@ -612,71 +609,6 @@ export function DataProvider() {
     }
   }, [])
 
-  // ATO-244: Listen for unexpected llama-server crashes that happen AFTER
-  // model load (i.e. during generation). The Rust post-load watcher emits
-  // `local_backend://llamacpp_upstream_session_died` when this occurs.
-  // Show an actionable toast so the user knows why generation stopped.
-  useEffect(() => {
-    if (!IS_TAURI) return
-
-    let unlistenSessionDied: (() => void) | undefined
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { listen } = await import('@tauri-apps/api/event')
-        if (cancelled) return
-        const unsub = await listen<{
-          model_id?: string
-          error_code?: string
-          message?: string
-        }>('local_backend://llamacpp_upstream_session_died', (event) => {
-          const { model_id } = event.payload ?? {}
-          console.warn(
-            '[LocalAPI] llamacpp_upstream_session_died:',
-            event.payload
-          )
-          // ATO-244: the backend process is gone, but `useAppState.activeModels`
-          // (the store every "is this model running?" check in the UI reads
-          // from — ChatInput's auto-start effect, the status dot, etc.) still
-          // lists it as active until something re-queries the engine. Without
-          // this, a "New chat" on the same model/provider never re-checks
-          // (its auto-start effect only reruns on model/provider change) and
-          // just sends straight into the dead backend, surfacing a raw
-          // "Connection refused" instead of silently reloading. Dropping the
-          // model here flips `isModelActive` to false, which re-triggers that
-          // effect and lets it restart the model on its own.
-          if (model_id) {
-            const { activeModels, setActiveModels } = useAppState.getState()
-            if (activeModels.includes(model_id)) {
-              setActiveModels(activeModels.filter((id) => id !== model_id))
-            }
-          }
-          toast.error('Model crashed during generation', {
-            id: `session-died-${model_id ?? 'unknown'}`,
-            description:
-              "The model's backend process exited unexpectedly. This can happen with Vulkan backends on some GPU drivers. Try reloading the model, or switch to a CPU backend in Settings → Providers.",
-          })
-        })
-        const detachSessionDied = createSafeUnlisten(unsub)
-        if (cancelled) {
-          void detachSessionDied()
-          return
-        }
-        unlistenSessionDied = detachSessionDied
-      } catch (e) {
-        console.warn(
-          '[LocalAPI] Failed to subscribe to llamacpp_upstream_session_died:',
-          e
-        )
-      }
-    })()
-
-    return () => {
-      cancelled = true
-      if (unlistenSessionDied) void unlistenSessionDied()
-    }
-  }, [])
-
   // Auto-start Local API Server on app startup, but only re-attach to an
   // already-running server or raise the proxy for a model that is already
   // running in a local engine. We never proactively load/select a model here:
@@ -706,7 +638,7 @@ export function DataProvider() {
 
         // Product decision: do NOT proactively load or pick a model on startup.
         // The Local API Server is only raised for a model that is already
-        // running in a local engine (llamacpp/mlx). If nothing is running, the
+        // running in the local engine (GInfer). If nothing is running, the
         // server stays down until the user starts a model manually.
         const runningModels = await serviceHub.models().getActiveModels()
         if (!runningModels || runningModels.length === 0) {
@@ -765,8 +697,8 @@ export function DataProvider() {
     if (!urls?.length) return
     console.log('Received deeplink:', urls)
     const target = urls
-      .map(parseAtomicChatDeepLink)
-      .find((value): value is AtomicChatDeepLinkTarget => value !== null)
+      .map(parseGChatDeepLink)
+      .find((value): value is GChatDeepLinkTarget => value !== null)
     if (!target) {
       return
     }

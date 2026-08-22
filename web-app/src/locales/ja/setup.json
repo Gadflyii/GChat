@@ -1,8 +1,8 @@
 {
-  "welcome": "Atomic Botへようこそ",
-  "description": "開始するには、Atomic Bot Modelで素早く起動するか、独自のローカルまたはリモートプロバイダーを選択してください",
+  "welcome": "GChatへようこそ",
+  "description": "開始するには、GChat Modelで素早く起動するか、独自のローカルまたはリモートプロバイダーを選択してください",
   "descriptionWeb": "開始するには、APIキーを使用してクラウドモデルに接続する必要があります",
-  "quickStart": "Atomic Bot Modelでクイックスタート",
+  "quickStart": "GChat Modelでクイックスタート",
   "quickStartDescription": "セットアップ不要",
   "quickStartFailed": "エラーが発生しました。もう一度お試しください。",
   "downloading": "ダウンロード中…",
@@ -12,8 +12,8 @@
   "localModel": "ローカルモデルをセットアップ",
   "remoteProvider": "リモートプロバイダーをセットアップ",
   "turboQuantTagline": "お使いのデバイス上のローカル AI モデル — 一般的な環境でも高速に動作します。",
-  "welcomeTitle": "Atomic Chat へようこそ！",
-  "welcomeSubtitle": "Atomic Chat を開始するにはモデルが必要です。セットアップしましょう。",
+  "welcomeTitle": "GChat へようこそ！",
+  "welcomeSubtitle": "GChat を開始するにはモデルが必要です。セットアップしましょう。",
   "skip": "スキップ",
   "modelUnavailable": "まだカタログにありません — 接続後に Hub を開いてください。",
   "localStep": {
@@ -42,7 +42,7 @@
     "switchingTitle": "バックエンドを切り替え中",
     "switchingDesc": "再起動なしで {{backend}} を有効化しています…",
     "restartTitle": "バックエンドの準備完了",
-    "restartDesc": "最適なバックエンドがダウンロードされました。次回 Atomic Chat を起動したときに有効化されます。",
+    "restartDesc": "最適なバックエンドがダウンロードされました。次回 GChat を起動したときに有効化されます。",
     "restartLater": "セットアップを続行",
     "restartNow": "今すぐ再起動"
   }

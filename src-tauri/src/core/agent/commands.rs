@@ -7,8 +7,7 @@ use std::time::UNIX_EPOCH;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
-use tauri_plugin_llamacpp::state::LlamacppState;
-use tauri_plugin_llamacpp_upstream::state::LlamacppState as LlamacppUpstreamState;
+use tauri_plugin_ginfer::state::GinferState;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
@@ -147,13 +146,11 @@ impl<R: Runtime> ContextExpansionHook for AgentContextExpansion<R> {
                 outcome.reason.as_deref().unwrap_or("unknown")
             ));
         }
-        let llama_state: State<LlamacppState> = self.app_handle.state();
-        let upstream_state: State<LlamacppUpstreamState> = self.app_handle.state();
+        let ginfer_state: State<GinferState> = self.app_handle.state();
         find_session_by_model_and_backend(
             &target.model_id,
             target.backend,
-            &llama_state,
-            &upstream_state,
+            &ginfer_state,
         )
         .await
         .map_err(|error| error.to_string())
@@ -386,9 +383,8 @@ pub async fn agent_run_turn<R: Runtime>(
         }
     }
     let editable_roots = EditableRoots::new(&working_dir, &editable_external_roots).await?;
-    let llama_state: State<LlamacppState> = app_handle.state();
-    let upstream_state: State<LlamacppUpstreamState> = app_handle.state();
-    let target = find_session_by_model_id(&request.model_id, &llama_state, &upstream_state)
+    let ginfer_state: State<GinferState> = app_handle.state();
+    let target = find_session_by_model_id(&request.model_id, &ginfer_state)
         .await
         .map_err(|error| error.to_string())?;
     let has_images = request

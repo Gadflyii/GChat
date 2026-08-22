@@ -3,7 +3,7 @@
  */
 
 import { ExtensionManager } from '@/lib/extension'
-import { ConversationalExtension, ExtensionTypeEnum } from '@janhq/core'
+import { ConversationalExtension, ExtensionTypeEnum } from '@gchat/core'
 import type { ThreadsService } from './types'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
@@ -152,8 +152,8 @@ export class DefaultThreadsService implements ThreadsService {
               id: thread.model?.id ?? '*',
               engine: thread.model?.provider ?? LOCAL_LLAMACPP_PROVIDER,
             },
-            id: 'jan',
-            name: 'Atomic Chat',
+            id: 'gchat',
+            name: 'GChat',
           },
         ],
         metadata: {

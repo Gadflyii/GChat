@@ -66,24 +66,13 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_llamacpp::init())
-        .plugin(tauri_plugin_llamacpp_upstream::init())
+        .plugin(tauri_plugin_ginfer::init())
         .plugin(tauri_plugin_vector_db::init())
         .plugin(tauri_plugin_rag::init());
 
     #[cfg(feature = "deep-link")]
     {
         app_builder = app_builder.plugin(tauri_plugin_deep_link::init());
-    }
-
-    #[cfg(feature = "mlx")]
-    {
-        app_builder = app_builder.plugin(tauri_plugin_mlx::init());
-    }
-
-    #[cfg(feature = "foundation-models")]
-    {
-        app_builder = app_builder.plugin(tauri_plugin_foundation_models::init());
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -454,8 +443,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 if let Err(e) = crate::core::notifications::ensure_aumid_registered(
-                    "chat.atomic.app",
-                    "Atomic Chat",
+                    "app.gchat",
+                    "GChat",
                 ) {
                     log::warn!("Failed to register AUMID for toast notifications: {e}");
                 }
@@ -646,40 +635,12 @@ pub fn run() {
                         Err(_) => log::warn!("MCP cleanup timed out after 10 seconds"),
                     }
 
-                    // Both llama.cpp providers keep their own process map, so clean
-                    // up each one to avoid orphaned llama-server processes on quit.
                     if let Err(e) =
-                        tauri_plugin_llamacpp::cleanup_llama_processes(app_handle.clone()).await
+                        tauri_plugin_ginfer::cleanup_ginfer_processes(app_handle.clone()).await
                     {
-                        log::warn!("Failed to cleanup llamacpp processes: {}", e);
+                        log::warn!("Failed to cleanup ginfer processes: {}", e);
                     } else {
-                        log::info!("llamacpp processes cleaned up successfully");
-                    }
-
-                    if let Err(e) =
-                        tauri_plugin_llamacpp_upstream::cleanup_llama_processes(app_handle.clone())
-                            .await
-                    {
-                        log::warn!("Failed to cleanup llamacpp-upstream processes: {}", e);
-                    } else {
-                        log::info!("llamacpp-upstream processes cleaned up successfully");
-                    }
-
-                    #[cfg(feature = "mlx")]
-                    {
-                        use tauri_plugin_mlx::cleanup_mlx_processes;
-                        if let Err(e) = cleanup_mlx_processes(app_handle.clone()).await {
-                            log::warn!("Failed to cleanup MLX processes: {}", e);
-                        } else {
-                            log::info!("MLX processes cleaned up successfully");
-                        }
-                    }
-
-                    #[cfg(feature = "foundation-models")]
-                    {
-                        use tauri_plugin_foundation_models::cleanup_processes;
-                        cleanup_processes(&app_handle).await;
-                        log::info!("Foundation Models processes cleaned up successfully");
+                        log::info!("ginfer processes cleaned up successfully");
                     }
 
                     log::info!("App cleanup completed");

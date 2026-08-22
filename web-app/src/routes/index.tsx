@@ -47,7 +47,7 @@ export const Route = createFileRoute(route.home as any)({
 function Index() {
   const { t } = useTranslation()
   const serviceHub = useServiceHub()
-  const { providers, selectedProvider } = useModelProvider()
+  const { providers } = useModelProvider()
   const search = useSearch({ from: route.home as any })
   const threadModel = search.threadModel
   const agentSkill = search.agentSkill
@@ -57,7 +57,6 @@ function Index() {
   )
   const sidebarMode = useAgentMode((state) => state.sidebarMode)
   const setAgentMode = useAgentMode((state) => state.setAgentMode)
-  const setSidebarMode = useAgentMode((state) => state.setSidebarMode)
   const agentWorkspace = useAgentMode(
     (state) => state.workspaces[TEMPORARY_CHAT_ID]
   )
@@ -102,13 +101,8 @@ function Index() {
   }, [setCurrentThreadId])
 
   useEffect(() => {
-    const nextMode =
-      sidebarMode === 'agent' && selectedProvider === 'mlx'
-        ? 'chat'
-        : sidebarMode
-    if (nextMode !== sidebarMode) setSidebarMode(nextMode)
-    setAgentMode(TEMPORARY_CHAT_ID, nextMode === 'agent')
-  }, [selectedProvider, setAgentMode, setSidebarMode, sidebarMode])
+    setAgentMode(TEMPORARY_CHAT_ID, sidebarMode === 'agent')
+  }, [setAgentMode, sidebarMode])
 
   if (onboardingPending) {
     return <SetupScreen onSkipped={() => setSetupSkippedThisSession(true)} />

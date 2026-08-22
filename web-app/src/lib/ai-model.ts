@@ -1,5 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
+import { isLlamacppProvider, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
 
 /**
  * Llama.cpp timings structure from the response
@@ -16,15 +17,15 @@ interface LlamaCppChunk {
 }
 
 /**
- * Custom metadata extractor for llama.cpp that extracts timing information
- * and converts it to token usage format
+ * Custom metadata extractor that extracts backend timing information and
+ * converts it to token usage format
  */
-const llamaCppMetadataExtractor = {
+const timingsMetadataExtractor = {
   extractMetadata: async ({ parsedBody }: { parsedBody: unknown }) => {
     const body = parsedBody as LlamaCppChunk
     if (body?.timings) {
       return {
-        llamacpp: {
+        timings: {
           promptTokens: body.timings.prompt_n ?? null,
           completionTokens: body.timings.predicted_n ?? null,
           tokensPerSecond: body.timings.predicted_per_second ?? null,
@@ -47,7 +48,7 @@ const llamaCppMetadataExtractor = {
       buildMetadata: () => {
         if (lastTimings) {
           return {
-            llamacpp: {
+            timings: {
               promptTokens: lastTimings.prompt_n ?? null,
               completionTokens: lastTimings.predicted_n ?? null,
               tokensPerSecond: lastTimings.predicted_per_second ?? null,
@@ -63,7 +64,7 @@ const llamaCppMetadataExtractor = {
 
 /**
  * Creates a LanguageModel instance for the AI SDK based on the provider configuration.
- * This allows using Jan's model providers with the AI SDK's useChat hook.
+ * This allows using GChat's model providers with the AI SDK's useChat hook.
  *
  * Note: This function is synchronous and does not load the model or construct URLs.
  * URL construction should happen elsewhere after the model is ready.
@@ -77,12 +78,12 @@ export function createLanguageModel(
     throw new Error('Provider configuration is required')
   }
 
-  // For llamacpp provider, create a placeholder configuration
+  // For the local provider, create a placeholder configuration
   // The actual URL and authentication will be updated later when the model is loaded
-  if (provider.provider === 'llamacpp' && providerObject) {
+  if (isLlamacppProvider(provider.provider) && providerObject) {
     // Create provider with placeholder connection info
     const openAICompatible = createOpenAICompatible({
-      name: 'llamacpp',
+      name: LOCAL_LLAMACPP_PROVIDER,
       baseURL: 'http://localhost:1337/v1', // Placeholder - will be updated when model loads
       headers: {
         Authorization: 'Bearer placeholder', // Placeholder - will be updated when model loads
@@ -94,7 +95,7 @@ export function createLanguageModel(
 
     // Use languageModel with custom config to include metadata extractor for timings
     return openAICompatible.languageModel(modelId, {
-      metadataExtractor: llamaCppMetadataExtractor,
+      metadataExtractor: timingsMetadataExtractor,
     })
   }
 
@@ -113,7 +114,7 @@ export function createLanguageModel(
       ...(provider.provider === 'openrouter'
         ? {
             'HTTP-Referer': 'https://jan.ai',
-            'X-Title': 'Atomic Bot',
+            'X-Title': 'GChat',
           }
         : {}),
     },

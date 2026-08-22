@@ -82,14 +82,13 @@ export enum AppEvent {
  * Identity every backend event carries so a listener can tell whose operation
  * it is watching.
  *
- * Both llama.cpp providers ship side by side and each has its own optimal
- * backend for the same hardware, so a payload is only actionable together with
- * the provider it came from and the release the backend belongs to. `provider`
- * is optional purely for backwards compatibility: an untagged payload is
- * attributed to `llamacpp-upstream`, which is what legacy emitters were.
+ * A payload is only actionable together with the provider it came from and the
+ * release the backend belongs to, since the same hardware can pair with
+ * different backends per provider. `provider` is optional purely for
+ * backwards compatibility with untagged payloads from legacy emitters.
  */
 export interface BackendEventOrigin {
-  /** Provider id, e.g. `llamacpp` (TurboQuant) or `llamacpp-upstream`. */
+  /** Provider id, e.g. the local engine or a cloud provider. */
   provider?: string
   /** Release tag the backend belongs to, e.g. `b10018-1.3.0`. */
   version?: string
@@ -124,7 +123,7 @@ export interface BetterBackendDetectedPayload extends BackendEventOrigin {
 /**
  * `detail` of the `app:backend-hotswapped` DOM event an extension dispatches
  * after activating a backend without a restart. It travels on the window
- * rather than the `@janhq/core` bus because it only drives UI transitions.
+ * rather than the `@gchat/core` bus because it only drives UI transitions.
  */
 export interface BackendHotswappedDetail extends BackendEventOrigin {
   /** Full `version/backend` string now active. */

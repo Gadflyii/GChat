@@ -198,7 +198,7 @@ fn is_transient_network_failure(event: &Event<'static>) -> bool {
 }
 
 /// Model-load failures all arrive under the same headline ("Error in load
-/// command:") with a whole llama.cpp log pasted after it. Sentry groups on that
+/// command:") with a whole engine log pasted after it. Sentry groups on that
 /// text, so unrelated defects — a shard set opened at the wrong file, a model
 /// too big for the machine, a context longer than the model was trained on —
 /// landed in one issue, while incidental differences in the log split the same
@@ -344,7 +344,7 @@ mod tests {
     const SPLIT_SHARD_FAILURE: &str = "Error in load command:\n\
         The model process encountered an unexpected error.\n\
         error loading model: illegal split file idx: 1 (file: /home/x/model.gguf), \
-        model must be loaded with the first split [LLAMA_CPP_PROCESS_ERROR]";
+        model must be loaded with the first split [PROCESS_ERROR]";
     const OOM_FAILURE: &str = "Error in load command:\n\
         Out of memory. The model requires more RAM or VRAM than available.\n\
         failed to allocate CPU_REPACK buffer of size 2167603200 [OUT_OF_MEMORY]";
@@ -358,7 +358,7 @@ mod tests {
             split,
             Some(vec![
                 "model-load-failure".to_string(),
-                "LLAMA_CPP_PROCESS_ERROR".to_string()
+                "PROCESS_ERROR".to_string()
             ])
         );
         assert_ne!(split, oom, "distinct causes must not share an issue");
@@ -373,8 +373,8 @@ mod tests {
             "Error in load command:\n\
              The model process encountered an unexpected error.\n\
              0.00.253.774 I cmn common_param: verbosity = 3\n\
-             error loading model: illegal split file idx: 3 (file: /Users/y/other.gguf), \
-             model must be loaded with the first split [LLAMA_CPP_PROCESS_ERROR]",
+              error loading model: illegal split file idx: 3 (file: /Users/y/other.gguf), \
+              model must be loaded with the first split [PROCESS_ERROR]",
         ));
 
         assert_eq!(a, b);

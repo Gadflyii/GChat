@@ -5,21 +5,12 @@ import { getProviderTitle } from '@/lib/utils'
  * provider overview cards). Anything not listed here — remote/cloud and
  * user-added providers — sorts after these, alphabetically by title.
  *
- * The local engines lead, with the TurboQuant fork (`llamacpp`) deliberately
- * placed BELOW `mlx` rather than beside `llamacpp-upstream`:
- *   - macOS ships MLX, so TurboQuant lands right under it.
- *   - Windows and Linux filter MLX out of these lists, so TurboQuant collapses
- *     to the slot right under upstream llama.cpp.
- * Either way it is never the first entry, and its title
- * ("llama.cpp turboquant") never sits directly beneath upstream's
- * ("llama.cpp"), where the two read as one duplicated row.
+ * The single local engine (GInfer) always leads; the legacy `jan` entry is
+ * kept so pre-migration installs still pin it to the top.
  */
 const PROVIDER_PRIORITY: Record<string, number> = {
   'jan': 0,
-  'llamacpp-upstream': 1,
-  'mlx': 2,
-  'llamacpp': 3,
-  'foundation-models': 4,
+  'ginfer': 1,
 }
 
 /**

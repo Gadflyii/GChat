@@ -107,7 +107,7 @@ pub struct AgentTurnRequest {
     pub run_id: String,
     /// Durable session id. The frontend binds this to the owning thread id.
     pub session_id: String,
-    /// The `model_id` whose `llama-server` session the agent should target.
+    /// The `model_id` whose `ginfer-serve` session the agent should target.
     pub model_id: String,
     /// The user's message for this turn.
     pub user_message: String,

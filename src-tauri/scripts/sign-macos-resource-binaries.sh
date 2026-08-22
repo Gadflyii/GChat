@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #* Подпись Mach-O в resources/bin до bundle: иначе копия в Contents/Resources/… не подписана
-#* и notarytool отклоняет архив («The binary is not signed» для jan-cli и т.д.).
+#* и notarytool отклоняет архив («The binary is not signed» для gchat-cli и т.д.).
 #? Если APPLE_SIGNING_IDENTITY не задан — выходим (локальные сборки без подписи).
 set -euo pipefail
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -26,18 +26,8 @@ sign_if_macho() {
   fi
 }
 
-for name in jan-cli mlx-server foundation-models-server; do
+for name in gchat-cli; do
   sign_if_macho "$BIN/$name"
-done
-
-#? llamacpp-backend Mach-O binaries (turboquant fork + upstream ggml-org)
-for sub in llamacpp-backend llamacpp-backend-upstream; do
-  LLAMA_BIN="$HERE/resources/$sub/build/bin"
-  if [[ -d "$LLAMA_BIN" ]]; then
-    for f in "$LLAMA_BIN"/*; do
-      sign_if_macho "$f"
-    done
-  fi
 done
 
 #? sqlite-vec и др. — при появлении ошибок notary добавить сюда или расширить цикл.

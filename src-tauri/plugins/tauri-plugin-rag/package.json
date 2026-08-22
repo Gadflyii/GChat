@@ -1,5 +1,5 @@
 {
-  "name": "@janhq/tauri-plugin-rag-api",
+  "name": "@gchat/tauri-plugin-rag-api",
   "version": "0.1.0",
   "private": true,
   "description": "Guest JS API for Jan RAG plugin",

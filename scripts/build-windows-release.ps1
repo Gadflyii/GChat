@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 # scripts/build-windows-release.ps1
-# Atomic Chat - Windows release builder (local, no code signing)
+# GChat - Windows release builder (local, no code signing)
 # Mirrors CI pipeline from release.yml: CPU-only backend, NSIS + MSI installers.
 #
 # Usage:
@@ -283,22 +283,22 @@ yarn copy:assets:tauri
 if ($LASTEXITCODE -ne 0) { Write-Host 'copy:assets:tauri failed' -ForegroundColor Red; exit 1 }
 
 # ── Build CLI (release) ───────────────────────────────────────
-Write-Step 'Build jan-cli (release)'
+Write-Step 'Build gchat-cli (release)'
 if (-not (Test-Path 'src-tauri/resources/bin')) {
     New-Item -ItemType Directory -Path 'src-tauri/resources/bin' -Force | Out-Null
 }
 
 Push-Location src-tauri
-cargo build --release --features cli --bin jan-cli
+cargo build --release --features cli --bin gchat-cli
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
-    Write-Host 'cargo build jan-cli failed' -ForegroundColor Red
+    Write-Host 'cargo build gchat-cli failed' -ForegroundColor Red
     exit 1
 }
 Pop-Location
 
-Copy-Item -Path 'src-tauri/target/release/jan-cli.exe' -Destination 'src-tauri/resources/bin/jan-cli.exe' -Force
-Write-Host '  CLI built: src-tauri/resources/bin/jan-cli.exe'
+Copy-Item -Path 'src-tauri/target/release/gchat-cli.exe' -Destination 'src-tauri/resources/bin/gchat-cli.exe' -Force
+Write-Host '  CLI built: src-tauri/resources/bin/gchat-cli.exe'
 
 # ── Build Tauri app (NSIS + MSI, no code signing) ─────────────
 Write-Step 'Building Tauri app (release, unsigned)'

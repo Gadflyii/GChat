@@ -78,13 +78,13 @@ describe('useWorkspacePreviewStore', () => {
   it('uses the filename for Windows workspace paths', () => {
     useWorkspacePreviewStore.getState().openFile({
       rootId: 'windows',
-      rootPath: 'C:\\Work\\Atomic-Chat',
+      rootPath: 'C:\\Work\\GChat',
       relativePath: 'docs\\README.md',
     })
 
     expect(useWorkspacePreviewStore.getState().tabs[0]).toMatchObject({
       rootId: 'windows',
-      rootPath: 'C:\\Work\\Atomic-Chat',
+      rootPath: 'C:\\Work\\GChat',
       relativePath: 'docs\\README.md',
       name: 'README.md',
     })

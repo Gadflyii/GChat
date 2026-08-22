@@ -6,13 +6,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { MlxModelDownloadAction } from '@/containers/MlxModelDownloadAction'
 import { ModelDownloadAction } from '@/containers/ModelDownloadAction'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import {
   findInstalledLocalModel,
-  LLAMACPP_PROVIDERS,
   quantModelIds,
 } from '@/lib/hub-installed'
 import {
@@ -23,7 +21,7 @@ import {
   quantLabel,
   type HardwareFit,
 } from '@/lib/model-card'
-import { getMlxTotalFileSize, getTotalDownloadFileSize } from '@/lib/models'
+import { getTotalDownloadFileSize } from '@/lib/models'
 import { cn } from '@/lib/utils'
 import type { CatalogModel } from '@/services/models/types'
 
@@ -58,9 +56,6 @@ export type DownloadOptionsSelectProps = {
 /**
  * Collapsed quant selector with the LM Studio shape: the chosen variant plus a
  * disclosure listing every quant with its size and hardware-fit dot.
- *
- * MLX repos ship as one safetensors set rather than a list of quants, so they
- * skip the selector entirely and render the MLX download action directly.
  */
 export function DownloadOptionsSelect({
   model,
@@ -83,8 +78,7 @@ export function DownloadOptionsSelect({
       (model.quants ?? []).find((quant) =>
         findInstalledLocalModel(
           providers,
-          quantModelIds(model, quant.model_id),
-          LLAMACPP_PROVIDERS
+          quantModelIds(model, quant.model_id)
         )
       ),
     [model, providers]
@@ -112,30 +106,6 @@ export function DownloadOptionsSelect({
     defaultQuant
 
   const fitKnown = budgetBytes > 0
-
-  if (model.is_mlx) {
-    const sizeText = getMlxTotalFileSize(model)
-    const fit = estimateFit(parseFileSizeToBytes(sizeText), budgetBytes)
-    return (
-      <section className="rounded-lg border border-border bg-card p-4">
-        <h2 className="mb-3 text-sm font-medium">{t('hub:downloadOptions')}</h2>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            {fitKnown && <FitDot fit={fit} />}
-            <span className="rounded-[5px] border border-slate-300 bg-slate-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
-              MLX
-            </span>
-            {sizeText && (
-              <span className="truncate text-xs text-muted-foreground">
-                {sizeText}
-              </span>
-            )}
-          </div>
-          <MlxModelDownloadAction model={model} deletable />
-        </div>
-      </section>
-    )
-  }
 
   if (!model.quants?.length || !selected) return null
 

@@ -72,11 +72,11 @@ export const SUPPORTED_SCHEMA_VERSION = 1
 /** Cache TTL (1 hour) — matches the sibling registries. */
 export const CACHE_TTL_MS = 60 * 60 * 1000
 
-//! Intentionally distinct from `jan_recommended_models_cache_v1`. Sharing a
+//! Intentionally distinct from `gchat_recommended_models_cache_v1`. Sharing a
 //! key would let a staff-picks payload poison the manifest that onboarding
 //! (and every shipped production client) reads.
-const CACHE_KEY = 'atomic_staff_picks_cache_v1'
-const CACHE_TS_KEY = 'atomic_staff_picks_cache_ts_v1'
+const CACHE_KEY = 'gchat_staff_picks_cache_v1'
+const CACHE_TS_KEY = 'gchat_staff_picks_cache_ts_v1'
 
 const FETCH_TIMEOUT_MS = 5000
 

@@ -68,10 +68,5 @@
     "neverUpdated": "Not yet loaded",
     "successDescription": "Provider catalog updated.",
     "errorDescription": "Could not refresh provider catalog. Using cached or built-in providers."
-  },
-  "llamacpp": {
-    "concurrentMode": {
-      "perSlotContextWarning": "Per-slot context equals ctx_size divided by slot count. Lower slot counts give each request more context."
-    }
   }
 }

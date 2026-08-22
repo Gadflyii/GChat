@@ -138,7 +138,7 @@ pub fn write_file_sync<R: Runtime>(
 }
 
 /// Returns the current OS user's real home directory (e.g. `/Users/<name>` or
-/// `C:\Users\<name>`), NOT the Jan data folder. Used by the local-model scanner
+/// `C:\Users\<name>`), NOT the GChat data folder. Used by the local-model scanner
 /// to locate other apps' model stores (Ollama / LM Studio / HF cache / Unsloth).
 #[tauri::command]
 pub fn get_os_home_dir() -> Result<String, String> {

@@ -1,49 +1,38 @@
-<img src="https://github.com/AtomicBot-ai/Atomic-Chat/raw/main/assets/logo.png" width="80" alt="Atomic Chat" />
+<img src="assets/logo.png" width="80" alt="GChat" />
 
-# Atomic Chat
+# GChat
 
-Local AI app and inference engine for agents. Run open-weight LLMs locally — private, on your machine.
+Local AI app and inference engine for agents. Run models locally with [ginfer](https://github.com/Gadflyii/ginfer) — private, on your machine.
 
-<a href="https://github.com/AtomicBot-ai/Atomic-Chat/stargazers"><img src="https://img.shields.io/github/stars/AtomicBot-ai/Atomic-Chat?style=flat&logo=github&label=Stars&color=f5c542" alt="Stars" /></a>&nbsp;
-<a href="https://github.com/AtomicBot-ai/Atomic-Chat/network/members"><img src="https://img.shields.io/github/forks/AtomicBot-ai/Atomic-Chat?style=flat&logo=github&label=Forks&color=4ac1f2" alt="Forks" /></a>&nbsp;
-<a href="https://github.com/AtomicBot-ai/Atomic-Chat/graphs/contributors"><img src="https://img.shields.io/github/contributors/AtomicBot-ai/Atomic-Chat?style=flat&logo=github&label=Contributors&color=ff69b4" alt="Contributors" /></a>&nbsp;
-<a href="https://github.com/AtomicBot-ai/Atomic-Chat/commits/main"><img src="https://img.shields.io/github/last-commit/AtomicBot-ai/Atomic-Chat?style=flat&label=Last%20Commit&color=blueviolet" alt="Last Commit" /></a>&nbsp;
+<a href="https://github.com/Gadflyii/gchat/stargazers"><img src="https://img.shields.io/github/stars/Gadflyii/gchat?style=flat&logo=github&label=Stars&color=f5c542" alt="Stars" /></a>&nbsp;
+<a href="https://github.com/Gadflyii/gchat/network/members"><img src="https://img.shields.io/github/forks/Gadflyii/gchat?style=flat&logo=github&label=Forks&color=4ac1f2" alt="Forks" /></a>&nbsp;
+<a href="https://github.com/Gadflyii/gchat/graphs/contributors"><img src="https://img.shields.io/github/contributors/Gadflyii/gchat?style=flat&logo=github&label=Contributors&color=ff69b4" alt="Contributors" /></a>&nbsp;
+<a href="https://github.com/Gadflyii/gchat/commits/main"><img src="https://img.shields.io/github/last-commit/Gadflyii/gchat?style=flat&label=Last%20Commit&color=blueviolet" alt="Last Commit" /></a>&nbsp;
 <img src="https://img.shields.io/badge/Built_with-Tauri-FFC131?style=flat&logo=tauri&logoColor=white" alt="Tauri" />&nbsp;
 <img src="https://img.shields.io/badge/Runtime-Node.js_≥20-339933?style=flat&logo=nodedotjs&logoColor=white" alt="Node.js" />
 
-[Getting Started](https://atomic.chat/) · [Hugging Face](https://huggingface.co/AtomicChat) · [Discord](https://discord.com/invite/8wGSsvmg4V) · [X / Twitter](https://x.com/atomic_chat_hq) · [Bug Reports](https://github.com/AtomicBot-ai/Atomic-Chat/issues)
+[Models on Hugging Face](https://huggingface.co/collections/GadflyII/ginfer-models) · [Bug Reports](https://github.com/Gadflyii/gchat/issues)
 
 <p align="center">
-  <img src="https://github.com/AtomicBot-ai/.github/raw/main/assets/0529_final.gif" width="100%" alt="Atomic Chat — local AI chat in action" />
+  <img src="assets/preview.png" width="100%" alt="GChat — local AI chat in action" />
 </p>
 
 ---
 ### 📦 Download
 
-<p align="left"><b>Desktop</b></p>
-<p align="left">
-  <a href="https://github.com/AtomicBot-ai/Atomic-Chat/releases/download/v2.0.0/Atomic.Chat_2.0.0_universal.dmg"><img src="https://img.shields.io/badge/macOS-Universal-000000?style=for-the-badge&logo=apple&logoColor=white" height="46" alt="Download for macOS" /></a>&nbsp;
-  <a href="https://github.com/AtomicBot-ai/Atomic-Chat/releases/download/v2.0.0/Atomic.Chat_2.0.0_x64-setup.exe"><img src="https://img.shields.io/badge/Windows-x64-0078D4?style=for-the-badge&logo=windows11&logoColor=white" height="46" alt="Download for Windows" /></a>&nbsp;
-  <a href="https://github.com/AtomicBot-ai/Atomic-Chat/releases/download/v2.0.0/Atomic.Chat_2.0.0_amd64.AppImage"><img src="https://img.shields.io/badge/Linux-AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black" height="46" alt="Download for Linux" /></a>
-</p>
-
-<p align="left"><b>Mobile</b></p>
-<p align="left">
-  <a href="https://apps.apple.com/us/app/atomic-chat-private-local-ai/id6761720226"><img src="https://img.shields.io/badge/iOS-App_Store-0D96F6?style=for-the-badge&logo=appstore&logoColor=white" height="46" alt="Download for iOS" /></a>&nbsp;
-  <a href="https://play.google.com/store/apps/details?id=chat.atomic.app"><img src="https://img.shields.io/badge/Android-Google_Play-414141?style=for-the-badge&logo=googleplay&logoColor=white" height="46" alt="Download for Android" /></a>
-</p>
+Releases are in progress — build from source with the instructions below.
 
 ---
 
 ### 🔌 Use It as an API
 
-Atomic Chat runs an **OpenAI-compatible server at `http://localhost:1337/v1`** — a drop-in replacement for the OpenAI SDK. Load a model in the app, then point any client at it:
+GChat runs an **OpenAI-compatible server at `http://localhost:1337/v1`** — a drop-in replacement for the OpenAI SDK. Load a model in the app, then point any client at it:
 
 ```bash
 curl http://localhost:1337/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "<model-id-loaded-in-atomic-chat>",
+    "model": "<model-id-loaded-in-gchat>",
     "messages": [{ "role": "user", "content": "Say hello in one word" }]
   }'
 ```
@@ -51,11 +40,11 @@ curl http://localhost:1337/v1/chat/completions \
 ```python
 from openai import OpenAI
 
-# Atomic Chat is OpenAI API-compatible — only the base_url changes.
+# GChat is OpenAI API-compatible — only the base_url changes.
 client = OpenAI(base_url="http://localhost:1337/v1", api_key="not-needed")
 
 resp = client.chat.completions.create(
-    model="<model-id-loaded-in-atomic-chat>",
+    model="<model-id-loaded-in-gchat>",
     messages=[{"role": "user", "content": "Say hello in one word"}],
 )
 print(resp.choices[0].message.content)
@@ -69,16 +58,11 @@ Bound to `127.0.0.1` by default; set `host: 0.0.0.0` to expose it on your LAN. W
 
 **Local models**
 
-- Run open-weight LLMs locally from HuggingFace — Llama, Gemma, Qwen, Mistral, Phi, and others
-- Multi-Token Prediction (MTP) speculative decoding — 30–70% throughput boost on supported models, up to 3× on Gemma 4
-- DFlash block-diffusion decoding — up to 6× faster on Qwen 3.6, Gemma 4, Kimi K2.5
-- Flash Attention toggle (`on` / `off` / `auto`)
+- Single inference engine, [ginfer](https://github.com/Gadflyii/ginfer) — C++/CUDA, purpose-built for the `.ginfer` model format
+- Models from the curated [GadflyII/ginfer-models](https://huggingface.co/collections/GadflyII/ginfer-models) Hugging Face collection (int-autoround and NVFP4 quantizations), with the HF download pipeline narrowed to `.ginfer` artifacts
 - Automatic reasoning-context tracking for chain-of-thought models
 - Auto context-window expansion with overflow notifications
-- EAGLE-3 speculative decoding for Gemma 4 on Apple Silicon (MLX)
-- MTP on MLX for Qwen 3.5 / 3.6 and DeepSeek V4
-- TurboQuant KV cache (`turbo3` / `turbo4`) on llama.cpp — now on **Windows & Linux** too, not just macOS: up to ~4.3× smaller KV cache footprint, CPU and GPU (CUDA / Vulkan)
-- TurboQuant KV cache on MLX-VLM — smaller memory footprint via RHT-correct fast paths
+- Local model cache under the data folder (`<data>/ginfer/models/`)
 
 **Cloud models**
 
@@ -106,42 +90,34 @@ Bound to `127.0.0.1` by default; set `host: 0.0.0.0` to expose it on your LAN. W
 
 ---
 
-### ⚙️ Inference Engines
+### ⚙️ Inference Engine
 
-Three engines under the hood, all exposed through one OpenAI-compatible API at `http://localhost:1337/v1`:
+One engine under the hood, exposed through the OpenAI-compatible API at `http://localhost:1337/v1`:
 
-- **[atomic-llama-cpp-turboquant](https://github.com/AtomicBot-ai/atomic-llama-cpp-turboquant)** — our `llama.cpp` fork with TurboQuant KV-cache optimizations (`turbo3` / `turbo4`) for faster, lower-memory quantized inference. Now a selectable second provider ("Atomic Llama.cpp Turboquant") on **all three desktops** — macOS, Windows, and Linux — CPU and GPU (CUDA / Vulkan).
-- **Upstream [llama.cpp](https://github.com/ggml-org/llama.cpp)** — official `ggml-org` build, the default engine on Windows and Linux for the widest hardware coverage and MTP support.
-- **[MLX-VLM](https://github.com/Blaizzy/mlx-vlm)** — Apple Silicon-native engine for vision-language models, running on the Neural Engine and unified memory. Faster than llama.cpp on M-series chips for supported models.
+- **[ginfer](https://github.com/Gadflyii/ginfer)** — our C++/CUDA inference engine. Models ship as `.ginfer` containers from the [GadflyII/ginfer-models](https://huggingface.co/collections/GadflyII/ginfer-models) collection, and `ginfer-serve` (an OpenAI-compatible HTTP server) does the serving. The app drives `ginfer-serve`'s process lifecycle through `extensions/ginfer-extension/` (provider `ginfer`) and `src-tauri/plugins/tauri-plugin-ginfer/`.
 
-Speculative-decoding features available across backends:
-
-- **MTP (Multi-Token Prediction)** — a draft model predicts ahead, the full model verifies in one pass. Available on macOS and Windows.
-- **DFlash** — block-diffusion speculative decoding for Qwen 3.6, Gemma 4, Kimi K2.5 and others. Apple Silicon only; can't be enabled together with MTP.
-- **Flash Attention** — Settings → `on` / `off` / `auto`.
-
-Tools talking to `http://localhost:1337/v1` don't need to know which backend is running underneath — switch engines without reconfiguring clients.
+Hardware: **Linux x86_64 with an NVIDIA GPU** — CUDA 13.1 and compute capability SM 86 / 89 / 120a. The app probes the GPU on first launch and surfaces a clear "unsupported" state everywhere else; a Windows port of ginfer is planned.
 
 ---
 
 ### 🚀 Launch With
 
-Atomic Chat runs an OpenAI-compatible server at `http://localhost:1337/v1`, so **any agent, CLI, IDE plugin, or app that speaks the OpenAI API can run on top of your local models** — no extra glue needed. Just point its base URL at Atomic Chat and you're done.
+GChat runs an OpenAI-compatible server at `http://localhost:1337/v1`, so **any agent, CLI, IDE plugin, or app that speaks the OpenAI API can run on top of your local models** — no extra glue needed. Just point its base URL at GChat and you're done.
 
 A few projects already ship first-class support with their own setup docs:
 
 | Tool | What it is | Setup |
 | --- | --- | --- |
-| **[OpenCode](https://opencode.ai/)** | Open-source TUI coding agent. Add Atomic Chat as a local provider in `opencode.json`. | [Setup&nbsp;guide&nbsp;→](https://opencode.ai/docs/providers/#atomic-chat) |
+| **[OpenCode](https://opencode.ai/)** | Open-source TUI coding agent. Add GChat as a local provider in `opencode.json`. | [Setup&nbsp;guide&nbsp;→](https://opencode.ai/docs/providers/#atomic-chat) |
 | **[Goose](https://github.com/block/goose)** | Open-source extensible AI agent (CLI, desktop, API). | [Setup&nbsp;guide&nbsp;→](https://goose-docs.ai/docs/getting-started/providers/#local-llms) |
 | **[nanobot](https://github.com/HKUDS/nanobot)** | Ultra-lightweight personal AI agent with chat channels, MCP, and WebUI. | [Repo&nbsp;→](https://github.com/HKUDS/nanobot) |
-| **[nanoclaw](https://github.com/qwibitai/nanoclaw)** | Containerized agent runtime that calls Atomic Chat as an MCP tool. | [Skill&nbsp;guide&nbsp;→](https://github.com/qwibitai/nanoclaw/blob/main/.claude/skills/add-atomic-chat-tool/SKILL.md) |
-| **[OpenClaude](https://github.com/Gitlawb/openclaude)** | Open-source coding-agent CLI for cloud and local models. Lists Atomic Chat as a supported provider. | [Providers&nbsp;list&nbsp;→](https://github.com/Gitlawb/openclaude#supported-providers) |
-| **[Kilo Code](https://kilo.ai/)** | Open-source AI coding agent for VS Code, JetBrains, and CLI. Ships with first-class Atomic Chat provider support and auto-discovery. | [Setup&nbsp;guide&nbsp;→](https://kilo.ai/docs/ai-providers/atomic-chat) |
-| **[Hermes Desktop](https://github.com/fathah/hermes-desktop)** | Native desktop companion for Hermes Agent. Includes an Atomic Chat local preset at `http://localhost:1337/v1`. | [Repo&nbsp;→](https://github.com/fathah/hermes-desktop) |
-| **[Hermes Workspace](https://github.com/outsourc-e/hermes-workspace)** | Local-first agent workspace built on Nous Research's Hermes. Uses Atomic Chat as its inference backend. | [Repo&nbsp;→](https://github.com/outsourc-e/hermes-workspace) |
+| **[nanoclaw](https://github.com/qwibitai/nanoclaw)** | Containerized agent runtime that calls GChat as an MCP tool. | [Skill&nbsp;guide&nbsp;→](https://github.com/qwibitai/nanoclaw/blob/main/.claude/skills/add-atomic-chat-tool/SKILL.md) |
+| **[OpenClaude](https://github.com/Gitlawb/openclaude)** | Open-source coding-agent CLI for cloud and local models. Lists GChat as a supported provider. | [Providers&nbsp;list&nbsp;→](https://github.com/Gitlawb/openclaude#supported-providers) |
+| **[Kilo Code](https://kilo.ai/)** | Open-source AI coding agent for VS Code, JetBrains, and CLI. Ships with first-class GChat provider support and auto-discovery. | [Setup&nbsp;guide&nbsp;→](https://kilo.ai/docs/ai-providers/atomic-chat) |
+| **[Hermes Desktop](https://github.com/fathah/hermes-desktop)** | Native desktop companion for Hermes Agent. Includes a GChat local preset at `http://localhost:1337/v1`. | [Repo&nbsp;→](https://github.com/fathah/hermes-desktop) |
+| **[Hermes Workspace](https://github.com/outsourc-e/hermes-workspace)** | Local-first agent workspace built on Nous Research's Hermes. Uses GChat as its inference backend. | [Repo&nbsp;→](https://github.com/outsourc-e/hermes-workspace) |
 
-> Built something that runs on Atomic Chat? [Open a PR](https://github.com/AtomicBot-ai/Atomic-Chat/pulls) and we'll add it here.
+> Built something that runs on GChat? [Open a PR](https://github.com/Gadflyii/gchat/pulls) and we'll add it here.
 
 ---
 
@@ -158,8 +134,8 @@ A few projects already ship first-class support with their own setup docs:
 #### Run with Make
 
 ```bash
-git clone https://github.com/AtomicBot-ai/Atomic-Chat
-cd Atomic-Chat
+git clone https://github.com/Gadflyii/gchat
+cd gchat
 make dev
 ```
 
@@ -186,24 +162,22 @@ yarn dev
 
 ### 💻 System Requirements
 
-- **macOS**: 13.6+ (8GB RAM for 3B models, 16GB for 7B, 32GB for 13B)
-- **Windows**: 10/11 x64 (same RAM recommendations as macOS)
-- **Linux**: x86_64, glibc ≥ 2.35 (Ubuntu 22.04+, Debian 12+, Fedora 40+, Arch, Mint, Pop!_OS — same RAM recommendations as macOS). Optional: a Vulkan loader (`vulkan-1` package, or `mesa-vulkan-drivers` / proprietary NVIDIA driver) for GPU acceleration.
-- **iOS**: download from App Store
-- **Android**: download from Google Play
+- **Linux**: x86_64, glibc ≥ 2.35 (Ubuntu 22.04+, Debian 12+, Fedora 40+, Arch, Mint, Pop!_OS) with an **NVIDIA GPU** — CUDA 13.1 driver (581.15+) and compute capability SM 86 / 89 / 120a (e.g. RTX 30/40/50-series, H100). Without a qualifying GPU the app surfaces an unsupported-hardware state and local inference is unavailable.
+- **Windows**: 10/11 x64 — supported once the ginfer Windows port ships.
+- Other platforms (macOS, mobile): not supported by the ginfer engine.
 
 ---
 
 ### 🐧 Running on Linux
 
-Atomic Chat ships as a single self-contained `.AppImage` — no installer, no root:
+GChat ships as a single self-contained `.AppImage` — no installer, no root:
 
 ```bash
-chmod +x Atomic.Chat_*_amd64.AppImage
-./Atomic.Chat_*_amd64.AppImage
+chmod +x GChat_*_amd64.AppImage
+./GChat_*_amd64.AppImage
 ```
 
-If prompted about FUSE on first launch: `sudo apt install fuse libfuse2` (Debian/Ubuntu) or `sudo dnf install fuse fuse-libs` (Fedora). GPU acceleration (Vulkan) is auto-detected on first launch; only GGUF models run on Linux.
+If prompted about FUSE on first launch: `sudo apt install fuse libfuse2` (Debian/Ubuntu) or `sudo dnf install fuse fuse-libs` (Fedora). The NVIDIA GPU (CUDA 13.1, SM 86/89/120a) is auto-detected on first launch; only `.ginfer` models run on GChat.
 
 ---
 
@@ -212,14 +186,13 @@ If prompted about FUSE on first launch: `sudo apt install fuse libfuse2` (Debian
 If something isn't working:
 
 1. Copy your error logs and system specs
-2. Open an issue on [GitHub](https://github.com/AtomicBot-ai/Atomic-Chat/issues)
-3. Or ask for help in our [Discord](https://discord.com/invite/8wGSsvmg4V)
+2. Open an issue on [GitHub](https://github.com/Gadflyii/gchat/issues)
 
 ---
 
 ### 👥 Contributors
 
-Atomic Chat is built by a small core team and **140+ contributors** — including everyone who shaped the project from its earliest days. Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
+GChat is built by a small core team with contributions from the upstream projects it grew out of. Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
 
 <a href="https://github.com/Vect0rM"><img src="https://images.weserv.nl/?url=https://github.com/Vect0rM.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Vect0rM" /></a>
 <a href="https://github.com/dtorey-d"><img src="https://images.weserv.nl/?url=https://github.com/dtorey-d.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="dtorey-d" /></a>
@@ -367,8 +340,8 @@ Atomic Chat is built by a small core team and **140+ contributors** — includin
 
 ### ⭐ Star History
 
-<a href="https://star-history.com/#AtomicBot-ai/Atomic-Chat&Date">
-  <img src="https://api.star-history.com/svg?repos=AtomicBot-ai/Atomic-Chat&type=Date&cache=1" width="100%" alt="Star History" />
+<a href="https://star-history.com/#Gadflyii/gchat&Date">
+  <img src="https://api.star-history.com/svg?repos=Gadflyii/gchat&type=Date&cache=1" width="100%" alt="Star History" />
 </a>
 
 ---
@@ -381,8 +354,7 @@ Apache 2.0 — see [LICENSE](LICENSE) for details.
 
 Built on the shoulders of giants:
 
-- [llama.cpp](https://github.com/ggml-org/llama.cpp)
-- [MLX-VLM](https://github.com/Blaizzy/mlx-vlm)
+- [ginfer](https://github.com/Gadflyii/ginfer) — the inference engine
 - [Tauri](https://tauri.app/)
 - [Scalar](https://github.com/scalar/scalar)
 
@@ -390,10 +362,10 @@ Built on the shoulders of giants:
 
 ### 🌱 Heritage
 
-Atomic Chat began as a fork of [**Jan**](https://github.com/menloresearch/jan) by [Menlo Research](https://menlo.ai/) — an excellent open-source local-AI app. We're grateful to the Jan team and its contributors for the foundation they built. Atomic Chat has since grown its own direction, engines, and roadmap, but we tip our hat to where it started. 🙏
+GChat is a fork of [Atomic Chat](https://github.com/AtomicBot-ai/Atomic-Chat), which began as a fork of [**Jan**](https://github.com/menloresearch/jan) by [Menlo Research](https://menlo.ai/) — an excellent open-source local-AI app. We're grateful to the upstream teams and their contributors for the foundation they built. GChat is the interface for our own inference engine, ginfer, and has its own direction, models, and roadmap. 🙏
 
 ---
 
 <p align="center">
-  <sub>© 2026 Atomic Chat · Built with ❤️ · <a href="https://atomic.chat">atomic.chat</a></sub>
+  <sub>© 2026 GChat · Built with ❤️</sub>
 </p>

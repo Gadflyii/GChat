@@ -1,0 +1,15 @@
+[default]
+description = "Default permissions for the ginfer plugin"
+permissions = [
+    # Cleanup command
+    "allow-cleanup-ginfer-processes",
+
+    # GInfer server commands
+    "allow-load-ginfer-model",
+    "allow-unload-ginfer-model",
+    "allow-is-process-running",
+    "allow-get-random-port",
+    "allow-find-session-by-model",
+    "allow-get-loaded-models",
+    "allow-get-all-sessions",
+]

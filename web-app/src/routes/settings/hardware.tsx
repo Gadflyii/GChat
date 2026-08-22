@@ -3,21 +3,16 @@ import { route } from '@/constants/routes'
 import SettingsMenu from '@/containers/SettingsMenu'
 import HeaderPage from '@/containers/HeaderPage'
 import { Card, CardItem } from '@/containers/Card'
-import { Switch } from '@/components/ui/switch'
 import { Progress } from '@/components/ui/progress'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useHardware } from '@/hooks/useHardware'
-import { useLlamacppDevices } from '@/hooks/useLlamacppDevices'
 import { useEffect, useState } from 'react'
 import { IconDeviceDesktopAnalytics } from '@tabler/icons-react'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import type { HardwareData, SystemUsage } from '@/services/hardware/types'
-import { cn, formatMegaBytes, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { cn, formatMegaBytes } from '@/lib/utils'
 import { toNumber } from '@/utils/number'
-import { useModelProvider } from '@/hooks/useModelProvider'
-import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 import { Button } from '@/components/ui/button'
-import { DriverOutdatedBanner } from '@/containers/DriverOutdatedBanner'
 import { buildFallbackDevices } from '@/lib/gpuFallback'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,39 +31,6 @@ function HardwareContent() {
     updateSystemUsage,
     pollingPaused,
   } = useHardware()
-
-  const { providers } = useModelProvider()
-  // Hardware status follows the default local provider rather than a
-  // hardcoded TurboQuant id. Both llama.cpp providers may be installed, but
-  // upstream is the fresh-install default on every desktop platform.
-  const llamacpp = providers.find(
-    (p) => p.provider === LOCAL_LLAMACPP_PROVIDER
-  )
-
-  // Llamacpp devices hook
-  const llamacppDevicesResult = useLlamacppDevices()
-
-  // Use default values on macOS since llamacpp devices are not relevant
-  const {
-    devices: llamacppDevices,
-    loading: llamacppDevicesLoading,
-    error: llamacppDevicesError,
-    toggleDevice,
-    fetchDevices,
-  } = IS_MACOS
-    ? {
-        devices: [],
-        loading: false,
-        error: null,
-        toggleDevice: () => {},
-        fetchDevices: () => {},
-      }
-    : llamacppDevicesResult
-
-  // Fetch llamacpp devices when component mounts
-  useEffect(() => {
-    fetchDevices()
-  }, [fetchDevices])
 
   // Fetch initial hardware info and system usage
   useEffect(() => {
@@ -134,7 +96,6 @@ function HardwareContent() {
       ])
       if (hardwareData) setHardwareData(hardwareData)
       if (systemUsage) updateSystemUsage(systemUsage)
-      if (!IS_MACOS) fetchDevices()
     } catch (error) {
       console.error('Failed to refresh hardware:', error)
     } finally {
@@ -297,8 +258,8 @@ function HardwareContent() {
                 />
               </Card>
 
-              {/* Llamacpp Devices Information */}
-              {!IS_MACOS && llamacpp && (
+              {/* GPU Information */}
+              {!IS_MACOS && (
                 <Card
                   title="GPUs"
                   header={
@@ -314,74 +275,7 @@ function HardwareContent() {
                     </div>
                   }
                 >
-                  {hardwareData.gpus.length > 0 &&
-                    llamacppDevices.length === 0 && (
-                      <div className="mb-3">
-                        <DriverOutdatedBanner gpus={hardwareData.gpus} />
-                      </div>
-                    )}
-                  {llamacppDevicesLoading ? (
-                    <CardItem title="Loading devices..." actions={<></>} />
-                  ) : llamacppDevicesError ? (
-                    <CardItem
-                      title="Error loading devices"
-                      actions={
-                        <span className="text-destructive text-sm">
-                          {llamacppDevicesError}
-                        </span>
-                      }
-                    />
-                  ) : llamacppDevices.length > 0 ? (
-                    llamacppDevices.map((device, index) => (
-                      <Card key={index}>
-                        <CardItem
-                          title={device.name}
-                          actions={
-                            <div className="flex items-center gap-4">
-                              {/* <div className="flex flex-col items-end gap-1">
-                            <span className="text-foreground text-sm">
-                              ID: {device.id}
-                            </span>
-                            <span className="text-foreground text-sm">
-                              Memory: {formatMegaBytes(device.mem)} /{' '}
-                              {formatMegaBytes(device.free)} free
-                            </span>
-                          </div> */}
-                              <Switch
-                                checked={device.activated}
-                                onCheckedChange={() => {
-                                  toggleDevice(device.id)
-                                  serviceHub.models().stopAllModels()
-
-                                  // Refresh active models after stopping —
-                                  // preserve cloud entries tracked only in UI
-                                  // state via the shared helper.
-                                  serviceHub
-                                    .models()
-                                    .getActiveModels()
-                                    .then((models) =>
-                                      syncActiveModelsFromEngines(models || [])
-                                    )
-                                }}
-                              />
-                            </div>
-                          }
-                        />
-                        <div className="mt-3">
-                          <CardItem
-                            title={t('settings:hardware.vram')}
-                            actions={
-                              <span className="text-foreground">
-                                {formatMegaBytes(device.free)}{' '}
-                                {t('settings:hardware.freeOf')}{' '}
-                                {formatMegaBytes(device.mem)}
-                              </span>
-                            }
-                          />
-                        </div>
-                      </Card>
-                    ))
-                  ) : hardwareData.gpus.length > 0 ? (
+                  {hardwareData.gpus.length > 0 ? (
                     <>
                       {buildFallbackDevices(hardwareData.gpus).map(
                         (device) => (

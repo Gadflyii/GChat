@@ -1,7 +1,7 @@
 [project]
-name = "atomic-concurrent-demo"
+name = "gchat-concurrent-demo"
 version = "0.1.0"
-description = "Concurrent multi-agent demo for Atomic-Chat's llama.cpp Concurrent Mode"
+description = "Concurrent multi-agent demo for GChat's llama.cpp Concurrent Mode"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useTokensCount } from '@/hooks/useTokensCount'
-import { ThreadMessage } from '@janhq/core'
+import { ThreadMessage } from '@gchat/core'
 
 interface TokenCounterProps {
   messages?: ThreadMessage[]

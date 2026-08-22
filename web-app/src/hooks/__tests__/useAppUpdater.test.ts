@@ -12,7 +12,7 @@ vi.mock('@/lib/utils', async (importOriginal) => ({
   isDev: vi.fn(() => false),
 }))
 
-vi.mock('@janhq/core', () => ({
+vi.mock('@gchat/core', () => ({
   events: {
     on: vi.fn(),
     off: vi.fn(),
@@ -55,7 +55,7 @@ Object.defineProperty(global, 'AUTO_UPDATER_DISABLED', {
 })
 
 import { isDev } from '@/lib/utils'
-import { events } from '@janhq/core'
+import { events } from '@gchat/core'
 
 describe('useAppUpdater', () => {
   const mockEvents = events as any

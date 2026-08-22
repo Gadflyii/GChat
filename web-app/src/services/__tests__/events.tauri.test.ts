@@ -12,12 +12,12 @@ describe('TauriEventsService', () => {
 
   it('emits and listens through the Tauri event transport', async () => {
     const handler = vi.fn()
-    await eventsService.listen<{ value: number }>('atomic-event', handler)
+    await eventsService.listen<{ value: number }>('gchat-event', handler)
 
-    await eventsService.emit('atomic-event', { value: 42 })
+    await eventsService.emit('gchat-event', { value: 42 })
 
     expect(handler).toHaveBeenCalledWith({
-      event: 'atomic-event',
+      event: 'gchat-event',
       payload: { value: 42 },
     })
   })

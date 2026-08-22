@@ -1,4 +1,4 @@
-//! Direct HTTP client to the local `llama-server` `/completion` endpoint.
+//! Direct HTTP client to the local `ginfer-serve` backend.
 
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -8,8 +8,7 @@ use futures_util::StreamExt;
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tauri_plugin_llamacpp::state::LlamacppState;
-use tauri_plugin_llamacpp_upstream::state::LlamacppState as LlamacppUpstreamState;
+use tauri_plugin_ginfer::state::GinferState;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
@@ -24,15 +23,13 @@ const ERROR_DETAIL_MAX_LEN: usize = 300;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LlamaBackend {
-    Llamacpp,
-    LlamacppUpstream,
+    Ginfer,
 }
 
 impl LlamaBackend {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Llamacpp => "llamacpp",
-            Self::LlamacppUpstream => "llamacpp-upstream",
+            Self::Ginfer => "ginfer",
         }
     }
 }
@@ -121,17 +118,17 @@ pub struct ParsedToolCalls {
 
 #[derive(Debug, Error)]
 pub enum LlamaClientError {
-    #[error("no active llama.cpp session for model '{0}'")]
+    #[error("no active ginfer session for model '{0}'")]
     SessionNotFound(String),
-    #[error("llama-server request was cancelled")]
+    #[error("ginfer-serve request was cancelled")]
     Cancelled,
-    #[error("llama-server completion exceeded the 600-second deadline")]
+    #[error("ginfer-serve completion exceeded the 600-second deadline")]
     TimedOut,
-    #[error("llama-server returned HTTP {status}: {detail}")]
+    #[error("ginfer-serve returned HTTP {status}: {detail}")]
     Http { status: u16, detail: String },
-    #[error("llama-server transport error: {0}")]
+    #[error("ginfer-serve transport error: {0}")]
     Transport(String),
-    #[error("invalid llama-server response: {0}")]
+    #[error("invalid ginfer-serve response: {0}")]
     InvalidResponse(String),
     #[error("invalid tool-call completion: {0}")]
     ToolCallParse(String),
@@ -270,7 +267,7 @@ impl LlamaServerClient {
         let target = self.target();
         if !target.has_vision {
             return Err(LlamaClientError::InvalidResponse(
-                "active llama.cpp session is not vision-capable".into(),
+                "active ginfer session is not vision-capable".into(),
             ));
         }
         let payload = vision_request_payload(&target.model_id, prompt, images);
@@ -561,34 +558,20 @@ fn vision_request_payload(model_id: &str, prompt: &str, images: &[(String, Strin
 
 pub async fn find_session_by_model_id(
     model_id: &str,
-    llamacpp: &LlamacppState,
-    upstream: &LlamacppUpstreamState,
+    ginfer: &GinferState,
 ) -> Result<LlamaSessionTarget, LlamaClientError> {
-    {
-        let sessions = llamacpp.llama_server_process.lock().await;
-        if let Some(session) = sessions
-            .values()
-            .find(|session| model_ids_match(&session.info.model_id, model_id))
-        {
-            return Ok(LlamaSessionTarget {
-                port: session.info.port,
-                api_key: session.info.api_key.clone(),
-                model_id: session.info.model_id.clone(),
-                has_vision: session.info.mmproj_path.is_some(),
-                backend: LlamaBackend::Llamacpp,
-            });
-        }
-    }
-    let sessions = upstream.llama_server_process.lock().await;
+    let sessions = ginfer.ginfer_process.lock().await;
     sessions
         .values()
         .find(|session| model_ids_match(&session.info.model_id, model_id))
         .map(|session| LlamaSessionTarget {
-            port: session.info.port,
+            port: session.info.port as i32,
             api_key: session.info.api_key.clone(),
             model_id: session.info.model_id.clone(),
-            has_vision: session.info.mmproj_path.is_some(),
-            backend: LlamaBackend::LlamacppUpstream,
+            // ginfer's session info does not expose a vision flag; assume
+            // text-only until the backend reports otherwise.
+            has_vision: false,
+            backend: LlamaBackend::Ginfer,
         })
         .ok_or_else(|| LlamaClientError::SessionNotFound(model_id.to_owned()))
 }
@@ -596,38 +579,22 @@ pub async fn find_session_by_model_id(
 pub async fn find_session_by_model_and_backend(
     model_id: &str,
     backend: LlamaBackend,
-    llamacpp: &LlamacppState,
-    upstream: &LlamacppUpstreamState,
+    ginfer: &GinferState,
 ) -> Result<LlamaSessionTarget, LlamaClientError> {
-    match backend {
-        LlamaBackend::Llamacpp => {
-            let sessions = llamacpp.llama_server_process.lock().await;
-            sessions
-                .values()
-                .find(|session| model_ids_match(&session.info.model_id, model_id))
-                .map(|session| LlamaSessionTarget {
-                    port: session.info.port,
-                    api_key: session.info.api_key.clone(),
-                    model_id: session.info.model_id.clone(),
-                    has_vision: session.info.mmproj_path.is_some(),
-                    backend,
-                })
-        }
-        LlamaBackend::LlamacppUpstream => {
-            let sessions = upstream.llama_server_process.lock().await;
-            sessions
-                .values()
-                .find(|session| model_ids_match(&session.info.model_id, model_id))
-                .map(|session| LlamaSessionTarget {
-                    port: session.info.port,
-                    api_key: session.info.api_key.clone(),
-                    model_id: session.info.model_id.clone(),
-                    has_vision: session.info.mmproj_path.is_some(),
-                    backend,
-                })
-        }
-    }
-    .ok_or_else(|| LlamaClientError::SessionNotFound(model_id.to_owned()))
+    let sessions = ginfer.ginfer_process.lock().await;
+    sessions
+        .values()
+        .find(|session| model_ids_match(&session.info.model_id, model_id))
+        .map(|session| LlamaSessionTarget {
+            port: session.info.port as i32,
+            api_key: session.info.api_key.clone(),
+            model_id: session.info.model_id.clone(),
+            // ginfer's session info does not expose a vision flag; assume
+            // text-only until the backend reports otherwise.
+            has_vision: false,
+            backend,
+        })
+        .ok_or_else(|| LlamaClientError::SessionNotFound(model_id.to_owned()))
 }
 
 fn read_context_window(props: &Value) -> Option<usize> {
@@ -1060,7 +1027,7 @@ mod tests {
         assert_eq!(completion.content, "ok");
         assert_eq!(hook.calls.load(Ordering::SeqCst), 1);
         assert_eq!(client.target().port, replacement_target.port);
-        assert_eq!(client.target().backend, LlamaBackend::Llamacpp);
+        assert_eq!(client.target().backend, LlamaBackend::Ginfer);
         assert_eq!(first.requests().len(), 1);
         assert_eq!(replacement.requests().len(), 1);
     }
@@ -1141,14 +1108,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rejects_context_expansion_target_from_another_backend() {
+    async fn rejects_context_expansion_target_from_another_model() {
         let server = ScriptedCompletionServer::start(vec![ScriptedResponse::http_error(
             StatusCode::BAD_REQUEST,
             "context size exceeded",
         )])
         .await;
         let mut replacement = server.client().target();
-        replacement.backend = LlamaBackend::LlamacppUpstream;
+        replacement.model_id = "some-other-model".into();
         let hook = Arc::new(StaticExpansion {
             calls: AtomicUsize::new(0),
             result: Ok(replacement),
@@ -1164,7 +1131,7 @@ mod tests {
             .unwrap_err();
 
         assert!(error.to_string().contains("different model or backend"));
-        assert_eq!(client.target().backend, LlamaBackend::Llamacpp);
+        assert_eq!(client.target().backend, LlamaBackend::Ginfer);
         assert_eq!(server.requests().len(), 1);
     }
 
@@ -1290,7 +1257,7 @@ mod tests {
             api_key: String::new(),
             model_id: "text-model".into(),
             has_vision: false,
-            backend: LlamaBackend::Llamacpp,
+            backend: LlamaBackend::Ginfer,
         })
         .unwrap();
         let error = client

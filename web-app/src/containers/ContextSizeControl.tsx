@@ -4,7 +4,7 @@ import {
   EngineManager,
   type AIEngine,
   type ThreadMessage,
-} from '@janhq/core'
+} from '@gchat/core'
 import {
   IconArrowDown,
   IconArrowUp,
@@ -21,14 +21,10 @@ import { Slider } from '@/components/ui/slider'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTokensCount } from '@/hooks/useTokensCount'
-import { cn } from '@/lib/utils'
+import { cn, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 
-const LOCAL_CONTEXT_PROVIDERS = new Set([
-  'llamacpp',
-  'llamacpp-upstream',
-  'mlx',
-])
+const LOCAL_CONTEXT_PROVIDERS = new Set([LOCAL_LLAMACPP_PROVIDER])
 const FALLBACK_MAX_CONTEXT = 512 * 1024
 
 interface ContextSizeControlProps {

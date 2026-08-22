@@ -11,7 +11,7 @@ import { useMatches, useNavigate } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 
 import { useModelProvider } from '@/hooks/useModelProvider'
-import { getProviderTitle } from '@/lib/utils'
+import { getProviderTitle, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
 import { sortProvidersForSettings } from '@/lib/providerOrder'
 import ProvidersAvatar from '@/containers/ProvidersAvatar'
 import { AddProviderDialog } from '@/containers/dialogs'
@@ -57,19 +57,11 @@ const SettingsMenu = () => {
   )
 
   const activeProviders = sortProvidersForSettings(
-    providers.filter((provider) => {
-      if (!provider.active) return false
-      if (!IS_MACOS && provider.provider === 'mlx') return false
-      return true
-    })
+    providers.filter((provider) => provider.active)
   )
 
   const hiddenProviders = sortProvidersForSettings(
-    providers.filter((provider) => {
-      if (provider.active) return false
-      if (!IS_MACOS && provider.provider === 'mlx') return false
-      return true
-    })
+    providers.filter((provider) => !provider.active)
   )
 
   // Check if current route has a providerName parameter and expand providers submenu
@@ -214,10 +206,11 @@ const SettingsMenu = () => {
                             className={cn(
                               'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground',
                               isActive && 'bg-foreground/20',
-                              // hidden for llama.cpp provider for setup remote provider
-                              provider.provider === 'llama.cpp' &&
-                                stepSetupRemoteProvider &&
-                                'hidden'
+                               // hidden for the local provider during setup
+                               // remote provider
+                               provider.provider === LOCAL_LLAMACPP_PROVIDER &&
+                                 stepSetupRemoteProvider &&
+                                 'hidden'
                             )}
                             onClick={() =>
                               navigate({
@@ -272,10 +265,10 @@ const SettingsMenu = () => {
                     key={provider.provider}
                     className={cn(
                       'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground',
-                      isRouteActive && 'bg-foreground/20',
-                      provider.provider === 'llama.cpp' &&
-                        stepSetupRemoteProvider &&
-                        'hidden'
+                       isRouteActive && 'bg-foreground/20',
+                       provider.provider === LOCAL_LLAMACPP_PROVIDER &&
+                         stepSetupRemoteProvider &&
+                         'hidden'
                     )}
                     onClick={() =>
                       navigate({

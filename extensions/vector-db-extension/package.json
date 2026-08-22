@@ -1,11 +1,11 @@
 {
-  "name": "@janhq/vector-db-extension",
+  "name": "@gchat/vector-db-extension",
   "productName": "Vector DB",
   "version": "0.1.0",
   "description": "Vector DB integration using sqlite-vec if available with linear fallback",
   "main": "dist/index.js",
   "module": "dist/module.js",
-  "author": "Jan <service@jan.ai>",
+  "author": "GChat",
   "license": "AGPL-3.0",
   "scripts": {
     "build": "rolldown -c rolldown.config.mjs",
@@ -18,9 +18,9 @@
     "typescript": "5.9.2"
   },
   "dependencies": {
-    "@janhq/core": "../../core/package.tgz",
-    "@janhq/tauri-plugin-rag-api": "link:../../src-tauri/plugins/tauri-plugin-rag",
-    "@janhq/tauri-plugin-vector-db-api": "link:../../src-tauri/plugins/tauri-plugin-vector-db"
+    "@gchat/core": "../../core/package.tgz",
+    "@gchat/tauri-plugin-rag-api": "link:../../src-tauri/plugins/tauri-plugin-rag",
+    "@gchat/tauri-plugin-vector-db-api": "link:../../src-tauri/plugins/tauri-plugin-vector-db"
   },
   "files": [
     "dist/*",

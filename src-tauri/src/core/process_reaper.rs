@@ -1,23 +1,23 @@
 //! Startup reaper for orphaned model-backend processes.
 //!
-//! The engine plugins spawn long-lived child processes (`llama-server`,
-//! `mlx-server`). On a *graceful* quit we tear them down via `RunEvent::Exit`
-//! (and `kill_on_drop` catches the normal `Child` drop). But none of that runs
-//! when the app dies abnormally — a crash, an OOM kill, a Force Quit, or any
-//! `SIGKILL`. In those cases the backends are re-parented to `launchd`/`init`
-//! (ppid = 1) and keep holding RAM, GPU/Metal contexts and TCP ports forever.
+//! The engine plugin spawns long-lived child processes (`ginfer-serve`). On a
+//! *graceful* quit we tear them down via `RunEvent::Exit` (and `kill_on_drop`
+//! catches the normal `Child` drop). But none of that runs when the app dies
+//! abnormally — a crash, an OOM kill, a Force Quit, or any `SIGKILL`. In those
+//! cases the backend is re-parented to `launchd`/`init` (ppid = 1) and keeps
+//! holding RAM, GPU contexts and TCP ports forever.
 //!
 //! Users hit exactly this: after a few abnormal exits, several stale
-//! `llama-server`/`mlx-server` processes pile up and starve the machine, so the
-//! next launch "freezes everything". Because the app enforces single-instance,
-//! any backend of *ours* still alive at startup can only be such an orphan — so
-//! we reap them before spawning anything new, guaranteeing a clean slate.
+//! `ginfer-serve` processes pile up and starve the machine, so the next launch
+//! "freezes everything". Because the app enforces single-instance, any backend
+//! of *ours* still alive at startup can only be such an orphan — so we reap it
+//! before spawning anything new, guaranteeing a clean slate.
 //!
 //! Matching is deliberately conservative: a victim must both (a) be named like
 //! one of our backends and (b) execute from inside a directory this app owns
-//! (its data folder, where llama.cpp backends are downloaded, or its bundled
-//! resource dir, where `mlx-server` ships). That avoids ever touching an
-//! unrelated process that merely shares a name.
+//! (its data folder, where the `ginfer-serve` binary is downloaded, or its
+//! bundled resource dir). That avoids ever touching an unrelated process that
+//! merely shares a name.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -27,7 +27,7 @@ use tauri::{Manager, Runtime};
 use crate::core::app::commands::get_jan_data_folder_path;
 
 /// Executable file-name prefixes for the backends we manage.
-const BACKEND_NAME_PREFIXES: [&str; 2] = ["llama-server", "mlx-server"];
+const BACKEND_NAME_PREFIXES: [&str; 1] = ["ginfer-serve"];
 
 /// How long to wait after `SIGTERM` before escalating survivors to `SIGKILL`.
 const GRACE_PERIOD: Duration = Duration::from_millis(1500);
@@ -51,9 +51,9 @@ fn exe_under_any_root(exe: &Path, roots: &[PathBuf]) -> bool {
 pub fn reap_orphan_backends<R: Runtime>(app: &tauri::AppHandle<R>) {
     use sysinfo::{ProcessesToUpdate, Signal, System};
 
-    // Directories we own. `llama-server` is downloaded under the data folder;
-    // `mlx-server` is bundled under the resource dir. Both are checked so a
-    // process only qualifies if it runs from inside one of them.
+    // Directories we own. `ginfer-serve` is downloaded under the data folder;
+    // the resource dir is also checked so a process only qualifies if it runs
+    // from inside one of them.
     let mut roots: Vec<PathBuf> = vec![get_jan_data_folder_path(app.clone())];
     if let Ok(resource_dir) = app.path().resource_dir() {
         roots.push(resource_dir);
@@ -138,45 +138,42 @@ mod tests {
 
     #[test]
     fn matches_exact_backend_names() {
-        assert!(is_backend_name("llama-server"));
-        assert!(is_backend_name("mlx-server"));
+        assert!(is_backend_name("ginfer-serve"));
     }
 
     #[test]
     fn matches_platform_suffixed_backend_names() {
         // macOS/Windows may report a suffixed executable name.
-        assert!(is_backend_name("llama-server-bin"));
-        assert!(is_backend_name("mlx-server.exe"));
+        assert!(is_backend_name("ginfer-serve-bin"));
+        assert!(is_backend_name("ginfer-serve.exe"));
     }
 
     #[test]
     fn rejects_unrelated_names() {
         assert!(!is_backend_name("server"));
-        assert!(!is_backend_name("Atomic Chat"));
+        assert!(!is_backend_name("GChat"));
         assert!(!is_backend_name("node"));
-        assert!(!is_backend_name("my-llama-server")); // prefix must be at the start
+        assert!(!is_backend_name("my-ginfer-serve")); // prefix must be at the start
     }
 
     #[test]
     fn exe_must_live_under_an_owned_root() {
-        let data = PathBuf::from("/Users/x/Library/Application Support/Atomic Chat/data");
-        let resource = PathBuf::from("/Applications/Atomic Chat.app/Contents/Resources");
+        let data = PathBuf::from("/Users/x/Library/Application Support/GChat/data");
+        let resource = PathBuf::from("/Applications/GChat.app/Contents/Resources");
         let roots = vec![data.clone(), resource.clone()];
 
-        // llama-server downloaded under the data folder → owned.
+        // ginfer-serve downloaded under the data folder → owned.
         assert!(exe_under_any_root(
-            &data.join("llamacpp-upstream/backends/b1/macos-arm64/build/bin/llama-server"),
+            &data.join("ginfer/bin/ginfer-serve"),
             &roots
         ));
-        // mlx-server bundled under resources → owned.
-        assert!(exe_under_any_root(&resource.join("bin/mlx-server"), &roots));
         // Same-named binary living elsewhere → NOT ours, must be spared.
         assert!(!exe_under_any_root(
-            &PathBuf::from("/opt/homebrew/bin/llama-server"),
+            &PathBuf::from("/opt/homebrew/bin/ginfer-serve"),
             &roots
         ));
         assert!(!exe_under_any_root(
-            &PathBuf::from("/tmp/mlx-server"),
+            &PathBuf::from("/tmp/ginfer-serve"),
             &roots
         ));
     }

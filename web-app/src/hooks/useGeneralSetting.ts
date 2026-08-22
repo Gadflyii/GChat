@@ -89,7 +89,7 @@ export const useGeneralSetting = create<GeneralSettingState>()(
       setHuggingfaceToken: (token) => {
         set({ huggingfaceToken: token })
         ExtensionManager.getInstance()
-          .getByName('@janhq/download-extension')
+          .getByName('@gchat/download-extension')
           ?.getSettings()
           .then((settings) => {
             if (settings) {
@@ -100,7 +100,7 @@ export const useGeneralSetting = create<GeneralSettingState>()(
                 return e
               })
               ExtensionManager.getInstance()
-                .getByName('@janhq/download-extension')
+                .getByName('@gchat/download-extension')
                 ?.updateSettings(newSettings)
             }
           })

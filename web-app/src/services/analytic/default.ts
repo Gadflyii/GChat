@@ -2,7 +2,7 @@
  * Default Analytic Service - Web implementation
  */
 
-import { AppConfiguration } from '@janhq/core'
+import { AppConfiguration } from '@gchat/core'
 import type { AnalyticService } from './types'
 
 export class DefaultAnalyticService implements AnalyticService {

@@ -5,7 +5,7 @@ const COMMANDS: &[&str] = &[
     // `tauri_plugin::Builder` never generated the autogen permission TOML
     // for it and the frontend invocation failed with
     // "Command plugin:hardware:refresh_system_info not allowed by ACL".
-    // See the 2026-05-27 ADR (Atomic-Chat#TBD).
+    // See the 2026-05-27 ADR (GChat#TBD).
     "refresh_system_info",
 ];
 

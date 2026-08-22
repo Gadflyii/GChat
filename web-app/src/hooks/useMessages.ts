@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { ThreadMessage } from '@janhq/core'
+import { ThreadMessage } from '@gchat/core'
 import { getServiceHub } from '@/hooks/useServiceHub'
 
 type MessageState = {

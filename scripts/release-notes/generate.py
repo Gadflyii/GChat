@@ -7,7 +7,7 @@ Reads env vars:
     OPENAI_BASE_URL  default "https://api.openai.com/v1"
     CURR_TAG         required, e.g. "v1.1.64"
     PREV_TAG         optional, resolved from git history if absent
-    REPO             optional, e.g. "AtomicBot-ai/Atomic-Chat"
+    REPO             optional, e.g. "AtomicBot-ai/GChat"
     GH_TOKEN         optional; enables GitHub API lookups for PR authors
                      (Contributors section) and for fetching recent published
                      releases used as few-shot style exemplars.
@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
 logger = logging.getLogger("release-notes")
 
 
-SYSTEM_PROMPT = """You are a release notes editor for a desktop AI app (Atomic Chat).
+SYSTEM_PROMPT = """You are a release notes editor for a desktop AI app (GChat).
 You receive (1) optional REAL examples of our previously published release
 notes and (2) the git commits (subject + body) between two tags. Produce
 concise, polished, user-facing release notes for end users.
@@ -71,7 +71,7 @@ OUTPUT RULES:
 FALLBACK EXAMPLE (only when no real examples are provided):
 ## 🚀 New Features
 
-- Windows support — Atomic Chat is now available on Windows
+- Windows support — GChat is now available on Windows
 
 ## 🔧 Improvements & Fixes
 
@@ -148,7 +148,7 @@ _PR_NUMBER_RE = re.compile(r"\(#(\d+)\)")
 def _gh_api(url: str, token: str | None) -> dict | list | None:
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "atomic-chat-release-notes",
+        "User-Agent": "gchat-release-notes",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     if token:

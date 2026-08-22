@@ -1,6 +1,6 @@
 import { isDev } from '@/lib/utils'
 import { useState, useCallback, useEffect } from 'react'
-import { events, AppEvent } from '@janhq/core'
+import { events, AppEvent } from '@gchat/core'
 import type { UpdateInfo } from '@/services/updater/types'
 import { SystemEvent } from '@/types/events'
 import { getServiceHub } from '@/hooks/useServiceHub'

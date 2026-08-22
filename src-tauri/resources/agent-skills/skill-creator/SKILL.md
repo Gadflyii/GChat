@@ -1,6 +1,6 @@
 ---
 name: skill-creator
-description: Author or edit Atomic Chat Agent skills (SKILL.md + YAML). Use when creating, renaming, or tightening skills and their install layout.
+description: Author or edit GChat Agent skills (SKILL.md + YAML). Use when creating, renaming, or tightening skills and their install layout.
 version: 1.3.1
 requires_tools:
   - os.fs.read
@@ -39,7 +39,7 @@ platforms:
 
 # my-skill-name
 
-Body here. Use real Atomic Chat Agent tool names such as `skill.view`,
+Body here. Use real GChat Agent tool names such as `skill.view`,
 `os.http.request`, and `os.web.search`.
 ```
 
@@ -58,9 +58,9 @@ Rules:
 
 | Scope | Path |
 |-------|------|
-| Global | `<Atomic Chat data folder>/agent-skills/<name>/SKILL.md` |
+| Global | `<GChat data folder>/agent-skills/<name>/SKILL.md` |
 
-Atomic Chat currently loads only this global root. One folder per skill;
+GChat currently loads only this global root. One folder per skill;
 single `SKILL.md` at folder root.
 
 ## Workflow

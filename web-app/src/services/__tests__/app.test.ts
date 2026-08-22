@@ -11,8 +11,8 @@ const engineMocks = vi.hoisted(() => ({
   unload: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('@janhq/core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@janhq/core')>()
+vi.mock('@gchat/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@gchat/core')>()
   return {
     ...actual,
     EngineManager: {
@@ -84,10 +84,10 @@ describe('TauriAppService', () => {
   })
 
   it('routes data-folder reads through APIs and TauriCoreService', async () => {
-    ipcHandler.mockReturnValue({ data_folder: '/path/to/atomic/data' })
+    ipcHandler.mockReturnValue({ data_folder: '/path/to/gchat/data' })
 
-    await expect(appService.getJanDataFolder()).resolves.toBe(
-      '/path/to/atomic/data'
+    await expect(appService.getGchatDataFolder()).resolves.toBe(
+      '/path/to/gchat/data'
     )
     expect(ipcHandler).toHaveBeenCalledWith('get_app_configurations', {})
   })
@@ -95,16 +95,16 @@ describe('TauriAppService', () => {
   it('routes data-folder relocation through APIs and TauriCoreService', async () => {
     ipcHandler.mockReturnValue(undefined)
 
-    await appService.relocateJanDataFolder('/new/path/to/atomic/data')
+    await appService.relocateGchatDataFolder('/new/path/to/gchat/data')
 
     expect(ipcHandler).toHaveBeenCalledWith('change_app_data_folder', {
-      newDataFolder: '/new/path/to/atomic/data',
+      newDataFolder: '/new/path/to/gchat/data',
     })
   })
 
   it('reads and updates the durable autostart preference', async () => {
     const configuration = {
-      data_folder: '/path/to/atomic/data',
+      data_folder: '/path/to/gchat/data',
       quick_ask: false,
       autostart_preference: 'disabled' as const,
     }

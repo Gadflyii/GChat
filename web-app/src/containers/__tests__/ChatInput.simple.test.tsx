@@ -61,8 +61,8 @@ vi.mock('@/hooks/useAgentMode', () => {
   return { useAgentMode }
 })
 
-vi.mock('@/hooks/useJanBrowserExtension', () => ({
-  useJanBrowserExtension: () => ({
+vi.mock('@/hooks/useGChatBrowserExtension', () => ({
+  useGChatBrowserExtension: () => ({
     isActive: false,
     dialogOpen: false,
     dialogState: null,
@@ -94,12 +94,8 @@ vi.mock('@/containers/ReasoningToggle', () => ({
   default: () => null,
 }))
 
-vi.mock('@/containers/dialogs/JanBrowserExtensionDialog', () => ({
+vi.mock('@/containers/dialogs/GChatBrowserExtensionDialog', () => ({
   default: () => null,
-}))
-
-vi.mock('@/containers/PromptVisionModel', () => ({
-  PromptVisionModel: () => null,
 }))
 
 vi.mock('@/containers/AgentApprovalModeSelect', () => ({

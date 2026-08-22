@@ -3,7 +3,6 @@ import type { CatalogModel } from '@/services/models/types'
 import {
   applyHubFilters,
   DEFAULT_HUB_FILTERS,
-  filterByFormats,
   formatMemoryBudget,
   hasLikeData,
   HUB_FILTERS_STORAGE_KEY,
@@ -37,41 +36,11 @@ const gguf = (
   ...extra,
 })
 
-const mlx = (
-  name: string,
-  fileSize: string,
-  extra: Partial<CatalogModel> = {}
-): CatalogModel => ({
-  model_name: name,
-  description: '',
-  downloads: 0,
-  is_mlx: true,
-  library_name: 'mlx',
-  safetensors_files: [
-    {
-      model_id: name,
-      path: `https://huggingface.co/${name}/resolve/main/model.safetensors`,
-      file_size: fileSize,
-    },
-  ],
-  ...extra,
-})
-
 describe('normalizeHubFilters', () => {
   it('returns the defaults for anything that is not an object', () => {
     expect(normalizeHubFilters(null)).toEqual(DEFAULT_HUB_FILTERS)
     expect(normalizeHubFilters('nonsense')).toEqual(DEFAULT_HUB_FILTERS)
     expect(normalizeHubFilters(42)).toEqual(DEFAULT_HUB_FILTERS)
-  })
-
-  it('keeps only the first valid format', () => {
-    expect(
-      normalizeHubFilters({ formats: ['gguf', 'mlx', 'onnx', 7] }).formats
-    ).toEqual(['gguf'])
-  })
-
-  it('falls back to GGUF when no valid format is selected', () => {
-    expect(normalizeHubFilters({ formats: [] }).formats).toEqual(['gguf'])
   })
 
   it('falls back to defaults for an unknown sort key or non-boolean flag', () => {
@@ -82,7 +51,6 @@ describe('normalizeHubFilters', () => {
 
   it('preserves a fully valid state', () => {
     const state: HubFilterState = {
-      formats: ['mlx'],
       sort: 'downloads',
       onlyFitting: false,
     }
@@ -97,7 +65,6 @@ describe('hub filter persistence', () => {
 
   it('round-trips through localStorage', () => {
     const state: HubFilterState = {
-      formats: ['mlx'],
       sort: 'last-modified',
       onlyFitting: false,
     }
@@ -117,10 +84,9 @@ describe('hub filter persistence', () => {
   it('repairs a partially valid stored value', () => {
     window.localStorage.setItem(
       HUB_FILTERS_STORAGE_KEY,
-      JSON.stringify({ formats: ['mlx', 'bogus'], sort: 'nope' })
+      JSON.stringify({ sort: 'nope', onlyFitting: 'yes' })
     )
     expect(readHubFilters()).toEqual({
-      formats: ['mlx'],
       sort: DEFAULT_HUB_FILTERS.sort,
       onlyFitting: DEFAULT_HUB_FILTERS.onlyFitting,
     })
@@ -137,7 +103,7 @@ describe('hub filter persistence', () => {
 
     expect(readHubFilters()).toEqual(DEFAULT_HUB_FILTERS)
     expect(() =>
-      writeHubFilters({ formats: ['gguf'], sort: 'likes', onlyFitting: false })
+      writeHubFilters({ sort: 'likes', onlyFitting: false })
     ).not.toThrow()
 
     denied.mockRestore()
@@ -158,40 +124,6 @@ describe('hub filter persistence', () => {
     ).not.toThrow()
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
-  })
-})
-
-describe('filterByFormats', () => {
-  const models = [gguf('a/gguf-one', '1 GB'), mlx('a/mlx-one', '1 GB')]
-
-  it('keeps only GGUF entries', () => {
-    expect(filterByFormats(models, ['gguf']).map((m) => m.model_name)).toEqual([
-      'a/gguf-one',
-    ])
-  })
-
-  it('keeps only MLX entries', () => {
-    expect(filterByFormats(models, ['mlx']).map((m) => m.model_name)).toEqual([
-      'a/mlx-one',
-    ])
-  })
-
-  it('keeps everything when both formats are selected', () => {
-    expect(filterByFormats(models, ['gguf', 'mlx'])).toHaveLength(2)
-  })
-
-  it('treats an empty selection as no filter rather than an empty list', () => {
-    expect(filterByFormats(models, [])).toHaveLength(2)
-  })
-
-  it('recognizes MLX declared only through library_name', () => {
-    const byLibrary: CatalogModel = {
-      model_name: 'a/library-mlx',
-      description: '',
-      downloads: 0,
-      library_name: 'MLX',
-    }
-    expect(filterByFormats([byLibrary], ['mlx'])).toHaveLength(1)
   })
 })
 
@@ -229,19 +161,6 @@ describe('modelDownloadSizeText and modelFitsBudget', () => {
       ],
     })
     expect(modelDownloadSizeText(withMmproj)).toBe('5.0 GB')
-  })
-
-  it('sums every safetensors shard for MLX', () => {
-    const sharded = mlx('a/sharded', '3.0 GB')
-    sharded.safetensors_files = [
-      ...(sharded.safetensors_files ?? []),
-      {
-        model_id: 'a/sharded-2',
-        path: 'https://example.com/model-2.safetensors',
-        file_size: '2.0 GB',
-      },
-    ]
-    expect(modelDownloadSizeText(sharded)).toBe('5.0 GB')
   })
 
   it('keeps models that fit and rejects the ones that do not', () => {
@@ -353,13 +272,12 @@ describe('applyHubFilters', () => {
   const models = [
     gguf('a/small', '4 GB', { downloads: 10 }),
     gguf('a/huge', '64 GB', { downloads: 999 }),
-    mlx('a/mlx', '6 GB', { downloads: 100 }),
   ]
 
-  it('applies format filter, fit filter and sort together', () => {
+  it('applies the fit filter and sort together', () => {
     const result = applyHubFilters(
       models,
-      { formats: ['gguf'], sort: 'downloads', onlyFitting: true },
+      { sort: 'downloads', onlyFitting: true },
       { budgetBytes: 20 * GB }
     )
     expect(result.map((m) => m.model_name)).toEqual(['a/small'])
@@ -368,7 +286,7 @@ describe('applyHubFilters', () => {
   it('skips the fit filter when the caller opts out', () => {
     const result = applyHubFilters(
       models,
-      { formats: ['gguf'], sort: 'downloads', onlyFitting: true },
+      { sort: 'downloads', onlyFitting: true },
       { budgetBytes: 20 * GB, applyFitFilter: false }
     )
     expect(result.map((m) => m.model_name)).toEqual(['a/huge', 'a/small'])
@@ -376,17 +294,16 @@ describe('applyHubFilters', () => {
 
   it('skips the fit filter when the budget is unknown', () => {
     const result = applyHubFilters(models, {
-      formats: ['gguf', 'mlx'],
       sort: 'recommended',
       onlyFitting: true,
     })
-    expect(result).toHaveLength(3)
+    expect(result).toHaveLength(2)
   })
 
   it('skips the fit filter when the user turned it off', () => {
     const result = applyHubFilters(
       models,
-      { formats: ['gguf'], sort: 'recommended', onlyFitting: false },
+      { sort: 'recommended', onlyFitting: false },
       { budgetBytes: 20 * GB }
     )
     expect(result.map((m) => m.model_name)).toEqual(['a/small', 'a/huge'])

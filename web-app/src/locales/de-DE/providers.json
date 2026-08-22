@@ -66,10 +66,5 @@
     "neverUpdated": "Noch nicht geladen",
     "successDescription": "Anbieterkatalog wurde aktualisiert.",
     "errorDescription": "Katalog konnte nicht aktualisiert werden. Zwischenspeicher oder integrierte Anbieter werden verwendet."
-  },
-  "llamacpp": {
-    "concurrentMode": {
-      "perSlotContextWarning": "Kontext pro Slot entspricht ctx_size geteilt durch die Slot-Anzahl. Weniger Slots bedeuten mehr Kontext pro Anfrage."
-    }
   }
 }

@@ -233,11 +233,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn coordination_key_preserves_backend_identity() {
+    async fn coordination_key_preserves_model_identity() {
         let state = AutoIncreaseState::default();
-        let (_first, first_is_leader) = acquire_slot(&state, "llamacpp:model").await;
-        let (_same, same_is_leader) = acquire_slot(&state, "llamacpp:model").await;
-        let (_other, other_is_leader) = acquire_slot(&state, "llamacpp-upstream:model").await;
+        let (_first, first_is_leader) = acquire_slot(&state, "ginfer:model").await;
+        let (_same, same_is_leader) = acquire_slot(&state, "ginfer:model").await;
+        let (_other, other_is_leader) = acquire_slot(&state, "ginfer:other-model").await;
         assert!(first_is_leader);
         assert!(!same_is_leader);
         assert!(other_is_leader);
@@ -246,9 +246,9 @@ mod tests {
     #[tokio::test]
     async fn release_allows_a_new_leader() {
         let state = AutoIncreaseState::default();
-        let (notify, _) = acquire_slot(&state, "llamacpp:qwen").await;
-        release_slot(&state, "llamacpp:qwen", &notify).await;
-        let (_next, is_leader) = acquire_slot(&state, "llamacpp:qwen").await;
+        let (notify, _) = acquire_slot(&state, "ginfer:qwen").await;
+        release_slot(&state, "ginfer:qwen", &notify).await;
+        let (_next, is_leader) = acquire_slot(&state, "ginfer:qwen").await;
         assert!(is_leader);
     }
 
@@ -260,8 +260,8 @@ mod tests {
             new_ctx_len: Some(16_384),
             reason: None,
         };
-        store_outcome(&state, "llamacpp:model", outcome).await;
-        let stored = read_outcome(&state, "llamacpp:model").await.unwrap();
+        store_outcome(&state, "ginfer:model", outcome).await;
+        let stored = read_outcome(&state, "ginfer:model").await.unwrap();
         assert!(stored.ok);
         assert_eq!(stored.new_ctx_len, Some(16_384));
     }

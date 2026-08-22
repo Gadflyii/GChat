@@ -10,8 +10,6 @@ import {
   SETUP_SCREEN_QUANTIZATIONS,
 } from '@/constants/models'
 import { useHardwareTier } from '@/hooks/useHardwareTier'
-import { findPinnedQuant } from '@/lib/model-card'
-import { getPreferredMmprojModel } from '@/lib/models'
 import { HUGGINGFACE_LOGO_SRC, modelFamilyLogoSrc } from '@/lib/model-logo'
 import { captureOnboardingModelReminder } from '@/lib/onboarding-telemetry'
 
@@ -73,11 +71,6 @@ export function PromptOnboardingModel() {
   const defaultVariant = useMemo(() => {
     if (!recommendedModel) return null
 
-    // The pin wins: this repo also ships a Q4_K_M that the loop below would
-    // match, so without it the reminder downloads the wrong file silently.
-    const pinned = findPinnedQuant(recommendedModel.quants, reminder.quant)
-    if (pinned) return pinned
-
     for (const quantization of SETUP_SCREEN_QUANTIZATIONS) {
       const variant = recommendedModel.quants?.find((quant) =>
         quant.model_id.toLowerCase().includes(quantization)
@@ -86,7 +79,7 @@ export function PromptOnboardingModel() {
     }
 
     return recommendedModel.quants?.[0]
-  }, [recommendedModel, reminder.quant])
+  }, [recommendedModel])
 
   const isDownloading = useMemo(() => {
     if (!defaultVariant) return false
@@ -121,10 +114,6 @@ export function PromptOnboardingModel() {
       .pullModelWithMetadata(
         defaultVariant.model_id,
         defaultVariant.path,
-        (findPinnedQuant(
-          recommendedModel.mmproj_models,
-          reminder.mmprojQuant
-        ) ?? getPreferredMmprojModel(recommendedModel))?.path,
         huggingfaceToken,
         true,
         resumableDownloads.has(defaultVariant.model_id)

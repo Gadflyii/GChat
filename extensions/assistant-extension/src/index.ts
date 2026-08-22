@@ -1,9 +1,9 @@
-import { Assistant, AssistantExtension, fs, joinPath } from '@janhq/core'
+import { Assistant, AssistantExtension, fs, joinPath } from '@gchat/core'
 /**
- * JanAssistantExtension is an AssistantExtension implementation that provides
+ * GChatAssistantExtension is an AssistantExtension implementation that provides
  * functionality for managing assistants.
  */
-export default class JanAssistantExtension extends AssistantExtension {
+export default class GChatAssistantExtension extends AssistantExtension {
   private readonly CURRENT_MIGRATION_VERSION = 2
   private readonly MIGRATION_FILE = 'file://assistants/.migration_version'
 
@@ -74,8 +74,8 @@ export default class JanAssistantExtension extends AssistantExtension {
     }
 
     if (currentVersion < 2) {
-      console.log('Running migration v2: Update to Atomic Chat instructions')
-      await this.migrateToAtomicChatInstructions()
+      console.log('Running migration v2: Update to GChat instructions')
+      await this.migrateToGChatInstructions()
       await this.saveMigrationVersion(2)
     }
 
@@ -89,7 +89,7 @@ export default class JanAssistantExtension extends AssistantExtension {
    */
   private async migrateAssistantInstructions(): Promise<void> {
     const OLD_INSTRUCTION = 'You are a helpful AI assistant.'
-    const NEW_INSTRUCTION = 'You are Atomic Chat, a helpful AI assistant.'
+    const NEW_INSTRUCTION = 'You are GChat, a helpful AI assistant.'
 
     if (!(await fs.existsSync('file://assistants'))) {
       return
@@ -127,11 +127,11 @@ export default class JanAssistantExtension extends AssistantExtension {
   }
 
   /**
-   * Migration v2: Update assistant instructions to Atomic Chat format and set default parameters
+   * Migration v2: Update assistant instructions to GChat format and set default parameters
    */
-  private async migrateToAtomicChatInstructions(): Promise<void> {
+  private async migrateToGChatInstructions(): Promise<void> {
     const OLD_INSTRUCTION_PREFIX = 'You are Jan, a helpful AI assistant.'
-    const NEW_INSTRUCTION = `You are Atomic Chat, a helpful AI assistant who assists users with their requests. Atomic Chat is trained by Atomic Chat (https://atomic.chat).
+    const NEW_INSTRUCTION = `You are GChat, a helpful AI assistant who assists users with their requests. GChat is trained by GChat.
 
 You must output your response in the exact language used in the latest user message. Do not provide translations or switch languages unless explicitly instructed to do so. If the input is mostly English, respond in English.
 
@@ -253,14 +253,14 @@ Current date: {{current_date}}`
   private defaultAssistant: Assistant = {
     avatar: '👋',
     thread_location: undefined,
-    id: 'jan',
+    id: 'gchat',
     object: 'assistant',
     created_at: Date.now() / 1000,
-    name: 'Atomic Chat',
+    name: 'GChat',
     description:
-      'Atomic Chat is a helpful desktop assistant that can reason through complex tasks and use tools to complete them on the user’s behalf.',
+      'GChat is a helpful desktop assistant that can reason through complex tasks and use tools to complete them on the user’s behalf.',
     model: '*',
-    instructions: `You are Atomic Chat, a helpful AI assistant who assists users with their requests. Atomic Chat is trained by Atomic Chat (https://atomic.chat).
+    instructions: `You are GChat, a helpful AI assistant who assists users with their requests. GChat is trained by GChat.
 
 You must output your response in the exact language used in the latest user message. Do not provide translations or switch languages unless explicitly instructed to do so. If the input is mostly English, respond in English.
 

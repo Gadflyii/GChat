@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #* Если `yarn build` упал на подписи главного бинарника (часто Desktop/iCloud → FinderInfo на .app):
 #* снимаем xattr со всего .app и подписываем заново все исполняемые файлы в MacOS, затем сам бандл.
-#? Использование: из корня `jan/`: APPLE_SIGNING_IDENTITY="…" bash scripts/finish-macos-codesign.sh
+#? Использование: из корня `gchat/`: APPLE_SIGNING_IDENTITY="…" bash scripts/finish-macos-codesign.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IDENTITY="${APPLE_SIGNING_IDENTITY:?Задайте APPLE_SIGNING_IDENTITY}"

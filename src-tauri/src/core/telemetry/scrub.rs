@@ -172,8 +172,8 @@ mod tests {
     #[test]
     fn masks_macos_username_keeps_structure() {
         assert_eq!(
-            scrub("/Users/misha/Work/Atomic/app.log"),
-            "/Users/<redacted>/Work/Atomic/app.log"
+            scrub("/Users/misha/Work/Project/app.log"),
+            "/Users/<redacted>/Work/Project/app.log"
         );
     }
 

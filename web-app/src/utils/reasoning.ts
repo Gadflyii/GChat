@@ -1,7 +1,7 @@
 import {
   ChatCompletionMessage,
   chatCompletionRequestMessage,
-} from '@janhq/core'
+} from '@gchat/core'
 
 // Helper function to get reasoning content from an object
 function getReasoning(

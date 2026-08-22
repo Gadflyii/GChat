@@ -66,10 +66,5 @@
     "neverUpdated": "Jeszcze nie załadowano",
     "successDescription": "Katalog dostawców został zaktualizowany.",
     "errorDescription": "Nie udało się odświeżyć katalogu. Używana jest pamięć podręczna lub wbudowani dostawcy."
-  },
-  "llamacpp": {
-    "concurrentMode": {
-      "perSlotContextWarning": "Kontekst na slot to ctx_size podzielone przez liczbę slotów. Mniej slotów oznacza więcej kontekstu na żądanie."
-    }
   }
 }

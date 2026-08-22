@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => {
     fetchSources: vi.fn(),
     navigate: vi.fn(),
     onSkipped: vi.fn(),
-    scanLocalModels: vi.fn(),
     leftPanel,
     setLeftPanel: vi.fn((value: boolean) => {
       leftPanel.open = value
@@ -25,7 +24,6 @@ const mocks = vi.hoisted(() => {
       reminder.pending = value
     }),
     refreshRegistry: vi.fn(() => Promise.resolve()),
-    engine: { import: vi.fn() },
     // Mutable so a test can put the machine in the low-spec tier.
     hardwareTier: { tier: 'standard' as 'low' | 'standard', ready: true },
     switchToModel: vi.fn(() => Promise.resolve()),
@@ -73,8 +71,6 @@ vi.mock('@/hooks/useDownloadStore', () => ({
     localDownloadingModels: new Set(),
     resumableDownloads: new Set(),
     addLocalDownloadingModel: vi.fn(),
-    removeLocalDownloadingModel: vi.fn(),
-    markResumableDownload: vi.fn(),
     clearResumableDownload: vi.fn(),
   }),
 }))
@@ -82,8 +78,6 @@ vi.mock('@/hooks/useDownloadStore', () => ({
 vi.mock('@/hooks/useGeneralSetting', () => {
   const state = {
     huggingfaceToken: '',
-    scanLocalModels: true,
-    localScanFolders: [],
   }
   const useGeneralSetting = (
     selector: (value: typeof state) => unknown
@@ -116,11 +110,6 @@ vi.mock('@/stores/recommended-models-registry-store', () => ({
   useRecommendedModelsRegistryStore: {
     getState: () => ({ refresh: mocks.refreshRegistry }),
   },
-}))
-
-vi.mock('@/services/models/localScan', () => ({
-  scanLocalModels: mocks.scanLocalModels,
-  collectImportedModelPaths: () => new Set(),
 }))
 
 vi.mock('@/hooks/useModelLoad', () => {
@@ -160,57 +149,16 @@ vi.mock('sonner', () => ({
   },
 }))
 
-vi.mock('@janhq/core', () => ({
+vi.mock('@gchat/core', () => ({
   AppEvent: { onModelImported: 'onModelImported' },
   DownloadEvent: {
     onFileDownloadAndVerificationSuccess:
       'onFileDownloadAndVerificationSuccess',
   },
-  EngineManager: { instance: () => ({ get: () => mocks.engine }) },
   events: { on: vi.fn(), off: vi.fn() },
 }))
 
-const detectedModel = {
-  id: 'lmstudio/qwen3.5-4b',
-  displayName: 'qwen3.5-4b.gguf',
-  path: '/models/qwen3.5-4b.gguf',
-  source: 'lmstudio',
-  format: 'gguf',
-  runnable: true,
-  sizeBytes: 4 * 1024 ** 3,
-}
-
-const biggerDetectedModel = {
-  id: 'lmstudio/gemma-4-12b',
-  displayName: 'gemma-4-12b.gguf',
-  path: '/models/gemma-4-12b.gguf',
-  source: 'lmstudio',
-  format: 'gguf',
-  runnable: true,
-  sizeBytes: 12 * 1024 ** 3,
-}
-
-const expectedImport = (model: typeof detectedModel) => [
-  model.id,
-  {
-    modelPath: model.path,
-    mmprojPath: undefined,
-    source: model.source,
-  },
-]
-
 describe('SetupScreen', () => {
-  const deferLocalScan = (found: unknown[] = []) => {
-    let finish!: () => void
-    mocks.scanLocalModels.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          finish = () => resolve(found)
-        })
-    )
-    return () => act(async () => finish())
-  }
-
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -220,33 +168,19 @@ describe('SetupScreen', () => {
     mocks.hardwareTier.tier = 'standard'
     mocks.hardwareTier.ready = true
     mocks.modelProviderState.providers = []
-    // Onboarding imports never settle by default, so a test can assert on the
-    // in-flight state without racing the import event handler.
-    mocks.engine.import.mockReturnValue(new Promise(() => {}))
   })
 
-  it('renders the production onboarding after local model discovery completes', async () => {
-    const finishLocalScan = deferLocalScan()
+  it('renders the production onboarding once the inputs resolve', async () => {
     const { unmount } = render(<SetupScreen />)
 
-    expect(screen.getByText('common:loading')).toBeInTheDocument()
-    await finishLocalScan()
     expect(await screen.findByText('setup:welcomeTitle')).toBeInTheDocument()
     expect(screen.getByText('setup:welcomeSubtitle')).toBeInTheDocument()
     expect(mocks.fetchSources).toHaveBeenCalledOnce()
-    expect(mocks.scanLocalModels).toHaveBeenCalledWith({
-      enabled: true,
-      extraRoots: [],
-      importedPaths: new Set(),
-    })
     unmount()
   })
 
   it('opens the sidebar so the model step sits next to it', async () => {
-    const finishLocalScan = deferLocalScan()
     const { unmount } = render(<SetupScreen />)
-
-    await finishLocalScan()
 
     expect(await screen.findByText('setup:welcomeTitle')).toBeInTheDocument()
     expect(mocks.leftPanel.open).toBe(true)
@@ -254,10 +188,7 @@ describe('SetupScreen', () => {
   })
 
   it('bypasses the registry cache when the model step opens', async () => {
-    const finishLocalScan = deferLocalScan()
     const { unmount } = render(<SetupScreen />)
-
-    await finishLocalScan()
     expect(await screen.findByText('setup:welcomeTitle')).toBeInTheDocument()
 
     // `force` is the whole point: a cache written before the manifest changed
@@ -267,47 +198,8 @@ describe('SetupScreen', () => {
     unmount()
   })
 
-  describe('auto-start of a model found on disk', () => {
-    it('launches the smallest candidate instead of offering a download', async () => {
-      const finishLocalScan = deferLocalScan([
-        biggerDetectedModel,
-        detectedModel,
-      ])
-      const { unmount } = render(<SetupScreen />)
-
-      await finishLocalScan()
-
-      expect(
-        await screen.findByText('setup:localStep.autoStarting')
-      ).toBeInTheDocument()
-      // The picker (and with it every Download button) is never rendered.
-      expect(screen.queryByText('setup:welcomeTitle')).not.toBeInTheDocument()
-      // Only the chosen model is imported here; the rest follow once it lands.
-      expect(mocks.engine.import.mock.calls).toEqual([
-        expectedImport(detectedModel),
-      ])
-      unmount()
-    })
-
-    it('falls back to the picker when the auto-started import fails', async () => {
-      mocks.engine.import.mockRejectedValueOnce(new Error('unsupported'))
-      const finishLocalScan = deferLocalScan([detectedModel])
-      const { unmount } = render(<SetupScreen />)
-
-      await finishLocalScan()
-
-      expect(await screen.findByText('setup:welcomeTitle')).toBeInTheDocument()
-      expect(
-        screen.getByRole('button', { name: /setup:localStep\.run/ })
-      ).toBeInTheDocument()
-      unmount()
-    })
-  })
-
   it('offers no Skip link, so setup is finished rather than dodged', async () => {
-    const finishLocalScan = deferLocalScan()
     const { unmount } = render(<SetupScreen onSkipped={mocks.onSkipped} />)
-    await finishLocalScan()
 
     // Leaving empty-handed still exists — it is the auto-exit timeout, covered
     // by describe('auto-exit') below — but it is no longer offered as a button.
@@ -320,13 +212,7 @@ describe('SetupScreen', () => {
     unmount()
   })
 
-
   describe('cloud provider', () => {
-    beforeEach(() => {
-      // Let the picker paint; these tests are about what happens after it does.
-      mocks.scanLocalModels.mockResolvedValue([])
-    })
-
     const apiKeySetting = {
       key: 'api-key',
       title: 'API Key',
@@ -369,7 +255,7 @@ describe('SetupScreen', () => {
           base_url: 'http://localhost:11434/v1',
         }),
         // Local engine.
-        cloudProvider({ provider: 'llamacpp', base_url: undefined }),
+        cloudProvider({ provider: 'ginfer', base_url: undefined }),
         // Placeholder host — a key alone cannot make it work.
         cloudProvider({
           provider: 'azure',
@@ -386,7 +272,9 @@ describe('SetupScreen', () => {
     })
 
     it('hides the trigger when there is no cloud provider to offer', async () => {
-      seedProviders([cloudProvider({ provider: 'llamacpp', base_url: undefined })])
+      seedProviders([
+        cloudProvider({ provider: 'ginfer', base_url: undefined }),
+      ])
 
       const { unmount } = render(<SetupScreen onSkipped={mocks.onSkipped} />)
       await screen.findByText('setup:welcomeTitle')
@@ -475,7 +363,6 @@ describe('SetupScreen', () => {
 
       const renderWithCloudProvider = async () => {
         seedProviders([cloudProvider()])
-        mocks.scanLocalModels.mockResolvedValue([])
         const rendered = render(<SetupScreen onSkipped={mocks.onSkipped} />)
         await act(async () => {})
         return rendered
@@ -533,15 +420,14 @@ describe('SetupScreen', () => {
       vi.useRealTimers()
     })
 
-    const renderPastLocalScan = async (found: unknown[] = []) => {
-      mocks.scanLocalModels.mockResolvedValue(found)
+    const renderSetup = async () => {
       const rendered = render(<SetupScreen onSkipped={mocks.onSkipped} />)
       await act(async () => {})
       return rendered
     }
 
     it('enters the chat and arms the reminder after 15 seconds', async () => {
-      const { unmount } = await renderPastLocalScan()
+      const { unmount } = await renderSetup()
 
       await act(async () => {
         vi.advanceTimersByTime(14_999)
@@ -581,7 +467,7 @@ describe('SetupScreen', () => {
           models: [{ id: 'gpt-5.5' }],
         },
       ] as ModelProvider[]
-      const { unmount } = await renderPastLocalScan()
+      const { unmount } = await renderSetup()
 
       fireEvent.click(
         screen.getByRole('button', { name: 'setup:cloudStep.trigger' })
@@ -601,25 +487,6 @@ describe('SetupScreen', () => {
       expect(mocks.navigate.mock.calls).toHaveLength(1)
       // The timeout must not fire behind the finished setup and nag the user.
       expect(mocks.reminder.pending).toBe(false)
-      unmount()
-    })
-
-    it('never cuts an in-flight local import short', async () => {
-      // A detected model auto-starts, so the import is already in flight here.
-      const { unmount } = await renderPastLocalScan([detectedModel])
-
-      await act(async () => {
-        vi.advanceTimersByTime(30_000)
-      })
-
-      expect(mocks.engine.import.mock.calls).toEqual([
-        expectedImport(detectedModel),
-      ])
-      // Still on onboarding: the timeout must not have completed setup behind
-      // the import, and the reminder must not be armed for a chosen model.
-      expect(localStorage.getItem(localStorageKey.setupCompleted)).toBeNull()
-      expect(mocks.reminder.pending).toBe(false)
-      expect(mocks.navigate.mock.calls).toHaveLength(0)
       unmount()
     })
   })

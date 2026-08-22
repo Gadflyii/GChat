@@ -33,7 +33,7 @@ const { appState, localApiState, modelProviderState, startServer, stopServer } =
     modelProviderState: {
       providers: [
         {
-          provider: 'mlx',
+          provider: 'ginfer',
           models: [{ id: 'broken-model' }],
         },
       ],
@@ -91,7 +91,7 @@ vi.mock('@/utils/activeModelsSync', () => ({
 
 vi.mock('@/lib/telemetry', () => ({
   isRecoverableModelLoadCode: vi.fn(() => true),
-  loadBackendFromProvider: vi.fn(() => 'mlx'),
+  loadBackendFromProvider: vi.fn(() => 'ginfer'),
   mmprojProjectorType: vi.fn(() => null),
   modelLoadSource: vi.fn(() => 'local'),
   oomSubtype: vi.fn(() => null),
@@ -145,7 +145,7 @@ describe('switchToModel', () => {
     await expect(
       switchToModel({
         modelId: 'broken-model',
-        providerName: 'mlx',
+        providerName: 'ginfer',
         serviceHub,
       })
     ).rejects.toThrow('missing vision weights')
@@ -177,23 +177,23 @@ describe('switchToModel', () => {
 
     const pending = switchToModel({
       modelId: 'ready-model',
-      providerName: 'mlx',
+      providerName: 'ginfer',
       serviceHub,
     })
     await vi.waitFor(() => expect(startModel).toHaveBeenCalled())
 
     // ChatInput's effect fires on the same selection change that started this
     // switch; it must not probe the engines and queue a duplicate switch.
-    expect(isExplicitSwitchPending('mlx', 'ready-model')).toBe(true)
-    expect(shouldAttemptAutoStart('mlx', 'ready-model')).toBe(false)
+    expect(isExplicitSwitchPending('ginfer', 'ready-model')).toBe(true)
+    expect(shouldAttemptAutoStart('ginfer', 'ready-model')).toBe(false)
     // A different target is untouched by the marker.
-    expect(shouldAttemptAutoStart('mlx', 'other-model')).toBe(true)
+    expect(shouldAttemptAutoStart('ginfer', 'other-model')).toBe(true)
 
     releaseStart()
     await pending
 
-    expect(isExplicitSwitchPending('mlx', 'ready-model')).toBe(false)
-    expect(shouldAttemptAutoStart('mlx', 'ready-model')).toBe(true)
+    expect(isExplicitSwitchPending('ginfer', 'ready-model')).toBe(false)
+    expect(shouldAttemptAutoStart('ginfer', 'ready-model')).toBe(true)
   })
 
   it('stops waiting once the engine reports the freshly started model', async () => {
@@ -212,7 +212,7 @@ describe('switchToModel', () => {
     const startedAt = Date.now()
     await switchToModel({
       modelId: 'ready-model',
-      providerName: 'mlx',
+      providerName: 'ginfer',
       serviceHub,
     })
 
@@ -237,7 +237,7 @@ describe('switchToModel', () => {
     const startedAt = Date.now()
     await switchToModel({
       modelId: 'slow-model',
-      providerName: 'mlx',
+      providerName: 'ginfer',
       serviceHub,
     })
 

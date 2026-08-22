@@ -196,7 +196,7 @@ describe('provider-registry loader', () => {
     await getProvidersOrFallback({ url: REMOTE_URL })
 
     // Backdate the cache so isCacheFresh would return false.
-    const tsKey = 'jan_provider_registry_cache_ts_v1'
+    const tsKey = 'gchat_provider_registry_cache_ts_v1'
     window.localStorage.setItem(
       tsKey,
       String(Date.now() - CACHE_TTL_MS - 1000)

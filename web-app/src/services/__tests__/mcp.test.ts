@@ -161,7 +161,7 @@ describe('TauriMCPService', () => {
 
     await mcpService.activateMCPServer('filesystem', config)
     await mcpService.deactivateMCPServer('filesystem')
-    await expect(mcpService.checkJanBrowserExtensionConnected()).resolves.toBe(
+    await expect(mcpService.checkGChatBrowserExtensionConnected()).resolves.toBe(
       true
     )
 

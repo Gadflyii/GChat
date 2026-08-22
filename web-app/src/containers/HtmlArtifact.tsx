@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, Code2, Copy, Download, Eye, Printer, X } from 'lucide-react'
-import { fs } from '@janhq/core'
+import { fs } from '@gchat/core'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { CodeBlock } from '@/components/ai-elements/code-block'

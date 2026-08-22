@@ -8,7 +8,7 @@ import {
   type SettingComponentProps,
   AIEngine,
   type AttachmentFileInfo,
-} from '@janhq/core'
+} from '@gchat/core'
 import './env.d'
 import { getRAGTools, RETRIEVE, LIST_ATTACHMENTS, GET_CHUNKS } from './tools'
 import * as ragApi from '../../../src-tauri/plugins/tauri-plugin-rag/guest-js/index'
@@ -554,7 +554,7 @@ export default class RagExtension extends RAGExtension {
     }
     // The upstream engine is the default; fall back to the legacy turboquant
     // engine for users still on it.
-    const llm = (['@janhq/llamacpp-upstream-extension', '@janhq/llamacpp-extension']
+    const llm = (['@gchat/llamacpp-upstream-extension', '@gchat/llamacpp-extension']
       .map((name) =>
         window.core?.extensionManager.getByName(name) as
           | EmbeddingEngine

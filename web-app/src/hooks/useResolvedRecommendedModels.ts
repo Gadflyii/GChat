@@ -106,16 +106,15 @@ export function useResolvedRecommendedModels(
             .fetchHuggingFaceRepo(rec.modelName, huggingfaceToken)
           if (!repo) return null
           const catalog = serviceHub.models().convertHfRepoToCatalogModel(repo)
+          // MLX repos cannot be run by the single local backend (GInfer).
+          if (catalog.is_mlx) return null
           const processed: CatalogModel = {
             ...catalog,
             quants: catalog.quants?.map((quant) => ({
               ...quant,
               model_id: sanitizeModelId(quant.model_id),
             })),
-            is_mlx: catalog.is_mlx ?? catalog.library_name === 'mlx',
           }
-          //! Как в useModelSources: MLX только на macOS
-          if (!IS_MACOS && processed.is_mlx) return null
           resolvedModels[rec.modelName] = processed
           return processed
         })()

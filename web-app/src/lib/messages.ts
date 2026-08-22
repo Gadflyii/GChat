@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ThreadMessage, ContentType, MessageStatus } from '@janhq/core'
+import { ThreadMessage, ContentType, MessageStatus } from '@gchat/core'
 import type { UIMessage } from '@ai-sdk/react'
 // Attachments are now handled upstream in newUserThreadContent
 
@@ -15,7 +15,7 @@ function mediaTypeFromImageUrl(url: string): string {
 }
 
 /**
- * Convert AI SDK UIMessage to Jan's ThreadMessage format.
+ * Convert AI SDK UIMessage to GChat's ThreadMessage format.
  * This allows using chatMessages from useChat with ThreadContent component.
  */
 export function convertUIMessageToThreadMessage(
@@ -122,7 +122,7 @@ export function convertUIMessageToThreadMessage(
 }
 
 /**
- * Convert an array of AI SDK UIMessages to Jan's ThreadMessage format.
+ * Convert an array of AI SDK UIMessages to GChat's ThreadMessage format.
  */
 export function convertUIMessagesToThreadMessages(
   uiMessages: UIMessage[],
@@ -183,7 +183,7 @@ export const parseReasoning = (text: string) => {
 }
 
 /**
- * Convert Jan's ThreadMessage format to AI SDK UIMessage format.
+ * Convert GChat's ThreadMessage format to AI SDK UIMessage format.
  * This is used to load existing messages into the AI SDK chat.
  * Tool calls are now part of the content array and will be converted to tool parts.
  */
@@ -274,7 +274,7 @@ export function convertThreadMessageToUIMessage(
   }
 
   // Reconstruct audio attachments from metadata (persisted there because
-  // @janhq/core has no audio ContentType). Mirrors the image `file` part shape
+  // @gchat/core has no audio ContentType). Mirrors the image `file` part shape
   // so the chat UI and the MLX transport handle them identically to a freshly
   // attached clip.
   const inputAudio = (threadMessage.metadata as any)?.input_audio
@@ -375,7 +375,7 @@ export function convertThreadMessageToUIMessage(
 }
 
 /**
- * Convert an array of Jan's ThreadMessages to AI SDK UIMessage format.
+ * Convert an array of GChat's ThreadMessages to AI SDK UIMessage format.
  * Tool calls are now part of the content array, so no special merging is needed.
  */
 export function convertThreadMessagesToUIMessages(

@@ -227,7 +227,7 @@ describe('staff-picks-registry loader', () => {
 
     // Backdate the cache so isCacheFresh returns false.
     window.localStorage.setItem(
-      'atomic_staff_picks_cache_ts_v1',
+      'gchat_staff_picks_cache_ts_v1',
       String(Date.now() - CACHE_TTL_MS - 1000)
     )
 
@@ -256,24 +256,24 @@ describe('staff-picks-registry loader', () => {
   it('never touches the production recommended-models cache keys', async () => {
     const recommendedPayload = JSON.stringify({ sentinel: true })
     window.localStorage.setItem(
-      'jan_recommended_models_cache_v1',
+      'gchat_recommended_models_cache_v1',
       recommendedPayload
     )
-    window.localStorage.setItem('jan_recommended_models_cache_ts_v1', '123')
+    window.localStorage.setItem('gchat_recommended_models_cache_ts_v1', '123')
 
     mockFetchSuccess(buildManifest())
     await getStaffPicksOrFallback({ url: REMOTE_URL })
     clearStaffPicksCache()
 
     expect(
-      window.localStorage.getItem('jan_recommended_models_cache_v1')
+      window.localStorage.getItem('gchat_recommended_models_cache_v1')
     ).toBe(recommendedPayload)
     expect(
-      window.localStorage.getItem('jan_recommended_models_cache_ts_v1')
+      window.localStorage.getItem('gchat_recommended_models_cache_ts_v1')
     ).toBe('123')
 
-    window.localStorage.removeItem('jan_recommended_models_cache_v1')
-    window.localStorage.removeItem('jan_recommended_models_cache_ts_v1')
+    window.localStorage.removeItem('gchat_recommended_models_cache_v1')
+    window.localStorage.removeItem('gchat_recommended_models_cache_ts_v1')
   })
 })
 
@@ -284,15 +284,6 @@ describe('BASELINE_STAFF_PICKS', () => {
     }
   })
 
-  it('gives every model an MLX twin that is macOS-only', () => {
-    const mlx = BASELINE_STAFF_PICKS.filter((p) => p.format === 'mlx')
-    expect(mlx.length).toBeGreaterThan(0)
-    for (const pick of mlx) {
-      expect(pick.platforms, pick.model_name).toEqual(['macos'])
-      expect(pick.description_key, pick.model_name).toBe('hub:recForMlx')
-    }
-  })
-
   it('never lists the same repo or the same order twice', () => {
     const names = BASELINE_STAFF_PICKS.map((p) => p.model_name)
     expect(new Set(names).size).toBe(names.length)
@@ -300,85 +291,11 @@ describe('BASELINE_STAFF_PICKS', () => {
     expect(new Set(orders).size).toBe(orders.length)
   })
 
-  //* Категории Recommended — источник capability-байджей, поэтому конверсии
-  //* одной модели не должны обещать разные возможности.
-  it('declares the same capabilities on a GGUF pick and its MLX twin', () => {
-    const CAPABILITIES = ['vision', 'audio', 'reasoning', 'tools'] as const
-    const capsOf = (pick: StaffPick) =>
-      CAPABILITIES.filter((cap) => pick.categories?.includes(cap))
-
-    const byModel = new Map<string, Map<string, string[]>>()
-    for (const pick of BASELINE_STAFF_PICKS) {
-      const model = (pick.title ?? pick.model_name).replace(/ \(MLX\)$/, '')
-      if (!byModel.has(model)) byModel.set(model, new Map())
-      byModel.get(model)!.set(pick.model_name, capsOf(pick))
-    }
-
-    const pairs = [...byModel].filter(([, builds]) => builds.size > 1)
-    expect(pairs.length).toBeGreaterThan(0)
-    for (const [model, builds] of pairs) {
-      const [reference, ...rest] = [...builds.values()]
-      for (const caps of rest) expect(caps, model).toEqual(reference)
-    }
-  })
-
   it('references only icon keys that resolve to a bundled asset', () => {
     for (const pick of BASELINE_STAFF_PICKS) {
       if (!pick.icon) continue
       expect(iconKeyLogoSrc(pick.icon), pick.icon).toBeTruthy()
     }
-  })
-
-  //* Порядок групп курируется вручную и легко ломается при правке манифеста.
-  describe('family grouping', () => {
-    const TIERS = ['qwen', 'gemma', 'lfm']
-
-    const tierOf = (icon?: string) => {
-      const index = TIERS.indexOf(icon ?? '')
-      return index === -1 ? TIERS.length : index
-    }
-
-    // Picks ordered ahead of the first family entry are a promoted head that is
-    // curated per release and is not part of the family sequence.
-    const FAMILY_SEQUENCE_START = 10
-
-    // Both format lists are curated as one sequence, so each is checked in the
-    // order the Hub renders it.
-    const listed = (format: 'gguf' | 'mlx') =>
-      filterStaffPicksForPlatform(BASELINE_STAFF_PICKS, 'macos', format).filter(
-        (pick) =>
-          (pick.order ?? Number.POSITIVE_INFINITY) >= FAMILY_SEQUENCE_START
-      )
-
-    it.each(['gguf', 'mlx'] as const)(
-      'opens the %s list with Qwen, then Gemma, then LFM',
-      (format) => {
-        const tiers = listed(format).map((pick) => tierOf(pick.icon))
-        expect(tiers.slice(0, 13)).toEqual([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2])
-      }
-    )
-
-    it.each(['gguf', 'mlx'] as const)(
-      'never drops a %s pick of a promoted family below an unrelated one',
-      (format) => {
-        const tiers = listed(format).map((pick) => tierOf(pick.icon))
-        expect(tiers).toEqual([...tiers].sort((a, b) => a - b))
-      }
-    )
-
-    // A model without an MLX build is allowed; one whose twin sits somewhere
-    // else in the list is not, because the two lists would then disagree on
-    // what "top of the recommendations" means.
-    it('walks the MLX list in the same model order as the GGUF one', () => {
-      const ggufTitles = listed('gguf').map((p) => p.title)
-      const mlxTitles = listed('mlx').map((p) => p.title?.replace(/ \(MLX\)$/, ''))
-
-      expect(mlxTitles.length).toBeGreaterThan(0)
-      for (const title of mlxTitles) expect(ggufTitles).toContain(title)
-      expect(mlxTitles).toEqual(
-        ggufTitles.filter((title) => mlxTitles.includes(title))
-      )
-    })
   })
 })
 

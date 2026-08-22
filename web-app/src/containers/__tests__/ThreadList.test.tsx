@@ -106,7 +106,7 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
-vi.mock('@janhq/core', () => ({}))
+vi.mock('@gchat/core', () => ({}))
 
 const threads: Thread[] = [
   { id: 'thread-1', title: 'First chat', updated: 2 },

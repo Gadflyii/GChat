@@ -1,9 +1,9 @@
 import type { SystemInformation as _SystemInformation } from '../types'
 
 /**
- * Gets Atomic Chat's data folder path.
+ * Gets GChat's data folder path.
  *
- * @returns {Promise<string>} A Promise that resolves with Atomic Chat's data folder path.
+ * @returns {Promise<string>} A Promise that resolves with GChat's data folder path.
  */
 const getJanDataFolderPath = (): Promise<string> => globalThis.core.api?.getJanDataFolderPath()
 

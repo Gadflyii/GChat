@@ -8,7 +8,7 @@ import {
   type VectorDBFileInput,
   type VectorDBIngestOptions,
   AIEngine,
-} from '@janhq/core'
+} from '@gchat/core'
 import * as vecdb from '../../../src-tauri/plugins/tauri-plugin-vector-db/guest-js/index'
 import * as ragApi from '../../../src-tauri/plugins/tauri-plugin-rag/guest-js/index'
 
@@ -244,7 +244,7 @@ export default class VectorDBExt extends VectorDBExtension {
     }
     // The upstream engine is the default; fall back to the legacy turboquant
     // engine for users still on it.
-    const llm = (['@janhq/llamacpp-upstream-extension', '@janhq/llamacpp-extension']
+    const llm = (['@gchat/llamacpp-upstream-extension', '@gchat/llamacpp-extension']
       .map((name) =>
         window.core?.extensionManager.getByName(name) as
           | EmbeddingEngine

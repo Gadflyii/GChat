@@ -24,17 +24,9 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'stream_local_http',
 ])
 const EXPECTED_MOBILE_ONLY = new Set(['abort_remote_stream'])
-const EXPECTED_PLUGIN_IDS = [
-  'foundation-models',
-  'hardware',
-  'llamacpp',
-  'llamacpp-upstream',
-  'mlx',
-  'rag',
-  'vector-db',
-]
+const EXPECTED_PLUGIN_IDS = ['ginfer', 'hardware', 'rag', 'vector-db']
 
-// Core still exposes these legacy Jan routes to browser/default services. They
+// Core still exposes these legacy routes to browser/default services. They
 // are implemented with web APIs or service adapters rather than Rust commands.
 const KNOWN_NON_TAURI_ROUTES = new Set([
   'ack_deep_link',

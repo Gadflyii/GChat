@@ -30,8 +30,7 @@ describe('ModelListRow', () => {
     render(<ModelListRow model={model()} onSelect={vi.fn()} />)
 
     expect(screen.getByText('Qwen3.5-4B-GGUF')).toBeInTheDocument()
-    // Uppercased by CSS, so the node still carries the raw format token.
-    expect(screen.getByText('gguf')).toBeInTheDocument()
+    expect(screen.getByText('GGUF')).toBeInTheDocument()
     expect(screen.queryByText(/^12.345$/)).not.toBeInTheDocument()
     expect(screen.queryByText('2.5 GB')).not.toBeInTheDocument()
   })

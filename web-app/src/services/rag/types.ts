@@ -1,5 +1,5 @@
-import { MCPTool } from '@janhq/core'
-import type { MCPToolCallResult } from '@janhq/core'
+import { MCPTool } from '@gchat/core'
+import type { MCPToolCallResult } from '@gchat/core'
 
 export interface RAGService {
   // Return tools exposed by RAG-related extensions (e.g., retrieval, list_attachments)

@@ -43,7 +43,8 @@ Existing evidence:
   hardware recommendations for Windows CUDA and Linux Vulkan/CPU.
 - Windows and Linux package both providers. Upstream remains the default;
   TurboQuant keeps separate ids, assets, driver gates, and storage.
-- `models.windowsProviderRouting.test.ts` checks frontend routing on Windows.
+- `models.localEngineRouting.test.ts` checks frontend routing to the single
+  local engine provider.
 - `tests/fixtures/hardware/profiles.json` is consumed by deterministic contract
   tests for Windows CUDA 13, Linux NVIDIA Vulkan, integrated Vulkan fallback,
   and Apple Silicon. The contract pins provider-specific ids and verifies that

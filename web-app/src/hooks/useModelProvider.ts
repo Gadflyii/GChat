@@ -2,33 +2,22 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { localStorageKey } from '@/constants/localStorage'
 import { getServiceHub } from '@/hooks/useServiceHub'
-import { modelSettings } from '@/lib/predefined'
-import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
-import { turboquantDefaultActive } from '@/lib/turboquantDefaultMigration'
-
-/**
- * Historical provider id retained for one-time migration logic. The
- * TurboQuant `llamacpp` provider now ships beside `llamacpp-upstream` on every
- * desktop platform, so this id must never be aliased away.
- */
-const LEGACY_LLAMACPP_PROVIDER = 'llamacpp'
 
 /** The local provider selected by default on fresh installs. */
 const GINFER_DEFAULT_PROVIDER = 'ginfer'
 
 /**
- * Identity mapping for a local llama.cpp provider id.
- *
- * Historically (ADR 2026-05-22) Windows shipped only `llamacpp-upstream`, so
- * this collapsed the turboquant `'llamacpp'` id → `'llamacpp-upstream'` on
- * Windows. As of the 2026-06-23 side-by-side decision the turboquant provider
- * ships on Windows AND Linux too, making `'llamacpp'` a real, registered
- * provider id on every platform — aliasing it away would make it
- * unselectable. The alias is therefore now a pass-through on all platforms;
- * it is kept as a single seam in case a future platform needs id remapping.
+ * Local backend provider ids retired by the single-ginfer strip. Persisted
+ * state from older installs may still carry them — the one-time migration at
+ * the bottom of `migrate()` drops these provider entries and redirects any
+ * selection on one to the only remaining local provider.
  */
-const aliasLocalLlamacppProvider = (providerName: string): string =>
-  providerName
+export const RETIRED_LOCAL_PROVIDERS = [
+  'llamacpp',
+  'llamacpp-upstream',
+  'mlx',
+  'foundation-models',
+]
 
 type ModelProviderState = {
   providers: ModelProvider[]
@@ -69,18 +58,16 @@ export const useModelProvider = create<ModelProviderState>()(
         return provider.models.find((model) => model.id === modelId)
       },
       setProviders: (providers) =>
-        set((state) => {
-          // The turboquant `llamacpp` provider ships side-by-side with
-          // `llamacpp-upstream` on every platform (Windows + Linux added
-          // 2026-06-23; macOS already shipped both), so it is no longer
-          // filtered out of the merge here. `llamacpp-upstream` stays the
-          // default selection; the user picks turboquant explicitly in
-          // Settings → Model Providers.
+          set((state) => {
           const incoming = providers
           const existingProviders = state.providers
             // Filter out legacy cortex `llama.cpp` provider for migration
             // Can remove after a couple of releases
-            .filter((e) => e.provider !== 'llama.cpp')
+            .filter(
+              (e) =>
+                e.provider !== 'llama.cpp' &&
+                !RETIRED_LOCAL_PROVIDERS.includes(e.provider)
+            )
             .map((provider) => {
               return {
                 ...provider,
@@ -176,14 +163,7 @@ export const useModelProvider = create<ModelProviderState>()(
               }),
               api_key: existingProvider?.api_key || provider.api_key,
               base_url: existingProvider?.base_url || provider.base_url,
-              // First registration: TurboQuant defaults to disabled on fresh
-              // installs (re-enableable via the Settings toggle); everything
-              // else — and every already-persisted provider — keeps its value.
-              active: existingProvider
-                ? existingProvider.active
-                : provider.provider === LEGACY_LLAMACPP_PROVIDER
-                  ? turboquantDefaultActive()
-                  : true,
+              active: existingProvider ? existingProvider.active : true,
             }
           })
           const nextProviders = [
@@ -241,22 +221,16 @@ export const useModelProvider = create<ModelProviderState>()(
         })
       },
       getProviderByName: (providerName: string) => {
-        // Windows-only alias: any legacy `'llamacpp'` lookup transparently
-        // resolves to `'llamacpp-upstream'`. Covers leftover references in
-        // thread history, lastUsedModel, route params, etc. that escaped
-        // the one-time migration.
-        const resolvedName = aliasLocalLlamacppProvider(providerName)
         const provider = get().providers.find(
-          (provider) => provider.provider === resolvedName
+          (provider) => provider.provider === providerName
         )
 
         return provider
       },
       selectModelProvider: (providerName: string, modelName: string) => {
-        const resolvedName = aliasLocalLlamacppProvider(providerName)
         // Find the model object
         const provider = get().providers.find(
-          (provider) => provider.provider === resolvedName
+          (provider) => provider.provider === providerName
         )
 
         let modelObject: Model | undefined = undefined
@@ -265,11 +239,8 @@ export const useModelProvider = create<ModelProviderState>()(
           modelObject = provider.models.find((model) => model.id === modelName)
         }
 
-        // Persist the *resolved* provider id so subsequent reads (e.g.
-        // `selectedProvider` rendering, model lookups) see the canonical
-        // local llama.cpp provider for this OS, not the legacy alias.
         set({
-          selectedProvider: resolvedName,
+          selectedProvider: providerName,
           selectedModel: modelObject || null,
         })
 
@@ -313,108 +284,7 @@ export const useModelProvider = create<ModelProviderState>()(
       name: localStorageKey.modelProvider,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as ModelProviderState & {
-          providers: Array<
-            ModelProvider & {
-              models: Array<
-                Model & {
-                  settings?: Record<string, unknown> & {
-                    chatTemplate?: string
-                    chat_template?: string
-                  }
-                }
-              >
-            }
-          >
-        }
-
-        if (version <= 1 && state?.providers) {
-          state.providers.forEach((provider) => {
-            // Update cont_batching description for llamacpp provider
-            if (provider.provider === 'llamacpp' && provider.settings) {
-              const contBatchingSetting = provider.settings.find(
-                (s) => s.key === 'cont_batching'
-              )
-              if (contBatchingSetting) {
-                contBatchingSetting.description =
-                  'Enable continuous batching (a.k.a dynamic batching) for concurrent requests.'
-              }
-            }
-
-            // Migrate model settings
-            if (provider.models && provider.provider === 'llamacpp') {
-              provider.models.forEach((model) => {
-                if (!model.settings) model.settings = {}
-
-                // Migrate chatTemplate key to chat_template
-                if (model.settings.chatTemplate) {
-                  model.settings.chat_template = model.settings.chatTemplate
-                  delete model.settings.chatTemplate
-                }
-
-                // Add missing settings with defaults
-                if (!model.settings.chat_template) {
-                  model.settings.chat_template = {
-                    ...modelSettings.chatTemplate,
-                    controller_props: {
-                      ...modelSettings.chatTemplate.controller_props,
-                    },
-                  }
-                }
-
-                if (!model.settings.override_tensor_buffer_t) {
-                  model.settings.override_tensor_buffer_t = {
-                    ...modelSettings.override_tensor_buffer_t,
-                    controller_props: {
-                      ...modelSettings.override_tensor_buffer_t
-                        .controller_props,
-                    },
-                  }
-                }
-
-                if (!model.settings.no_kv_offload) {
-                  model.settings.no_kv_offload = {
-                    ...modelSettings.no_kv_offload,
-                    controller_props: {
-                      ...modelSettings.no_kv_offload.controller_props,
-                    },
-                  }
-                }
-              })
-            }
-          })
-        }
-
-        if (version <= 2 && state?.providers) {
-          state.providers.forEach((provider) => {
-            // Update cont_batching description for llamacpp provider
-            if (provider.provider === 'llamacpp' && provider.settings) {
-              const contBatchingSetting = provider.settings.find(
-                (s) => s.key === 'cont_batching'
-              )
-              if (contBatchingSetting) {
-                contBatchingSetting.description =
-                  'Enable continuous batching (a.k.a dynamic batching) for concurrent requests.'
-              }
-            }
-
-            // Migrate model settings
-            if (provider.models && provider.provider === 'llamacpp') {
-              provider.models.forEach((model) => {
-                if (!model.settings) model.settings = {}
-
-                if (!model.settings.batch_size) {
-                  model.settings.batch_size = {
-                    ...modelSettings.batch_size,
-                    controller_props: {
-                      ...modelSettings.batch_size.controller_props,
-                    },
-                  }
-                }
-              })
-            }
-          })
-        }
+        const state = persistedState as ModelProviderState
 
         if (version <= 3 && state?.providers) {
           state.providers.forEach((provider) => {
@@ -475,8 +345,7 @@ export const useModelProvider = create<ModelProviderState>()(
                   baseUrlSetting?.controller_props?.value ===
                   'https://api.cohere.ai/compatibility/v1'
                 ) {
-                  baseUrlSetting.controller_props.value =
-                    'https://api.cohere.ai/v1'
+                  baseUrlSetting.controller_props.value = 'https://api.cohere.ai/v1'
                 }
                 if (
                   baseUrlSetting?.controller_props?.placeholder ===
@@ -490,56 +359,6 @@ export const useModelProvider = create<ModelProviderState>()(
           })
         }
 
-        if (version <= 4 && state?.providers) {
-          state.providers.forEach((provider) => {
-            // Migrate model settings
-            if (provider.models && provider.provider === 'llamacpp') {
-              provider.models.forEach((model) => {
-                if (!model.settings) model.settings = {}
-
-                if (!model.settings.cpu_moe) {
-                  model.settings.cpu_moe = {
-                    ...modelSettings.cpu_moe,
-                    controller_props: {
-                      ...modelSettings.cpu_moe.controller_props,
-                    },
-                  }
-                }
-
-                if (!model.settings.n_cpu_moe) {
-                  model.settings.n_cpu_moe = {
-                    ...modelSettings.n_cpu_moe,
-                    controller_props: {
-                      ...modelSettings.n_cpu_moe.controller_props,
-                    },
-                  }
-                }
-              })
-            }
-          })
-        }
-        if (version <= 5 && state?.providers) {
-          state.providers.forEach((provider) => {
-            // Migrate flash_attn setting to dropdown for llamacpp provider
-            if (provider.provider === 'llamacpp' && provider.settings) {
-              const flashAttentionSetting = provider.settings.find(
-                (s) => s.key === 'flash_attn'
-              )
-              if (flashAttentionSetting) {
-                flashAttentionSetting.controller_type = 'dropdown'
-                flashAttentionSetting.controller_props = {
-                  ...flashAttentionSetting.controller_props,
-                  options: [
-                    { name: 'Auto', value: 'auto' },
-                    { name: 'On', value: 'on' },
-                    { name: 'Off', value: 'off' },
-                  ],
-                  value: 'auto',
-                }
-              }
-            }
-          })
-        }
         if (version <= 7 && state?.providers) {
           // Remove 'proactive' capability from all models as it's now managed in MCP settings
           state.providers.forEach((provider) => {
@@ -554,6 +373,7 @@ export const useModelProvider = create<ModelProviderState>()(
             }
           })
         }
+
         if (version <= 8 && state?.providers) {
           state.providers.forEach((provider) => {
             // Migrate Mistral provider base URL to add /v1
@@ -568,11 +388,9 @@ export const useModelProvider = create<ModelProviderState>()(
                   (s) => s.key === 'base-url'
                 )
                 if (
-                  baseUrlSetting?.controller_props?.value ===
-                  'https://api.mistral.ai'
+                  baseUrlSetting?.controller_props?.value === 'https://api.mistral.ai'
                 ) {
-                  baseUrlSetting.controller_props.value =
-                    'https://api.mistral.ai/v1'
+                  baseUrlSetting.controller_props.value = 'https://api.mistral.ai/v1'
                 }
                 if (
                   baseUrlSetting?.controller_props?.placeholder ===
@@ -592,106 +410,24 @@ export const useModelProvider = create<ModelProviderState>()(
           )
         }
 
-        if (version <= 10 && state?.providers) {
-          state.providers.forEach((provider) => {
-            if (provider.models && provider.provider === 'llamacpp') {
-              provider.models.forEach((model) => {
-                if (!model.settings) model.settings = {}
-
-                if (!model.settings.auto_increase_ctx_len) {
-                  model.settings.auto_increase_ctx_len = {
-                    ...modelSettings.auto_increase_ctx_len,
-                    controller_props: {
-                      ...modelSettings.auto_increase_ctx_len.controller_props,
-                    },
-                  }
-                }
-              })
-            }
-          })
-        }
-        if (version <= 11 && state?.providers) {
-          state.providers.forEach((provider) => {
-            if (
-              provider.models &&
-              (provider.provider === 'llamacpp' || provider.provider === 'mlx')
-            ) {
-              provider.models.forEach((model) => {
-                if (model.settings?.ctx_len?.controller_props) {
-                  const current = model.settings.ctx_len.controller_props.value
-                  if (current === 8192 || current === '8192') {
-                    model.settings.ctx_len.controller_props.value = 16384
-                  }
-                  if (
-                    model.settings.ctx_len.controller_props.placeholder ===
-                    '8192'
-                  ) {
-                    model.settings.ctx_len.controller_props.placeholder =
-                      '16384'
-                  }
-                }
-              })
-            }
-          })
-        }
-
-        // v13 — Windows-only: the upstream-only consolidation
-        // (ADR 2026-05-22) removed the turboquant `llamacpp` provider
-        // from the Windows build. Existing installs upgrading into this
-        // version still have a `llamacpp` ModelProvider object in
-        // zustand-persisted state — drop it, and redirect any active
-        // selection to `'llamacpp-upstream'` so the model picker / Settings
-        // → Providers page render cleanly on first launch after the
-        // update. Models on disk (under `<data>/llamacpp/models/`) are
-        // shared between both providers via `MODELS_PROVIDER_ROOT =
-        // 'llamacpp'` in the upstream extension, so no model-level data
-        // migration is necessary.
-        if (version <= 12 && state?.providers && IS_WINDOWS) {
+        // v15 — single-ginfer strip: drop the retired local backends from
+        // persisted state and redirect any selection stuck on one of them to
+        // the only remaining local provider.
+        if (version <= 14 && state?.providers) {
           state.providers = state.providers.filter(
-            (provider) => provider.provider !== LEGACY_LLAMACPP_PROVIDER
+            (provider) => !RETIRED_LOCAL_PROVIDERS.includes(provider.provider)
           )
-          if (state.selectedProvider === LEGACY_LLAMACPP_PROVIDER) {
-            state.selectedProvider = LOCAL_LLAMACPP_PROVIDER
-            // INTENTIONALLY do NOT null `selectedModel` here. The on-disk
-            // GGUFs are shared between providers (both extensions point at
-            // `<data>/llamacpp/models/`), so the upstream extension will
-            // re-register the same model id at `setProviders` time. The
-            // re-resolve block at the bottom of `setProviders`
-            // (`nextSelectedModel = nextSelectedProvider?.models.find(...)`)
-            // then rebinds `selectedModel` to the upstream provider's copy
-            // of the same model on first paint — without that, the user
-            // would have to manually re-pick the active model in the
-            // dropdown after every update, even though the same model is
-            // still on disk.
+          if (
+            state.selectedProvider &&
+            RETIRED_LOCAL_PROVIDERS.includes(state.selectedProvider)
+          ) {
+            state.selectedProvider = GINFER_DEFAULT_PROVIDER
           }
-        }
-
-        // v14 — macOS: ATO-116 made `llamacpp-upstream` the default local
-        // engine, but the v13 redirect above is IS_WINDOWS-gated, so macOS
-        // users carrying a pre-ATO-116 `selectedProvider: 'llamacpp'` (the
-        // turboquant fork, which crashes on new archs like gemma4uv /
-        // lfm2moe) were never moved off it — auto-start and the model-bar
-        // default kept loading GGUFs on turboquant (ATO-136). Redirect ONLY
-        // the global default selection to the upstream provider. We
-        // deliberately:
-        //   - do NOT remove the turboquant `llamacpp` provider (still shipped
-        //     on macOS as an explicit manual choice), and
-        //   - do NOT touch per-thread bindings (left to their own history),
-        // so this reverses only the *default* clause of the IS_WINDOWS gate.
-        // The on-disk GGUF tree is shared (MODELS_PROVIDER_ROOT='llamacpp'),
-        // so `setProviders` re-resolves `selectedModel` against the upstream
-        // provider's copy of the same model (see the v13 note above).
-        if (
-          version <= 13 &&
-          IS_MACOS &&
-          state?.selectedProvider === LEGACY_LLAMACPP_PROVIDER
-        ) {
-          state.selectedProvider = LOCAL_LLAMACPP_PROVIDER
         }
 
         return state
       },
-      version: 14,
+      version: 15,
     }
   )
 )

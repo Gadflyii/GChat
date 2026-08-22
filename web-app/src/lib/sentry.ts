@@ -1,5 +1,5 @@
 /**
- * ATO-113: Sentry frontend integration for Atomic Chat.
+ * ATO-113: Sentry frontend integration for GChat.
  *
  * - Initialised once, early in `main.tsx`, before the router so the React
  *   `ErrorBoundary` and the global `window.onerror` / `unhandledrejection`

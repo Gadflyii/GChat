@@ -1,12 +1,10 @@
 import { localStorageKey } from '@/constants/localStorage'
 import { EMBEDDING_MODEL_ID } from '@/constants/models'
-import type { ModelInfo } from '@janhq/core'
+import type { ModelInfo } from '@gchat/core'
 
-// Upstream llama.cpp first: it understands the full Gemma 4 projector set
-// (`gemma4uv`/`gemma4ua`) that the turboquant fork doesn't yet carry, so the
-// default vision model starts cleanly. TurboQuant (`llamacpp`) stays a
-// manual macOS choice. See ADR 2026-06-09 (ATO-116).
-const localProviderNames = ['llamacpp-upstream', 'llamacpp', 'mlx'] as const
+import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+
+const localProviderNames = [LOCAL_LLAMACPP_PROVIDER] as const
 
 export const getLastUsedModel = (): {
   provider: string
@@ -32,7 +30,7 @@ function findFirstLocalModel(
       (m) => m.id !== EMBEDDING_MODEL_ID && !(m as { missing?: boolean }).missing
     )
     // A deactivated provider (Settings → Model Providers toggle) must never
-    // be auto-started — e.g. TurboQuant ships disabled on fresh installs.
+    // be auto-started.
     if (provider && provider.active !== false && firstUsable) {
       return { model: firstUsable.id, provider }
     }

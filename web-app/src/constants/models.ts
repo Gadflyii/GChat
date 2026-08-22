@@ -8,13 +8,17 @@ import type { HardwareTier } from '@/lib/hardware-tier'
 
 export const EMBEDDING_MODEL_ID = 'sentence-transformer-mini'
 
+/** HF repo for the bundled quick-start coding model (Settings → Claude Code). */
+export const JAN_CODE_HF_REPO = 'janhq/Jan-Code-4b-Gguf'
+
 /**
  * Model offered by the bottom-right reminder that appears when onboarding is
  * left without picking anything. Must stay in sync with the first entry of the
  * onboarding manifest (`atomic-chat-conf/models/recommended.json`) so the
  * reminder repeats the same recommendation the setup screen showed.
  */
-export const ONBOARDING_REMINDER_MODEL_HF_REPO = 'AtomicChat/Qwen3.5-4B-GGUF'
+export const ONBOARDING_REMINDER_MODEL_HF_REPO =
+  'GadflyII/Qwen3.8-27B-NInfer'
 
 /** What the bottom-right reminder offers, keyed by hardware tier. */
 export type OnboardingReminderModel = {
@@ -22,10 +26,6 @@ export type OnboardingReminderModel = {
   repo: string
   /** Display name — this card is not translated, matching its siblings. */
   title: string
-  /** Quant pin; see `findPinnedQuant`. Omitted = house default. */
-  quant?: string
-  /** Vision models only: projector pin. */
-  mmprojQuant?: string
 }
 
 /**
@@ -34,8 +34,7 @@ export type OnboardingReminderModel = {
  * onboarding got nudged toward a 2.5 GB model it would struggle with.
  *
  * Keep the `standard` entry in sync with the first entry of
- * `recommendations` in the onboarding manifest, and `low` with the first entry
- * of `low_spec_recommendations`.
+ * `recommendations` in the onboarding manifest.
  */
 export const ONBOARDING_REMINDER_MODELS: Record<
   HardwareTier,
@@ -43,16 +42,13 @@ export const ONBOARDING_REMINDER_MODELS: Record<
 > = {
   standard: {
     repo: ONBOARDING_REMINDER_MODEL_HF_REPO,
-    title: 'Qwen3.5 4B',
+    title: 'Qwen3.8 27B',
   },
   low: {
-    repo: 'LiquidAI/LFM2.5-VL-450M-GGUF',
-    title: 'LFM2.5 VL 450M',
-    quant: 'Q8_0',
-    mmprojQuant: 'Q8_0',
+    repo: ONBOARDING_REMINDER_MODEL_HF_REPO,
+    title: 'Qwen3.8 27B',
   },
 }
-export const JAN_CODE_HF_REPO = 'janhq/Jan-Code-4b-Gguf'
 export const DEFAULT_MODEL_QUANTIZATIONS = ['iq4_xs', 'q4_k_m']
 
 /**
@@ -74,12 +70,12 @@ export const SETUP_SCREEN_QUANTIZATIONS = ['q4_k_m']
  */
 export const BASELINE_RECOMMENDED_MODELS: ReadonlyArray<Recommendation> = [
   {
-    model_name: 'AtomicChat/Qwen3.5-4B-GGUF',
+    model_name: 'GadflyII/Qwen3.8-27B-NInfer',
     description_key: 'hub:recEverydayUse',
   },
   {
-    model_name: 'AtomicChat/gemma-4-E2B-it-GGUF',
-    description_key: 'hub:recEverydayUse',
+    model_name: 'GadflyII/Qwen3.8-27B-nvfp4-NInfer',
+    description_key: 'hub:recMathReasoning',
   },
 ]
 
@@ -87,185 +83,17 @@ export const BASELINE_RECOMMENDED_MODELS: ReadonlyArray<Recommendation> = [
  * Mirror of the manifest's `low_spec_recommendations` array. Shown INSTEAD of
  * {@link BASELINE_RECOMMENDED_MODELS} on machines `classifyHardwareTier` calls
  * low-spec, so the first model a weak machine downloads is one it can run.
- *
- * Same rule as above: keep this declarative and identical to the manifest —
- * no `IS_MACOS` ternaries, no computed quants. The `quant` pins are required,
- * not cosmetic: both repos also ship a Q4_K_M, so a dropped pin downloads a
- * working-but-wrong file and fails silently.
+ * Empty: the single local backend (GInfer) requires an NVIDIA GPU, so there is
+ * no low-spec local model to offer.
  */
 export const BASELINE_LOW_SPEC_RECOMMENDED_MODELS: ReadonlyArray<Recommendation> =
-  [
-    {
-      model_name: 'LiquidAI/LFM2.5-2.6B-GGUF',
-      description_key: 'hub:recEverydayUse',
-      quant: 'Q4_K_M',
-    },
-    {
-      model_name: 'LiquidAI/LFM2.5-VL-450M-GGUF',
-      description_key: 'hub:recVisionKnowledge',
-      quant: 'Q8_0',
-      mmproj_quant: 'Q8_0',
-    },
-  ]
-
-const ATOMIC_GEMMA4_E4B_HF =
-  'https://huggingface.co/AtomicChat/gemma4-e4b-it-GGUF/resolve/main'
-const ATOMIC_QWEN35_4B_HF =
-  'https://huggingface.co/AtomicChat/qwen35-4b-GGUF/resolve/main'
-const ATOMIC_QWEN3_CODER_HF =
-  'https://huggingface.co/AtomicChat/qwen3-coder-30b-a3b-GGUF/resolve/main'
-const QWEN_MLX_HF =
-  'https://huggingface.co/mlx-community/Qwen3.5-9B-MLX-4bit/resolve/main'
-
-//! MLX-fallback инжектится только на macOS — иначе утекает через useState-инициализацию
-//! useResolvedRecommendedModels и через прямое чтение в routes/hub/$modelId.tsx
-const MLX_QWEN_FALLBACK: CatalogModel = {
-  model_name: 'mlx-community/Qwen3.5-9B-MLX-4bit',
-  developer: 'mlx-community',
-  library_name: 'mlx',
-  description:
-    '**Tags**: Image-Text-to-Text, MLX, Safetensors, qwen3_5, vision-language-model, 4-bit, conversational',
-  downloads: 73490,
-  num_safetensors: 1,
-  safetensors_files: [
-    {
-      model_id: 'mlx-community/Qwen3.5-9B-MLX-4bit',
-      path: `${QWEN_MLX_HF}/model.safetensors`,
-      file_size: '5.6 GB',
-    },
-  ],
-  is_mlx: true,
-  readme: `${QWEN_MLX_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-}
-
-export const RECOMMENDED_MODEL_FALLBACKS: Readonly<
-  Record<string, CatalogModel>
-> = {
-  'AtomicChat/gemma4-e4b-it-GGUF': {
-    model_name: 'AtomicChat/gemma4-e4b-it-GGUF',
-    developer: 'AtomicChat',
-    description:
-      '**Tags**: Image-Text-to-Text, GGUF, gemma4, atomic-chat, google, imatrix, conversational',
-    downloads: 0,
-    num_quants: 12,
-    quants: [
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q8_0',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q8_0.gguf`,
-        file_size: '8.0 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q6_K',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q6_K.gguf`,
-        file_size: '7.0 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q5_K_M',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q5_K_M.gguf`,
-        file_size: '5.5 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q5_K_S',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q5_K_S.gguf`,
-        file_size: '5.4 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-UD-Q4_K_XL',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-UD-Q4_K_XL.gguf`,
-        file_size: '5.1 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q4_K_M',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q4_K_M.gguf`,
-        file_size: '4.9 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q4_K_S',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q4_K_S.gguf`,
-        file_size: '4.7 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-IQ4_XS',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-IQ4_XS.gguf`,
-        file_size: '4.5 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q3_K_L',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q3_K_L.gguf`,
-        file_size: '4.4 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q3_K_M',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q3_K_M.gguf`,
-        file_size: '4.1 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-IQ3_M',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-IQ3_M.gguf`,
-        file_size: '3.8 GB',
-      },
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q2_K',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q2_K.gguf`,
-        file_size: '3.3 GB',
-      },
-    ],
-    num_mmproj: 1,
-    mmproj_models: [
-      {
-        model_id: 'mmproj-gemma4-e4b-it-f16',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/mmproj-gemma4-e4b-it-f16.gguf`,
-        file_size: '1.0 GB',
-      },
-    ],
-    readme: `${ATOMIC_GEMMA4_E4B_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-  },
-  'AtomicChat/qwen35-4b-GGUF': {
-    model_name: 'AtomicChat/qwen35-4b-GGUF',
-    developer: 'AtomicChat',
-    description: '**Tags**: text-generation, GGUF, qwen3, atomic-chat, imatrix, conversational',
-    downloads: 0,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    readme: `${ATOMIC_QWEN35_4B_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-  },
-  'AtomicChat/qwen3-coder-30b-a3b-GGUF': {
-    model_name: 'AtomicChat/qwen3-coder-30b-a3b-GGUF',
-    developer: 'AtomicChat',
-    description: '**Tags**: text-generation, GGUF, qwen3, qwen3-coder, atomic-chat, imatrix, conversational',
-    downloads: 0,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    readme: `${ATOMIC_QWEN3_CODER_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-  },
-  ...(IS_MACOS
-    ? { 'mlx-community/Qwen3.5-9B-MLX-4bit': MLX_QWEN_FALLBACK }
-    : {}),
-}
-
-/**
- * Bundled offline-first fallback for the model catalog registry.
- *
- * Lives next to `RECOMMENDED_MODEL_FALLBACKS` above but serves a different
- * purpose: this list seeds `useModelCatalogStore` when neither the
- * `localStorage` cache nor the network fetch succeed (e.g. first launch on
- * an air-gapped machine). Each entry follows the exact `CatalogModel` shape
- * so the existing download pipeline can act on it without conversion.
- *
- * Keep it small (~10 entries) — the goal is for Hub to render something
- * useful before the real catalog lands, not to mirror the full curated set.
- */
+  []
 
 /**
  * One `.ginfer` weights file per repo. File sizes and hashes are unknown
  * until the repos are published, so the download resolves them from the live
- * HuggingFace repo at download time (the same deferral GGUF entries use via
- * `fetchHuggingFaceRepo`) — an unpublished repo degrades to a clean download
- * error, never a crash.
+ * HuggingFace repo at download time — an unpublished repo degrades to a clean
+ * download error, never a crash.
  */
 const ginferEntry = ({
   id,
@@ -300,129 +128,15 @@ const ginferEntry = ({
   readme: `https://huggingface.co/${repo}/resolve/main/README.md`,
 })
 
+/**
+ * Bundled offline-first fallback for the model catalog registry.
+ *
+ * Seeds `useModelCatalogStore` when neither the `localStorage` cache nor the
+ * network fetch succeed (e.g. first launch on an air-gapped machine). Each
+ * entry follows the exact `CatalogModel` shape so the existing download
+ * pipeline can act on it without conversion.
+ */
 export const BASELINE_MODEL_CATALOG: ReadonlyArray<CatalogModel> = [
-  {
-    model_name: 'AtomicChat/gemma4-e4b-it-GGUF',
-    developer: 'AtomicChat',
-    description:
-      '**Tags**: gguf, gemma4, atomic-chat, google, imatrix, conversational, image-text-to-text',
-    downloads: 0,
-    num_quants: 1,
-    quants: [
-      {
-        model_id: 'AtomicChat/gemma4-e4b-it-Q4_K_M',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/gemma4-e4b-it-Q4_K_M.gguf`,
-        file_size: '4.9 GB',
-      },
-    ],
-    num_mmproj: 1,
-    mmproj_models: [
-      {
-        model_id: 'mmproj-gemma4-e4b-it-f16',
-        path: `${ATOMIC_GEMMA4_E4B_HF}/mmproj-gemma4-e4b-it-f16.gguf`,
-        file_size: '1.0 GB',
-      },
-    ],
-    num_safetensors: 0,
-    safetensors_files: [],
-    is_mlx: false,
-    readme: `${ATOMIC_GEMMA4_E4B_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-  },
-  {
-    model_name: 'AtomicChat/qwen35-4b-GGUF',
-    developer: 'AtomicChat',
-    description: '**Tags**: gguf, qwen3, atomic-chat, imatrix, conversational',
-    downloads: 0,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    num_safetensors: 0,
-    safetensors_files: [],
-    is_mlx: false,
-    readme: `${ATOMIC_QWEN35_4B_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-  },
-  {
-    model_name: 'AtomicChat/qwen36-27b-GGUF',
-    developer: 'AtomicChat',
-    description: '**Tags**: gguf, qwen3, atomic-chat, imatrix, conversational',
-    downloads: 0,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    num_safetensors: 0,
-    safetensors_files: [],
-    is_mlx: false,
-    readme: 'https://huggingface.co/AtomicChat/qwen36-27b-GGUF/resolve/main/README.md',
-  },
-  {
-    model_name: 'AtomicChat/qwen3-coder-30b-a3b-GGUF',
-    developer: 'AtomicChat',
-    description: '**Tags**: gguf, qwen3, qwen3-coder, atomic-chat, imatrix, conversational',
-    downloads: 0,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    num_safetensors: 0,
-    safetensors_files: [],
-    is_mlx: false,
-    readme: `${ATOMIC_QWEN3_CODER_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-  },
-  {
-    model_name: 'unsloth/Llama-3.2-3B-Instruct-GGUF',
-    developer: 'unsloth',
-    description: '**Tags**: gguf, llama, unsloth, conversational',
-    downloads: 0,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    num_safetensors: 0,
-    safetensors_files: [],
-    is_mlx: false,
-    readme:
-      'https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/README.md',
-  },
-  {
-    model_name: 'mlx-community/Qwen3.5-9B-MLX-4bit',
-    developer: 'mlx-community',
-    library_name: 'mlx',
-    description:
-      '**Tags**: mlx, qwen3_5, vision-language-model, 4-bit, conversational',
-    downloads: 73490,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    num_safetensors: 1,
-    safetensors_files: [
-      {
-        model_id: 'mlx-community/Qwen3.5-9B-MLX-4bit',
-        path: `${QWEN_MLX_HF}/model.safetensors`,
-        file_size: '5.6 GB',
-      },
-    ],
-    is_mlx: true,
-    readme: `${QWEN_MLX_HF.replace('/resolve/main', '')}/resolve/main/README.md`,
-  },
-  {
-    model_name: 'mlx-community/gemma-4-e4b-it-4bit',
-    developer: 'mlx-community',
-    library_name: 'mlx',
-    description: '**Tags**: mlx, gemma4, 4-bit, conversational',
-    downloads: 0,
-    num_quants: 0,
-    quants: [],
-    num_mmproj: 0,
-    mmproj_models: [],
-    num_safetensors: 0,
-    safetensors_files: [],
-    is_mlx: true,
-    readme:
-      'https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit/resolve/main/README.md',
-  },
   ginferEntry({
     id: 'qwen3.8-27b-int-autoround',
     name: 'Qwen3.8 27B (int autoround)',
@@ -449,8 +163,16 @@ export const BASELINE_MODEL_CATALOG: ReadonlyArray<CatalogModel> = [
   }),
 ]
 
-export const JAN_V2_VL_MODEL_HF_REPO = 'janhq/Jan-v2-VL-high-gguf'
-export const JAN_V2_VL_QUANTIZATIONS = ['q4_k_m', 'q4_k_s', 'q4_0', 'q3_k_m']
+/**
+ * Offline-only `CatalogModel` snapshot used by the Hub model page when the
+ * HF API is unreachable. Kept in lockstep with `BASELINE_MODEL_CATALOG` —
+ * the two are the same set of local models.
+ */
+export const RECOMMENDED_MODEL_FALLBACKS: Readonly<
+  Record<string, CatalogModel>
+> = Object.freeze(
+  Object.fromEntries(BASELINE_MODEL_CATALOG.map((model) => [model.model_name, model]))
+)
 
 /**
  * Provider model capabilities - copied from token.js package

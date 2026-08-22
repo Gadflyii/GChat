@@ -13,15 +13,6 @@ type SystemUsage = {
   total_memory: number
 }
 
-type MlxSession = {
-  pid: number
-  port: number
-  model_id: string
-  model_path: string
-  is_embedding: boolean
-  api_key: string
-}
-
 type TrayStatusPayload = {
   server_running: boolean
   server_url: string
@@ -70,22 +61,11 @@ export function useTrayStatusSync(): void {
       if (cancelled) return
       try {
         const current = latest.current
-        const [usage, sessions] = await Promise.all([
-          invoke<SystemUsage>('plugin:hardware|get_system_usage').catch(
-            () => null
-          ),
-          invoke<MlxSession[]>('plugin:mlx|get_mlx_all_sessions').catch(
-            () => [] as MlxSession[]
-          ),
-        ])
+        const usage = await invoke<SystemUsage>('plugin:hardware|get_system_usage').catch(
+          () => null
+        )
 
-        // Prefer an active MLX session (authoritative: a running inference process),
-        // fall back to `activeModels` which also tracks non-MLX engines.
         const modelLabel = (() => {
-          const nonEmbedding = sessions.filter((s) => !s.is_embedding)
-          if (nonEmbedding.length === 1) return nonEmbedding[0].model_id
-          if (nonEmbedding.length > 1)
-            return `${nonEmbedding.length} models loaded`
           if (current.activeModels.length === 1) return current.activeModels[0]
           if (current.activeModels.length > 1)
             return `${current.activeModels.length} models loaded`

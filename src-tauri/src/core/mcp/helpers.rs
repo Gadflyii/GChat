@@ -263,9 +263,9 @@ async fn connect_remote_mcp(
             protocol_version: Default::default(),
             capabilities: ClientCapabilities::default(),
             client_info: Implementation {
-                name: "Atomic Chat MCP Client".to_string(),
+                name: "GChat MCP Client".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
-                title: Some("Atomic Chat".to_string()),
+                title: Some("GChat".to_string()),
                 website_url: None,
                 icons: None,
             },
@@ -487,7 +487,7 @@ async fn schedule_mcp_start_task<R: Runtime>(
         if config_params.command.trim().is_empty() {
             return Err(format!("MCP stdio server {name} has no command"));
         }
-        if name == "Jan Browser MCP" {
+        if name == "GChat Browser MCP" {
             if let Some(port_str) = config_params.envs.get("BRIDGE_PORT") {
                 if let Some(port_str) = port_str.as_str() {
                     if let Ok(port) = port_str.parse::<u16>() {
@@ -499,7 +499,7 @@ async fn schedule_mcp_start_task<R: Runtime>(
                                 }
                                 Ok(false) => {
                                     return Err(format!(
-                                        "Port {} is already in use. Please close the application using this port or restart Jan.",
+                                        "Port {} is already in use. Please close the application using this port or restart GChat.",
                                         port
                                     ));
                                 }
@@ -701,8 +701,8 @@ async fn schedule_mcp_start_task<R: Runtime>(
             return Err(format!("MCP server {name} quit immediately after starting"));
         }
 
-        // Create lock file for Jan Browser MCP
-        if name == "Jan Browser MCP" {
+        // Create lock file for GChat Browser MCP
+        if name == "GChat Browser MCP" {
             if let Some(port_str) = config_params.envs.get("BRIDGE_PORT") {
                 if let Some(port_str) = port_str.as_str() {
                     if let Ok(port) = port_str.parse::<u16>() {
@@ -894,7 +894,7 @@ pub async fn kill_orphaned_mcp_process_with_app<R: Runtime>(
 
     if !jan_utils::network::is_orphaned_mcp_process(&process_info) {
         log::warn!(
-            "Port {} occupied by non-Jan process '{}' (PID {})",
+            "Port {} occupied by non-GChat process '{}' (PID {})",
             port,
             process_info.name,
             process_info.pid
@@ -1091,7 +1091,7 @@ pub async fn stop_mcp_servers_with_context<R: Runtime>(
         let mut result = Vec::new();
         for key in keys {
             if let Some(service) = servers_map.remove(&key) {
-                let port = if key == "Jan Browser MCP" {
+                let port = if key == "GChat Browser MCP" {
                     let active_servers = state.mcp_active_servers.lock().await;
                     active_servers.get(&key).and_then(|config| {
                         config
@@ -1142,7 +1142,7 @@ pub async fn stop_mcp_servers_with_context<R: Runtime>(
                     }
                 }
 
-                if name == "Jan Browser MCP" {
+                if name == "GChat Browser MCP" {
                     if let Some(port) = port {
                         use crate::core::mcp::lockfile::delete_lock_file;
                         if success {

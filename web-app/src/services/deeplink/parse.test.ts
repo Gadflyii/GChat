@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseAtomicChatDeepLink } from './parse'
+import { parseGChatDeepLink } from './parse'
 
-describe('parseAtomicChatDeepLink', () => {
+describe('parseGChatDeepLink', () => {
   it('parses a Hugging Face model deeplink', () => {
     expect(
-      parseAtomicChatDeepLink(
-        'atomic-chat://models/huggingface/owner/model-GGUF'
+      parseGChatDeepLink(
+        'gchat://models/huggingface/owner/model-GGUF'
       )
     ).toEqual({
       provider: 'huggingface',
@@ -15,15 +15,15 @@ describe('parseAtomicChatDeepLink', () => {
     })
   })
 
-  it('rejects non Atomic Chat schemes', () => {
+  it('rejects non GChat schemes', () => {
     expect(
-      parseAtomicChatDeepLink('jan://models/huggingface/owner/model-GGUF')
+      parseGChatDeepLink('janai://models/huggingface/owner/model-GGUF')
     ).toBeNull()
   })
 
   it('rejects incomplete Hugging Face paths', () => {
     expect(
-      parseAtomicChatDeepLink('atomic-chat://models/huggingface/owner')
+      parseGChatDeepLink('gchat://models/huggingface/owner')
     ).toBeNull()
   })
 })

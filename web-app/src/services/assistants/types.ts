@@ -2,7 +2,7 @@
  * Assistants Service Types
  */
 
-import { Assistant } from '@janhq/core'
+import { Assistant } from '@gchat/core'
 
 export interface AssistantsService {
   getAssistants(): Promise<Assistant[] | null>

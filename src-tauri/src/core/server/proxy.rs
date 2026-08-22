@@ -11,8 +11,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Runtime};
-use tauri_plugin_llamacpp::LLamaBackendSession;
-use tauri_plugin_llamacpp_upstream::LLamaBackendSession as LLamaUpstreamBackendSession;
+use tauri_plugin_ginfer::state::GinferSession;
 use tokio::sync::{oneshot, Mutex};
 
 use crate::core::server::api_request_analytics::{
@@ -20,9 +19,9 @@ use crate::core::server::api_request_analytics::{
     API_REQUEST_SUMMARY_WINDOW_SECS,
 };
 use crate::core::server::context_expansion::{
-    is_context_limit_error as shared_is_context_limit_error, request_context_increase,
+    is_context_limit_error as shared_is_context_limit_error,
 };
-use crate::core::state::{AutoIncreaseState, ProviderConfig, ServerHandle};
+use crate::core::state::{ProviderConfig, ServerHandle};
 
 /// Immediate analytics channel retained for bind failures, which happen
 /// before a three-minute request window can exist.
@@ -163,7 +162,7 @@ fn emit_ttft_timing<R: Runtime>(app: &AppHandle<R>, marker: &'static str) {
 }
 
 fn log_ttft_prefix_dump(json_body: &serde_json::Value) {
-    if std::env::var("ATOMIC_TTFT_PREFIX_DUMP").ok().as_deref() != Some("1") {
+    if std::env::var("GCHAT_TTFT_PREFIX_DUMP").ok().as_deref() != Some("1") {
         return;
     }
     // Zero-PII (ATO-113): never log message/tool *text* (prompts are PII).
@@ -205,7 +204,6 @@ fn endpoint_from_path(path: &str) -> &'static str {
         "/embeddings" => "embeddings",
         "/messages/count_tokens" => "messages/count_tokens",
         "/models" => "models",
-        "/metrics" => "metrics",
         _ => "other",
     }
 }
@@ -217,11 +215,11 @@ fn transform_anthropic_to_openai(body: &serde_json::Value) -> Option<serde_json:
 
     let openai_messages = convert_messages(messages, body.get("system"))?;
 
-    // Strict chat templates (e.g. AtomicChat/ornith-9b, Qwen3-family GGUFs)
+    // Strict chat templates (e.g. GadflyII/ornith-9b, Qwen3-family models)
     // `raise` "System message must be at the beginning" whenever a request
     // carries more than one system message or a non-leading one. Claude Code
     // triggers this by combining its system prompt with developer/system items,
-    // and the failure surfaces during llama.cpp's tool-call parser generation.
+    // and the failure surfaces during the backend's tool-call parser generation.
     // Collapse them into a single leading system message — the same fix already
     // applied on the Codex `/responses` path (see responses_shim).
     let openai_messages = match openai_messages.as_array() {
@@ -635,7 +633,7 @@ pub fn get_destination_path(original_path: &str, prefix: &str) -> String {
 
 /// Compare a model id from an incoming request against a model id from an
 /// active session. Dots and underscores are treated as equivalent so that
-/// e.g. `Qwen3_5-9B-MLX-4bit` matches `Qwen3.5-9B-MLX-4bit` — some clients
+/// e.g. `Qwen3_5-9B-4bit` matches `Qwen3.5-9B-4bit` — some clients
 /// (and filesystems) substitute one for the other.
 pub fn model_ids_match(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
@@ -651,7 +649,7 @@ pub fn allowed_methods_for_path(path: &str) -> Option<&'static [&'static str]> {
         "/" | "/openapi.json" | "/docs/swagger-ui.css" | "/docs/swagger-ui-bundle.js" => {
             Some(&["GET"])
         }
-        "/models" | "/metrics" => Some(&["GET"]),
+        "/models" => Some(&["GET"]),
         "/messages"
         | "/chat/completions"
         | "/responses"
@@ -661,8 +659,6 @@ pub fn allowed_methods_for_path(path: &str) -> Option<&'static [&'static str]> {
         _ => None,
     }
 }
-
-use tauri_plugin_mlx::state::{MlxBackendSession, SessionInfo};
 
 fn is_local_url(url: &str) -> bool {
     url.contains("://localhost")
@@ -677,7 +673,7 @@ fn is_context_limit_error(status: StatusCode, body: &str) -> bool {
 
 /// ATO-112: local on-device engines vs remote cloud providers.
 fn is_local_backend(backend: &str) -> bool {
-    matches!(backend, "llamacpp" | "llamacpp-upstream" | "mlx")
+    matches!(backend, "ginfer")
 }
 
 /// ATO-112: error_kind for an upstream that responded with a non-2xx status.
@@ -711,43 +707,6 @@ fn body_indicates_oom(body: &str) -> bool {
         || b.contains("erroroutofdevicememory")
 }
 
-/// ATO-197: Detects a *fatal* llama.cpp compute/decode failure that poisons
-/// the backend. On Apple Silicon (Metal) a GPU out-of-memory during prompt
-/// processing returns HTTP 500 `{"error":{"message":"Compute error"}}` and
-/// leaves the ggml Metal backend in a permanent error state ("backend is in
-/// error state from a previous command buffer failure - recreate the backend
-/// to recover"). The OOM detail (`kIOGPUCommandBufferCallbackErrorOutOfMemory`)
-/// only appears in the server's stderr, never the HTTP body, so we key off the
-/// body's decode/compute-failure phrasing. Context-overflow errors are handled
-/// separately and checked first, so they never reach this matcher.
-fn is_compute_backend_error(status: StatusCode, body: &str) -> bool {
-    if status != StatusCode::INTERNAL_SERVER_ERROR {
-        return false;
-    }
-    let b = body.to_lowercase();
-    b.contains("compute error")
-        || b.contains("failed to decode")
-        || b.contains("failed to compute graph")
-        || b.contains("backend is in error state")
-        || b.contains("ggml_backend_sched_graph_compute")
-}
-
-/// ATO-197: human-readable, actionable error envelope for a fatal compute/OOM
-/// failure from a local backend. Replaces the opaque "Compute error" the
-/// engine returns with guidance, and carries the OpenAI `insufficient_memory`
-/// code. `oom` is `true` when the upstream body itself pinned an OOM cause; on
-/// macOS Metal the bare "Compute error" is overwhelmingly an out-of-memory
-/// condition, so the non-`oom` wording still leads with that as the likely
-/// cause but hedges.
-fn compute_error_envelope(oom: bool) -> String {
-    let message = if oom {
-        "The model ran out of memory while processing this request. Try a smaller or lighter model, reduce the context size, or remove attached images. On Apple Silicon, memory is shared with the system, so closing other memory-heavy apps can free up headroom."
-    } else {
-        "The model failed during computation — most often because it ran out of memory. Try a smaller or lighter model, reduce the context size, or remove attached images. On Apple Silicon, memory is shared with the system, so closing other memory-heavy apps can free up headroom."
-    };
-    structured_error_json(message, "server_error", "insufficient_memory")
-}
-
 /// ATO-182: Build an OpenAI-compatible structured error envelope so every
 /// client (the in-app UI plus external agents that hit `localhost:1337/v1`)
 /// receives a parseable `{"error": {...}}` document with a typed `code`,
@@ -765,7 +724,7 @@ fn structured_error_json(message: &str, error_type: &str, code: &str) -> String 
 }
 
 /// ATO-182: True when `body` is already a structured `{"error": {...}}`
-/// envelope (llama.cpp and remote providers emit this shape), so we never
+/// envelope (ginfer-serve and remote providers emit this shape), so we never
 /// double-wrap it.
 fn is_structured_error_body(body: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(body)
@@ -788,11 +747,12 @@ fn error_code_for(oom: bool, ctx_overflow: bool) -> &'static str {
 
 /// ATO-182: Normalize a *local-backend* error body for the OpenAI chat path.
 /// If the backend already returned a structured `{"error": {...}}` envelope
-/// (llama.cpp), forward it unchanged. Otherwise wrap the raw body (mlx-vlm's
-/// `{"detail": ...}`, plaintext stderr, "Failed to read error body", …) into a
-/// structured envelope carrying a typed `code`. The original text is preserved
-/// inside `message`, so the UI/Rust context-overflow + OOM matchers — which key
-/// off the message text — keep working.
+/// (ginfer-serve and remote providers emit this shape), forward it unchanged.
+/// Otherwise wrap the raw body (`{"detail": ...}`, plaintext stderr, "Failed
+/// to read error body", …) into a structured envelope carrying a typed `code`.
+/// The original text is preserved inside `message`, so the UI/Rust
+/// context-overflow + OOM matchers — which key off the message text — keep
+/// working.
 fn structure_backend_error_body(body: &str, oom: bool, ctx_overflow: bool) -> String {
     if is_structured_error_body(body) {
         return body.to_string();
@@ -806,196 +766,8 @@ fn structure_backend_error_body(body: &str, oom: bool, ctx_overflow: bool) -> St
     structured_error_json(body, error_type, code)
 }
 
-/// Parses the client's buffered request body and extracts `max_tokens` (or
-/// the newer `max_completion_tokens` alias that some OpenAI SDKs already
-/// emit). Returns `None` when the field is absent/invalid — meaning the
-/// client imposed no explicit completion cap.
-fn extract_client_max_tokens(request_body: Option<&[u8]>) -> Option<u64> {
-    let bytes = request_body?;
-    let json: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-    let obj = json.as_object()?;
-    for key in ["max_tokens", "max_completion_tokens"] {
-        if let Some(v) = obj.get(key).and_then(|v| v.as_u64()) {
-            if v > 0 {
-                return Some(v);
-            }
-        }
-    }
-    None
-}
-
-/// Scans a non-streaming OpenAI JSON response for a terminal
-/// `finish_reason == "length"` that is caused by the *context window* being
-/// exhausted — **not** by the client's own `max_tokens` cap.
-///
-/// Discrimination rules (in order):
-///   1. Any choice must report `finish_reason == "length"`.
-///   2. If the client did **not** set `max_tokens`/`max_completion_tokens`,
-///      `length` can only come from the context window → trigger.
-///   3. If the client did set a cap, we only trigger when
-///      `usage.completion_tokens < max_tokens`. When completion_tokens
-///      equals/exceeds the cap the stop was client-driven and we must
-///      leave the model alone (otherwise we would auto-grow the ctx on
-///      every short `max_tokens=16` healthcheck).
-fn is_context_overflow_finish_length(response_body: &[u8], request_body: Option<&[u8]>) -> bool {
-    let Ok(json) = serde_json::from_slice::<serde_json::Value>(response_body) else {
-        return false;
-    };
-
-    let has_length = json
-        .get("choices")
-        .and_then(|c| c.as_array())
-        .map(|choices| {
-            choices.iter().any(|choice| {
-                choice
-                    .get("finish_reason")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s == "length")
-                    .unwrap_or(false)
-            })
-        })
-        .unwrap_or(false);
-
-    if !has_length {
-        return false;
-    }
-
-    let client_cap = extract_client_max_tokens(request_body);
-
-    match client_cap {
-        None => true, // No client-imposed cap → `length` must be context-limit.
-        Some(cap) => {
-            let completion_tokens = json
-                .get("usage")
-                .and_then(|u| u.get("completion_tokens"))
-                .and_then(|v| v.as_u64());
-            match completion_tokens {
-                Some(done) => done + 1 < cap,
-                // Unknown completion_tokens: treat as client-driven to avoid
-                // ratcheting ctx on every opaque `length` stop. Clients who
-                // really hit ctx get HTTP 500 anyway, which we still catch.
-                None => false,
-            }
-        }
-    }
-}
-
-/// Returns `true` iff the given model is currently served by an
-/// `is_embedding == true` session on either backend. Embedding sessions
-/// have no context-exhaustion flow (batched fixed-size inputs) so the
-/// proxy must not trigger a reload for them.
-async fn is_embedding_session(
-    backend: &str,
-    model_id: &str,
-    sessions: &Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: &Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: &Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
-) -> bool {
-    match backend {
-        "llamacpp" => {
-            let guard = sessions.lock().await;
-            guard
-                .values()
-                .find(|s| model_ids_match(&s.info.model_id, model_id))
-                .map(|s| s.info.is_embedding)
-                .unwrap_or(false)
-        }
-        "llamacpp-upstream" => {
-            let guard = sessions_upstream.lock().await;
-            guard
-                .values()
-                .find(|s| model_ids_match(&s.info.model_id, model_id))
-                .map(|s| s.info.is_embedding)
-                .unwrap_or(false)
-        }
-        "mlx" => {
-            let guard = mlx_sessions.lock().await;
-            guard
-                .values()
-                .find(|s| model_ids_match(&s.info.model_id, model_id))
-                .map(|s| s.info.is_embedding)
-                .unwrap_or(false)
-        }
-        _ => false,
-    }
-}
-
-/// Look up the freshly-loaded local backend session after a successful
-/// auto-increase reload and return its `(port, api_key)`. Returns `None`
-/// when the session can't be found (e.g. TS reload actually failed despite
-/// `ok=true`).
-async fn resolve_local_session(
-    backend: &str,
-    model_id: &str,
-    sessions: &Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: &Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: &Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
-) -> Option<(i32, String)> {
-    match backend {
-        "llamacpp" => {
-            let guard = sessions.lock().await;
-            guard
-                .values()
-                .find(|s| model_ids_match(&s.info.model_id, model_id))
-                .map(|s| (s.info.port, s.info.api_key.clone()))
-        }
-        "llamacpp-upstream" => {
-            let guard = sessions_upstream.lock().await;
-            guard
-                .values()
-                .find(|s| model_ids_match(&s.info.model_id, model_id))
-                .map(|s| (s.info.port, s.info.api_key.clone()))
-        }
-        "mlx" => {
-            let guard = mlx_sessions.lock().await;
-            guard
-                .values()
-                .find(|s| model_ids_match(&s.info.model_id, model_id))
-                .map(|s| (s.info.port, s.info.api_key.clone()))
-        }
-        _ => None,
-    }
-}
-
-/// Rebuild and re-send the proxied request after a successful
-/// auto-increase-ctx reload. `new_port` points at the freshly-spawned
-/// llama-server / mlx-server, `new_api_key` is the per-session bearer
-/// token (empty for MLX sessions, since mlx-vlm has no auth layer and is
-/// bound to loopback only — the `if !new_api_key.is_empty()` branch below
-/// gracefully omits the `Authorization` header in that case).
-/// All other parameters mirror the original request so the retry is
-/// byte-identical on the wire.
-async fn retry_local_upstream(
-    local_client: &Client,
-    method: &hyper::Method,
-    destination_path: &str,
-    new_port: i32,
-    new_api_key: &str,
-    headers: &hyper::HeaderMap,
-    body: Option<Bytes>,
-) -> Result<reqwest::Response, reqwest::Error> {
-    let upstream_url = format!("http://127.0.0.1:{new_port}/v1{destination_path}");
-    let mut req = local_client.request(method.clone(), &upstream_url);
-    for (name, value) in headers.iter() {
-        if name != hyper::header::HOST && name != hyper::header::AUTHORIZATION {
-            req = req.header(name, value);
-        }
-    }
-    if !new_api_key.is_empty() {
-        req = req.header("Authorization", format!("Bearer {new_api_key}"));
-    }
-    let req_with_body = if let Some(bytes) = body {
-        req.body(bytes)
-    } else {
-        req
-    };
-    req_with_body.send().await
-}
-
 /// Wrap an upstream `reqwest::Response` into a `hyper::Response<Body>` that
 /// streams bytes as they arrive and attaches the proxy's CORS headers.
-/// Extracted so the auto-increase-ctx retry path and the primary success
-/// path share the same forwarding implementation.
 fn build_streaming_response(
     response: reqwest::Response,
     host_header: &str,
@@ -1020,7 +792,7 @@ fn build_streaming_response(
                 StreamStep::Chunk(chunk_result) => chunk_result,
                 StreamStep::Idle => {
                     log::warn!(
-                        "Retry stream produced no data for {}s; giving up on the response",
+                        "Stream produced no data for {}s; giving up on the response",
                         STREAM_IDLE_TIMEOUT.as_secs()
                     );
                     break;
@@ -1030,12 +802,12 @@ fn build_streaming_response(
             match chunk_result {
                 Ok(chunk) => {
                     if sender.send_data(chunk).await.is_err() {
-                        log::debug!("Client disconnected during retry streaming");
+                        log::debug!("Client disconnected during streaming");
                         break;
                     }
                 }
                 Err(e) => {
-                    log::error!("Retry stream error: {e}");
+                    log::error!("Stream error: {e}");
                     break;
                 }
             }
@@ -1045,11 +817,11 @@ fn build_streaming_response(
     builder.body(body).unwrap()
 }
 
-/// Handle a POST to `/responses`. Backends that serve the Responses API
-/// natively (MLX sidecar, remote OpenAI-compatible providers) get a byte-for-
-/// byte passthrough; the llama.cpp backends, which only speak Chat Completions,
-/// are bridged through [`responses_shim`] in both directions (request body and
-/// the streamed / non-streamed reply). See the 2026-06-02 ADR in `AGENTS.md`.
+/// Handle a POST to `/responses`. Remote OpenAI-compatible providers that
+/// serve the Responses API natively get a byte-for-byte passthrough; ginfer,
+/// which only speaks Chat Completions, is bridged through [`responses_shim`]
+/// in both directions (request body and the streamed / non-streamed reply).
+/// See the 2026-06-02 ADR in `AGENTS.md`.
 #[allow(clippy::too_many_arguments)]
 async fn handle_responses_request(
     state: &mut EmitState,
@@ -1060,9 +832,7 @@ async fn handle_responses_request(
     config: &ProxyConfig,
     local_client: &Client,
     client: &Client,
-    sessions: &Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: &Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: &Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
+    ginfer_sessions: &Arc<Mutex<HashMap<i32, GinferSession>>>,
     provider_configs: &Arc<Mutex<HashMap<String, ProviderConfig>>>,
 ) -> Result<Response<Body>, hyper::Error> {
     use crate::core::server::responses_shim;
@@ -1178,43 +948,17 @@ async fn handle_responses_request(
             }
         }
     } else {
-        let llama = {
-            let g = sessions.lock().await;
-            g.values()
-                .find(|s| model_ids_match(&s.info.model_id, &model_id))
-                .map(|s| (s.info.port, s.info.api_key.clone()))
-        };
-        let upstream = if llama.is_none() {
-            let g = sessions_upstream.lock().await;
-            g.values()
-                .find(|s| model_ids_match(&s.info.model_id, &model_id))
-                .map(|s| (s.info.port, s.info.api_key.clone()))
-        } else {
-            None
-        };
-        let mlx = {
-            let g = mlx_sessions.lock().await;
+        let ginfer = {
+            let g = ginfer_sessions.lock().await;
             g.values()
                 .find(|s| model_ids_match(&s.info.model_id, &model_id))
                 .map(|s| (s.info.port, s.info.api_key.clone()))
         };
 
-        if let Some((port, key)) = llama {
-            state.backend = "llamacpp";
+        if let Some((port, key)) = ginfer {
+            state.backend = "ginfer";
             Target::Translate {
                 url: format!("http://127.0.0.1:{port}/v1/chat/completions"),
-                api_key: Some(key),
-            }
-        } else if let Some((port, key)) = upstream {
-            state.backend = "llamacpp-upstream";
-            Target::Translate {
-                url: format!("http://127.0.0.1:{port}/v1/chat/completions"),
-                api_key: Some(key),
-            }
-        } else if let Some((port, key)) = mlx {
-            state.backend = "mlx";
-            Target::Passthrough {
-                url: format!("http://127.0.0.1:{port}/v1/responses"),
                 api_key: Some(key),
             }
         } else {
@@ -1404,46 +1148,6 @@ async fn handle_responses_request(
     }
 }
 
-/// Requests the shared extension-owned context reload and resolves the
-/// replacement session after the coordinated reload completes.
-#[allow(clippy::too_many_arguments)]
-async fn maybe_auto_increase_and_retry<R: Runtime>(
-    app_handle: &AppHandle<R>,
-    auto_state: &AutoIncreaseState,
-    backend: &str,
-    model_id: &str,
-    sessions: &Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: &Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: &Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
-    trigger: &str,
-) -> Option<(i32, String)> {
-    if backend != "llamacpp" && backend != "llamacpp-upstream" && backend != "mlx" {
-        return None;
-    }
-    if is_embedding_session(backend, model_id, sessions, sessions_upstream, mlx_sessions).await {
-        log::debug!(
-            "auto_increase_ctx: skipping embedding session backend={backend} model_id={model_id}"
-        );
-        return None;
-    }
-
-    let outcome =
-        request_context_increase(app_handle, auto_state, backend, model_id, trigger, None).await;
-    if !outcome.ok {
-        log::info!(
-            "auto_increase_ctx: outcome ok=false model_id={model_id} reason={:?}",
-            outcome.reason
-        );
-        return None;
-    }
-    log::info!(
-        "auto_increase_ctx: outcome ok=true model_id={model_id} new_ctx_len={:?}",
-        outcome.new_ctx_len
-    );
-
-    resolve_local_session(backend, model_id, sessions, sessions_upstream, mlx_sessions).await
-}
-
 /// Wraps `inner_proxy_request` and records one observation in the current
 /// analytics window for each eligible proxied request. For streaming responses
 /// latency is TTFB (headers + status), matching the previous per-request metric.
@@ -1453,11 +1157,8 @@ async fn proxy_request<R: Runtime>(
     client: Client,
     local_client: Client,
     config: ProxyConfig,
-    sessions: Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
+    ginfer_sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     provider_configs: Arc<Mutex<HashMap<String, ProviderConfig>>>,
-    auto_increase_state: Arc<AutoIncreaseState>,
     api_request_aggregator: Arc<ApiRequestAggregator>,
     app_handle: AppHandle<R>,
 ) -> Result<Response<Body>, hyper::Error> {
@@ -1474,11 +1175,8 @@ async fn proxy_request<R: Runtime>(
         client,
         local_client,
         config,
-        sessions,
-        sessions_upstream,
-        mlx_sessions,
+        ginfer_sessions,
         provider_configs,
-        auto_increase_state,
         app_handle.clone(),
     )
     .await?;
@@ -1514,11 +1212,8 @@ async fn inner_proxy_request<R: Runtime>(
     client: Client,
     local_client: Client,
     config: ProxyConfig,
-    sessions: Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
+    ginfer_sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     provider_configs: Arc<Mutex<HashMap<String, ProviderConfig>>>,
-    auto_increase_state: Arc<AutoIncreaseState>,
     app_handle: AppHandle<R>,
 ) -> Result<Response<Body>, hyper::Error> {
     if req.method() == hyper::Method::OPTIONS {
@@ -1797,11 +1492,11 @@ async fn inner_proxy_request<R: Runtime>(
         return Ok(error_response.body(Body::from("Not Found")).unwrap());
     }
 
-    // Codex CLI (and other Responses-only clients) hit `/responses`, which the
-    // llama.cpp backends do not implement. Handle it in a self-contained
-    // branch: passthrough for backends that serve it natively (MLX, remote
-    // providers), translate to `/chat/completions` for llama.cpp. Returns
-    // early so it never threads through the chat-completions retry machinery.
+    // Codex CLI (and other Responses-only clients) hit `/responses`, which
+    // ginfer does not implement. Handle it in a self-contained branch:
+    // passthrough for remote providers that serve it natively, translate to
+    // `/chat/completions` for ginfer. Returns early so it never threads
+    // through the chat-completions retry machinery.
     if method == hyper::Method::POST && path == "/responses" {
         return handle_responses_request(
             state,
@@ -1812,9 +1507,7 @@ async fn inner_proxy_request<R: Runtime>(
             &config,
             &local_client,
             &client,
-            &sessions,
-            &sessions_upstream,
-            &mlx_sessions,
+            &ginfer_sessions,
             &provider_configs,
         )
         .await;
@@ -1900,46 +1593,18 @@ async fn inner_proxy_request<R: Runtime>(
                                 session_api_key = provider_cfg.api_key.clone();
                             }
                         } else {
-                            // No remote provider, try local sessions
-                            let sessions_guard = sessions.lock().await;
-                            let llama_session = sessions_guard
-                                .values()
-                                .find(|s| model_ids_match(&s.info.model_id, model_id))
-                                .map(|s| (s.info.port, s.info.api_key.clone()));
-                            drop(sessions_guard);
-
-                            let llama_upstream_session = if llama_session.is_none() {
-                                let guard = sessions_upstream.lock().await;
-                                guard
+                            // No remote provider, try the local ginfer session
+                            let ginfer_session = {
+                                let ginfer_guard = ginfer_sessions.lock().await;
+                                ginfer_guard
                                     .values()
                                     .find(|s| model_ids_match(&s.info.model_id, model_id))
                                     .map(|s| (s.info.port, s.info.api_key.clone()))
-                            } else {
-                                None
                             };
 
-                            let mlx_session_info = {
-                                let mlx_guard = mlx_sessions.lock().await;
-                                mlx_guard
-                                    .values()
-                                    .find(|s| model_ids_match(&s.info.model_id, model_id))
-                                    .map(|s| s.info.clone())
-                            };
-
-                            if let Some((target_port, api_key)) = llama_session {
-                                state.backend = "llamacpp";
+                            if let Some((target_port, api_key)) = ginfer_session {
+                                state.backend = "ginfer";
                                 session_api_key = Some(api_key);
-                                target_base_url =
-                                    Some(format!("http://127.0.0.1:{}/v1/messages", target_port));
-                            } else if let Some((target_port, api_key)) = llama_upstream_session {
-                                state.backend = "llamacpp-upstream";
-                                session_api_key = Some(api_key);
-                                target_base_url =
-                                    Some(format!("http://127.0.0.1:{}/v1/messages", target_port));
-                            } else if let Some(info) = mlx_session_info {
-                                state.backend = "mlx";
-                                let target_port = info.port;
-                                session_api_key = Some(info.api_key.clone());
                                 target_base_url =
                                     Some(format!("http://127.0.0.1:{}/v1/messages", target_port));
                             } else {
@@ -2087,51 +1752,20 @@ async fn inner_proxy_request<R: Runtime>(
                                 log::error!("Provider config not found for '{provider}'");
                             }
                         } else {
-                            // No remote provider found, check for local session
-                            let sessions_guard = sessions.lock().await;
-
-                            // Use original model_id for local session lookup
-                            let sessions_find_model = model_id;
-
-                            // Check both llama.cpp variants and MLX sessions
-                            let llama_session = sessions_guard
-                                .values()
-                                .find(|s| model_ids_match(&s.info.model_id, sessions_find_model))
-                                .map(|s| (s.info.port, s.info.api_key.clone()));
-                            let llama_count = sessions_guard.len();
-                            drop(sessions_guard);
-
-                            let (llama_upstream_session, llama_upstream_count) = {
-                                let guard = sessions_upstream.lock().await;
+                            // No remote provider found, check the local ginfer session
+                            // using the original model_id.
+                            let (ginfer_session, ginfer_count) = {
+                                let guard = ginfer_sessions.lock().await;
                                 let info = guard
                                     .values()
                                     .find(|s| {
-                                        model_ids_match(&s.info.model_id, sessions_find_model)
+                                        model_ids_match(&s.info.model_id, model_id)
                                     })
                                     .map(|s| (s.info.port, s.info.api_key.clone()));
                                 (info, guard.len())
                             };
 
-                            let (mlx_session_info, mlx_count) = {
-                                let mut mlx_session_info: Option<SessionInfo> = None;
-                                let mlx_count;
-                                let mlx_guard = mlx_sessions.lock().await;
-                                mlx_count = mlx_guard.len();
-                                if let Some(session) = mlx_guard.values().find(|s| {
-                                    model_ids_match(&s.info.model_id, sessions_find_model)
-                                }) {
-                                    // Clone just the SessionInfo since MlxBackendSession is not Clone
-                                    mlx_session_info = Some(session.info.clone());
-                                }
-                                (mlx_session_info, mlx_count)
-                            };
-
-                            let total_sessions = llama_count + llama_upstream_count + mlx_count;
-
-                            // mlx_session_info is Option<SessionInfo>, use as_ref to get Option<&SessionInfo>
-                            let mlx_session = mlx_session_info.as_ref();
-
-                            if total_sessions == 0 {
+                            if ginfer_count == 0 {
                                 state.error_kind = Some("not_found");
                                 log::warn!(
                                     "Request for model '{model_id}' but no models are running."
@@ -2149,27 +1783,10 @@ async fn inner_proxy_request<R: Runtime>(
                                     .unwrap());
                             }
 
-                            if let Some((target_port, api_key)) = llama_session {
-                                state.backend = "llamacpp";
+                            if let Some((target_port, api_key)) = ginfer_session {
+                                state.backend = "ginfer";
                                 session_api_key = Some(api_key);
-                                log::debug!("Found llama.cpp session for model_id {model_id}");
-                                target_base_url = Some(format!(
-                                    "http://127.0.0.1:{target_port}/v1{destination_path}"
-                                ));
-                            } else if let Some((target_port, api_key)) = llama_upstream_session {
-                                state.backend = "llamacpp-upstream";
-                                session_api_key = Some(api_key);
-                                log::debug!(
-                                    "Found upstream llama.cpp session for model_id {model_id}"
-                                );
-                                target_base_url = Some(format!(
-                                    "http://127.0.0.1:{target_port}/v1{destination_path}"
-                                ));
-                            } else if let Some(info) = mlx_session {
-                                state.backend = "mlx";
-                                let target_port = info.port;
-                                session_api_key = Some(info.api_key.clone());
-                                log::debug!("Found MLX session for model_id {model_id}");
+                                log::debug!("Found GInfer session for model_id {model_id}");
                                 target_base_url = Some(format!(
                                     "http://127.0.0.1:{target_port}/v1{destination_path}"
                                 ));
@@ -2230,48 +1847,17 @@ async fn inner_proxy_request<R: Runtime>(
             state.skip_emit = true;
             log::debug!("Handling GET /v1/models request");
 
-            // Get local llama.cpp (turboquant) sessions
-            let sessions_guard = sessions.lock().await;
-            let mut local_models: Vec<_> = sessions_guard
-                .values()
-                .map(|session| {
-                    serde_json::json!({
-                        "id": session.info.model_id,
-                        "object": "model",
-                        "created": 1,
-                        "owned_by": "llama.cpp"
-                    })
-                })
-                .collect();
-            drop(sessions_guard);
-
-            // Get upstream llama.cpp sessions
-            let sessions_upstream_guard = sessions_upstream.lock().await;
-            let upstream_models: Vec<_> = sessions_upstream_guard
-                .values()
-                .map(|session| {
-                    serde_json::json!({
-                        "id": session.info.model_id,
-                        "object": "model",
-                        "created": 1,
-                        "owned_by": "llama.cpp-upstream"
-                    })
-                })
-                .collect();
-            drop(sessions_upstream_guard);
-            local_models.extend(upstream_models);
-
-            // Get MLX sessions
-            let mlx_models: Vec<_> = {
-                let mlx_guard = mlx_sessions.lock().await;
-                mlx_guard
+            // Get local GInfer sessions
+            let local_models: Vec<_> = {
+                let ginfer_guard = ginfer_sessions.lock().await;
+                ginfer_guard
                     .values()
                     .map(|session| {
                         serde_json::json!({
                             "id": session.info.model_id,
                             "object": "model",
                             "created": 1,
-                            "owned_by": "mlx"
+                            "owned_by": "ginfer"
                         })
                     })
                     .collect()
@@ -2294,13 +1880,11 @@ async fn inner_proxy_request<R: Runtime>(
 
             // Store counts before moving
             let local_count = local_models.len();
-            let mlx_count = mlx_models.len();
             let remote_count = remote_models.len();
 
             // Combine all models
-            let mut all_models = Vec::with_capacity(local_count + mlx_count + remote_count);
+            let mut all_models = Vec::with_capacity(local_count + remote_count);
             all_models.extend(local_models);
-            all_models.extend(mlx_models);
             all_models.extend(remote_models);
 
             let response_json = serde_json::json!({
@@ -2323,159 +1907,13 @@ async fn inner_proxy_request<R: Runtime>(
             );
 
             log::debug!(
-                "Returning {} models ({} llama.cpp, {} MLX, {} remote)",
+                "Returning {} models ({} GInfer, {} remote)",
                 all_models.len(),
                 local_count,
-                mlx_count,
                 remote_count
             );
 
             return Ok(response_builder.body(Body::from(body_str)).unwrap());
-        }
-
-        // Prometheus /metrics endpoint — proxies llama-server's built-in
-        // metrics exporter. Requires `?model=<id>` (or `X-Model` header) so
-        // a specific session can be targeted when multiple llama.cpp models
-        // are loaded. Analytics is suppressed because pollers typically hit
-        // this endpoint every ~500ms and the noise is not a product signal.
-        (hyper::Method::GET, "/metrics") => {
-            state.endpoint = Some("metrics");
-            state.skip_emit = true;
-
-            // Resolve target model_id: ?model=<id> takes precedence over X-Model.
-            let model_query = parts.uri.query().and_then(|q| {
-                q.split('&').find_map(|pair| {
-                    let mut kv = pair.splitn(2, '=');
-                    match (kv.next(), kv.next()) {
-                        (Some("model"), Some(v)) => Some(v.to_string()),
-                        _ => None,
-                    }
-                })
-            });
-            let model_header = parts
-                .headers
-                .get("X-Model")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string());
-            let metrics_model_id = match model_query.or(model_header) {
-                Some(id) if !id.is_empty() => id,
-                _ => {
-                    state.error_kind = Some("bad_request");
-                    let mut error_response = Response::builder().status(StatusCode::BAD_REQUEST);
-                    error_response = add_cors_headers_with_host_and_origin(
-                        error_response,
-                        &host_header,
-                        &origin_header,
-                        &config.trusted_hosts,
-                    );
-                    return Ok(error_response
-                        .body(Body::from(
-                            "Missing 'model' query parameter (use ?model=<model_id>)",
-                        ))
-                        .unwrap());
-                }
-            };
-
-            // llama.cpp (both turboquant and upstream variants) is the only
-            // backend family exposing a Prometheus /metrics endpoint. MLX has
-            // no slot-pool metrics so we deliberately do not fall back to
-            // mlx_sessions here.
-            let target_session = {
-                let sessions_guard = sessions.lock().await;
-                let found = sessions_guard
-                    .values()
-                    .find(|s| model_ids_match(&s.info.model_id, &metrics_model_id))
-                    .map(|s| (s.info.port, s.info.api_key.clone(), "llamacpp"));
-                drop(sessions_guard);
-                if found.is_some() {
-                    found
-                } else {
-                    let upstream_guard = sessions_upstream.lock().await;
-                    upstream_guard
-                        .values()
-                        .find(|s| model_ids_match(&s.info.model_id, &metrics_model_id))
-                        .map(|s| (s.info.port, s.info.api_key.clone(), "llamacpp-upstream"))
-                }
-            };
-
-            let (port, upstream_api_key, backend_label) = match target_session {
-                Some(v) => v,
-                None => {
-                    state.error_kind = Some("not_found");
-                    log::warn!(
-                        "Metrics requested for unknown or non-llamacpp model '{metrics_model_id}'"
-                    );
-                    let mut error_response = Response::builder().status(StatusCode::NOT_FOUND);
-                    error_response = add_cors_headers_with_host_and_origin(
-                        error_response,
-                        &host_header,
-                        &origin_header,
-                        &config.trusted_hosts,
-                    );
-                    return Ok(error_response
-                        .body(Body::from(format!(
-                            "No running llama.cpp session for model '{metrics_model_id}'"
-                        )))
-                        .unwrap());
-                }
-            };
-
-            // Note: llama-server exposes /metrics at the server root, NOT
-            // under /v1, so we must not reuse the standard `/v1{path}`
-            // upstream URL pattern here.
-            let upstream = format!("http://127.0.0.1:{port}/metrics");
-            state.backend = backend_label;
-
-            // Atomic-Chat boots llama-server with a per-session `--api-key`,
-            // so even the bundled `/metrics` endpoint expects a Bearer token.
-            // Forward the session key so this proxy route does not fail 401.
-            let mut upstream_req = local_client.get(&upstream);
-            if !upstream_api_key.is_empty() {
-                upstream_req = upstream_req.header(
-                    hyper::header::AUTHORIZATION,
-                    format!("Bearer {upstream_api_key}"),
-                );
-            }
-
-            match upstream_req.send().await {
-                Ok(resp) => {
-                    let status = resp.status();
-                    let content_type = resp
-                        .headers()
-                        .get(hyper::header::CONTENT_TYPE)
-                        .and_then(|v| v.to_str().ok())
-                        .unwrap_or("text/plain; version=0.0.4")
-                        .to_string();
-                    let bytes = resp.bytes().await.unwrap_or_default();
-
-                    let mut response_builder = Response::builder()
-                        .status(status)
-                        .header(hyper::header::CONTENT_TYPE, content_type);
-                    response_builder = add_cors_headers_with_host_and_origin(
-                        response_builder,
-                        &host_header,
-                        &origin_header,
-                        &config.trusted_hosts,
-                    );
-                    return Ok(response_builder.body(Body::from(bytes)).unwrap());
-                }
-                Err(e) => {
-                    state.error_kind = Some(unreachable_error_kind(state.backend));
-                    log::warn!("Failed to fetch metrics for model '{metrics_model_id}': {e}");
-                    let mut error_response = Response::builder().status(StatusCode::BAD_GATEWAY);
-                    error_response = add_cors_headers_with_host_and_origin(
-                        error_response,
-                        &host_header,
-                        &origin_header,
-                        &config.trusted_hosts,
-                    );
-                    return Ok(error_response
-                        .body(Body::from(format!(
-                            "Failed to fetch metrics from llama-server: {e}"
-                        )))
-                        .unwrap());
-                }
-            }
         }
 
         (hyper::Method::GET, "/openapi.json") => {
@@ -2859,137 +2297,15 @@ async fn inner_proxy_request<R: Runtime>(
                     .await
                     .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
 
-                // Auto-increase-ctx retry path. Only local backends go through
-                // this; remote providers and embedding sessions are filtered
-                // inside `maybe_auto_increase_and_retry`. We keep the original
-                // body/headers so the retry is byte-identical apart from the
-                // rewritten upstream URL + Authorization header.
-                let can_retry_local = (state.backend == "llamacpp"
-                    || state.backend == "llamacpp-upstream"
-                    || state.backend == "mlx")
-                    && state.model_id.is_some()
-                    && buffered_body.is_some();
-
-                if can_retry_local && is_context_limit_error(status, &error_body) {
-                    let model_id = state.model_id.clone().unwrap();
-                    let backend = state.backend;
-                    log::info!(
-                        "Context-limit error detected (status={status} backend={backend} model_id={model_id}); triggering auto-increase"
-                    );
-                    if let Some((new_port, new_api_key)) = maybe_auto_increase_and_retry(
-                        &app_handle,
-                        &auto_increase_state,
-                        backend,
-                        &model_id,
-                        &sessions,
-                        &sessions_upstream,
-                        &mlx_sessions,
-                        "error",
-                    )
-                    .await
-                    {
-                        match retry_local_upstream(
-                            &local_client,
-                            &method,
-                            &destination_path,
-                            new_port,
-                            &new_api_key,
-                            &headers,
-                            buffered_body.clone(),
-                        )
-                        .await
-                        {
-                            Ok(retry_response) => {
-                                let retry_status = retry_response.status();
-                                if retry_status.is_success() {
-                                    log::info!(
-                                        "auto_increase_ctx retry succeeded for model_id={model_id} (status={retry_status})"
-                                    );
-                                    return Ok(build_streaming_response(
-                                        retry_response,
-                                        &host_header,
-                                        &origin_header,
-                                        &config.trusted_hosts,
-                                    ));
-                                } else {
-                                    log::warn!(
-                                        "auto_increase_ctx retry returned non-success status={retry_status}, falling back to original error"
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                log::warn!(
-                                    "auto_increase_ctx retry send failed: {e}; falling back to original error"
-                                );
-                            }
-                        }
-                    }
-                }
-
-                // ATO-197: A fatal Metal/compute failure (e.g. a GPU OOM during
-                // prompt processing) poisons the ggml backend — every subsequent
-                // request to the same llama-server returns "Compute error" until
-                // the backend is recreated. Retrying the identical request (the
-                // AI SDK's default 3× retry on HTTP 500) just hammers the dead
-                // backend and surfaces the opaque "Failed after 3 attempts. Last
-                // error: Compute error." So we:
-                //   1. recreate the backend (reload the model with the SAME ctx)
-                //      so the *next* request works again, and
-                //   2. return a clear, NON-retryable (HTTP 400) OOM error for
-                //      THIS request so the client stops looping and the user sees
-                //      an actionable message.
-                // We deliberately do NOT auto-retry the same request here: a
-                // deterministic prompt-processing OOM would just re-poison the
-                // fresh backend.
-                if can_retry_local && is_compute_backend_error(status, &error_body) {
-                    let model_id = state.model_id.clone().unwrap();
-                    let backend = state.backend;
-                    log::warn!(
-                        "Fatal compute error detected (status={status} backend={backend} model_id={model_id}); recreating backend, not retrying"
-                    );
-                    // Only the upstream extension understands the
-                    // `compute_error_recovery` trigger (reload same-ctx). Other
-                    // local backends would misinterpret it as a context grow, so
-                    // we skip the reload for them and only return the clear error.
-                    if backend == "llamacpp-upstream" {
-                        let _ = maybe_auto_increase_and_retry(
-                            &app_handle,
-                            &auto_increase_state,
-                            backend,
-                            &model_id,
-                            &sessions,
-                            &sessions_upstream,
-                            &mlx_sessions,
-                            "compute_error_recovery",
-                        )
-                        .await;
-                    }
-
-                    let oom = body_indicates_oom(&error_body);
-                    state.error_kind = Some(upstream_error_kind(state.backend));
-                    state.upstream_status = Some(status.as_u16());
-                    state.oom_detected = true;
-                    let mut error_response = Response::builder().status(StatusCode::BAD_REQUEST);
-                    error_response = add_cors_headers_with_host_and_origin(
-                        error_response,
-                        &host_header,
-                        &origin_header,
-                        &config.trusted_hosts,
-                    );
-                    return Ok(error_response
-                        .body(Body::from(compute_error_envelope(oom)))
-                        .unwrap());
-                }
-
                 state.error_kind = Some(upstream_error_kind(state.backend));
                 state.upstream_status = Some(status.as_u16());
                 state.oom_detected = body_indicates_oom(&error_body);
                 state.ctx_overflow_detected = is_context_limit_error(status, &error_body);
-                // ATO-182: For local engines (llama.cpp / mlx), forward a
-                // structured OpenAI error envelope with a typed `code` instead
-                // of a raw stderr dump / `{"detail": ...}`. Remote providers
-                // already return their own structured error shape, so we leave
-                // those untouched.
+                // ATO-182: For the local engine (ginfer), forward a structured
+                // OpenAI error envelope with a typed `code` instead of a raw
+                // `{"detail": ...}` / stderr dump. Remote providers already
+                // return their own structured error shape, so we leave those
+                // untouched.
                 let client_body = if is_local_backend(state.backend) {
                     structure_backend_error_body(
                         &error_body,
@@ -3009,98 +2325,8 @@ async fn inner_proxy_request<R: Runtime>(
                 return Ok(error_response.body(Body::from(client_body)).unwrap());
             }
 
-            // Success case.
-            //
-            // For non-streaming local-backend responses we get one final JSON
-            // doc we can inspect before forwarding. If `finish_reason=length`
-            // surfaces, it means the upstream generation was truncated by the
-            // current context window — mirror the UI-side auto-increase:
-            // trigger a reload and retry once. Streaming responses remain
-            // pass-through (can't retry after chunks have been emitted).
-            let can_inspect_finish = !state.stream
-                && (state.backend == "llamacpp"
-                    || state.backend == "llamacpp-upstream"
-                    || state.backend == "mlx")
-                && state.model_id.is_some()
-                && buffered_body.is_some();
-
-            if can_inspect_finish {
-                let body_bytes = response.bytes().await.unwrap_or_default();
-
-                let context_overflow =
-                    is_context_overflow_finish_length(&body_bytes, buffered_body.as_deref());
-
-                if context_overflow {
-                    let model_id = state.model_id.clone().unwrap();
-                    let backend = state.backend;
-                    log::info!(
-                        "finish_reason=length detected on 200 OK with no client max_tokens cap (backend={backend} model_id={model_id}); triggering auto-increase"
-                    );
-                    if let Some((new_port, new_api_key)) = maybe_auto_increase_and_retry(
-                        &app_handle,
-                        &auto_increase_state,
-                        backend,
-                        &model_id,
-                        &sessions,
-                        &sessions_upstream,
-                        &mlx_sessions,
-                        "finish_length",
-                    )
-                    .await
-                    {
-                        match retry_local_upstream(
-                            &local_client,
-                            &method,
-                            &destination_path,
-                            new_port,
-                            &new_api_key,
-                            &headers,
-                            buffered_body.clone(),
-                        )
-                        .await
-                        {
-                            Ok(retry_response) if retry_response.status().is_success() => {
-                                log::info!(
-                                    "auto_increase_ctx retry succeeded for finish_reason=length (model_id={model_id})"
-                                );
-                                return Ok(build_streaming_response(
-                                    retry_response,
-                                    &host_header,
-                                    &origin_header,
-                                    &config.trusted_hosts,
-                                ));
-                            }
-                            Ok(retry_response) => {
-                                log::warn!(
-                                    "finish_reason=length retry returned status={}; falling back to original body",
-                                    retry_response.status()
-                                );
-                            }
-                            Err(e) => {
-                                log::warn!(
-                                    "finish_reason=length retry send failed: {e}; falling back to original body"
-                                );
-                            }
-                        }
-                    }
-                }
-
-                // Fall-through: serve the originally-buffered body. We've
-                // already consumed `response`, so we can't copy its headers
-                // verbatim — reconstruct the minimum set the client needs
-                // for a non-streaming OpenAI JSON response.
-                let mut builder = Response::builder()
-                    .status(status)
-                    .header(hyper::header::CONTENT_TYPE, "application/json");
-                builder = add_cors_headers_with_host_and_origin(
-                    builder,
-                    &host_header,
-                    &origin_header,
-                    &config.trusted_hosts,
-                );
-                return Ok(builder.body(Body::from(body_bytes)).unwrap());
-            }
-
+            // Success case: forward the upstream response, streaming chunks as
+            // they arrive.
             let mut builder = Response::builder().status(status);
 
             for (name, value) in response.headers() {
@@ -3246,9 +2472,7 @@ pub async fn is_server_running(server_handle: Arc<Mutex<Option<ServerHandle>>>) 
 pub async fn start_server<R: Runtime>(
     app_handle: AppHandle<R>,
     server_handle: Arc<Mutex<Option<ServerHandle>>>,
-    sessions: Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
+    ginfer_sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     host: String,
     port: u16,
     prefix: String,
@@ -3256,14 +2480,11 @@ pub async fn start_server<R: Runtime>(
     trusted_hosts: Vec<Vec<String>>,
     proxy_timeout: u64,
     provider_configs: Arc<Mutex<HashMap<String, ProviderConfig>>>,
-    auto_increase_state: Arc<AutoIncreaseState>,
 ) -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
     start_server_internal(
         app_handle,
         server_handle,
-        sessions,
-        sessions_upstream,
-        mlx_sessions,
+        ginfer_sessions,
         host,
         port,
         prefix,
@@ -3271,7 +2492,6 @@ pub async fn start_server<R: Runtime>(
         trusted_hosts,
         proxy_timeout,
         provider_configs,
-        auto_increase_state,
     )
     .await
 }
@@ -3280,9 +2500,7 @@ pub async fn start_server<R: Runtime>(
 async fn start_server_internal<R: Runtime>(
     app_handle: AppHandle<R>,
     server_handle: Arc<Mutex<Option<ServerHandle>>>,
-    sessions: Arc<Mutex<HashMap<i32, LLamaBackendSession>>>,
-    sessions_upstream: Arc<Mutex<HashMap<i32, LLamaUpstreamBackendSession>>>,
-    mlx_sessions: Arc<Mutex<HashMap<i32, MlxBackendSession>>>,
+    ginfer_sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     host: String,
     port: u16,
     prefix: String,
@@ -3290,7 +2508,6 @@ async fn start_server_internal<R: Runtime>(
     trusted_hosts: Vec<Vec<String>>,
     proxy_timeout: u64,
     provider_configs: Arc<Mutex<HashMap<String, ProviderConfig>>>,
-    auto_increase_state: Arc<AutoIncreaseState>,
 ) -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
     let mut handle_guard = server_handle.lock().await;
     if handle_guard.is_some() {
@@ -3385,11 +2602,8 @@ async fn start_server_internal<R: Runtime>(
         let client = client.clone();
         let local_client = local_client.clone();
         let config = config.clone();
-        let sessions = sessions.clone();
-        let sessions_upstream = sessions_upstream.clone();
-        let mlx_sessions = mlx_sessions.clone();
+        let ginfer_sessions = ginfer_sessions.clone();
         let provider_configs = provider_configs.clone();
-        let auto_increase_state = auto_increase_state.clone();
         let api_request_aggregator = api_request_aggregator.clone();
         let app_handle = app_handle.clone();
 
@@ -3400,11 +2614,8 @@ async fn start_server_internal<R: Runtime>(
                     client.clone(),
                     local_client.clone(),
                     config.clone(),
-                    sessions.clone(),
-                    sessions_upstream.clone(),
-                    mlx_sessions.clone(),
+                    ginfer_sessions.clone(),
                     provider_configs.clone(),
-                    auto_increase_state.clone(),
                     api_request_aggregator.clone(),
                     app_handle.clone(),
                 )
@@ -3420,7 +2631,7 @@ async fn start_server_internal<R: Runtime>(
             return Err(Box::new(e));
         }
     };
-    log::info!("Atomic Chat API server started on http://{bound_addr}");
+    log::info!("GChat API server started on http://{bound_addr}");
 
     let server_task = tokio::spawn(async move {
         if let Err(e) = server.await {
@@ -3460,7 +2671,7 @@ async fn start_server_internal<R: Runtime>(
         analytics_task,
         analytics_shutdown,
     });
-    log::info!("Atomic Chat API server started successfully on port {actual_port}");
+    log::info!("GChat API server started successfully on port {actual_port}");
     Ok(actual_port)
 }
 
@@ -3475,7 +2686,7 @@ pub async fn stop_server(
             log::warn!("Local API Server analytics flush task failed: {e}");
         }
         handle.server_task.abort();
-        log::info!("Atomic Chat API server stopped");
+        log::info!("GChat API server stopped");
     } else {
         log::debug!("Server was not running");
     }
@@ -3840,8 +3051,8 @@ mod auto_increase_ctx_tests {
     // --- is_context_limit_error -------------------------------------------------
 
     #[test]
-    fn detects_llama_cpp_ctx_overflow_500() {
-        // Realistic body from llama-server when the prompt overshoots n_ctx.
+    fn detects_ctx_overflow_500() {
+        // Realistic body when the prompt overshoots the context window.
         let body = r#"{"error":{"code":500,"message":"the request exceeds the available context size. Try increasing context size or enable context shift","type":"server_error"}}"#;
         assert!(is_context_limit_error(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -3850,38 +3061,14 @@ mod auto_increase_ctx_tests {
     }
 
     #[test]
-    fn detects_llama_cpp_ctx_overflow_400() {
+    fn detects_ctx_overflow_400() {
         let body = r#"{"error":{"message":"prompt is too long for the current context length","type":"invalid_request_error"}}"#;
         assert!(is_context_limit_error(StatusCode::BAD_REQUEST, body));
     }
 
     #[test]
-    fn detects_mlx_ctx_overflow_500() {
-        // Legacy dflash mlx-server surface: still in the wild on user
-        // machines until they upgrade to the new mlx-vlm binary.
+    fn detects_detail_ctx_overflow_500() {
         let body = r#"{"detail":"Context size exceeded: requested 9000 tokens but the model only supports 8192."}"#;
-        assert!(is_context_limit_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            body
-        ));
-    }
-
-    #[test]
-    fn detects_mlxvlm_kv_overflow_500() {
-        // mlx-vlm wraps generation errors as `Generation failed: ...`.
-        // The inner phrasing typically references the KV cache rather than
-        // the word "context"; classify those too so auto-increase-ctx still
-        // fires on the new backend.
-        let body = r#"{"detail":"Generation failed: kv cache exceeded max_kv_size=8192"}"#;
-        assert!(is_context_limit_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            body
-        ));
-    }
-
-    #[test]
-    fn detects_mlxvlm_max_kv_size_500() {
-        let body = r#"{"detail":"Generation failed: requested tokens exceed max-kv-size limit"}"#;
         assert!(is_context_limit_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             body
@@ -3925,8 +3112,7 @@ mod auto_increase_ctx_tests {
 
     #[test]
     fn ignores_200_even_with_matching_body() {
-        // Successful responses must never be classified as ctx errors; the
-        // finish_reason=length path handles those.
+        // Successful responses must never be classified as ctx errors.
         let body = "context size exceeded";
         assert!(!is_context_limit_error(StatusCode::OK, body));
     }
@@ -3958,7 +3144,7 @@ mod auto_increase_ctx_tests {
     fn detects_already_structured_error_body() {
         let body = r#"{"error":{"code":500,"message":"x","type":"server_error"}}"#;
         assert!(is_structured_error_body(body));
-        // plaintext / mlx `{"detail":...}` / empty are not structured envelopes
+        // plaintext / `{"detail":...}` / empty are not structured envelopes
         assert!(!is_structured_error_body(
             "Failed to read error body: connection reset"
         ));
@@ -3984,10 +3170,10 @@ mod auto_increase_ctx_tests {
     }
 
     #[test]
-    fn structure_backend_error_body_wraps_mlx_detail_with_ctx_code() {
-        // mlx-vlm `{"detail": ...}` is not an `{"error": {...}}` envelope, so we
-        // wrap it. The original text must be preserved so the UI ctx matcher
-        // still fires.
+    fn structure_backend_error_body_wraps_detail_with_ctx_code() {
+        // `{"detail": ...}` is not an `{"error": {...}}` envelope, so we wrap
+        // it. The original text must be preserved so the UI ctx matcher still
+        // fires.
         let raw = r#"{"detail":"Generation failed: kv cache exceeded max_kv_size=8192"}"#;
         let wrapped = structure_backend_error_body(raw, false, true);
         let v: serde_json::Value = serde_json::from_str(&wrapped).unwrap();
@@ -4017,148 +3203,6 @@ mod auto_increase_ctx_tests {
         let wrapped = structure_backend_error_body(raw, true, false);
         let v: serde_json::Value = serde_json::from_str(&wrapped).unwrap();
         assert_eq!(v["error"]["code"], "insufficient_memory");
-    }
-
-    // --- is_compute_backend_error (ATO-197) ------------------------------------
-
-    #[test]
-    fn detects_metal_compute_error_body() {
-        // The exact body llama-server returns on a Metal OOM during prefill.
-        let body = r#"{"error":{"code":500,"message":"Compute error","type":"server_error"}}"#;
-        assert!(is_compute_backend_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            body
-        ));
-        // Other decode/compute phrasings.
-        assert!(is_compute_backend_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "llama_decode: failed to decode, ret = -3"
-        ));
-        assert!(is_compute_backend_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "process_ubatch: failed to compute graph, compute status: -1"
-        ));
-        assert!(is_compute_backend_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "backend is in error state from a previous command buffer failure"
-        ));
-    }
-
-    #[test]
-    fn ignores_non_compute_errors() {
-        // Only 500s are fatal-compute candidates.
-        assert!(!is_compute_backend_error(
-            StatusCode::BAD_REQUEST,
-            "Compute error"
-        ));
-        assert!(!is_compute_backend_error(StatusCode::OK, "Compute error"));
-        // Unrelated 500 bodies must not match.
-        assert!(!is_compute_backend_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error"
-        ));
-        assert!(!is_compute_backend_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            r#"{"error":{"message":"the request exceeds the available context size."}}"#
-        ));
-    }
-
-    #[test]
-    fn compute_error_envelope_is_structured_oom() {
-        for oom in [true, false] {
-            let env = compute_error_envelope(oom);
-            let v: serde_json::Value = serde_json::from_str(&env).unwrap();
-            assert_eq!(v["error"]["code"], "insufficient_memory");
-            let msg = v["error"]["message"].as_str().unwrap().to_lowercase();
-            // The message must read as out-of-memory so the UI matcher fires and
-            // the user gets actionable guidance instead of "Compute error".
-            assert!(msg.contains("out of memory"));
-            assert!(msg.contains("smaller"));
-        }
-    }
-
-    // --- is_context_overflow_finish_length -------------------------------------
-
-    #[test]
-    fn triggers_when_no_client_max_tokens_and_length() {
-        let resp = br#"{
-            "choices":[{"index":0,"finish_reason":"length"}],
-            "usage":{"prompt_tokens":7000,"completion_tokens":1000,"total_tokens":8000}
-        }"#;
-        let req = br#"{"model":"m","messages":[]}"#;
-        assert!(is_context_overflow_finish_length(resp, Some(req)));
-    }
-
-    #[test]
-    fn triggers_when_request_body_missing() {
-        // No buffered request body at all → treat as "no client cap".
-        let resp = br#"{"choices":[{"finish_reason":"length"}]}"#;
-        assert!(is_context_overflow_finish_length(resp, None));
-    }
-
-    #[test]
-    fn skips_when_completion_hits_client_max_tokens() {
-        let resp = br#"{
-            "choices":[{"finish_reason":"length"}],
-            "usage":{"prompt_tokens":10,"completion_tokens":16,"total_tokens":26}
-        }"#;
-        let req = br#"{"max_tokens":16,"messages":[]}"#;
-        assert!(!is_context_overflow_finish_length(resp, Some(req)));
-    }
-
-    #[test]
-    fn skips_when_completion_hits_max_completion_tokens_alias() {
-        // Newer OpenAI SDKs use `max_completion_tokens` for reasoning models.
-        let resp = br#"{
-            "choices":[{"finish_reason":"length"}],
-            "usage":{"prompt_tokens":10,"completion_tokens":32,"total_tokens":42}
-        }"#;
-        let req = br#"{"max_completion_tokens":32,"messages":[]}"#;
-        assert!(!is_context_overflow_finish_length(resp, Some(req)));
-    }
-
-    #[test]
-    fn triggers_when_cap_set_but_completion_below_cap() {
-        // finish_reason=length with completion_tokens well under max_tokens
-        // ⇒ generation stopped because ctx filled up, not the client cap.
-        let resp = br#"{
-            "choices":[{"finish_reason":"length"}],
-            "usage":{"prompt_tokens":7900,"completion_tokens":200,"total_tokens":8100}
-        }"#;
-        let req = br#"{"max_tokens":4096,"messages":[]}"#;
-        assert!(is_context_overflow_finish_length(resp, Some(req)));
-    }
-
-    #[test]
-    fn ignores_finish_reason_stop() {
-        let resp = br#"{"choices":[{"finish_reason":"stop"}]}"#;
-        assert!(!is_context_overflow_finish_length(resp, None));
-    }
-
-    #[test]
-    fn ignores_malformed_json() {
-        assert!(!is_context_overflow_finish_length(b"not json", None));
-    }
-
-    #[test]
-    fn ignores_empty_choices() {
-        let resp = br#"{"choices":[]}"#;
-        assert!(!is_context_overflow_finish_length(resp, None));
-    }
-
-    #[test]
-    fn ignores_missing_finish_reason() {
-        let resp = br#"{"choices":[{"index":0}]}"#;
-        assert!(!is_context_overflow_finish_length(resp, None));
-    }
-
-    #[test]
-    fn skips_when_cap_set_and_completion_tokens_missing() {
-        // Without usage data we can't distinguish client-cap from ctx-limit,
-        // so we err on the side of NOT touching ctx.
-        let resp = br#"{"choices":[{"finish_reason":"length"}]}"#;
-        let req = br#"{"max_tokens":16,"messages":[]}"#;
-        assert!(!is_context_overflow_finish_length(resp, Some(req)));
     }
 
     // --- add_cors_headers_with_host_and_origin (ATO-203) -----------------------

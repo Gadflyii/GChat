@@ -3,13 +3,13 @@ import {
   Thread,
   ThreadAssistantInfo,
   ThreadMessage,
-} from '@janhq/core'
+} from '@gchat/core'
 
 /**
- * JanConversationalExtension is a ConversationalExtension implementation that provides
+ * GChatConversationalExtension is a ConversationalExtension implementation that provides
  * functionality for managing threads.
  */
-export default class JanConversationalExtension extends ConversationalExtension {
+export default class GChatConversationalExtension extends ConversationalExtension {
   /**
    * Called when the extension is loaded.
    */

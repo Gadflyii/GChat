@@ -770,7 +770,7 @@ mod tests {
     }
 
     fn test_dir() -> PathBuf {
-        let path = std::env::temp_dir().join(format!("atomic-chat-agent-{}", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("gchat-agent-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         path
     }

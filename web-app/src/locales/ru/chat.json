@@ -61,7 +61,7 @@
     "choose": "Выбрать workspace",
     "change": "Изменить workspace агента",
     "default": "Workspace по умолчанию",
-    "defaultDescription": "Используется папка agent-workspace внутри папки данных Atomic Chat.",
+    "defaultDescription": "Используется папка agent-workspace внутри папки данных GChat.",
     "projectFiles": "Project Files",
     "external": "External",
     "canEdit": "CAN EDIT",

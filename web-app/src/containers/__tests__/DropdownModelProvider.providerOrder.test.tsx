@@ -75,10 +75,6 @@ vi.mock('../ModelSetting', () => ({
   ModelSetting: () => <div data-testid="model-setting" />,
 }))
 
-vi.mock('../ModelSupportStatus', () => ({
-  ModelSupportStatus: () => <div data-testid="model-support-status" />,
-}))
-
 vi.mock('../SamplerPopover', () => ({
   SamplerPopover: () => <div data-testid="sampler-popover" />,
 }))
@@ -93,17 +89,10 @@ const providerHeaderOrder = () =>
 describe('DropdownModelProvider - provider ordering', () => {
   const mockProviders = [
     {
-      provider: 'llamacpp',
+      provider: 'ginfer',
       active: true,
       api_key: '',
-      models: [{ id: 'turbo.gguf', capabilities: ['completion'] }],
-      settings: [],
-    },
-    {
-      provider: 'llamacpp-upstream',
-      active: true,
-      api_key: '',
-      models: [{ id: 'upstream.gguf', capabilities: ['completion'] }],
+      models: [{ id: 'local.gguf', capabilities: ['completion'] }],
       settings: [],
     },
     {
@@ -111,6 +100,13 @@ describe('DropdownModelProvider - provider ordering', () => {
       active: true,
       api_key: 'sk-test',
       models: [{ id: 'gpt-4o', capabilities: ['completion'] }],
+      settings: [],
+    },
+    {
+      provider: 'anthropic',
+      active: true,
+      api_key: 'sk-ant',
+      models: [{ id: 'claude', capabilities: ['completion'] }],
       settings: [],
     },
   ]
@@ -135,7 +131,7 @@ describe('DropdownModelProvider - provider ordering', () => {
 
     mockModelProvider({
       providers: mockProviders,
-      selectedProvider: 'llamacpp-upstream',
+      selectedProvider: 'openai',
       selectedModel: mockProviders[1].models[0],
       getProviderByName: vi.fn((name: string) =>
         mockProviders.find((p) => p.provider === name)
@@ -150,22 +146,19 @@ describe('DropdownModelProvider - provider ordering', () => {
     cleanup()
   })
 
-  it('renders turboquant last, below the remote providers', () => {
+  it('renders the local provider first, above the remote providers', () => {
     render(<DropdownModelProvider />)
 
     expect(providerHeaderOrder()).toEqual([
-      'llamacpp-upstream',
+      'ginfer',
+      'anthropic',
       'openai',
-      'llamacpp',
     ])
   })
 
-  it('keeps upstream and turboquant apart', () => {
+  it('keeps the local provider at the top', () => {
     render(<DropdownModelProvider />)
 
-    const order = providerHeaderOrder()
-    expect(
-      Math.abs(order.indexOf('llamacpp') - order.indexOf('llamacpp-upstream'))
-    ).toBeGreaterThan(1)
+    expect(providerHeaderOrder().indexOf('ginfer')).toBe(0)
   })
 })

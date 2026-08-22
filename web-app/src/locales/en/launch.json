@@ -1,6 +1,6 @@
 {
   "title": "Integrations",
-  "subtitle": "Install external coding agents and assistants, then point them at your local Atomic Chat models with one click.",
+  "subtitle": "Install external coding agents and assistants, then point them at your local GChat models with one click.",
   "serverSection": "Local API Server",
   "serverSectionDesc": "Run an OpenAI-compatible server for your local models, then point the agents below at it.",
   "codingAgents": "Coding Agents",
@@ -40,7 +40,7 @@
   "experimental": "Experimental",
   "toast": {
     "serverStarting": "Starting local server...",
-    "serverStartingDesc": "Preparing the Atomic Chat server for {{name}}",
+    "serverStartingDesc": "Preparing the GChat server for {{name}}",
     "installSuccess": "{{name}} installed",
     "installSuccessDesc": "{{name}} was installed successfully.",
     "installFailed": "Failed to install {{name}}",

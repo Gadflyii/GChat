@@ -11,7 +11,7 @@ type SearchParams = {
  *
  * Model details now live in the right-hand panel of `/hub/`, addressed by
  * `?model=owner/repo`. Deep links published in earlier releases — including
- * the `atomic-chat://` handler in `DataProvider` — still point here, so this
+ * the `gchat://` handler in `DataProvider` — still point here, so this
  * route forwards them instead of 404ing.
  */
 export const Route = createFileRoute('/hub/$modelId')({

@@ -22,7 +22,7 @@ const FILESYSTEM_DIR_PLACEHOLDER: &str = "__JAN_DEFAULT_FS_DIR__";
 /// `FILESYSTEM_MCP_PINNED_VERSION`).
 const FILESYSTEM_SPEC_PLACEHOLDER: &str = "__JAN_FS_MCP_SPEC__";
 
-/// Literal placeholder path shipped in older versions of Atomic Chat. Existing
+/// Literal placeholder path shipped in older versions of GChat. Existing
 /// `mcp_config.json` files on disk may still contain this value; the runtime
 /// migrates it to a real per-user sandbox path on next config read.
 pub const LEGACY_FILESYSTEM_PLACEHOLDER: &str = "/path/to/other/allowed/dir";
@@ -47,8 +47,8 @@ pub fn filesystem_mcp_pinned_spec() -> String {
 }
 
 const DEFAULT_MCP_CONFIG_TEMPLATE: &str = r#"{
-  "mcpServers": {
-    "Jan Browser MCP": {
+    "mcpServers": {
+    "GChat Browser MCP": {
       "command": "npx",
       "args": ["-y", "search-mcp-server@latest"],
       "env": {
@@ -108,12 +108,12 @@ const DEFAULT_MCP_CONFIG_TEMPLATE: &str = r#"{
 }"#;
 
 /// Default sandbox directory exposed to the `filesystem` MCP server.
-/// Resolves to `~/Documents/Atomic_chat` (or the platform equivalent).
+/// Resolves to `~/Documents/GChat` (or the platform equivalent).
 pub fn default_filesystem_root() -> PathBuf {
     let docs = dirs::document_dir()
         .or_else(|| dirs::home_dir().map(|h| h.join("Documents")))
         .unwrap_or_else(|| PathBuf::from("."));
-    docs.join("Atomic_chat")
+    docs.join("GChat")
 }
 
 /// Materialised default `mcp_config.json` content with a real, per-user

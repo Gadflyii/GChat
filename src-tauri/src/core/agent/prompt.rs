@@ -4,7 +4,7 @@
 //! (`stable-prefix.ts` + `build-prompt.ts`). The prompt is a **stable
 //! prefix** — persona + `### rules` + `### skills` + `### tools` + `### capabilities` +
 //! `### instructions` — that must stay byte-identical within a session so
-//! `llama-server`'s `cache_prompt` + `slot_id` KV-cache reuse holds, followed
+//! `ginfer-serve`'s `cache_prompt` + `slot_id` KV-cache reuse holds, followed
 //! by a **variable tail** (optional `### loaded-tools` and
 //! `### loaded-skills`, `### conversation`, optional `### notice`, and the
 //! `### respond` emit anchor).

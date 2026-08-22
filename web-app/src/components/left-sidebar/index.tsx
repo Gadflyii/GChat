@@ -67,7 +67,7 @@ export function LeftSidebar() {
           sidebar toggle) is right-aligned, so it sits well clear of the
           left-edge traffic-light cluster and can share the same Y-coord
           with the system buttons. We therefore keep that row at the top
-          and instead push only the left-aligned Atomic Chat logo row
+          and instead push only the left-aligned GChat logo row
           below the traffic-light band, so it doesn't collide.
         */}
         <SidebarHeader className="flex flex-col gap-1 px-1 pb-0">
@@ -98,11 +98,11 @@ export function LeftSidebar() {
           >
             <div
               className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-950 p-[3px] shadow-sm dark:bg-white dark:shadow-none"
-              title="Atomic Bot"
+              title="GChat"
             >
               <img
                 src="/images/transparent-logo.png"
-                alt="Atomic Bot"
+                alt="GChat"
                 className="size-full min-h-0 min-w-0 object-contain invert dark:invert-0"
               />
             </div>
@@ -112,7 +112,7 @@ export function LeftSidebar() {
               xmlns="http://www.w3.org/2000/svg"
               className="text-sidebar-foreground h-4 w-auto shrink-0"
               role="img"
-              aria-label="Atomic Chat"
+              aria-label="GChat"
             >
               <path
                 d="M78.862 50.0268L27.8032 171.947C26.7001 174.987 24.9666 177.387 22.6028 179.147C20.3965 180.747 17.9539 181.547 15.2749 181.547C11.02 181.547 7.86822 180.347 5.81956 177.947C3.77091 175.547 2.74658 172.587 2.74658 169.067C2.74658 167.627 2.98297 166.107 3.45573 164.507L62.3151 20.9868C63.5759 17.7868 65.4669 15.3068 67.9883 13.5468C70.6673 11.7868 73.5039 11.0668 76.4981 11.3868C79.3347 11.3868 81.9349 12.2668 84.2988 14.0268C86.8202 15.6268 88.6325 17.9468 89.7356 20.9868L147.886 161.627C148.674 163.707 149.068 165.627 149.068 167.387C149.068 171.707 147.649 175.147 144.813 177.707C142.134 180.267 139.14 181.547 135.83 181.547C132.994 181.547 130.393 180.667 128.03 178.907C125.823 177.147 124.09 174.747 122.829 171.707L72.0068 51.4668L78.862 50.0268ZM35.1311 142.667L48.1321 115.067H111.956L116.447 142.667H35.1311Z"

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-cleanup-ginfer-processes"
+description = "Enables the cleanup_ginfer_processes command without any pre-configured scope."
+commands.allow = ["cleanup_ginfer_processes"]
+
+[[permission]]
+identifier = "deny-cleanup-ginfer-processes"
+description = "Denies the cleanup_ginfer_processes command without any pre-configured scope."
+commands.deny = ["cleanup_ginfer_processes"]

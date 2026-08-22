@@ -79,7 +79,7 @@ describe('CustomChatTransport production harness', () => {
       defaultDisabledTools: [],
     })
     useModelProvider.setState({
-      selectedProvider: 'mlx',
+      selectedProvider: 'ginfer',
       selectedModel: {
         id: 'fixture-model',
         capabilities: [],
@@ -87,7 +87,7 @@ describe('CustomChatTransport production harness', () => {
       } as never,
       providers: [
         {
-          provider: 'mlx',
+          provider: 'ginfer',
           active: true,
           api_key: '',
           base_url: 'http://localhost',

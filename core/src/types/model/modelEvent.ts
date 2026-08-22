@@ -1,5 +1,5 @@
 /**
- * The `EventName` enumeration contains the names of all the available events in the Atomic Chat platform.
+ * The `EventName` enumeration contains the names of all the available events in the GChat platform.
  */
 export enum ModelEvent {
   /** The `OnModelInit` event is emitted when a model inits. */
@@ -16,7 +16,7 @@ export enum ModelEvent {
   OnModelsUpdate = 'OnModelsUpdate',
   /**
    * The `OnAutoIncreasedCtxLen` event is emitted by a local backend extension
-   * (llamacpp, mlx, ...) when the Local API Server proxy asked it to grow a
+   * (e.g. ginfer) when the Local API Server proxy asked it to grow a
    * model's context window after an overflow. The web-app listens to this so
    * the Zustand provider store mirrors the reload. Payload shape:
    * `{ provider: string, modelId: string, newCtxLen: number }`.

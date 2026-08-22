@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { fs } from '@janhq/core'
+import { fs } from '@gchat/core'
 
 import { Attachment, createImageAttachment } from '@/types/attachment'
 

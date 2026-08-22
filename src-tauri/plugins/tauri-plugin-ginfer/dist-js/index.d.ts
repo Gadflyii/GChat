@@ -1,0 +1,11 @@
+import { SessionInfo, UnloadResult, GinferConfig } from './types';
+export declare function normalizeGinferConfig(config: any): GinferConfig;
+export declare function loadGinferModel(binaryPath: string, modelId: string, modelPath: string, port: number, cfg: GinferConfig, apiKey: string, isEmbedding?: boolean, timeout?: number): Promise<SessionInfo>;
+export declare function unloadGinferModel(pid: number): Promise<UnloadResult>;
+export declare function isProcessRunning(pid: number): Promise<boolean>;
+export declare function getRandomPort(): Promise<number>;
+export declare function findSessionByModel(modelId: string): Promise<SessionInfo | null>;
+export declare function getLoadedModels(): Promise<string[]>;
+export declare function getAllSessions(): Promise<SessionInfo[]>;
+export declare function cleanupGinferProcesses(): Promise<void>;
+export * from './types';

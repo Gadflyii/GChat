@@ -6,8 +6,7 @@
  * configurations and returns a standard LanguageModel interface.
  *
  * Supported Providers:
- * - llamacpp: Local models via llama.cpp (requires running session)
- * - mlx: Local models via MLX-Swift on Apple Silicon (requires running session)
+ * - ginfer: Local models via the GInfer backend (requires running session)
  * - anthropic: Claude models via Anthropic API (@ai-sdk/anthropic v2.0)
  * - google/gemini: Gemini models via Google Generative AI API (@ai-sdk/google v2.0)
  * - openai: OpenAI models via OpenAI API (@ai-sdk/openai)
@@ -20,7 +19,7 @@
  *
  * The factory automatically:
  * - Handles provider-specific authentication and headers
- * - Manages llamacpp session discovery and connection
+ * - Manages ginfer session discovery and connection
  * - Configures custom headers for each provider
  * - Returns a unified LanguageModel interface compatible with Vercel AI SDK
  */
@@ -39,16 +38,6 @@ export interface ModelParameters {
   stop_sequences?: string[]
 }
 
-/**
- * Audio attachment payload delivered to omni/audio-capable models as an
- * OpenAI-style `input_audio` content part. `data` is base64 (no data-URL
- * prefix) and `format` is the short codec name (mp3/wav/ogg/flac).
- */
-export interface AudioInputPart {
-  data: string
-  format: string
-}
-
 import {
   extractReasoningMiddleware,
   wrapLanguageModel,
@@ -63,7 +52,7 @@ import {
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createXai } from '@ai-sdk/xai'
 import { invoke, Channel } from '@tauri-apps/api/core'
-import { SessionInfo } from '@janhq/core'
+import { SessionInfo } from '@gchat/core'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 import { ttftPreBegin } from '@/lib/ttft-timing'
@@ -86,10 +75,9 @@ import { extractModelErrorMessage } from '@/lib/modelErrorMessage'
 const LOCAL_STREAM_IDLE_TIMEOUT_SECS = 1800
 
 /**
- * Legacy llama.cpp / dflash timings structure (kept for backward
- * compatibility while users still have the old binary on disk).
+ * llama.cpp-style `timings` block emitted by some local inference servers.
  */
-interface LlamaCppTimings {
+interface ServerTimings {
   prompt_n?: number
   predicted_n?: number
   predicted_per_second?: number
@@ -101,11 +89,10 @@ interface LlamaCppTimings {
 }
 
 /**
- * mlx-vlm OpenAI-compatible `usage` block; emitted on every streaming
- * chunk and on the final non-streaming response. See
- * `mlx_vlm.server.UsageStats` upstream.
+ * OpenAI-compatible `usage` block emitted by local inference servers on every
+ * streaming chunk and on the final non-streaming response.
  */
-interface MlxVlmUsage {
+interface ServerUsage {
   prompt_tokens?: number
   completion_tokens?: number
   total_tokens?: number
@@ -115,8 +102,8 @@ interface MlxVlmUsage {
 }
 
 interface ProviderMetricsChunk {
-  usage?: MlxVlmUsage
-  timings?: LlamaCppTimings
+  usage?: ServerUsage
+  timings?: ServerTimings
 }
 
 interface NormalizedMetrics {
@@ -128,7 +115,7 @@ interface NormalizedMetrics {
   draftTokensAccepted: number | null
 }
 
-const buildFromUsage = (usage: MlxVlmUsage): NormalizedMetrics => ({
+const buildFromUsage = (usage: ServerUsage): NormalizedMetrics => ({
   promptTokens: usage.prompt_tokens ?? null,
   completionTokens: usage.completion_tokens ?? null,
   tokensPerSecond: usage.generation_tps ?? null,
@@ -137,7 +124,7 @@ const buildFromUsage = (usage: MlxVlmUsage): NormalizedMetrics => ({
   draftTokensAccepted: null,
 })
 
-const buildFromTimings = (timings: LlamaCppTimings): NormalizedMetrics => ({
+const buildFromTimings = (timings: ServerTimings): NormalizedMetrics => ({
   promptTokens: timings.prompt_n ?? null,
   completionTokens: timings.predicted_n ?? null,
   tokensPerSecond: timings.predicted_per_second ?? null,
@@ -162,8 +149,8 @@ const hasAnyMetric = (m: NormalizedMetrics): boolean =>
  * perfectly valid TPS reading with `null`.
  */
 const mergeMetrics = (
-  usage: MlxVlmUsage | undefined,
-  timings: LlamaCppTimings | undefined
+  usage: ServerUsage | undefined,
+  timings: ServerTimings | undefined
 ): NormalizedMetrics | null => {
   if (!usage && !timings) return null
   const u = usage ? buildFromUsage(usage) : null
@@ -198,11 +185,11 @@ const mergeMetrics = (
 }
 
 /**
- * Custom metadata extractor for MLX that pulls token / TPS metrics from
- * both the OpenAI-compatible `usage` block emitted by mlx-vlm and the
- * legacy `timings.*` shape used by llama.cpp / dflash. The two shapes
- * are merged (usage-first, timings-fallback per field) so a server that
- * only fills one of the two channels still produces a complete metric.
+ * Custom metadata extractor for local providers that pulls token / TPS
+ * metrics from both the OpenAI-compatible `usage` block and the legacy
+ * `timings.*` shape. The two shapes are merged (usage-first,
+ * timings-fallback per field) so a server that only fills one of the two
+ * channels still produces a complete metric.
  */
 const providerMetadataExtractor: MetadataExtractor = {
   extractMetadata: async ({ parsedBody }: { parsedBody: unknown }) => {
@@ -212,8 +199,8 @@ const providerMetadataExtractor: MetadataExtractor = {
     return { providerMetadata: { ...merged } }
   },
   createStreamExtractor: () => {
-    let lastUsage: MlxVlmUsage | undefined
-    let lastTimings: LlamaCppTimings | undefined
+    let lastUsage: ServerUsage | undefined
+    let lastTimings: ServerTimings | undefined
 
     return {
       processChunk: (parsedChunk: unknown) => {
@@ -261,63 +248,6 @@ function createCustomFetch(
       }
     }
 
-    return baseFetch(input, init)
-  }
-}
-
-/**
- * Wrap a fetch so it injects `input_audio` content parts into the latest user
- * message of an outgoing chat-completions request body.
- *
- * Why this exists: the `@ai-sdk/openai-compatible` message converter only
- * understands `image/*` file parts and throws on audio, so audio can't ride the
- * normal message path. We therefore strip audio upstream and re-attach it here,
- * directly on the JSON the MLX (mlx-vlm/omni) server receives. The audio is
- * appended to the last `role: 'user'` message so it stays attached to the
- * user's turn across tool-call round-trips.
- */
-function createAudioInjectingFetch(
-  baseFetch: typeof httpFetch,
-  audioParts: AudioInputPart[]
-): typeof httpFetch {
-  if (audioParts.length === 0) return baseFetch
-
-  return async (
-    input: RequestInfo | URL,
-    init?: RequestInit
-  ): Promise<Response> => {
-    const isPost = !init?.method || init.method.toUpperCase() === 'POST'
-
-    if (isPost && typeof init?.body === 'string') {
-      try {
-        const body = JSON.parse(init.body)
-
-        if (Array.isArray(body?.messages)) {
-          for (let i = body.messages.length - 1; i >= 0; i--) {
-            const msg = body.messages[i]
-            if (msg?.role !== 'user') continue
-
-            let content = msg.content
-            if (typeof content === 'string') {
-              content = content ? [{ type: 'text', text: content }] : []
-            }
-
-            if (!Array.isArray(content)) content = []
-            for (const audio of audioParts) {
-              content.push({
-                type: 'input_audio',
-                input_audio: { data: audio.data, format: audio.format },
-              })
-            }
-            msg.content = content
-            break
-          }
-          init = { ...init, body: JSON.stringify(body) }
-        }
-      } catch {
-        /* non-JSON or unexpected shape — forward unchanged */
-      }
-    }
     return baseFetch(input, init)
   }
 }
@@ -537,10 +467,10 @@ function getLocalApiServerBaseURL(): {
  * Supports native AI SDK providers (Anthropic, Google) and OpenAI-compatible providers.
  */
 /**
- * Cached `SessionInfo` (port + api_key) for an already-warm local
- * llama.cpp / MLX session, keyed by `providerName::modelId`. Avoids paying
- * 100–200ms of redundant IPC (`startModel` + `find_session_by_model`) on
- * every `sendMessages` for a session that is clearly still alive.
+ * Cached `SessionInfo` (port + api_key) for an already-warm local session,
+ * keyed by `providerName::modelId`. Avoids paying 100–200ms of redundant IPC
+ * (`startModel` + `find_session_by_model`) on every `sendMessages` for a
+ * session that is clearly still alive.
  *
  * TTL is short so that if the user stops/restarts the model the cache
  * naturally expires and the next request re-discovers the new session.
@@ -554,9 +484,6 @@ interface CachedSession {
 const LOCAL_SESSION_CACHE_TTL_MS = 10_000
 
 export class ModelFactory {
-  private static fmAvailabilityCache: { status: string; at: number } | null =
-    null
-  private static readonly FM_AVAILABILITY_TTL_MS = 30 * 60 * 1000
   private static localSessionCache: Map<string, CachedSession> = new Map()
 
   private static sessionCacheKey(providerName: string, modelId: string): string {
@@ -586,14 +513,14 @@ export class ModelFactory {
   }
 
   /**
-   * Resolve `SessionInfo` for a llama.cpp or MLX model, reusing a cached
-   * entry when fresh, otherwise calling `startModel` + the appropriate
+   * Resolve `SessionInfo` for a ginfer model, reusing a cached entry when
+   * fresh, otherwise calling `startModel` + the
    * `find_session_by_model` IPC and populating the cache. Concurrent
    * resolves for the same key share a single in-flight promise so the
    * pre-warm from the chat input and the real send don't both hit IPC.
    */
   private static async resolveLocalSession(
-    providerName: 'llamacpp' | 'llamacpp-upstream' | 'mlx',
+    providerName: 'ginfer',
     modelId: string,
     provider: ProviderObject | undefined
   ): Promise<SessionInfo> {
@@ -632,16 +559,13 @@ export class ModelFactory {
         }
       }
 
-      const ipcName =
-        providerName === 'llamacpp'
-          ? 'plugin:llamacpp|find_session_by_model'
-          : providerName === 'llamacpp-upstream'
-            ? 'plugin:llamacpp-upstream|find_session_by_model'
-            : 'plugin:mlx|find_mlx_session_by_model'
-      const sessionInfo = await invoke<SessionInfo | null>(ipcName, { modelId })
+      const sessionInfo = await invoke<SessionInfo | null>(
+        'plugin:ginfer|find_session_by_model',
+        { modelId }
+      )
       if (!sessionInfo) {
         throw new Error(
-          `No running ${providerName === 'mlx' ? 'MLX ' : ''}session found for model: ${modelId}`
+          `No running session found for model: ${modelId} (provider: ${providerName})`
         )
       }
       ModelFactory.localSessionCache.set(key, {
@@ -683,44 +607,14 @@ export class ModelFactory {
     modelId: string,
     provider: ProviderObject
   ): Promise<void> {
-    const lower = providerName.toLowerCase()
-    if (
-      lower !== 'llamacpp' &&
-      lower !== 'llamacpp-upstream' &&
-      lower !== 'mlx'
-    ) {
+    if (providerName.toLowerCase() !== 'ginfer') {
       return
     }
     try {
-      await ModelFactory.resolveLocalSession(
-        lower as 'llamacpp' | 'llamacpp-upstream' | 'mlx',
-        modelId,
-        provider
-      )
+      await ModelFactory.resolveLocalSession('ginfer', modelId, provider)
     } catch (error) {
       console.debug('[ModelFactory] prewarmSession failed:', error)
     }
-  }
-
-  static invalidateFoundationModelsAvailabilityCache(): void {
-    ModelFactory.fmAvailabilityCache = null
-  }
-
-  static async getFoundationModelsAvailability(): Promise<string> {
-    const now = Date.now()
-    if (
-      ModelFactory.fmAvailabilityCache &&
-      now - ModelFactory.fmAvailabilityCache.at <
-        ModelFactory.FM_AVAILABILITY_TTL_MS
-    ) {
-      return ModelFactory.fmAvailabilityCache.status
-    }
-    const status = await invoke<string>(
-      'plugin:foundation-models|check_foundation_models_availability',
-      {}
-    )
-    ModelFactory.fmAvailabilityCache = { status, at: now }
-    return status
   }
 
   /**
@@ -730,8 +624,7 @@ export class ModelFactory {
     modelId: string,
     provider: ProviderObject,
     parameters: Record<string, unknown> = {},
-    reasoningOverride?: Record<string, unknown>,
-    audioParts?: AudioInputPart[]
+    reasoningOverride?: Record<string, unknown>
   ): Promise<LanguageModel> {
     const providerName = provider.provider.toLowerCase()
     const override = reasoningOverride ?? {}
@@ -746,24 +639,8 @@ export class ModelFactory {
     }
 
     switch (providerName) {
-      case 'llamacpp':
-      case 'llamacpp-upstream':
-        return this.createLlamaCppModel(
-          modelId,
-          provider,
-          localInjected,
-          providerName
-        )
-
-      case 'mlx':
-        return this.createMlxModel(modelId, provider, localInjected, audioParts)
-
-      case 'foundation-models':
-        return this.createFoundationModelsModel(
-          modelId,
-          provider,
-          localInjected
-        )
+      case 'ginfer':
+        return this.createGinferModel(modelId, provider, localInjected)
 
       case 'anthropic':
         return this.createAnthropicModel(modelId, provider, override)
@@ -803,20 +680,18 @@ export class ModelFactory {
   }
 
   /**
-   * Create a llamacpp model by starting the model and finding the running session.
-   * The `engineName` selects which Tauri plugin to talk to: `'llamacpp'` (our
-   * TurboQuant fork) or `'llamacpp-upstream'` (official ggml-org/llama.cpp).
-   * Both expose an OpenAI-compatible HTTP surface, so the rest of the factory
-   * is identical — only the session-discovery IPC differs.
+   * Create a GInfer model by starting the model and finding the running
+   * session. GInfer exposes an OpenAI-compatible HTTP surface, so the model
+   * construction is shared with the rest of the local-provider path — only
+   * the session-discovery IPC differs.
    */
-  private static async createLlamaCppModel(
+  private static async createGinferModel(
     modelId: string,
     provider?: ProviderObject,
-    parameters: Record<string, unknown> = {},
-    engineName: 'llamacpp' | 'llamacpp-upstream' = 'llamacpp'
+    parameters: Record<string, unknown> = {}
   ): Promise<LanguageModel> {
     const sessionInfo = await ModelFactory.resolveLocalSession(
-      engineName,
+      'ginfer',
       modelId,
       provider
     )
@@ -824,7 +699,7 @@ export class ModelFactory {
     const customFetch = createLocalStreamingFetch(httpFetch, parameters)
 
     const model = new OpenAICompatibleChatLanguageModel(modelId, {
-      provider: engineName,
+      provider: 'ginfer',
       headers: () => ({
         Authorization: `Bearer ${sessionInfo.api_key}`,
         Origin: 'tauri://localhost',
@@ -834,152 +709,6 @@ export class ModelFactory {
         return url.toString()
       },
       includeUsage: true,
-      fetch: customFetch,
-      metadataExtractor: providerMetadataExtractor,
-    })
-
-    return wrapLanguageModel({
-      model,
-      middleware: extractReasoningMiddleware({
-        tagName: 'think',
-        separator: '\n',
-      }),
-    })
-  }
-
-  /**
-   * Create an MLX model by starting the model and finding the running session.
-   * MLX uses the same OpenAI-compatible API pattern as llamacpp.
-   */
-  private static async createMlxModel(
-    modelId: string,
-    provider?: ProviderObject,
-    parameters: Record<string, unknown> = {},
-    audioParts?: AudioInputPart[]
-  ): Promise<LanguageModel> {
-    const sessionInfo = await ModelFactory.resolveLocalSession(
-      'mlx',
-      modelId,
-      provider
-    )
-
-    const baseUrl = `http://localhost:${sessionInfo.port}`
-    const authHeaders = {
-      Authorization: `Bearer ${sessionInfo.api_key}`,
-      Origin: 'tauri://localhost',
-    }
-
-    // Use the same IPC-channel streaming fetch that llamacpp uses —
-    // tauri_plugin_http's ReadableStream bridge does not relay SSE chunks.
-    //
-    // Cancellation: mlx-vlm has no `/v1/cancel` endpoint (the legacy dflash
-    // server did, but the new backend cancels in-flight generation when the
-    // client TCP connection drops). The IPC streaming bridge propagates
-    // `AbortSignal` to the underlying socket teardown for us, so we simply
-    // forward `init` and rely on the backend's disconnect handler.
-    const streamingFetch = createLocalStreamingFetch(httpFetch, parameters)
-    // Re-attach audio attachments as `input_audio` on the request body the
-    // mlx-vlm/omni server receives (they were stripped from the AI SDK message
-    // path because the OpenAI-compatible converter rejects audio file parts).
-    const customFetch = createAudioInjectingFetch(
-      streamingFetch,
-      audioParts ?? []
-    )
-
-    const model = new OpenAICompatibleChatLanguageModel(modelId, {
-      provider: 'mlx',
-      headers: () => authHeaders,
-      url: ({ path }) => {
-        const url = new URL(`${baseUrl}/v1${path}`)
-        return url.toString()
-      },
-      // mlx-vlm v0.6.0 (PR #1216) made the streaming `usage`/`timings` frame
-      // spec-compliant: it is emitted only when the client opts in via
-      // `stream_options.include_usage`. The pre-v0.6.0 fork emitted it
-      // unconditionally, so this path used to get TPS for free. Set the flag
-      // explicitly (as the llamacpp factory already does) so the
-      // `providerMetadataExtractor` keeps receiving `timings.predicted_per_second`
-      // and the UI shows the real decode rate instead of a wall-clock estimate.
-      includeUsage: true,
-      fetch: customFetch,
-      metadataExtractor: providerMetadataExtractor,
-    })
-
-    return wrapLanguageModel({
-      model: model,
-      middleware: extractReasoningMiddleware({
-        tagName: 'think',
-        separator: '\n',
-      }),
-    })
-  }
-
-  /**
-   * Create a Foundation Models model (Apple on-device) by starting the local
-   * Swift server via the Tauri plugin and connecting over localhost.
-   */
-  private static async createFoundationModelsModel(
-    modelId: string,
-    provider?: ProviderObject,
-    parameters: Record<string, unknown> = {}
-  ): Promise<LanguageModel> {
-    const availability = await ModelFactory.getFoundationModelsAvailability()
-
-    if (availability !== 'available') {
-      const messages: Record<string, string> = {
-        notEligible:
-          'Apple Intelligence is not supported on this device. An Apple Silicon Mac (M1 or later) with macOS 26+ is required.',
-        appleIntelligenceNotEnabled:
-          'Apple Intelligence is not enabled. Please enable it in System Settings > Apple Intelligence & Siri.',
-        modelNotReady:
-          'The Apple on-device model is still preparing. Please wait and try again shortly.',
-        binaryNotFound:
-          'The Foundation Models server binary is missing. Please reinstall the app.',
-        unavailable:
-          'Apple Foundation Models are currently unavailable on this device.',
-      }
-      throw new Error(messages[availability] ?? messages.unavailable)
-    }
-
-    if (provider) {
-      try {
-        const { useServiceStore } = await import('@/hooks/useServiceHub')
-        const serviceHub = useServiceStore.getState().serviceHub
-
-        if (serviceHub) {
-          await serviceHub.models().startModel(provider, modelId)
-        }
-      } catch (error) {
-        console.error('Failed to start Foundation Models:', error)
-        throw new Error(
-          `Failed to start model: ${extractModelErrorMessage(error)}`
-        )
-      }
-    }
-
-    const sessionInfo = await invoke<SessionInfo | null>(
-      'plugin:foundation-models|find_foundation_models_session',
-      {}
-    )
-
-    if (!sessionInfo) {
-      throw new Error(
-        'No running Foundation Models session. The server may have failed to start — please check the logs.'
-      )
-    }
-
-    const baseUrl = `http://localhost:${sessionInfo.port}`
-    const authHeaders = {
-      Authorization: `Bearer ${sessionInfo.api_key}`,
-      Origin: 'tauri://localhost',
-    }
-
-    const customFetch = createCustomFetch(httpFetch, parameters)
-
-    const model = new OpenAICompatibleChatLanguageModel(modelId, {
-      provider: 'foundation-models',
-      headers: () => authHeaders,
-      url: ({ path }) => new URL(`${baseUrl}/v1${path}`).toString(),
       fetch: customFetch,
       metadataExtractor: providerMetadataExtractor,
     })

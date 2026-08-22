@@ -447,7 +447,7 @@ async fn test_stop_mcp_servers_prevents_concurrent_shutdown() {
 
 #[test]
 fn test_extension_disconnected_error_detection() {
-    // Real error messages from Jan Browser MCP server when extension is not connected
+    // Real error messages from GChat Browser MCP server when extension is not connected
     let disconnected_errors = [
         // Direct error messages from MCP server
         "Browser extension not connected to bridge",

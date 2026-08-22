@@ -1,8 +1,8 @@
 """
-demo/metrics.py — Prometheus /metrics poller for Atomic-Chat's proxied
+demo/metrics.py — Prometheus /metrics poller for GChat's proxied
 llama-server endpoint.
 
-The Atomic-Chat proxy exposes llama-server's metrics at
+The GChat proxy exposes llama-server's metrics at
 ``{base_url}/metrics?model={model_id}`` (see
 src-tauri/src/core/server/proxy.rs). This module polls that endpoint on a
 fixed interval and exposes the most recent sample as a dataclass-shaped

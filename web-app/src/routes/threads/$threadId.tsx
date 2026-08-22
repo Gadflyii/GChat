@@ -67,7 +67,7 @@ import {
   computeNextCtxLen,
   EngineManager,
   type AIEngine,
-} from '@janhq/core'
+} from '@gchat/core'
 import { toast } from 'sonner'
 import {
   Attachment,
@@ -106,7 +106,7 @@ import { LinkifiedText } from '@/components/LinkifiedText'
 import { IconAlertCircle, IconRefresh } from '@tabler/icons-react'
 import { useToolApproval } from '@/hooks/useToolApproval'
 import DropdownModelProvider from '@/containers/DropdownModelProvider'
-import { ExtensionTypeEnum, VectorDBExtension } from '@janhq/core'
+import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ExtensionManager } from '@/lib/extension'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { useAgentMode } from '@/hooks/useAgentMode'

@@ -1,5 +1,4 @@
 import { ModelLogo } from '@/containers/ModelLogo'
-import { modelFormat } from '@/lib/model-card'
 import { extractModelName } from '@/lib/models'
 import { cn } from '@/lib/utils'
 import type { CatalogModel } from '@/services/models/types'
@@ -32,7 +31,6 @@ export function ModelListRow({
   const name =
     pick?.title || model.name || extractModelName(model.model_name) || model.model_name
   const summary = pick?.summary || model.developer || ''
-  const format = modelFormat(model)
 
   return (
     <button
@@ -57,7 +55,7 @@ export function ModelListRow({
             {name}
           </span>
           <span className="shrink-0 rounded-[5px] border border-border px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            {format}
+            GGUF
           </span>
         </span>
         {summary && (

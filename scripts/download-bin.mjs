@@ -60,7 +60,7 @@ async function getJson(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const opts = new URL(url)
     opts.headers = {
-      'User-Agent': 'jan-app',
+      'User-Agent': 'gchat',
       'Accept': 'application/vnd.github+json',
       ...headers,
     }
@@ -351,8 +351,8 @@ async function main() {
     } else {
       let sqlvecUrl = await fetchLatestSqliteVecUrl(platform, os.arch())
       // Allow override via env if needed
-      if ((process.env.SQLVEC_URL || process.env.JAN_SQLITE_VEC_URL) && !sqlvecUrl) {
-        sqlvecUrl = process.env.SQLVEC_URL || process.env.JAN_SQLITE_VEC_URL
+      if ((process.env.SQLVEC_URL || process.env.GCHAT_SQLITE_VEC_URL) && !sqlvecUrl) {
+        sqlvecUrl = process.env.SQLVEC_URL || process.env.GCHAT_SQLITE_VEC_URL
       }
       if (!sqlvecUrl) {
         console.log('Could not determine sqlite-vec download URL; skipping (linear fallback will be used).')

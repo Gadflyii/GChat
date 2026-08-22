@@ -25,68 +25,79 @@ beforeEach(() => {
 })
 
 describe('getModelToStart', () => {
-  it('skips a deactivated provider when picking the first local model', () => {
-    const providers = [
-      makeProvider('llamacpp-upstream', [], true),
-      makeProvider('llamacpp', ['model-a'], false),
-      makeProvider('mlx', ['model-b'], true),
-    ]
+  it('picks the first usable model on the local provider', () => {
+    const providers = [makeProvider('ginfer', ['model-a'], true)]
 
     const result = getModelToStart({ getProviderByName: lookup(providers) })
-    expect(result?.provider.provider).toBe('mlx')
-    expect(result?.model).toBe('model-b')
+    expect(result?.provider.provider).toBe('ginfer')
+    expect(result?.model).toBe('model-a')
+  })
+
+  it('skips a deactivated local provider', () => {
+    const providers = [makeProvider('ginfer', ['model-a'], false)]
+
+    expect(getModelToStart({ getProviderByName: lookup(providers) })).toBeNull()
   })
 
   it('never resurrects a deactivated provider via lastUsedModel', () => {
     localStorage.setItem(
       localStorageKey.lastUsedModel,
-      JSON.stringify({ provider: 'llamacpp', model: 'model-a' })
+      JSON.stringify({ provider: 'ginfer', model: 'model-a' })
     )
-    const providers = [
-      makeProvider('llamacpp-upstream', ['model-b'], true),
-      makeProvider('llamacpp', ['model-a'], false),
-    ]
+    const providers = [makeProvider('ginfer', ['model-a'], false)]
 
-    const result = getModelToStart({ getProviderByName: lookup(providers) })
-    expect(result?.provider.provider).toBe('llamacpp-upstream')
-    expect(result?.model).toBe('model-b')
+    expect(getModelToStart({ getProviderByName: lookup(providers) })).toBeNull()
   })
 
   it('still honors lastUsedModel on an active provider', () => {
     localStorage.setItem(
       localStorageKey.lastUsedModel,
-      JSON.stringify({ provider: 'llamacpp', model: 'model-a' })
+      JSON.stringify({ provider: 'ginfer', model: 'model-a' })
     )
-    const providers = [
-      makeProvider('llamacpp-upstream', ['model-b'], true),
-      makeProvider('llamacpp', ['model-a'], true),
-    ]
+    const providers = [makeProvider('ginfer', ['model-a'], true)]
 
     const result = getModelToStart({ getProviderByName: lookup(providers) })
-    expect(result?.provider.provider).toBe('llamacpp')
+    expect(result?.provider.provider).toBe('ginfer')
     expect(result?.model).toBe('model-a')
   })
 
   it('ignores a stale selection pointing at a deactivated provider', () => {
-    const providers = [
-      makeProvider('llamacpp-upstream', ['model-b'], true),
-      makeProvider('llamacpp', ['model-a'], false),
-    ]
+    const providers = [makeProvider('ginfer', ['model-a'], false)]
 
     const result = getModelToStart({
       selectedModel: { id: 'model-a' } as never,
-      selectedProvider: 'llamacpp',
+      selectedProvider: 'ginfer',
       getProviderByName: lookup(providers),
     })
-    expect(result?.provider.provider).toBe('llamacpp-upstream')
+    expect(result).toBeNull()
   })
 
-  it('returns null when only deactivated providers carry models', () => {
+  it('honors an explicit selection on an active provider', () => {
+    const providers = [makeProvider('ginfer', ['model-a'], true)]
+
+    const result = getModelToStart({
+      selectedModel: { id: 'model-a' } as never,
+      selectedProvider: 'ginfer',
+      getProviderByName: lookup(providers),
+    })
+    expect(result?.provider.provider).toBe('ginfer')
+    expect(result?.model).toBe('model-a')
+  })
+
+  it('skips broken-link (missing) models when auto-picking', () => {
     const providers = [
-      makeProvider('llamacpp-upstream', [], true),
-      makeProvider('llamacpp', ['model-a'], false),
+      {
+        provider: 'ginfer',
+        active: true,
+        models: [
+          { id: 'broken', missing: true },
+          { id: 'model-b' },
+        ],
+        settings: [],
+      } as unknown as ModelProvider,
     ]
 
-    expect(getModelToStart({ getProviderByName: lookup(providers) })).toBeNull()
+    const result = getModelToStart({ getProviderByName: lookup(providers) })
+    expect(result?.model).toBe('model-b')
   })
 })

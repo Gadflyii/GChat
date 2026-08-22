@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 # scripts/dev-windows.ps1
-# Atomic Chat - Windows development launcher
+# GChat - Windows development launcher
 # Mirrors CI pipeline: install deps, download backend, build CLI, run dev
 #
 # Usage:
@@ -498,7 +498,7 @@ if ($skipDownload) {
     # Resolve from the static backend manifest (ATO-199) and map family ids
     # (win-cuda-13-x64 / win-cuda-12-x64) to concrete published minors.
     $manifestUrl = 'https://raw.githubusercontent.com/AtomicBot-ai/atomic-chat-conf/main/backends/manifest.json'
-    $headers = @{ 'User-Agent' = 'atomic-chat-dev' }
+    $headers = @{ 'User-Agent' = 'gchat-dev' }
 
     Write-Host '  Fetching backend manifest...'
     $manifest = Invoke-BackendManifest -Uri $manifestUrl -Headers $headers
@@ -578,7 +578,7 @@ if ($skipDownload) {
         }
 
         # Merge CUDA Toolkit runtime DLLs from the matching cudart archive
-        # (AtomicBot-ai/Atomic-Chat#14). No-op for non-CUDA backends.
+        # (AtomicBot-ai/GChat#14). No-op for non-CUDA backends.
         & (Join-Path $PSScriptRoot 'download-llamacpp-cudart-windows.ps1') `
             -BackendDir $llamacppDir -Backend $backend -Tag $tag
         if ($LASTEXITCODE -ne 0) {
@@ -642,7 +642,7 @@ $tqReuseWithoutFetch = $SkipBackendDownload -and $tqIsTurboquant
 $tqEntry = $null
 $tqPinnedTag = ''
 if (-not $tqReuseWithoutFetch) {
-    $tqHeaders = @{ 'User-Agent' = 'atomic-chat-dev' }
+    $tqHeaders = @{ 'User-Agent' = 'gchat-dev' }
     $tqOverride = $env:TURBOQUANT_TAG
 
     if ($tqOverride) {
@@ -754,22 +754,22 @@ if ($tqReuseWithoutFetch) {
 }
 
 # ── Build CLI (debug) ─────────────────────────────────────────
-Write-Step 'Build jan-cli (debug)'
-$cliBin = 'src-tauri/resources/bin/jan-cli.exe'
+Write-Step 'Build gchat-cli (debug)'
+$cliBin = 'src-tauri/resources/bin/gchat-cli.exe'
 if (-not (Test-Path 'src-tauri/resources/bin')) {
     New-Item -ItemType Directory -Path 'src-tauri/resources/bin' -Force | Out-Null
 }
 
 Push-Location src-tauri
-cargo build --features cli --bin jan-cli
+cargo build --features cli --bin gchat-cli
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
-    Write-Host 'cargo build jan-cli failed' -ForegroundColor Red
+    Write-Host 'cargo build gchat-cli failed' -ForegroundColor Red
     exit 1
 }
 Pop-Location
 
-Copy-Item -Path 'src-tauri/target/debug/jan-cli.exe' -Destination $cliBin -Force
+Copy-Item -Path 'src-tauri/target/debug/gchat-cli.exe' -Destination $cliBin -Force
 Write-Host "  CLI built: $cliBin"
 
 # ── Generate icons (tauri icon, skip macOS-only Python padding) ─

@@ -7,7 +7,6 @@ import { sanitizeModelId } from '@/lib/utils'
 import {
   filterStaffPicksForPlatform,
   type StaffPick,
-  type StaffPickFormat,
   type StaffPickPlatform,
 } from '@/services/staff-picks-registry'
 import { useStaffPicksStore } from '@/stores/staff-picks-store'
@@ -45,22 +44,18 @@ export const __resetStaffPickResolutionCache = () => {
  * when the repo is indexed there, and from a single Hugging Face API call
  * otherwise.
  *
- * `format` narrows the manifest before any of that work happens: the curated
- * list carries a GGUF and an MLX entry for most models, and resolving both
- * would double the Hugging Face round-trips to populate rows the Hub is not
- * going to show.
+ * Only GGUF picks are resolved: the curated manifest may still carry MLX
+ * rows, but the single local backend (GInfer) cannot run them, so the Hub
+ * never shows them and resolving them would waste Hugging Face round-trips.
  */
-export function useStaffPicks(
-  sources: CatalogModel[],
-  format: StaffPickFormat = 'gguf'
-): ResolvedStaffPick[] {
+export function useStaffPicks(sources: CatalogModel[]): ResolvedStaffPick[] {
   const serviceHub = useServiceHub()
   const huggingfaceToken = useGeneralSetting((s) => s.huggingfaceToken)
   const remotePicks = useStaffPicksStore((s) => s.picks)
 
   const picks = useMemo(
-    () => filterStaffPicksForPlatform(remotePicks, currentOs, format),
-    [remotePicks, format]
+    () => filterStaffPicksForPlatform(remotePicks, currentOs, 'gguf'),
+    [remotePicks]
   )
 
   const [fetched, setFetched] = useState<Record<string, CatalogModel>>(() => ({
@@ -94,16 +89,15 @@ export function useStaffPicks(
             .fetchHuggingFaceRepo(pick.model_name, huggingfaceToken)
           if (!repo) return null
           const catalog = serviceHub.models().convertHfRepoToCatalogModel(repo)
+          // MLX repos cannot be run by the single local backend (GInfer).
+          if (catalog.is_mlx) return null
           const processed: CatalogModel = {
             ...catalog,
             quants: catalog.quants?.map((quant) => ({
               ...quant,
               model_id: sanitizeModelId(quant.model_id),
             })),
-            is_mlx: catalog.is_mlx ?? catalog.library_name === 'mlx',
           }
-          //! Как в useModelSources: MLX только на macOS
-          if (!IS_MACOS && processed.is_mlx) return null
           resolvedModels[pick.model_name] = processed
           return processed
         })()

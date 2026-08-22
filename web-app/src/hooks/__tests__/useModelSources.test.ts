@@ -74,7 +74,7 @@ describe('useModelSources (compatibility shim)', () => {
     expect(typeof result.current.fetchSources).toBe('function')
   })
 
-  it('mirrors the catalog from the underlying store, sanitised + platform-filtered', async () => {
+  it('mirrors the catalog from the underlying store, sanitised + format-filtered', async () => {
     const catalog: CatalogModel[] = [
       {
         model_name: 'unsloth/model-1',
@@ -108,14 +108,12 @@ describe('useModelSources (compatibility shim)', () => {
     })
 
     expect(mockEnsureCatalogLoaded).toHaveBeenCalledOnce()
-    expect(result.current.sources).toHaveLength(2)
+    // MLX entries are dropped on every platform — the single local backend
+    // (GInfer) cannot run them.
+    expect(result.current.sources).toHaveLength(1)
     expect(result.current.sources[0]).toMatchObject({
       model_name: 'unsloth/model-1',
       is_mlx: false,
-    })
-    expect(result.current.sources[1]).toMatchObject({
-      model_name: 'mlx-community/model-2',
-      is_mlx: true,
     })
   })
 

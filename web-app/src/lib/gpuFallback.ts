@@ -1,21 +1,13 @@
 /**
- * Helpers for the "System Monitor / Settings → Hardware" fallback path
- * that renders a GPU card from the `hardware` plugin (NVML / Vulkan
- * enumeration) when `llama-server.exe --list-devices` returns an empty
- * list but a GPU is actually present.
+ * Helpers for the "System Monitor / Settings → Hardware" GPU card, built
+ * from the `hardware` plugin (NVML for NVIDIA, Vulkan loader for
+ * everything else).
  *
- * Why this exists:
- *   - `llamacppDevices` (the parsed stdout of `llama-server --list-devices`)
- *     is currently the single source of truth for the "Active GPUs" panel.
- *   - Real-world data (nvidia-smi from AtomicBot-ai/Atomic-Chat#25 + AMD
- *     RX 7900 XTX report from the same Discord thread) showed that
- *     `--list-devices` can return empty stdout on hosts where the same
- *     binary's real inference path is using the GPU happily.
- *   - The hardware plugin (NVML for NVIDIA, Vulkan loader for everything
- *     else) is an independent source. When `llamacppDevices` is empty
- *     but `hardwareData.gpus` is not, the right behaviour is to render
- *     the GPU(s) we DO know about and signal that live VRAM stats are
- *     limited — instead of showing a misleading "No GPUs detected".
+ * The hardware plugin is the app's source of truth for GPU presence:
+ * it can report GPUs even on hosts where live per-device VRAM stats are
+ * unavailable, in which case the UI renders the known cards and signals
+ * that live stats are limited — instead of a misleading "No GPUs
+ * detected".
  *
  * See the 2026-05-27 ADR in `AGENTS.md` § 7.
  */
@@ -23,13 +15,11 @@
 import type { GPU } from '@/hooks/useHardware'
 
 /**
- * Shape consumed by the fallback card. Intentionally a subset of
- * `DeviceList` (the llamacpp `--list-devices` shape) so the calling
- * components can render either kind through a thin conditional. We
- * deliberately omit `free` / `used` — for fallback entries we have no
- * reliable live-VRAM signal (see `Bug #2` in the ADR: NVML and Vulkan
- * UUIDs are not byte-identical, so `systemUsage.gpus[*]` cannot always
- * be matched back to the Vulkan-sourced duplicate).
+ * Shape consumed by the GPU card. We deliberately omit `free` / `used` —
+ * for these entries we have no reliable live-VRAM signal (see `Bug #2` in
+ * the ADR: NVML and Vulkan UUIDs are not byte-identical, so
+ * `systemUsage.gpus[*]` cannot always be matched back to the
+ * Vulkan-sourced duplicate).
  */
 export interface FallbackGpuDevice {
   id: string

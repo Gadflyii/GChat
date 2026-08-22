@@ -17,8 +17,8 @@ export interface ParamSetting {
 /**
  * Canonical sampling / generation parameters surfaced in the Sampling popover
  * and the assistant editor. Keys map 1:1 onto the OpenAI-compatible request
- * body that local backends (llamacpp / llamacpp-upstream / mlx) accept — the
- * whole bag is injected verbatim into the request body (see ModelFactory).
+ * body that the local backend (GInfer) accepts — the whole bag is injected
+ * verbatim into the request body (see ModelFactory).
  *
  * Shape kept backward-compatible: existing consumers only read `key`, `value`,
  * `title`; the extra metadata is additive.

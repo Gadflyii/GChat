@@ -7,7 +7,7 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 
-vi.mock('@janhq/core', () => ({ fs: { writeFileSync: vi.fn() } }))
+vi.mock('@gchat/core', () => ({ fs: { writeFileSync: vi.fn() } }))
 
 vi.mock('@/hooks/useServiceHub', () => ({
   getServiceHub: () => ({ dialog: () => ({ save: vi.fn() }) }),

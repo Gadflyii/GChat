@@ -1,14 +1,14 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Atomic Chat API Server Endpoints",
-    "description": "Atomic Chat API server provides a REST API interface for seamless interaction with large language models (LLMs) for third party apps. Compatible with the OpenAI API spec, it enables straightforward API access of models available in Atomic Chat.",
+    "title": "GChat API Server Endpoints",
+    "description": "GChat API server provides a REST API interface for seamless interaction with large language models (LLMs) for third party apps. Compatible with the OpenAI API spec, it enables straightforward API access of models available in GChat.",
     "version": "1.0"
   },
   "servers": [
     {
       "url": "http://localhost:1337/v1",
-      "description": "Atomic Chat API server"
+      "description": "GChat API server"
     }
   ],
   "tags": [
@@ -56,7 +56,7 @@
                 "$ref": "#/components/schemas/CreateChatCompletionDto"
               },
               "example": {
-                "model": "janhq/Jan-v3-4b-base-instruct-Q4_K_XL",
+                "model": "GadflyII/Qwen3.5-9B",
                 "messages": [
                   {"role": "user", "content": "Hello!"}
                 ]
@@ -92,7 +92,7 @@
                 "$ref": "#/components/schemas/CreateMessageDto"
               },
               "example": {
-                "model": "janhq/Jan-v3-4b-base-instruct-Q4_K_XL",
+                "model": "GadflyII/Qwen3.5-9B",
                 "messages": [
                   {"role": "user", "content": "Hello!"}
                 ]

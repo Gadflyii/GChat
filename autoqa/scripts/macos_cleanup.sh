@@ -1,34 +1,34 @@
 #!/bin/bash
-# macOS cleanup script for Jan app
+# macOS cleanup script for GChat
 
-echo "Cleaning existing Jan installations..."
+echo "Cleaning existing GChat installations..."
 
-# Kill any running Jan processes (both regular and nightly)
-pkill -f "Jan" || true
-pkill -f "jan" || true
-pkill -f "Jan-nightly" || true
-pkill -f "jan-nightly" || true
+# Kill any running GChat processes (both regular and nightly)
+pkill -f "GChat" || true
+pkill -f "gchat" || true
+pkill -f "GChat-nightly" || true
+pkill -f "gchat-nightly" || true
 
-# Remove Jan app directories
-rm -rf /Applications/Jan.app
-rm -rf /Applications/Jan-nightly.app
-rm -rf ~/Applications/Jan.app
-rm -rf ~/Applications/Jan-nightly.app
+# Remove GChat app directories
+rm -rf /Applications/GChat.app
+rm -rf /Applications/GChat-nightly.app
+rm -rf ~/Applications/GChat.app
+rm -rf ~/Applications/GChat-nightly.app
 
-# Remove Jan data folders (both regular and nightly)
-rm -rf ~/Library/Application\ Support/Jan
-rm -rf ~/Library/Application\ Support/Jan-nightly
-rm -rf ~/Library/Application\ Support/jan.ai.app
-rm -rf ~/Library/Application\ Support/jan-nightly.ai.app
-rm -rf ~/Library/Preferences/jan.*
-rm -rf ~/Library/Preferences/jan-nightly.*
-rm -rf ~/Library/Caches/jan.*
-rm -rf ~/Library/Caches/jan-nightly.*
-rm -rf ~/Library/Caches/jan.ai.app
-rm -rf ~/Library/Caches/jan-nightly.ai.app
-rm -rf ~/Library/WebKit/jan.ai.app
-rm -rf ~/Library/WebKit/jan-nightly.ai.app
-rm -rf ~/Library/Saved\ Application\ State/jan.ai.app
-rm -rf ~/Library/Saved\ Application\ State/jan-nightly.ai.app
+# Remove GChat data folders (both regular and nightly)
+rm -rf ~/Library/Application\ Support/GChat
+rm -rf ~/Library/Application\ Support/GChat-nightly
+rm -rf ~/Library/Application\ Support/app.gchat
+rm -rf ~/Library/Application\ Support/app.gchat-nightly
+rm -rf ~/Library/Preferences/app.gchat*
+rm -rf ~/Library/Preferences/app.gchat-nightly*
+rm -rf ~/Library/Caches/app.gchat*
+rm -rf ~/Library/Caches/app.gchat-nightly*
+rm -rf ~/Library/Caches/app.gchat
+rm -rf ~/Library/Caches/app.gchat-nightly
+rm -rf ~/Library/WebKit/app.gchat
+rm -rf ~/Library/WebKit/app.gchat-nightly
+rm -rf ~/Library/Saved\ Application\ State/app.gchat
+rm -rf ~/Library/Saved\ Application\ State/app.gchat-nightly
 
-echo "Jan cleanup completed"
+echo "GChat cleanup completed"

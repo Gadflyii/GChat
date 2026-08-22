@@ -1,10 +1,10 @@
 # E2E Test Runner with ReportPortal Integration
 
-🚀 An automated end-to-end test runner for Atomic Chat application with ReportPortal integration, screen recording, and comprehensive test monitoring.
+🚀 An automated end-to-end test runner for GChat application with ReportPortal integration, screen recording, and comprehensive test monitoring.
 
 ## Features
 
-- ✅ **Automated Atomic Chat App Testing**: Automatically starts/stops Atomic Chat application
+- ✅ **Automated GChat App Testing**: Automatically starts/stops GChat application
 - 🖥️ **Auto Computer Server**: Automatically starts computer server in background
 - 📹 **Screen Recording**: Records test execution for debugging
 - 📊 **ReportPortal Integration**: Optional test results upload to ReportPortal
@@ -16,7 +16,7 @@
 ## Prerequisites
 
 - Python 3.8+
-- Atomic Chat application installed
+- GChat application installed
 - Windows Sandbox (for computer provider)
 - Computer server package installed
 - Required Python packages (see requirements.txt)
@@ -37,10 +37,10 @@ cd autoqa
 pip install -r requirements.txt
 ```
 
-3. Ensure Atomic Chat application is installed in one of the default locations:
-   - Windows: `%LOCALAPPDATA%\Programs\jan\Jan.exe`
-   - macOS: `~/Applications/Jan.app/Contents/MacOS/Jan`
-   - Linux: `jan` (in PATH)
+3. Ensure GChat application is installed in one of the default locations:
+   - Windows: `%LOCALAPPDATA%\Programs\gchat\GChat.exe`
+   - macOS: `~/Applications/GChat.app/Contents/MacOS/GChat`
+   - Linux: `gchat` (in PATH)
 
 ## Quick Start
 
@@ -53,8 +53,8 @@ python main.py
 # Run with custom test directory
 python main.py --tests-dir "my_tests"
 
-# Run with custom Jan app path
-python main.py --jan-app-path "C:/Custom/Path/Jan.exe"
+# Run with custom GChat app path
+python main.py --gchat-app-path "C:/Custom/Path/GChat.exe"
 
 # Skip auto computer server start (if already running)
 python main.py --skip-server-start
@@ -87,9 +87,9 @@ python main.py \
 | `--rp-endpoint`         | `RP_ENDPOINT`         | `https://reportportal.menlo.ai` | ReportPortal endpoint URL                         |
 | `--rp-project`          | `RP_PROJECT`          | `default_personal`              | ReportPortal project name                         |
 | `--rp-token`            | `RP_TOKEN`            | -                               | ReportPortal API token (required when RP enabled) |
-| **Jan Application**     |
-| `--jan-app-path`        | `JAN_APP_PATH`        | _auto-detected_                 | Path to Jan application executable                |
-| `--jan-process-name`    | `JAN_PROCESS_NAME`    | `Jan.exe`                       | Jan process name for monitoring                   |
+| **GChat Application**     |
+| `--gchat-app-path`        | `GCHAT_APP_PATH`        | _auto-detected_                 | Path to GChat application executable                |
+| `--gchat-process-name`  | `GCHAT_PROCESS_NAME`  | `GChat.exe`                     | GChat process name for monitoring                 |
 | **Model Configuration** |
 | `--model-name`          | `MODEL_NAME`          | `ByteDance-Seed/UI-TARS-1.5-7B` | AI model name                                     |
 | `--model-base-url`      | `MODEL_BASE_URL`      | `http://10.200.108.58:1234/v1`  | Model API endpoint                                |
@@ -114,9 +114,9 @@ RP_ENDPOINT=https://reportportal.example.com
 RP_PROJECT=my_project
 RP_TOKEN=your_secret_token
 
-# Atomic Chat Application
-JAN_APP_PATH=C:\Custom\Path\Jan.exe
-JAN_PROCESS_NAME=Jan.exe
+# GChat Application
+GCHAT_APP_PATH=C:\Custom\Path\Jan.exe
+GCHAT_PROCESS_NAME=GChat.exe
 
 # Model Configuration
 MODEL_NAME=gpt-4
@@ -141,7 +141,7 @@ DELAY_BETWEEN_TESTS=5
 Example test file (`tests/basic/login_test.txt`):
 
 ```
-Test the login functionality of Jan application.
+Test the login functionality of GChat application.
 Navigate to login screen, enter valid credentials, and verify successful login.
 ```
 
@@ -150,7 +150,7 @@ Navigate to login screen, enter valid credentials, and verify successful login.
 ```
 autoqa/
 ├── main.py                 # Main test runner
-├── utils.py               # Jan app utilities
+├── utils.py               # GChat app utilities
 ├── test_runner.py         # Test execution logic
 ├── screen_recorder.py     # Screen recording functionality
 ├── reportportal_handler.py # ReportPortal integration
@@ -279,11 +279,11 @@ When enabled, results are uploaded to ReportPortal including:
    python main.py --skip-server-start
    ```
 
-2. **Jan app not found**:
+2. **GChat app not found**:
 
    ```bash
    # Specify custom path
-   python main.py --jan-app-path "D:/Apps/Jan/Jan.exe"
+   python main.py --gchat-app-path "D:/Apps/GChat/GChat.exe"
    ```
 
 3. **Windows dependencies missing**:

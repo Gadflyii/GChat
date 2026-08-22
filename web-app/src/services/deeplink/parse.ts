@@ -1,16 +1,16 @@
-export type AtomicChatDeepLinkTarget = {
+export type GChatDeepLinkTarget = {
   provider: 'huggingface'
   repo: string
   modelId: string
 }
 
-export function parseAtomicChatDeepLink(
+export function parseGChatDeepLink(
   deeplink: string
-): AtomicChatDeepLinkTarget | null {
+): GChatDeepLinkTarget | null {
   try {
     const url = new URL(deeplink)
 
-    if (url.protocol !== 'atomic-chat:' || url.host !== 'models') {
+    if (url.protocol !== 'gchat:' || url.host !== 'models') {
       return null
     }
 

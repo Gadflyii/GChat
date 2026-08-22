@@ -8,9 +8,7 @@ import { formatMegaBytes } from '@/lib/utils'
 import { IconDeviceDesktopAnalytics } from '@tabler/icons-react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { toNumber } from '@/utils/number'
-import { useLlamacppDevices } from '@/hooks/useLlamacppDevices'
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { DriverOutdatedBanner } from '@/containers/DriverOutdatedBanner'
 import { buildFallbackDevices } from '@/lib/gpuFallback'
 
 export const Route = createFileRoute(route.systemMonitor as any)({
@@ -21,13 +19,6 @@ function SystemMonitorContent() {
   const { t } = useTranslation()
   const { hardwareData, systemUsage, updateSystemUsage } = useHardware()
   const serviceHub = useServiceHub()
-
-  const { devices: llamacppDevices, fetchDevices } = useLlamacppDevices()
-
-  useEffect(() => {
-    // Fetch llamacpp devices
-    fetchDevices()
-  }, [updateSystemUsage, fetchDevices])
 
   // Poll system usage every 5 seconds
   useEffect(() => {
@@ -152,47 +143,8 @@ function SystemMonitorContent() {
             <h2 className="text-base font-semibold mb-4">
               {t('system-monitor:activeGpus')}
             </h2>
-            {hardwareData.gpus.length > 0 && llamacppDevices.length === 0 && (
-              <DriverOutdatedBanner
-                gpus={hardwareData.gpus}
-                className="mb-4"
-              />
-            )}
             <div className="flex flex-col gap-2">
-              {llamacppDevices.length > 0 ? (
-                llamacppDevices.map((device) => (
-                  <div key={device.id} className="flex flex-col gap-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">
-                        {device.name}
-                      </span>
-                      <span
-                        className={`text-sm px-2 py-1 rounded-md ${
-                          device.activated
-                            ? 'bg-green-500/20 text-green-600 dark:text-green-400'
-                            : 'hidden'
-                        }`}
-                      >
-                        {device.activated
-                          ? t('system-monitor:active')
-                          : 'Inactive'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">VRAM:</span>
-                      <span className="text-foreground">
-                        {formatMegaBytes(device.mem)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Free:</span>
-                      <span className="text-foreground">
-                        {formatMegaBytes(device.free)}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              ) : hardwareData.gpus.length > 0 ? (
+              {hardwareData.gpus.length > 0 ? (
                 <>
                   {buildFallbackDevices(hardwareData.gpus).map((device) => (
                     <div key={device.id} className="flex flex-col gap-1">

@@ -7,38 +7,38 @@ param(
 
 Write-Host "Cleaning existing Jan installations..."
 
-# Remove Jan data folders (both regular and nightly)
-$janAppData = "$env:APPDATA\Jan"
-$janNightlyAppData = "$env:APPDATA\Jan-nightly"
-$janLocalAppData = "$env:LOCALAPPDATA\jan.ai.app"
-$janNightlyLocalAppData = "$env:LOCALAPPDATA\jan-nightly.ai.app"
+# Remove GChat data folders (both regular and nightly)
+$gchatAppData = "$env:APPDATA\GChat"
+$gchatNightlyAppData = "$env:APPDATA\GChat-nightly"
+$gchatLocalAppData = "$env:LOCALAPPDATA\app.gchat"
+$gchatNightlyLocalAppData = "$env:LOCALAPPDATA\app.gchat-nightly"
 
-if (Test-Path $janAppData) {
-    Write-Host "Removing $janAppData"
-    Remove-Item -Path $janAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatAppData) {
+    Write-Host "Removing $gchatAppData"
+    Remove-Item -Path $gchatAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janNightlyAppData) {
-    Write-Host "Removing $janNightlyAppData"
-    Remove-Item -Path $janNightlyAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatNightlyAppData) {
+    Write-Host "Removing $gchatNightlyAppData"
+    Remove-Item -Path $gchatNightlyAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janLocalAppData) {
-    Write-Host "Removing $janLocalAppData"
-    Remove-Item -Path $janLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatLocalAppData) {
+    Write-Host "Removing $gchatLocalAppData"
+    Remove-Item -Path $gchatLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (Test-Path $janNightlyLocalAppData) {
-    Write-Host "Removing $janNightlyLocalAppData"
-    Remove-Item -Path $janNightlyLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
+if (Test-Path $gchatNightlyLocalAppData) {
+    Write-Host "Removing $gchatNightlyLocalAppData"
+    Remove-Item -Path $gchatNightlyLocalAppData -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 
-# Kill any running Jan processes (both regular and nightly)
-Get-Process -Name "Jan" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Get-Process -Name "jan" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Get-Process -Name "Jan-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Get-Process -Name "jan-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Kill any running GChat processes (both regular and nightly)
+Get-Process -Name "GChat" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "gchat" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "GChat-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "gchat-nightly" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 # Remove Jan extensions folder
 $janExtensionsPath = "$env:USERPROFILE\jan\extensions"

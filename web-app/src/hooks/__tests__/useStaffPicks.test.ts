@@ -76,14 +76,14 @@ describe('useStaffPicks', () => {
     const first = renderHook(() => useStaffPicks([]))
 
     await waitFor(() => {
-      expect(first.result.current[0].model).toEqual({ ...model, is_mlx: false })
+      expect(first.result.current[0].model).toEqual(model)
     })
     expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledOnce()
 
     first.unmount()
     const second = renderHook(() => useStaffPicks([]))
 
-    expect(second.result.current[0].model).toEqual({ ...model, is_mlx: false })
+    expect(second.result.current[0].model).toEqual(model)
     expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledOnce()
   })
 
@@ -105,7 +105,7 @@ describe('useStaffPicks', () => {
     ])
   })
 
-  it('resolves only the requested build format', () => {
+  it('resolves only GGUF picks, never MLX ones', () => {
     mocks.picks = [
       { model_name: 'a/gguf', format: 'gguf', order: 10 },
       {
@@ -116,13 +116,8 @@ describe('useStaffPicks', () => {
       },
     ]
 
-    const gguf = renderHook(() => useStaffPicks([]))
-    expect(gguf.result.current.map((i) => i.pick.model_name)).toEqual([
-      'a/gguf',
-    ])
-
-    const mlx = renderHook(() => useStaffPicks([], 'mlx'))
-    expect(mlx.result.current.map((i) => i.pick.model_name)).toEqual(['a/mlx'])
+    const { result } = renderHook(() => useStaffPicks([]))
+    expect(result.current.map((i) => i.pick.model_name)).toEqual(['a/gguf'])
   })
 
   it('never looks up a pick belonging to the other format', () => {
@@ -172,7 +167,7 @@ describe('useStaffPicks on non-macOS hosts', () => {
     mocks.picks = []
   })
 
-  it('drops an MLX pick that forgot to declare platforms', async () => {
+  it('drops an MLX repo that Hugging Face resolves to', async () => {
     ;(globalThis as Record<string, unknown>).IS_MACOS = false
     ;(globalThis as Record<string, unknown>).IS_WINDOWS = true
 
@@ -183,6 +178,7 @@ describe('useStaffPicks on non-macOS hosts', () => {
     const mlxModel: CatalogModel = {
       ...catalogModel('mlx-community/no-platforms'),
       library_name: 'mlx',
+      is_mlx: true,
     }
     mocks.fetchHuggingFaceRepo.mockResolvedValue({ id: mlxModel.model_name })
     mocks.convertHfRepoToCatalogModel.mockReturnValue(mlxModel)

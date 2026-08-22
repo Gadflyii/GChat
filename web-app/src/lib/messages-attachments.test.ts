@@ -1,4 +1,4 @@
-import { ContentType, MessageStatus, type ThreadMessage } from '@janhq/core'
+import { ContentType, MessageStatus, type ThreadMessage } from '@gchat/core'
 import { describe, expect, it } from 'vitest'
 
 import { convertThreadMessageToUIMessage } from './messages'

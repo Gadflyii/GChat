@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ChatCompletionRole, ContentType, MessageStatus } from '@janhq/core'
-import type { ThreadMessage } from '@janhq/core'
+import { ChatCompletionRole, ContentType, MessageStatus } from '@gchat/core'
+import type { ThreadMessage } from '@gchat/core'
 import type { UIMessage } from 'ai'
 import { rebuildEditedContent, rebuildEditedParts } from '@/lib/message-edit'
 import { convertThreadMessageToUIMessage } from '@/lib/messages'

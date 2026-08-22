@@ -42,7 +42,7 @@ class Provider:
             return {
                 "x-api-key": self.api_key,
                 "anthropic-version": os.environ.get(
-                    "ATOMIC_CLOUD_ANTHROPIC_VERSION", "2023-06-01"
+                    "GCHAT_CLOUD_ANTHROPIC_VERSION", "2023-06-01"
                 ),
             }
         return {"Authorization": f"Bearer {self.api_key}"}
@@ -133,13 +133,13 @@ class Provider:
 
 def env_name(provider_name: str, suffix: str) -> str:
     normalized = re.sub(r"[^A-Za-z0-9]", "_", provider_name).upper()
-    return f"ATOMIC_CLOUD_{normalized}_{suffix}"
+    return f"GCHAT_CLOUD_{normalized}_{suffix}"
 
 
 def configured_providers() -> tuple[list[Provider], list[str]]:
     names = [
         item.strip()
-        for item in os.environ.get("ATOMIC_CLOUD_PROVIDERS", "").split(",")
+        for item in os.environ.get("GCHAT_CLOUD_PROVIDERS", "").split(",")
         if item.strip()
     ]
     providers: list[Provider] = []
@@ -218,9 +218,9 @@ def record_provider(provider: Provider, output_dir: Path) -> Path:
 
     invalid_headers = dict(provider.headers)
     if provider.style == "anthropic":
-        invalid_headers["x-api-key"] = "atomic-invalid-key"
+        invalid_headers["x-api-key"] = "gchat-invalid-key"
     else:
-        invalid_headers["Authorization"] = "Bearer atomic-invalid-key"
+        invalid_headers["Authorization"] = "Bearer gchat-invalid-key"
     invalid_status, _ = json_request(
         provider.completion_url,
         method="POST",
@@ -306,7 +306,7 @@ def main() -> int:
         return 1
     if not providers:
         message = (
-            "no cloud providers configured; set ATOMIC_CLOUD_PROVIDERS and "
+            "no cloud providers configured; set GCHAT_CLOUD_PROVIDERS and "
             "provider-specific BASE_URL/API_KEY/MODEL variables"
         )
         if args.require:

@@ -1,4 +1,4 @@
-import { CoreRoutes, APIRoutes } from '@janhq/core'
+import { CoreRoutes, APIRoutes } from '@gchat/core'
 import { getServiceHub } from '@/hooks/useServiceHub'
 import { isPlatformTauri } from '@/lib/platform'
 import type { InvokeArgs } from '@/services/core/types'

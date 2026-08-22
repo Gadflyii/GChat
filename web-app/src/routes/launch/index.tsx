@@ -752,7 +752,7 @@ function LaunchPage() {
         try {
           // Zed is a desktop editor, not a terminal agent: its AI agent lives
           // in its own window. Launch the app directly (no terminal) — the
-          // config we just wrote points its native Atomic Chat provider at the
+          // config we just wrote points its native GChat provider at the
           // local server, and the user drives the Agent Panel from there.
           if (agent.id === 'zed') {
             await invoke('launch_zed')
@@ -788,7 +788,7 @@ function LaunchPage() {
                 : serverHost
             const apiUrl = `http://${connectHost}:${serverPort}${apiPrefix}`
             const standaloneBase = apiUrl.replace(/\/v1\/?$/, '')
-            const key = apiKey || 'atomic'
+            const key = apiKey || 'gchat'
             const modelId = model ?? ''
             if (osType() === 'windows') {
               command = `set POOLSIDE_STANDALONE_BASE_URL=${standaloneBase}&& set POOLSIDE_API_KEY=${key}&& set POOLSIDE_STANDALONE_MODEL=${modelId}&& pool`
@@ -849,7 +849,7 @@ function LaunchPage() {
         : serverHost
     return {
       baseUrl: `http://${connectHost}:${serverPort}${apiPrefix}`,
-      apiKey: apiKey || 'atomic',
+      apiKey: apiKey || 'gchat',
       model: activeModel,
     }
   }, [serverHost, serverPort, apiPrefix, apiKey, activeModel])

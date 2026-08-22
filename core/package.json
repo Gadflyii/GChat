@@ -1,9 +1,9 @@
 {
-  "name": "@janhq/core",
+  "name": "@gchat/core",
   "version": "0.1.10",
-  "description": "Core library for the Jan AI application framework",
+  "description": "Core library for the GChat application framework",
   "keywords": [
-    "jan",
+    "gchat",
     "core"
   ],
   "homepage": "https://jan.ai",
@@ -14,7 +14,7 @@
     "dist",
     "types"
   ],
-  "author": "Jan <service@jan.ai>",
+  "author": "GChat",
   "scripts": {
     "lint": "tslint --project tsconfig.json -t codeFrame 'src/**/*.ts' 'test/**/*.ts'",
     "test": "vitest run",

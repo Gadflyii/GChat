@@ -30,8 +30,8 @@ function isCloudModel(modelId: string): boolean {
  * Merge a freshly-queried list of locally-loaded models with the cloud models
  * currently tracked in `useAppState.activeModels`.
  *
- * `serviceHub.models().getActiveModels()` only inspects on-device engines
- * (llamacpp / mlx / foundation-models), so naively calling
+ * `serviceHub.models().getActiveModels()` only inspects the on-device
+ * engine (GInfer), so naively calling
  * `setActiveModels(await getActiveModels())` from a screen mount wipes out
  * any cloud provider that was activated earlier in the session even though
  * the Local API Server proxy is still routing to it. Use this helper (or

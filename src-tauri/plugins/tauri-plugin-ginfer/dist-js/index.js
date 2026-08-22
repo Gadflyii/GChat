@@ -1,0 +1,71 @@
+import { invoke } from '@tauri-apps/api/core';
+
+// Helpers
+function asNumber(v, defaultValue = 0) {
+    if (v === '' || v === null || v === undefined)
+        return defaultValue;
+    const n = Number(v);
+    return isFinite(n) ? n : defaultValue;
+}
+function asBool(v) {
+    if (v === '' || v === null || v === undefined)
+        return false;
+    return v === true || v === 'true' || v === 1 || v === '1';
+}
+function asString(v, defaultValue = '') {
+    if (v === '' || v === null || v === undefined)
+        return defaultValue;
+    return String(v);
+}
+function normalizeGinferConfig(config) {
+    return {
+        vision: asBool(config.vision),
+        spec: asString(config.spec, 'auto'),
+        draft_tokens: asNumber(config.draft_tokens),
+        kv_dtype: asString(config.kv_dtype),
+        lm_head_draft: asBool(config.lm_head_draft),
+        max_context: asNumber(config.max_context),
+        kv_capacity: asString(config.kv_capacity),
+        prefill_chunk: asNumber(config.prefill_chunk),
+        max_concurrency: asNumber(config.max_concurrency),
+        no_cuda_graph: asBool(config.no_cuda_graph),
+    };
+}
+// GInfer server commands
+async function loadGinferModel(binaryPath, modelId, modelPath, port, cfg, apiKey, isEmbedding = false, timeout = 600) {
+    const config = normalizeGinferConfig(cfg);
+    return await invoke('plugin:ginfer|load_ginfer_model', {
+        binaryPath,
+        modelId,
+        modelPath,
+        port,
+        config,
+        apiKey,
+        isEmbedding,
+        timeout,
+    });
+}
+async function unloadGinferModel(pid) {
+    return await invoke('plugin:ginfer|unload_ginfer_model', { pid });
+}
+async function isProcessRunning(pid) {
+    return await invoke('plugin:ginfer|is_process_running', { pid });
+}
+async function getRandomPort() {
+    return await invoke('plugin:ginfer|get_random_port');
+}
+async function findSessionByModel(modelId) {
+    return await invoke('plugin:ginfer|find_session_by_model', { modelId });
+}
+async function getLoadedModels() {
+    return await invoke('plugin:ginfer|get_loaded_models');
+}
+async function getAllSessions() {
+    return await invoke('plugin:ginfer|get_all_sessions');
+}
+// Cleanup commands
+async function cleanupGinferProcesses() {
+    return await invoke('plugin:ginfer|cleanup_ginfer_processes');
+}
+
+export { cleanupGinferProcesses, findSessionByModel, getAllSessions, getLoadedModels, getRandomPort, isProcessRunning, loadGinferModel, normalizeGinferConfig, unloadGinferModel };

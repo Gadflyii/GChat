@@ -16,7 +16,7 @@ export type ApiServerRequestEvent = {
     | 'other'
   method: 'GET' | 'POST' | 'BIND'
   model_id: string | null
-  backend: 'llamacpp' | 'llamacpp-upstream' | 'mlx' | 'remote' | 'unknown' | ''
+  backend: 'ginfer' | 'remote' | 'unknown' | ''
   provider: string | null
   stream: boolean
   status: number

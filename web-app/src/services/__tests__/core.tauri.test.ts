@@ -25,7 +25,7 @@ describe('TauriCoreService', () => {
 
   it('uses exact extension command payloads', async () => {
     const extension = {
-      name: '@atomic/example-extension',
+      name: '@gchat/example-extension',
     } as ExtensionManifest
     ipcHandler.mockImplementation((command: string) => {
       if (command === 'get_active_extensions') return [extension]
@@ -42,7 +42,7 @@ describe('TauriCoreService', () => {
       extension,
     ])
     await expect(
-      coreService.uninstallExtension(['@atomic/example-extension'], false)
+      coreService.uninstallExtension(['@gchat/example-extension'], false)
     ).resolves.toBe(true)
 
     expect(ipcHandler.mock.calls).toEqual([
@@ -52,7 +52,7 @@ describe('TauriCoreService', () => {
       [
         'uninstall_extension',
         {
-          extensions: ['@atomic/example-extension'],
+          extensions: ['@gchat/example-extension'],
           reload: false,
         },
       ],

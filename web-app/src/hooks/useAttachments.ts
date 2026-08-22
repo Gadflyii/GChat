@@ -4,7 +4,7 @@ import {
   ExtensionTypeEnum,
   type RAGExtension,
   type SettingComponentProps,
-} from '@janhq/core'
+} from '@gchat/core'
 
 export type AttachmentsSettings = {
   enabled: boolean

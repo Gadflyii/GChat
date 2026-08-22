@@ -1,4 +1,4 @@
-import type { BaseExtension, ExtensionTypeEnum } from '@janhq/core'
+import type { BaseExtension, ExtensionTypeEnum } from '@gchat/core'
 
 declare global {
   interface Window {

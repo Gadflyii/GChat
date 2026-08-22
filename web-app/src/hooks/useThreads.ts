@@ -5,10 +5,11 @@ import { Fzf } from 'fzf'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { useAgentMode } from '@/hooks/useAgentMode'
 import { ExtensionManager } from '@/lib/extension'
-import { ExtensionTypeEnum, VectorDBExtension } from '@janhq/core'
+import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import posthog from 'posthog-js'
 import { useThreadReadStatus } from '@/stores/thread-read-store'
 import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { RETIRED_LOCAL_PROVIDERS } from '@/hooks/useModelProvider'
 
 type ThreadState = {
   threads: Record<string, Thread>
@@ -80,17 +81,20 @@ export const useThreads = create<ThreadState>()((set, get) => ({
           ...thread,
           model: thread.model
             ? {
-                // A thread with no provider recorded binds to the default
-                // local engine (upstream), not the TurboQuant fork. The
-                // `llama.cpp` → `llamacpp` rewrite stays: it only fires for
-                // pre-fork cortex threads, which belong to existing users.
+                // A thread with no provider recorded, or one recorded on a
+                // retired local backend, binds to the only remaining local
+                // provider. The cortex id rewrite below stays for those
+                // legacy threads, which belong to existing users.
                 provider:
-                  thread.model?.provider?.replace('llama.cpp', 'llamacpp') ??
-                  LOCAL_LLAMACPP_PROVIDER,
+                  !thread.model?.provider ||
+                  thread.model?.provider === 'llama.cpp' ||
+                  RETIRED_LOCAL_PROVIDERS.includes(thread.model.provider)
+                    ? LOCAL_LLAMACPP_PROVIDER
+                    : thread.model.provider,
                 // Cortex migration: take first two parts of the ID (the last is file name which is not needed)
                 id:
                   thread.model?.provider === 'llama.cpp' ||
-                  thread.model?.provider === 'llamacpp'
+                  RETIRED_LOCAL_PROVIDERS.includes(thread.model?.provider ?? '')
                     ? thread.model?.id
                         ?.split(':')
                         .slice(0, 2)

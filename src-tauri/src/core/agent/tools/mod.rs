@@ -582,7 +582,7 @@ mod tests {
     }
 
     fn test_dir() -> PathBuf {
-        let path = std::env::temp_dir().join(format!("atomic-chat-agent-{}", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("gchat-agent-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).unwrap();
         path
     }
@@ -1151,7 +1151,7 @@ mod tests {
                 "script": "inspect.ts",
                 "args": [
                     "--repo",
-                    "AtomicBot-ai/Atomic-Chat",
+                    "GadflyII/GChat",
                     "Authorization: Bearer secret",
                     "https://user:password@example.com/path?token=secret"
                 ],
@@ -1160,7 +1160,7 @@ mod tests {
         });
 
         assert_eq!(preview["args"][0], "--repo");
-        assert_eq!(preview["args"][1], "AtomicBot-ai/Atomic-Chat");
+        assert_eq!(preview["args"][1], "GadflyII/GChat");
         assert_eq!(preview["args"][2], "<redacted>");
         assert_eq!(preview["args"][3], "https://example.com/path");
         assert_eq!(preview["argument_count"], 4);

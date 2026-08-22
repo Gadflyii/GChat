@@ -7,57 +7,34 @@ const order = (names: string[]) =>
   )
 
 describe('sortProvidersForSettings', () => {
-  it('puts turboquant under mlx when mlx is present (macOS)', () => {
-    // Install order the engine manager reports: alphabetical by extension.
+  it('puts the local engines first, then the rest by title', () => {
+    // foundation-models/openai/mlx all sort by title: Foundation-models, Mlx, OpenAI
     expect(
-      order([
-        'foundation-models',
-        'llamacpp',
-        'llamacpp-upstream',
-        'mlx',
-        'openai',
-        'jan',
-      ])
-    ).toEqual([
-      'jan',
-      'llamacpp-upstream',
-      'mlx',
-      'llamacpp',
-      'foundation-models',
-      'openai',
-    ])
-  })
-
-  it('puts turboquant under upstream when mlx is filtered out (Windows/Linux)', () => {
-    expect(order(['llamacpp', 'llamacpp-upstream', 'openai'])).toEqual([
-      'llamacpp-upstream',
-      'llamacpp',
-      'openai',
-    ])
-  })
-
-  it('never leaves turboquant first', () => {
-    expect(order(['llamacpp', 'llamacpp-upstream'])[0]).toBe(
-      'llamacpp-upstream'
-    )
-    expect(order(['llamacpp', 'mlx'])[0]).toBe('mlx')
+      order(['foundation-models', 'ginfer', 'openai', 'jan', 'mlx'])
+    ).toEqual(['jan', 'ginfer', 'foundation-models', 'mlx', 'openai'])
   })
 
   it('sorts unknown providers after the local engines, by title', () => {
-    expect(order(['openrouter', 'anthropic', 'llamacpp', 'openai'])).toEqual([
-      'llamacpp',
+    // Anthropic < OpenAI < OpenRouter by title
+    expect(order(['openrouter', 'anthropic', 'ginfer', 'openai'])).toEqual([
+      'ginfer',
       'anthropic',
       'openai',
       'openrouter',
     ])
   })
 
-  it('does not mutate the input array', () => {
-    const input = [{ provider: 'llamacpp' }, { provider: 'llamacpp-upstream' }]
-    sortProvidersForSettings(input)
-    expect(input.map((p) => p.provider)).toEqual([
-      'llamacpp',
-      'llamacpp-upstream',
+  it('never leaves a cloud provider ahead of the local engines', () => {
+    expect(order(['openai', 'ginfer', 'jan'])).toEqual([
+      'jan',
+      'ginfer',
+      'openai',
     ])
+  })
+
+  it('does not mutate the input array', () => {
+    const input = [{ provider: 'ginfer' }, { provider: 'openai' }]
+    sortProvidersForSettings(input)
+    expect(input.map((p) => p.provider)).toEqual(['ginfer', 'openai'])
   })
 })

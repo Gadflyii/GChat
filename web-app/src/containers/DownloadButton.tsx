@@ -6,10 +6,10 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTranslation } from '@/i18n'
 import { markDownloadCancellationRequested } from '@/lib/downloadCancellation'
 import { extractModelName } from '@/lib/models'
-import { cn, sanitizeModelId } from '@/lib/utils'
+import { LOCAL_LLAMACPP_PROVIDER, cn, sanitizeModelId } from '@/lib/utils'
 import { CatalogModel, ModelQuant } from '@/services/models/types'
 import { IconX } from '@tabler/icons-react'
-import { DownloadEvent, DownloadState, events } from '@janhq/core'
+import { DownloadEvent, DownloadState, events } from '@gchat/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/shallow'
@@ -53,16 +53,11 @@ export function DownloadButtonPlaceholder({
   )
   const { t } = useTranslation()
   const providers = useModelProvider((state) => state.providers)
-  // Merge models from BOTH local llama.cpp providers — the turboquant
-  // `llamacpp` fork AND the vanilla `llamacpp-upstream` build. On Windows/Linux
-  // the downloaded model is registered under `llamacpp-upstream` (the default),
-  // so checking only `llamacpp` left the button stuck on "Download".
-  const llamacppModels = useMemo(
+  // Models registered under the single local (ginfer) provider.
+  const localModels = useMemo(
     () =>
       providers
-        .filter(
-          (p) => p.provider === 'llamacpp' || p.provider === 'llamacpp-upstream'
-        )
+        .filter((p) => p.provider === LOCAL_LLAMACPP_PROVIDER)
         .flatMap((p) => p.models),
     [providers]
   )
@@ -84,13 +79,13 @@ export function DownloadButtonPlaceholder({
 
   // Get the actual downloaded model ID (with or without developer prefix)
   const downloadedModelId = useMemo(() => {
-    const foundModel = llamacppModels.find(
+    const foundModel = localModels.find(
       (m: { id: string }) =>
         m.id === modelId ||
         m.id === `${model.developer}/${sanitizeModelId(modelId)}`
     )
     return foundModel?.id || modelId
-  }, [llamacppModels, modelId, model.developer])
+  }, [localModels, modelId, model.developer])
 
   const downloadProcesses = useMemo(
     () =>
@@ -105,13 +100,13 @@ export function DownloadButtonPlaceholder({
   )
 
   useEffect(() => {
-    const downloaded = llamacppModels.some(
+    const downloaded = localModels.some(
       (m: { id: string }) =>
         m.id === modelId ||
         m.id === `${model.developer}/${sanitizeModelId(modelId)}`
     )
     setDownloaded((prev) => (prev === downloaded ? prev : downloaded))
-  }, [llamacppModels, modelId, model.developer])
+  }, [localModels, modelId, model.developer])
 
   useEffect(() => {
     events.on(
@@ -159,18 +154,12 @@ export function DownloadButtonPlaceholder({
     clearResumableDownload(modelId)
     addLocalDownloadingModel(modelId)
     setDownloadOrigin(modelId, model.model_name)
-    const mmprojPath = (
-      model.mmproj_models?.find(
-        (e) => e.model_id.toLowerCase() === 'mmproj-f16'
-      ) || model.mmproj_models?.[0]
-    )?.path
     try {
       await serviceHub
         .models()
         .pullModelWithMetadata(
           modelId,
           modelUrl,
-          mmprojPath,
           huggingfaceToken,
           true,
           shouldResume

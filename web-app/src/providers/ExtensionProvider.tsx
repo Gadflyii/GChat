@@ -1,7 +1,7 @@
 import { ExtensionManager } from '@/lib/extension'
 import { APIs } from '@/lib/service'
 import { EventEmitter } from '@/services/events/EventEmitter'
-import { EngineManager, ModelManager } from '@janhq/core'
+import { EngineManager, ModelManager } from '@gchat/core'
 import { PropsWithChildren, useCallback, useEffect, useState } from 'react'
 
 /**

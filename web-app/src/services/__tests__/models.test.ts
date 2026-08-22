@@ -16,7 +16,7 @@ vi.hoisted(() => {
 
 import { DefaultModelsService } from '../models/default'
 import type { HuggingFaceRepo, CatalogModel } from '../models/types'
-import { EngineManager, events, DownloadEvent } from '@janhq/core'
+import { EngineManager, events, DownloadEvent } from '@gchat/core'
 import { BASELINE_MODEL_CATALOG } from '@/constants/models'
 import { clearCatalogCache } from '@/services/model-catalog-registry'
 
@@ -30,7 +30,7 @@ const { mockEvents, mockDownloadEvent } = vi.hoisted(() => ({
 }))
 
 // Mock EngineManager and events
-vi.mock('@janhq/core', () => ({
+vi.mock('@gchat/core', () => ({
   EngineManager: {
     instance: vi.fn(),
   },
@@ -207,11 +207,8 @@ describe('DefaultModelsService', () => {
 
       expect(mockEngine.import).toHaveBeenCalledWith(id, {
         modelPath,
-        mmprojPath: undefined,
         modelSha256: undefined,
         modelSize: undefined,
-        mmprojSha256: undefined,
-        mmprojSize: undefined,
         resume: false,
       })
     })
@@ -247,8 +244,8 @@ describe('DefaultModelsService', () => {
       mockEngineManager.get.mockReturnValueOnce(undefined)
 
       await expect(
-        modelsService.deleteModel('model1', 'llamacpp-upstream')
-      ).rejects.toThrow('llamacpp-upstream')
+        modelsService.deleteModel('model1', 'no-such-provider')
+      ).rejects.toThrow('no-such-provider')
     })
   })
 
@@ -263,25 +260,13 @@ describe('DefaultModelsService', () => {
       expect(mockEngine.getLoadedModels).toHaveBeenCalled()
     })
 
-    it('should aggregate active local models across engines', async () => {
-      const llamaEngine = {
-        ...mockEngine,
-        getLoadedModels: vi.fn().mockResolvedValue(['llama-model']),
-      }
-      const mlxEngine = {
-        ...mockEngine,
-        getLoadedModels: vi.fn().mockResolvedValue(['mlx-model']),
-      }
-
-      mockEngineManager.get.mockImplementation((provider?: string) =>
-        provider === 'mlx' ? mlxEngine : llamaEngine
-      )
+    it('should return the loaded models from the local engine', async () => {
+      mockEngine.getLoadedModels.mockResolvedValue(['ginfer-model'])
 
       const result = await modelsService.getActiveModels()
 
-      expect(result).toEqual(['llama-model', 'mlx-model'])
-      expect(llamaEngine.getLoadedModels).toHaveBeenCalled()
-      expect(mlxEngine.getLoadedModels).toHaveBeenCalled()
+      expect(result).toEqual(['ginfer-model'])
+      expect(mockEngine.getLoadedModels).toHaveBeenCalled()
     })
   })
 
@@ -296,60 +281,40 @@ describe('DefaultModelsService', () => {
     })
 
     it('should auto-detect the active local engine when provider is omitted', async () => {
-      const llamaEngine = {
+      const ginferEngine = {
         ...mockEngine,
-        getLoadedModels: vi.fn().mockResolvedValue(['llama-model']),
-        unload: vi.fn(),
-      }
-      const mlxEngine = {
-        ...mockEngine,
-        getLoadedModels: vi.fn().mockResolvedValue(['mlx-model']),
+        getLoadedModels: vi.fn().mockResolvedValue(['ginfer-model']),
         unload: vi.fn().mockResolvedValue({ success: true, error: undefined }),
       }
 
       mockEngineManager.get.mockImplementation((provider?: string) =>
-        provider === 'mlx' ? mlxEngine : llamaEngine
+        provider === 'ginfer' ? ginferEngine : undefined
       )
 
-      const result = await modelsService.stopModel('mlx-model')
+      const result = await modelsService.stopModel('ginfer-model')
 
       expect(result).toEqual({ success: true, error: undefined })
-      expect(llamaEngine.unload).not.toHaveBeenCalled()
-      expect(mlxEngine.unload).toHaveBeenCalledWith('mlx-model')
+      expect(ginferEngine.unload).toHaveBeenCalledWith('ginfer-model')
     })
   })
 
   describe('stopAllModels', () => {
-    it('should stop all active models from all providers', async () => {
+    it('should stop all active models from the local provider', async () => {
       const mockActiveModels = ['model1', 'model2']
-      const engines = {
-        'llamacpp': {
-          ...mockEngine,
-          getLoadedModels: vi.fn().mockResolvedValue(mockActiveModels),
-          unload: vi.fn(),
-        },
-        'llamacpp-upstream': {
-          ...mockEngine,
-          getLoadedModels: vi.fn().mockResolvedValue(mockActiveModels),
-          unload: vi.fn(),
-        },
-        'mlx': {
-          ...mockEngine,
-          getLoadedModels: vi.fn().mockResolvedValue(mockActiveModels),
-          unload: vi.fn(),
-        },
+      const ginferEngine = {
+        ...mockEngine,
+        getLoadedModels: vi.fn().mockResolvedValue(mockActiveModels),
+        unload: vi.fn(),
       }
-      mockEngineManager.get.mockImplementation(
-        (provider: keyof typeof engines) => engines[provider]
+      mockEngineManager.get.mockImplementation((provider?: string) =>
+        provider === 'ginfer' ? ginferEngine : undefined
       )
 
       await modelsService.stopAllModels()
 
-      for (const engine of Object.values(engines)) {
-        expect(engine.unload).toHaveBeenCalledTimes(2)
-        expect(engine.unload).toHaveBeenCalledWith('model1')
-        expect(engine.unload).toHaveBeenCalledWith('model2')
-      }
+      expect(ginferEngine.unload).toHaveBeenCalledTimes(2)
+      expect(ginferEngine.unload).toHaveBeenCalledWith('model1')
+      expect(ginferEngine.unload).toHaveBeenCalledWith('model2')
     })
 
     it('should handle empty active models', async () => {

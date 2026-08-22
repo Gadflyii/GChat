@@ -1,5 +1,5 @@
 """
-demo/main.py — Orchestrator CLI for the Atomic-Chat concurrent multi-agent demo.
+demo/main.py — Orchestrator CLI for the GChat concurrent multi-agent demo.
 
 Flow:
     1. Parse CLI flags and materialise the requested scenario.
@@ -649,7 +649,7 @@ async def _run_multi_window(
 
     console = Console()
     console.print(
-        "[bold cyan]⚡ Atomic-Chat · Concurrent Demo · multi-window mode[/bold cyan]"
+        "[bold cyan]⚡ GChat · Concurrent Demo · multi-window mode[/bold cyan]"
     )
     console.print(
         f"  scenario=[bold]{scenario_name}[/bold]   "
@@ -691,7 +691,7 @@ async def _run_multi_window(
             }
         )
 
-    session_dir = pathlib.Path(tempfile.mkdtemp(prefix="atomic-chat-concurrent-"))
+    session_dir = pathlib.Path(tempfile.mkdtemp(prefix="gchat-concurrent-"))
     payload = {
         "scenario_name": scenario_name,
         "topic": topic,
@@ -943,7 +943,7 @@ def run(
         ),
     ),
 ) -> None:
-    """Fan out N concurrent agents against Atomic-Chat's local API server."""
+    """Fan out N concurrent agents against GChat's local API server."""
     if multi_window:
         exit_code = asyncio.run(
             _run_multi_window(

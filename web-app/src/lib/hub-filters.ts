@@ -8,12 +8,10 @@
 
 import {
   estimateFit,
-  modelFormat,
   parseFileSizeToBytes,
   pickMedianQuant,
-  type ModelFormat,
 } from '@/lib/model-card'
-import { getMlxTotalFileSize, getTotalDownloadFileSize } from '@/lib/models'
+import { getTotalDownloadFileSize } from '@/lib/models'
 import type { CatalogModel } from '@/services/models/types'
 
 export type HubSortKey =
@@ -30,23 +28,17 @@ export const HUB_SORT_KEYS: readonly HubSortKey[] = [
 ]
 
 export type HubFilterState = {
-  /** The UI keeps exactly one active model format. */
-  formats: ModelFormat[]
   sort: HubSortKey
   /** Hide entries that cannot fit the detected memory budget. */
   onlyFitting: boolean
 }
 
 export const DEFAULT_HUB_FILTERS: HubFilterState = {
-  formats: ['gguf'],
   sort: 'recommended',
   onlyFitting: true,
 }
 
-export const HUB_FILTERS_STORAGE_KEY = 'atomic_hub_filters_v1'
-
-const isFormat = (value: unknown): value is ModelFormat =>
-  value === 'gguf' || value === 'mlx'
+export const HUB_FILTERS_STORAGE_KEY = 'gchat_hub_filters_v1'
 
 const isSortKey = (value: unknown): value is HubSortKey =>
   typeof value === 'string' && HUB_SORT_KEYS.includes(value as HubSortKey)
@@ -56,13 +48,7 @@ export function normalizeHubFilters(raw: unknown): HubFilterState {
   if (typeof raw !== 'object' || raw === null) return { ...DEFAULT_HUB_FILTERS }
   const value = raw as Record<string, unknown>
 
-  const selectedFormat = Array.isArray(value.formats)
-    ? value.formats.find(isFormat)
-    : undefined
-  const formats = [selectedFormat ?? DEFAULT_HUB_FILTERS.formats[0]]
-
   return {
-    formats,
     sort: isSortKey(value.sort) ? value.sort : DEFAULT_HUB_FILTERS.sort,
     onlyFitting:
       typeof value.onlyFitting === 'boolean'
@@ -73,7 +59,6 @@ export function normalizeHubFilters(raw: unknown): HubFilterState {
 
 export function serializeHubFilters(state: HubFilterState): string {
   return JSON.stringify({
-    formats: state.formats,
     sort: state.sort,
     onlyFitting: state.onlyFitting,
   })
@@ -114,15 +99,13 @@ function safeLocalStorage(): Storage | null {
 }
 
 /**
- * Download size of the entry as shown on its row: the whole safetensors set
- * for MLX, the median quant plus its mmproj companion for GGUF.
+ * Download size of the entry as shown on its row: the median quant plus its
+ * mmproj companion.
  */
 export function modelDownloadSizeText(
   model: CatalogModel
 ): string | undefined {
-  return model.is_mlx
-    ? getMlxTotalFileSize(model)
-    : getTotalDownloadFileSize(model, pickMedianQuant(model.quants))
+  return getTotalDownloadFileSize(model, pickMedianQuant(model.quants))
 }
 
 /**
@@ -136,17 +119,6 @@ export function modelFitsBudget(
   if (!budgetBytes) return true
   const sizeBytes = parseFileSizeToBytes(modelDownloadSizeText(model))
   return estimateFit(sizeBytes, budgetBytes) !== 'no'
-}
-
-export function filterByFormats(
-  models: readonly CatalogModel[],
-  formats: readonly ModelFormat[]
-): CatalogModel[] {
-  // An empty selection is a UI dead end (nothing could ever match), so treat
-  // it the same as "everything selected".
-  if (formats.length === 0) return [...models]
-  const allowed = new Set(formats)
-  return models.filter((model) => allowed.has(modelFormat(model)))
 }
 
 const timestamp = (value?: string): number => {
@@ -196,7 +168,7 @@ export type ApplyHubFiltersOptions = {
   applyFitFilter?: boolean
 }
 
-/** Full pipeline: format filter, optional fit filter, then sort. */
+/** Full pipeline: optional fit filter, then sort. */
 export function applyHubFilters(
   models: readonly CatalogModel[],
   state: HubFilterState,
@@ -204,7 +176,7 @@ export function applyHubFilters(
 ): CatalogModel[] {
   const { budgetBytes = 0, applyFitFilter = true } = options
 
-  let result = filterByFormats(models, state.formats)
+  let result = [...models]
 
   if (applyFitFilter && state.onlyFitting && budgetBytes > 0) {
     result = result.filter((model) => modelFitsBudget(model, budgetBytes))

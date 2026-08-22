@@ -35,8 +35,8 @@ import { createSafeUnlisten } from '@/lib/tauriEvent'
 import { MCPLogViewer } from '@/components/MCPLogViewer'
 import type { MCPServerStatus } from '@/services/mcp/types'
 
-//! Совпадает с useJanBrowserExtension; скрыто вместе с кнопкой Browse в чате
-const JAN_BROWSER_MCP_SERVER_KEY = 'Jan Browser MCP'
+//! Совпадает с useGChatBrowserExtension; скрыто вместе с кнопкой Browse в чате
+const GCHAT_BROWSER_MCP_SERVER_KEY = 'GChat Browser MCP'
 
 // Function to mask sensitive URL parameters
 const maskSensitiveUrl = (url: string) => {
@@ -149,7 +149,7 @@ function MCPServersDesktop() {
   const visibleMcpServerEntries = useMemo(
     () =>
       Object.entries(mcpServers).filter(
-        ([key]) => key !== JAN_BROWSER_MCP_SERVER_KEY
+        ([key]) => key !== GCHAT_BROWSER_MCP_SERVER_KEY
       ),
     [mcpServers]
   )
@@ -565,7 +565,7 @@ function MCPServersDesktop() {
                             <div className="flex items-center gap-1.5 px-2 py-0.5 text-xs bg-secondary border rounded-sm">
                               <img
                                 src="/images/transparent-logo.png"
-                                alt="Atomic Bot"
+                                alt="GChat"
                                 className="w-3 h-3 object-contain"
                               />
                               <span>Official</span>
@@ -611,7 +611,7 @@ function MCPServersDesktop() {
                               {config.official && (
                                 <div className="mt-2 text-xs text-muted-foreground pt-2">
                                   <p className="mb-1">
-                                    Requires the Atomic Bot browser extension to
+                                    Requires the GChat Browser MCP extension to
                                     be installed in your Chrome-based browser.
                                   </p>
                                   <a

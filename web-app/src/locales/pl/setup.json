@@ -1,8 +1,8 @@
 {
-  "welcome": "Witaj w Atomic Bot",
-  "description": "Aby rozpocząć, szybko uruchom Atomic Bot Model lub wybierz własnego dostawcę lokalnego lub zdalnego",
+  "welcome": "Witaj w GChat",
+  "description": "Aby rozpocząć, szybko uruchom GChat Model lub wybierz własnego dostawcę lokalnego lub zdalnego",
   "descriptionWeb": "Aby rozpocząć, musisz połączyć się z modelem w chmurze przy użyciu klucza API",
-  "quickStart": "Szybki start z Atomic Bot Model",
+  "quickStart": "Szybki start z GChat Model",
   "quickStartDescription": "Nie wymaga konfiguracji",
   "quickStartFailed": "Coś poszło nie tak. Spróbuj ponownie.",
   "downloading": "Pobieranie…",

@@ -178,8 +178,8 @@ vi.mock('@/components/ui/dialog', () => ({
 vi.mock('@/services/app/web', () => ({
   WebAppService: vi.fn().mockImplementation(() => ({
     factoryReset: vi.fn(),
-    getJanDataFolder: vi.fn().mockResolvedValue('/test/data/folder'),
-    relocateJanDataFolder: vi.fn(),
+    getGchatDataFolder: vi.fn().mockResolvedValue('/test/data/folder'),
+    relocateGchatDataFolder: vi.fn(),
   })),
 }))
 
@@ -286,8 +286,8 @@ describe('General Settings Route', () => {
     seedServiceHub({
       app: {
         factoryReset: vi.fn(),
-        getJanDataFolder: vi.fn().mockResolvedValue('/test/data/folder'),
-        relocateJanDataFolder: vi.fn(),
+        getGchatDataFolder: vi.fn().mockResolvedValue('/test/data/folder'),
+        relocateGchatDataFolder: vi.fn(),
       } as ReturnType<ServiceHub['app']>,
       models: {
         stopAllModels: vi.fn(),

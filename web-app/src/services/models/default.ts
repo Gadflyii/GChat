@@ -19,8 +19,8 @@ import {
   events,
   DownloadEvent,
   UnloadResult,
-} from '@janhq/core'
-import { Model as CoreModel } from '@janhq/core'
+} from '@gchat/core'
+import { Model as CoreModel } from '@gchat/core'
 import type {
   ModelsService,
   ModelCatalog,
@@ -39,15 +39,11 @@ import {
   urlHost,
 } from '@/lib/telemetry'
 
-// Platform-active llama.cpp provider id. Windows registers only the
-// upstream extension ('llamacpp-upstream') after the 2026-05-22 ADR;
-// macOS / Linux register the turboquant fork ('llamacpp'). Resolving
-// this through LOCAL_LLAMACPP_PROVIDER keeps `getEngine()` calls
-// platform-agnostic — without it, Windows `pullModel` / `validateGgufFile`
-// silently no-op because the EngineManager has no 'llamacpp' entry.
+// The only local inference provider id. Resolving this through
+// LOCAL_LLAMACPP_PROVIDER keeps `getEngine()` calls provider-agnostic.
 const defaultProvider = LOCAL_LLAMACPP_PROVIDER
 const HUGGING_FACE_SEARCH_LIMIT = 10
-const localProviders = ['llamacpp', 'llamacpp-upstream', 'mlx', 'ginfer'] as const
+const localProviders = ['ginfer'] as const
 type LocalProviderName = (typeof localProviders)[number]
 
 type HuggingFaceRepoSearchResult = Pick<
@@ -210,7 +206,7 @@ export class DefaultModelsService implements ModelsService {
   }
 
   async fetchModelCatalog(): Promise<ModelCatalog> {
-    // Primary source: the Atomic Chat curated catalog (`atomic-chat-model-catalog`
+    // Primary source: the GChat curated catalog (`atomic-chat-model-catalog`
     // GitHub Releases) loaded via the registry abstraction so the same
     // localStorage cache + baseline fallback machinery is shared with
     // `useModelCatalogStore`. The loader never throws — on hard failure it
@@ -414,21 +410,13 @@ export class DefaultModelsService implements ModelsService {
     modelPath: string,
     modelSha256?: string,
     modelSize?: number,
-    mmprojPath?: string,
-    mmprojSha256?: string,
-    mmprojSize?: number,
     resume: boolean = false,
     provider?: string
   ): Promise<void> {
-    // `provider` routes the import to a specific engine (e.g. `ginfer`);
-    // undefined keeps the platform-default llama.cpp engine.
     return this.getEngine(provider)?.import(id, {
       modelPath,
-      mmprojPath,
       modelSha256,
       modelSize,
-      mmprojSha256,
-      mmprojSize,
       resume,
     })
   }
@@ -436,7 +424,6 @@ export class DefaultModelsService implements ModelsService {
   async pullModelWithMetadata(
     id: string,
     modelPath: string,
-    mmprojPath?: string,
     hfToken?: string,
     skipVerification: boolean = true,
     resume: boolean = false,
@@ -444,8 +431,6 @@ export class DefaultModelsService implements ModelsService {
   ): Promise<void> {
     let modelSha256: string | undefined
     let modelSize: number | undefined
-    let mmprojSha256: string | undefined
-    let mmprojSize: number | undefined
 
     // Extract repo ID from model URL
     // URL format: https://huggingface.co/{repo}/resolve/main/{filename}
@@ -469,23 +454,6 @@ export class DefaultModelsService implements ModelsService {
             modelSha256 = modelFile.lfs.sha256
             modelSize = modelFile.lfs.size
           }
-
-          // If mmproj path provided, extract its metadata too
-          if (mmprojPath) {
-            const mmprojUrlMatch = mmprojPath.match(
-              /https:\/\/huggingface\.co\/[^/]+\/[^/]+\/resolve\/main\/(.+)/
-            )
-            if (mmprojUrlMatch) {
-              const [, mmprojFilename] = mmprojUrlMatch
-              const mmprojFile = repoInfo.siblings.find(
-                (file) => file.rfilename === mmprojFilename
-              )
-              if (mmprojFile?.lfs) {
-                mmprojSha256 = mmprojFile.lfs.sha256
-                mmprojSize = mmprojFile.lfs.size
-              }
-            }
-          }
         }
       } catch (error) {
         console.warn(
@@ -502,7 +470,6 @@ export class DefaultModelsService implements ModelsService {
     // through `engine.import` directly and are pause/resume-gated out.
     useDownloadStore.getState().setResumeParams(id, {
       modelPath,
-      mmprojPath,
       hfToken,
       skipVerification,
       provider,
@@ -531,17 +498,7 @@ export class DefaultModelsService implements ModelsService {
 
     // Call the original pullModel with the fetched metadata
     try {
-      return await this.pullModel(
-        id,
-        modelPath,
-        modelSha256,
-        modelSize,
-        mmprojPath,
-        mmprojSha256,
-        mmprojSize,
-        resume,
-        provider
-      )
+      return await this.pullModel(id, modelPath, modelSha256, modelSize, resume, provider)
     } catch (error) {
       // ATO-154: a paused download stops the underlying transfer (which rejects
       // this promise with a cancellation error). Swallow it so the initiator's
@@ -562,16 +519,10 @@ export class DefaultModelsService implements ModelsService {
   }
 
   async abortDownload(id: string): Promise<void> {
-    const llamacppEngine = this.getEngine(LOCAL_LLAMACPP_PROVIDER)
-    const mlxEngine = this.getEngine('mlx')
     const ginferEngine = this.getEngine('ginfer')
     try {
       await Promise.allSettled(
-        [
-          llamacppEngine?.abortImport(id),
-          mlxEngine?.abortImport(id),
-          ginferEngine?.abortImport(id),
-        ].filter(Boolean)
+        [ginferEngine?.abortImport(id)].filter(Boolean)
       )
     } finally {
       events.emit(DownloadEvent.onFileDownloadStopped, {
@@ -718,112 +669,15 @@ export class DefaultModelsService implements ModelsService {
   }
 
   async checkMmprojExistsAndUpdateOffloadMMprojSetting(
-    modelId: string,
-    updateProvider?: (
-      providerName: string,
-      data: Partial<ModelProvider>
-    ) => void,
-    getProviderByName?: (providerName: string) => ModelProvider | undefined
+    modelId: string
   ): Promise<{ exists: boolean; settingsUpdated: boolean }> {
-    let settingsUpdated = false
-
     try {
-      const engine = this.getEngine(LOCAL_LLAMACPP_PROVIDER) as AIEngine & {
-        checkMmprojExists?: (id: string) => Promise<boolean>
-      }
-      if (engine && typeof engine.checkMmprojExists === 'function') {
-        const exists = await engine.checkMmprojExists(modelId)
-
-        // If we have the store functions, use them; otherwise fall back to localStorage
-        if (updateProvider && getProviderByName) {
-          const provider = getProviderByName('llamacpp')
-          if (provider) {
-            const model = provider.models.find((m) => m.id === modelId)
-
-            if (model?.settings) {
-              const hasOffloadMmproj = 'offload_mmproj' in model.settings
-
-              // If mmproj exists, add offload_mmproj setting (only if it doesn't exist)
-              if (exists && !hasOffloadMmproj) {
-                // Create updated models array with the new setting
-                const updatedModels = provider.models.map((m) => {
-                  if (m.id === modelId) {
-                    return {
-                      ...m,
-                      settings: {
-                        ...m.settings,
-                        offload_mmproj: {
-                          key: 'offload_mmproj',
-                          title: 'Offload MMProj',
-                          description:
-                            'Offload multimodal projection model to GPU',
-                          controller_type: 'checkbox',
-                          controller_props: {
-                            value: true,
-                          },
-                        },
-                      },
-                    }
-                  }
-                  return m
-                })
-
-                // Update the provider with the new models array
-                updateProvider('llamacpp', { models: updatedModels })
-                settingsUpdated = true
-              }
-            }
-          }
-        } else {
-          // Fall back to localStorage approach for backwards compatibility
-          try {
-            const modelProviderData = JSON.parse(
-              localStorage.getItem('model-provider') || '{}'
-            )
-            const llamacppProvider = modelProviderData.state?.providers?.find(
-              (p: { provider: string }) => p.provider === 'llamacpp'
-            )
-            const model = llamacppProvider?.models?.find(
-              (m: { id: string; settings?: Record<string, unknown> }) =>
-                m.id === modelId
-            )
-
-            if (model?.settings) {
-              // If mmproj exists, add offload_mmproj setting (only if it doesn't exist)
-              if (exists) {
-                if (!model.settings.offload_mmproj) {
-                  model.settings.offload_mmproj = {
-                    key: 'offload_mmproj',
-                    title: 'Offload MMProj',
-                    description: 'Offload multimodal projection layers to GPU',
-                    controller_type: 'checkbox',
-                    controller_props: {
-                      value: true,
-                    },
-                  }
-                  // Save updated settings back to localStorage
-                  localStorage.setItem(
-                    'model-provider',
-                    JSON.stringify(modelProviderData)
-                  )
-                  settingsUpdated = true
-                }
-              }
-            }
-          } catch (localStorageError) {
-            console.error(
-              `Error checking localStorage for model ${modelId}:`,
-              localStorageError
-            )
-          }
-        }
-
-        return { exists, settingsUpdated }
-      }
+      const exists = await this.checkMmprojExists(modelId)
+      return { exists, settingsUpdated: false }
     } catch (error) {
       console.error(`Error checking mmproj for model ${modelId}:`, error)
     }
-    return { exists: false, settingsUpdated }
+    return { exists: false, settingsUpdated: false }
   }
 
   async checkMmprojExists(modelId: string): Promise<boolean> {
@@ -880,7 +734,7 @@ export class DefaultModelsService implements ModelsService {
         return status
       }
       // Fallback if method is not available
-      console.warn('isModelSupported method not available in llamacpp engine')
+      console.warn('isModelSupported method not available in local engine')
       return 'YELLOW' // Conservative fallback
     } catch (error) {
       console.error(`Error checking model support for ${modelPath}:`, error)
@@ -899,7 +753,7 @@ export class DefaultModelsService implements ModelsService {
       }
 
       // If the specific method isn't available, we can fallback to a basic check
-      console.warn('validateGgufFile method not available in llamacpp engine')
+      console.warn('validateGgufFile method not available in local engine')
       return {
         isValid: true, // Assume valid for now
         error: 'Validation method not available',
@@ -919,12 +773,7 @@ export class DefaultModelsService implements ModelsService {
   ): Promise<number> {
     try {
       // Resolve the engine that currently holds the active session for this
-      // model. The session lives in whichever llama.cpp extension started it
-      // — 'llamacpp' (turboquant) or 'llamacpp-upstream' — depending on
-      // which provider the user selected. Using LOCAL_LLAMACPP_PROVIDER
-      // unconditionally always picked the upstream engine even when the
-      // turboquant provider was active, causing the /tokenize call to fail
-      // with "No active session found for model" → silent return 0.
+      // model rather than assuming the default provider.
       const activeByProvider = await this.getLocalActiveModelsByProvider()
       const ownerProvider = activeByProvider.find((p) =>
         p.models.includes(modelId)
@@ -960,7 +809,7 @@ export class DefaultModelsService implements ModelsService {
       )
 
       if (typedEngine && typeof typedEngine.getTokensCount === 'function') {
-        // Transform Jan's ThreadMessage format to OpenAI chat completion format
+        // Transform GChat's ThreadMessage format to OpenAI chat completion format
         const transformedMessages = messages
           .map((message) => {
             // Handle different content types
@@ -1058,7 +907,7 @@ export class DefaultModelsService implements ModelsService {
       }
 
       console.warn(
-        '[TokenCounter:service] getTokensCount method not available in llamacpp engine'
+        '[TokenCounter:service] getTokensCount method not available in local engine'
       )
       return 0
     } catch (error) {

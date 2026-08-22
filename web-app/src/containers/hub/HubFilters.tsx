@@ -7,8 +7,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -19,7 +17,7 @@ import {
   type HubFilterState,
   type HubSortKey,
 } from '@/lib/hub-filters'
-import { getMemoryBudgetBytes, type ModelFormat } from '@/lib/model-card'
+import { getMemoryBudgetBytes } from '@/lib/model-card'
 import { cn } from '@/lib/utils'
 import { useShallow } from 'zustand/shallow'
 
@@ -64,9 +62,6 @@ export function HubFilters({
     [total_memory, gpus]
   )
 
-  // MLX only exists on Apple Silicon, so offering the toggle elsewhere would
-  // be a filter that can only ever empty the list.
-  const availableFormats: ModelFormat[] = IS_MACOS ? ['gguf', 'mlx'] : ['gguf']
   const sortKeys = HUB_SORT_KEYS.filter(
     (key) => key !== 'likes' || showLikesSort
   )
@@ -74,35 +69,8 @@ export function HubFilters({
   // caption would read "Based on : ".
   const canFilterByFit = budgetBytes > 0
 
-  const selectedFormat = state.formats[0] ?? 'gguf'
-
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      {availableFormats.length > 1 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" aria-label={t('hub:formats')}>
-              {selectedFormat.toUpperCase()}
-              <ChevronsUpDown className="ml-2 size-4 shrink-0 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="bottom" align="start">
-            <DropdownMenuRadioGroup
-              value={selectedFormat}
-              onValueChange={(format) =>
-                onChange({ ...state, formats: [format as ModelFormat] })
-              }
-            >
-              {availableFormats.map((format) => (
-                <DropdownMenuRadioItem key={format} value={format}>
-                  {format.toUpperCase()}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" aria-label={t('hub:sortBy')}>

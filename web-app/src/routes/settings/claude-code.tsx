@@ -28,7 +28,11 @@ import {
 import { IconChevronDown, IconPlus, IconX } from '@tabler/icons-react'
 import ProvidersAvatar from '@/containers/ProvidersAvatar'
 import Capabilities from '@/containers/Capabilities'
-import { getModelDisplayName, isLocalProvider } from '@/lib/utils'
+import {
+  LOCAL_LLAMACPP_PROVIDER,
+  getModelDisplayName,
+  isLocalProvider,
+} from '@/lib/utils'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -605,14 +609,14 @@ function JanCodeRecommendation({
     )
   }, [janCodeCatalog])
 
-  const llamaProvider = getProviderByName('llamacpp')
+  const localProvider = getProviderByName(LOCAL_LLAMACPP_PROVIDER)
 
   const isDownloaded = useMemo(() => {
     if (!defaultVariant) return false
-    return !!llamaProvider?.models.some(
+    return !!localProvider?.models.some(
       (m: { id: string }) => m.id === defaultVariant.model_id
     )
-  }, [defaultVariant, llamaProvider])
+  }, [defaultVariant, localProvider])
 
   const isDownloading = useMemo(() => {
     if (!defaultVariant) return false
@@ -637,7 +641,6 @@ function JanCodeRecommendation({
       .pullModelWithMetadata(
         defaultVariant.model_id,
         defaultVariant.path,
-        undefined,
         huggingfaceToken,
         true,
         resumableDownloads.has(defaultVariant.model_id)

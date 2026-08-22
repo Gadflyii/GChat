@@ -40,7 +40,7 @@ vi.mock('@/hooks/useModelProvider', () => ({
         models: [],
       },
       {
-        provider: 'llama.cpp',
+        provider: 'ginfer',
         active: true,
         models: [],
       },
@@ -58,6 +58,7 @@ vi.mock('@/containers/dialogs', () => ({
 vi.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
   getProviderTitle: (provider: string) => provider,
+  LOCAL_LLAMACPP_PROVIDER: 'ginfer',
 }))
 
 vi.mock('@/containers/ProvidersAvatar', () => ({
@@ -85,7 +86,7 @@ describe('SettingsMenu', () => {
     vi.mocked(useModelProvider).mockReturnValue({
       providers: [
         { provider: 'openai', active: true, models: [] },
-        { provider: 'llama.cpp', active: true, models: [] },
+        { provider: 'ginfer', active: true, models: [] },
       ],
       addProvider: vi.fn(),
     })
@@ -194,7 +195,7 @@ describe('SettingsMenu', () => {
     expect(mockNavigate).toHaveBeenCalled()
   })
 
-  it('hides llama.cpp during setup remote provider step', () => {
+  it('hides ginfer during setup remote provider step', () => {
     vi.mocked(useMatches).mockReturnValue([
       {
         routeId: '/settings/providers/',
@@ -208,21 +209,19 @@ describe('SettingsMenu', () => {
     // openai should be visible during remote provider setup
     expect(screen.getByTestId('provider-avatar-openai')).toBeInTheDocument()
 
-    // llama.cpp should have 'hidden' class during setup_remote_provider step
+    // ginfer should have 'hidden' class during setup_remote_provider step
     const llamaCpp = screen
-      .getByTestId('provider-avatar-llama.cpp')
+      .getByTestId('provider-avatar-ginfer')
       .closest('div[class*="cursor-pointer"]')
     expect(llamaCpp?.className).toContain('hidden')
   })
 
-  it('lists turboquant below upstream, never first', () => {
-    // IS_MACOS is false under vitest, so this is the Windows/Linux list —
-    // mlx is filtered out and turboquant collapses under upstream.
+  it('lists the local engine first, then the rest by title', () => {
     vi.mocked(useModelProvider).mockReturnValue({
       providers: [
-        { provider: 'llamacpp', active: true, models: [] },
-        { provider: 'llamacpp-upstream', active: true, models: [] },
         { provider: 'openai', active: true, models: [] },
+        { provider: 'ginfer', active: true, models: [] },
+        { provider: 'anthropic', active: true, models: [] },
       ],
       addProvider: vi.fn(),
     })
@@ -234,14 +233,15 @@ describe('SettingsMenu', () => {
     ).map((el) =>
       el.getAttribute('data-testid')?.replace('provider-avatar-', '')
     )
-    expect(rendered).toEqual(['llamacpp-upstream', 'llamacpp', 'openai'])
+    // ginfer (local engine) leads; the rest sort by title, mocked to the id.
+    expect(rendered).toEqual(['ginfer', 'anthropic', 'openai'])
   })
 
   it('marks the provider backing the selected model with a green dot', () => {
     vi.mocked(useModelProvider).mockReturnValue({
       providers: [
         { provider: 'openai', active: true, models: [] },
-        { provider: 'llama.cpp', active: true, models: [] },
+        { provider: 'ginfer', active: true, models: [] },
       ],
       selectedProvider: 'openai',
       addProvider: vi.fn(),
@@ -251,7 +251,7 @@ describe('SettingsMenu', () => {
 
     expect(screen.getByTestId('provider-active-dot-openai')).toBeInTheDocument()
     expect(
-      screen.queryByTestId('provider-active-dot-llama.cpp')
+      screen.queryByTestId('provider-active-dot-ginfer')
     ).not.toBeInTheDocument()
   })
 

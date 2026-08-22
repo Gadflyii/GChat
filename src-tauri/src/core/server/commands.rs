@@ -1,7 +1,5 @@
 use tauri::{AppHandle, Manager, Runtime, State};
-use tauri_plugin_llamacpp::state::LlamacppState;
-use tauri_plugin_llamacpp_upstream::state::LlamacppState as LlamacppUpstreamState;
-use tauri_plugin_mlx::state::MlxState;
+use tauri_plugin_ginfer::state::GinferState;
 
 use crate::core::server::proxy;
 use crate::core::server::state_file;
@@ -37,21 +35,13 @@ pub async fn start_server<R: Runtime>(
     let mirror_host = host.clone();
     let mirror_prefix = prefix.clone();
     let server_handle = state.server_handle.clone();
-    let llama_state: State<LlamacppState> = app_handle.state();
-    let sessions = llama_state.llama_server_process.clone();
-
-    let llama_upstream_state: State<LlamacppUpstreamState> = app_handle.state();
-    let sessions_upstream = llama_upstream_state.llama_server_process.clone();
-
-    let mlx_state: State<MlxState> = app_handle.state();
-    let mlx_sessions = mlx_state.mlx_server_process.clone();
+    let ginfer_state: State<GinferState> = app_handle.state();
+    let ginfer_sessions = ginfer_state.ginfer_process.clone();
 
     let actual_port = proxy::start_server(
         app_handle.clone(),
         server_handle,
-        sessions,
-        sessions_upstream,
-        mlx_sessions,
+        ginfer_sessions,
         host,
         port,
         prefix,
@@ -59,7 +49,6 @@ pub async fn start_server<R: Runtime>(
         vec![trusted_hosts],
         proxy_timeout,
         state.provider_configs.clone(),
-        state.auto_increase_ctx.clone(),
     )
     .await
     .map_err(|e| e.to_string())?;

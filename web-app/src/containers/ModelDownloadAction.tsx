@@ -10,14 +10,10 @@ import { markDownloadCancellationRequested } from '@/lib/downloadCancellation'
 import {
   findInstalledLocalModel,
   GINFER_PROVIDER,
-  LLAMACPP_PROVIDERS,
   quantModelIds,
 } from '@/lib/hub-installed'
 import { CatalogModel } from '@/services/models/types'
 
-// Stable module-level reference so `providerNames` below never allocates a new
-// array per render (it feeds a useMemo dependency array).
-const GINFER_PROVIDER_NAMES = [GINFER_PROVIDER] as const
 import { switchToModel } from '@/utils/switchModel'
 import { IconDownload, IconX } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -69,83 +65,14 @@ export const ModelDownloadAction = ({
 
   const navigate = useNavigate()
 
-  // Ginfer catalog entries download through the generic GGUF mechanism but
-  // register on the `ginfer` engine, not a llama.cpp one. Route install
-  // detection, the download target and the post-download "use" action to the
-  // matching provider so the row flips to "New chat" once on disk.
-  const isGinfer = model.library_name === 'ginfer'
-  const providerNames = isGinfer ? GINFER_PROVIDER_NAMES : LLAMACPP_PROVIDERS
-
   const handleUseModel = useCallback(
     (modelId: string) => {
-      if (isGinfer) {
-        useModelProvider
-          .getState()
-          .selectModelProvider(GINFER_PROVIDER, modelId)
-        switchToModel({
-          modelId,
-          providerName: GINFER_PROVIDER,
-          serviceHub,
-        }).catch((error) => {
-          console.error('[ModelDownloadAction] switchToModel failed:', error)
-        })
-        navigate({
-          to: route.home,
-          params: {},
-          search: {
-            threadModel: {
-              id: modelId,
-              provider: GINFER_PROVIDER,
-            },
-          },
-        })
-        return
-      }
-      // Resolve the target provider at click-time so we always see the
-      // freshest providers/models snapshot — not whatever was captured at
-      // render. Prefer the vanilla upstream `llama.cpp` provider when it
-      // both exists AND has the model registered (currently macOS-only —
-      // see AGENTS.md ADR 2026-05-19). If the model is not yet in the
-      // upstream provider's list (e.g. its `list()` hasn't been refreshed
-      // since download), fall back to `llamacpp` so the dropdown selection
-      // and ChatInput auto-start effect on the home route can pick it up.
-      const allProviders = useModelProvider.getState().providers
-      const upstream = allProviders.find(
-        (p) => p.provider === 'llamacpp-upstream'
-      )
-      const fork = allProviders.find((p) => p.provider === 'llamacpp')
-      const upstreamHasModel = upstream?.models.some((m) => m.id === modelId)
-      // Never route to a deactivated TurboQuant (disabled by default on
-      // fresh installs) — the upstream tail of the ternary covers it.
-      const forkUsable =
-        fork?.active !== false && fork?.models.some((m) => m.id === modelId)
-      const targetLlamaProvider: 'llamacpp' | 'llamacpp-upstream' =
-        upstreamHasModel
-          ? 'llamacpp-upstream'
-          : forkUsable
-            ? 'llamacpp'
-            : upstream
-              ? 'llamacpp-upstream'
-              : 'llamacpp'
-
-      console.log(
-        '[ModelDownloadAction] handleUseModel:',
-        modelId,
-        '→ provider:',
-        targetLlamaProvider,
-        '(upstreamHasModel:',
-        upstreamHasModel,
-        'forkUsable:',
-        forkUsable,
-        ')'
-      )
-
       useModelProvider
         .getState()
-        .selectModelProvider(targetLlamaProvider, modelId)
+        .selectModelProvider(GINFER_PROVIDER, modelId)
       switchToModel({
         modelId,
-        providerName: targetLlamaProvider,
+        providerName: GINFER_PROVIDER,
         serviceHub,
       }).catch((error) => {
         console.error('[ModelDownloadAction] switchToModel failed:', error)
@@ -156,12 +83,12 @@ export const ModelDownloadAction = ({
         search: {
           threadModel: {
             id: modelId,
-            provider: targetLlamaProvider,
+            provider: GINFER_PROVIDER,
           },
         },
       })
     },
-    [navigate, serviceHub, isGinfer]
+    [navigate, serviceHub]
   )
 
   const handleDownloadModel = useCallback(async () => {
@@ -174,16 +101,11 @@ export const ModelDownloadAction = ({
         .pullModelWithMetadata(
           variant.model_id,
           variant.path,
-          (
-            model.mmproj_models?.find(
-              (e) => e.model_id.toLowerCase() === 'mmproj-f16'
-            ) || model.mmproj_models?.[0]
-          )?.path,
-           huggingfaceToken,
-           true,
-           resumableDownloads.has(variant.model_id),
-           isGinfer ? GINFER_PROVIDER : undefined
-         )
+          huggingfaceToken,
+          true,
+          resumableDownloads.has(variant.model_id),
+          GINFER_PROVIDER
+        )
     } catch (error) {
       // If pull rejects before any DownloadEvent fires, the global listener in
       // DownloadManegement.tsx never clears localDownloadingModels and the row
@@ -204,7 +126,6 @@ export const ModelDownloadAction = ({
     variant.path,
     variant.model_id,
     huggingfaceToken,
-    model.mmproj_models,
     model.model_name,
     addLocalDownloadingModel,
     removeLocalDownloadingModel,
@@ -214,7 +135,6 @@ export const ModelDownloadAction = ({
     clearDownloadOrigin,
     resumableDownloads,
     t,
-    isGinfer,
   ])
 
   const handleCancelDownload = useCallback(() => {
@@ -234,20 +154,10 @@ export const ModelDownloadAction = ({
       downloadProcesses.some((e) => e.id === variant.model_id))
   const downloadProgress =
     downloadProcesses.find((e) => e.id === variant.model_id)?.progress || 0
-  // Inspect BOTH local llama.cpp providers — the turboquant `llamacpp` fork
-  // AND the vanilla `llamacpp-upstream` build. On Windows/Linux the downloaded
-  // model is registered under `llamacpp-upstream` (the default), so checking
-  // only `llamacpp` left the button stuck on "Download" (mirrors handleUseModel
-  // and hub/$modelId.tsx, which already consult both).
   const providers = useModelProvider((state) => state.providers)
   const installed = useMemo(
-    () =>
-      findInstalledLocalModel(
-        providers,
-        quantModelIds(model, variant.model_id),
-        providerNames
-      ),
-    [providers, model, variant.model_id, providerNames]
+    () => findInstalledLocalModel(providers, quantModelIds(model, variant.model_id)),
+    [providers, model, variant.model_id]
   )
   const isDownloaded = installed !== null
 

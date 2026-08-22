@@ -4,7 +4,7 @@ import {
   ChatCompletionRole,
   ThreadMessage,
   MessageStatus,
-} from '@janhq/core'
+} from '@gchat/core'
 import { ulid } from 'ulidx'
 import { Attachment } from '@/types/attachment'
 import { injectFilesIntoPrompt } from './fileMetadata'
@@ -71,7 +71,7 @@ export const newUserThreadContent = (
   })
 
   // Audio attachments are persisted in metadata (there is no `ContentType.Audio`
-  // in @janhq/core). On reload they are reconstructed into `file` parts by
+  // in @gchat/core). On reload they are reconstructed into `file` parts by
   // convertThreadMessageToUIMessage, mirroring how images round-trip via the
   // content array. Stored as a self-contained `data:` URL so no filesystem
   // path is required.

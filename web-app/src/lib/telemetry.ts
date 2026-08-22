@@ -28,7 +28,7 @@ export function getAnalyticsPlatform(): string {
 
 export type DownloadStatus = 'started' | 'completed' | 'failed' | 'cancelled'
 
-export type DownloadKind = 'model' | 'gpu_backend' | 'companion_artifact'
+export type DownloadKind = 'model'
 
 export type DownloadFailureReason =
   | 'http_404'
@@ -48,12 +48,7 @@ export type GpuVendor = 'nvidia' | 'amd' | 'intel' | 'apple' | 'none'
 
 export type CpuAvxLevel = 'none' | 'avx' | 'avx2' | 'avx512'
 
-export type LoadBackend =
-  | 'llamacpp'
-  | 'llamacpp-upstream'
-  | 'mlx'
-  | 'foundation-models'
-  | 'unknown'
+export type LoadBackend = 'ginfer' | 'unknown'
 
 const STDERR_TAIL_BYTES = 2048
 
@@ -129,14 +124,7 @@ export function classifyDownloadFailure(err?: string | null): DownloadFailureRea
 }
 
 /** Map a download task/model id + type to the `download_kind` enum. */
-export function downloadKind(
-  idOrTask?: string | null,
-  downloadType?: string | null
-): DownloadKind {
-  const id = (idOrTask ?? '').toLowerCase()
-  if (id.includes('cudart')) return 'companion_artifact'
-  if (downloadType === 'Backend' || id.includes('llamacpp-backend'))
-    return 'gpu_backend'
+export function downloadKind(): DownloadKind {
   return 'model'
 }
 
@@ -238,14 +226,7 @@ export function cpuAvxLevel(extensions?: string[] | null): CpuAvxLevel {
 }
 
 export function loadBackendFromProvider(provider?: string | null): LoadBackend {
-  if (
-    provider === 'llamacpp' ||
-    provider === 'llamacpp-upstream' ||
-    provider === 'mlx' ||
-    provider === 'foundation-models'
-  )
-    return provider
-  return 'unknown'
+  return provider === 'ginfer' ? 'ginfer' : 'unknown'
 }
 
 const downloadStartTimes = new Map<string, number>()

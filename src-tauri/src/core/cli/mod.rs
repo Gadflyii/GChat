@@ -2,43 +2,33 @@
 //!
 //! This module is only compiled when the `cli` feature is enabled.
 //!
-//! The CLI targets a single inference provider: `llamacpp-upstream`, the same
-//! one the desktop app defaults to on every platform (see
-//! `LOCAL_LLAMACPP_PROVIDER` in `web-app/src/lib/utils.ts`).
-//!
-//! Note the asymmetry in the on-disk layout: backends are per-provider
-//! (`<data>/llamacpp-upstream/backends/`) but the GGUF tree is shared between
-//! both llama.cpp providers (`<data>/llamacpp/models/`). Models the user
-//! downloads in the app therefore show up here without any extra wiring.
+//! The CLI targets the app's single inference provider: `ginfer`. Models are
+//! stored in `<data>/ginfer/models/<model_id>/` as a `.ginfer` artifact plus a
+//! `model.yml`, and the backend binary lives at `<data>/ginfer/bin/`. Models
+//! the user downloads in the app therefore show up here without any extra
+//! wiring.
 
 pub mod integrations;
 
 use std::path::{Path, PathBuf};
 
 use crate::core::app::commands::resolve_jan_data_folder;
-use tauri_plugin_llamacpp_upstream::state::LlamacppState as LlamacppUpstreamState;
 
 // Re-export impl functions and config types so the binary can call them directly.
-// `load_llama_model_impl` is explicitly documented as usable without an AppHandle.
-pub use tauri_plugin_llamacpp_upstream::{load_llama_model_impl, LlamacppConfig};
+// `load_ginfer_model_impl` is explicitly documented as usable without an AppHandle.
+pub use tauri_plugin_ginfer::{load_ginfer_model_impl, GinferConfig, GinferState};
 
-/// The only inference provider the CLI runs: upstream `ggml-org/llama.cpp`.
-/// Its backends live under `<data_folder>/<LOCAL_PROVIDER>/backends/`.
-pub const LOCAL_PROVIDER: &str = "llamacpp-upstream";
+/// The only inference provider the CLI runs: ginfer. Its binary and models
+/// live under `<data_folder>/<LOCAL_PROVIDER>/`.
+pub const LOCAL_PROVIDER: &str = "ginfer";
 
-/// On-disk subfolder holding the GGUF tree, at `<data_folder>/<MODELS_ROOT>/models/`.
-///
-/// Both llama.cpp providers deliberately share it — see `MODELS_PROVIDER_ROOT`
-/// in `extensions/llamacpp-upstream-extension/src/index.ts` — so a model
-/// downloaded once is runnable by either engine. Only backends and
-/// provider-specific settings live per provider, which is why this is not the
-/// same constant as [`LOCAL_PROVIDER`].
-pub const MODELS_ROOT: &str = "llamacpp";
+/// On-disk subfolder holding the model tree, at `<data_folder>/<MODELS_ROOT>/models/`.
+pub const MODELS_ROOT: &str = "ginfer";
 
 // ── State constructors ─────────────────────────────────────────────────────
 
-pub fn init_llamacpp_upstream_state() -> LlamacppUpstreamState {
-    LlamacppUpstreamState::new()
+pub fn init_ginfer_state() -> GinferState {
+    GinferState::default()
 }
 
 // ── Model discovery ───────────────────────────────────────────────────────
@@ -52,9 +42,6 @@ pub struct ModelYml {
     pub size_bytes: u64,
     #[serde(default)]
     pub embedding: bool,
-    pub mmproj_path: Option<String>,
-    #[serde(default)]
-    pub capabilities: Vec<String>,
 }
 
 /// A discovered model entry: `(model_id, yml)`.
@@ -116,20 +103,17 @@ pub fn list_chat_models_in(data_folder: &Path) -> Vec<ModelEntry> {
     results
 }
 
-/// Resolve the absolute model file path (and optional mmproj path) for a model ID.
+/// Resolve the absolute model file path for a model ID.
 ///
 /// `model_path` in the YAML can be:
 ///   - absolute (`/…` or `C:\…`) — used verbatim
-///   - relative — joined with the Atomic Chat data folder
-pub fn resolve_model_by_id(model_id: &str) -> Result<(PathBuf, Option<PathBuf>), String> {
+///   - relative — joined with the GChat data folder
+pub fn resolve_model_by_id(model_id: &str) -> Result<PathBuf, String> {
     resolve_model_by_id_in(&resolve_jan_data_folder(), model_id)
 }
 
 /// Same as [`resolve_model_by_id`], against an explicit data folder.
-pub fn resolve_model_by_id_in(
-    data_folder: &Path,
-    model_id: &str,
-) -> Result<(PathBuf, Option<PathBuf>), String> {
+pub fn resolve_model_by_id_in(data_folder: &Path, model_id: &str) -> Result<PathBuf, String> {
     let yml_path = data_folder
         .join(MODELS_ROOT)
         .join("models")
@@ -139,144 +123,40 @@ pub fn resolve_model_by_id_in(
     if !yml_path.exists() {
         return Err(format!(
             "Model '{model_id}' is not installed. \
-            Run `atomic-chat-cli models list` to see available models."
+            Run `gchat-cli models list` to see available models."
         ));
     }
 
     let content = std::fs::read_to_string(&yml_path).map_err(|e| e.to_string())?;
     let yml: ModelYml = serde_yaml::from_str(&content).map_err(|e| e.to_string())?;
 
-    let resolve_path = |p: &str| -> PathBuf {
-        let pb = PathBuf::from(p);
-        if pb.is_absolute() {
-            pb
-        } else {
-            data_folder.join(p)
-        }
-    };
-
-    let model_path = resolve_path(&yml.model_path);
-    let mmproj_path = yml.mmproj_path.as_deref().map(resolve_path);
-
-    Ok((model_path, mmproj_path))
+    let pb = PathBuf::from(&yml.model_path);
+    if pb.is_absolute() {
+        Ok(pb)
+    } else {
+        Ok(data_folder.join(pb))
+    }
 }
 
 // ── Binary auto-discovery ──────────────────────────────────────────────────
 
-/// A discovered `llama-server` and the backend it came from.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BackendBinary {
-    pub path: PathBuf,
-    /// `"<version>/<backend>"`, the form `ArgumentBuilder` parses to decide
-    /// which llama.cpp features (flash attention, reasoning-preserve, cache
-    /// quantization) the build supports. Getting this wrong silently disables
-    /// them, so it is carried alongside the path rather than reconstructed.
-    pub version_backend: String,
-}
-
-/// Parse the upstream llama.cpp build number out of a backend version directory
-/// name. Mirrors `ArgumentBuilder::parse_build_number`: handles plain upstream
-/// tags ("b6325") and the unified TurboQuant tag shape ("b10018-1.3.0").
-/// Returns `None` for anything else, which sorts last.
-fn parse_build_number(version: &str) -> Option<u32> {
-    version.strip_prefix('b')?.split('-').next()?.parse().ok()
-}
-
-/// Find the llama-server binary inside the Atomic Chat data folder.
+/// Find the ginfer-serve binary inside the GChat data folder.
 ///
-/// Walks `<data_folder>/llamacpp-upstream/backends/<version>/<backend>/` and
-/// checks two locations per backend (same logic as the llamacpp extension):
-///   1. `<backend_dir>/build/bin/llama-server[.exe]`
-///   2. `<backend_dir>/llama-server[.exe]`
-///
-/// Returns the first binary found, preferring the newest version directory.
-pub fn discover_llamacpp_binary() -> Option<BackendBinary> {
-    discover_llamacpp_binary_in(&resolve_jan_data_folder())
+/// The ginfer extension downloads it to
+/// `<data_folder>/ginfer/bin/ginfer-serve[.exe]`.
+pub fn discover_ginfer_binary() -> Option<PathBuf> {
+    discover_ginfer_binary_in(&resolve_jan_data_folder())
 }
 
-/// Same as [`discover_llamacpp_binary`], against an explicit data folder.
-pub fn discover_llamacpp_binary_in(data_folder: &Path) -> Option<BackendBinary> {
-    use std::fs;
-
-    let backends_dir = data_folder.join(LOCAL_PROVIDER).join("backends");
-
-    if !backends_dir.exists() {
-        return None;
-    }
-
+/// Same as [`discover_ginfer_binary`], against an explicit data folder.
+pub fn discover_ginfer_binary_in(data_folder: &Path) -> Option<PathBuf> {
     let exe = if cfg!(windows) {
-        "llama-server.exe"
+        "ginfer-serve.exe"
     } else {
-        "llama-server"
+        "ginfer-serve"
     };
-
-    // Collect version directories, newest first. Sorting the names as plain
-    // strings would rank "b9000" above "b10018-1.3.0" ('9' > '1'), so the build
-    // number is parsed out and compared numerically, with the raw name as the
-    // tiebreaker for anything unparseable (e.g. the fork's `turboquant-<sha>`).
-    let mut version_entries: Vec<_> = fs::read_dir(&backends_dir)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .collect();
-    version_entries.sort_by(|a, b| {
-        let a_name = a.file_name().to_string_lossy().into_owned();
-        let b_name = b.file_name().to_string_lossy().into_owned();
-        parse_build_number(&b_name)
-            .cmp(&parse_build_number(&a_name))
-            .then_with(|| b_name.cmp(&a_name))
-    });
-
-    for version_entry in version_entries {
-        let version_dir = version_entry.path();
-        let version = version_entry.file_name().to_string_lossy().into_owned();
-
-        let mut backend_entries: Vec<_> = match fs::read_dir(&version_dir) {
-            Ok(entries) => entries
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_dir())
-                .collect(),
-            Err(_) => continue,
-        };
-        backend_entries.sort_by_key(|e| e.file_name());
-
-        for backend_entry in backend_entries {
-            let backend_dir = backend_entry.path();
-            let backend = backend_entry.file_name().to_string_lossy().into_owned();
-
-            // Primary location: <backend>/build/bin/llama-server
-            let primary = backend_dir.join("build").join("bin").join(exe);
-            // Fallback: <backend>/llama-server
-            let fallback = backend_dir.join(exe);
-
-            for candidate in [primary, fallback] {
-                if candidate.exists() {
-                    return Some(BackendBinary {
-                        path: candidate,
-                        version_backend: format!("{version}/{backend}"),
-                    });
-                }
-            }
-        }
-    }
-
-    None
-}
-
-/// Recover `"<version>/<backend>"` from a hand-supplied `--bin` path.
-///
-/// Only works for a binary that still sits inside the standard
-/// `.../backends/<version>/<backend>/…` layout; returns `None` otherwise, in
-/// which case the caller falls back to a neutral placeholder.
-pub fn version_backend_from_bin_path(bin: &Path) -> Option<String> {
-    let components: Vec<String> = bin
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy().into_owned())
-        .collect();
-    let idx = components.iter().rposition(|c| c == "backends")?;
-    let version = components.get(idx + 1)?;
-    let backend = components.get(idx + 2)?;
-    Some(format!("{version}/{backend}"))
+    let candidate = data_folder.join(LOCAL_PROVIDER).join("bin").join(exe);
+    candidate.is_file().then_some(candidate)
 }
 
 // ── HuggingFace download ───────────────────────────────────────────────────
@@ -284,7 +164,7 @@ pub fn version_backend_from_bin_path(bin: &Path) -> Option<String> {
 /// A single file entry from a HuggingFace repository.
 #[derive(Debug, Clone)]
 pub struct HfFileInfo {
-    /// Original filename in the repo (e.g. `qwen3-30b.Q4_K_M.gguf`)
+    /// Original filename in the repo (e.g. `qwen3-9b.ginfer`)
     pub filename: String,
     /// Total size in bytes (from HF metadata or LFS pointer)
     pub size: u64,
@@ -312,11 +192,11 @@ pub fn looks_like_hf_repo(s: &str) -> bool {
     owner.chars().all(ok) && name.chars().all(ok)
 }
 
-/// Fetch the list of GGUF files available in a HuggingFace repository.
+/// Fetch the list of `.ginfer` files available in a HuggingFace repository.
 ///
 /// Results are sorted by size ascending so smaller quantizations appear first.
 /// Passes `hf_token` as a Bearer token when provided.
-pub async fn fetch_hf_gguf_files(
+pub async fn fetch_hf_ginfer_files(
     repo_id: &str,
     hf_token: Option<&str>,
 ) -> Result<Vec<HfFileInfo>, String> {
@@ -342,7 +222,7 @@ pub async fn fetch_hf_gguf_files(
             ),
             404 => format!(
                 "HuggingFace repo '{repo_id}' not found. \
-                Check the repo ID or run `atomic-chat-cli models list` to see local models."
+                Check the repo ID or run `gchat-cli models list` to see local models."
             ),
             _ => format!("HuggingFace API error {status} for '{repo_id}'."),
         });
@@ -358,7 +238,7 @@ pub async fn fetch_hf_gguf_files(
         .iter()
         .filter_map(|s| {
             let name = s["rfilename"].as_str()?;
-            if !name.to_lowercase().ends_with(".gguf") {
+            if !name.to_lowercase().ends_with(".ginfer") {
                 return None;
             }
             // Prefer LFS size, fall back to top-level size field
@@ -379,7 +259,7 @@ pub async fn fetch_hf_gguf_files(
 
     if files.is_empty() {
         return Err(format!(
-            "No GGUF files found in HuggingFace repo '{repo_id}'."
+            "No .ginfer files found in HuggingFace repo '{repo_id}'."
         ));
     }
 
@@ -388,14 +268,14 @@ pub async fn fetch_hf_gguf_files(
     Ok(files)
 }
 
-/// Download one GGUF file from HuggingFace and write a `model.yml` for it.
+/// Download one `.ginfer` file from HuggingFace and write a `model.yml` for it.
 ///
-/// The model is stored at `<data_folder>/llamacpp/models/<repo_id>/<filename>`
-/// — the shared GGUF tree the desktop app downloads into, so the two stay
+/// The model is stored at `<data_folder>/ginfer/models/<repo_id>/<filename>`
+/// — the model tree the desktop app downloads into, so the two stay
 /// interchangeable.
 ///
 /// The file is streamed to `<filename>.part` and renamed only once the download
-/// completes, so an interrupted run never leaves a truncated `.gguf` behind a
+/// completes, so an interrupted run never leaves a truncated `.ginfer` behind a
 /// `model.yml` that claims it is ready.
 ///
 /// `on_progress(downloaded, total)` is called after each chunk.
@@ -464,7 +344,7 @@ pub async fn download_hf_model(
         .map_err(|e| e.to_string())?;
 
     // ── Write model.yml ───────────────────────────────────────────────────
-    // model_path is relative to the Atomic Chat data folder
+    // model_path is relative to the GChat data folder
     let rel_path = format!("{MODELS_ROOT}/models/{repo_id}/{}", file.filename);
     let display_name = repo_id.rsplit('/').next().unwrap_or(repo_id);
 
@@ -473,7 +353,7 @@ pub async fn download_hf_model(
         file.size
     );
     if let Some(sha) = &file.sha256 {
-        yml.push_str(&format!("model_sha256: {sha}\n"));
+        yml.push_str(&format!("sha256: {sha}\n"));
     }
 
     tokio::fs::write(model_dir.join("model.yml"), yml)
@@ -494,7 +374,7 @@ mod tests {
     use super::*;
 
     fn temp_data_folder(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join("atomic-cli-tests").join(name);
+        let dir = std::env::temp_dir().join("gchat-cli-tests").join(name);
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("create temp data folder");
         dir
@@ -507,20 +387,20 @@ mod tests {
     }
 
     #[test]
-    fn lists_upstream_models_and_skips_embeddings() {
+    fn lists_models_and_skips_embeddings() {
         let data = temp_data_folder("list-models");
 
         write_model(
             &data,
-            "AtomicChat/Qwen3.5-9B-GGUF",
-            "model_path: llamacpp/models/AtomicChat/Qwen3.5-9B-GGUF/model.gguf\n\
+            "GadflyII/Qwen3.5-9B",
+            "model_path: ginfer/models/GadflyII/Qwen3.5-9B/model.ginfer\n\
              name: Qwen3.5-9B\nsize_bytes: 123\nembedding: false\n",
         );
         // Embedding models cannot serve /v1/chat/completions.
         write_model(
             &data,
             "some/embedder",
-            "model_path: llamacpp/models/some/embedder/model.gguf\n\
+            "model_path: ginfer/models/some/embedder/model.ginfer\n\
              name: Embedder\nembedding: true\n",
         );
         // A directory with no model.yml is not a model.
@@ -529,7 +409,7 @@ mod tests {
         let models = list_chat_models_in(&data);
         let ids: Vec<&str> = models.iter().map(|(id, _)| id.as_str()).collect();
 
-        assert_eq!(ids, vec!["AtomicChat/Qwen3.5-9B-GGUF"]);
+        assert_eq!(ids, vec!["GadflyII/Qwen3.5-9B"]);
         assert_eq!(models[0].1.name.as_deref(), Some("Qwen3.5-9B"));
 
         let _ = std::fs::remove_dir_all(&data);
@@ -549,28 +429,19 @@ mod tests {
         write_model(
             &data,
             "rel/model",
-            "model_path: llamacpp/models/rel/model/model.gguf\n\
-             mmproj_path: llamacpp/models/rel/model/mmproj.gguf\n",
+            "model_path: ginfer/models/rel/model/model.ginfer\n",
         );
-        let (model_path, mmproj) = resolve_model_by_id_in(&data, "rel/model").unwrap();
-        assert_eq!(
-            model_path,
-            data.join("llamacpp/models/rel/model/model.gguf")
-        );
-        assert_eq!(
-            mmproj.unwrap(),
-            data.join("llamacpp/models/rel/model/mmproj.gguf")
-        );
+        let model_path = resolve_model_by_id_in(&data, "rel/model").unwrap();
+        assert_eq!(model_path, data.join("ginfer/models/rel/model/model.ginfer"));
 
         let absolute = if cfg!(windows) {
-            "C:\\models\\abs.gguf"
+            "C:\\models\\abs.ginfer"
         } else {
-            "/models/abs.gguf"
+            "/models/abs.ginfer"
         };
         write_model(&data, "abs/model", &format!("model_path: {absolute}\n"));
-        let (model_path, mmproj) = resolve_model_by_id_in(&data, "abs/model").unwrap();
+        let model_path = resolve_model_by_id_in(&data, "abs/model").unwrap();
         assert_eq!(model_path, PathBuf::from(absolute));
-        assert!(mmproj.is_none());
 
         let err = resolve_model_by_id_in(&data, "nope").unwrap_err();
         assert!(err.contains("not installed"), "unexpected error: {err}");
@@ -579,75 +450,33 @@ mod tests {
     }
 
     #[test]
-    fn discovers_newest_backend_and_reports_version_backend() {
-        let data = temp_data_folder("discover-backend");
+    fn discovers_ginfer_binary() {
+        let data = temp_data_folder("discover-binary");
         let exe = if cfg!(windows) {
-            "llama-server.exe"
+            "ginfer-serve.exe"
         } else {
-            "llama-server"
+            "ginfer-serve"
         };
+        let bin_dir = data.join(LOCAL_PROVIDER).join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        std::fs::write(bin_dir.join(exe), b"stub").unwrap();
 
-        // b9000 sorts ABOVE b10018 as a plain string, so this pair is exactly
-        // the case a lexicographic sort gets wrong.
-        for (version, backend, nested) in [
-            ("b9000", "linux-cpu-x64", true),
-            ("b10018-1.3.0", "linux-vulkan-x64", false),
-        ] {
-            let mut dir = data
-                .join(LOCAL_PROVIDER)
-                .join("backends")
-                .join(version)
-                .join(backend);
-            if nested {
-                dir = dir.join("build").join("bin");
-            }
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join(exe), b"stub").unwrap();
-        }
-
-        // The TurboQuant fork keeps its own backends next door; they must not
-        // be picked up.
-        let fork_dir = data
-            .join("llamacpp")
-            .join("backends")
-            .join("turboquant-x")
-            .join("linux-cpu-x64");
-        std::fs::create_dir_all(&fork_dir).unwrap();
-        std::fs::write(fork_dir.join(exe), b"stub").unwrap();
-
-        let found = discover_llamacpp_binary_in(&data).expect("binary discovered");
-        // Versions sort descending, so the newer build wins.
-        assert_eq!(found.version_backend, "b10018-1.3.0/linux-vulkan-x64");
-        assert!(found.path.ends_with(exe));
-        assert!(found.path.starts_with(data.join(LOCAL_PROVIDER)));
+        let found = discover_ginfer_binary_in(&data).expect("binary discovered");
+        assert_eq!(found, data.join(LOCAL_PROVIDER).join("bin").join(exe));
 
         let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]
-    fn no_backends_folder_discovers_nothing() {
-        let data = temp_data_folder("no-backends");
-        assert!(discover_llamacpp_binary_in(&data).is_none());
+    fn no_bin_folder_discovers_nothing() {
+        let data = temp_data_folder("no-bin");
+        assert!(discover_ginfer_binary_in(&data).is_none());
         let _ = std::fs::remove_dir_all(&data);
-    }
-
-    #[test]
-    fn recovers_version_backend_from_an_explicit_bin_path() {
-        assert_eq!(
-            version_backend_from_bin_path(Path::new(
-                "/data/llamacpp-upstream/backends/b9691/linux-vulkan-x64/build/bin/llama-server"
-            )),
-            Some("b9691/linux-vulkan-x64".to_string())
-        );
-        assert_eq!(
-            version_backend_from_bin_path(Path::new("/usr/local/bin/llama-server")),
-            None
-        );
     }
 
     #[test]
     fn recognises_huggingface_repo_ids() {
-        assert!(looks_like_hf_repo("AtomicChat/Qwen3.5-9B-GGUF"));
+        assert!(looks_like_hf_repo("GadflyII/Qwen3.5-9B"));
         assert!(!looks_like_hf_repo("./local/path"));
         assert!(!looks_like_hf_repo("/abs/path"));
         assert!(!looks_like_hf_repo("~/home"));

@@ -1,5 +1,5 @@
 import { FolderOpen } from 'lucide-react'
-import { getJanDataFolderPath } from '@janhq/core'
+import { getJanDataFolderPath } from '@gchat/core'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 

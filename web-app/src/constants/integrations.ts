@@ -162,7 +162,7 @@ export const INTEGRATION_AGENTS: IntegrationAgent[] = [
     installable: true,
     configurable: true,
     requiresModel: true,
-    // Zed's native Atomic Chat provider expects the OpenAI-compatible base URL
+    // Zed's native GChat provider expects the OpenAI-compatible base URL
     // with the `/v1` prefix (matches its built-in default).
     endpointWithPrefix: true,
   },
@@ -280,7 +280,7 @@ export const INTEGRATION_AGENTS: IntegrationAgent[] = [
         'Sign in to GitHub Copilot (the free plan is enough).',
         'Open the Copilot Chat view, then click the model picker and choose "Manage Models…".',
         'Pick "OpenAI Compatible" (BYOK), paste the copied Base URL and API key, and save.',
-        'Select the Atomic Chat model from the model picker to start chatting.',
+        'Select the GChat model from the model picker to start chatting.',
       ],
     },
   },
@@ -302,7 +302,7 @@ export const INTEGRATION_AGENTS: IntegrationAgent[] = [
         'Open Settings → Tools → AI Assistant → Models.',
         'Enable third-party / local providers, then add an "OpenAI-compatible endpoint".',
         'Paste the copied Base URL (and API key if prompted) and apply.',
-        'Select the Atomic Chat model as the provider for AI Assistant.',
+        'Select the GChat model as the provider for AI Assistant.',
       ],
     },
   },
@@ -324,7 +324,7 @@ export const INTEGRATION_AGENTS: IntegrationAgent[] = [
         'Open Xcode → Settings → Intelligence (requires Xcode 26 or newer, macOS only).',
         'Click "Add a Model Provider" and choose "Locally Hosted".',
         'Enter the port from the copied Base URL (default 1337); Xcode adds the /v1 path itself.',
-        'Restart Xcode if the models do not appear, then pick the Atomic Chat model.',
+        'Restart Xcode if the models do not appear, then pick the GChat model.',
       ],
     },
   },

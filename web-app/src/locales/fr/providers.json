@@ -66,10 +66,5 @@
     "neverUpdated": "Pas encore chargé",
     "successDescription": "Catalogue des fournisseurs mis à jour.",
     "errorDescription": "Impossible d'actualiser le catalogue. Utilisation du cache ou des fournisseurs intégrés."
-  },
-  "llamacpp": {
-    "concurrentMode": {
-      "perSlotContextWarning": "Le contexte par slot est égal à ctx_size divisé par le nombre de slots. Moins de slots signifient plus de contexte par requête."
-    }
   }
 }

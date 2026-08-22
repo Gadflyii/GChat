@@ -1,15 +1,15 @@
 """
-demo/client.py — Async OpenAI-compatible streaming client for Atomic-Chat.
+demo/client.py — Async OpenAI-compatible streaming client for GChat.
 
-Talks to Atomic-Chat's built-in local API server (the proxy defined in
+Talks to GChat's built-in local API server (the proxy defined in
 `src-tauri/src/core/server/proxy.rs`) which in turn forwards requests to the
 running llama.cpp session for the selected model.
 
 Environment variables:
-    ATOMIC_BASE_URL   Defaults to http://127.0.0.1:1337/v1.
-    ATOMIC_API_KEY    Optional Bearer token. Copy from
+    GCHAT_BASE_URL   Defaults to http://127.0.0.1:1337/v1.
+    GCHAT_API_KEY    Optional Bearer token. Copy from
                       Settings → Local API Server when the proxy has one set.
-    ATOMIC_MODEL      Default model_id used by stream_chat / plan_chat.
+    GCHAT_MODEL      Default model_id used by stream_chat / plan_chat.
 """
 
 from __future__ import annotations
@@ -36,9 +36,9 @@ class ClientSettings:
     @classmethod
     def from_env(cls) -> ClientSettings:
         return cls(
-            base_url=os.environ.get("ATOMIC_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
-            api_key=os.environ.get("ATOMIC_API_KEY", ""),
-            model=os.environ.get("ATOMIC_MODEL", DEFAULT_MODEL),
+            base_url=os.environ.get("GCHAT_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
+            api_key=os.environ.get("GCHAT_API_KEY", ""),
+            model=os.environ.get("GCHAT_MODEL", DEFAULT_MODEL),
         )
 
 
@@ -56,7 +56,7 @@ def build_async_client(settings: ClientSettings) -> httpx.AsyncClient:
 
     limits = httpx.Limits(max_connections=32, max_keepalive_connections=16)
     timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=30.0)
-    # Atomic-Chat's local API server lives on 127.0.0.1, so any system-wide
+    # GChat's local API server lives on 127.0.0.1, so any system-wide
     # HTTP(S)_PROXY env var would misroute these requests through a corporate
     # proxy that neither knows about nor can reach localhost. Disabling
     # `trust_env` makes the client ignore *_PROXY, NO_PROXY, and .netrc.

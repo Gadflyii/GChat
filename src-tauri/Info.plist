@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key>
-  <string>chat.atomic.app</string>
+  <string>app.gchat</string>
   <key>NSLocalNetworkUsageDescription</key>
-  <string>Atomic Chat needs local network access to connect to model servers running on your local network (e.g. a vLLM, Ollama, or LM Studio endpoint on your LAN).</string>
+  <string>GChat needs local network access to connect to model servers running on your local network (e.g. a vLLM, Ollama, or LM Studio endpoint on your LAN).</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
       <key>CFBundleURLName</key>
-      <string>chat.atomic.app</string>
+      <string>app.gchat</string>
       <key>CFBundleURLSchemes</key>
       <array>
-        <string>atomic-chat</string>
+        <string>gchat</string>
       </array>
     </dict>
   </array>

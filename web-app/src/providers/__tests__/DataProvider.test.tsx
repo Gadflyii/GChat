@@ -46,8 +46,8 @@ vi.mock('@/hooks/useModelProvider', () => {
 
 vi.mock('@/hooks/useAssistant', () => ({
   defaultAssistant: {
-    id: 'jan',
-    name: 'Atomic Chat',
+    id: 'gchat',
+    name: 'GChat',
     description: 'Built-in description',
     avatar: '/images/transparent-logo.png',
     instructions: 'Current date: {{current_date}}',
@@ -130,7 +130,7 @@ vi.mock('@/utils/switchModel', () => ({
   switchToModel: mocks.switchToModel,
 }))
 
-vi.mock('@janhq/core', () => ({
+vi.mock('@gchat/core', () => ({
   AppEvent: { onModelImported: 'onModelImported' },
   ModelEvent: { OnAutoIncreasedCtxLen: 'OnAutoIncreasedCtxLen' },
   events: {
@@ -233,7 +233,7 @@ describe('DataProvider', () => {
 
   it('preserves saved settings when migrating the built-in assistant', async () => {
     const savedAssistant = {
-      id: 'jan',
+      id: 'gchat',
       name: 'Old name',
       description: 'Old description',
       avatar: 'old-avatar.png',
@@ -253,7 +253,7 @@ describe('DataProvider', () => {
       expect(migratedAssistants).toEqual([
         {
           ...savedAssistant,
-          name: 'Atomic Chat',
+          name: 'GChat',
           description: 'Built-in description',
           avatar: '/images/transparent-logo.png',
         },
@@ -267,7 +267,7 @@ describe('DataProvider', () => {
     // TurboQuant comes first in the array but is deactivated (the fresh-install
     // default) — the auto-switch must land on upstream.
     const { useModelProvider } = await import('@/hooks/useModelProvider')
-    const { events } = await import('@janhq/core')
+    const { events } = await import('@gchat/core')
     const state = useModelProvider.getState() as unknown as {
       providers: unknown[]
     }
@@ -320,7 +320,7 @@ describe('DataProvider', () => {
       navigations.push(destination)
     })
     getCurrent.mockResolvedValue([
-      'atomic-chat://models/huggingface/owner/model-GGUF',
+      'gchat://models/huggingface/owner/model-GGUF',
     ])
     const { unmount } = render(<DataProvider />)
 

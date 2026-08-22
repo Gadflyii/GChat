@@ -14,7 +14,7 @@ describe('buildTraceBlocks activity projection', () => {
           type: 'tool-mcp.search',
           toolCallId: 'tool-1',
           state: 'output-available',
-          input: { query: 'Atomic Chat' },
+          input: { query: 'GChat' },
           output: { ok: true },
         },
         { type: 'text', text: 'Done.' },

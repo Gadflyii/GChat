@@ -238,8 +238,8 @@ mod tests {
         ApiRequestObservation {
             endpoint: "chat/completions",
             method: "POST".to_string(),
-            model_id: Some("atomic/model".to_string()),
-            backend: "llamacpp-upstream",
+            model_id: Some("gchat/model".to_string()),
+            backend: "ginfer",
             provider: None,
             stream: true,
             status,
@@ -266,7 +266,7 @@ mod tests {
 
         let mut failed = observation(503, 500);
         failed.endpoint = "responses";
-        failed.model_id = Some("atomic/other".to_string());
+        failed.model_id = Some("gchat/other".to_string());
         failed.backend = "remote";
         failed.provider = Some("openrouter".to_string());
         failed.stream = false;
@@ -278,7 +278,7 @@ mod tests {
         aggregator.record(failed);
 
         let mut rejected = observation(401, 300);
-        rejected.model_id = Some("atomic/model".to_string());
+        rejected.model_id = Some("gchat/model".to_string());
         rejected.error_kind = Some("auth");
         aggregator.record(rejected);
 
@@ -297,7 +297,7 @@ mod tests {
         assert_eq!(summary.ctx_overflow_count, 1);
         assert_eq!(summary.endpoint_counts["chat/completions"], 2);
         assert_eq!(summary.endpoint_counts["responses"], 1);
-        assert_eq!(summary.backend_counts["llamacpp-upstream"], 2);
+        assert_eq!(summary.backend_counts["ginfer"], 2);
         assert_eq!(summary.backend_counts["remote"], 1);
         assert_eq!(summary.provider_counts["openrouter"], 1);
         assert_eq!(summary.status_counts["200"], 1);
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(summary.error_kind_counts["remote_provider_error"], 1);
         assert_eq!(
             summary.models_used,
-            vec!["atomic/model".to_string(), "atomic/other".to_string()]
+            vec!["gchat/model".to_string(), "gchat/other".to_string()]
         );
         assert_eq!(summary.window_duration_ms, 180_000);
     }

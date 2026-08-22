@@ -68,10 +68,5 @@
     "neverUpdated": "아직 불러오지 않음",
     "successDescription": "제공자 카탈로그가 업데이트되었습니다.",
     "errorDescription": "제공자 카탈로그를 새로고침할 수 없습니다. 캐시된 또는 내장된 제공자를 사용합니다."
-  },
-  "llamacpp": {
-    "concurrentMode": {
-      "perSlotContextWarning": "슬롯당 컨텍스트는 ctx_size를 슬롯 수로 나눈 값과 같습니다. 슬롯 수가 적을수록 각 요청에 더 많은 컨텍스트가 주어집니다."
-    }
   }
 }

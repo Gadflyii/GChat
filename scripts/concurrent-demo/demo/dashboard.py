@@ -39,7 +39,7 @@ _HERO_FONT = "ansi_shadow"
 # width=300 keeps long titles on a single 7-row figlet block instead of being
 # wrapped into multi-row chunks (pyfiglet's default smart layout).
 _HERO_FIGLET = pyfiglet.Figlet(font=_HERO_FONT, width=300)
-_BRAND_ASCII = _HERO_FIGLET.renderText("Atomic Agent").rstrip("\n")
+_BRAND_ASCII = _HERO_FIGLET.renderText("GChat Agent").rstrip("\n")
 
 _ANSI_TO_RICH: dict[str, str] = {
     "1;31": "bold red", "1;32": "bold green", "1;33": "bold yellow",
@@ -205,7 +205,7 @@ def render(state: DashboardState) -> Group:
     total_tokens = sum(a.tokens for a in agent_list)
 
     header_text = Text.from_markup(
-        f"[bold cyan]\u26a1 Atomic-Chat \u2014 Concurrent Demo[/]    "
+        f"[bold cyan]\u26a1 GChat \u2014 Concurrent Demo[/]    "
         f"[white]scenario=[/][bold]{state.scenario}[/]  "
         f"[white]topic=[/]\"{state.topic}\"  "
         f"[white]model=[/][bold]{state.model_id}[/]",

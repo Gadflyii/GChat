@@ -288,9 +288,9 @@ impl ScriptedCompletionServer {
             api_key: String::new(),
             model_id: "scripted-test-model".into(),
             has_vision: false,
-            backend: super::llm_client::LlamaBackend::Llamacpp,
+            backend: super::llm_client::LlamaBackend::Ginfer,
         })
-        .expect("create scripted llama client")
+        .expect("create scripted backend client")
     }
 
     pub(crate) fn requests(&self) -> Vec<Value> {

@@ -17,7 +17,7 @@ import { deleteLocalModel } from '@/lib/model-deletion'
 export type DeleteModelActionProps = {
   /** Id the engine registered the model under, not the catalog's spelling. */
   modelId: string
-  /** Local provider that owns the files (`llamacpp*` / `mlx`). */
+  /** Local provider that owns the files. */
   provider: string
   /** Called after the files are gone, before the provider list is refreshed. */
   onDeleted?: () => void

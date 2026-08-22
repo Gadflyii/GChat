@@ -1,4 +1,4 @@
-# Atomic Chat Agent Architecture
+# GChat Agent Architecture
 
 Living engineering reference for the autonomous Rust agent in this directory.
 Update this document when the agent loop, tool contract, safety policy, or
@@ -7,8 +7,8 @@ decision log in `AGENTS.md`.
 
 ## Status and scope
 
-The agent backend is isolated from regular Atomic Chat conversations and from
-the Vercel AI SDK path. It talks directly to the active local llama.cpp session
+The agent backend is isolated from regular GChat conversations and from
+the Vercel AI SDK path. It talks directly to the active local model session
 over native `/completion`.
 
 Iterations 1 and 1b are implemented. Agent turns also accept bounded local
@@ -24,8 +24,8 @@ MCP tools, window control, and filesystem watchers are deferred.
 - `agent_cancel_turn` cancels a run by its caller-provided `run_id`.
 - `agent_resolve_approval` resolves a pending approval by its generated
   approval id.
-- `LlamaServerClient` resolves the active TurboQuant or upstream llama.cpp
-  session and calls its `/completion` endpoint directly.
+- `LlamaServerClient` resolves the active local model session and calls its
+  `/completion` endpoint directly.
 - Image analysis uses a separate, non-streaming `/v1/chat/completions` request
   to the same active session. It never uses the grammar-constrained agent slot.
 - Every completion uses the static tool grammar, `cache_prompt`, and a stable
@@ -94,7 +94,7 @@ valid only as the final call and executes after all preceding calls finish.
 - Clipboard: read and write.
 - Desktop notifications: `os.notify`.
 - Vision: `vision.describe` for up to four staged PNG, JPEG, GIF, or WebP
-  images when the active llama.cpp session has an `mmproj`.
+  images when the active session is vision-capable.
 - Tool discovery: `tool.view`.
 - Terminals: `reply` and `finish`.
 
@@ -129,47 +129,6 @@ network access:
 - `tools/contract_tests.rs` runs real filesystem, archive, Git, and safe shell
   operations inside an isolated workspace. It also pins traversal, path
   escape, hard-block, denial, cancellation, and output-boundary behavior.
-
-`model_e2e.rs` is a local, ignored acceptance ritual. It starts and stops one
-externally supplied TurboQuant `llama-server`, loads one externally supplied
-GGUF once, and runs all model scenarios sequentially against slot `0`.
-Automatic artifact downloads and mandatory CI execution are intentionally out
-of scope.
-
-### Managed model E2E contract
-
-The ignored test requires:
-
-- `ATOMIC_AGENT_E2E_LLAMA_SERVER`: local executable from
-  `AtomicBot-ai/atomic-llama-cpp-turboquant`, not vanilla upstream llama.cpp.
-- `ATOMIC_AGENT_E2E_MODEL`: the already-downloaded IQ4_XS GGUF for
-  `unsloth/Qwen3_5-9B-GGUF-Qwen3_5-9B-IQ4_XS`. A different model is not an
-  equivalent acceptance run.
-- `ATOMIC_AGENT_E2E_N_GPU_LAYERS`: optional `-ngl` value; defaults to `-1`.
-- `ATOMIC_AGENT_E2E_TIMEOUT_SECS`: optional startup and per-scenario timeout;
-  defaults to 900 seconds.
-
-The harness chooses a free loopback port and launches the server with one
-parallel slot, an 8192-token context, Jinja templates, no Web UI, flash
-attention, and TurboQuant `turbo3` K/V cache. It prints `llama-server
---version`, the nearest `version.txt`, and the exact paths before waiting for
-`/health`.
-
-Run it from the repository root:
-
-```bash
-ATOMIC_AGENT_E2E_LLAMA_SERVER=<turboquant-llama-server> \
-ATOMIC_AGENT_E2E_MODEL=<unsloth-Qwen3_5-9B-IQ4_XS.gguf> \
-cargo test --manifest-path src-tauri/Cargo.toml -p Atomic-Chat \
-  managed_model_agent_scenarios -- --ignored --nocapture --test-threads=1
-```
-
-The model must reliably follow array-only GBNF tool calls and the
-`tool.view`-before-rare-tool contract. Assertions target parsed tools, events,
-side effects, and terminal reasons rather than free-form reply text. On
-startup failure, timeout, or agent invariant failure, the harness includes
-bounded stdout/stderr tails in the panic and its RAII guard terminates the
-child process.
 
 ## Iteration 1b contract corrections
 

@@ -49,7 +49,7 @@ flowchart LR
     rawCdn["raw.githubusercontent.com"]
     regJson -->|"published on merge"| rawCdn
 
-    subgraph janClient [Atomic-Chat web-app]
+    subgraph gchatClient [GChat web-app]
         loader[services/provider-registry.ts]
         store[stores/provider-registry-store.ts]
         tauriSvc[services/providers/tauri.ts]
@@ -110,8 +110,8 @@ The manifest carries `schema_version`. The client embeds
 
 - TTL: `CACHE_TTL_MS = 60 * 60 * 1000` (1 hour).
 - Keys in `localStorage`:
-  - `jan_provider_registry_cache_v1` — JSON-stringified manifest.
-  - `jan_provider_registry_cache_ts_v1` — number, `Date.now()` at write time.
+  - `gchat_provider_registry_cache_v1` — JSON-stringified manifest.
+  - `gchat_provider_registry_cache_ts_v1` — number, `Date.now()` at write time.
 - `clearRegistryCache()` wipes both keys; tests use it for isolation.
 - The Refresh button in Settings → Providers calls `refresh({ force: true })`,
   which bypasses freshness and writes a new cache entry on success.
@@ -141,7 +141,7 @@ not wrap it in `try/catch` for control flow.
 1. Open `providers/registry.json` in `AtomicBot-ai/atomic-chat-conf` on GitHub.
 2. Click **Edit**, append a new entry, bump `updated_at`, open a PR.
 3. CI (`ajv validate` + the integrity script) must be green before merge.
-4. After merge, every Jan client picks up the change within an hour, or
+4. After merge, every GChat client picks up the change within an hour, or
    immediately on Settings → Providers → **Refresh catalog**.
 
 ### For developers (only when shape changes)
@@ -168,7 +168,7 @@ not wrap it in `try/catch` for control flow.
 - **Do not** call `getProvidersOrFallback()` from render-critical code paths
   on every render. Use the store (`useProviderRegistryStore(s => s.providers)`)
   so a single fetch backs every component.
-- **Do not** edit `registry.json` inside `Atomic-Chat`. It does not exist
+- **Do not** edit `registry.json` inside `GChat`. It does not exist
   here. The single source of truth is the `atomic-chat-conf` repo.
 - **Do not** widen the cache TTL beyond 24h without coordinating with
   release/communications — users expect changes within an hour.
@@ -243,7 +243,7 @@ flowchart LR
     rawCdn["raw.githubusercontent.com"]
     modelsJson --> rawCdn
 
-    subgraph janClient [Atomic-Chat web-app]
+    subgraph gchatClient [GChat web-app]
         loader[services/recommended-models-registry.ts]
         store[stores/recommended-models-registry-store.ts]
         baseline[constants/models.BASELINE_RECOMMENDED_MODELS]
@@ -265,8 +265,8 @@ flowchart LR
 
 - TTL: `CACHE_TTL_MS = 60 * 60 * 1000` (1 hour) — same as the provider registry.
 - `localStorage` keys (intentionally distinct from the provider-registry keys):
-  - `jan_recommended_models_cache_v1`
-  - `jan_recommended_models_cache_ts_v1`
+  - `gchat_recommended_models_cache_v1`
+  - `gchat_recommended_models_cache_ts_v1`
 - A stale cache is reused as **fallback** only when the network attempt
   fails. If there is no cache at all, `BASELINE_RECOMMENDED_MODELS` wins.
 
@@ -305,7 +305,7 @@ it as a separate concern.
 1. Open `models/recommended.json` in `AtomicBot-ai/atomic-chat-conf` on
    GitHub, click **Edit**, append (or modify) an entry, bump `updated_at`.
 2. CI runs `ajv validate` and a duplicate-entry check; both must be green.
-3. After merge, every Atomic Chat client picks up the change within an
+3. After merge, every GChat client picks up the change within an
    hour, or immediately on next launch.
 
 ### For developers (only when the entry shape changes)
@@ -328,7 +328,7 @@ it as a separate concern.
   manifest verbatim.
 - **Do not** move `RECOMMENDED_MODEL_FALLBACKS` into the manifest.
 - **Do not** share cache keys with the provider registry.
-- **Do not** edit `models/recommended.json` inside `Atomic-Chat`. It does
+- **Do not** edit `models/recommended.json` inside `GChat`. It does
   not exist here. The single source of truth is the `atomic-chat-conf` repo.
 
 ## Tests
@@ -461,7 +461,7 @@ flowchart LR
     idxJson --> release
     statsJson --> release
 
-    subgraph janClient [Atomic-Chat web-app]
+    subgraph gchatClient [GChat web-app]
         loader[services/model-catalog-registry.ts]
         store[stores/model-catalog-store.ts]
         search[services/model-search.ts]
@@ -486,10 +486,10 @@ flowchart LR
 - TTL: `CACHE_TTL_MS = 60 * 60 * 1000` (1 hour) — same posture as the
   provider / recommended-models registries.
 - The catalog and MiniSearch snapshot live as structured-clone values in the
-  `atomic_model_catalog_cache` IndexedDB database, `snapshots` object store.
+  `gchat_model_catalog_cache` IndexedDB database, `snapshots` object store.
   They must not move back to `localStorage`: the catalog is larger than every
   supported webview's per-origin localStorage quota.
-- The former `atomic_model_catalog_*` localStorage keys are removed when the
+- The former `gchat_model_catalog_*` localStorage keys are removed when the
   cache is explicitly cleared.
 - A stale cache is reused as **fallback** only when the network attempt
   fails. If there is no cache at all, `BASELINE_MODEL_CATALOG` wins
@@ -558,7 +558,7 @@ Two independent version dials:
    or modify an entry, bump `updated_at`. CI runs `ajv validate` plus
    integrity checks; both must be green.
 2. After merge, the next 12-hour cron run (or a manual
-   `workflow_dispatch`) refreshes the catalog Release. Atomic Chat
+   `workflow_dispatch`) refreshes the catalog Release. GChat
    clients pick up the change within an hour, or immediately on next
    launch.
 
@@ -589,7 +589,7 @@ Two independent version dials:
   search field — read-only by convention.
 - **Do not** widen the cache TTL beyond 24h without coordinating with
   release/communications. Users expect catalog changes within an hour.
-- **Do not** edit `catalog.json` inside Atomic-Chat. It does not exist
+- **Do not** edit `catalog.json` inside `GChat`. It does not exist
   here. The single source of truth is the `atomic-chat-model-catalog`
   repo + its Releases.
 

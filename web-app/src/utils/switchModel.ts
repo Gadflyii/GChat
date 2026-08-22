@@ -118,12 +118,7 @@ function emitModelLoad(
 }
 
 // Local providers whose models are served by on-device engines.
-const LOCAL_PROVIDERS = [
-  'llamacpp',
-  'llamacpp-upstream',
-  'mlx',
-  'foundation-models',
-] as const
+const LOCAL_PROVIDERS = ['ginfer'] as const
 type LocalProviderName = (typeof LOCAL_PROVIDERS)[number]
 
 function isLocalEngineProvider(providerName: string): boolean {
@@ -358,7 +353,7 @@ async function isTargetModelAlreadyServing(params: {
 /**
  * Unified model switching function.
  *
- * Ensures only one local model is ever running across both llamacpp and mlx,
+ * Ensures only one local model is ever running across local engines,
  * restarts the Local API Server for the new model, and synchronises all
  * global UI state (dropdown selection, thread model, localStorage, etc.).
  *
@@ -546,7 +541,7 @@ async function doSwitchToModel(params: {
   )
 
   try {
-    // 1. Stop ALL local engines (llamacpp + mlx). This is a no-op for cloud
+    // 1. Stop ALL local engines. This is a no-op for cloud
     //    but guarantees only one model is ever "active" globally.
     await serviceHub.models().stopAllModels()
     setActiveModels([])
@@ -610,8 +605,8 @@ async function doSwitchToModel(params: {
     //    Mirrors the same handling in hermes-agent.tsx / claude-code.tsx.
     //
     //    Gating: the :1337 proxy is a user-facing surface, not a hard
-    //    requirement for chatting with a *local* engine (llamacpp/mlx connect
-    //    to their own port directly). So when the "Auto-start" toggle is off we
+    //    requirement for chatting with a *local* engine (the local engine
+    //    connects to its own port directly). So when the "Auto-start" toggle is off we
     //    leave it down for a local model — unless it was already running
     //    (manually started), in which case we bring it back up after step 2's
     //    stop. Cloud/remote models always need the proxy to route requests, so
@@ -804,26 +799,10 @@ function isOutOfMemoryError(err: ErrorObject): boolean {
   return OOM_MESSAGE_PATTERNS.some((pattern) => haystack.includes(pattern))
 }
 
-// The two on-device llama.cpp engines are interchangeable for most models, so
-// when one rejects a model we can point the user at the other. `llamacpp` is the
-// turboquant fork; `llamacpp-upstream` is stock llama.cpp. The turboquant engine
-// only ships on macOS, so it's only a valid suggestion there — and only when
-// the user hasn't deactivated it (it ships disabled on fresh installs).
-function alternateLocalBackend(providerName?: string): string | undefined {
-  if (providerName === 'llamacpp') return getProviderTitle('llamacpp-upstream')
-  if (providerName === 'llamacpp-upstream') {
-    const fork = useModelProvider.getState().getProviderByName('llamacpp')
-    return IS_MACOS && fork?.active !== false
-      ? getProviderTitle('llamacpp')
-      : undefined
-  }
-  return undefined
-}
-
 /**
  * Build the description for an "unsupported by this backend" toast, naming the
- * current backend and (when available) the backend to switch to. Falls back to
- * a no-alternative variant on platforms that ship a single engine.
+ * current backend. A single local engine ships, so there is no alternative to
+ * suggest.
  */
 function unsupportedDescription(
   t: typeof i18n.t,
@@ -831,10 +810,6 @@ function unsupportedDescription(
   providerName?: string
 ): string {
   const backend = providerName ? getProviderTitle(providerName) : undefined
-  const alternative = alternateLocalBackend(providerName)
-  if (backend && alternative) {
-    return t(`model-errors:${baseKey}Description`, { backend, alternative })
-  }
   return t(`model-errors:${baseKey}DescriptionNoAlt`, {
     backend: backend ?? t('model-errors:currentBackendFallback'),
   })

@@ -1,6 +1,6 @@
 //! Catalog of coding agents the CLI can wire to a local model.
 //!
-//! This mirrors `web-app/src/constants/integrations.ts` so `atomic-chat-cli
+//! This mirrors `web-app/src/constants/integrations.ts` so `gchat-cli
 //! launch` and the desktop Launch page configure agents identically. The three
 //! GUI editors in that list (`vscode`, `jetbrains`, `xcode`) are omitted: they
 //! keep their provider in secret/IDE storage with no writable config file, so

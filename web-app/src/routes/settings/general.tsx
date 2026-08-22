@@ -14,7 +14,6 @@ import { useThreadNotifications } from '@/hooks/useThreadNotifications'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { useEffect, useState, useCallback } from 'react'
 import ChangeDataFolderLocation from '@/containers/dialogs/ChangeDataFolderLocation'
-import LocalModelLocationsCard from '@/containers/LocalModelLocationsCard'
 import { FactoryResetDialog } from '@/containers/dialogs'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import {
@@ -37,7 +36,7 @@ import { useAnalytic } from '@/hooks/useAnalytic'
 import posthog from 'posthog-js'
 import { setLaunchAtStartup } from '@/lib/launchAtStartup'
 const TOKEN_VALIDATION_TIMEOUT_MS = 10_000
-const ATOMIC_CLI_COMMAND = 'atomic-chat-cli'
+const GCHAT_CLI_COMMAND = 'gchat-cli'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.settings.general as any)({
@@ -96,7 +95,7 @@ function General() {
 
   useEffect(() => {
     const fetchDataFolder = async () => {
-      const path = await serviceHub.app().getJanDataFolder()
+      const path = await serviceHub.app().getGchatDataFolder()
       setJanDataFolder(path)
     }
 
@@ -145,8 +144,8 @@ function General() {
       setCliInstalled(s.installed)
       setCliPath(s.path)
       toast.success(
-        t('settings:general.atomicBotCliInstalledToast', {
-          path: s.path ?? ATOMIC_CLI_COMMAND,
+        t('settings:general.gchatCliInstalledToast', {
+          path: s.path ?? GCHAT_CLI_COMMAND,
         })
       )
     } catch (e) {
@@ -162,7 +161,7 @@ function General() {
       await invoke('uninstall_jan_cli')
       setCliInstalled(false)
       setCliPath(null)
-      toast.success('Atomic Bot CLI uninstalled')
+      toast.success('GChat CLI uninstalled')
     } catch (e) {
       toast.error('Uninstall failed', { description: String(e) })
     } finally {
@@ -223,7 +222,7 @@ function General() {
             // Prevent relocating to root directory (e.g., C:\ or D:\ on Windows, / on Unix)
             if (isRootDir(selectedNewPath))
               throw new Error(t('settings:general.couldNotRelocateToRoot'))
-            await serviceHub.app().relocateJanDataFolder(selectedNewPath)
+            await serviceHub.app().relocateGchatDataFolder(selectedNewPath)
             setJanDataFolder(selectedNewPath)
             // Only relaunch if relocation was successful
             window.core?.api?.relaunch()
@@ -241,7 +240,7 @@ function General() {
       } catch (error) {
         console.error('Failed to relocate data folder:', error)
         // Revert the data folder path on error
-        const originalPath = await serviceHub.app().getJanDataFolder()
+        const originalPath = await serviceHub.app().getGchatDataFolder()
         setJanDataFolder(originalPath)
 
         toast.error(t('settings:general.failedToRelocateDataFolderDesc'))
@@ -351,7 +350,7 @@ function General() {
             <Card title="Contact Us">
               <CardItem
                 title="Email"
-                description="Reach Atomic Chat support by email."
+                description="Reach GChat support by email."
                 actions={
                   <a
                     href="mailto:support@atomic.chat"
@@ -366,40 +365,20 @@ function General() {
                 }
               />
               <CardItem
-                title="X"
-                description="Follow Atomic Chat on X."
-                actions={
-                  <a
-                    href="https://x.com/atomic_chat_hq"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      void handleOpenContactLink('https://x.com/atomic_chat_hq')
-                    }}
-                    className="text-foreground font-medium hover:underline"
-                  >
-                    @atomic_chat_hq
-                  </a>
-                }
-              />
-              <CardItem
                 title="GitHub"
-                description="View the Atomic Chat repository on GitHub."
+                description="View the GChat repository on GitHub."
                 actions={
                   <a
-                    href="https://github.com/AtomicBot-ai/Atomic-Chat"
+                    href="https://github.com/Gadflyii/gchat"
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(event) => {
                       event.preventDefault()
-                      void handleOpenContactLink(
-                        'https://github.com/AtomicBot-ai/Atomic-Chat'
-                      )
+                      void handleOpenContactLink('https://github.com/Gadflyii/gchat')
                     }}
                     className="text-foreground font-medium hover:underline"
                   >
-                    AtomicBot-ai/Atomic-Chat
+                    Gadflyii/gchat
                   </a>
                 }
               />
@@ -591,20 +570,17 @@ function General() {
               />
             </Card>
 
-            {/* Detected model locations / scan folders - Desktop only */}
-            {IS_TAURI && <LocalModelLocationsCard />}
-
             {/* Advanced - Desktop only */}
             <Card title="Advanced">
               {IS_TAURI && (
                 <CardItem
-                  title={t('settings:general.atomicBotCliTitle')}
+                  title={t('settings:general.gchatCliTitle')}
                   description={
                     cliInstalled && cliPath
-                      ? t('settings:general.atomicBotCliInstalled', {
+                      ? t('settings:general.gchatCliInstalled', {
                           path: cliPath,
                         })
-                      : t('settings:general.atomicBotCliNotInstalled')
+                      : t('settings:general.gchatCliNotInstalled')
                   }
                   actions={
                     cliInstalled ? (
@@ -788,7 +764,7 @@ function General() {
                   description={t('settings:general.releaseNotesDesc')}
                   actions={
                     <a
-                      href="https://github.com/AtomicBot-ai/Atomic-Chat/releases"
+                      href="https://github.com/Gadflyii/gchat/releases"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -810,7 +786,7 @@ function General() {
                   description={t('settings:general.githubDesc')}
                   actions={
                     <a
-                      href="https://github.com/AtomicBot-ai/Atomic-Chat"
+                      href="https://github.com/Gadflyii/gchat"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -848,7 +824,7 @@ function General() {
                   description={t('settings:general.reportAnIssueDesc')}
                   actions={
                     <a
-                      href="https://github.com/AtomicBot-ai/Atomic-Chat/issues/new"
+                      href="https://github.com/Gadflyii/gchat/issues/new"
                       target="_blank"
                     >
                       <div className="flex items-center gap-1">

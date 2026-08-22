@@ -183,7 +183,7 @@ export const extractModelLoadParams = (
  * Compute the next context-window size for the auto-increase flow. This is
  * the single source of truth shared between the web-app UI
  * (`handleContextSizeIncrease` in `$threadId.tsx`) and local backend
- * extensions (`llamacpp-extension`, `mlx-extension`). Mirrors the existing
+ * extensions (e.g. `ginfer-extension`). Mirrors the existing
  * UI steps: `<8192 → 8192 → 32768 → ×1.5` and optionally caps the result at
  * the model's training-max context.
  *

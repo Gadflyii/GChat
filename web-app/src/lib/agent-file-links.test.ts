@@ -78,7 +78,7 @@ describe('agent file links', () => {
     )
 
     expect(linked).toContain(
-      `[summary.txt](https://atomic.local/open-file?path=${encodeURIComponent(path)})`
+      `[summary.txt](https://gchat.local/open-file?path=${encodeURIComponent(path)})`
     )
     expect(linked).not.toContain(`[${path}]`)
   })
@@ -91,7 +91,7 @@ describe('agent file links', () => {
         { path, name: 'Техническое задание.pdf' },
       ])
     ).toContain(
-      `[Техническое задание.pdf](https://atomic.local/open-file?path=${encodeURIComponent(path)})`
+      `[Техническое задание.pdf](https://gchat.local/open-file?path=${encodeURIComponent(path)})`
     )
   })
 
@@ -103,7 +103,7 @@ describe('agent file links', () => {
         { path, name: 'Техническое задание.pdf' },
       ])
     ).toContain(
-      `[Техническое задание.pdf](https://atomic.local/open-file?path=${encodeURIComponent(path)})`
+      `[Техническое задание.pdf](https://gchat.local/open-file?path=${encodeURIComponent(path)})`
     )
   })
 
@@ -127,9 +127,9 @@ describe('agent file links', () => {
     ).toBe('`summary.txt` [summary.txt](https://example.com)')
   })
 
-  it('decodes only Atomic Chat file hrefs', () => {
+  it('decodes only GChat file hrefs', () => {
     const path = 'C:\\Users\\Misha\\summary.txt'
-    const href = `https://atomic.local/open-file?path=${encodeURIComponent(path)}`
+    const href = `https://gchat.local/open-file?path=${encodeURIComponent(path)}`
 
     expect(agentFilePathFromHref(href)).toBe(path)
     expect(agentFilePathFromHref('https://example.com')).toBeNull()

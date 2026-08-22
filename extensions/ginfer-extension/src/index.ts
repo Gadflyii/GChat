@@ -14,7 +14,7 @@ import {
   AppEvent,
   DownloadEvent,
   Compatibility,
-} from '@janhq/core'
+} from '@gchat/core'
 
 import { error, info, warn } from '@tauri-apps/plugin-log'
 import { invoke } from '@tauri-apps/api/core'
@@ -201,7 +201,7 @@ export default class ginfer_extension extends AIEngine {
       }
     }
 
-    const janDataFolderPath = await getJanDataFolderPath()
+    const gchatDataFolderPath = await getJanDataFolderPath()
     const modelInfos: modelInfo[] = []
     for (const modelId of modelIds) {
       const path = await joinPath([modelsDir, modelId, 'model.yml'])
@@ -209,7 +209,7 @@ export default class ginfer_extension extends AIEngine {
         path,
       })
       const resolvedPath = await joinPath([
-        janDataFolderPath,
+        gchatDataFolderPath,
         modelConfig.model_path,
       ])
       modelInfos.push({
@@ -540,7 +540,7 @@ export default class ginfer_extension extends AIEngine {
 
     if (isRemote) {
       const downloadManager = window.core.extensionManager.getByName(
-        '@janhq/download-extension'
+        '@gchat/download-extension'
       )
       if (!downloadManager?.downloadFiles) {
         throw new Error(
@@ -683,7 +683,7 @@ export default class ginfer_extension extends AIEngine {
   override async abortImport(modelId: string): Promise<void> {
     const taskId = this.createDownloadTaskId(modelId)
     const downloadManager = window.core.extensionManager.getByName(
-      '@janhq/download-extension'
+      '@gchat/download-extension'
     )
     try {
       await downloadManager.cancelDownload(taskId)

@@ -37,21 +37,16 @@ import {
   filterInstalledBySearch,
 } from '@/lib/hub-installed'
 import { getMemoryBudgetBytes } from '@/lib/model-card'
-import { extractModelName } from '@/lib/models'
 import { cn } from '@/lib/utils'
 import { getModelSearchService } from '@/services/model-search'
 import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import type { CatalogModel } from '@/services/models/types'
-import type {
-  StaffPick,
-  StaffPickFormat,
-} from '@/services/staff-picks-registry'
+import type { StaffPick } from '@/services/staff-picks-registry'
 import { useShallow } from 'zustand/shallow'
 import { getHubSearchQuery, setHubSearchQuery } from './hub-session'
 
 type SearchParams = {
   repo?: string
-  engine?: 'mlx' | 'gguf'
   q?: string
   /** Repo id of the model shown in the right-hand detail panel. */
   model?: string
@@ -64,37 +59,10 @@ type HubListItem = {
   fromHuggingFace?: boolean
 }
 
-// Base (non-instruction-tuned) Gemma 4 MLX builds (e.g.
-// `mlx-community/gemma-4-12B-4bit`, converted from `google/gemma-4-12B`)
-// ship no chat template and behave as raw text-completion models when used
-// in chat — garbled output (stray markup / wrong-script tokens) that never
-// stops. Only the `-it` instruction-tuned variants are usable. Hide the base
-// builds from the MLX catalog/search so they can't be picked by mistake.
-function isUnsupportedBaseGemmaMlx(model: CatalogModel) {
-  const is_mlx = model.is_mlx ?? model.library_name === 'mlx'
-  if (!is_mlx) return false
-  const name = (
-    extractModelName(model.model_name) ?? model.model_name
-  ).toLowerCase()
-  if (!/gemma[-_]?4/.test(name)) return false
-  const isInstruct = /(^|[-_])it([-_]|$)/.test(name)
-  const isDrafterArtifact =
-    name.includes('assistant') ||
-    name.includes('eagle3') ||
-    name.includes('speculator') ||
-    name.includes('dflash') ||
-    name.includes('-mtp')
-  return !isInstruct && !isDrafterArtifact
-}
-
 export const Route = createFileRoute(route.hub.index as any)({
   component: HubContent,
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
     repo: typeof search.repo === 'string' ? search.repo : undefined,
-    engine:
-      search.engine === 'mlx' || search.engine === 'gguf'
-        ? search.engine
-        : undefined,
     q: typeof search.q === 'string' ? search.q : undefined,
     model: typeof search.model === 'string' ? search.model : undefined,
   }),
@@ -211,14 +179,9 @@ function HubContent() {
     }
   }, [scanLocalModelsEnabled, serviceHub, setProviders])
 
-  // The curated list carries a GGUF and an MLX entry per model. Showing both
-  // at once would list every model twice, so MLX picks surface only once the
-  // user narrows the format filter to MLX alone.
-  const picksFormat: StaffPickFormat =
-    filters.formats.length === 1 && filters.formats[0] === 'mlx'
-      ? 'mlx'
-      : 'gguf'
-  const staffPickItems = useStaffPicks(sources, picksFormat)
+  // The Hub only runs GGUF through the single local backend (GInfer), so the
+  // curated staff picks are always resolved as GGUF.
+  const staffPickItems = useStaffPicks(sources)
 
   const isSearchMode = debouncedSearchValue.length > 0 || showOnlyDownloaded
 
@@ -275,10 +238,7 @@ function HubContent() {
     [installedModels, debouncedSearchValue]
   )
 
-  const catalogResults = useMemo(
-    () => searchMatches.filter((model) => !isUnsupportedBaseGemmaMlx(model)),
-    [searchMatches]
-  )
+  const catalogResults = searchMatches
 
   // Exact-repo lookup: the user pasted a full `owner/name`.
   const fetchExactRepo = useCallback(
@@ -296,9 +256,10 @@ function HubContent() {
             .models()
             .fetchHuggingFaceRepo(normalized, huggingfaceToken)
           if (repoInfo) {
-            setHuggingFaceRepo(
+            const catalog =
               serviceHub.models().convertHfRepoToCatalogModel(repoInfo)
-            )
+            // MLX repos cannot be run by the single local backend (GInfer).
+            if (!catalog.is_mlx) setHuggingFaceRepo(catalog)
           }
         } catch (error) {
           console.error('Error fetching repository info:', error)
@@ -386,8 +347,10 @@ function HubContent() {
         : []
     for (const model of head) seen.add(model.model_name)
 
+    // MLX repos cannot be run by the single local backend (GInfer) — HF's
+    // long-tail search still returns them, so drop them here.
     const tail = hfCandidates.filter(
-      (c) => !seen.has(c.model_name) && !isUnsupportedBaseGemmaMlx(c)
+      (c) => !seen.has(c.model_name) && !c.is_mlx
     )
 
     const hfNames = new Set([

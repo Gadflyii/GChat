@@ -28,7 +28,7 @@ import {
 } from '../useOnboardingModelReminder'
 
 const withModel = (id: string) => [
-  { provider: 'llamacpp-upstream', models: [{ id }] },
+  { provider: 'ginfer', models: [{ id }] },
 ]
 
 describe('useOnboardingModelReminder', () => {
@@ -59,9 +59,9 @@ describe('useOnboardingModelReminder', () => {
   })
 
   it.each([
-    'AtomicChat/Qwen3_5-4B-Q4_K_M',
-    'AtomicChat/Qwen3.5-4B-IQ4_XS',
-    'Qwen3.5-4B-GGUF',
+    'GadflyII/Qwen3.8-27B-NInfer-Q4_K_M',
+    'GadflyII/Qwen3.8-27B-NInfer-IQ4_XS',
+    'Qwen3.8-27B-NInfer',
   ])('stays hidden once %s is in the library', (id) => {
     localStorage.setItem(localStorageKey.setupCompleted, 'true')
     useOnboardingModelReminderStore.setState({ pending: true })
@@ -79,7 +79,7 @@ describe('useOnboardingModelReminder', () => {
       {
         provider: 'openrouter',
         api_key: 'sk-test',
-        models: [{ id: 'qwen/qwen3.5-4b' }],
+        models: [{ id: 'qwen/qwen3.8-27b-ninfer' }],
       },
     ]
 
@@ -101,7 +101,7 @@ describe('useOnboardingModelReminder', () => {
   it('stays hidden while the recommended model is downloading', () => {
     localStorage.setItem(localStorageKey.setupCompleted, 'true')
     useOnboardingModelReminderStore.setState({ pending: true })
-    state.localDownloadingModels = new Set(['AtomicChat/Qwen3.5-4B-Q4_K_M'])
+    state.localDownloadingModels = new Set(['GadflyII/Qwen3.8-27B-NInfer-Q4_K_M'])
 
     const { result } = setup()
     expect(result.current.isDownloading).toBe(true)

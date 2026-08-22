@@ -5,12 +5,12 @@ use std::time::Duration;
 use tauri::ipc::Channel;
 
 /// Fallback when the caller passes no (or a nonsensical) timeout, matching the
-/// llama.cpp extension's `timeout` setting default.
+/// ginfer extension's `timeout` setting default.
 const DEFAULT_TIMEOUT_SECS: u64 = 600;
 
 /// Floor for the streaming inactivity budget (30 min), mirroring the
 /// model-load readiness floor from ATO-188. Reasoning models can sit silent
-/// for a long stretch before the first token — notably while llama.cpp
+/// for a long stretch before the first token — notably while the backend
 /// processes a large prompt — so the shared `timeout` setting (default 600s)
 /// is too tight to double as a liveness signal for the stream. A larger
 /// user-configured value still wins.

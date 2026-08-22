@@ -46,7 +46,7 @@ fn main() {
 
     // Ensure localhost bypasses any configured HTTP/SOCKS proxy.
     // Without this, the Tauri HTTP plugin (reqwest) picks up the macOS
-    // system proxy and routes local llama-server requests through it,
+    // system proxy and routes local model-server requests through it,
     // which breaks communication with the local inference backend.
     let local_hosts = "localhost,127.0.0.1,::1,0.0.0.0";
     for key in &["NO_PROXY", "no_proxy"] {

@@ -80,11 +80,6 @@ export function getProviderLogo(provider: string) {
   switch (provider) {
     case 'jan':
       return '/images/model-provider/jan.png'
-    case 'llamacpp':
-    case 'llamacpp-upstream':
-      return '/images/model-provider/llamacpp.svg'
-    case 'mlx':
-      return '/images/model-provider/mlx.png'
     case 'anthropic':
       return '/images/model-provider/anthropic.svg'
     case 'huggingface':
@@ -121,57 +116,28 @@ export function getProviderLogo(provider: string) {
 }
 
 /**
- * The DEFAULT local llama.cpp provider id for THIS platform.
- *   - Windows and Linux ship upstream plus the optional TurboQuant provider;
- *     upstream remains the default.
- *   - macOS defaults to `llamacpp-upstream` too — see ADR
- *     2026-06-09 (ATO-116). The vanilla upstream backend understands the
- *     full Gemma 4 projector set (`gemma4uv`/`gemma4ua`), so the bundled
- *     "Recommended" Gemma 4 vision model loads out of the box. The
- *     turboquant fork (`llamacpp`) is NOT removed on macOS — it stays a
- *     parallel provider the user can select manually for its turbo3
- *     KV-cache memory savings (2026-05-19 dual-provider ADR).
- *
- * This only governs the default for fresh downloads / empty state. Users
- * with `llamacpp` (turboquant) explicitly selected keep it (zustand-persist),
- * and existing models on disk under `<data>/llamacpp/models/` are untouched.
- *
- * Use this whenever the UI needs to address "the local llama.cpp engine
- * that runs models" without forking call sites per OS.
+ * The only local inference provider id. Use this whenever the UI needs to
+ * address "the local engine that runs models" without hardcoding call sites.
  */
-export const LOCAL_LLAMACPP_PROVIDER = 'llamacpp-upstream'
+export const LOCAL_LLAMACPP_PROVIDER = 'ginfer'
 
 /**
- * Extension name (`@janhq/...`) that drives the DEFAULT llama.cpp provider
- * on THIS platform. Mirrors `LOCAL_LLAMACPP_PROVIDER` — the extension
- * manager resolves the upstream extension on every platform. The TurboQuant
- * extension is also packaged on every desktop OS and is reached when the user
- * selects that provider explicitly.
+ * Extension name (`@gchat/...`) that drives the local inference provider.
+ * Mirrors `LOCAL_LLAMACPP_PROVIDER`.
  */
-export const LOCAL_LLAMACPP_EXTENSION_NAME = '@janhq/llamacpp-upstream-extension'
+export const LOCAL_LLAMACPP_EXTENSION_NAME = '@gchat/ginfer-extension'
 
 /**
- * Returns true for either llamacpp provider id ('llamacpp' = turboquant,
- * 'llamacpp-upstream' = upstream ggml-org build). Both providers support
- * client-side token counting via their respective getTokensCount() methods.
+ * Returns true for the local inference provider id.
  */
-export const isLlamacppProvider = (provider: string) =>
-  provider === 'llamacpp' || provider === 'llamacpp-upstream'
+export const isLlamacppProvider = (provider: string) => provider === 'ginfer'
 
 export const getProviderTitle = (provider: string) => {
   switch (provider) {
     case 'jan':
-      return 'Atomic Chat'
-    case 'llamacpp':
-      // TurboQuant now ships on Windows and Linux as a second provider
-      // side-by-side with `llamacpp-upstream` (which stays the default),
-      // so the `llamacpp` provider carries its real Turboquant name on
-      // every platform.
-      return 'llama.cpp turboquant'
-    case 'llamacpp-upstream':
-      return 'llama.cpp'
-    case 'mlx':
-      return 'MLX'
+      return 'GChat'
+    case 'ginfer':
+      return 'GInfer'
     case 'openai':
       return 'OpenAI'
     case 'openrouter':

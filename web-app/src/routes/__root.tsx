@@ -2,8 +2,6 @@ import { createRootRoute, Outlet } from '@tanstack/react-router'
 // import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 
 import DialogAppUpdater from '@/containers/dialogs/AppUpdater'
-import BackendUpdater from '@/containers/dialogs/BackendUpdater'
-import SuboptimalBackendDialog from '@/containers/dialogs/SuboptimalBackendDialog'
 import { Fragment } from 'react/jsx-runtime'
 import { ThemeProvider } from '@/providers/ThemeProvider'
 import { InterfaceProvider } from '@/providers/InterfaceProvider'
@@ -27,11 +25,9 @@ import OutOfContextPromiseModal from '@/containers/dialogs/OutOfContextDialog'
 import AttachmentIngestionDialog from '@/containers/dialogs/AttachmentIngestionDialog'
 import WhatsNewDialog from '@/containers/dialogs/WhatsNewDialog'
 import { useEffect } from 'react'
-import { useSetupCompleted } from '@/hooks/useSetupCompleted'
 import GlobalError from '@/containers/GlobalError'
 import * as Sentry from '@sentry/react'
 import { GlobalEventHandler } from '@/providers/GlobalEventHandler'
-import { StartupBackendCoordinator } from '@/providers/StartupBackendCoordinator'
 import { ServiceHubProvider } from '@/providers/ServiceHubProvider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LeftSidebar } from '@/components/left-sidebar'
@@ -56,7 +52,6 @@ const AppLayout = () => {
   // Feeds live server / model / RAM state into the desktop system tray.
   // No-op outside macOS and Windows Tauri builds (see hook implementation).
   useTrayStatusSync()
-  const isSetupCompleted = useSetupCompleted()
 
   return (
     <div className="bg-neutral-50 dark:bg-background size-full relative">
@@ -69,11 +64,6 @@ const AppLayout = () => {
         <AnalyticProvider />
         <KeyboardShortcutsProvider />
         <DialogAppUpdater />
-        {isSetupCompleted && <BackendUpdater />}
-        {/* Unlike the recommendation dialogs above, this dialog only opens
-            after ChatInput dispatches a mismatch prompt. Keep it mounted for
-            upgraded/legacy users whose setup-completed flag is absent. */}
-        <SuboptimalBackendDialog />
         <WhatsNewDialog />
         <LeftSidebar />
         <SidebarInset>
@@ -152,7 +142,6 @@ function RootLayout() {
           <ExtensionProvider>
             <DataProvider />
             <GlobalEventHandler />
-            <StartupBackendCoordinator />
             {IS_LOGS_ROUTE ? <LogsLayout /> : <AppLayout />}
           </ExtensionProvider>
           {/* <TanStackRouterDevtools position="bottom-right" /> */}

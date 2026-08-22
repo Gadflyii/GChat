@@ -172,10 +172,6 @@ export function ModelSetting({
             // so there is exactly one place to tune sampling. The persisted
             // `model.settings.*` values are left untouched on disk.
             if (LEGACY_SAMPLING_KEYS.has(key)) return false
-            // MLX models only support context size setting
-            if (provider.provider === 'mlx') {
-              return key === 'ctx_len'
-            }
             return true
           })
           .map(([key, value]) => {

@@ -213,7 +213,7 @@ describe('useGeneralSetting', () => {
       })
 
       expect(mockExtensionManager.getInstance).toHaveBeenCalled()
-      expect(mockGetByName).toHaveBeenCalledWith('@janhq/download-extension')
+      expect(mockGetByName).toHaveBeenCalledWith('@gchat/download-extension')
 
       // Wait for async operations
       await new Promise((resolve) => setTimeout(resolve, 0))

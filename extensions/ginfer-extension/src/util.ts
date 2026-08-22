@@ -1,5 +1,5 @@
-import { joinPath } from '@janhq/core'
-import { fs } from '@janhq/core'
+import { joinPath } from '@gchat/core'
+import { fs } from '@gchat/core'
 
 export async function defaultBinaryPath(
   dataFolderPath: string

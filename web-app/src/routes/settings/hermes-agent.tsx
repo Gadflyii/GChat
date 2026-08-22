@@ -400,7 +400,7 @@ function ManualConfigPanel({
     `  base_url: "${apiUrl}"`,
     '',
     'custom_providers:',
-    '- name: atomic-chat',
+    '- name: gchat',
     `  base_url: ${apiUrl}`,
     `  model: ${model}`,
     '  models:',

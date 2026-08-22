@@ -12,9 +12,6 @@ import { routeTree } from './routeTree.gen'
 import './index.css'
 import './i18n'
 import { installCodeBlockDownloadHandler } from './lib/codeBlockDownload'
-import { runWindowsLlamacppProviderMigration } from './lib/windowsProviderMigration'
-import { runMacosLlamacppDefaultMigration } from './lib/macosLlamacppDefaultMigration'
-import { runTurboquantDefaultMigration } from './lib/turboquantDefaultMigration'
 import { initSentryFrontend } from './lib/sentry'
 import { resetForcedOnboardingRun } from './lib/onboarding'
 import { useGeneralSetting } from './hooks/useGeneralSetting'
@@ -141,29 +138,6 @@ preventDefaultFileDrop()
 
 // Prevent user-initiated zoom across the app
 disablePageZoom()
-
-// One-time, Windows-only migration of localStorage entries that point at
-// the now-excised turboquant `llamacpp` provider (ADR 2026-05-22). Must
-// run BEFORE React mounts so the very first paint of `DataProvider` /
-// `ChatInput` / `SetupScreen` sees the rewritten `'llamacpp-upstream'`
-// value in `lastUsedModel`. No-op on macOS / Linux and on second launch.
-runWindowsLlamacppProviderMigration()
-
-// One-time, macOS-only migration of the `lastUsedModel` localStorage entry
-// that still points at the turboquant `llamacpp` provider (ATO-136 / ADR
-// 2026-06-09). Pairs with the zustand v14 `selectedProvider` redirect in
-// `useModelProvider`. Must run BEFORE React mounts so the first auto-start
-// in `DataProvider` resolves the model on `'llamacpp-upstream'`. No-op on
-// Windows / Linux and on second launch.
-runMacosLlamacppDefaultMigration()
-
-// One-time classification of this profile as fresh-install vs existing, which
-// decides whether the TurboQuant `llamacpp` provider registers active (existing
-// users) or disabled-but-toggleable (fresh installs). Must run BEFORE React
-// mounts AND before the `preloadModelOnStartup` reset below — that
-// `useModelProvider.setState` call creates the persisted `model-provider`
-// blob, which would misclassify a fresh install as an existing profile.
-runTurboquantDefaultMigration()
 
 // Dev-only (`make dev-onboarding`): drop the persisted onboarding completion
 // flag so the forced run replays the whole flow — picker, 15s auto-exit, chat

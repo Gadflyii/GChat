@@ -184,10 +184,10 @@ pub fn migrate_mcp_servers(
         }
     }
     if mcp_version < 2 {
-        log::info!("Migrating MCP schema version 2: Adding Jan Browser MCP");
+        log::info!("Migrating MCP schema version 2: Adding GChat Browser MCP");
         let result = add_server_config(
             app_handle.clone(),
-            "Jan Browser MCP".to_string(),
+            "GChat Browser MCP".to_string(),
             serde_json::json!({
                 "command": "npx",
                 "args": ["-y", "search-mcp-server@latest"],
@@ -200,7 +200,7 @@ pub fn migrate_mcp_servers(
             }),
         );
         if let Err(e) = result {
-            log::error!("Failed to add Jan Browser MCP server config: {e}");
+            log::error!("Failed to add GChat Browser MCP server config: {e}");
         }
     }
     if mcp_version < 3 {
@@ -277,7 +277,7 @@ pub fn extract_extension_manifest<R: Read>(
     Ok(None)
 }
 
-/// Install/update the bundled `atomic-chat-cli` binary.
+/// Install/update the bundled `gchat-cli` binary.
 ///
 /// - `version_changed`: pass `true` whenever the app version has changed (i.e. after an update).
 ///   When `true` the binary is always overwritten so the CLI stays in sync with the new app.
@@ -298,7 +298,7 @@ pub fn setup_jan_cli<R: Runtime>(app_handle: tauri::AppHandle<R>, version_change
                 cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             }
             if cmd.output().map(|o| o.status.success()).unwrap_or(false) {
-                log::debug!("Atomic Chat CLI already on PATH — skipping reinstall");
+                log::debug!("GChat CLI already on PATH — skipping reinstall");
                 return;
             }
         }
@@ -306,7 +306,7 @@ pub fn setup_jan_cli<R: Runtime>(app_handle: tauri::AppHandle<R>, version_change
         match crate::core::system::commands::install_jan_cli_sync(&app_handle) {
             Ok(status) => {
                 log::info!(
-                    "Atomic Chat CLI {} to {}",
+                    "GChat CLI {} to {}",
                     if version_changed {
                         "updated"
                     } else {
@@ -316,7 +316,7 @@ pub fn setup_jan_cli<R: Runtime>(app_handle: tauri::AppHandle<R>, version_change
                 );
             }
             Err(e) => {
-                log::warn!("Atomic Chat CLI auto-install skipped: {e}");
+                log::warn!("GChat CLI auto-install skipped: {e}");
             }
         }
     });
@@ -424,7 +424,7 @@ pub fn setup_tray(app: &App) -> tauri::Result<TrayIcon> {
         None::<&str>,
     )?;
 
-    let show_i = MenuItem::with_id(app.handle(), "open", "Open Atomic Chat", true, None::<&str>)?;
+    let show_i = MenuItem::with_id(app.handle(), "open", "Open GChat", true, None::<&str>)?;
     let quit_i = MenuItem::with_id(app.handle(), "quit", "Quit", true, None::<&str>)?;
 
     //* Three separators carve the menu into Pico-style sections so the rows
@@ -662,7 +662,7 @@ fn setup_window_theme_listener<R: Runtime>(
             let _ = app_handle_clone.emit("theme-changed", theme_str);
         }
         // On macOS the red traffic-light button should send the app to the
-        // background (keeping the llama.cpp server running) instead of quitting,
+        // background (keeping the model server running) instead of quitting,
         // matching typical menu-bar app behavior. We hide both the window and the
         // application (NSApplication): `window.hide()` alone leaves the window in
         // Mission Control / the app switcher, while `app.hide()` alone leaves the

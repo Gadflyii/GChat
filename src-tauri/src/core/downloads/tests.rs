@@ -389,7 +389,7 @@ async fn spawn_model_contract_server() -> (String, tokio::task::JoinHandle<Resul
 fn test_download_path(name: &str) -> std::path::PathBuf {
     std::env::temp_dir()
         .join(format!(
-            "atomic-chat-download-test-{}",
+            "gchat-download-test-{}",
             uuid::Uuid::new_v4()
         ))
         .join(name)

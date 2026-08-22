@@ -47,7 +47,7 @@ pub async fn deactivate_mcp_server<R: Runtime>(
     log::info!("Deactivating MCP server: {name}");
 
     // Get port from config before removing (for lock file cleanup later)
-    let bridge_port = if name == "Jan Browser MCP" {
+    let bridge_port = if name == "GChat Browser MCP" {
         let active_servers = state.mcp_active_servers.lock().await;
         active_servers.get(&name).and_then(|config| {
             config
@@ -120,8 +120,8 @@ pub async fn deactivate_mcp_server<R: Runtime>(
         }
     }
     cancel_result?;
-    // Delete lock file if this is Jan Browser MCP and we have a port
-    if name == "Jan Browser MCP" {
+    // Delete lock file if this is GChat Browser MCP and we have a port
+    if name == "GChat Browser MCP" {
         if let Some(port) = bridge_port {
             use crate::core::mcp::lockfile::delete_lock_file;
 
@@ -538,16 +538,16 @@ pub async fn get_mcp_configs<R: Runtime>(app: AppHandle<R>) -> Result<String, St
         mutated = true;
     }
 
-    // Migration: Add Jan Browser MCP if not present
+    // Migration: Add GChat Browser MCP if not present
     let mcp_servers = config_object
         .get_mut("mcpServers")
         .and_then(|v| v.as_object_mut())
         .ok_or("mcpServers is not an object")?;
 
-    if !mcp_servers.contains_key("Jan Browser MCP") {
-        log::info!("Migrating config: Adding 'Jan Browser MCP' server");
+    if !mcp_servers.contains_key("GChat Browser MCP") {
+        log::info!("Migrating config: Adding 'GChat Browser MCP' server");
         mcp_servers.insert(
-            "Jan Browser MCP".to_string(),
+            "GChat Browser MCP".to_string(),
             json!({
                 "command": "npx",
                 "args": ["-y", "search-mcp-server@latest"],
@@ -675,13 +675,13 @@ fn get_result_text(result: &rmcp::model::CallToolResult) -> Option<&str> {
         .map(|t| t.text.as_str())
 }
 
-/// Check if Jan Browser extension is connected via MCP
+/// Check if GChat Browser extension is connected via MCP
 #[tauri::command]
 pub async fn check_jan_browser_extension_connected(
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
     let servers = state.mcp_servers.lock().await;
-    let service = match servers.get("Jan Browser MCP") {
+    let service = match servers.get("GChat Browser MCP") {
         Some(s) => s,
         None => return Ok(false),
     };

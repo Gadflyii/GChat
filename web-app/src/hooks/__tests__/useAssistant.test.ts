@@ -59,7 +59,7 @@ describe('useAssistant', () => {
 
     const updatedAssistant = {
       ...defaultAssistant,
-      name: 'Updated Atomic Chat',
+      name: 'Updated GChat',
       description: 'Updated description',
     }
 
@@ -67,7 +67,7 @@ describe('useAssistant', () => {
       result.current.updateAssistant(updatedAssistant)
     })
 
-    expect(result.current.assistants[0].name).toBe('Updated Atomic Chat')
+    expect(result.current.assistants[0].name).toBe('Updated GChat')
     expect(result.current.assistants[0].description).toBe('Updated description')
   })
 
@@ -95,7 +95,7 @@ describe('useAssistant', () => {
     })
 
     expect(result.current.assistants).toHaveLength(1)
-    expect(result.current.assistants[0].id).toBe('jan')
+    expect(result.current.assistants[0].id).toBe('gchat')
   })
 
   it('should set current assistant', () => {
@@ -153,8 +153,8 @@ describe('useAssistant', () => {
   it('should maintain assistant structure', () => {
     const { result } = renderHook(() => useAssistant())
 
-    expect(result.current.currentAssistant.id).toBe('jan')
-    expect(result.current.currentAssistant.name).toBe('Atomic Chat')
+    expect(result.current.currentAssistant.id).toBe('gchat')
+    expect(result.current.currentAssistant.name).toBe('GChat')
     expect(result.current.currentAssistant.avatar).toBe(
       '/images/transparent-logo.png'
     )
@@ -180,7 +180,7 @@ describe('useAssistant', () => {
 
     const updatedDefaultAssistant = {
       ...defaultAssistant,
-      name: 'Updated Atomic Chat Name',
+      name: 'Updated GChat Name',
     }
 
     act(() => {
@@ -188,7 +188,7 @@ describe('useAssistant', () => {
     })
 
     expect(result.current.currentAssistant.name).toBe(
-      'Updated Atomic Chat Name'
+      'Updated GChat Name'
     )
   })
 

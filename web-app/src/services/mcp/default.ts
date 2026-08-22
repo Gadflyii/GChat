@@ -2,7 +2,7 @@
  * Default MCP Service - Generic implementation with minimal returns
  */
 
-import { MCPTool, MCPToolCallResult } from '@janhq/core'
+import { MCPTool, MCPToolCallResult } from '@gchat/core'
 import type { MCPServerConfig } from '@/hooks/useMCPServers'
 import type {
   MCPService,
@@ -81,7 +81,7 @@ export class DefaultMCPService implements MCPService {
     // No-op - not implemented in default service
   }
 
-  async checkJanBrowserExtensionConnected(): Promise<boolean> {
+  async checkGChatBrowserExtensionConnected(): Promise<boolean> {
     return false
   }
 }

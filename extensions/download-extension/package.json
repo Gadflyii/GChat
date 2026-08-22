@@ -1,10 +1,10 @@
 {
-  "name": "@janhq/download-extension",
+  "name": "@gchat/download-extension",
   "productName": "Download Manager",
   "version": "1.0.0",
-  "description": "Download and manage files and AI models in Jan.",
+  "description": "Download and manage files and AI models in GChat.",
   "main": "dist/index.js",
-  "author": "Jan <service@jan.ai>",
+  "author": "GChat",
   "license": "AGPL-3.0",
   "scripts": {
     "test": "vitest run",
@@ -26,7 +26,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@janhq/core": "../../core/package.tgz",
+    "@gchat/core": "../../core/package.tgz",
     "@tauri-apps/api": "2.8.0"
   },
   "bundleDependencies": [],

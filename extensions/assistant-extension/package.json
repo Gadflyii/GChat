@@ -1,11 +1,11 @@
 {
-  "name": "@janhq/assistant-extension",
-  "productName": "Jan Assistant",
+  "name": "@gchat/assistant-extension",
+  "productName": "GChat Assistant",
   "version": "1.0.2",
   "description": "Powers the default AI assistant that works with all your installed models.",
   "main": "dist/index.js",
   "node": "dist/node/index.js",
-  "author": "Jan <service@jan.ai>",
+  "author": "GChat",
   "license": "AGPL-3.0",
   "scripts": {
     "build": "rolldown -c rolldown.config.mjs",
@@ -19,7 +19,7 @@
     "typescript": "5.9.2"
   },
   "dependencies": {
-    "@janhq/core": "../../core/package.tgz",
+    "@gchat/core": "../../core/package.tgz",
     "ts-loader": "^9.5.0"
   },
   "files": [
@@ -28,7 +28,7 @@
     "README.md"
   ],
   "bundleDependencies": [
-    "@janhq/core"
+    "@gchat/core"
   ],
   "installConfig": {
     "hoistingLimits": "workspaces"

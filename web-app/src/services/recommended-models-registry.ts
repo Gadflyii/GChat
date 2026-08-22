@@ -51,8 +51,8 @@ export const SUPPORTED_SCHEMA_VERSION = 1
 /** Cache TTL (1 hour) — matches provider registry. */
 export const CACHE_TTL_MS = 60 * 60 * 1000
 
-const CACHE_KEY = 'jan_recommended_models_cache_v1'
-const CACHE_TS_KEY = 'jan_recommended_models_cache_ts_v1'
+const CACHE_KEY = 'gchat_recommended_models_cache_v1'
+const CACHE_TS_KEY = 'gchat_recommended_models_cache_ts_v1'
 
 const FETCH_TIMEOUT_MS = 5000
 

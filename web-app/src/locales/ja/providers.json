@@ -68,10 +68,5 @@
     "neverUpdated": "未読み込み",
     "successDescription": "プロバイダーカタログを更新しました。",
     "errorDescription": "カタログを更新できませんでした。キャッシュまたは組み込みプロバイダーを使用しています。"
-  },
-  "llamacpp": {
-    "concurrentMode": {
-      "perSlotContextWarning": "スロットごとのコンテキストは ctx_size をスロット数で割った値です。スロット数が少ないほど、リクエストごとのコンテキストが大きくなります。"
-    }
   }
 }

@@ -3,7 +3,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Atomic Chat",
+        "title": "GChat",
         "width": 1200,
         "minWidth": 1024,
         "height": 800,
@@ -34,10 +34,8 @@
       "resources/pre-install/**/*",
       "resources/LICENSE",
       "resources/agent-skills/**/*",
-      "resources/bin/jan-cli",
-      "resources/bin/sqlite-vec.so",
-      "resources/llamacpp-backend-upstream/**/*",
-      "resources/llamacpp-backend/**/*"
+      "resources/bin/gchat-cli",
+      "resources/bin/sqlite-vec.so"
     ],
     "externalBin": ["resources/bin/uv"],
     "linux": {

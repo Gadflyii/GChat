@@ -1,5 +1,5 @@
 /**
- * Model catalog registry -- remote loader for the curated Atomic Chat
+ * Model catalog registry -- remote loader for the curated GChat
  * model catalog and its pre-built MiniSearch index.
  *
  * Mirrors the architecture of `provider-registry.ts` and
@@ -59,11 +59,11 @@ export const SUPPORTED_INDEX_VERSION = 1
 /** Cache TTL (1 hour) — same posture as the sibling registries. */
 export const CACHE_TTL_MS = 60 * 60 * 1000
 
-const CATALOG_CACHE_KEY = 'atomic_model_catalog_cache_v1'
-const CATALOG_CACHE_TS_KEY = 'atomic_model_catalog_cache_ts_v1'
-const INDEX_CACHE_KEY = 'atomic_model_catalog_idx_v1'
-const INDEX_CACHE_TS_KEY = 'atomic_model_catalog_idx_ts_v1'
-const CACHE_DB_NAME = 'atomic_model_catalog_cache'
+const CATALOG_CACHE_KEY = 'gchat_model_catalog_cache_v1'
+const CATALOG_CACHE_TS_KEY = 'gchat_model_catalog_cache_ts_v1'
+const INDEX_CACHE_KEY = 'gchat_model_catalog_idx_v1'
+const INDEX_CACHE_TS_KEY = 'gchat_model_catalog_idx_ts_v1'
+const CACHE_DB_NAME = 'gchat_model_catalog_cache'
 const CACHE_DB_VERSION = 1
 const CACHE_STORE_NAME = 'snapshots'
 
@@ -582,7 +582,7 @@ export const getCatalogOrFallback = async (
     if (manifest.schema_version > SUPPORTED_SCHEMA_VERSION) {
       throw new Error(
         `Catalog schema_version ${manifest.schema_version} is newer than supported ` +
-          `(${SUPPORTED_SCHEMA_VERSION}). Update Atomic Chat to read it.`
+          `(${SUPPORTED_SCHEMA_VERSION}). Update GChat to read it.`
       )
     }
     const fetchedAt = Date.now()

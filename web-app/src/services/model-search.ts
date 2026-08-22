@@ -1,6 +1,6 @@
 /**
  * Model search service -- Google-like local search over the curated
- * Atomic Chat model catalog.
+ * GChat model catalog.
  *
  * The service loads a pre-built MiniSearch snapshot when one is
  * available (`catalog.idx.json` from the catalog repo's GitHub Release).

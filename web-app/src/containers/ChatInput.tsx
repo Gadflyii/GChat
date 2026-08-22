@@ -1,11 +1,6 @@
 import { EMBEDDING_MODEL_ID } from '@/constants/models'
 import TextareaAutosize from 'react-textarea-autosize'
-import {
-  cn,
-  formatBytes,
-  LOCAL_LLAMACPP_PROVIDER,
-  isLlamacppProvider,
-} from '@/lib/utils'
+import { cn, formatBytes, isLlamacppProvider } from '@/lib/utils'
 import { usePrompt } from '@/hooks/usePrompt'
 import { useThreads } from '@/hooks/useThreads'
 import {
@@ -58,7 +53,6 @@ import {
 } from '@/hooks/useInitialMessage'
 import { useOptimisticUserMessage } from '@/hooks/useOptimisticUserMessage'
 import { buildOptimisticUserMessage } from '@/lib/optimisticUserMessage'
-import { localStorageKey } from '@/constants/localStorage'
 import { defaultModel } from '@/lib/models'
 import { useAssistant } from '@/hooks/useAssistant'
 import DropdownToolsAvailable from '@/containers/DropdownToolsAvailable'
@@ -77,7 +71,7 @@ import {
   ThreadMessage,
   fs,
   VectorDBExtension,
-} from '@janhq/core'
+} from '@gchat/core'
 import { ExtensionManager } from '@/lib/extension'
 import { useAttachments } from '@/hooks/useAttachments'
 import { toast } from 'sonner'
@@ -110,9 +104,8 @@ import {
   AUDIO_EXTENSIONS,
   classifyDroppedPaths,
 } from '@/containers/chatInput/classifyDroppedPaths'
-import JanBrowserExtensionDialog from '@/containers/dialogs/JanBrowserExtensionDialog'
-import { useJanBrowserExtension } from '@/hooks/useJanBrowserExtension'
-import { PromptVisionModel } from '@/containers/PromptVisionModel'
+import GChatBrowserExtensionDialog from '@/containers/dialogs/GChatBrowserExtensionDialog'
+import { useGChatBrowserExtension } from '@/hooks/useGChatBrowserExtension'
 import { useAgentMode } from '@/hooks/useAgentMode'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import ReasoningToggle from '@/containers/ReasoningToggle'
@@ -131,10 +124,6 @@ import {
   type AgentSkillSlashQuery,
 } from '@/containers/agentSkillSlash'
 import { useAgentSkills } from '@/hooks/useAgentSkills'
-import {
-  BACKEND_MISMATCH_PROMPT_EVENT,
-  useBackendMismatch,
-} from '@/hooks/useBackendMismatch'
 import type { AgentSkill } from '@/services/agent/skills'
 
 type ChatInputProps = {
@@ -176,9 +165,6 @@ const ChatInput = memo(function ChatInput({
   const prompt = usePrompt((state) => state.prompt)
   const setPrompt = usePrompt((state) => state.setPrompt)
   const currentThreadId = useThreads((state) => state.currentThreadId)
-  const updateCurrentThreadModel = useThreads(
-    (state) => state.updateCurrentThreadModel
-  )
   const { t } = useTranslation()
   const spellCheckChatInput = useGeneralSetting(
     (state) => state.spellCheckChatInput
@@ -187,7 +173,6 @@ const ChatInput = memo(function ChatInput({
     (state) => state.tokenCounterCompact
   )
   const maxImageSizePx = useGeneralSetting((state) => state.maxImageSizePx)
-  const { shouldPrompt: shouldPromptBackendMismatch } = useBackendMismatch()
   useTools()
   const router = useRouter()
   const createThread = useThreads((state) => state.createThread)
@@ -195,10 +180,6 @@ const ChatInput = memo(function ChatInput({
   const defaultAssistantId = useAssistant((state) => state.defaultAssistantId)
   const selectedModel = useModelProvider((state) => state.selectedModel)
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
-  const selectModelProvider = useModelProvider(
-    (state) => state.selectModelProvider
-  )
-  const updateProvider = useModelProvider((state) => state.updateProvider)
 
   const canSelectAgentMode = canSelectChatAgentMode(initialMessage, projectId)
   const isAgentProviderSelected = isLlamacppProvider(selectedProvider)
@@ -296,8 +277,6 @@ const ChatInput = memo(function ChatInput({
   const [dropdownToolsAvailable, setDropdownToolsAvailable] = useState(false)
   const [tooltipToolsAvailable, setTooltipToolsAvailable] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
-  const [hasMmproj, setHasMmproj] = useState(false)
-  const [showVisionModelPrompt, setShowVisionModelPrompt] = useState(false)
   const [isPreparingDocumentAttachments, setIsPreparingDocumentAttachments] =
     useState(false)
   const activeModels = useAppState(useShallow((state) => state.activeModels))
@@ -306,15 +285,12 @@ const ChatInput = memo(function ChatInput({
     ? activeModels.includes(selectedModel.id)
     : false
 
-  // Auto-start local model (llamacpp/mlx) when selected so the indicator and send
-  // button reflect its status. Uses the unified switchToModel to ensure only one
-  // model runs across all local providers. switchToModel manages loadingModel,
-  // activeModels and is serialised, so no manual state juggling is needed here.
+  // Auto-start the local model when selected so the indicator and send
+  // button reflect its status. Uses the unified switchToModel to ensure only
+  // one model runs. switchToModel manages loadingModel, activeModels and is
+  // serialised, so no manual state juggling is needed here.
   useEffect(() => {
-    const isLocal =
-      selectedProvider === 'mlx' ||
-      selectedProvider === 'llamacpp' ||
-      selectedProvider === 'llamacpp-upstream'
+    const isLocal = isLlamacppProvider(selectedProvider)
     if (
       !isLocal ||
       !selectedModel?.id ||
@@ -400,9 +376,7 @@ const ChatInput = memo(function ChatInput({
   )
 
   const isLocalModelNotReady =
-    (selectedProvider === 'mlx' ||
-      selectedProvider === 'llamacpp' ||
-      selectedProvider === 'llamacpp-upstream') &&
+    isLlamacppProvider(selectedProvider) &&
     !!selectedModel?.id &&
     !activeModels.includes(selectedModel.id)
 
@@ -425,16 +399,16 @@ const ChatInput = memo(function ChatInput({
 
   // No auto-selection: let the user explicitly pick an assistant
 
-  // Jan Browser Extension hook
+  // GChat Browser Extension hook
   const {
-    //! при возврате кнопки Browse: hasConfig: hasJanBrowserMCPConfig, isLoading: isJanBrowserMCPLoading,
-    isActive: janBrowserMCPActive,
+    //! при возврате кнопки Browse: hasConfig: hasGChatBrowserMCPConfig, isLoading: isGChatBrowserMCPLoading,
+    isActive: gchatBrowserMCPActive,
     dialogOpen: extensionDialogOpen,
     dialogState: extensionDialogState,
     toggleBrowser: handleBrowseClick,
     handleCancel: handleExtensionDialogCancel,
     setDialogOpen: setExtensionDialogOpen,
-  } = useJanBrowserExtension()
+  } = useGChatBrowserExtension()
 
   // Check if model supports browser feature (requires both vision and tools)
   const modelSupportsBrowser = useMemo(() => {
@@ -443,20 +417,26 @@ const ChatInput = memo(function ChatInput({
   }, [selectedModel?.capabilities])
 
   // Audio input is gated on the model's `audio` capability (omni/audio-capable
-  // models such as Gemma 4 via the MLX backend). The "Add audio" menu item is
-  // hidden entirely for non-audio models — unlike images, there is no
-  // download-a-model prompt to fall back to.
+  // models). The "Add audio" menu item is hidden entirely for non-audio
+  // models — unlike images, there is no download-a-model prompt to fall back
+  // to.
   const hasAudio = useMemo(
     () => selectedModel?.capabilities?.includes('audio') ?? false,
     [selectedModel?.capabilities]
   )
 
+  // Image attachment is gated on the model's `vision` capability.
+  const hasVision = useMemo(
+    () => selectedModel?.capabilities?.includes('vision') ?? false,
+    [selectedModel?.capabilities]
+  )
+
   // Auto-disable browser feature when model doesn't support it
   useEffect(() => {
-    if (janBrowserMCPActive && !modelSupportsBrowser) {
+    if (gchatBrowserMCPActive && !modelSupportsBrowser) {
       handleBrowseClick()
     }
-  }, [janBrowserMCPActive, modelSupportsBrowser, handleBrowseClick])
+  }, [gchatBrowserMCPActive, modelSupportsBrowser, handleBrowseClick])
 
   const attachmentsEnabled = useAttachments((s) => s.enabled)
   const parsePreference = useAttachments((s) => s.parseMode)
@@ -566,30 +546,9 @@ const ChatInput = memo(function ChatInput({
     [clearAttachmentsForThread, setAttachmentsForThread]
   )
 
-  // Check for mmproj existence or vision capability when model changes
-  useEffect(() => {
-    const checkMmprojSupport = async () => {
-      if (selectedModel && selectedModel?.id) {
-        try {
-          // Only check mmproj for llamacpp provider
-          if (selectedModel?.capabilities?.includes('vision')) {
-            setHasMmproj(true)
-          } else {
-            setHasMmproj(false)
-          }
-        } catch (error) {
-          console.error('Error checking mmproj:', error)
-          setHasMmproj(false)
-        }
-      }
-    }
-
-    checkMmprojSupport()
-  }, [selectedModel, selectedModel?.capabilities, selectedProvider, serviceHub])
-
   // Check if there are active MCP servers
   const hasActiveMCPServers =
-    tools.filter((tool) => tool.server !== 'Jan Browser MCP').length > 0
+    tools.filter((tool) => tool.server !== 'GChat Browser MCP').length > 0
 
   // Get MCP extension and its custom component
   const extensionManager = ExtensionManager.getInstance()
@@ -640,22 +599,14 @@ const ChatInput = memo(function ChatInput({
     }
     if (
       effectiveAgentMode &&
-      !hasMmproj &&
+      !hasVision &&
       attachments.some((attachment) => attachment.type === 'image')
     ) {
       toast.error(t('chat:agentErrors.visionModelRequired'))
-      setShowVisionModelPrompt(true)
       return
     }
 
     setMessage('')
-
-    // A previous model load found that the running backend is not the one the UI
-    // shows (or that a faster one exists). Raise it here, on the first send after
-    // the load, rather than interrupting the load itself. Never blocks the send.
-    if (shouldPromptBackendMismatch) {
-      window.dispatchEvent(new Event(BACKEND_MISMATCH_PROMPT_EVENT))
-    }
 
     // Use onSubmit prop if available (AI SDK), otherwise create thread and navigate
     if (onSubmit) {
@@ -734,7 +685,7 @@ const ChatInput = memo(function ChatInput({
       })
       // #endregion
 
-      // Pre-warm the local llama.cpp / MLX session in parallel with
+      // Pre-warm the local ginfer session in parallel with
       // createThread + navigation + ThreadDetail mount. By the time
       // `CustomChatTransport.sendMessages` calls `ModelFactory.createModel`,
       // the session-cache entry is already populated and the IPC round-trips
@@ -985,11 +936,7 @@ const ChatInput = memo(function ChatInput({
         const modelReady = await (async () => {
           if (!selectedModel?.id) return false
           if (activeModels.includes(selectedModel.id)) return true
-          const isLocal =
-            selectedProvider === 'llamacpp' ||
-            selectedProvider === 'llamacpp-upstream' ||
-            selectedProvider === 'mlx'
-          if (!isLocal) return false
+          if (!isLlamacppProvider(selectedProvider)) return false
           try {
             const { switchToModel } = await import('@/utils/switchModel')
             await switchToModel({
@@ -1756,18 +1703,20 @@ const ChatInput = memo(function ChatInput({
   }, [serviceHub, processImageFiles])
 
   const handleImagePickerClick = async () => {
-    if (hasMmproj) {
+    if (hasVision) {
       await openImagePicker()
       return
     }
-    setShowVisionModelPrompt(true)
+    toast.error('Vision model required', {
+      description: 'Select a model with vision support to attach images.',
+    })
   }
 
   // --- Audio attachments (omni/audio-capable models) -----------------------
   // Audio mirrors the image attachment pipeline (validate → read as base64 →
   // commit to the per-thread chip store) but is never downscaled/transcoded,
   // and is forwarded to the model as an `input_audio` content part rather than
-  // an `image_url` file part (handled in the MLX transport).
+  // an `image_url` file part (handled in the local transport).
   const AUDIO_MAX_SIZE_BYTES = 25 * 1024 * 1024
   const AUDIO_WARN_DURATION_SECONDS = 90
   const AUDIO_ALLOWED_MIME_TYPES = [
@@ -1986,62 +1935,6 @@ const ChatInput = memo(function ChatInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceHub])
 
-  const handleVisionModelDownloadComplete = useCallback(
-    (modelId: string) => {
-      setShowVisionModelPrompt(false)
-
-      try {
-        localStorage.setItem(
-          localStorageKey.lastUsedModel,
-          JSON.stringify({
-            provider: LOCAL_LLAMACPP_PROVIDER,
-            model: modelId,
-          })
-        )
-      } catch {
-        // Ignore localStorage errors
-      }
-
-      setTimeout(() => {
-        // `getProviderByName('llamacpp')` is alias-aware on Windows and
-        // returns the upstream provider, but `updateProvider` is not — so
-        // we must address the canonical id for the platform here, otherwise
-        // the vision capability is never persisted on Windows.
-        const provider = getProviderByName(LOCAL_LLAMACPP_PROVIDER)
-        if (provider) {
-          const modelIndex = provider.models.findIndex((m) => m.id === modelId)
-          if (modelIndex !== -1) {
-            const model = provider.models[modelIndex]
-            const capabilities = model.capabilities || []
-
-            if (!capabilities.includes('vision')) {
-              const updatedModels = [...provider.models]
-              updatedModels[modelIndex] = {
-                ...model,
-                capabilities: [...capabilities, 'vision'],
-              }
-              updateProvider(LOCAL_LLAMACPP_PROVIDER, {
-                models: updatedModels,
-              })
-            }
-          }
-        }
-
-        selectModelProvider(LOCAL_LLAMACPP_PROVIDER, modelId)
-        updateCurrentThreadModel({
-          id: modelId,
-          provider: LOCAL_LLAMACPP_PROVIDER,
-        })
-      }, 500)
-    },
-    [
-      selectModelProvider,
-      getProviderByName,
-      updateProvider,
-      updateCurrentThreadModel,
-    ]
-  )
-
   const handleTauriDrop = (paths: string[]) => {
     if (!attachmentsEnabled) {
       toast.info('Attachments are disabled in Settings')
@@ -2057,7 +1950,7 @@ const ChatInput = memo(function ChatInput({
     }
 
     if (images.length > 0) {
-      if (!hasMmproj) {
+      if (!hasVision) {
         toast.error('Vision model required', {
           description: 'Select a model with vision support to attach images.',
         })
@@ -2166,7 +2059,7 @@ const ChatInput = memo(function ChatInput({
 
     if (imageFiles.length === 0) return
 
-    if (!hasMmproj) {
+    if (!hasVision) {
       toast.error('Vision model required', {
         description: 'Select a model with vision support to attach images.',
       })
@@ -2177,8 +2070,8 @@ const ChatInput = memo(function ChatInput({
   }
 
   const handlePaste = async (e: React.ClipboardEvent) => {
-    // Only process images if model supports mmproj
-    if (hasMmproj) {
+    // Only process images if the model supports vision
+    if (hasVision) {
       const clipboardItems = e.clipboardData?.items
       let hasProcessedImage = false
 
@@ -2278,7 +2171,7 @@ const ChatInput = memo(function ChatInput({
         'No image data found in clipboard, allowing normal text paste'
       )
     }
-    // If hasMmproj is false or no images found, allow normal text pasting to continue
+    // If the model lacks vision support or no images found, allow normal text pasting to continue
   }
 
   const isStreaming = chatStatus === 'submitted' || chatStatus === 'streaming'
@@ -2667,30 +2560,22 @@ const ChatInput = memo(function ChatInput({
                       />
                     </>
                   )}
-                  {/* {model?.provider === 'llamacpp' && loadingModel ? (
-                  <ModelLoader />
-                ) : (
-                  <DropdownModelProvider
-                    model={model}
-                    useLastUsedModel={initialMessage}
-                  />
-                )} */}
                   {/* //! Кнопка Browse (Chrome) — временно скрыта
-                {!effectiveAgentMode && hasJanBrowserMCPConfig && modelSupportsBrowser && (
+                {!effectiveAgentMode && hasGChatBrowserMCPConfig && modelSupportsBrowser && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        disabled={isJanBrowserMCPLoading}
-                        className={cn(janBrowserMCPActive && "text-primary")}
+                        disabled={isGChatBrowserMCPLoading}
+                        className={cn(gchatBrowserMCPActive && "text-primary")}
                         onClick={
-                          isJanBrowserMCPLoading
+                          isGChatBrowserMCPLoading
                             ? undefined
                             : handleBrowseClick
                         }
                       >
-                        {isJanBrowserMCPLoading ? (
+                        {isGChatBrowserMCPLoading ? (
                           <IconLoader2
                             size={18}
                             className="text-primary animate-spin"
@@ -2700,7 +2585,7 @@ const ChatInput = memo(function ChatInput({
                             size={18}
                             className={cn(
                               'text-muted-foreground',
-                              janBrowserMCPActive && 'text-primary'
+                              gchatBrowserMCPActive && 'text-primary'
                             )}
                           />
                         )}
@@ -2708,9 +2593,9 @@ const ChatInput = memo(function ChatInput({
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
-                        {isJanBrowserMCPLoading
+                        {isGChatBrowserMCPLoading
                           ? 'Starting...'
-                          : janBrowserMCPActive
+                          : gchatBrowserMCPActive
                             ? 'Browse (Active)'
                             : 'Browse'}
                       </p>
@@ -2908,19 +2793,14 @@ const ChatInput = memo(function ChatInput({
           </div>
         )}
 
-      <JanBrowserExtensionDialog
+      <GChatBrowserExtensionDialog
         open={extensionDialogOpen}
         onOpenChange={setExtensionDialogOpen}
         state={extensionDialogState}
         onCancel={handleExtensionDialogCancel}
       />
 
-      {/* Vision Model Download Prompt */}
-      <PromptVisionModel
-        open={showVisionModelPrompt}
-        onClose={() => setShowVisionModelPrompt(false)}
-        onDownloadComplete={handleVisionModelDownloadComplete}
-      />
+
     </div>
   )
 })

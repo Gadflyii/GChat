@@ -12,7 +12,7 @@ import {
   IconRefresh,
   IconSettings,
 } from '@tabler/icons-react'
-import { cn, getProviderTitle } from '@/lib/utils'
+import { cn, getProviderTitle, isLlamacppProvider } from '@/lib/utils'
 import { sortProvidersForSettings } from '@/lib/providerOrder'
 import ProvidersAvatar from '@/containers/ProvidersAvatar'
 import { AddProviderDialog } from '@/containers/dialogs'
@@ -104,10 +104,7 @@ function ModelProviders() {
   }, [refreshRegistry, serviceHub, setProviders, t])
 
   const sortedProviders = useMemo(
-    () =>
-      sortProvidersForSettings(
-        providers.filter((provider) => IS_MACOS || provider.provider !== 'mlx')
-      ),
+    () => sortProvidersForSettings(providers),
     [providers]
   )
 
@@ -242,12 +239,9 @@ function ModelProviders() {
                       <Switch
                         checked={provider.active}
                         onCheckedChange={async (e) => {
-                          if (
-                            !e &&
-                            provider.provider.toLowerCase() === 'llamacpp'
-                          ) {
-                            await serviceHub.models().stopAllModels()
-                          }
+                           if (!e && isLlamacppProvider(provider.provider)) {
+                             await serviceHub.models().stopAllModels()
+                           }
                           updateProvider(provider.provider, {
                             ...provider,
                             active: e,

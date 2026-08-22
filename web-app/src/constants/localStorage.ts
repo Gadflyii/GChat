@@ -29,19 +29,13 @@ export const localStorageKey = {
   samplingMigratedPerAssistant: 'sampling-migrated-per-assistant',
   favoriteModels: 'favorite-models',
   setupCompleted: 'setup-completed',
-  // Marks that the user has completed (either Skip or Download) the dedicated
-  // Windows-only llama.cpp backend onboarding step. Once set, the extension
-  // stops emitting `onBetterBackendDetected` events automatically — the
-  // recommendation can still be surfaced manually via the "Find optimal
-  // backend" button in provider settings.
-  llamacppOnboardingDone: 'llama_cpp_onboarding_done',
   threadManagement: 'thread-management',
-  modelSupportCache: 'jan_model_support_cache',
+  modelSupportCache: 'gchat_model_support_cache',
   recentSearches: 'recent-searches',
   // Set when onboarding is left without a model (Skip or the auto-exit
   // timeout) and cleared once the bottom-right reminder has been acted on or
   // dismissed. Survives a restart so the offer is not lost with the session.
-  onboardingModelReminder: 'atomic-onboarding-model-reminder',
+  onboardingModelReminder: 'gchat-onboarding-model-reminder',
   agentMode: 'agent-mode',
   agentModeAttentionSeen: 'agent-mode-attention-seen-v1',
   factoryResetPending: 'factory-reset-pending',
@@ -55,20 +49,6 @@ export const localStorageKey = {
   // user fix a wrong "Not installed" status for agents installed in a
   // non-standard location that PATH/WSL detection misses.
   launchCustomPaths: 'launch-custom-paths',
-  // Windows/Linux only: marks that the once-ever "find optimal backend" prompt
-  // for the turboquant (`llamacpp`) provider has been shown after the first
-  // model launch on that backend. Set on Skip OR Find so the popup never
-  // reappears; the optimal-backend recommendation stays reachable via the
-  // manual button in provider settings.
-  turboquantOptimalPromptShown: 'turboquant-optimal-prompt-shown',
-  // Backend pairs ("<configured>→<effective-or-ideal>") the user chose never to
-  // be reminded about again. Suppression is per pair, not global, so a later
-  // hardware or backend change still surfaces a fresh mismatch.
-  backendMismatchSuppressed: 'backend-mismatch-suppressed',
-  // Last startup attempt to silently upgrade the upstream llama.cpp backend to
-  // the tier detection picked for this host. Written before the download starts
-  // so a crash or a failure mid-download cannot retry on every launch.
-  startupBackendUpgradeAttempt: 'startup-backend-upgrade-attempt',
 }
 
 export const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24

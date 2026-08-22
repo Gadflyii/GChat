@@ -3,7 +3,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
-import { type AppConfiguration, type AutostartPreference } from '@janhq/core'
+import { type AppConfiguration, type AutostartPreference } from '@gchat/core'
 import { localStorageKey } from '@/constants/localStorage'
 import type { LogEntry } from './types'
 import { DefaultAppService } from './default'
@@ -14,7 +14,7 @@ export class TauriAppService extends DefaultAppService {
   ]
 
   async factoryReset(): Promise<void> {
-    const { EngineManager } = await import('@janhq/core')
+    const { EngineManager } = await import('@gchat/core')
     for (const [, engine] of EngineManager.instance().engines) {
       const activeModels = await engine.getLoadedModels()
       if (activeModels) {
@@ -53,19 +53,19 @@ export class TauriAppService extends DefaultAppService {
     }
   }
 
-  async getJanDataFolder(): Promise<string | undefined> {
+  async getGchatDataFolder(): Promise<string | undefined> {
     try {
       const appConfiguration: AppConfiguration | undefined =
         await window.core?.api?.getAppConfigurations()
 
       return appConfiguration?.data_folder
     } catch (error) {
-      console.error('Failed to get Jan data folder:', error)
+      console.error('Failed to get GChat data folder:', error)
       return undefined
     }
   }
 
-  async relocateJanDataFolder(path: string): Promise<void> {
+  async relocateGchatDataFolder(path: string): Promise<void> {
     await window.core?.api?.changeAppDataFolder({ newDataFolder: path })
   }
 

@@ -1,4 +1,4 @@
-ATOMIC-CHAT · CONCURRENT DEMO
+GCHAT · CONCURRENT DEMO
 ================================================================================
 
 Thanks for helping us record the video! Follow the three steps below
@@ -7,11 +7,11 @@ animals in parallel, each in its own Terminal window, tiled in a 4x4
 grid.
 
 --------------------------------------------------------------------------------
-STEP 1 · Install & run Atomic-Chat
+STEP 1 · Install & run GChat
 --------------------------------------------------------------------------------
 
-  1. Download and install Atomic-Chat:
-       https://atomic-chat.ai/download          (or the release URL we shared)
+  1. Download and install GChat:
+       https://github.com/Gadflyii/gchat/releases   (or the release URL we shared)
 
   2. Open the app. Sign in / skip onboarding.
 
@@ -19,7 +19,7 @@ STEP 1 · Install & run Atomic-Chat
 STEP 2 · Load the model and turn on Concurrent Mode
 --------------------------------------------------------------------------------
 
-  In Atomic-Chat:
+  In GChat:
 
   1. Settings (gear icon) → Providers → "Llama.cpp" (or "Llama.cpp + TurboQuant").
 
@@ -77,7 +77,7 @@ STEP 3 · Run the demo
       bash "Start Demo.command"
 
   What happens:
-    • The script verifies that Atomic-Chat is running and the model is loaded.
+    • The script verifies that GChat is running and the model is loaded.
     • A wide DASHBOARD window opens at the top of the screen, showing
       combined throughput (t/s), total tokens, and a compact status grid
       for every agent.
@@ -110,11 +110,11 @@ Available variables (with defaults):
                               owl, octopus…). Try "fruits", "vehicles",
                               "space", "mythological creatures" etc.
   DEMO_TASKS      16          Number of concurrent agents (and windows)
-  ATOMIC_MODEL    gemma-4-E4B-it-IQ4_XS
-  ATOMIC_BASE_URL http://127.0.0.1:1337/v1
-  ATOMIC_API_KEY  (empty)     Only needed if you set one in Local API Server
+  GCHAT_MODEL    gemma-4-E4B-it-IQ4_XS
+  GCHAT_BASE_URL http://127.0.0.1:1337/v1
+  GCHAT_API_KEY  (empty)     Only needed if you set one in Local API Server
 
-Note: DEMO_TASKS should match the "Concurrent Slots" setting in Atomic-Chat.
+Note: DEMO_TASKS should match the "Concurrent Slots" setting in GChat.
 If they differ, llama.cpp will simply queue the extra requests — but the
 visual effect is strongest when every agent gets its own slot.
 
@@ -129,15 +129,15 @@ TROUBLESHOOTING
         Then double-click the file again.
       → Or: System Settings → Privacy & Security → "Open Anyway".
 
-  ✗ "Atomic-Chat local API server is not reachable"
-      → Open Atomic-Chat; Settings → Local API Server → toggle ON.
+  ✗ "GChat local API server is not reachable"
+      → Open GChat; Settings → Local API Server → toggle ON.
 
   ✗ "Model did not respond"
-      → The model isn't loaded. In Atomic-Chat, click the power button
+      → The model isn't loaded. In GChat, click the power button
         next to gemma-4-E4B-it-IQ4_XS.
 
   ✗ A Terminal window shows a "metrics endpoint not supported" error
-      → Enable "Concurrent Mode" in Atomic-Chat settings and restart
+      → Enable "Concurrent Mode" in GChat settings and restart
         the model. (This turns on llama.cpp's --metrics flag.)
 
   ✗ "uv is not installed"

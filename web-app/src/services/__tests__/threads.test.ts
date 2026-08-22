@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DefaultThreadsService } from '../threads/default'
 import { ExtensionManager } from '@/lib/extension'
-import { ConversationalExtension, ExtensionTypeEnum } from '@janhq/core'
+import { ConversationalExtension, ExtensionTypeEnum } from '@gchat/core'
 
 // Mock ExtensionManager
 vi.mock('@/lib/extension', () => ({
@@ -374,7 +374,7 @@ describe('DefaultThreadsService', () => {
         expect.objectContaining({
           assistants: [
             expect.objectContaining({
-              model: { id: '*', engine: 'llamacpp-upstream' },
+              model: { id: '*', engine: 'ginfer' },
             }),
           ],
         })
@@ -441,8 +441,8 @@ describe('DefaultThreadsService', () => {
           assistants: [
             {
               model: { id: 'gpt-4', engine: 'openai' },
-              id: 'jan',
-              name: 'Atomic Chat',
+              id: 'gchat',
+              name: 'GChat',
             },
           ],
         })
@@ -471,7 +471,7 @@ describe('DefaultThreadsService', () => {
         expect.objectContaining({
           assistants: [
             expect.objectContaining({
-              model: { id: '*', engine: 'llamacpp-upstream' },
+              model: { id: '*', engine: 'ginfer' },
             }),
           ],
         })

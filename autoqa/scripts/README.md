@@ -7,18 +7,18 @@ This directory contains platform-specific scripts used by the AutoQA GitHub Acti
 ```text
 autoqa/scripts/
 ├── setup_permissions.sh        # Setup executable permissions for all scripts
-├── windows_cleanup.ps1          # Windows: Clean existing Atomic Chat installations
-├── windows_download.ps1         # Windows: Download Atomic Chat app installer
-├── windows_install.ps1          # Windows: Install Atomic Chat app
+├── windows_cleanup.ps1          # Windows: Clean existing GChat installations
+├── windows_download.ps1         # Windows: Download GChat app installer
+├── windows_install.ps1          # Windows: Install GChat app
 ├── windows_post_cleanup.ps1     # Windows: Post-test cleanup
 ├── run_tests.ps1               # Windows: Run AutoQA tests
-├── ubuntu_cleanup.sh           # Ubuntu: Clean existing Atomic Chat installations
-├── ubuntu_download.sh          # Ubuntu: Download Atomic Chat app (.deb)
-├── ubuntu_install.sh           # Ubuntu: Install Atomic Chat app
+├── ubuntu_cleanup.sh           # Ubuntu: Clean existing GChat installations
+├── ubuntu_download.sh          # Ubuntu: Download GChat app (.deb)
+├── ubuntu_install.sh           # Ubuntu: Install GChat app
 ├── ubuntu_post_cleanup.sh      # Ubuntu: Post-test cleanup
-├── macos_cleanup.sh            # macOS: Clean existing Atomic Chat installations
-├── macos_download.sh           # macOS: Download Atomic Chat app (.dmg)
-├── macos_install.sh            # macOS: Install Atomic Chat app
+├── macos_cleanup.sh            # macOS: Clean existing GChat installations
+├── macos_download.sh           # macOS: Download GChat app (.dmg)
+├── macos_install.sh            # macOS: Install GChat app
 ├── macos_post_cleanup.sh       # macOS: Post-test cleanup
 ├── run_tests.sh                # Unix: Run AutoQA tests (Ubuntu/macOS)
 ├── README.md                   # This file
@@ -29,23 +29,23 @@ autoqa/scripts/
 
 ### Windows Scripts (.ps1)
 
-- **windows_cleanup.ps1**: Removes existing Atomic Chat installations and kills running processes
-- **windows_download.ps1**: Downloads Atomic Chat installer with priority-based URL selection
-- **windows_install.ps1**: Installs Atomic Chatan app and sets environment variables
+- **windows_cleanup.ps1**: Removes existing GChat installations and kills running processes
+- **windows_download.ps1**: Downloads GChat installer with priority-based URL selection
+- **windows_install.ps1**: Installs GChat app and sets environment variables
 - **windows_post_cleanup.ps1**: Comprehensive cleanup after tests including uninstallation
 - **run_tests.ps1**: Runs the AutoQA Python tests with proper arguments
 
 ### Ubuntu Scripts (.sh)
 
-- **ubuntu_cleanup.sh**: Removes existing Atomic Chat installations and kills running processes
-- **ubuntu_download.sh**: Downloads Atomic Chat .deb package with priority-based URL selection
-- **ubuntu_install.sh**: Installs Atomic Chat .deb package and sets environment variables
+- **ubuntu_cleanup.sh**: Removes existing GChat installations and kills running processes
+- **ubuntu_download.sh**: Downloads GChat .deb package with priority-based URL selection
+- **ubuntu_install.sh**: Installs GChat .deb package and sets environment variables
 - **ubuntu_post_cleanup.sh**: Comprehensive cleanup after tests including package removal
 
 ### macOS Scripts (.sh)
 
-- **macos_cleanup.sh**: Removes existing Atomic Chat installations and kills running processes
-- **macos_download.sh**: Downloads Atomic Chat .dmg package with priority-based URL selection
+- **macos_cleanup.sh**: Removes existing GChat installations and kills running processes
+- **macos_download.sh**: Downloads GChat .dmg package with priority-based URL selection
 - **macos_install.sh**: Mounts DMG, extracts .app, and installs to Applications
 - **macos_post_cleanup.sh**: Comprehensive cleanup after tests
 
@@ -66,12 +66,12 @@ These scripts are called from the `.github/workflows/autoqa.yml` workflow file:
     ./autoqa/scripts/setup_permissions.sh
 
 # Then use scripts without chmod
-- name: Clean existing Jan installations
+- name: Clean existing GChat installations
   run: |
     ./autoqa/scripts/ubuntu_cleanup.sh
 
 # Windows example (no chmod needed)
-- name: Clean existing Jan installations
+- name: Clean existing GChat installations
   shell: powershell
   run: |
     .\autoqa\scripts\windows_cleanup.ps1
@@ -110,7 +110,7 @@ When modifying these scripts:
 
 Scripts set these environment variables for subsequent workflow steps:
 
-- `JAN_APP_URL`: The selected Jan app download URL
+- `GCHAT_APP_URL`: The selected GChat app download URL
 - `IS_NIGHTLY`: Boolean flag indicating if it's a nightly build
-- `JAN_APP_PATH`: Path to the installed Jan executable
-- `JAN_PROCESS_NAME`: Name of the Jan process for monitoring
+- `GCHAT_APP_PATH`: Path to the installed GChat executable
+- `GCHAT_PROCESS_NAME`: Name of the GChat process for monitoring

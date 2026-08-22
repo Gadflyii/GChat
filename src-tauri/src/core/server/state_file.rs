@@ -3,7 +3,7 @@
 //! The server's host / port / prefix live in the webview's localStorage
 //! (`useLocalApiServer`), which a headless process cannot read. The desktop app
 //! mirrors them into `<data_folder>/local-api-server.json` whenever the proxy
-//! starts or stops, so `atomic-chat-cli server status` knows where to probe.
+//! starts or stops, so `gchat-cli server status` knows where to probe.
 //!
 //! The API key itself is deliberately never written — the CLI only needs to
 //! know *whether* one is required, not what it is.
@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::app::commands::resolve_jan_data_folder;
 
-/// File name inside the Jan data folder.
+/// File name inside the GChat data folder.
 pub const SERVER_STATE_FILE: &str = "local-api-server.json";
 
 /// Defaults matching `useLocalApiServer`'s initial state, used when the file is
@@ -136,7 +136,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir()
-            .join("atomic-server-state-tests")
+            .join("gchat-server-state-tests")
             .join(name);
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("create temp dir");

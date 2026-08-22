@@ -8,23 +8,18 @@ type ProviderLike = {
 }
 
 /**
- * Whether the user already has at least one usable provider: a configured API
- * key, or a local llama.cpp / Jan provider with models, or any custom provider
- * with models. Mirrors the gate the home route uses to decide whether to show
- * onboarding. Single source of truth so the startup auto-start and the route
- * can never disagree about whether onboarding is in play.
+ * Whether the user already has at least one usable provider: a registry
+ * (cloud) provider with an API key, or a local/custom provider with models.
+ * Mirrors the gate the home route uses to decide whether to show onboarding.
+ * Single source of truth so the startup auto-start and the route can never
+ * disagree about whether onboarding is in play.
  */
 export function hasValidProviders(providers: ProviderLike[]): boolean {
   return providers.some((provider) => {
     if (!isKnownProvider(provider.provider)) {
       return provider.models.length > 0
     }
-    return Boolean(
-      provider.api_key?.length ||
-        (provider.provider === 'llamacpp' && provider.models.length) ||
-        (provider.provider === 'llamacpp-upstream' && provider.models.length) ||
-        (provider.provider === 'jan' && provider.models.length)
-    )
+    return Boolean(provider.api_key?.length)
   })
 }
 

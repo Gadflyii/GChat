@@ -1,4 +1,4 @@
-import { ContentType, ThreadContent } from '@janhq/core'
+import { ContentType, ThreadContent } from '@gchat/core'
 import type { UIMessage } from 'ai'
 
 /**

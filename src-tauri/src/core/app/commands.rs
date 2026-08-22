@@ -21,9 +21,9 @@ fn fallback_test_data_folder() -> PathBuf {
         let mut dir = dir.borrow_mut();
         let temp_dir = dir.get_or_insert_with(|| {
             tempfile::Builder::new()
-                .prefix("atomic-chat-test-data-")
+                .prefix("gchat-test-data-")
                 .tempdir()
-                .expect("failed to create temporary Atomic Chat test data directory")
+                .expect("failed to create temporary GChat test data directory")
         });
         temp_dir.path().to_path_buf()
     })
@@ -50,7 +50,7 @@ fn resolve_data_folder_from_config(config_file: &Path, default_folder: &Path) ->
         .unwrap_or_else(|| default_folder.to_path_buf())
 }
 
-/// Resolve the Jan config file path without an AppHandle (for CLI use).
+/// Resolve the GChat config file path without an AppHandle (for CLI use).
 /// Mirrors the logic in get_configuration_file_path() using the dirs crate.
 pub fn resolve_config_file_path() -> PathBuf {
     let package_name = env!("CARGO_PKG_NAME");
@@ -64,7 +64,7 @@ pub fn resolve_config_file_path() -> PathBuf {
         }
     }
 
-    // Primary path: data_dir/Jan  (e.g. ~/Library/Application Support/Jan on macOS)
+    // Primary path: data_dir/GChat  (e.g. ~/Library/Application Support/GChat on macOS)
     if let Some(data_dir) = dirs::data_dir() {
         let path = data_dir.join(package_name);
         if !path.exists() {
@@ -80,11 +80,11 @@ pub fn resolve_config_file_path() -> PathBuf {
     PathBuf::from(home).join(CONFIGURATION_FILE_NAME)
 }
 
-/// Resolve the Jan data folder path without an AppHandle (for CLI use).
+/// Resolve the GChat data folder path without an AppHandle (for CLI use).
 /// Reads AppConfiguration from the config file; falls back to the default location.
 pub fn resolve_jan_data_folder() -> PathBuf {
     let config_file = resolve_config_file_path();
-    let app_name = std::env::var("APP_NAME").unwrap_or_else(|_| "Atomic Chat".to_string());
+    let app_name = std::env::var("APP_NAME").unwrap_or_else(|_| "GChat".to_string());
     let data_dir = dirs::data_dir().unwrap_or_else(|| {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
@@ -114,7 +114,7 @@ pub fn get_app_configurations<R: Runtime>(app_handle: tauri::AppHandle<R>) -> Ap
         app_default_configuration.data_folder = default_data_folder;
 
         // On a clean install the app-data directory (e.g. on Windows
-        // `…\Roaming\chat.atomic.app`) does not exist yet, so `fs::write`
+        // `…\Roaming\app.gchat`) does not exist yet, so `fs::write`
         // alone fails with os error 3 and the config is never persisted.
         if let Some(parent) = configuration_file.parent() {
             if let Err(err) = fs::create_dir_all(parent) {
@@ -323,8 +323,8 @@ mod tests {
     #[test]
     fn selects_current_config_for_a_clean_install() {
         let root = tempdir().unwrap();
-        let current = root.path().join("chat.atomic.app");
-        let legacy = root.path().join("Atomic-Chat");
+        let current = root.path().join("app.gchat");
+        let legacy = root.path().join("gchat");
 
         assert_eq!(
             select_configuration_file_path(&current, &legacy),
@@ -335,8 +335,8 @@ mod tests {
     #[test]
     fn selects_legacy_config_when_only_legacy_directory_exists() {
         let root = tempdir().unwrap();
-        let current = root.path().join("chat.atomic.app");
-        let legacy = root.path().join("Atomic-Chat");
+        let current = root.path().join("app.gchat");
+        let legacy = root.path().join("gchat");
         fs::create_dir_all(&legacy).unwrap();
 
         assert_eq!(
@@ -348,8 +348,8 @@ mod tests {
     #[test]
     fn keeps_legacy_precedence_when_both_config_directories_exist() {
         let root = tempdir().unwrap();
-        let current = root.path().join("chat.atomic.app");
-        let legacy = root.path().join("Atomic-Chat");
+        let current = root.path().join("app.gchat");
+        let legacy = root.path().join("gchat");
         fs::create_dir_all(&current).unwrap();
         fs::create_dir_all(&legacy).unwrap();
 
@@ -364,8 +364,8 @@ mod tests {
         let root = tempdir().unwrap();
 
         assert_eq!(
-            build_default_data_folder(root.path(), "Atomic Chat"),
-            root.path().join("Atomic Chat").join("data")
+            build_default_data_folder(root.path(), "GChat"),
+            root.path().join("GChat").join("data")
         );
     }
 
@@ -390,7 +390,7 @@ mod tests {
     fn falls_back_to_default_data_folder_without_valid_settings() {
         let root = tempdir().unwrap();
         let config_file = root.path().join(CONFIGURATION_FILE_NAME);
-        let default = root.path().join("Atomic Chat").join("data");
+        let default = root.path().join("GChat").join("data");
 
         assert_eq!(
             resolve_data_folder_from_config(&config_file, &default),

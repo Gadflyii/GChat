@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMessages } from '../useMessages'
-import { ThreadMessage } from '@janhq/core'
+import { ThreadMessage } from '@gchat/core'
 import type { MessagesService } from '@/services/messages/types'
 import { seedServiceHub } from '@/test/service-hub'
 

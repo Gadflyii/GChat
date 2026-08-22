@@ -8,7 +8,7 @@
 
 import { TauriCoreService } from './tauri'
 import type { ExtensionManifest } from '@/lib/extension'
-import JanConversationalExtension from '@janhq/conversational-extension'
+import JanConversationalExtension from '@gchat/conversational-extension'
 
 export class MobileCoreService extends TauriCoreService {
   /**
@@ -47,7 +47,7 @@ export class MobileCoreService extends TauriCoreService {
   private getBundledExtensions(): ExtensionManifest[] {
     const conversationalExt = new JanConversationalExtension(
       'built-in',
-      '@janhq/conversational-extension',
+      '@gchat/conversational-extension',
       'Conversational Extension',
       true,
       'Manages conversation threads and messages',
@@ -56,7 +56,7 @@ export class MobileCoreService extends TauriCoreService {
 
     return [
       {
-        name: '@janhq/conversational-extension',
+        name: '@gchat/conversational-extension',
         productName: 'Conversational Extension',
         url: 'built-in',
         active: true,

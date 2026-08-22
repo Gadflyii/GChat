@@ -1,8 +1,8 @@
 {
-  "welcome": "Atomic Bot에 오신 것을 환영합니다",
-  "description": "시작하려면 Atomic Bot 모델로 빠르게 실행하거나, 직접 로컬 또는 원격 제공자를 설정하세요",
+  "welcome": "GChat에 오신 것을 환영합니다",
+  "description": "시작하려면 GChat 모델로 빠르게 실행하거나, 직접 로컬 또는 원격 제공자를 설정하세요",
   "descriptionWeb": "시작하려면 API 키를 사용하여 클라우드 모델에 연결해야 합니다",
-  "quickStart": "Atomic Bot 모델로 빠른 시작",
+  "quickStart": "GChat 모델로 빠른 시작",
   "quickStartDescription": "설정이 필요 없습니다",
   "quickStartFailed": "문제가 발생했습니다. 다시 시도해 주세요.",
   "downloading": "다운로드 중…",
@@ -39,7 +39,7 @@
     "switchingTitle": "백엔드 전환 중",
     "switchingDesc": "재시작 없이 {{backend}}을(를) 활성화하는 중…",
     "restartTitle": "백엔드 준비 완료",
-    "restartDesc": "최적의 백엔드가 다운로드되었습니다. 다음에 Atomic Chat을 시작할 때 활성화됩니다.",
+    "restartDesc": "최적의 백엔드가 다운로드되었습니다. 다음에 GChat을 시작할 때 활성화됩니다.",
     "restartLater": "설정 계속하기",
     "restartNow": "지금 재시작"
   }

@@ -2,7 +2,7 @@
  * App Service Types
  */
 
-import type { AutostartPreference } from '@janhq/core'
+import type { AutostartPreference } from '@gchat/core'
 
 export interface LogEntry {
   timestamp: string | number
@@ -15,8 +15,8 @@ export interface AppService {
   factoryReset(): Promise<void>
   readLogs(): Promise<LogEntry[]>
   parseLogLine(line: string): LogEntry
-  getJanDataFolder(): Promise<string | undefined>
-  relocateJanDataFolder(path: string): Promise<void>
+  getGchatDataFolder(): Promise<string | undefined>
+  relocateGchatDataFolder(path: string): Promise<void>
   getAutostartPreference(): Promise<AutostartPreference>
   setAutostartPreference(preference: AutostartPreference): Promise<void>
   getServerStatus(): Promise<boolean>

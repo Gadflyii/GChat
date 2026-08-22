@@ -5,8 +5,8 @@ import {
   runFreshInstallReset,
 } from '@/lib/freshInstall'
 
-const BACKUP_KEY = '__atomic_fresh_install_backup_v1__'
-const SESSION_MARKER = 'atomic_fresh_install_launch'
+const BACKUP_KEY = '__gchat_fresh_install_backup_v1__'
+const SESSION_MARKER = 'gchat_fresh_install_launch'
 
 beforeEach(() => {
   localStorage.clear()

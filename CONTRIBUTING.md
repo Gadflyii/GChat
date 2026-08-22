@@ -1,8 +1,8 @@
-# Contributing to Atomic Chat
+# Contributing to GChat
 
-First off, thank you for considering contributing to Atomic Chat. It's people like you that make Atomic Chat such an amazing project.
+First off, thank you for considering contributing to GChat. It's people like you that make GChat such an amazing project.
 
-Atomic Chat is an AI assistant that can run 100% offline on your device. Think ChatGPT, but private, local, and under your complete control. If you're thinking about contributing, you're already awesome - let's make AI accessible to everyone, one commit at a time.
+GChat is an AI assistant that can run 100% offline on your device, powered by the ginfer inference engine. Think ChatGPT, but private, local, and under your complete control. If you're thinking about contributing, you're already awesome - let's make AI accessible to everyone, one commit at a time.
 
 ## Quick Links to Component Guides
 
@@ -12,9 +12,9 @@ Atomic Chat is an AI assistant that can run 100% offline on your device. Think C
 - **[Tauri Backend](./src-tauri/CONTRIBUTING.md)** - Rust native integration
 - **[Tauri Plugins](./src-tauri/plugins/CONTRIBUTING.md)** - Hardware and system plugins
 
-## How Atomic Chat Actually Works
+## How GChat Actually Works
 
-Atomic Chat is a desktop app that runs local AI models. Here's how the components actually connect:
+GChat is a desktop app that runs local AI models through the ginfer inference engine. Here's how the components actually connect:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -35,7 +35,7 @@ Atomic Chat is a desktop app that runs local AI models. Here's how the component
   │ • TypeScript APIs    │◄─────│ • Assistant Mgmt     │
   │ • Extension System   │ uses │ • Conversations      │
   │ • Event Bus          │      │ • Downloads          │
-  │ • Type Definitions   │      │ • LlamaCPP           │
+  │ • Type Definitions   │      │ • GInfer             │
   └──────────┬───────────┘      └───────────┬──────────┘
              │                              │
              │   ┌──────────────────────┐   │
@@ -65,11 +65,11 @@ Atomic Chat is a desktop app that runs local AI models. Here's how the component
 │                   (src-tauri/plugins/)                    │
 │                                                           │
 │     ┌──────────────────┐        ┌──────────────────┐      │
-│     │  Hardware Plugin │        │  LlamaCPP Plugin │      │
+│     │  Hardware Plugin │        │  GInfer Plugin   │      │
 │     │                  │        │                  │      │
 │     │ • CPU/GPU Info   │        │ • Process Mgmt   │      │
-│     │ • Memory Stats   │        │ • Model Loading  │      │
-│     │ • System Info    │        │ • Inference      │      │
+│     │ • Memory Stats   │        │ • Model Serving  │      │
+│     │ • System Info    │        │ • NVIDIA Gate    │      │
 │     └──────────────────┘        └──────────────────┘      │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -96,34 +96,37 @@ Atomic Chat is a desktop app that runs local AI models. Here's how the component
 
 ### Real-World Example: Loading a Model
 
-Here's what actually happens when you click "Download Llama 3":
+Here's what actually happens when you click "Download" on a ginfer model:
 
 1. **Web App** (`web-app/`) - User clicks download button
 2. **Extension** (`extensions/download-extension`) - Handles the download logic
-3. **Tauri Backend** (`src-tauri/`) - Actually downloads the file to disk
-4. **Extension** (`extensions/llamacpp-extension`) - Prepares model for loading
-5. **Tauri Plugin** (`src-tauri/plugins/llamacpp`) - Starts llama.cpp process
-6. **Hardware Plugin** (`src-tauri/plugins/hardware`) - Detects GPU, optimizes settings
+3. **Tauri Backend** (`src-tauri/`) - Actually downloads the `.ginfer` file to disk
+4. **Extension** (`extensions/ginfer-extension`) - Registers the model with the ginfer engine
+5. **Tauri Plugin** (`src-tauri/plugins/tauri-plugin-ginfer`) - Manages the `ginfer-serve` process
+6. **Hardware Plugin** (`src-tauri/plugins/tauri-plugin-hardware`) - Detects the NVIDIA GPU, enforces the CUDA 13.1 gate
 7. **Model ready!** - User can start chatting
 
 ## Project Structure
 
 ```
-Atomic-Chat/
+gchat/
 ├── web-app/              # React frontend (what users see)
 ├── src-tauri/            # Rust backend (system integration)
 │   ├── src/core/         # Core Tauri commands
-│   └── plugins/          # Tauri plugins (hardware, llamacpp)
+│   └── plugins/          # Tauri plugins (ginfer, hardware, rag, vector-db)
 ├── core/                 # TypeScript SDK (API layer)
 ├── extensions/           # JavaScript extensions
 │   ├── assistant-extension/
 │   ├── conversational-extension/
 │   ├── download-extension/
-│   └── llamacpp-extension/
+│   ├── ginfer-extension/
+│   ├── rag-extension/
+│   └── vector-db-extension/
+├── pre-install/          # Pre-built extension tarballs
 ├── docs/                 # Documentation website
-├── website/              # Marketing website
 ├── autoqa/               # Automated testing
 ├── scripts/              # Build utilities
+├── tests/                # Top-level Vitest + quality fixtures
 │
 ├── package.json          # Root workspace configuration
 ├── Makefile              # Build automation commands
@@ -140,12 +143,12 @@ Atomic-Chat/
 - Yarn ≥ 4.5.3
 - Make ≥ 3.81
 - Rust (for Tauri)
-- (Apple Silicon) MetalToolchain `xcodebuild -downloadComponent MetalToolchain`
+- Linux x86_64 with an NVIDIA GPU (CUDA 13.1, SM 86/89/120a) for local inference
 
 **Option 1: The Easy Way (Make)**
 ```bash
-git clone https://github.com/AtomicBot-ai/Atomic-Chat
-cd Atomic-Chat
+git clone https://github.com/Gadflyii/gchat
+cd gchat
 make dev
 ```
 
@@ -153,8 +156,8 @@ make dev
 
 ### Reporting Bugs
 
-- **Ensure the bug was not already reported** by searching on GitHub under [Issues](https://github.com/AtomicBot-ai/Atomic-Chat/issues)
-- If you're unable to find an open issue addressing the problem, [open a new one](https://github.com/AtomicBot-ai/Atomic-Chat/issues/new)
+- **Ensure the bug was not already reported** by searching on GitHub under [Issues](https://github.com/Gadflyii/gchat/issues)
+- If you're unable to find an open issue addressing the problem, [open a new one](https://github.com/Gadflyii/gchat/issues/new)
 - Include your system specs and error logs - it helps a ton
 
 ### Suggesting Enhancements
@@ -266,22 +269,21 @@ docs: update installation instructions
 
 If things go sideways:
 
-1. **Check [GitHub Issues](https://github.com/AtomicBot-ai/Atomic-Chat/issues) for known problems**
+1. **Check [GitHub Issues](https://github.com/Gadflyii/gchat/issues) for known problems**
 2. **Clear everything and start fresh:** `make clean` then `make dev`
 3. **Copy your error logs and system specs**
-4. **Ask for help in our [Discord](https://discord.com/invite/AbWHHdKT)** `#🆘|atomic-chat-help` channel
+4. **Open an issue with the logs attached**
 
 Common issues:
 - **Build failures**: Check Node.js and Rust versions
 - **Extension not loading**: Verify it's properly registered
-- **Model not working**: Check hardware requirements and GPU drivers
+- **Model not working**: Check the NVIDIA GPU (CUDA 13.1, SM 86/89/120a) and drivers
 
 ## Getting Help
 
-- [Documentation](https://github.com/AtomicBot-ai/Atomic-Chat#readme) - Project overview and setup
-- [Discord Community](https://discord.com/invite/AbWHHdKT) - Where the community lives
-- [GitHub Issues](https://github.com/AtomicBot-ai/Atomic-Chat/issues) - Report bugs here
-- [GitHub Discussions](https://github.com/AtomicBot-ai/Atomic-Chat/discussions) - Ask questions
+- [Documentation](https://github.com/Gadflyii/gchat#readme) - Project overview and setup
+- [GitHub Issues](https://github.com/Gadflyii/gchat/issues) - Report bugs here
+- [GitHub Discussions](https://github.com/Gadflyii/gchat/discussions) - Ask questions
 
 ## License
 

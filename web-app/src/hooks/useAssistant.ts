@@ -1,5 +1,5 @@
 import { getServiceHub } from '@/hooks/useServiceHub'
-import { Assistant as CoreAssistant } from '@janhq/core'
+import { Assistant as CoreAssistant } from '@gchat/core'
 import { create } from 'zustand'
 import { localStorageKey } from '@/constants/localStorage'
 
@@ -50,8 +50,8 @@ const setLastUsedAssistantId = (assistantId: string) => {
 }
 
 export const defaultAssistant: Assistant = {
-  id: 'jan',
-  name: 'Atomic Chat',
+  id: 'gchat',
+  name: 'GChat',
   created_at: 1747029866.542,
   parameters: {
     temperature: 0.7,
@@ -61,7 +61,7 @@ export const defaultAssistant: Assistant = {
   },
   avatar: '/images/transparent-logo.png',
   description:
-    "Atomic Chat is a helpful desktop assistant that can reason through complex tasks and use tools to complete them on the user's behalf.",
+    "GChat is a helpful desktop assistant that can reason through complex tasks and use tools to complete them on the user's behalf.",
   instructions: 'Current date: {{current_date}}',
 }
 

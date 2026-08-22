@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Start Demo.command — Double-clickable launcher for the Atomic-Chat
+# Start Demo.command — Double-clickable launcher for the GChat
 # Concurrent Demo, designed for non-technical users (marketers, presenters).
 #
 # macOS users can simply double-click this file in Finder; the script will:
 #   1. Ensure `uv` (the Python package manager) is installed.
-#   2. Verify Atomic-Chat's local API server is reachable.
+#   2. Verify GChat's local API server is reachable.
 #   3. Check that the target model is loaded and answering.
 #   4. Launch the multi-window demo with sensible defaults.
 #
@@ -15,8 +15,8 @@ set -u
 cd "$(dirname "$0")"
 
 # ─── Configuration (overridable via environment) ──────────────────────────
-: "${ATOMIC_BASE_URL:=http://127.0.0.1:1337/v1}"
-: "${ATOMIC_MODEL:=gemma-4-E4B-it-IQ4_XS}"
+: "${GCHAT_BASE_URL:=http://127.0.0.1:1337/v1}"
+: "${GCHAT_MODEL:=gemma-4-E4B-it-IQ4_XS}"
 : "${DEMO_SCENARIO:=ascii}"
 : "${DEMO_TOPIC:=animals}"
 : "${DEMO_TASKS:=16}"
@@ -46,12 +46,12 @@ pause_and_exit() {
 }
 
 clear
-header "Atomic-Chat · Concurrent Demo"
+header "GChat · Concurrent Demo"
 printf '%sscenario:%s %s   %stopic:%s %s   %stasks:%s %s   %smodel:%s %s\n' \
     "$DIM" "$RESET" "$DEMO_SCENARIO" \
     "$DIM" "$RESET" "$DEMO_TOPIC" \
     "$DIM" "$RESET" "$DEMO_TASKS" \
-    "$DIM" "$RESET" "$ATOMIC_MODEL"
+    "$DIM" "$RESET" "$GCHAT_MODEL"
 
 # ─── Step 1: ensure `uv` is installed ─────────────────────────────────────
 header "1/4  Python toolchain (uv)"
@@ -76,15 +76,15 @@ else
     ok "uv installed."
 fi
 
-# ─── Step 2: verify Atomic-Chat is running ────────────────────────────────
-header "2/4  Atomic-Chat local API"
-say  "Checking $ATOMIC_BASE_URL/models …"
-if ! curl --silent --fail --max-time 4 "$ATOMIC_BASE_URL/models" >/dev/null 2>&1; then
-    fail "Atomic-Chat local API server is not reachable at $ATOMIC_BASE_URL."
+# ─── Step 2: verify GChat is running ────────────────────────────────
+header "2/4  GChat local API"
+say  "Checking $GCHAT_BASE_URL/models …"
+if ! curl --silent --fail --max-time 4 "$GCHAT_BASE_URL/models" >/dev/null 2>&1; then
+    fail "GChat local API server is not reachable at $GCHAT_BASE_URL."
     cat <<EOF
 
   To fix this:
-    1. Open the Atomic-Chat app.
+    1. Open the GChat app.
     2. Go to Settings → Local API Server and make sure it is running.
     3. Re-launch this demo.
 
@@ -95,40 +95,40 @@ ok "Local API reachable."
 
 # ─── Step 3: verify the target model is loaded ────────────────────────────
 header "3/4  Model readiness"
-say  "Pinging model '$ATOMIC_MODEL' with a short completion…"
+say  "Pinging model '$GCHAT_MODEL' with a short completion…"
 PING_BODY=$(cat <<JSON
-{"model":"$ATOMIC_MODEL","messages":[{"role":"user","content":"ping"}],"max_tokens":1,"stream":false}
+{"model":"$GCHAT_MODEL","messages":[{"role":"user","content":"ping"}],"max_tokens":1,"stream":false}
 JSON
 )
 HTTP_CODE=$(
     curl --silent --show-error --max-time 20 \
-        -o /tmp/atomic-demo-ping.$$.json \
+        -o /tmp/gchat-demo-ping.$$.json \
         -w '%{http_code}' \
         -H 'Content-Type: application/json' \
-        ${ATOMIC_API_KEY:+-H "Authorization: Bearer $ATOMIC_API_KEY"} \
+        ${GCHAT_API_KEY:+-H "Authorization: Bearer $GCHAT_API_KEY"} \
         --data "$PING_BODY" \
-        "$ATOMIC_BASE_URL/chat/completions" || echo '000'
+        "$GCHAT_BASE_URL/chat/completions" || echo '000'
 )
 if [[ "$HTTP_CODE" != "200" ]]; then
-    fail "Model '$ATOMIC_MODEL' did not respond (HTTP $HTTP_CODE)."
-    if [[ -s /tmp/atomic-demo-ping.$$.json ]]; then
+    fail "Model '$GCHAT_MODEL' did not respond (HTTP $HTTP_CODE)."
+    if [[ -s /tmp/gchat-demo-ping.$$.json ]]; then
         printf '%sresponse:%s ' "$DIM" "$RESET"
-        head -c 400 /tmp/atomic-demo-ping.$$.json
+        head -c 400 /tmp/gchat-demo-ping.$$.json
         printf '\n'
     fi
     cat <<EOF
 
   To fix this:
-    1. Open Atomic-Chat → Settings → Providers → Llama.cpp (or TurboQuant).
-    2. Make sure the model '$ATOMIC_MODEL' is installed and started.
+    1. Open GChat → Settings → Providers → Llama.cpp (or TurboQuant).
+    2. Make sure the model '$GCHAT_MODEL' is installed and started.
     3. Enable "Concurrent Mode" and set Concurrent Slots to $DEMO_TASKS.
     4. Re-launch this demo.
 
 EOF
-    rm -f /tmp/atomic-demo-ping.$$.json
+    rm -f /tmp/gchat-demo-ping.$$.json
     pause_and_exit 1
 fi
-rm -f /tmp/atomic-demo-ping.$$.json
+rm -f /tmp/gchat-demo-ping.$$.json
 ok "Model is loaded and responding."
 
 # ─── Step 4: launch the demo in multi-window mode ─────────────────────────
@@ -140,9 +140,9 @@ uv sync --quiet || {
 }
 
 # Export the resolved settings so the orchestrator picks them up.
-export ATOMIC_BASE_URL ATOMIC_MODEL
-if [[ -n "${ATOMIC_API_KEY:-}" ]]; then
-    export ATOMIC_API_KEY
+export GCHAT_BASE_URL GCHAT_MODEL
+if [[ -n "${GCHAT_API_KEY:-}" ]]; then
+    export GCHAT_API_KEY
 fi
 
 set +e

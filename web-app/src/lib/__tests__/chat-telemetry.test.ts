@@ -337,11 +337,18 @@ describe('captureChatResponse', () => {
     const thread = `t-${Math.random()}`
     captureChatResponse({
       ...base(beginChatTurn(thread), thread),
-      provider: 'llamacpp',
+      provider: 'ginfer',
     })
-    expect((captured()[0][1] as Record<string, unknown>).backend).toBe(
-      'llamacpp'
-    )
+    expect((captured()[0][1] as Record<string, unknown>).backend).toBe('ginfer')
+  })
+
+  it('reports an unknown backend for a non-local provider', () => {
+    const thread = `t-${Math.random()}`
+    captureChatResponse({
+      ...base(beginChatTurn(thread), thread),
+      provider: 'openai',
+    })
+    expect((captured()[0][1] as Record<string, unknown>).backend).toBe('unknown')
   })
 
   it('throttles a repeated identical failure', () => {
@@ -418,7 +425,7 @@ describe('PII contract', () => {
       source: 'chat',
       outcome: 'success',
       model_id: 'org/model-Q4_K_M',
-      provider: 'llamacpp',
+      provider: 'ginfer',
     })
 
     const props = captured()[0][1] as Record<string, unknown>

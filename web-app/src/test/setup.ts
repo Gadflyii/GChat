@@ -28,16 +28,16 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
-// Mock globalThis.core.api for @janhq/core functions // cspell: disable-line
+// Mock globalThis.core.api for @gchat/core functions // cspell: disable-line
 ;(globalThis as Record<string, unknown>).core = {
   api: {
-    getJanDataFolderPath: vi.fn().mockResolvedValue('/mock/jan/data'),
+    getJanDataFolderPath: vi.fn().mockResolvedValue('/mock/gchat/data'),
     openFileExplorer: vi.fn().mockResolvedValue(undefined),
     joinPath: vi.fn((...paths: string[]) => paths.join('/')),
   },
 }
 
-// Mock globalThis.fs for @janhq/core fs functions // cspell: disable-line
+// Mock globalThis.fs for @gchat/core fs functions // cspell: disable-line
 ;(globalThis as Record<string, unknown>).fs = {
   existsSync: vi.fn().mockResolvedValue(false),
   readFile: vi.fn().mockResolvedValue(''),

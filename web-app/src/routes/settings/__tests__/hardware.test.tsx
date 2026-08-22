@@ -76,33 +76,28 @@ vi.mock('@/hooks/useHardware', () => ({
         extensions: ['SSE'],
       },
       total_memory: 16384,
-      gpus: [],
+      gpus: [
+        {
+          name: 'RTX 3080',
+          total_memory: 10240,
+          vendor: 'NVIDIA',
+          uuid: 'gpu0-uuid',
+          driver_version: '550.00',
+          nvidia_info: { index: 0, compute_capability: '8.6' },
+          vulkan_info: {
+            index: 0,
+            device_id: 900,
+            device_type: 'discrete-gpu',
+            api_version: '1.3',
+          },
+        },
+      ],
     },
     systemUsage: { cpu: 50, used_memory: 8192, total_memory: 16384, gpus: [] },
     setHardwareData: vi.fn(),
     updateSystemUsage: vi.fn(),
     pollingPaused: false,
   }),
-}))
-
-vi.mock('@/hooks/useLlamacppDevices', () => ({
-  useLlamacppDevices: () => ({
-    devices: [
-      {
-        id: 'gpu0',
-        name: 'RTX 3080',
-        mem: 10240,
-        free: 8192,
-        activated: true,
-      },
-    ],
-    loading: false,
-    error: null,
-    activatedDevices: new Set(['gpu0']),
-    toggleDevice: vi.fn(),
-    fetchDevices: vi.fn(),
-  }),
-  getState: () => ({ setActivatedDevices: vi.fn() }),
 }))
 
 vi.mock('@/hooks/useModelProvider', () => ({

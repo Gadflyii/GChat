@@ -1,5 +1,5 @@
 {
-  "name": "@janhq/web-app",
+  "name": "@gchat/web-app",
   "private": true,
   "version": "2.0.23",
   "type": "module",
@@ -22,7 +22,7 @@
     "@dnd-kit/modifiers": "9.0.0",
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@janhq/core": "workspace:*",
+    "@gchat/core": "workspace:*",
     "@janhq/interfaces": "0.0.2",
     "@radix-ui/react-accordion": "1.2.11",
     "@radix-ui/react-avatar": "1.1.10",

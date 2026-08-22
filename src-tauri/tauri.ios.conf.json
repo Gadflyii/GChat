@@ -1,5 +1,5 @@
 {
-  "identifier": "jan.ai.app.ios",
+  "identifier": "app.gchat.ios",
   "build": {
     "devUrl": null,
     "frontendDist": "../web-app/dist",

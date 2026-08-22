@@ -32,10 +32,6 @@ vi.mock('@/containers/ModelDownloadAction', () => ({
   ModelDownloadAction: () => <button type="button">download</button>,
 }))
 
-vi.mock('@/containers/MlxModelDownloadAction', () => ({
-  MlxModelDownloadAction: () => <button type="button">download mlx</button>,
-}))
-
 vi.mock('@/lib/model-card', async () => {
   const actual =
     await vi.importActual<typeof import('@/lib/model-card')>('@/lib/model-card')
@@ -101,7 +97,7 @@ describe('ModelDetailPanel', () => {
     expect(screen.getByText(/^4.200$/)).toBeInTheDocument()
     expect(screen.getByText('77')).toBeInTheDocument()
     expect(screen.getByText('4B')).toBeInTheDocument()
-    expect(screen.getByText('gguf')).toBeInTheDocument()
+    expect(screen.getByText('GGUF')).toBeInTheDocument()
     expect(screen.getByText('hub:context')).toBeInTheDocument()
     const details = screen.getByRole('heading', { name: 'hub:details' })
       .parentElement!

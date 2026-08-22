@@ -576,7 +576,7 @@ mod tests {
             ("rmdir /s /q .\\cache", "approval"),
             ("taskkill.exe /PID 42 /F", "approval"),
             (
-                "reg.exe add HKCU\\Software\\Atomic /v Enabled /d 1",
+                "reg.exe add HKCU\\Software\\Sample /v Enabled /d 1",
                 "approval",
             ),
             ("cmd.exe /C \"copy source.txt target.txt\"", "approval"),

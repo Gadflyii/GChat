@@ -66,10 +66,5 @@
     "neverUpdated": "尚未載入",
     "successDescription": "提供者目錄已更新。",
     "errorDescription": "無法重新整理目錄。正在使用快取或內建提供者。"
-  },
-  "llamacpp": {
-    "concurrentMode": {
-      "perSlotContextWarning": "每個槽位的上下文等於 ctx_size 除以槽位數量。槽位越少，每個請求可用的上下文越大。"
-    }
   }
 }

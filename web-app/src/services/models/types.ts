@@ -7,8 +7,8 @@ import {
   modelInfo,
   ThreadMessage,
   UnloadResult,
-} from '@janhq/core'
-import { Model as CoreModel } from '@janhq/core'
+} from '@gchat/core'
+import { Model as CoreModel } from '@gchat/core'
 
 // Types for model catalog
 export interface ModelQuant {
@@ -142,16 +142,12 @@ export interface ModelsService {
     modelPath: string,
     modelSha256?: string,
     modelSize?: number,
-    mmprojPath?: string,
-    mmprojSha256?: string,
-    mmprojSize?: number,
     resume?: boolean,
     provider?: string
   ): Promise<void>
   pullModelWithMetadata(
     id: string,
     modelPath: string,
-    mmprojPath?: string,
     hfToken?: string,
     skipVerification?: boolean,
     resume?: boolean,

@@ -3,36 +3,36 @@
 
 echo "Cleaning up after tests..."
 
-# Kill any running Jan processes (both regular and nightly)
-pkill -f "Jan" || true
-pkill -f "jan" || true
-pkill -f "Jan-nightly" || true
-pkill -f "jan-nightly" || true
+# Kill any running GChat processes (both regular and nightly)
+pkill -f "GChat" || true
+pkill -f "gchat" || true
+pkill -f "GChat-nightly" || true
+pkill -f "gchat-nightly" || true
 
-# Remove Jan app directories
-rm -rf /Applications/Jan.app
-rm -rf /Applications/Jan-nightly.app
-rm -rf ~/Applications/Jan.app
-rm -rf ~/Applications/Jan-nightly.app
+# Remove GChat app directories
+rm -rf /Applications/GChat.app
+rm -rf /Applications/GChat-nightly.app
+rm -rf ~/Applications/GChat.app
+rm -rf ~/Applications/GChat-nightly.app
 
-# Remove Jan data folders (both regular and nightly)
-rm -rf ~/Library/Application\ Support/Jan
-rm -rf ~/Library/Application\ Support/Jan-nightly
-rm -rf ~/Library/Application\ Support/jan.ai.app
-rm -rf ~/Library/Application\ Support/jan-nightly.ai.app
-rm -rf ~/Library/Preferences/jan.*
-rm -rf ~/Library/Preferences/jan-nightly.*
-rm -rf ~/Library/Caches/jan.*
-rm -rf ~/Library/Caches/jan-nightly.*
-rm -rf ~/Library/Caches/jan.ai.app
-rm -rf ~/Library/Caches/jan-nightly.ai.app
-rm -rf ~/Library/WebKit/jan.ai.app
-rm -rf ~/Library/WebKit/jan-nightly.ai.app
-rm -rf ~/Library/Saved\ Application\ State/jan.ai.app
-rm -rf ~/Library/Saved\ Application\ State/jan-nightly.ai.app
+# Remove GChat data folders (both regular and nightly)
+rm -rf ~/Library/Application\ Support/GChat
+rm -rf ~/Library/Application\ Support/GChat-nightly
+rm -rf ~/Library/Application\ Support/gchat.ai.app
+rm -rf ~/Library/Application\ Support/gchat-nightly.ai.app
+rm -rf ~/Library/Preferences/gchat.*
+rm -rf ~/Library/Preferences/gchat-nightly.*
+rm -rf ~/Library/Caches/gchat.*
+rm -rf ~/Library/Caches/gchat-nightly.*
+rm -rf ~/Library/Caches/gchat.ai.app
+rm -rf ~/Library/Caches/gchat-nightly.ai.app
+rm -rf ~/Library/WebKit/gchat.ai.app
+rm -rf ~/Library/WebKit/gchat-nightly.ai.app
+rm -rf ~/Library/Saved\ Application\ State/gchat.ai.app
+rm -rf ~/Library/Saved\ Application\ State/gchat-nightly.ai.app
 
 # Clean up downloaded installer
-rm -f "/tmp/jan-installer.dmg"
-rm -rf "/tmp/jan-mount"
+rm -f "/tmp/gchat-installer.dmg"
+rm -rf "/tmp/gchat-mount"
 
 echo "Cleanup completed"

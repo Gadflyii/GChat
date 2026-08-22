@@ -89,19 +89,13 @@ describe('useResolvedRecommendedModels', () => {
       expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledOnce()
     })
     await waitFor(() => {
-      expect(first.result.current[0]?.model).toEqual({
-        ...model,
-        is_mlx: false,
-      })
+      expect(first.result.current[0]?.model).toEqual(model)
     })
     first.unmount()
 
     const second = renderHook(() => useResolvedRecommendedModels([]))
 
-    expect(second.result.current[0]?.model).toEqual({
-      ...model,
-      is_mlx: false,
-    })
+    expect(second.result.current[0]?.model).toEqual(model)
     expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledOnce()
   })
 })

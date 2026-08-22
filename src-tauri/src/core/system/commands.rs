@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
-use tauri_plugin_llamacpp::cleanup_llama_processes;
+use tauri_plugin_ginfer::cleanup_ginfer_processes;
 
 use crate::core::app::commands::{
     default_data_folder_path, get_app_configurations, get_jan_data_folder_path,
@@ -87,7 +87,7 @@ fn detect_shell_env_file(home_dir: &str, is_macos: bool) -> (&'static str, Strin
 
 // Helper function to write env vars to a shell config file
 fn write_env_to_shell(env_file_path: &str, env_vars: &[(String, String)]) -> Result<(), String> {
-    let marker = "# Jan Local API Server - Claude Code Config";
+    let marker = "# GChat Local API Server - Claude Code Config";
     let new_entries: String = env_vars
         .iter()
         .map(|(k, v)| format!("export {}='{}'\n", k, v))
@@ -97,9 +97,9 @@ fn write_env_to_shell(env_file_path: &str, env_vars: &[(String, String)]) -> Res
     let cleaned: Vec<&str> = existing_content
         .split('\n')
         .filter(|line| {
-            // Remove Jan config markers and existing ANTHROPIC env vars to replace them
+            // Remove GChat config markers and existing ANTHROPIC env vars to replace them
             !line.starts_with(marker)
-                && !line.starts_with("# Jan Local API Server")
+                && !line.starts_with("# GChat Local API Server")
                 && !line.starts_with("export ANTHROPIC_")
         })
         .collect();
@@ -142,9 +142,8 @@ pub async fn factory_reset<R: Runtime>(
     if let Err(e) = cleanup_own_locks(&app_handle) {
         log::warn!("Failed to cleanup lock files: {}", e);
     }
-    // Clean up both llama.cpp providers' process maps.
-    let _ = cleanup_llama_processes(app_handle.clone()).await;
-    let _ = tauri_plugin_llamacpp_upstream::cleanup_llama_processes(app_handle.clone()).await;
+    // Clean up the ginfer process map.
+    let _ = cleanup_ginfer_processes(app_handle.clone()).await;
 
     // Windows needs time to release file handles after TerminateProcess
     #[cfg(windows)]
@@ -159,21 +158,21 @@ pub async fn factory_reset<R: Runtime>(
             return Ok(());
         }
 
-        // Preserve downloaded llamacpp backends across factory reset so the user
-        // doesn't have to re-download CUDA/Vulkan binaries (can be hundreds of MB).
-        let backends_dir = data_folder.join("llamacpp").join("backends");
-        let temp_backends = std::env::temp_dir().join("atomic-chat-backends-preserve");
-        let backends_preserved = if backends_dir.is_dir() {
-            if temp_backends.exists() {
-                let _ = fs::remove_dir_all(&temp_backends);
+        // Preserve the downloaded ginfer-serve binary across factory reset so
+        // the user doesn't have to re-download it.
+        let bin_dir = data_folder.join("ginfer").join("bin");
+        let temp_bin = std::env::temp_dir().join("gchat-ginfer-bin-preserve");
+        let bin_preserved = if bin_dir.is_dir() {
+            if temp_bin.exists() {
+                let _ = fs::remove_dir_all(&temp_bin);
             }
-            match fs::rename(&backends_dir, &temp_backends) {
+            match fs::rename(&bin_dir, &temp_bin) {
                 Ok(()) => {
-                    log::info!("Preserved llamacpp backends to temp dir");
+                    log::info!("Preserved ginfer binary to temp dir");
                     true
                 }
                 Err(e) => {
-                    log::warn!("Failed to preserve llamacpp backends: {e}");
+                    log::warn!("Failed to preserve ginfer binary: {e}");
                     false
                 }
             }
@@ -183,12 +182,12 @@ pub async fn factory_reset<R: Runtime>(
 
         remove_jan_data_contents(&data_folder);
 
-        if backends_preserved {
-            let llamacpp_dir = data_folder.join("llamacpp");
-            let _ = fs::create_dir_all(&llamacpp_dir);
-            match fs::rename(&temp_backends, &backends_dir) {
-                Ok(()) => log::info!("Restored llamacpp backends after factory reset"),
-                Err(e) => log::warn!("Failed to restore llamacpp backends: {e}"),
+        if bin_preserved {
+            let ginfer_dir = data_folder.join("ginfer");
+            let _ = fs::create_dir_all(&ginfer_dir);
+            match fs::rename(&temp_bin, &bin_dir) {
+                Ok(()) => log::info!("Restored ginfer binary after factory reset"),
+                Err(e) => log::warn!("Failed to restore ginfer binary: {e}"),
             }
         }
     }
@@ -392,7 +391,7 @@ fn detect_windows_installer_type() -> String {
     use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
     use winreg::RegKey;
 
-    const PRODUCT: &str = "Atomic Chat";
+    const PRODUCT: &str = "GChat";
     const UNINSTALL: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 
     // NSIS (setup.exe) writes its uninstall key named after the product.
@@ -461,7 +460,7 @@ pub fn launch_claude_code_with_config(
 
     env_vars.push((
         "ANTHROPIC_AUTH_TOKEN".to_string(),
-        api_key.unwrap_or_else(|| "jan".to_string()),
+        api_key.unwrap_or_else(|| "gchat".to_string()),
     ));
 
     if let Some(model) = big_model {
@@ -519,13 +518,13 @@ pub fn launch_claude_code_with_config(
             }
             Err(_) => {
                 // Use admin privileges to write
-                let marker = "# Jan Local API Server - Claude Code Config";
+                let marker = "# GChat Local API Server - Claude Code Config";
                 let existing_content = std::fs::read_to_string(&env_file_path).unwrap_or_default();
                 let cleaned: Vec<&str> = existing_content
                     .split('\n')
                     .filter(|line| {
                         !line.starts_with(marker)
-                            && !line.starts_with("# Jan Local API Server")
+                            && !line.starts_with("# GChat Local API Server")
                             && !line.starts_with("export ANTHROPIC_")
                     })
                     .collect();
@@ -540,7 +539,7 @@ pub fn launch_claude_code_with_config(
                 let final_content = cleaned.join("\n") + "\n" + &new_block + marker;
 
                 // Write to a temp file first, then use osascript to move it
-                let temp_script_path = format!("{}/.jan_env_update.sh", home_dir);
+                let temp_script_path = format!("{}/.gchat_env_update.sh", home_dir);
                 std::fs::write(&temp_script_path, &final_content).map_err(|e| e.to_string())?;
 
                 // Use admin privileges to move the temp file
@@ -581,9 +580,9 @@ pub fn launch_claude_code_with_config(
                 return Ok(());
             }
             Err(_) => {
-                let jan_config_dir = format!("{}/.config/jan", home_dir);
+                let gchat_config_dir = format!("{}/.config/gchat", home_dir);
                 let ext = if shell_name == "bash" { "bash" } else { "zsh" };
-                let env_file = format!("{}/claude-code-env.{}", jan_config_dir, ext);
+                let env_file = format!("{}/claude-code-env.{}", gchat_config_dir, ext);
                 return Err(format!("NEED_PERMISSION:{}", env_file));
             }
         }
@@ -614,16 +613,16 @@ pub struct CliInstallStatus {
 }
 
 /// Name of the CLI command as it is installed on the user's PATH.
-pub const CLI_COMMAND_NAME: &str = "atomic-chat-cli";
+pub const CLI_COMMAND_NAME: &str = "gchat-cli";
 
-/// Name the CLI shipped under before the Atomic Chat rebrand. Older builds
+/// Name the CLI shipped under before the GChat rebrand. Older builds
 /// installed it as plain `jan`, which collides with the unrelated Jan.ai CLI.
 const LEGACY_CLI_COMMAND_NAME: &str = "jan";
 
-/// Marker string embedded in every Atomic Chat CLI build. Used to confirm that a
-/// leftover `jan` binary on PATH was written by us before we remove it — a `jan`
-/// belonging to the actual Jan.ai app must never be touched.
-const CLI_OWNERSHIP_MARKER: &[u8] = b"Atomic Chat";
+/// Marker string embedded in every GChat CLI build. Used to confirm that a
+/// leftover legacy CLI binary on PATH was written by us before we remove it —
+/// a `jan` belonging to the actual Jan.ai app must never be touched.
+const CLI_OWNERSHIP_MARKER: &[u8] = b"GChat";
 
 /// Return true when `path` is a binary we shipped (contains [`CLI_OWNERSHIP_MARKER`]).
 fn is_our_cli_binary(path: &std::path::Path) -> bool {
@@ -670,18 +669,18 @@ fn remove_legacy_cli_binary(dir: &std::path::Path) {
     }
     if !is_our_cli_binary(&legacy) {
         log::info!(
-            "Leaving {} alone — not an Atomic Chat binary",
+            "Leaving {} alone — not a GChat binary",
             legacy.display()
         );
         return;
     }
     match std::fs::remove_file(&legacy) {
-        Ok(()) => log::info!("Removed legacy Atomic Chat CLI at {}", legacy.display()),
+        Ok(()) => log::info!("Removed legacy GChat CLI at {}", legacy.display()),
         Err(e) => log::warn!("Could not remove {}: {}", legacy.display(), e),
     }
 }
 
-/// Check if the `atomic-chat-cli` binary is accessible on PATH.
+/// Check if the `gchat-cli` binary is accessible on PATH.
 #[tauri::command]
 pub async fn check_jan_cli_installed() -> CliInstallStatus {
     let which_cmd = if cfg!(windows) { "where" } else { "which" };
@@ -733,12 +732,12 @@ pub fn install_jan_cli_sync<R: Runtime>(
     app_handle: &AppHandle<R>,
 ) -> Result<CliInstallStatus, String> {
     let bin_name = if cfg!(windows) {
-        "jan-cli.exe"
+        "gchat-cli.exe"
     } else {
-        "jan-cli"
+        "gchat-cli"
     };
     let dest_bin_name = if cfg!(windows) {
-        "atomic-chat-cli.exe"
+        "gchat-cli.exe"
     } else {
         CLI_COMMAND_NAME
     };
@@ -751,14 +750,16 @@ pub fn install_jan_cli_sync<R: Runtime>(
     let dest = resource_bin_dir.join(dest_bin_name);
 
     if !bundled.exists() && !dest.exists() {
-        return Err("Atomic Chat CLI binary not bundled with this version of the app.".to_string());
+        return Err("GChat CLI binary not bundled with this version of the app.".to_string());
     }
 
     #[cfg(windows)]
     {
-        if bundled.exists() {
+        // The bundled binary is already named for PATH; only rename when the
+        // bundled name differs from the install name.
+        if bundled.exists() && bundled != dest {
             if let Err(e) = std::fs::rename(&bundled, &dest) {
-                log::warn!("Could not rename jan-cli.exe to atomic-chat-cli.exe: {}", e);
+                log::warn!("Could not rename {} to {}: {}", bundled.display(), dest.display(), e);
             }
         }
         // Older builds put `jan.exe` on PATH here; drop it so it stops shadowing Jan.ai.
@@ -799,7 +800,7 @@ pub fn install_jan_cli_sync<R: Runtime>(
     }
 }
 
-/// Copy the bundled `atomic-chat-cli` binary to the system PATH (Tauri command wrapper).
+/// Copy the bundled `gchat-cli` binary to the system PATH (Tauri command wrapper).
 #[tauri::command]
 pub async fn install_jan_cli<R: Runtime>(
     app_handle: AppHandle<R>,
@@ -807,13 +808,13 @@ pub async fn install_jan_cli<R: Runtime>(
     install_jan_cli_sync(&app_handle)
 }
 
-/// Remove the installed `atomic-chat-cli` binary (plus any legacy `jan` we wrote).
+/// Remove the installed `gchat-cli` binary (plus any legacy `jan` we wrote).
 #[tauri::command]
 pub fn uninstall_jan_cli() -> Result<(), String> {
     #[cfg(windows)]
     {
         let bin_dir = jan_cli_bin_dir_windows()?;
-        let path = bin_dir.join("atomic-chat-cli.exe");
+        let path = bin_dir.join("gchat-cli.exe");
         if path.exists() {
             if let Err(e) = std::fs::remove_file(&path) {
                 log::warn!("Could not remove {}: {}", path.display(), e);
@@ -831,7 +832,7 @@ pub fn uninstall_jan_cli() -> Result<(), String> {
         if dest.exists() {
             std::fs::remove_file(&dest).map_err(|e| {
                 format!(
-                    "Failed to remove the Atomic Chat CLI from {}: {}",
+                    "Failed to remove the GChat CLI from {}: {}",
                     dest.display(),
                     e
                 )
@@ -842,14 +843,14 @@ pub fn uninstall_jan_cli() -> Result<(), String> {
     }
 }
 
-/// Build the cleaned shell-file content with all Jan CC env vars stripped out.
+/// Build the cleaned shell-file content with all GChat CC env vars stripped out.
 fn build_cleaned_env_content(env_file_path: &str) -> String {
     let existing_content = std::fs::read_to_string(env_file_path).unwrap_or_default();
     let cleaned: Vec<&str> = existing_content
         .split('\n')
         .filter(|line| {
-            !line.starts_with("# Jan Local API Server - Claude Code Config")
-                && !line.starts_with("# Jan Local API Server")
+            !line.starts_with("# GChat Local API Server - Claude Code Config")
+                && !line.starts_with("# GChat Local API Server")
                 && !line.starts_with("export ANTHROPIC_")
         })
         .collect();
@@ -857,7 +858,7 @@ fn build_cleaned_env_content(env_file_path: &str) -> String {
     cleaned.join("\n").trim_end().to_string() + "\n"
 }
 
-/// Clear all Jan-written Claude Code environment variables from the shell config.
+/// Clear all GChat-written Claude Code environment variables from the shell config.
 /// Uses the same write-probe + osascript-fallback logic as `launch_claude_code_with_config`.
 #[tauri::command]
 pub fn clear_claude_code_env() -> Result<(), String> {
@@ -883,7 +884,7 @@ pub fn clear_claude_code_env() -> Result<(), String> {
             }
             Err(_) => {
                 // Write cleaned content to a temp file, then use osascript to move it
-                let temp_path = format!("{}/.jan_env_clear.sh", home_dir);
+                let temp_path = format!("{}/.gchat_env_clear.sh", home_dir);
                 std::fs::write(&temp_path, &cleaned).map_err(|e| e.to_string())?;
 
                 let script = format!(
@@ -945,12 +946,12 @@ pub fn clear_claude_code_env() -> Result<(), String> {
     }
 }
 
-/// Determine the best writable directory for the Jan CLI install (Unix only).
+/// Determine the best writable directory for the GChat CLI install (Unix only).
 #[cfg(unix)]
 fn jan_cli_install_dir() -> Result<PathBuf, String> {
     let usr_local_bin = PathBuf::from("/usr/local/bin");
     if usr_local_bin.exists() {
-        let probe = usr_local_bin.join(".jan_write_probe");
+        let probe = usr_local_bin.join(".gchat_write_probe");
         if std::fs::write(&probe, b"").is_ok() {
             let _ = std::fs::remove_file(&probe);
             return Ok(usr_local_bin);
@@ -967,7 +968,7 @@ fn jan_cli_bin_dir_windows() -> Result<PathBuf, String> {
         std::env::var("LOCALAPPDATA").map_err(|_| "Cannot determine LOCALAPPDATA".to_string())?;
     Ok(PathBuf::from(local_app_data)
         .join("Programs")
-        .join("Atomic Chat")
+        .join("GChat")
         .join("resources")
         .join("bin"))
 }
@@ -1020,14 +1021,15 @@ fn add_to_path_windows(install_dir: &PathBuf) -> Result<(), String> {
         .trim()
         .to_string();
 
-    // Remove stale old-style PATH entry (..\\Programs\\Jan without \\resources\\bin)
-    // left by previous versions that placed jan.exe next to the GUI binary.
-    let old_jan_dir = install_dir
+    // Remove stale old-style PATH entry (..\\Programs\\<product> without
+    // \\resources\\bin) left by previous versions that placed the CLI next to
+    // the GUI binary.
+    let old_gui_dir = install_dir
         .parent()
         .and_then(|p| p.parent())
         .map(|p| p.to_string_lossy().to_string());
 
-    let old_jan_dir_norm = old_jan_dir.as_deref().map(strip_verbatim_prefix);
+    let old_gui_dir_norm = old_gui_dir.as_deref().map(strip_verbatim_prefix);
 
     let parts: Vec<&str> = existing_user_path
         .split(';')
@@ -1035,7 +1037,7 @@ fn add_to_path_windows(install_dir: &PathBuf) -> Result<(), String> {
         .filter(|p| {
             let norm = strip_verbatim_prefix(p);
             // Drop the stale old-style GUI-dir entry...
-            if let Some(ref old) = old_jan_dir_norm {
+            if let Some(ref old) = old_gui_dir_norm {
                 if norm.eq_ignore_ascii_case(old) {
                     return false;
                 }
@@ -1215,7 +1217,7 @@ pub fn configure_hermes_agent(
     // Hermes Agent rejects any model whose context window is below 64K, so the
     // fallback must satisfy that floor too (the UI passes 65536 explicitly).
     let ctx = context_length.unwrap_or(65536);
-    let after_cp = upsert_atomic_provider(&after_model_patch, &api_url, &model, ctx);
+    let after_cp = upsert_gchat_provider(&after_model_patch, &api_url, &model, ctx);
 
     // Seed a per-request timeout for the `custom` provider (the id our model
     // section uses). Hermes reads `providers.<id>.request_timeout_seconds`
@@ -1305,7 +1307,7 @@ pub fn clear_hermes_agent_config() -> Result<(), String> {
     let after_model_patch = patched.join("\n");
 
     // Remove only our entry from custom_providers (preserves user's other providers)
-    let after_cp = remove_atomic_provider(&after_model_patch);
+    let after_cp = remove_gchat_provider(&after_model_patch);
 
     let final_content = if content.ends_with('\n') && !after_cp.ends_with('\n') {
         format!("{}\n", after_cp)
@@ -1353,7 +1355,7 @@ fn replace_yaml_scalar_value(line: &str, new_value: &str) -> String {
     }
 }
 
-const ATOMIC_PROVIDER_NAME: &str = "atomic-chat";
+const GCHAT_PROVIDER_NAME: &str = "gchat";
 
 /// Default per-request timeout (seconds) seeded for Hermes' `custom` provider.
 /// Hermes otherwise defaults to 1800s (`HERMES_API_TIMEOUT`); a tighter cap
@@ -1383,7 +1385,7 @@ custom_providers: []
 ///
 /// On Windows the native installer (`install.ps1`) sets `HERMES_HOME` via
 /// `[Environment]::SetEnvironmentVariable(..., "User")` -- a registry write
-/// that is invisible to Atomic Chat's own already-running process (which only
+/// that is invisible to GChat's own already-running process (which only
 /// sees the environment block snapshotted at its own startup). So
 /// `std::env::var("HERMES_HOME")` can be stale within the same app session
 /// that just installed Hermes. Reading the registry value directly first
@@ -1521,7 +1523,7 @@ fn entry_is_ours(entry: &[String]) -> bool {
         } else {
             return false;
         };
-        name_val == ATOMIC_PROVIDER_NAME || name_val == format!("\"{}\"", ATOMIC_PROVIDER_NAME)
+        name_val == GCHAT_PROVIDER_NAME || name_val == format!("\"{}\"", GCHAT_PROVIDER_NAME)
     })
 }
 
@@ -1559,9 +1561,9 @@ fn rebuild_custom_providers(
     }
 }
 
-/// Add or update only the `atomic-chat` entry in `custom_providers`,
+/// Add or update only the `gchat` entry in `custom_providers`,
 /// leaving all other user entries (Telegram, WhatsApp, etc.) intact.
-fn upsert_atomic_provider(
+fn upsert_gchat_provider(
     content: &str,
     api_url: &str,
     model: &str,
@@ -1572,7 +1574,7 @@ fn upsert_atomic_provider(
     entries.retain(|e| !entry_is_ours(e));
 
     entries.push(vec![
-        format!("- name: {}", ATOMIC_PROVIDER_NAME),
+        format!("- name: {}", GCHAT_PROVIDER_NAME),
         format!("  base_url: {}", api_url),
         format!("  model: {}", model),
         "  models:".to_string(),
@@ -1583,9 +1585,9 @@ fn upsert_atomic_provider(
     rebuild_custom_providers(&before, &entries, &after)
 }
 
-/// Remove only the `atomic-chat` entry from `custom_providers`,
+/// Remove only the `gchat` entry from `custom_providers`,
 /// leaving all other user entries intact.
-fn remove_atomic_provider(content: &str) -> String {
+fn remove_gchat_provider(content: &str) -> String {
     let (before, mut entries, after) = split_custom_providers(content);
     entries.retain(|e| !entry_is_ours(e));
     rebuild_custom_providers(&before, &entries, &after)
@@ -1688,8 +1690,8 @@ fn upsert_provider_request_timeout(content: &str, provider_id: &str, seconds: u3
 // External coding-agent / assistant integrations (Launch page)
 // ---------------------------------------------------------------------------
 
-const ATOMIC_MANAGED_BEGIN: &str = "# >>> Atomic Chat (managed) >>>";
-const ATOMIC_MANAGED_END: &str = "# <<< Atomic Chat (managed) <<<";
+const GCHAT_MANAGED_BEGIN: &str = "# >>> GChat (managed) >>>";
+const GCHAT_MANAGED_END: &str = "# <<< GChat (managed) <<<";
 
 /// Resolve the user's home directory in a platform-aware way.
 fn agent_home_dir() -> Result<String, String> {
@@ -1700,20 +1702,20 @@ fn agent_home_dir() -> Result<String, String> {
     }
 }
 
-/// Remove every previously written `# >>> Atomic Chat (managed) >>> ... <<<`
+/// Remove every previously written `# >>> GChat (managed) >>> ... <<<`
 /// block. Some agents (e.g. Codex) need two managed regions — a root-level
 /// activation key at the very top of the file and a tables block at the
 /// bottom — so this strips them all, not just the first.
-fn strip_atomic_managed_block(content: &str) -> String {
+fn strip_gchat_managed_block(content: &str) -> String {
     let mut result = content.to_string();
     while let (Some(start), Some(end)) = (
-        result.find(ATOMIC_MANAGED_BEGIN),
-        result.find(ATOMIC_MANAGED_END),
+        result.find(GCHAT_MANAGED_BEGIN),
+        result.find(GCHAT_MANAGED_END),
     ) {
         if end < start {
             break;
         }
-        let end_idx = end + ATOMIC_MANAGED_END.len();
+        let end_idx = end + GCHAT_MANAGED_END.len();
         let mut next = String::with_capacity(result.len());
         next.push_str(&result[..start]);
         next.push_str(&result[end_idx..]);
@@ -2502,7 +2504,7 @@ pub async fn install_agent<R: Runtime>(
             return Err(format!(
                 "'{}' is required to install this agent but was not found on PATH. \
                  Install it (Node.js from https://nodejs.org for npm-based agents), \
-                 then restart Atomic Chat and try again: {}",
+                 then restart GChat and try again: {}",
                 prereq, docs
             ));
         }
@@ -2609,41 +2611,41 @@ pub fn configure_codex(
     let path = dir.join("config.toml");
 
     let existing = std::fs::read_to_string(&path).unwrap_or_default();
-    let cleaned = strip_atomic_managed_block(&existing);
+    let cleaned = strip_gchat_managed_block(&existing);
 
     // Codex 0.135+ removed the legacy root-level `profile` selector (named
     // profiles now live in separate `~/.codex/<name>.config.toml` files chosen
     // via `--profile`) and dropped `wire_api = "chat"` entirely. So we make
-    // Atomic the *default* provider via the root keys `model` / `model_provider`
+    // GChat the *default* provider via the root keys `model` / `model_provider`
     // — bare TOML keys that must precede any `[table]`, hence a top region —
-    // plus the `[model_providers.atomic]` table below. `wire_api` is left at
+    // plus the `[model_providers.gchat]` table below. `wire_api` is left at
     // its default (`responses`), the only wire API Codex still supports.
-    // `strip_atomic_managed_block` removes both regions on rerun.
+    // `strip_gchat_managed_block` removes both regions on rerun.
     let mut head = String::new();
-    head.push_str(ATOMIC_MANAGED_BEGIN);
+    head.push_str(GCHAT_MANAGED_BEGIN);
     head.push('\n');
     head.push_str(&format!(
         "model = \"{}\"\n",
         toml_basic_string_escape(&model)
     ));
-    head.push_str("model_provider = \"atomic\"\n");
-    head.push_str(ATOMIC_MANAGED_END);
+    head.push_str("model_provider = \"gchat\"\n");
+    head.push_str(GCHAT_MANAGED_END);
     head.push('\n');
 
     let mut block = String::new();
-    block.push_str(ATOMIC_MANAGED_BEGIN);
+    block.push_str(GCHAT_MANAGED_BEGIN);
     block.push('\n');
-    block.push_str("[model_providers.atomic]\n");
-    block.push_str("name = \"Atomic Chat\"\n");
+    block.push_str("[model_providers.gchat]\n");
+    block.push_str("name = \"GChat\"\n");
     block.push_str(&format!(
         "base_url = \"{}\"\n",
         toml_basic_string_escape(&api_url)
     ));
     if api_key.as_deref().filter(|k| !k.is_empty()).is_some() {
         // Codex reads the secret from the env var named here, not inline.
-        block.push_str("env_key = \"ATOMIC_CHAT_API_KEY\"\n");
+        block.push_str("env_key = \"GCHAT_API_KEY\"\n");
     }
-    block.push_str(ATOMIC_MANAGED_END);
+    block.push_str(GCHAT_MANAGED_END);
     block.push('\n');
 
     let final_content = if cleaned.trim().is_empty() {
@@ -2658,7 +2660,7 @@ pub fn configure_codex(
     Ok(())
 }
 
-/// Configure OpenCode by upserting `provider.atomic` in
+/// Configure OpenCode by upserting `provider.gchat` in
 /// `~/.config/opencode/opencode.json` (strict JSON, other providers preserved).
 #[tauri::command]
 pub fn configure_opencode(
@@ -2705,26 +2707,26 @@ pub fn configure_opencode(
     let key_val = api_key
         .as_deref()
         .filter(|k| !k.is_empty())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
     let mut models = serde_json::Map::new();
     models.insert(model.clone(), serde_json::json!({ "name": model }));
 
     provider.as_object_mut().unwrap().insert(
-        "atomic".to_string(),
+        "gchat".to_string(),
         serde_json::json!({
             "npm": "@ai-sdk/openai-compatible",
-            "name": "Atomic Chat",
+            "name": "GChat",
             "options": { "baseURL": api_url, "apiKey": key_val },
             "models": serde_json::Value::Object(models),
         }),
     );
 
-    // Select Atomic as the active default model so OpenCode opens on it without
+    // Select GChat as the active default model so OpenCode opens on it without
     // a manual `/models` pick. Format is `<providerId>/<modelId>`. Pressing Run
     // is an explicit "use this", so we overwrite any prior selection.
     obj.insert(
         "model".to_string(),
-        serde_json::json!(format!("atomic/{}", model)),
+        serde_json::json!(format!("gchat/{}", model)),
     );
 
     let pretty = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
@@ -2734,18 +2736,18 @@ pub fn configure_opencode(
     Ok(())
 }
 
-const OPENCLAUDE_ATOMIC_PROFILE_ID: &str = "provider_atomic_chat";
+const OPENCLAUDE_GCHAT_PROFILE_ID: &str = "provider_gchat";
 
 fn openclaude_global_config_path(home: &str) -> PathBuf {
     PathBuf::from(home).join(".openclaude.json")
 }
 
-/// Configure OpenClaude by upserting an `atomic-chat` provider profile in the
+/// Configure OpenClaude by upserting a `gchat` provider profile in the
 /// global config (`~/.openclaude.json`) and syncing the startup profile file
 /// (`~/.openclaude/.openclaude-profile.json`). OpenClaude explicitly does not
 /// read `~/.claude` / `~/.claude.json` (see its README's "OpenClaude config
 /// cutover" section), so there is no legacy path to fall back to. OpenClaude
-/// routes atomic-chat through its OpenAI-compatible shim; local Atomic Chat
+/// routes gchat through its OpenAI-compatible shim; local GChat
 /// needs no API key.
 #[tauri::command]
 pub fn configure_openclaude(
@@ -2783,9 +2785,9 @@ pub fn configure_openclaude(
         .ok_or_else(|| format!("{} is not a JSON object", config_path.display()))?;
 
     let profile_entry = serde_json::json!({
-        "id": OPENCLAUDE_ATOMIC_PROFILE_ID,
-        "name": "Atomic Chat",
-        "provider": "atomic-chat",
+        "id": OPENCLAUDE_GCHAT_PROFILE_ID,
+        "name": "GChat",
+        "provider": "gchat",
         "baseUrl": api_url,
         "model": model,
     });
@@ -2798,8 +2800,8 @@ pub fn configure_openclaude(
     }
     let arr = profiles.as_array_mut().unwrap();
     if let Some(index) = arr.iter().position(|entry| {
-        entry.get("id").and_then(|v| v.as_str()) == Some(OPENCLAUDE_ATOMIC_PROFILE_ID)
-            || entry.get("provider").and_then(|v| v.as_str()) == Some("atomic-chat")
+        entry.get("id").and_then(|v| v.as_str()) == Some(OPENCLAUDE_GCHAT_PROFILE_ID)
+            || entry.get("provider").and_then(|v| v.as_str()) == Some("gchat")
     }) {
         arr[index] = profile_entry;
     } else {
@@ -2808,7 +2810,7 @@ pub fn configure_openclaude(
 
     obj.insert(
         "activeProviderProfileId".to_string(),
-        serde_json::json!(OPENCLAUDE_ATOMIC_PROFILE_ID),
+        serde_json::json!(OPENCLAUDE_GCHAT_PROFILE_ID),
     );
 
     let pretty = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
@@ -2817,7 +2819,7 @@ pub fn configure_openclaude(
 
     let profile_path = config_home.join(".openclaude-profile.json");
     let profile_file = serde_json::json!({
-        "profile": "atomic-chat",
+        "profile": "gchat",
         "env": {
             "OPENAI_BASE_URL": api_url,
             "OPENAI_MODEL": model,
@@ -2837,7 +2839,7 @@ pub fn configure_openclaude(
     Ok(())
 }
 
-/// Configure MiMo Code by upserting `provider.atomic` in
+/// Configure MiMo Code by upserting `provider.gchat` in
 /// `~/.config/mimocode/mimocode.json` (strict JSON, other providers preserved).
 /// MiMo Code is a fork of OpenCode, so its config system is OpenCode's
 /// field-for-field; only the paths and `$schema` differ.
@@ -2886,26 +2888,26 @@ pub fn configure_mimo(
     let key_val = api_key
         .as_deref()
         .filter(|k| !k.is_empty())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
     let mut models = serde_json::Map::new();
     models.insert(model.clone(), serde_json::json!({ "name": model }));
 
     provider.as_object_mut().unwrap().insert(
-        "atomic".to_string(),
+        "gchat".to_string(),
         serde_json::json!({
             "npm": "@ai-sdk/openai-compatible",
-            "name": "Atomic Chat",
+            "name": "GChat",
             "options": { "baseURL": api_url, "apiKey": key_val },
             "models": serde_json::Value::Object(models),
         }),
     );
 
-    // Select Atomic as the active default model so MiMo Code opens on it without
+    // Select GChat as the active default model so MiMo Code opens on it without
     // a manual `/models` pick. Format is `<providerId>/<modelId>`. Pressing Run
     // is an explicit "use this", so we overwrite any prior selection.
     obj.insert(
         "model".to_string(),
-        serde_json::json!(format!("atomic/{}", model)),
+        serde_json::json!(format!("gchat/{}", model)),
     );
 
     let pretty = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
@@ -2925,7 +2927,7 @@ pub fn configure_droid(
     model: String,
     api_key: Option<String>,
 ) -> Result<(), String> {
-    const DISPLAY_NAME: &str = "Atomic Chat";
+    const DISPLAY_NAME: &str = "GChat";
 
     let home = agent_home_dir()?;
     let dir = PathBuf::from(&home).join(".factory");
@@ -2966,7 +2968,7 @@ pub fn configure_droid(
     let key_val = api_key
         .as_deref()
         .filter(|k| !k.is_empty())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
 
     let entry = serde_json::json!({
         "model": model,
@@ -3011,19 +3013,19 @@ pub fn configure_droid(
 }
 
 /// Display name (and provider id) of the custom provider we register in Zed.
-const ZED_PROVIDER_ID: &str = "Atomic Chat";
+const ZED_PROVIDER_ID: &str = "GChat";
 
 /// Configure Zed by upserting a custom OpenAI-compatible provider named
-/// "Atomic Chat" under `language_models.openai_compatible` in
+/// "GChat" under `language_models.openai_compatible` in
 /// `~/.config/zed/settings.json`, and (when a model is running) selecting it as
 /// the agent's default model.
 ///
 /// We deliberately use Zed's built-in `openai_compatible` mechanism rather than
-/// the native `atomic_chat` provider: `openai_compatible` ships in every stock
+/// a custom-built `gchat` provider: `openai_compatible` ships in every stock
 /// Zed release, so the integration works without building a custom Zed. The
 /// tradeoff is that stock Zed can't auto-discover models (we list the running
 /// one) and marks the provider "authenticated" only once a key is present — so
-/// we also seed the `ATOMIC_CHAT_API_KEY` env var on launch (see `launch_zed`).
+/// we also seed the `GCHAT_API_KEY` env var on launch (see `launch_zed`).
 ///
 /// Zed reads `settings.json` as JSONC (comments, trailing commas), so we parse
 /// leniently with json5 and re-serialize as strict JSON — any comments are
@@ -3033,7 +3035,7 @@ pub fn configure_zed(
     api_url: String,
     model: Option<String>,
     // Accepted for call-site symmetry with the other agents. Zed reads the
-    // provider key from its keychain / the ATOMIC_CHAT_API_KEY env var, not
+    // provider key from its keychain / the GCHAT_API_KEY env var, not
     // from settings.json, so we don't persist it here.
     api_key: Option<String>,
 ) -> Result<(), String> {
@@ -3137,7 +3139,7 @@ pub fn configure_zed(
 /// the `~/.local/bin` shim the installer drops); on macOS fall back to
 /// `open -a Zed` when the CLI shim isn't present.
 ///
-/// We seed `ATOMIC_CHAT_API_KEY` so the custom openai_compatible provider is
+/// We seed `GCHAT_API_KEY` so the custom openai_compatible provider is
 /// authenticated without the user pasting a key: stock Zed reads the provider
 /// key from the `<PROVIDER_ID>_API_KEY` env var and treats any non-empty value
 /// as authenticated, which is all a keyless local server needs. This only takes
@@ -3147,8 +3149,8 @@ pub fn configure_zed(
 pub fn launch_zed() -> Result<(), String> {
     // Non-empty placeholder: the local server is keyless, but Zed needs *some*
     // key present to consider the provider authenticated.
-    const KEY_ENV: &str = "ATOMIC_CHAT_API_KEY";
-    const KEY_PLACEHOLDER: &str = "atomic";
+    const KEY_ENV: &str = "GCHAT_API_KEY";
+    const KEY_PLACEHOLDER: &str = "gchat";
 
     let mut cmd = std::process::Command::new("zed");
     apply_login_path(&mut cmd);
@@ -3178,7 +3180,7 @@ pub fn launch_zed() -> Result<(), String> {
     Err("Could not launch Zed. Is it installed and on your PATH?".to_string())
 }
 
-/// Configure OpenClaw by upserting `models.providers.atomic` plus the
+/// Configure OpenClaw by upserting `models.providers.gchat` plus the
 /// `agents.defaults.models` allowlist entry in `~/.openclaw/openclaw.json`.
 #[tauri::command]
 pub fn configure_openclaw(
@@ -3224,11 +3226,11 @@ pub fn configure_openclaw(
         .as_object_mut()
         .ok_or_else(|| "openclaw.json is not a JSON object".to_string())?;
 
-    let model_ref = format!("atomic/{}", model);
+    let model_ref = format!("gchat/{}", model);
     let key_val = api_key
         .as_deref()
         .filter(|k| !k.is_empty())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
 
     let models = obj.entry("models").or_insert_with(|| serde_json::json!({}));
     let models_obj = models
@@ -3245,9 +3247,9 @@ pub fn configure_openclaw(
         .ok_or_else(|| "models.providers is not a JSON object".to_string())?;
     // The catalog entry's `id` is the bare model id our /v1 server reports;
     // OpenClaw builds the model ref as `<providerId>/<id>` (= `model_ref`), so
-    // prefixing here would double it to `atomic/atomic/...` and break lookup.
+    // prefixing here would double it to `gchat/gchat/...` and break lookup.
     providers_obj.insert(
-        "atomic".to_string(),
+        "gchat".to_string(),
         serde_json::json!({
             "baseUrl": api_url,
             "apiKey": key_val,
@@ -3327,7 +3329,7 @@ pub fn configure_openclaw(
 }
 
 /// Configure Claude Code by upserting `~/.claude/settings.json` so it points at
-/// the local Atomic Chat server and uses the active model. Values go into the
+/// the local GChat server and uses the active model. Values go into the
 /// `env` block — Claude reads it at startup regardless of how `claude` was
 /// launched, and `ANTHROPIC_MODEL` there overrides any stale top-level `model`.
 /// All other user settings are preserved.
@@ -3366,7 +3368,7 @@ pub fn configure_claude_code(
     let key_val = api_key
         .as_deref()
         .filter(|k| !k.is_empty())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
 
     let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
     if !env.is_object() {
@@ -3413,7 +3415,7 @@ pub fn configure_claude_code(
 /// Upsert a marked `export KEY='VALUE'` block into a shell rc file. Removes any
 /// previous block carrying the same `marker` plus stray `export <prefix>...`
 /// lines, then appends a fresh block. Generalizes `write_env_to_shell` (which is
-/// hardcoded to the legacy Jan / Claude Code marker) for Atomic-branded agents.
+/// hardcoded to the GChat / Claude Code marker) for GChat-branded agents.
 fn write_marked_env_to_shell(
     env_file_path: &str,
     marker: &str,
@@ -3460,7 +3462,7 @@ fn write_marked_env_to_shell(
 /// Environment variables Copilot CLI reads for BYOK.
 ///
 /// Shared by `configure_copilot`, which persists them to the user's shell rc,
-/// and by `atomic-chat-cli launch`, which must also set them directly on the
+/// and by `gchat-cli launch`, which must also set them directly on the
 /// spawned child: a freshly written rc file is not live in a process that is
 /// already running.
 pub fn copilot_env_vars(
@@ -3479,7 +3481,7 @@ pub fn copilot_env_vars(
     env_vars
 }
 
-/// Configure GitHub Copilot CLI to use the local Atomic Chat server via its BYOK
+/// Configure GitHub Copilot CLI to use the local GChat server via its BYOK
 /// environment variables. Copilot has no provider config file — it reads these
 /// from the environment at launch — so we persist them to the user's shell rc
 /// (Windows: `setx`). The auto-opened terminal then sources them. `COPILOT_OFFLINE`
@@ -3492,7 +3494,7 @@ pub fn configure_copilot(
 ) -> Result<(), String> {
     let env_vars = copilot_env_vars(&api_url, &model, api_key.as_deref());
 
-    const MARKER: &str = "# Atomic Chat - Copilot CLI Config";
+    const MARKER: &str = "# GChat - Copilot CLI Config";
 
     if cfg!(target_os = "windows") {
         for (key, value) in &env_vars {
@@ -3527,7 +3529,7 @@ pub fn configure_copilot(
     Ok(())
 }
 
-/// Configure Pi by upserting the `atomic` provider in `~/.pi/agent/models.json`
+/// Configure Pi by upserting the `gchat` provider in `~/.pi/agent/models.json`
 /// and pointing `~/.pi/agent/settings.json` at it (both strict JSON, all other
 /// providers / keys preserved). Pi speaks OpenAI Chat Completions, so `api_url`
 /// carries the `/v1` suffix.
@@ -3540,9 +3542,9 @@ pub fn configure_pi(api_url: String, model: String, api_key: Option<String>) -> 
     let key_val = api_key
         .as_deref()
         .filter(|k| !k.is_empty())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
 
-    // --- models.json: upsert providers.atomic (preserve other providers) ---
+    // --- models.json: upsert providers.gchat (preserve other providers) ---
     let models_path = dir.join("models.json");
     let mut models_root: serde_json::Value = if models_path.exists() {
         let text = std::fs::read_to_string(&models_path).map_err(|e| e.to_string())?;
@@ -3571,7 +3573,7 @@ pub fn configure_pi(api_url: String, model: String, api_key: Option<String>) -> 
         *providers = serde_json::json!({});
     }
     providers.as_object_mut().unwrap().insert(
-        "atomic".to_string(),
+        "gchat".to_string(),
         serde_json::json!({
             "api": "openai-completions",
             "apiKey": key_val,
@@ -3606,7 +3608,7 @@ pub fn configure_pi(api_url: String, model: String, api_key: Option<String>) -> 
     let settings_obj = settings_root
         .as_object_mut()
         .ok_or_else(|| "settings.json is not a JSON object".to_string())?;
-    settings_obj.insert("defaultProvider".to_string(), serde_json::json!("atomic"));
+    settings_obj.insert("defaultProvider".to_string(), serde_json::json!("gchat"));
     settings_obj.insert("defaultModel".to_string(), serde_json::json!(model));
 
     let pretty = serde_json::to_string_pretty(&settings_root).map_err(|e| e.to_string())?;
@@ -3629,11 +3631,11 @@ const DSH_SECTION: &str = "llm-pi-ai";
 /// Our route id. It doubles as the stem of the credential reference below, and
 /// as the settings key the harness' own Models page addresses, so it must stay
 /// a lowercase-leading POSIX-identifier-safe word.
-const DSH_ROUTE_ID: &str = "atomic";
+const DSH_ROUTE_ID: &str = "gchat";
 /// Credential *reference* (an env var name, never the secret). The harness'
 /// Models page derives `<ROUTE>_API_KEY` for routes it creates, so matching
 /// that derivation keeps our route editable — and deletable — from inside dsh.
-const DSH_KEY_ENV: &str = "ATOMIC_API_KEY";
+const DSH_KEY_ENV: &str = "GCHAT_API_KEY";
 /// A route the pi-ai catalog does not ship falls back to `defaultContextWindow`
 /// 262144 / `defaultMaxTokens` 32768, a wild over-claim for a local model that
 /// surfaces as a mid-turn provider rejection. Declare something sane instead.
@@ -3679,7 +3681,7 @@ fn dsh_child_mapping<'a>(
         })
 }
 
-/// Build the `llm-pi-ai.providers.atomic` route node.
+/// Build the `llm-pi-ai.providers.gchat` route node.
 ///
 /// dsh refuses a hand-declared route unless `api`, `baseURL` and a NON-EMPTY
 /// `models` list are all present, and it refuses the *whole* section when one
@@ -3700,7 +3702,7 @@ fn dsh_route_node(api_url: &str, model: &str, with_key: bool) -> serde_yaml::Val
     let mut route = Mapping::new();
     route.insert(
         ykey("displayName"),
-        Value::String("Atomic Chat".to_string()),
+        Value::String("GChat".to_string()),
     );
     route.insert(ykey("api"), Value::String("openai-completions".to_string()));
     route.insert(ykey("baseURL"), Value::String(api_url.to_string()));
@@ -3717,7 +3719,7 @@ fn dsh_route_node(api_url: &str, model: &str, with_key: bool) -> serde_yaml::Val
 /// Upsert our route into an already-parsed `settings.yaml` tree. Pure: no IO,
 /// no environment.
 ///
-/// Everything outside `llm-pi-ai.providers.atomic` is preserved — other plugin
+/// Everything outside `llm-pi-ai.providers.gchat` is preserved — other plugin
 /// sections, other keys inside the section, other provider routes — including
 /// relative order, since `serde_yaml::Mapping` is insertion-ordered and
 /// `insert` on an existing key keeps its position.
@@ -3842,7 +3844,7 @@ fn dsh_write_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let stem = target
         .file_name()
         .and_then(|s| s.to_str())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
     let tmp = target.with_file_name(format!(".{}.atomic-tmp-{}", stem, std::process::id()));
 
     let result = (|| -> Result<(), String> {
@@ -3884,7 +3886,7 @@ fn dsh_validate_env_value(name: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Upsert — or, with an empty `vars`, remove — an Atomic-Chat-managed block in a
+/// Upsert — or, with an empty `vars`, remove — a GChat-managed block in a
 /// dotenv file, preserving every line outside it. `#` starts a comment in dotenv
 /// too, so the markers are inert to any reader.
 ///
@@ -3911,7 +3913,7 @@ fn dsh_write_managed_env(path: &Path, vars: &[(&str, &str)]) -> Result<(), Strin
 
     // The shared stripper removes every block we ever wrote, so reruns cannot
     // accumulate duplicates.
-    let kept = strip_atomic_managed_block(&existing);
+    let kept = strip_gchat_managed_block(&existing);
     let kept = kept.trim_end();
 
     let out = if vars.is_empty() {
@@ -3925,7 +3927,7 @@ fn dsh_write_managed_env(path: &Path, vars: &[(&str, &str)]) -> Result<(), Strin
             .iter()
             .map(|(name, value)| format!("{}={}\n", name, value))
             .collect();
-        let block = format!("{}\n{}{}\n", ATOMIC_MANAGED_BEGIN, body, ATOMIC_MANAGED_END);
+        let block = format!("{}\n{}{}\n", GCHAT_MANAGED_BEGIN, body, GCHAT_MANAGED_END);
         if kept.is_empty() {
             block
         } else {
@@ -3993,9 +3995,9 @@ fn configure_dsh_at(
 
     // The round trip below drops comments and expands anchors, so keep one copy
     // of whatever the user had before we first touched it. Only ever written
-    // once, so a later run cannot overwrite the true pre-Atomic state.
+    // once, so a later run cannot overwrite the true pre-GChat state.
     if !text.is_empty() {
-        let backup = home.join("settings.yaml.atomic-backup");
+        let backup = home.join("settings.yaml.gchat-backup");
         if !backup.exists() {
             let _ = std::fs::write(&backup, &text);
         }
@@ -4026,8 +4028,8 @@ fn configure_dsh_at(
     Ok(())
 }
 
-/// Point DeepSeek Harness (`dsh`) at the local Atomic Chat server by upserting
-/// the `llm-pi-ai.providers.atomic` route in `$DSH_HOME/settings.yaml`
+/// Point DeepSeek Harness (`dsh`) at the local GChat server by upserting
+/// the `llm-pi-ai.providers.gchat` route in `$DSH_HOME/settings.yaml`
 /// (default `~/.dsh`). dsh re-reads that document live, so no restart is needed.
 ///
 /// NOTE: the parse/re-serialize round trip drops YAML comments and expands
@@ -4046,7 +4048,7 @@ pub fn configure_dsh(
 /// Environment variables Goose reads for BYOK. See `copilot_env_vars` for why
 /// this is shared with the CLI.
 pub fn goose_env_vars(api_url: &str, model: &str, api_key: Option<&str>) -> Vec<(String, String)> {
-    let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("atomic");
+    let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("gchat");
 
     let mut env_vars: Vec<(String, String)> = Vec::with_capacity(5);
     env_vars.push(("GOOSE_PROVIDER".to_string(), "openai".to_string()));
@@ -4074,7 +4076,7 @@ pub fn configure_goose(
 ) -> Result<(), String> {
     let env_vars = goose_env_vars(&api_url, &model, api_key.as_deref());
 
-    const MARKER: &str = "# Atomic Chat - Goose Config";
+    const MARKER: &str = "# GChat - Goose Config";
 
     if cfg!(target_os = "windows") {
         for (key, value) in &env_vars {
@@ -4122,7 +4124,7 @@ pub fn openhands_env_vars(
     model: &str,
     api_key: Option<&str>,
 ) -> Vec<(String, String)> {
-    let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("atomic");
+    let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("gchat");
 
     let mut env_vars: Vec<(String, String)> = Vec::with_capacity(3);
     // The litellm `openai/` prefix is required for a custom OpenAI-compatible
@@ -4147,7 +4149,7 @@ pub fn configure_openhands(
 ) -> Result<(), String> {
     let env_vars = openhands_env_vars(&api_url, &model, api_key.as_deref());
 
-    const MARKER: &str = "# Atomic Chat - OpenHands Config";
+    const MARKER: &str = "# GChat - OpenHands Config";
 
     if cfg!(target_os = "windows") {
         for (key, value) in &env_vars {
@@ -4182,7 +4184,7 @@ pub fn configure_openhands(
     Ok(())
 }
 
-/// Configure KiloCode by upserting the `atomic` provider in
+/// Configure KiloCode by upserting the `gchat` provider in
 /// `~/.config/kilo/kilo.jsonc` and selecting our model (other providers
 /// preserved). The file is JSONC (comments / trailing commas), so we parse it
 /// with json5 — the same leniency KiloCode applies — and re-serialize as strict
@@ -4229,7 +4231,7 @@ pub fn configure_kilo(
     let key_val = api_key
         .as_deref()
         .filter(|k| !k.is_empty())
-        .unwrap_or("atomic");
+        .unwrap_or("gchat");
 
     let provider = obj
         .entry("provider")
@@ -4240,21 +4242,21 @@ pub fn configure_kilo(
     let mut models = serde_json::Map::new();
     models.insert(model.clone(), serde_json::json!({ "name": model }));
     provider.as_object_mut().unwrap().insert(
-        "atomic".to_string(),
+        "gchat".to_string(),
         serde_json::json!({
-            "name": "Atomic Chat",
+            "name": "GChat",
             "npm": "@ai-sdk/openai-compatible",
             "options": { "baseURL": api_url, "apiKey": key_val },
             "models": serde_json::Value::Object(models),
         }),
     );
 
-    // Select Atomic as the active model so KiloCode opens on it without a manual
+    // Select GChat as the active model so KiloCode opens on it without a manual
     // pick. Format is `<providerId>/<modelId>`. Run is explicit "use this", so
     // we overwrite any prior selection.
     obj.insert(
         "model".to_string(),
-        serde_json::json!(format!("atomic/{}", model)),
+        serde_json::json!(format!("gchat/{}", model)),
     );
 
     let pretty = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
@@ -4286,7 +4288,7 @@ pub fn poolside_env_vars(
     model: &str,
     api_key: Option<&str>,
 ) -> Vec<(String, String)> {
-    let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("atomic");
+    let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("gchat");
     let standalone_base = poolside_standalone_base_url(api_url);
 
     let mut env_vars: Vec<(String, String)> = Vec::with_capacity(3);
@@ -4305,7 +4307,7 @@ pub fn configure_poolside(
     let standalone_base = poolside_standalone_base_url(&api_url);
     let env_vars = poolside_env_vars(&api_url, &model, api_key.as_deref());
 
-    const MARKER: &str = "# Atomic Chat - Poolside Config";
+    const MARKER: &str = "# GChat - Poolside Config";
 
     if cfg!(target_os = "windows") {
         for (key, value) in &env_vars {
@@ -4544,8 +4546,8 @@ pub fn launch_editor(editor_id: String) -> Result<(), String> {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        // Find user-installed launchers (`code`, `idea`, …) even when Atomic
-        // Chat was started from Finder/Dock with a minimal PATH. No-op on Windows.
+        // Find user-installed launchers (`code`, `idea`, …) even when GChat
+        // was started from Finder/Dock with a minimal PATH. No-op on Windows.
         apply_login_path(&mut cmd);
         #[cfg(windows)]
         {
@@ -4717,7 +4719,7 @@ mod tests {
     #[test]
     fn is_our_cli_binary_rejects_missing_file() {
         assert!(!is_our_cli_binary(std::path::Path::new(
-            "/nonexistent/atomic-chat-cli"
+            "/nonexistent/gchat-cli"
         )));
     }
 
@@ -4756,7 +4758,7 @@ mod tests {
     #[test]
     fn appimage_restart_strips_runtime_environment() {
         let command =
-            sanitized_appimage_restart_command(std::ffi::OsStr::new("/tmp/atomic-chat.AppImage"));
+            sanitized_appimage_restart_command(std::ffi::OsStr::new("/tmp/gchat.AppImage"));
         let removed: Vec<_> = command
             .get_envs()
             .filter_map(|(key, value)| value.is_none().then(|| key.to_os_string()))
@@ -4787,13 +4789,13 @@ mod dsh_tests {
         serde_yaml::from_str(text).expect("fixture must be valid YAML")
     }
 
-    /// `llm-pi-ai.providers.atomic` as a mapping, or panic.
+    /// `llm-pi-ai.providers.gchat` as a mapping, or panic.
     fn route(root: &serde_yaml::Value) -> &serde_yaml::Mapping {
         root.get(DSH_SECTION)
             .and_then(|s| s.get("providers"))
             .and_then(|p| p.get(DSH_ROUTE_ID))
             .and_then(|r| r.as_mapping())
-            .expect("the atomic route must exist")
+            .expect("the gchat route must exist")
     }
 
     #[test]
@@ -4804,7 +4806,7 @@ mod dsh_tests {
         let r = route(&root);
         assert_eq!(r.get("api").unwrap().as_str(), Some("openai-completions"));
         assert_eq!(r.get("baseURL").unwrap().as_str(), Some(URL));
-        assert_eq!(r.get("displayName").unwrap().as_str(), Some("Atomic Chat"));
+        assert_eq!(r.get("displayName").unwrap().as_str(), Some("GChat"));
 
         // A hand-declared route is refused by dsh without a non-empty model list.
         let models = r.get("models").unwrap().as_sequence().unwrap();
@@ -4881,10 +4883,10 @@ mod dsh_tests {
     #[test]
     fn rewrites_the_route_wholesale_dropping_stale_fields() {
         let mut root = parse(
-            "llm-pi-ai:\n  providers:\n    atomic:\n      \
-             apiKeyEnv: ATOMIC_API_KEY\n      \
-             baseURL: http://127.0.0.1:9999/v1\n      \
-             leftoverJunk: true\n",
+            "llm-pi-ai:\n  providers:\n    gchat:\n      \
+              apiKeyEnv: GCHAT_API_KEY\n      \
+              baseURL: http://127.0.0.1:9999/v1\n      \
+              leftoverJunk: true\n",
         );
         apply_dsh_provider(&mut root, URL, "m", false).unwrap();
 

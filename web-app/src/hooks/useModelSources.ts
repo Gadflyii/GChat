@@ -7,14 +7,15 @@
  * result through `zustand/middleware:persist`. After the migration to the
  * curated `AtomicBot-ai/atomic-chat-model-catalog` source, persistence and
  * caching are handled by `model-catalog-store` (which writes its own
- * localStorage cache keyed `atomic_model_catalog_cache_v1`). This module
+ * localStorage cache keyed `gchat_model_catalog_cache_v1`). This module
  * keeps the original API surface (`sources`, `fetchSources`, `loading`,
  * `error`) so the dozens of existing consumers do not need to change in
  * lockstep, but every reactive read now flows through the new store.
  *
- * Platform filtering (drop MLX entries on non-macOS) and quant-id
- * sanitisation stay here -- they are shape transforms specific to the
- * client, and the catalog artefact is intentionally platform-neutral.
+ * Format filtering (drop MLX entries, which the single local backend
+ * cannot run on any platform) and quant-id sanitisation stay here --
+ * they are shape transforms specific to the client, and the catalog
+ * artefact is intentionally format-neutral.
  */
 
 import { create } from 'zustand'
@@ -38,12 +39,9 @@ const adaptCatalog = (
 ): CatalogModel[] => {
   const out: CatalogModel[] = []
   for (const entry of catalog) {
-    const is_mlx = entry.is_mlx ?? entry.library_name === 'mlx'
-    // Defense-in-depth: keep platform filtering here (mirrors
-    // useResolvedRecommendedModels' MLX safety net). The artefact stays
-    // OS-agnostic so the same cache works for a user who later moves to
-    // macOS.
-    if (is_mlx && !IS_MACOS) continue
+    // MLX builds cannot be run by the single local backend (GInfer) on any
+    // platform, so they never surface in the Hub.
+    if (entry.is_mlx) continue
     // Hide MTP companion GGUFs baked into the curated catalog — they are
     // speculative-decoding heads, not standalone downloadable models.
     const stripped = stripMtpCompanionQuants(entry)
@@ -53,7 +51,6 @@ const adaptCatalog = (
         ...q,
         model_id: sanitizeModelId(q.model_id),
       })),
-      is_mlx,
     })
   }
   return out

@@ -1,5 +1,5 @@
 /**
- * Script to find missing i18n keys in Jan components
+ * Script to find missing i18n keys in GChat components
  *
  * Usage:
  *   node scripts/find-missing-i18n-key.js [options]
@@ -28,7 +28,7 @@ const args = process.argv.slice(2).reduce((acc, arg) => {
 // Display help information
 if (args.help) {
   console.log(`
-Find missing i18n translations in Jan
+Find missing i18n translations in GChat
 
 A useful script to identify whether the i18n keys used in component files exist in all language files.
 
@@ -174,7 +174,7 @@ function checkKeyInLocales(key, localeDirs, localesDir) {
     try {
       const json = JSON.parse(fs.readFileSync(filePath, 'utf8'))
 
-      // Jan's localization files have flat structure
+      // GChat's localization files have a flat structure
       // e.g., common.json has { "save": "Save", "cancel": "Cancel" }
       // not nested like { "common": { "save": "Save" } }
       const valueToCheck = getValueByPath(json, keyPath)

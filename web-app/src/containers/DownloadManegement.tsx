@@ -7,7 +7,7 @@ import { Progress } from '@/components/ui/progress'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { DownloadEvent, DownloadState, events, AppEvent } from '@janhq/core'
+import { DownloadEvent, DownloadState, events, AppEvent } from '@gchat/core'
 import { IconX, IconPlayerPause, IconPlayerPlay } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -56,7 +56,7 @@ function captureDownloadTerminal(
 ): void {
   if (!finalizeDownloadOnce(id)) return
 
-  const kind = downloadKind(id, opts.downloadType)
+  const kind = downloadKind()
   if (status === 'completed' && kind === 'model') {
     markModelDownloaded(id)
   }
@@ -303,7 +303,7 @@ export function DownloadManagement() {
           feature: 'model_download',
           failure_reason: classifyDownloadFailure(err),
           http_status: parseHttpStatus(err),
-          download_kind: downloadKind(state.modelId, anyState?.downloadType),
+          download_kind: downloadKind(),
           model_id: state.modelId,
           quant: quantFromModelId(state.modelId),
         }
@@ -609,12 +609,6 @@ export function DownloadManagement() {
     return ((gb * 100) / 100).toFixed(2)
   }
 
-  // ATO-154: pause/resume is only offered for resumable model (GGUF) downloads.
-  // Backend-binary downloads (`llamacpp*`) and MLX repos (`mlx-community/*`,
-  // which start with `mlx`) get cancel-only, matching Jan's gating.
-  const isPausableDownload = (id: string): boolean =>
-    !id.startsWith('llamacpp') && !id.startsWith('mlx')
-
   const handlePauseDownload = useCallback(
     (download: { id: string; name: string }) => {
       markPausedDownload(download.id)
@@ -650,7 +644,6 @@ export function DownloadManagement() {
         .pullModelWithMetadata(
           download.id,
           params.modelPath,
-          params.mmprojPath,
           params.hfToken,
           params.skipVerification ?? true,
           true,
@@ -751,32 +744,31 @@ export function DownloadManagement() {
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate">{download.name}</p>
                         <div className="shrink-0 flex items-center space-x-0.5">
-                          {isPausableDownload(download.id) &&
-                            (pausedDownloads.has(download.id) ? (
-                              <Button
-                                variant="secondary"
-                                size="icon-xs"
-                                onClick={() => handleResumeDownload(download)}
-                              >
-                                <IconPlayerPlay
-                                  size={16}
-                                  className="text-muted-foreground cursor-pointer"
-                                  title={t('resumeDownload')}
-                                />
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="secondary"
-                                size="icon-xs"
-                                onClick={() => handlePauseDownload(download)}
-                              >
-                                <IconPlayerPause
-                                  size={16}
-                                  className="text-muted-foreground cursor-pointer"
-                                  title={t('pauseDownload')}
-                                />
-                              </Button>
-                            ))}
+                          {pausedDownloads.has(download.id) ? (
+                            <Button
+                              variant="secondary"
+                              size="icon-xs"
+                              onClick={() => handleResumeDownload(download)}
+                            >
+                              <IconPlayerPlay
+                                size={16}
+                                className="text-muted-foreground cursor-pointer"
+                                title={t('resumeDownload')}
+                              />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="secondary"
+                              size="icon-xs"
+                              onClick={() => handlePauseDownload(download)}
+                            >
+                              <IconPlayerPause
+                                size={16}
+                                className="text-muted-foreground cursor-pointer"
+                                title={t('pauseDownload')}
+                              />
+                            </Button>
+                          )}
                           <Button
                             variant="secondary"
                             size="icon-xs"
@@ -791,21 +783,7 @@ export function DownloadManagement() {
                                 clearPausedDownload(download.id)
                                 clearResumeParams(download.id)
                               }
-                              if (
-                                download.id.startsWith('llamacpp') ||
-                                download.id.startsWith('mlx')
-                              ) {
-                                const downloadManager =
-                                  window.core.extensionManager.getByName(
-                                    '@janhq/download-extension'
-                                  )
-                                downloadManager.cancelDownload(download.id)
-                              } else {
-                                serviceHub.models().abortDownload(download.name)
-                                if (downloadProcesses.length === 0) {
-                                  setIsPopoverOpen(false)
-                                }
-                              }
+                              serviceHub.models().abortDownload(download.name)
                               setIsPopoverOpen(false)
                             }}
                           >

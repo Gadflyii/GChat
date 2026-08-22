@@ -6,11 +6,17 @@ Native Rust plugins for hardware access, process management, and system integrat
 
 ## Current Plugins
 
+### `/tauri-plugin-ginfer`
+- ginfer process management and model inference
+
 ### `/tauri-plugin-hardware`
 - Hardware detection (CPU, GPU, memory)
 
-### `/tauri-plugin-llamacpp`  
-- llama.cpp process management and model inference
+### `/tauri-plugin-rag`
+- Retrieval-augmented generation (embedding + vector search)
+
+### `/tauri-plugin-vector-db`
+- Local vector database
 
 ## Plugin Structure
 

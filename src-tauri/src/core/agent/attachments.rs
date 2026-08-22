@@ -365,7 +365,7 @@ mod tests {
 
     fn temp_data_folder() -> PathBuf {
         let path = std::env::temp_dir().join(format!(
-            "atomic-chat-agent-attachments-{}",
+            "gchat-agent-attachments-{}",
             uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&path).unwrap();

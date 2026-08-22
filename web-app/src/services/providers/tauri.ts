@@ -4,7 +4,7 @@
 
 import { ensureRegistryLoaded } from '@/stores/provider-registry-store'
 import { providerModels } from '@/constants/models'
-import { EngineManager, SettingComponentProps } from '@janhq/core'
+import { EngineManager, SettingComponentProps } from '@gchat/core'
 import { ModelCapabilities } from '@/types/models'
 import { modelSettings } from '@/lib/predefined'
 import { ExtensionManager } from '@/lib/extension'

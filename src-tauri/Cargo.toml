@@ -1,14 +1,14 @@
 [package]
-name = "Atomic-Chat"
+name = "gchat"
 version = "0.6.599"
 description = "Use offline LLMs with your own data. Run open source models like Llama2 or Falcon on your internal computers/servers."
-authors = ["Jan <service@jan.ai>"]
+authors = ["GChat"]
 license = "MIT"
-repository = "https://github.com/janhq/jan"
+repository = "https://github.com/Gadflyii/gchat"
 edition = "2021"
 rust-version = "1.77.2"
 resolver = "2"
-default-run = "Atomic-Chat"
+default-run = "gchat"
 autobins = false
 
 [lib]
@@ -16,18 +16,13 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "Atomic-Chat"
+name = "gchat"
 path = "src/main.rs"
 
 [[bin]]
-name = "jan-cli"
-path = "src/bin/jan-cli.rs"
+name = "gchat-cli"
+path = "src/bin/gchat-cli.rs"
 required-features = ["cli"]
-
-[[example]]
-name = "gaia-eval"
-path = "examples/gaia-eval.rs"
-required-features = ["gaia-eval"]
 
 [features]
 default = [
@@ -43,13 +38,9 @@ default = [
 ]
 hardware = ["dep:tauri-plugin-hardware"]
 deep-link = ["dep:tauri-plugin-deep-link"]
-mlx = ["dep:tauri-plugin-mlx"]
-foundation-models = ["dep:tauri-plugin-foundation-models"]
 desktop = [
     "deep-link",
-    "hardware",
-    "mlx",
-    "foundation-models"
+    "hardware"
 ]
 mobile = [
     "tauri/protocol-asset",
@@ -67,7 +58,6 @@ test-tauri = [
     "desktop",
 ]
 cli = ["dep:env_logger", "dep:dialoguer", "dep:indicatif", "dep:console"]
-gaia-eval = ["dep:env_logger", "dep:indicatif", "dep:parquet"]
 
 [build-dependencies]
 tauri-build = { version = "2.0.2", features = [] }
@@ -106,10 +96,7 @@ tar = "0.4"
 zip = "0.6"
 tauri-plugin-deep-link = { version = "2", optional = true }
 tauri-plugin-hardware = { path = "./plugins/tauri-plugin-hardware", optional = true }
-tauri-plugin-llamacpp = { path = "./plugins/tauri-plugin-llamacpp" }
-tauri-plugin-llamacpp-upstream = { path = "./plugins/tauri-plugin-llamacpp-upstream" }
-tauri-plugin-mlx = { path = "./plugins/tauri-plugin-mlx", optional = true }
-tauri-plugin-foundation-models = { path = "./plugins/tauri-plugin-foundation-models", optional = true }
+tauri-plugin-ginfer = { path = "./plugins/tauri-plugin-ginfer" }
 tauri-plugin-vector-db = { path = "./plugins/tauri-plugin-vector-db" }
 tauri-plugin-rag = { path = "./plugins/tauri-plugin-rag" }
 tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
@@ -146,7 +133,6 @@ ignore = "=0.4.30"
 regex = "1.13.1"
 diffy = "0.4.2"
 trash = "=5.2.3"
-parquet = { version = "54.3.1", default-features = false, features = ["brotli", "flate2", "json", "lz4", "snap", "zstd"], optional = true }
 
 [dependencies.tauri]
 version = "2.8.5"

@@ -47,21 +47,14 @@ const catalogModel: CatalogModel = {
   downloads: 0,
   quants: [
     {
-      model_id: 'AtomicChat/Qwen3.5-4B-Q8_0',
-      path: 'https://example.test/Qwen3.5-4B-Q8_0.gguf',
+      model_id: 'AtomicChat/Qwen3.8-27B-Q8_0',
+      path: 'https://example.test/Qwen3.8-27B-Q8_0.gguf',
       file_size: '8.0 GB',
     },
     {
-      model_id: 'AtomicChat/Qwen3.5-4B-Q4_K_M',
-      path: 'https://example.test/Qwen3.5-4B-Q4_K_M.gguf',
+      model_id: 'AtomicChat/Qwen3.8-27B-Q4_K_M',
+      path: 'https://example.test/Qwen3.8-27B-Q4_K_M.gguf',
       file_size: '2.5 GB',
-    },
-  ],
-  mmproj_models: [
-    {
-      model_id: 'mmproj-f16',
-      path: 'https://example.test/mmproj-f16.gguf',
-      file_size: '0.5 GB',
     },
   ],
 }
@@ -89,7 +82,7 @@ describe('PromptOnboardingModel', () => {
 
     const heading = await screen.findByRole('heading', { level: 2 })
     expect(heading.textContent?.replace(/\s+/g, ' ')).toBe(
-      'Qwen3.5 4B (2.5 GB)'
+      'Qwen3.8 27B (2.5 GB)'
     )
     expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledWith(
       ONBOARDING_REMINDER_MODEL_HF_REPO,
@@ -97,19 +90,18 @@ describe('PromptOnboardingModel', () => {
     )
   })
 
-  it('downloads the quant with its mmproj and clears the reminder', async () => {
+  it('downloads the quant and clears the reminder', async () => {
     render(<PromptOnboardingModel />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Download' }))
 
     expect(mocks.addLocalDownloadingModel.mock.calls).toEqual([
-      ['AtomicChat/Qwen3.5-4B-Q4_K_M'],
+      ['AtomicChat/Qwen3.8-27B-Q4_K_M'],
     ])
     expect(mocks.pullModelWithMetadata.mock.calls).toEqual([
       [
-        'AtomicChat/Qwen3.5-4B-Q4_K_M',
-        'https://example.test/Qwen3.5-4B-Q4_K_M.gguf',
-        'https://example.test/mmproj-f16.gguf',
+        'AtomicChat/Qwen3.8-27B-Q4_K_M',
+        'https://example.test/Qwen3.8-27B-Q4_K_M.gguf',
         '',
         true,
         false,
@@ -137,46 +129,14 @@ describe('PromptOnboardingModel', () => {
 })
 
 describe('PromptOnboardingModel hardware tiers', () => {
-  const VL_REPO = 'LiquidAI/LFM2.5-VL-450M-GGUF'
-
-  // Mirrors the real repo: it ships a Q4_K_M alongside the Q8_0 the manifest
-  // pins, and a BF16 projector ahead of the Q8_0 one.
-  const vlModel: CatalogModel = {
-    model_name: VL_REPO,
-    developer: 'LiquidAI',
-    downloads: 0,
-    quants: [
-      {
-        model_id: 'LiquidAI/LFM2_5-VL-450M-Q4_K_M',
-        path: 'https://example.test/LFM2.5-VL-450M-Q4_K_M.gguf',
-        file_size: '279.0 MB',
-      },
-      {
-        model_id: 'LiquidAI/LFM2_5-VL-450M-Q8_0',
-        path: 'https://example.test/LFM2.5-VL-450M-Q8_0.gguf',
-        file_size: '361.6 MB',
-      },
-    ],
-    mmproj_models: [
-      {
-        model_id: 'mmproj-LFM2_5-VL-450m-BF16',
-        path: 'https://example.test/mmproj-BF16.gguf',
-        file_size: '181.0 MB',
-      },
-      {
-        model_id: 'mmproj-LFM2_5-VL-450m-Q8_0',
-        path: 'https://example.test/mmproj-Q8_0.gguf',
-        file_size: '98.0 MB',
-      },
-    ],
-  }
-
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.localDownloadingModels = new Set()
     mocks.hardwareTier.tier = 'low'
-    mocks.fetchHuggingFaceRepo.mockResolvedValue({ id: VL_REPO })
-    mocks.convertHfRepoToCatalogModel.mockReturnValue(vlModel)
+    mocks.fetchHuggingFaceRepo.mockResolvedValue({
+      id: ONBOARDING_REMINDER_MODEL_HF_REPO,
+    })
+    mocks.convertHfRepoToCatalogModel.mockReturnValue(catalogModel)
     seedServiceHub({
       models: {
         fetchHuggingFaceRepo: mocks.fetchHuggingFaceRepo,
@@ -187,28 +147,25 @@ describe('PromptOnboardingModel hardware tiers', () => {
     })
   })
 
-  it('offers the small model on a weak device', async () => {
+  it('offers the reminder model on a weak device', async () => {
     render(<PromptOnboardingModel />)
 
-    // Nudging a low-spec machine toward Qwen3.5 4B would undo the whole point
-    // of the low-spec onboarding tier.
     const heading = await screen.findByRole('heading', { level: 2 })
     expect(heading.textContent?.replace(/\s+/g, ' ')).toBe(
-      'LFM2.5 VL 450M (361.6 MB)'
+      'Qwen3.8 27B (2.5 GB)'
     )
-    expect(screen.queryByText(/Qwen3.5 4B/)).not.toBeInTheDocument()
-    expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledWith(VL_REPO, '')
+    expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledWith(
+      ONBOARDING_REMINDER_MODEL_HF_REPO,
+      ''
+    )
   })
 
-  it('downloads the pinned quant and its matching projector', async () => {
+  it('downloads the q4_k_m quant', async () => {
     render(<PromptOnboardingModel />)
     fireEvent.click(await screen.findByRole('button', { name: 'Download' }))
 
-    const [modelId, path, mmprojPath] =
-      mocks.pullModelWithMetadata.mock.calls[0]
-    expect(modelId).toBe('LiquidAI/LFM2_5-VL-450M-Q8_0')
-    expect(path).toContain('Q8_0.gguf')
-    // Not the BF16 projector, which is what the default preference returns.
-    expect(mmprojPath).toBe('https://example.test/mmproj-Q8_0.gguf')
+    const [modelId, path] = mocks.pullModelWithMetadata.mock.calls[0]
+    expect(modelId).toBe('AtomicChat/Qwen3.8-27B-Q4_K_M')
+    expect(path).toContain('Q4_K_M.gguf')
   })
 })

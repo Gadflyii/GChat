@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EngineManager, type ThreadMessage } from '@janhq/core'
+import { EngineManager, type ThreadMessage } from '@gchat/core'
 
 import { ContextSizeControl } from '@/containers/ContextSizeControl'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -84,17 +84,14 @@ describe('ContextSizeControl', () => {
     })
   })
 
-  it.each(['llamacpp', 'llamacpp-upstream', 'mlx'])(
-    'is visible for %s models',
-    (providerName) => {
-      setSelectedModel(providerName)
-      render(<ContextSizeControl />)
+  it('is visible for the local provider', () => {
+    setSelectedModel('ginfer')
+    render(<ContextSizeControl />)
 
-      expect(
-        screen.getByRole('button', { name: 'Context usage: 1.0%' })
-      ).toBeInTheDocument()
-    }
-  )
+    expect(
+      screen.getByRole('button', { name: 'Context usage: 1.0%' })
+    ).toBeInTheDocument()
+  })
 
   it('is hidden for non-local providers', () => {
     setSelectedModel('openai')
@@ -106,7 +103,7 @@ describe('ContextSizeControl', () => {
   })
 
   it('shows the current input and latest output token usage', () => {
-    setSelectedModel('llamacpp')
+    setSelectedModel('ginfer')
     const messages = [
       {
         role: 'assistant',
@@ -138,7 +135,7 @@ describe('ContextSizeControl', () => {
 
   it('falls back to response usage when a new chat has not been tokenized', () => {
     tokenCountState.value = 0
-    setSelectedModel('llamacpp')
+    setSelectedModel('ginfer')
     const messages = [
       {
         role: 'assistant',
@@ -166,7 +163,7 @@ describe('ContextSizeControl', () => {
   ])(
     'changes the context progress tone at usage thresholds',
     (additionalTokens, expectedClass) => {
-      setSelectedModel('llamacpp')
+      setSelectedModel('ginfer')
       render(<ContextSizeControl additionalTokens={additionalTokens} />)
 
       fireEvent.click(
@@ -180,7 +177,7 @@ describe('ContextSizeControl', () => {
   )
 
   it('persists the edited context size through the model provider store', () => {
-    setSelectedModel('llamacpp')
+    setSelectedModel('ginfer')
     render(<ContextSizeControl />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Context usage: 1.0%' }))
@@ -201,7 +198,7 @@ describe('ContextSizeControl', () => {
       .mockReturnValue({
         get: () => ({ getMaxCtxTrain }),
       } as unknown as EngineManager)
-    setSelectedModel('llamacpp')
+    setSelectedModel('ginfer')
     render(<ContextSizeControl />)
 
     fireEvent.click(screen.getByRole('button', { name: /Context usage:/ }))
@@ -219,7 +216,7 @@ describe('ContextSizeControl', () => {
   it('restarts a running model after the context size changes', async () => {
     vi.useFakeTimers()
     getActiveModels.mockResolvedValue(['test-model'])
-    setSelectedModel('mlx')
+    setSelectedModel('ginfer')
     render(<ContextSizeControl />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Context usage: 1.0%' }))
@@ -238,7 +235,7 @@ describe('ContextSizeControl', () => {
 
     expect(stopModel).toHaveBeenCalledWith('test-model')
     expect(startModel).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: 'mlx' }),
+      expect.objectContaining({ provider: 'ginfer' }),
       'test-model',
       true
     )

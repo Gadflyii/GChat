@@ -59,15 +59,15 @@ import { useThreads } from '@/hooks/useThreads'
 import { useAttachments } from '@/hooks/useAttachments'
 import { useAppState } from '@/hooks/useAppState'
 import { ExtensionManager } from '@/lib/extension'
-import { ExtensionTypeEnum, VectorDBExtension } from '@janhq/core'
+import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ttftMark } from '@/lib/ttft-timing'
 import { extractModelErrorMessage } from '@/lib/modelErrorMessage'
 import type { ServiceHub } from '@/services'
 import { ensureRemoteProviderReady } from '@/utils/ensureRemoteProviderReady'
 import { isLocalProvider as isLocalProviderName } from '@/utils/registerRemoteProvider'
 
-/// Local inference backends (mlx, llamacpp, llamacpp-upstream,
-/// foundation-models) get special handling at the `streamText` boundary:
+/// Local inference backends (ginfer) get special handling at the
+/// `streamText` boundary:
 ///   * when tools are also active, the assistant system prompt is not passed
 ///     as a `system` message — gemma-4 and similar local models reliably
 ///     auto-emit a chain-of-thought block whenever the rendered prompt
@@ -80,24 +80,7 @@ import { isLocalProvider as isLocalProviderName } from '@/utils/registerRemotePr
 /// providers: tools are forwarded whenever the tools on/off setting has
 /// them enabled and the model supports tool calling.
 /// Remote providers (OpenAI, Anthropic, …) are unaffected.
-const LOCAL_INFERENCE_PROVIDERS = new Set<string>([
-  'mlx',
-  'llamacpp',
-  'llamacpp-upstream',
-  'foundation-models',
-])
-
-/// Map an audio MIME type to the `format` string expected by the OpenAI-style
-/// `input_audio` content part (which the MLX/omni backend consumes).
-function audioMediaTypeToFormat(mediaType: string): string {
-  const mt = mediaType.toLowerCase()
-  if (mt.includes('mpeg') || mt.includes('mp3')) return 'mp3'
-  if (mt.includes('wav') || mt.includes('wave')) return 'wav'
-  if (mt.includes('ogg')) return 'ogg'
-  if (mt.includes('flac')) return 'flac'
-  // Fall back to the subtype (audio/<x> → <x>); the backend rejects unknowns.
-  return mt.split('/')[1] ?? 'mp3'
-}
+const LOCAL_INFERENCE_PROVIDERS = new Set<string>(['ginfer'])
 
 /// Pull audio attachments out of the latest user message as `input_audio`
 /// payloads. Audio is carried in the UI as a `file` part with an `audio/*`
@@ -105,32 +88,6 @@ function audioMediaTypeToFormat(mediaType: string): string {
 /// understands `image/*` file parts and throws `UnsupportedFunctionalityError`
 /// on anything else — so audio never travels through the normal message path.
 /// Instead we extract it here and inject it at the MLX fetch layer.
-export function extractAudioInputParts(
-  messages: UIMessage[]
-): Array<{ data: string; format: string }> {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i]
-    if (message.role !== 'user') continue
-    const parts = Array.isArray(message.parts) ? message.parts : []
-    const audio: Array<{ data: string; format: string }> = []
-    for (const part of parts as Array<Record<string, unknown>>) {
-      if (
-        part.type === 'file' &&
-        typeof part.mediaType === 'string' &&
-        part.mediaType.startsWith('audio/') &&
-        typeof part.url === 'string'
-      ) {
-        const url = part.url as string
-        const data = url.includes(',') ? url.slice(url.indexOf(',') + 1) : url
-        audio.push({ data, format: audioMediaTypeToFormat(part.mediaType) })
-      }
-    }
-    // Only the most recent user turn can carry freshly attached audio.
-    return audio
-  }
-  return []
-}
-
 /// Whether a part may travel to the model as-is.
 ///
 /// `image/*` is the only file part any converter we route to accepts:
@@ -138,10 +95,9 @@ export function extractAudioInputParts(
 /// `UnsupportedFunctionalityError` on everything else, and Anthropic — which
 /// does understand `application/pdf` — would receive our `url`, a local
 /// filesystem path the SDK cannot resolve, as the document body. Every other
-/// attachment kind reaches the model through its own channel: audio as
-/// `input_audio` at the MLX fetch layer (see `extractAudioInputParts`),
-/// documents as text folded in by `mapUserInlineAttachments` or retrieved by
-/// the RAG tools. So a non-image file part is never information — only a way
+/// attachment kind reaches the model through its own channel: documents as
+/// text folded in by `mapUserInlineAttachments` or retrieved by the RAG
+/// tools. So a non-image file part is never information — only a way
 /// to break the request.
 function isModelSupportedPart(part: unknown): boolean {
   const candidate = part as { type?: unknown; mediaType?: unknown }
@@ -196,61 +152,6 @@ export function foldSystemIntoFirstUserMessage<
   const copy = [...messages]
   copy[idx] = { ...target, content: newContent } as T
   return copy
-}
-
-export function shouldSuppressToolsForUpstreamDflash(
-  providerId: string,
-  settings: readonly ProviderSetting[] | undefined
-): boolean {
-  return (
-    providerId === 'llamacpp-upstream' &&
-    settings?.some(
-      (setting) =>
-        setting.key === 'dflash' && setting.controller_props.value === true
-    ) === true
-  )
-}
-
-export function withUpstreamDflashSampling(
-  providerId: string,
-  settings: readonly ProviderSetting[] | undefined,
-  params: Record<string, unknown>
-): Record<string, unknown> {
-  if (!shouldSuppressToolsForUpstreamDflash(providerId, settings)) return params
-  return {
-    ...params,
-    temperature: 0,
-    top_k: 1,
-    repeat_penalty: 1,
-    presence_penalty: 0,
-    frequency_penalty: 0,
-  }
-}
-
-export function withUpstreamDflashReasoningOverride(
-  providerId: string,
-  settings: readonly ProviderSetting[] | undefined,
-  override: Record<string, unknown>
-): Record<string, unknown> {
-  if (!shouldSuppressToolsForUpstreamDflash(providerId, settings)) {
-    return override
-  }
-
-  const existingTemplateKwargs =
-    typeof override.chat_template_kwargs === 'object' &&
-    override.chat_template_kwargs !== null &&
-    !Array.isArray(override.chat_template_kwargs)
-      ? (override.chat_template_kwargs as Record<string, unknown>)
-      : {}
-
-  return {
-    ...override,
-    chat_template_kwargs: {
-      ...existingTemplateKwargs,
-      enable_thinking: false,
-    },
-    reasoning_budget: 0,
-  }
 }
 
 export type TokenUsageCallback = (
@@ -544,15 +445,10 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         // top_k 64) is layered on at request time unless the user has tuned
         // that assistant's sampling — non-destructive, follows the active model.
         const sampling = getSamplingParamsForThread(this.threadId)
-        const providerSettings = updatedProvider?.settings ?? provider.settings
-        const inferenceParams = withUpstreamDflashSampling(
-          providerId,
-          providerSettings,
-          withRecommendedSampling(
-            modelId,
-            sampling.params,
-            sampling.overridden
-          )
+        const inferenceParams = withRecommendedSampling(
+          modelId,
+          sampling.params,
+          sampling.overridden
         )
 
         // Global "Disable reasoning" setting — best-effort: dispatch the
@@ -578,9 +474,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         }
         if (disableReasoning || reasoningBudget === 'off') {
           switch (effectiveProviderName) {
-            case 'llamacpp':
-            case 'llamacpp-upstream':
-            case 'mlx':
+            case 'ginfer':
               reasoningOverride.chat_template_kwargs = {
                 enable_thinking: false,
               }
@@ -618,29 +512,14 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
               }
           }
         } else if (
-          (effectiveProviderName === 'llamacpp' ||
-            effectiveProviderName === 'llamacpp-upstream' ||
-            effectiveProviderName === 'mlx') &&
+          effectiveProviderName === 'ginfer' &&
           reasoningBudgetTokens[reasoningBudget] !== undefined
         ) {
           reasoningOverride.reasoning_budget =
             reasoningBudgetTokens[reasoningBudget]
         }
-        const effectiveReasoningOverride = withUpstreamDflashReasoningOverride(
-          providerId,
-          providerSettings,
-          reasoningOverride
-        )
+        const effectiveReasoningOverride = reasoningOverride
         const hasOverride = Object.keys(effectiveReasoningOverride).length > 0
-
-        // Audio attachments (omni/audio-capable models, MLX backend) are
-        // injected as `input_audio` at the MLX fetch layer rather than as
-        // file parts — the OpenAI-compatible converter rejects audio file
-        // parts. Only the MLX provider consumes them today.
-        const audioInputParts =
-          effectiveProviderName === 'mlx'
-            ? extractAudioInputParts(options.messages)
-            : []
 
         ttftMark('deltaStart')
         const effectiveProvider = updatedProvider ?? provider
@@ -651,8 +530,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           modelId,
           effectiveProvider,
           inferenceParams ?? {},
-          hasOverride ? effectiveReasoningOverride : undefined,
-          audioInputParts.length > 0 ? audioInputParts : undefined
+          hasOverride ? effectiveReasoningOverride : undefined
         )
         ttftMark('deltaEnd')
       } catch (error) {
@@ -678,8 +556,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     // Convert UI messages to model messages. Non-image file parts are stripped
     // first — the converters accept `image/*` and nothing else. Order matters:
     // `mapUserInlineAttachments` folds document text into the message before
-    // the strip runs, and `extractAudioInputParts` ran earlier against the
-    // untouched `options.messages`, so neither loses anything.
+    // the strip runs, so neither loses anything.
     let preparedMessages = stripUnsupportedFileParts(
       this.mapUserInlineAttachments(messagesToConvert)
     )
@@ -712,7 +589,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         ]
       : baseMessages
 
-    // Local-providers (mlx, llamacpp, llamacpp-upstream, foundation-models):
+    // Local providers (ginfer):
     // when tools are also active we don't pass a `system` message (gemma-4 and
     // similar local models reliably auto-emit a chain-of-thought block whenever
     // the rendered prompt contains BOTH a system message and tools). Instead of
@@ -728,12 +605,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     const selectedModel = useModelProvider.getState().selectedModel
     const modelSupportsTools =
       selectedModel?.capabilities?.includes('tools') ?? this.modelSupportsTools
-    const suppressToolsForDflash = shouldSuppressToolsForUpstreamDflash(
-      effectiveProviderName,
-      provider.settings
-    )
-    const shouldEnableTools =
-      hasTools && modelSupportsTools && !suppressToolsForDflash
+    const shouldEnableTools = hasTools && modelSupportsTools
 
     const dropSystemForTools =
       isLocalProvider && shouldEnableTools && !!this.systemMessage

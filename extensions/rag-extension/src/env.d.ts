@@ -1,4 +1,4 @@
-import type { SettingComponentProps } from '@janhq/core'
+import type { SettingComponentProps } from '@gchat/core'
 declare global {
   const SETTINGS: SettingComponentProps[]
 }

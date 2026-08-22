@@ -14,9 +14,7 @@ import {
 
 describe('getProviderLogo', () => {
   it('returns correct logo paths for known providers', () => {
-    expect(getProviderLogo('llamacpp')).toBe(
-      '/images/model-provider/llamacpp.svg'
-    )
+    expect(getProviderLogo('jan')).toBe('/images/model-provider/jan.png')
     expect(getProviderLogo('anthropic')).toBe(
       '/images/model-provider/anthropic.svg'
     )
@@ -33,7 +31,7 @@ describe('getProviderLogo', () => {
 
 describe('getProviderTitle', () => {
   it('returns formatted titles for special providers', () => {
-    expect(getProviderTitle('llamacpp')).toBe('llama.cpp turboquant')
+    expect(getProviderTitle('ginfer')).toBe('GInfer')
     expect(getProviderTitle('openai')).toBe('OpenAI')
     expect(getProviderTitle('openrouter')).toBe('OpenRouter')
     expect(getProviderTitle('gemini')).toBe('Gemini')

@@ -11,12 +11,10 @@ export interface DownloadProgressProps {
 // ATO-154: parameters needed to resume a paused model download from the
 // global Download popover. The popover only knows the model id, not the HF
 // paths/token, so the download-start choke point (`pullModelWithMetadata`)
-// records them here. Only the resumable GGUF (`llamacpp`) path stores these;
-// MLX (`mlx-community/*`) and backend-binary downloads are pause/resume-gated
-// out and never populate this map.
+// records them here. Backend-binary downloads are pause/resume-gated out and
+// never populate this map.
 export interface DownloadResumeParams {
   modelPath: string
-  mmprojPath?: string
   hfToken?: string
   skipVerification?: boolean
   /** Engine the download routes to (e.g. `ginfer`); undefined = default. */

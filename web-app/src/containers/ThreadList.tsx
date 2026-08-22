@@ -29,14 +29,14 @@ import { Link, useParams } from '@tanstack/react-router'
 import { RenameThreadDialog, DeleteThreadDialog } from '@/containers/dialogs'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { ThreadMessage } from '@janhq/core'
+import { ThreadMessage } from '@gchat/core'
 import { useChatSessions, isSessionBusy } from '@/stores/chat-session-store'
 import { useThreadReadStatus } from '@/stores/thread-read-store'
 import { ThreadStatusDot } from '@/components/left-sidebar/ThreadStatusDot'
 
 //* Заголовок приветственного треда: новый бренд и старая строка из прошлых версий
 const WELCOME_THREAD_TITLES = new Set([
-  'What is Atomic Bot?',
+  'What is GChat?',
   'What is Overchat?',
 ])
 

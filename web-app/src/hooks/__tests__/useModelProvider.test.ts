@@ -7,7 +7,7 @@ import { seedServiceHub } from '@/test/service-hub'
 // Mock the localStorage key constants
 vi.mock('@/constants/localStorage', () => ({
   localStorageKey: {
-    modelProvider: 'jan-model-provider',
+    modelProvider: 'gchat-model-provider',
   },
 }))
 
@@ -42,7 +42,7 @@ describe('useModelProvider - displayName functionality', () => {
     act(() => {
       useModelProvider.setState({
         providers: [],
-        selectedProvider: 'llamacpp',
+        selectedProvider: 'ginfer',
         selectedModel: null,
         deletedModels: [],
       })
@@ -53,7 +53,7 @@ describe('useModelProvider - displayName functionality', () => {
     const { result } = renderHook(() => useModelProvider())
 
     const provider = {
-      provider: 'llamacpp',
+      provider: 'ginfer',
       active: true,
       models: [
         {
@@ -69,7 +69,7 @@ describe('useModelProvider - displayName functionality', () => {
       result.current.addProvider(provider)
     })
 
-    const updatedProvider = result.current.getProviderByName('llamacpp')
+    const updatedProvider = result.current.getProviderByName('ginfer')
     expect(updatedProvider?.models[0].displayName).toBeUndefined()
     expect(updatedProvider?.models[0].id).toBe('test-model.gguf')
   })
@@ -83,7 +83,7 @@ describe('useModelProvider - displayName functionality', () => {
       useModelProvider.setState({
         providers: [
           {
-            provider: 'llamacpp',
+            provider: 'ginfer',
             active: true,
             models: [
               {
@@ -95,7 +95,7 @@ describe('useModelProvider - displayName functionality', () => {
             settings: [],
           },
         ] as any,
-        selectedProvider: 'llamacpp',
+        selectedProvider: 'ginfer',
         selectedModel: null,
         deletedModels: [],
       })
@@ -104,7 +104,7 @@ describe('useModelProvider - displayName functionality', () => {
     // Now simulate setProviders with fresh data (like from server refresh)
     const freshProviders = [
       {
-        provider: 'llamacpp',
+        provider: 'ginfer',
         active: true,
         persist: true,
         models: [
@@ -123,7 +123,7 @@ describe('useModelProvider - displayName functionality', () => {
     })
 
     // The displayName should be preserved from existing state
-    const provider = result.current.getProviderByName('llamacpp')
+    const provider = result.current.getProviderByName('ginfer')
     expect(provider?.models[0].displayName).toBe('My Custom Model')
   })
 
@@ -134,7 +134,7 @@ describe('useModelProvider - displayName functionality', () => {
       useModelProvider.setState({
         providers: [
           {
-            provider: 'llamacpp',
+            provider: 'ginfer',
             active: true,
             models: [
               {
@@ -152,7 +152,7 @@ describe('useModelProvider - displayName functionality', () => {
             settings: [],
           },
         ] as any,
-        selectedProvider: 'llamacpp',
+        selectedProvider: 'ginfer',
         selectedModel: null,
         deletedModels: [],
       })
@@ -160,7 +160,7 @@ describe('useModelProvider - displayName functionality', () => {
 
     const freshProviders = [
       {
-        provider: 'llamacpp',
+        provider: 'ginfer',
         active: true,
         persist: true,
         models: [
@@ -184,7 +184,7 @@ describe('useModelProvider - displayName functionality', () => {
       result.current.setProviders(freshProviders)
     })
 
-    const provider = result.current.getProviderByName('llamacpp')
+    const provider = result.current.getProviderByName('ginfer')
     expect(provider?.models[0].settings?.ctx_len?.controller_props?.value).toBe(
       48000
     )
@@ -195,7 +195,7 @@ describe('useModelProvider - displayName functionality', () => {
 
     // Test that basic provider operations work
     expect(result.current.providers).toEqual([])
-    expect(result.current.selectedProvider).toBe('llamacpp')
+    expect(result.current.selectedProvider).toBe('ginfer')
     expect(result.current.selectedModel).toBeNull()
 
     // Test addProvider functionality
@@ -219,7 +219,7 @@ describe('useModelProvider - displayName functionality', () => {
 
     // Test that we can at least get and set providers with displayName models
     const providerWithDisplayName = {
-      provider: 'llamacpp',
+      provider: 'ginfer',
       active: true,
       models: [
         {
@@ -235,13 +235,13 @@ describe('useModelProvider - displayName functionality', () => {
     act(() => {
       useModelProvider.setState({
         providers: [providerWithDisplayName],
-        selectedProvider: 'llamacpp',
+        selectedProvider: 'ginfer',
         selectedModel: null,
         deletedModels: [],
       })
     })
 
-    const provider = result.current.getProviderByName('llamacpp')
+    const provider = result.current.getProviderByName('ginfer')
     expect(provider?.models[0].displayName).toBe('Custom Model Name')
     expect(provider?.models[0].id).toBe('test-model.gguf')
   })
@@ -250,7 +250,7 @@ describe('useModelProvider - displayName functionality', () => {
     const { result } = renderHook(() => useModelProvider())
 
     const provider = {
-      provider: 'llamacpp',
+      provider: 'ginfer',
       active: true,
       models: [
         {
@@ -271,14 +271,14 @@ describe('useModelProvider - displayName functionality', () => {
     act(() => {
       useModelProvider.setState({
         providers: [provider],
-        selectedProvider: 'llamacpp',
+        selectedProvider: 'ginfer',
         selectedModel: provider.models[0],
         deletedModels: [],
       })
     })
 
     act(() => {
-      result.current.updateProvider('llamacpp', {
+      result.current.updateProvider('ginfer', {
         models: [
           {
             ...provider.models[0],
@@ -303,7 +303,7 @@ describe('useModelProvider - displayName functionality', () => {
     const { result } = renderHook(() => useModelProvider())
 
     const provider = {
-      provider: 'llamacpp',
+      provider: 'ginfer',
       active: true,
       persist: true,
       models: [
@@ -336,7 +336,7 @@ describe('useModelProvider - displayName functionality', () => {
     act(() => {
       useModelProvider.setState({
         providers: [provider],
-        selectedProvider: 'llamacpp',
+        selectedProvider: 'ginfer',
         selectedModel: staleSelectedModel,
         deletedModels: [],
       })
@@ -362,81 +362,8 @@ describe('useModelProvider - displayName functionality', () => {
   })
 })
 
-describe('useModelProvider - turboquant first-registration default', () => {
-  const TURBOQUANT_FLAG_KEY = 'atomic_turboquant_default_active_v1'
-
-  beforeEach(() => {
-    localStorageMock.getItem.mockReturnValue(null)
-    act(() => {
-      useModelProvider.setState({
-        providers: [],
-        selectedProvider: 'llamacpp-upstream',
-        selectedModel: null,
-        deletedModels: [],
-      })
-    })
-  })
-
-  const freshLlamacppProviders = [
-    { provider: 'llamacpp', active: true, models: [], settings: [] },
-    { provider: 'llamacpp-upstream', active: true, models: [], settings: [] },
-  ] as any
-
-  it('registers turboquant inactive on a fresh install (flag false), upstream active', () => {
-    localStorageMock.getItem.mockImplementation((key: string) =>
-      key === TURBOQUANT_FLAG_KEY ? 'false' : null
-    )
-    const { result } = renderHook(() => useModelProvider())
-
-    act(() => {
-      result.current.setProviders(freshLlamacppProviders)
-    })
-
-    expect(result.current.getProviderByName('llamacpp')?.active).toBe(false)
-    expect(result.current.getProviderByName('llamacpp-upstream')?.active).toBe(
-      true
-    )
-  })
-
-  it('registers turboquant active when the flag says existing profile or is absent', () => {
-    const { result } = renderHook(() => useModelProvider())
-
-    act(() => {
-      result.current.setProviders(freshLlamacppProviders)
-    })
-
-    expect(result.current.getProviderByName('llamacpp')?.active).toBe(true)
-  })
-
-  it('preserves a persisted active value regardless of the flag', () => {
-    localStorageMock.getItem.mockImplementation((key: string) =>
-      key === TURBOQUANT_FLAG_KEY ? 'false' : null
-    )
-    const { result } = renderHook(() => useModelProvider())
-
-    act(() => {
-      useModelProvider.setState({
-        providers: [
-          { provider: 'llamacpp', active: true, models: [], settings: [] },
-        ] as any,
-        selectedProvider: 'llamacpp',
-        selectedModel: null,
-        deletedModels: [],
-      })
-    })
-
-    act(() => {
-      result.current.setProviders(freshLlamacppProviders)
-    })
-
-    // The user (an existing profile) had turboquant active — the fresh-install
-    // default must not flip it off.
-    expect(result.current.getProviderByName('llamacpp')?.active).toBe(true)
-  })
-})
-
 describe('useModelProvider migrations', () => {
-  it('migrates flash_attn setting to dropdown with default value', () => {
+  it('drops the retired local backends from persisted state (v15)', () => {
     const persistApi = (useModelProvider as any).persist
     const migrate = persistApi?.getOptions().migrate as
       | ((state: unknown, version: number) => any)
@@ -446,37 +373,23 @@ describe('useModelProvider migrations', () => {
 
     const persistedState = {
       providers: [
-        {
-          provider: 'llamacpp',
-          models: [],
-          settings: [
-            {
-              key: 'flash_attn',
-              controller_type: 'toggle',
-              controller_props: {
-                value: 'ON',
-              },
-            },
-          ],
-        },
+        { provider: 'llamacpp', models: [], settings: [] },
+        { provider: 'llamacpp-upstream', models: [], settings: [] },
+        { provider: 'mlx', models: [], settings: [] },
+        { provider: 'ginfer', models: [], settings: [] },
+        { provider: 'openai', models: [], settings: [] },
       ],
-      selectedProvider: 'llamacpp',
+      selectedProvider: 'llamacpp-upstream',
       selectedModel: null,
       deletedModels: [],
     }
 
-    const migratedState = migrate!(persistedState, 5)
-    const flashAttnSetting = migratedState.providers[0].settings.find(
-      (setting: any) => setting.key === 'flash_attn'
-    )
+    const migratedState = migrate!(persistedState, 14)
 
-    expect(flashAttnSetting.controller_type).toBe('dropdown')
-    expect(flashAttnSetting.controller_props.value).toBe('auto')
-    expect(flashAttnSetting.controller_props.options).toEqual([
-      { name: 'Auto', value: 'auto' },
-      { name: 'On', value: 'on' },
-      { name: 'Off', value: 'off' },
-    ])
+    expect(
+      migratedState.providers.map((p: any) => p.provider)
+    ).toEqual(['ginfer', 'openai'])
+    expect(migratedState.selectedProvider).toBe('ginfer')
   })
 
   it('migrates Mistral provider base URL to add /v1 suffix', () => {

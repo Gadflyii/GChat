@@ -18,14 +18,7 @@ const summaryRoots = [
   join(
     root,
     'extensions',
-    'llamacpp-extension',
-    'coverage',
-    'coverage-summary.json'
-  ),
-  join(
-    root,
-    'extensions',
-    'llamacpp-upstream-extension',
+    'ginfer-extension',
     'coverage',
     'coverage-summary.json'
   ),
@@ -34,13 +27,11 @@ const summaryRoots = [
 const targetPaths = [
   'web-app/src/lib/custom-chat-transport.ts',
   'web-app/src/containers/SetupScreen.tsx',
-  'web-app/src/containers/SetupBackendStep.tsx',
   'web-app/src/utils/getModelToStart.ts',
   'web-app/src/hooks/useModelProvider.ts',
   'web-app/src/services/staff-picks-registry.ts',
   'web-app/src/lib/hub-filters.ts',
-  'extensions/llamacpp-extension/src/backend.ts',
-  'extensions/llamacpp-upstream-extension/src/backend.ts',
+  'extensions/ginfer-extension/src/index.ts',
 ]
 const metricNames = ['statements', 'branches', 'functions', 'lines']
 
