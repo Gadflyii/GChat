@@ -113,12 +113,13 @@ describe('useTheme', () => {
       expect(typeof result.current.setIsDark).toBe('function')
     })
 
-    it('should initialize with auto theme', async () => {
+    it('should initialize with dark theme', async () => {
       const { useTheme } = await import('../useTheme')
       const { result } = renderHook(() => useTheme())
 
-      expect(result.current.activeTheme).toBe('auto')
-      expect(typeof result.current.isDark).toBe('boolean')
+      // Fresh installs (no persisted `theme` key) start dark.
+      expect(result.current.activeTheme).toBe('dark')
+      expect(result.current.isDark).toBe(true)
     })
 
     it('should allow setting isDark directly', async () => {

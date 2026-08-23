@@ -181,8 +181,11 @@ const ChatInput = memo(function ChatInput({
   const selectedModel = useModelProvider((state) => state.selectedModel)
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
 
+  const providers = useModelProvider((state) => state.providers)
   const canSelectAgentMode = canSelectChatAgentMode(initialMessage, projectId)
-  const isAgentProviderSelected = isLlamacppProvider(selectedProvider)
+  const isAgentProviderSelected =
+    isLlamacppProvider(selectedProvider) ||
+    providers.some((p) => isLlamacppProvider(p.provider))
   const agentModeKey = canSelectAgentMode
     ? TEMPORARY_CHAT_ID
     : (currentThreadId ?? TEMPORARY_CHAT_ID)

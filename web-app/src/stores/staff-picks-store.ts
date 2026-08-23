@@ -123,15 +123,5 @@ export const ensureStaffPicksLoaded = async (): Promise<StaffPick[]> => {
   return useStaffPicksStore.getState().picks
 }
 
-/**
- * Kick off the initial fetch in the background. Importing this module is
- * enough to start loading; tests can override or skip via mocking.
- */
-if (typeof window !== 'undefined') {
-  void useStaffPicksStore
-    .getState()
-    .refresh()
-    .catch((error) => {
-      console.warn('[staff-picks-store] initial refresh failed:', error)
-    })
-}
+// No background fetch on import: GChat's local catalog is the closed ginfer
+// model set, so the legacy remote staff-picks registry is never loaded.

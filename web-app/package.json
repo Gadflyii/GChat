@@ -6,7 +6,7 @@
   "scripts": {
     "seed-catalog": "node scripts/fetch-seed-catalog.mjs",
     "dev": "yarn seed-catalog && vite",
-    "build": "yarn seed-catalog && tsc -b && vite build",
+    "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest --run",

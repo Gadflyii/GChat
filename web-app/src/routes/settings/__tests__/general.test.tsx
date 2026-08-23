@@ -482,19 +482,21 @@ describe('General Settings Route', () => {
     expect(links.length).toBeGreaterThan(0)
   })
 
-  it('should open support email through opener service', async () => {
+  it('should open the issues link through opener service', async () => {
     const Component = GeneralRoute.component as React.ComponentType
     await act(async () => {
       render(<Component />)
     })
 
-    const emailLink = screen.getByRole('link', { name: 'support@atomic.chat' })
+    const issuesLink = screen.getByRole('link', { name: 'Open an issue' })
 
     await act(async () => {
-      fireEvent.click(emailLink)
+      fireEvent.click(issuesLink)
     })
 
-    expect(mockOpenerOpen).toHaveBeenCalledWith('mailto:support@atomic.chat')
+    expect(mockOpenerOpen).toHaveBeenCalledWith(
+      'https://github.com/Gadflyii/gchat/issues'
+    )
   })
 
   it('should handle logs window opening', async () => {

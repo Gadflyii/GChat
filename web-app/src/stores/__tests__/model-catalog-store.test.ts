@@ -1,140 +1,56 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CatalogModel } from '@/services/models/types'
+import { describe, expect, it, vi } from 'vitest'
 
-// Shape of a published catalog entry for a sharded repo (unsloth MoE builds):
-// one entry per shard, opening with a few-megabyte header.
-const shardedEntry = (): CatalogModel =>
-  ({
-    model_name: 'unsloth/big-moe-GGUF',
-    description: '',
-    developer: 'unsloth',
-    downloads: 1,
-    num_quants: 3,
-    quants: [
-      {
-        model_id: 'unsloth/UD-IQ4_XS/big-moe-UD-IQ4_XS-00001-of-00003',
-        path: 'https://huggingface.co/unsloth/big-moe-GGUF/resolve/main/UD-IQ4_XS/big-moe-UD-IQ4_XS-00001-of-00003.gguf',
-        file_size: '5.0 MB',
-      },
-      {
-        model_id: 'unsloth/UD-IQ4_XS/big-moe-UD-IQ4_XS-00002-of-00003',
-        path: 'https://huggingface.co/unsloth/big-moe-GGUF/resolve/main/UD-IQ4_XS/big-moe-UD-IQ4_XS-00002-of-00003.gguf',
-        file_size: '40.0 GB',
-      },
-      {
-        model_id: 'unsloth/UD-IQ4_XS/big-moe-UD-IQ4_XS-00003-of-00003',
-        path: 'https://huggingface.co/unsloth/big-moe-GGUF/resolve/main/UD-IQ4_XS/big-moe-UD-IQ4_XS-00003-of-00003.gguf',
-        file_size: '20.0 GB',
-      },
-    ],
-    mmproj_models: [],
-  }) as unknown as CatalogModel
-
-const flatEntry = (): CatalogModel =>
-  ({
-    model_name: 'prism-ml/Bonsai-27B-gguf',
-    description: '',
-    developer: 'prism-ml',
-    downloads: 1,
-    num_quants: 1,
-    quants: [
-      {
-        model_id: 'prism-ml/Bonsai-27B-Q1_0',
-        path: 'https://huggingface.co/prism-ml/Bonsai-27B-gguf/resolve/main/Bonsai-27B-Q1_0.gguf',
-        file_size: '3.5 GB',
-      },
-    ],
-    mmproj_models: [],
-  }) as unknown as CatalogModel
-
-const mocks = vi.hoisted(() => ({
-  remoteModels: [] as CatalogModel[],
-  cachedModels: null as CatalogModel[] | null,
-}))
-
-vi.mock('@/services/model-catalog-registry', () => ({
-  getBundledSeedCatalog: vi.fn(async () => null),
-  getBundledSeedIndex: vi.fn(async () => null),
-  getCachedIndex: vi.fn(async () => null),
-  getCachedCatalog: vi.fn(async () =>
-    mocks.cachedModels
-      ? {
-          manifest: {
-            manifest_version: 1,
-            schema_version: 1,
-            updated_at: '2026-08-01T00:00:00Z',
-            models: mocks.cachedModels,
-          },
-          fetchedAt: 1,
-        }
-      : null
-  ),
-  getCatalogOrFallback: vi.fn(async () => ({
-    manifest: {
-      manifest_version: 1,
-      schema_version: 1,
-      updated_at: '2026-08-07T00:00:00Z',
-      models: mocks.remoteModels,
-    },
-    source: 'remote',
-    fetchedAt: 2,
-    manifestUpdatedAt: '2026-08-07T00:00:00Z',
-    error: null,
-  })),
-  getIndexOrFallback: vi.fn(async () => ({
-    payload: null,
-    source: 'remote',
-    fetchedAt: 2,
-    error: null,
-  })),
-}))
-
-// The module refreshes itself on import, so the fixtures have to be in place
-// before it loads; importing later would race that first pass.
+// The catalog is the closed ginfer set, so the store no longer fetches a
+// remote registry or a bundled seed: `refresh()` resolves to the bundled
+// baseline, with the shard-folding helper still applied to it.
+//
+// The baseline is read from the same module graph the store loads after
+// `vi.resetModules()`, so the store's entries are comparable by reference.
 const loadStore = async () => {
   vi.resetModules()
-  const { useModelCatalogStore } = await import('../model-catalog-store')
+  const [{ useModelCatalogStore }, { BASELINE_MODEL_CATALOG: baseline }] =
+    await Promise.all([
+      import('../model-catalog-store'),
+      import('@/constants/models'),
+    ])
   await useModelCatalogStore.getState().refresh()
-  return useModelCatalogStore
+  return { store: useModelCatalogStore, baseline }
 }
 
-beforeEach(() => {
-  mocks.remoteModels = []
-  mocks.cachedModels = null
-})
-
 describe('model-catalog-store', () => {
-  it('folds the shards of a fetched catalog into one variant per quant', async () => {
-    mocks.remoteModels = [shardedEntry()]
+  it('resolves the catalog to the baseline ginfer set', async () => {
+    const { store, baseline } = await loadStore()
 
-    const store = await loadStore()
-
-    const [model] = store.getState().catalog
-    expect(model.num_quants).toBe(1)
-    expect(model.quants[0]).toMatchObject({
-      model_id: 'unsloth/UD-IQ4_XS/big-moe-UD-IQ4_XS',
-      // 5 MB + 40 GB + 20 GB: the set, not its header file.
-      file_size: '60.0 GB',
-    })
+    const state = store.getState()
+    expect(state.catalog).toHaveLength(baseline.length)
+    expect(state.catalog).toEqual(baseline)
+    expect(state.catalog.every((entry) => entry.library_name === 'ginfer')).toBe(
+      true
+    )
+    expect(state.source).toBe('baseline')
+    expect(state.status).toBe('success')
+    expect(state.hasInitialized).toBe(true)
+    expect(state.error).toBeNull()
   })
 
-  it('keeps the download pointing at the first shard', async () => {
-    mocks.remoteModels = [shardedEntry()]
+  it('keeps the download pointing at the bundled .ginfer artifact', async () => {
+    const { store } = await loadStore()
 
-    const store = await loadStore()
-
-    expect(store.getState().catalog[0].quants[0].path).toContain(
-      '00001-of-00003.gguf'
-    )
+    for (const model of store.getState().catalog) {
+      expect(model.quants[0].path).toBe(
+        `https://huggingface.co/${model.model_name}/resolve/main/model.ginfer`
+      )
+    }
   })
 
   it('leaves an unsharded entry untouched', async () => {
-    mocks.remoteModels = [flatEntry()]
+    const { store, baseline } = await loadStore()
 
-    const store = await loadStore()
-
-    const [model] = store.getState().catalog
-    expect(model.num_quants).toBe(1)
-    expect(model.quants[0].file_size).toBe('3.5 GB')
+    // The baseline entries each carry a single quant, so the folding helper
+    // passes them through as-is rather than rewriting them.
+    const catalog = store.getState().catalog
+    for (const [index, model] of catalog.entries()) {
+      expect(model).toBe(baseline[index])
+    }
   })
 })

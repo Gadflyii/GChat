@@ -349,18 +349,22 @@ function General() {
 
             <Card title="Contact Us">
               <CardItem
-                title="Email"
-                description="Reach GChat support by email."
+                title="Issues"
+                description="Report a problem or request a feature."
                 actions={
                   <a
-                    href="mailto:support@atomic.chat"
+                    href="https://github.com/Gadflyii/gchat/issues"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={(event) => {
                       event.preventDefault()
-                      void handleOpenContactLink('mailto:support@atomic.chat')
+                      void handleOpenContactLink(
+                        'https://github.com/Gadflyii/gchat/issues'
+                      )
                     }}
                     className="text-foreground font-medium hover:underline"
                   >
-                    support@atomic.chat
+                    Open an issue
                   </a>
                 }
               />

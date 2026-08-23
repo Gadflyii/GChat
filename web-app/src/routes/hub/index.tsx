@@ -134,7 +134,6 @@ function HubContent() {
     null
   )
   const hfCandidatesFetchedForRef = useRef<string>('')
-  const exactRepoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateFilters = useCallback((next: HubFilterState) => {
     setFilters(next)
@@ -241,79 +240,17 @@ function HubContent() {
   const catalogResults = searchMatches
 
   // Exact-repo lookup: the user pasted a full `owner/name`.
-  const fetchExactRepo = useCallback(
-    (rawValue: string) => {
-      const normalized = rawValue.trim()
-      if (normalized.length < 3) return
+  const fetchExactRepo = useCallback((rawValue: string) => {
+    // GChat only loads the closed ginfer catalog - no HF repo lookup.
+    void rawValue
+    setHuggingFaceRepo(null)
+  }, [setHuggingFaceRepo])
 
-      setIsSearching(true)
-      if (exactRepoTimeoutRef.current) {
-        clearTimeout(exactRepoTimeoutRef.current)
-      }
-      exactRepoTimeoutRef.current = setTimeout(async () => {
-        try {
-          const repoInfo = await serviceHub
-            .models()
-            .fetchHuggingFaceRepo(normalized, huggingfaceToken)
-          if (repoInfo) {
-            const catalog =
-              serviceHub.models().convertHfRepoToCatalogModel(repoInfo)
-            // MLX repos cannot be run by the single local backend (GInfer).
-            if (!catalog.is_mlx) setHuggingFaceRepo(catalog)
-          }
-        } catch (error) {
-          console.error('Error fetching repository info:', error)
-        } finally {
-          setIsSearching(false)
-        }
-      }, 500)
-    },
-    [serviceHub, huggingfaceToken]
-  )
-
-  // Long-tail Hugging Face fallback (Path B): fan out to HF's public search
-  // when the curated catalog returns sparse hits for a non-trivial query.
+  // GChat only loads the closed ginfer catalog - no HF long-tail candidates.
   useEffect(() => {
-    if (showOnlyDownloaded) {
-      setHfCandidates([])
-      hfCandidatesFetchedForRef.current = ''
-      return
-    }
-    const query = debouncedSearchValue.trim()
-    if (query.length < 3 || catalogResults.length >= 5) {
-      if (catalogResults.length >= 5) setHfCandidates([])
-      return
-    }
-    const cacheKey = query.toLowerCase()
-    if (hfCandidatesFetchedForRef.current === cacheKey) return
-    hfCandidatesFetchedForRef.current = cacheKey
-
-    let cancelled = false
-    serviceHub
-      .models()
-      .searchHuggingFaceCandidates(query, huggingfaceToken, 10)
-      .then((candidates) => {
-        if (cancelled) return
-        const seen = new Set(catalogResults.map((m) => m.model_name))
-        if (huggingFaceRepo) seen.add(huggingFaceRepo.model_name)
-        setHfCandidates(
-          candidates.filter((c) => c.model_name && !seen.has(c.model_name))
-        )
-      })
-      .catch(() => {
-        if (!cancelled) setHfCandidates([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [
-    debouncedSearchValue,
-    catalogResults,
-    showOnlyDownloaded,
-    serviceHub,
-    huggingfaceToken,
-    huggingFaceRepo,
-  ])
+    setHfCandidates([])
+    hfCandidatesFetchedForRef.current = ''
+  }, [debouncedSearchValue, showOnlyDownloaded])
 
   // ---- Unified list -----------------------------------------------------
 
@@ -328,7 +265,9 @@ function HubContent() {
     }
 
     if (!isSearchMode) {
-      const filtered = applyHubFilters(staffPickModels, filters, {
+      // GChat's local catalog is the closed ginfer model set.
+      const ginferCatalog = sources.filter((m) => m.library_name === 'ginfer')
+      const filtered = applyHubFilters(ginferCatalog, filters, {
         budgetBytes,
         applyFitFilter: true,
       })

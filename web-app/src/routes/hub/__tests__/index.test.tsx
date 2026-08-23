@@ -146,6 +146,27 @@ const model = (name: string, extra: Partial<CatalogModel> = {}): CatalogModel =>
     ...extra,
   }) as CatalogModel
 
+// The closed ginfer model set (mirrors BASELINE_MODEL_CATALOG): with an empty
+// query the Hub lists exactly these entries.
+const ginferCatalog: CatalogModel[] = [
+  model('GadflyII/Qwen3.8-27B-NInfer', {
+    library_name: 'ginfer',
+    name: 'Qwen3.8 27B (int autoround)',
+  }),
+  model('GadflyII/Qwen3.8-27B-nvfp4-NInfer', {
+    library_name: 'ginfer',
+    name: 'Qwen3.8 27B (NVFP4)',
+  }),
+  model('GadflyII/Muse-Glimmer-30B-NInfer', {
+    library_name: 'ginfer',
+    name: 'Muse Glimmer 30B (int autoround)',
+  }),
+  model('GadflyII/Muse-Glimmer-30B-nvfp4-NInfer', {
+    library_name: 'ginfer',
+    name: 'Muse Glimmer 30B (NVFP4)',
+  }),
+]
+
 const HubPage = () => {
   const Component = (Route as unknown as { component: React.ComponentType })
     .component
@@ -158,7 +179,7 @@ describe('/hub route', () => {
     localStorage.clear()
     setHubSearchQuery('')
     mocks.search = {}
-    mocks.sources = []
+    mocks.sources = ginferCatalog
     mocks.staffPicks = [
       {
         pick: { model_name: 'Qwen/Qwen3.5-4B-GGUF', title: 'Qwen3.5 4B' },
@@ -172,13 +193,16 @@ describe('/hub route', () => {
     mocks.search_.mockReturnValue([])
   })
 
-  it('opens on staff picks with an empty query', () => {
+  it('opens on the ginfer catalog with an empty query', () => {
     render(<HubPage />)
 
-    expect(screen.queryByText('hub:staffPicks')).not.toBeInTheDocument()
-    expect(screen.queryByText('hub:searchResults')).not.toBeInTheDocument()
-    expect(screen.getByText('Qwen3.5 4B')).toBeInTheDocument()
-    expect(screen.getByText('Gemma 4 12B')).toBeInTheDocument()
+    // Staff picks no longer populate the default view; the closed ginfer
+    // set does.
+    expect(screen.queryByText('Qwen3.5 4B')).not.toBeInTheDocument()
+    expect(screen.getByText('Qwen3.8 27B (int autoround)')).toBeInTheDocument()
+    expect(screen.getByText('Qwen3.8 27B (NVFP4)')).toBeInTheDocument()
+    expect(screen.getByText('Muse Glimmer 30B (int autoround)')).toBeInTheDocument()
+    expect(screen.getByText('Muse Glimmer 30B (NVFP4)')).toBeInTheDocument()
   })
 
   it('switches to search results once the user types', async () => {
@@ -227,20 +251,24 @@ describe('/hub route', () => {
     expect(screen.queryByText('huge-GGUF')).not.toBeInTheDocument()
   })
 
-  it('returns to staff picks when the query is cleared', async () => {
+  it('returns to the ginfer catalog when the query is cleared', async () => {
     const user = userEvent.setup()
     render(<HubPage />)
     const input = screen.getByRole('textbox', { name: 'hub:searchPlaceholder' })
 
     await user.type(input, 'llama')
     await waitFor(() =>
-      expect(screen.queryByText('Qwen3.5 4B')).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('Qwen3.8 27B (int autoround)')
+      ).not.toBeInTheDocument()
     )
 
     await user.clear(input)
 
     await waitFor(() =>
-      expect(screen.getByText('Qwen3.5 4B')).toBeInTheDocument()
+      expect(
+        screen.getByText('Qwen3.8 27B (int autoround)')
+      ).toBeInTheDocument()
     )
   })
 
@@ -248,7 +276,7 @@ describe('/hub route', () => {
     const user = userEvent.setup()
     render(<HubPage />)
 
-    await user.click(screen.getByText('Qwen3.5 4B'))
+    await user.click(screen.getByText('Qwen3.8 27B (int autoround)'))
 
     expect(mocks.navigate).toHaveBeenCalledWith(
       expect.objectContaining({ to: '/hub/', replace: false })
@@ -256,15 +284,15 @@ describe('/hub route', () => {
     const call = mocks.navigate.mock.calls.at(-1)?.[0] as {
       search: (prev: Record<string, unknown>) => Record<string, unknown>
     }
-    expect(call.search({})).toEqual({ model: 'Qwen/Qwen3.5-4B-GGUF' })
+    expect(call.search({})).toEqual({ model: 'GadflyII/Qwen3.8-27B-NInfer' })
   })
 
   it('opens the detail panel straight away for a deep link', () => {
-    mocks.search = { model: 'google/gemma-4-12b-GGUF' }
+    mocks.search = { model: 'GadflyII/Muse-Glimmer-30B-nvfp4-NInfer' }
     render(<HubPage />)
 
     expect(screen.getByTestId('detail-panel')).toHaveTextContent(
-      'google/gemma-4-12b-GGUF'
+      'GadflyII/Muse-Glimmer-30B-nvfp4-NInfer'
     )
     // A deep link must survive the auto-selection below.
     expect(mocks.navigate).not.toHaveBeenCalledWith(
@@ -283,11 +311,12 @@ describe('/hub route', () => {
     // Replaces rather than pushes: arriving at the Hub should not leave a
     // history entry the Back button has to chew through.
     expect(call.replace).toBe(true)
-    expect(call.search({})).toEqual({ model: 'Qwen/Qwen3.5-4B-GGUF' })
+    expect(call.search({})).toEqual({ model: 'GadflyII/Qwen3.8-27B-NInfer' })
   })
 
   it('does not auto-select while the list is still empty', () => {
-    mocks.staffPicks = []
+    // With an empty catalog the list is empty, so nothing is auto-selected.
+    mocks.sources = []
     render(<HubPage />)
 
     expect(screen.getByTestId('detail-panel')).toHaveTextContent(

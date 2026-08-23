@@ -41,7 +41,7 @@ pub struct GinferConfig {
 impl Default for GinferConfig {
     fn default() -> Self {
         Self {
-            vision: false,
+            vision: true,
             spec: "auto".into(),
             draft_tokens: 0,
             kv_dtype: String::new(),
