@@ -89,3 +89,20 @@ Unlike the upstream layout there is no legacy-folder baggage: the fork is clean-
 ### Custom data folder
 
 If a user has relocated the data folder via `Settings → Advanced → Change data folder location` (`change_app_data_folder`), the uninstaller and `make clean-windows-all` **do not** delete that custom path — only the default `%APPDATA%\GChat\` is cleaned. Removing a custom data folder is the user's responsibility.
+
+## Release signing (updater)
+
+GChat signs release artifacts with a minisign key (Tauri updater). The public key is committed in `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`); the private key lives outside the repo at `~/.tauri/gchat.key` (encrypted with an empty password).
+
+Sign a release build:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/gchat.key"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+make build   # AppImage bundle is signed; latest.json is emitted next to it
+```
+
+If the key is lost the update chain is unrecoverable — regenerate with
+`yarn tauri signer generate -w ~/.tauri/gchat.key --ci` and replace the
+pubkey in `src-tauri/tauri.conf.json`. The update endpoint is
+`https://github.com/Gadflyii/gchat/releases/latest/download/latest.json`.

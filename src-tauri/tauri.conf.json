@@ -46,7 +46,7 @@
       "resolve": true
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2QzBERDIyODEyNTc2RDcKUldUWGRpV0JJdDNBaGdkQXBhUEk1ZzJQMDJQWC9DK1I3QVNuZmhDaWFvUDlxVklpdWRlMHRkTzEK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ0NDYxODYxN0Y5MDcxNkIKUldScmNaQi9ZUmhHMVBlT2IzWmNLMXByREsrOTJUMzM5VjZ3enpDamdydVdHWFh0d2hFZ0U5alkK",
       "endpoints": [
         "https://github.com/Gadflyii/gchat/releases/latest/download/latest.json"
       ],

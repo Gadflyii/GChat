@@ -213,21 +213,6 @@ jobs:
           corepack prepare yarn@4.5.3 --activate
           yarn config set -H enableImmutableInstalls false
 
-      - name: Download llamacpp backend
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make download-llamacpp-backend
-
-      - name: Download upstream llama.cpp backend
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make download-llamacpp-upstream-backend
-
-      - name: Download MLX server (mlx-vlm)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: make build-mlx-server
-
       - name: Install dependencies and build core
         run: |
           make install-and-build
@@ -294,7 +279,6 @@ jobs:
           echo "=== Building ==="
 
           yarn download:bin
-          yarn build:foundation-models-server
           yarn build:cli
           # Универсальная macOS-сборка + переименование VOLNAME с версией + ресигн/нотаризация DMG
           make build-mac
@@ -526,94 +510,6 @@ jobs:
       - name: Download binaries (bun, uv)
         run: yarn download:bin
 
-      - name: Download upstream llamacpp backend (manifest resolver)
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Upstream remains the Windows default provider. Per ATO-199 its
-          # backend INDEX is resolved from the static atomic-chat-conf manifest
-          # (raw.githubusercontent.com, no api.github.com rate limit), and the
-          # archive comes from our signed mirror when that tag was mirrored.
-          # scripts/resolve-upstream-backend.mjs owns both decisions and is
-          # shared with the Makefile — do not re-derive them here.
-          # Inline bash (not `make ...-win-cpu`) because that make target is a
-          # PowerShell one-liner whose `$(...)` is mangled by make's
-          # /usr/bin/sh under `shell: bash`.
-          DIR="src-tauri/resources/llamacpp-backend-upstream"
-          rm -rf "$DIR"
-          mkdir -p "$DIR"
-          # Two steps, not eval "$(...)": under `set -e` a failing command
-          # substitution inside eval does not abort the step.
-          RESOLVED="$(node scripts/resolve-upstream-backend.mjs --backend win-cpu-x64)"
-          eval "$RESOLVED"
-          echo "$TAG" > "$DIR/version.txt"
-          echo "$BACKEND" > "$DIR/backend.txt"
-          echo "Release: $TAG  Backend: $BACKEND"
-          echo "Downloading: $URL"
-          curl -fSL --retry 5 --retry-delay 3 "$URL" -o /tmp/llamacpp-upstream-backend.zip
-          if [ -n "$SHA256" ]; then
-            ACTUAL="$(sha256sum /tmp/llamacpp-upstream-backend.zip | cut -d' ' -f1)"
-            if [ "$ACTUAL" != "$SHA256" ]; then
-              echo "Error: sha256 mismatch for $ASSET (expected $SHA256, got $ACTUAL)"
-              exit 1
-            fi
-            echo "sha256 verified: $ASSET"
-          else
-            echo "No sha256 published for $ASSET; skipping integrity check"
-          fi
-          unzip -o /tmp/llamacpp-upstream-backend.zip -d "$DIR"
-          rm -f /tmp/llamacpp-upstream-backend.zip
-          if [ ! -f "$DIR/build/bin/llama-server.exe" ] && [ -f "$DIR/llama-server.exe" ]; then
-            echo "Relocating flat-extracted binaries into build/bin/..."
-            mkdir -p "$DIR/build/bin"
-            find "$DIR" -maxdepth 1 -type f ! -name version.txt ! -name backend.txt -exec mv {} "$DIR/build/bin/" \;
-          fi
-          if [ ! -f "$DIR/build/bin/llama-server-impl.dll" ]; then
-            echo "Error: upstream backend is missing build/bin/llama-server-impl.dll"
-            exit 1
-          fi
-          echo "CPU backend ($BACKEND) downloaded successfully. App will auto-download GPU backend at runtime."
-
-      - name: Download TurboQuant llamacpp backend (manifest resolver)
-        shell: bash
-        run: |
-          set -euo pipefail
-          # TurboQuant ships on Windows as the SECOND provider alongside
-          # llamacpp-upstream. Bundle the offline-fallback `windows-x64-cpu`
-          # build into the turboquant resource dir; the app auto-downloads the
-          # optimal CUDA/Vulkan backend at runtime via the llamacpp-extension.
-          # No tag is pinned: scripts/resolve-turboquant-release.sh asks the
-          # fork's own releases/latest which stable release is current, so a
-          # new fork release ships without a commit here. Set TURBOQUANT_TAG to
-          # pin one for a reproducible build. The archive itself comes from the
-          # AtomicBot-ai releases CDN. Inline bash (not `make ...-win-cpu`)
-          # because that make target is a PowerShell one-liner whose `$(...)`
-          # is mangled by make's /usr/bin/sh.
-          DIR="src-tauri/resources/llamacpp-backend"
-          BACKEND="windows-x64-cpu"
-          rm -rf "$DIR"
-          mkdir -p "$DIR"
-          RESOLVED="$(./scripts/resolve-turboquant-release.sh "$BACKEND" "${TURBOQUANT_TAG:-}")"
-          TAG="${RESOLVED%% *}"
-          ASSET="${RESOLVED#* }"
-          URL="https://github.com/AtomicBot-ai/atomic-llama-cpp-turboquant/releases/download/${TAG}/${ASSET}"
-          echo "$TAG" > "$DIR/version.txt"
-          echo "$BACKEND" > "$DIR/backend.txt"
-          echo "Release: $TAG  Backend: $BACKEND"
-          echo "Downloading: $URL"
-          curl -fSL --retry 5 --retry-delay 3 "$URL" -o /tmp/llamacpp-turboquant-backend.zip
-          unzip -o /tmp/llamacpp-turboquant-backend.zip -d "$DIR"
-          rm -f /tmp/llamacpp-turboquant-backend.zip
-          if [ ! -f "$DIR/build/bin/llama-server.exe" ] && [ -f "$DIR/llama-server.exe" ]; then
-            echo "Relocating flat-extracted binaries into build/bin/..."
-            mkdir -p "$DIR/build/bin"
-            # Move ALL top-level files (exe + DLLs incl. llama-server-impl.dll),
-            # not just *.exe; keep the meta files (version.txt/backend.txt) at
-            # the resource root where install_bundled_backend expects them.
-            find "$DIR" -maxdepth 1 -type f ! -name version.txt ! -name backend.txt -exec mv {} "$DIR/build/bin/" \;
-          fi
-          echo "TurboQuant CPU backend ($BACKEND) downloaded successfully. App will auto-download GPU backend at runtime."
-
       - name: Build web app and generate icons
         env:
           POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
@@ -800,14 +696,14 @@ jobs:
           asset_content_type: text/plain
 
   # ──────────────────────────────────────────────────────────────
-  # Linux  (x86_64 — AppImage, upstream ggml-org/llama.cpp, CPU-only bundled)
+  # Linux  (x86_64 — AppImage; no inference backend bundled — ginfer-serve is
+  # user-provided at <data>/ginfer/bin)
   # ──────────────────────────────────────────────────────────────
   build-linux-x64:
     if: github.event_name == 'push' || inputs.build_linux
     # Pinned to ubuntu-22.04 (glibc 2.35) so the produced AppImage stays
     # compatible with Ubuntu 22.04 / 24.04 / Debian 12 / Fedora 40 /
-    # Mint / Pop!_OS / Arch. Upstream remains the Linux default while the
-    # TurboQuant Vulkan build ships as the optional second provider.
+    # Mint / Pop!_OS / Arch.
     runs-on: ubuntu-22.04
     needs: create-draft-release
     outputs:
@@ -919,25 +815,6 @@ jobs:
             exit 1
           fi
           echo "sqlite-vec.so present: $(ls -l src-tauri/resources/bin/sqlite-vec.so)"
-
-      - name: Download upstream llamacpp backend (ggml-org/llama.cpp, linux-cpu-x64)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Per 2026-05-28 ADR: Linux installer ships the CPU-only build.
-        # Vulkan GPU backend is fetched at runtime by the user via
-        # "Find optimal backend" when `tauri-plugin-hardware` reports a
-        # working Vulkan loader.
-        run: make download-llamacpp-upstream-backend
-
-      - name: Download TurboQuant llamacpp backend (linux-x64-vulkan)
-        # TurboQuant ships on Linux as the SECOND provider alongside
-        # llamacpp-upstream. The single linux-x64-vulkan build serves both CPU
-        # and GPU via GGML_BACKEND_DL, so it is the offline-fallback bundle.
-        # The make target resolves the backend index from the static turboquant
-        # manifest in atomic-chat-conf (raw.githubusercontent.com — no
-        # api.github.com rate limit); the archive comes from the AtomicBot-ai
-        # releases CDN.
-        run: make download-llamacpp-backend
 
       - name: Build web app and generate icons
         env:

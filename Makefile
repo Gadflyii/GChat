@@ -144,50 +144,50 @@ endif
 # Guarded by CONFIRM=1 so an accidental `make clean-windows-all` only prints
 # what would be removed.
 clean-windows-all:
- ifeq ($(OS),Windows_NT)
- ifeq ($(CONFIRM),1)
- 	powershell -ExecutionPolicy Bypass -Command "\
- 		Get-Process ginfer-serve -ErrorAction SilentlyContinue | Stop-Process -Force; \
- 		Get-Process -Name 'GChat','gchat' -ErrorAction SilentlyContinue | Stop-Process -Force; \
- 		Get-Process -Name 'msedgewebview2' -ErrorAction SilentlyContinue | Where-Object { try { $$_.MainModule.FileName -like '*app.gchat*' -or $$_.MainModule.FileName -like '*GChat*' } catch { $$false } } | Stop-Process -Force; \
- 		Start-Sleep -Seconds 2; \
- 		$$paths = @( \
- 			(Join-Path $$env:APPDATA 'GChat'), \
- 			(Join-Path $$env:APPDATA 'app.gchat'), \
- 			(Join-Path $$env:LOCALAPPDATA 'app.gchat') \
- 		); \
- 		foreach ($$p in $$paths) { \
- 			if (Test-Path $$p) { \
- 				Write-Host ('Removing ' + $$p) -ForegroundColor Yellow; \
- 				Remove-Item $$p -Recurse -Force -ErrorAction SilentlyContinue; \
- 				if (Test-Path $$p) { Write-Host ('  WARN: failed to fully remove ' + $$p) -ForegroundColor Red } \
- 			} else { \
- 				Write-Host ('Not present: ' + $$p) -ForegroundColor Gray; \
- 			} \
- 		}; \
- 		Write-Host 'GChat: full data wipe done.' -ForegroundColor Green; \
- 	"
- else
- 	@powershell -NoProfile -ExecutionPolicy Bypass -Command "\
- 		Write-Host 'DRY RUN. Nothing was deleted.' -ForegroundColor Yellow; \
- 		Write-Host 'These paths WOULD be removed when re-run with CONFIRM=1:' -ForegroundColor Yellow; \
- 		$$paths = @( \
- 			(Join-Path $$env:APPDATA 'GChat'), \
- 			(Join-Path $$env:APPDATA 'app.gchat'), \
- 			(Join-Path $$env:LOCALAPPDATA 'app.gchat') \
- 		); \
- 		foreach ($$p in $$paths) { \
- 			$$exists = if (Test-Path $$p) { '[exists]' } else { '[not present]' }; \
- 			Write-Host ('  ' + $$p + '  ' + $$exists) -ForegroundColor Gray; \
- 		}; \
- 		Write-Host ''; \
- 		Write-Host 'Run again with CONFIRM=1 to actually delete:' -ForegroundColor Yellow; \
- 		Write-Host '  make clean-windows-all CONFIRM=1' -ForegroundColor Cyan; \
- 	"
- endif
- else
- 	@echo "This target is for Windows only."
- endif
+ifeq ($(OS),Windows_NT)
+ifeq ($(CONFIRM),1)
+	powershell -ExecutionPolicy Bypass -Command "\
+		Get-Process ginfer-serve -ErrorAction SilentlyContinue | Stop-Process -Force; \
+		Get-Process -Name 'GChat','gchat' -ErrorAction SilentlyContinue | Stop-Process -Force; \
+		Get-Process -Name 'msedgewebview2' -ErrorAction SilentlyContinue | Where-Object { try { $$_.MainModule.FileName -like '*app.gchat*' -or $$_.MainModule.FileName -like '*GChat*' } catch { $$false } } | Stop-Process -Force; \
+		Start-Sleep -Seconds 2; \
+		$$paths = @( \
+			(Join-Path $$env:APPDATA 'GChat'), \
+			(Join-Path $$env:APPDATA 'app.gchat'), \
+			(Join-Path $$env:LOCALAPPDATA 'app.gchat') \
+		); \
+		foreach ($$p in $$paths) { \
+			if (Test-Path $$p) { \
+				Write-Host ('Removing ' + $$p) -ForegroundColor Yellow; \
+				Remove-Item $$p -Recurse -Force -ErrorAction SilentlyContinue; \
+				if (Test-Path $$p) { Write-Host ('  WARN: failed to fully remove ' + $$p) -ForegroundColor Red } \
+			} else { \
+				Write-Host ('Not present: ' + $$p) -ForegroundColor Gray; \
+			} \
+		}; \
+		Write-Host 'GChat: full data wipe done.' -ForegroundColor Green; \
+	"
+else
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "\
+		Write-Host 'DRY RUN. Nothing was deleted.' -ForegroundColor Yellow; \
+		Write-Host 'These paths WOULD be removed when re-run with CONFIRM=1:' -ForegroundColor Yellow; \
+		$$paths = @( \
+			(Join-Path $$env:APPDATA 'GChat'), \
+			(Join-Path $$env:APPDATA 'app.gchat'), \
+			(Join-Path $$env:LOCALAPPDATA 'app.gchat') \
+		); \
+		foreach ($$p in $$paths) { \
+			$$exists = if (Test-Path $$p) { '[exists]' } else { '[not present]' }; \
+			Write-Host ('  ' + $$p + '  ' + $$exists) -ForegroundColor Gray; \
+		}; \
+		Write-Host ''; \
+		Write-Host 'Run again with CONFIRM=1 to actually delete:' -ForegroundColor Yellow; \
+		Write-Host '  make clean-windows-all CONFIRM=1' -ForegroundColor Cyan; \
+	"
+endif
+else
+	@echo "This target is for Windows only."
+endif
 
 # Web application targets
 install-web-app:

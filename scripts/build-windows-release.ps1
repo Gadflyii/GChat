@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 # scripts/build-windows-release.ps1
 # GChat - Windows release builder (local, no code signing)
-# Mirrors CI pipeline from release.yml: CPU-only backend, NSIS + MSI installers.
+# Mirrors CI pipeline from release.yml: NSIS + MSI installers.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1
@@ -170,90 +170,12 @@ Write-Step 'yarn download:bin'
 yarn download:bin
 if ($LASTEXITCODE -ne 0) { Write-Host 'download:bin failed' -ForegroundColor Red; exit 1 }
 
-# ── Download CPU-only upstream llamacpp backend (matches CI) ──
-# Per ADR 2026-05-22, Windows release artifacts ship only the
-# `llamacpp-upstream` provider, sourced from ggml-org/llama.cpp.
-Write-Step 'Download upstream llamacpp CPU backend (win-cpu-x64)'
-$llamacppDir = 'src-tauri/resources/llamacpp-backend-upstream'
-$backend = 'win-cpu-x64'
-
-if (Test-Path $llamacppDir) { Remove-Item $llamacppDir -Recurse -Force }
-New-Item -ItemType Directory -Path $llamacppDir -Force | Out-Null
-
-# ATO-199: the tag, the asset and the download base all come from the shared
-# resolver, which reads the atomic-chat-conf manifest and prefers our signed
-# mirror over the ggml-org CDN.
-$resolved = @{}
-$resolverOut = & node scripts/resolve-upstream-backend.mjs --backend $backend
-if ($LASTEXITCODE -ne 0) {
-    Write-Host '[FATAL] scripts/resolve-upstream-backend.mjs failed' -ForegroundColor Red
-    exit 1
-}
-foreach ($line in $resolverOut) {
-    $kv = $line -split '=', 2
-    if ($kv.Length -eq 2) { $resolved[$kv[0]] = $kv[1] }
-}
-$tag = $resolved['TAG']
-$backend = $resolved['BACKEND']
-if (-not $tag -or -not $resolved['URL']) {
-    Write-Host '[FATAL] resolver returned no TAG/URL' -ForegroundColor Red
-    exit 1
-}
-
-# Windows binaries ship as .zip (not .tar.gz like the legacy janhq mirror).
-$archiveUrl = $resolved['URL']
-$archivePath = Join-Path $env:TEMP 'llamacpp-upstream-backend.zip'
-
-Write-Host "  Release: $tag  Backend: $backend"
-Write-Host "  Downloading: $archiveUrl"
-
-$downloaded = $false
-for ($i = 1; $i -le 5; $i++) {
-    try {
-        Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath -UseBasicParsing
-        $downloaded = $true
-        break
-    } catch {
-        Write-Host "  Download attempt $i/5 failed: $($_.Exception.Message); retrying..." -ForegroundColor Yellow
-        Start-Sleep -Seconds 3
-    }
-}
-if (-not $downloaded) {
-    Write-Host "[FATAL] Failed to download $archiveUrl after 5 attempts" -ForegroundColor Red
-    exit 1
-}
-
-if ($resolved['SHA256']) {
-    $actual = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToLower()
-    if ($actual -ne $resolved['SHA256']) {
-        Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
-        Write-Host "[FATAL] sha256 mismatch for $($resolved['ASSET']): expected $($resolved['SHA256']), got $actual" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "  sha256 verified: $($resolved['ASSET'])"
-} else {
-    Write-Host "  No sha256 published for $($resolved['ASSET']); skipping integrity check" -ForegroundColor Yellow
-}
-
-Set-Content -Path "$llamacppDir/version.txt" -Value $tag -NoNewline
-Set-Content -Path "$llamacppDir/backend.txt" -Value $backend -NoNewline
-
-Write-Host '  Extracting...'
-Expand-Archive -Path $archivePath -DestinationPath $llamacppDir -Force
-Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
-
-if (-not (Test-Path "$llamacppDir/build/bin/llama-server.exe")) {
-    if (Test-Path "$llamacppDir/llama-server.exe") {
-        Write-Host '  Relocating flat-extracted binaries into build/bin/...'
-        New-Item -ItemType Directory -Path "$llamacppDir/build/bin" -Force | Out-Null
-        Get-ChildItem -Path $llamacppDir -Filter '*.exe' -File |
-            Move-Item -Destination "$llamacppDir/build/bin/" -Force
-        Get-ChildItem -Path $llamacppDir -Filter '*.dll' -File -ErrorAction SilentlyContinue |
-            Move-Item -Destination "$llamacppDir/build/bin/" -Force
-    }
-}
-
-Write-Host "  CPU backend ($backend) downloaded successfully" -ForegroundColor Green
+# ── Local inference backend (ginfer) ──────────────────────────
+# GChat has a single local backend: ginfer. Its Windows build has not
+# shipped yet (see docs/decisions — ginfer as the sole inference
+# backend), so release artifacts do not bundle a backend binary.
+Write-Step 'ginfer backend'
+Write-Host '  Windows build of ginfer not shipped yet — no backend bundled.' -ForegroundColor Yellow
 
 # ── Build web app ─────────────────────────────────────────────
 Write-Step 'yarn build:web'
