@@ -462,23 +462,13 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         const { disableReasoning, reasoningBudget } =
           useGeneralSetting.getState()
         const reasoningOverride: Record<string, unknown> = {}
-        const reasoningBudgetTokens: Record<
-          typeof reasoningBudget,
-          number | undefined
-        > = {
-          off: 0,
-          low: 256,
-          medium: 1024,
-          high: 4096,
-          unlimited: undefined,
-        }
         if (disableReasoning || reasoningBudget === 'off') {
           switch (effectiveProviderName) {
             case 'ginfer':
-              reasoningOverride.chat_template_kwargs = {
-                enable_thinking: false,
-              }
-              reasoningOverride.reasoning_budget = 0
+              // ginfer's OpenAI-compatible off level is `none` (direct
+              // response); don't also send enable_thinking — a
+              // contradictory combination is rejected.
+              reasoningOverride.reasoning_effort = 'none'
               break
             case 'anthropic':
               reasoningOverride.thinking = { type: 'disabled' }
@@ -511,12 +501,17 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
                 enable_thinking: false,
               }
           }
-        } else if (
-          effectiveProviderName === 'ginfer' &&
-          reasoningBudgetTokens[reasoningBudget] !== undefined
-        ) {
-          reasoningOverride.reasoning_budget =
-            reasoningBudgetTokens[reasoningBudget]
+        } else if (effectiveProviderName === 'ginfer') {
+          // ginfer maps OpenAI-compatible `reasoning_effort` onto its
+          // artifact's effort template; the budget dropdown drives it.
+          const effortByBudget: Partial<Record<typeof reasoningBudget, string>> =
+            {
+              low: 'low',
+              medium: 'medium',
+              high: 'high',
+            }
+          const effort = effortByBudget[reasoningBudget]
+          if (effort) reasoningOverride.reasoning_effort = effort
         }
         const effectiveReasoningOverride = reasoningOverride
         const hasOverride = Object.keys(effectiveReasoningOverride).length > 0

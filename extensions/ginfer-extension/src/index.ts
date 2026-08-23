@@ -59,6 +59,17 @@ export interface GinferModelConfig {
   source?: string
 }
 
+/**
+ * Modality capabilities of the registered .ginfer artifacts: every
+ * published family (Qwen, Muse Glimmer) is multimodal — media routes
+ * require the serve-side `--vision` flag. `tools` is not listed here; it
+ * is reported via `isToolSupported`. Restrict per family if a text-only
+ * artifact ever lands in the GadflyII/ginfer-models collection.
+ */
+const modelCapabilities = (_modelId: string, _name?: string): string[] => [
+  'vision',
+]
+
 export default class ginfer_extension extends AIEngine {
   provider: string = 'ginfer'
   readonly providerId: string = 'ginfer'
@@ -218,6 +229,7 @@ export default class ginfer_extension extends AIEngine {
         providerId: this.provider,
         port: 0,
         sizeBytes: modelConfig.size_bytes ?? 0,
+        capabilities: modelCapabilities(modelId, modelConfig.name),
         embedding: !!modelConfig.embedding,
         source: modelConfig.source,
         path: resolvedPath,

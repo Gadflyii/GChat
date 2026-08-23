@@ -3,6 +3,7 @@ import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAppState } from '@/hooks/useAppState'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { seedServiceHub } from '@/test/service-hub'
@@ -191,5 +192,60 @@ describe('CustomChatTransport production harness', () => {
         input: { query: 'alpha' },
       })
     )
+  })
+
+  it('maps ginfer reasoning state to the OpenAI-compatible reasoning_effort field', async () => {
+    const createModel = vi
+      .spyOn(ModelFactory, 'createModel')
+      .mockImplementation(
+        async () =>
+          fakeStreamingModel([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            },
+          ])
+      )
+    const transport = new CustomChatTransport()
+    const send = async () =>
+      readChunks(
+        (await transport.sendMessages({
+          chatId: 'chat-1',
+          messages: [userMessage],
+          abortSignal: undefined,
+          trigger: 'submit-message',
+          messageId: undefined,
+        })) as ReadableStream<Record<string, unknown>>
+      )
+
+    useGeneralSetting.setState({
+      disableReasoning: false,
+      reasoningBudget: 'low',
+    })
+    await send()
+    expect(createModel.mock.calls[0]?.[3]).toEqual({
+      reasoning_effort: 'low',
+    })
+
+    useGeneralSetting.setState({ reasoningBudget: 'high' })
+    await send()
+    expect(createModel.mock.calls[1]?.[3]).toEqual({
+      reasoning_effort: 'high',
+    })
+
+    // unlimited → no override; the artifact template default applies
+    useGeneralSetting.setState({ reasoningBudget: 'unlimited' })
+    await send()
+    expect(createModel.mock.calls[2]?.[3]).toBeUndefined()
+
+    // off in either control → ginfer's `none` (direct response)
+    useGeneralSetting.setState({ reasoningBudget: 'medium' })
+    useGeneralSetting.setState({ disableReasoning: true })
+    await send()
+    expect(createModel.mock.calls[3]?.[3]).toEqual({
+      reasoning_effort: 'none',
+    })
   })
 })
