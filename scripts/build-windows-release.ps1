@@ -8,9 +8,73 @@
 #   - or -
 #   make build-windows-release
 
+param(
+    # Internal flags used when a build is relaunched from the native mirror.
+    [switch]$NativeMirror,
+    [string]$SourceRoot
+)
+
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = $PSScriptRoot | Split-Path
+
+if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
+    $nativeBuildRoot = if ($env:GCHAT_WINDOWS_BUILD_ROOT) {
+        $env:GCHAT_WINDOWS_BUILD_ROOT
+    } else {
+        Join-Path $env:LOCALAPPDATA 'GChat\windows-build'
+    }
+    $nativeSourceRoot = Join-Path $nativeBuildRoot 'source'
+
+    # cmd-backed tools cannot inherit a UNC working directory. Keep all Windows
+    # dependencies and compiler output on NTFS, while the WSL checkout remains
+    # the authoritative source tree.
+    Set-Location ([System.IO.Path]::GetPathRoot($nativeBuildRoot))
+    New-Item -ItemType Directory -Path $nativeSourceRoot -Force | Out-Null
+
+    Write-Host ''
+    Write-Host '>>> Staging WSL source for a native Windows build' -ForegroundColor Cyan
+    Write-Host "  Source: $projectRoot"
+    Write-Host "  Build:  $nativeSourceRoot"
+
+    $excludedDirectories = @(
+        '.git', '.yarn', '.cache', '.next', '.turbo', '.vite',
+        'node_modules', 'target', 'coverage', 'dist', 'dist-web',
+        'dist-ssr', 'build', 'out', 'pre-install', '__pycache__',
+        'docs', 'autoqa', 'tests',
+        (Join-Path $projectRoot 'core\lib'),
+        (Join-Path $projectRoot 'src-tauri\resources\bin'),
+        (Join-Path $projectRoot 'src-tauri\resources\pre-install')
+    )
+    $robocopyArgs = @(
+        $projectRoot,
+        $nativeSourceRoot,
+        '/MIR',
+        '/COPY:DAT',
+        '/DCOPY:DAT',
+        '/R:2',
+        '/W:1',
+        '/NFL',
+        '/NDL',
+        '/NP',
+        '/NJH',
+        '/NJS',
+        '/XD'
+    ) + $excludedDirectories
+
+    & robocopy.exe @robocopyArgs
+    $robocopyExit = $LASTEXITCODE
+    if ($robocopyExit -gt 7) {
+        Write-Host "[FATAL] Source staging failed (robocopy exit $robocopyExit)." -ForegroundColor Red
+        exit $robocopyExit
+    }
+
+    $nativeScript = Join-Path $nativeSourceRoot 'scripts\build-windows-release.ps1'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $nativeScript `
+        -NativeMirror -SourceRoot $projectRoot
+    exit $LASTEXITCODE
+}
+
 Set-Location $projectRoot
 
 function Write-Step {
@@ -34,8 +98,25 @@ function Assert-Cmd {
     param([string]$cmd, [string]$hint)
     if (-not (Test-Cmd $cmd)) {
         Write-Host "[FATAL] $cmd not found. $hint" -ForegroundColor Red
-        Write-Host 'Run: make setup-windows' -ForegroundColor Yellow
+        Write-Host 'Restart PowerShell, then rerun this same build command.' -ForegroundColor Yellow
         exit 1
+    }
+}
+
+# The release builder is the public one-command entry point. If the workstation
+# has not been prepared yet, run the existing setup first instead of requiring
+# the user to discover and execute a separate bootstrap command.
+Refresh-SessionPath
+$initialCargoPath = Join-Path $env:USERPROFILE '.cargo\bin'
+if ((Test-Path $initialCargoPath) -and ($env:Path -notlike "*$initialCargoPath*")) {
+    $env:Path = $initialCargoPath + ';' + $env:Path
+}
+if ((-not (Test-Cmd 'node')) -or (-not (Test-Cmd 'cargo'))) {
+    Write-Step 'Installing missing Windows build prerequisites'
+    & (Join-Path $projectRoot 'scripts\setup-windows.ps1')
+    Refresh-SessionPath
+    if (Test-Path $initialCargoPath) {
+        $env:Path = $initialCargoPath + ';' + $env:Path
     }
 }
 
@@ -252,6 +333,26 @@ if (Test-Path $msiDir) {
     Get-ChildItem -Path $msiDir -Filter '*.msi' | ForEach-Object {
         Write-Host "    $($_.FullName)" -ForegroundColor White
     }
+}
+
+if ($NativeMirror -and $SourceRoot) {
+    $sourceOutputRoot = Join-Path $SourceRoot 'out\windows'
+    New-Item -ItemType Directory -Path $sourceOutputRoot -Force | Out-Null
+
+    $installers = @()
+    if (Test-Path $nsisDir) {
+        $installers += Get-ChildItem -Path $nsisDir -Filter '*.exe'
+    }
+    if (Test-Path $msiDir) {
+        $installers += Get-ChildItem -Path $msiDir -Filter '*.msi'
+    }
+    foreach ($installer in $installers) {
+        Copy-Item -Path $installer.FullName -Destination $sourceOutputRoot -Force
+    }
+
+    Write-Host ''
+    Write-Host '  Copied installer(s) back to:' -ForegroundColor Cyan
+    Write-Host "    $sourceOutputRoot" -ForegroundColor White
 }
 
 Write-Host ''

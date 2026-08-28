@@ -10,6 +10,16 @@
 
 $ErrorActionPreference = 'Continue'
 
+# Tool installation does not need the repository as its working directory.
+# Move off UNC immediately so cmd-backed installers and Corepack do not fall
+# back to the Windows directory when this script is launched from a WSL path.
+$setupProjectRoot = $PSScriptRoot | Split-Path
+if ($setupProjectRoot.StartsWith('\\')) {
+    Set-Location $env:SystemDrive\
+} else {
+    Set-Location $setupProjectRoot
+}
+
 function Write-Step {
     param([string]$msg)
     Write-Host ''
