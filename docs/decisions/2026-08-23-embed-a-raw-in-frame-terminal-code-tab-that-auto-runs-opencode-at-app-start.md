@@ -47,11 +47,16 @@ title: "Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app 
     between repositories.
   - **Auto-start:** after the frontend channel is attached and a fresh
     supported-hardware result is available, one root-level bootstrap owner
-    checks that OpenCode is installed and that `provider.gchat` is valid in the
-    existing OpenCode configuration. Only then does it start OpenCode. Missing
-    hardware, install, or configuration never triggers installation or rewrites
-    user files at startup; the Code tab shows the exact setup state and routes
-    configuration through the existing Integrations owner.
+    checks for a native OpenCode executable. When it is absent (including the
+    Windows case where only a WSL copy exists), that owner runs GChat's existing
+    hardened OpenCode installer asynchronously, without opening an external
+    console. On Windows the installer may first bootstrap native Node.js/npm via
+    winget. It then writes `provider.gchat` through the existing
+    `configure_opencode` owner, verifies the resulting effective JSON/JSONC
+    configuration, and starts OpenCode. The operation is single-flight under
+    React StrictMode so startup cannot launch competing installers. A missing
+    model selection does not prevent acquisition; configuration and launch
+    continue automatically as soon as a local API model is selected.
   - First-run wiring reuses `configure_opencode` (provider → loaded GChat
     model + `:1337/v1` + API key). Model load is not a prerequisite for
     the terminal itself; requests simply fail until a model is up.
@@ -60,9 +65,9 @@ title: "Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app 
   (terminal, TUI-in-its-own-window, and API all hit the same engine).
   Costs: two new runtime dependencies (`portable-pty`, `@xterm/*`), a
   Windows ConPTY test matrix, and a PTY that outlives view navigation
-  (killed on app exit). OpenCode is not bundled in the installer in this
-  phase — the Launch page install remains the acquisition path (bundling
-  the binary is a later, supply-chain-reviewed decision). A user who
+  (killed on app exit). OpenCode is not bundled in the installer; first use
+  acquires the official npm package through the same audited installer used by
+  Integrations. A user who
   types directly in the frame gets a plain shell: the terminal is a
   generic feature, OpenCode is its default payload. Runtime dependencies are
   `portable-pty` 0.9, `@xterm/xterm` 6.0, and `@xterm/addon-fit` 0.11; no
