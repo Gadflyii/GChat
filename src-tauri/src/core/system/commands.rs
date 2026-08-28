@@ -1694,7 +1694,7 @@ const GCHAT_MANAGED_BEGIN: &str = "# >>> GChat (managed) >>>";
 const GCHAT_MANAGED_END: &str = "# <<< GChat (managed) <<<";
 
 /// Resolve the user's home directory in a platform-aware way.
-fn agent_home_dir() -> Result<String, String> {
+pub(crate) fn agent_home_dir() -> Result<String, String> {
     if cfg!(windows) {
         std::env::var("USERPROFILE").map_err(|e| e.to_string())
     } else {

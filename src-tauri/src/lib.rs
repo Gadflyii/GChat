@@ -152,6 +152,15 @@ pub fn run() {
         core::system::commands::configure_poolside,
         core::system::commands::open_agent_terminal,
         core::system::commands::launch_editor,
+        // Persistent Code-tab terminal
+        core::terminal::terminal_attach,
+        core::terminal::terminal_status,
+        core::terminal::terminal_spawn,
+        core::terminal::terminal_write,
+        core::terminal::terminal_resize,
+        core::terminal::terminal_set_flow,
+        core::terminal::terminal_stop,
+        core::terminal::opencode_readiness,
         // Server commands
         core::server::commands::start_server,
         core::server::commands::stop_server,
@@ -357,6 +366,9 @@ pub fn run() {
         // Tray status (no-op on mobile; kept registered so the frontend can invoke it uniformly)
         core::tray_status::update_tray_status,
     ]);
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let app_builder = app_builder.manage(core::terminal::TerminalState::default());
 
     let app = app_builder
         .manage(AppState {
@@ -587,6 +599,11 @@ pub fn run() {
             }
             RunEvent::Exit => {
                 let app_handle = app.clone();
+
+            #[cfg(not(any(target_os = "ios", target_os = "android")))]
+            app_handle
+                .state::<core::terminal::TerminalState>()
+                .shutdown();
 
             #[cfg(not(any(target_os = "ios", target_os = "android")))]
             {
