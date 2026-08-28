@@ -1,0 +1,25 @@
+{
+  "title": "OpenCode",
+  "checking": "Checking hardware, OpenCode, and its GChat provider configuration…",
+  "desktopOnly": "Code is available in the GChat desktop app.",
+  "unsupportedHardware": "This system is not supported by the current GInfer runtime.",
+  "notInstalled": "OpenCode is not installed. Install it from Integrations, then return here.",
+  "wslOnly": "OpenCode was found only inside WSL. Install a native Windows copy to use the embedded ConPTY terminal.",
+  "missingConfiguration": "OpenCode is installed but has not been configured for the local GChat provider.",
+  "invalidConfiguration": "The OpenCode configuration could not be read. Fix it from Integrations before starting Code.",
+  "openIntegrations": "Open Integrations",
+  "checkAgain": "Check again",
+  "retry": "Retry",
+  "restart": "Restart OpenCode",
+  "restartWorkspace": "Restart in workspace",
+  "stop": "Stop terminal",
+  "workspaceUnavailable": "The Code workspace is not available.",
+  "stopTimeout": "The existing Code terminal did not stop in time.",
+  "replayUnavailable": "The terminal was detached long enough to lose exact screen state. Restart OpenCode for a clean display.",
+  "status": {
+    "idle": "Not started",
+    "running": "Running",
+    "stopping": "Stopping",
+    "exited": "Exited"
+  }
+}

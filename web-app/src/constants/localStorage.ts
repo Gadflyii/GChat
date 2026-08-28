@@ -49,6 +49,9 @@ export const localStorageKey = {
   // user fix a wrong "Not installed" status for agents installed in a
   // non-standard location that PATH/WSL detection misses.
   launchCustomPaths: 'launch-custom-paths',
+  // Explicit working directory for the persistent Code-tab PTY. The running
+  // session never changes directory silently; applying a new value restarts it.
+  codeTerminal: 'code-terminal',
 }
 
 export const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24

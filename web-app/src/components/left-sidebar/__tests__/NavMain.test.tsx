@@ -98,6 +98,26 @@ describe('NavMain', () => {
     expect(screen.getByText('common:models')).toBeInTheDocument()
   })
 
+  it('shows Code in both modes', () => {
+    const { rerender } = render(<NavMain mode="chat" />)
+
+    expect(screen.getByText('common:code')).toBeInTheDocument()
+
+    rerender(<NavMain mode="agent" />)
+
+    expect(screen.getByText('common:code')).toBeInTheDocument()
+  })
+
+  it('highlights Code on the code route', () => {
+    vi.mocked(useLocation).mockReturnValue({ pathname: '/code/' } as never)
+
+    render(<NavMain mode="chat" />)
+
+    expect(
+      screen.getByText('common:code').closest('[data-active]')
+    ).toHaveAttribute('data-active', 'true')
+  })
+
   it('shows Skills only in Agent mode', () => {
     const { rerender } = render(<NavMain mode="chat" />)
 

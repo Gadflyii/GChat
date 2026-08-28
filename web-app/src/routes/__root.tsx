@@ -1,4 +1,4 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router'
+import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
 // import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 
 import DialogAppUpdater from '@/containers/dialogs/AppUpdater'
@@ -31,6 +31,7 @@ import { GlobalEventHandler } from '@/providers/GlobalEventHandler'
 import { ServiceHubProvider } from '@/providers/ServiceHubProvider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LeftSidebar } from '@/components/left-sidebar'
+import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -44,6 +45,8 @@ export const Route = createRootRoute({
 })
 
 const AppLayout = () => {
+  const { pathname } = useLocation()
+  const codeVisible = pathname.startsWith('/code')
   const { showOnboardingModelReminder } = useOnboardingModelReminder()
   const isLeftPanelOpen = useLeftPanel((state) => state.open)
   const setLeftPanel = useLeftPanel((state) => state.setLeftPanel)
@@ -67,8 +70,9 @@ const AppLayout = () => {
         <WhatsNewDialog />
         <LeftSidebar />
         <SidebarInset>
-          <div className="bg-neutral-50 dark:bg-background size-full">
+          <div className="relative bg-neutral-50 dark:bg-background size-full">
             <Outlet />
+            <CodeTerminalHost visible={codeVisible} />
           </div>
         </SidebarInset>
 

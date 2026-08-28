@@ -22,6 +22,7 @@ import { useProjectDialog } from '@/hooks/useProjectDialog'
 import { useSearchDialog } from '@/hooks/useSearchDialog'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
 import type { SidebarMode } from '@/hooks/useAgentMode'
+import { IconTerminal2 } from '@tabler/icons-react'
 
 type AnimatedIconHandle = {
   startAnimation: () => void
@@ -85,6 +86,18 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             <span>
               {mode === 'agent' ? t('common:newTask') : t('common:newChat')}
             </span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            isActive={pathname.startsWith('/code')}
+            className="data-[active=true]:bg-sidebar-foreground/15"
+          >
+            <Link to={route.code.index}>
+              <IconTerminal2 className="size-4 text-foreground/70" />
+              <span>{t('common:code')}</span>
+            </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>
