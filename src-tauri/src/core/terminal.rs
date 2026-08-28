@@ -789,11 +789,10 @@ pub fn terminal_stop(state: State<'_, TerminalState>) -> Result<TerminalStatus, 
     Ok(status)
 }
 
-fn opencode_config_path() -> Result<PathBuf, String> {
-    Ok(PathBuf::from(super::system::commands::agent_home_dir()?)
-        .join(".config")
-        .join("opencode")
-        .join("opencode.json"))
+fn opencode_config_directory() -> Result<PathBuf, String> {
+    Ok(super::system::opencode_config::config_directory(
+        &super::system::commands::agent_home_dir()?,
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -803,14 +802,10 @@ enum OpenCodeConfigurationState {
     Ready,
 }
 
-fn opencode_configuration_state(path: &Path) -> Result<OpenCodeConfigurationState, String> {
-    if !path.is_file() {
+fn opencode_configuration_state(directory: &Path) -> Result<OpenCodeConfigurationState, String> {
+    let Some(root) = super::system::opencode_config::read_merged_global_config(directory)? else {
         return Ok(OpenCodeConfigurationState::Missing);
-    }
-    let text = std::fs::read_to_string(path)
-        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
-    let root: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|error| format!("Could not parse {}: {error}", path.display()))?;
+    };
     let Some(provider) = root
         .pointer("/provider/gchat")
         .and_then(|value| value.as_object())
@@ -868,8 +863,9 @@ fn opencode_configuration_state(path: &Path) -> Result<OpenCodeConfigurationStat
 pub async fn opencode_readiness(custom_path: Option<String>) -> Result<OpenCodeReadiness, String> {
     let detection =
         super::system::commands::detect_agent_installed("opencode".to_string(), custom_path).await;
-    let config_path = opencode_config_path()?;
-    let config_state = match opencode_configuration_state(&config_path) {
+    let config_directory = opencode_config_directory()?;
+    let config_path = super::system::opencode_config::writable_config_path(&config_directory);
+    let config_state = match opencode_configuration_state(&config_directory) {
         Ok(state) => state,
         Err(error) => {
             log::debug!("OpenCode readiness config error: {error}");
@@ -939,33 +935,32 @@ mod tests {
     #[test]
     fn gchat_opencode_configuration_requires_the_selected_registered_model() {
         let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("opencode.json");
         assert_eq!(
-            opencode_configuration_state(&path),
+            opencode_configuration_state(temp.path()),
             Ok(OpenCodeConfigurationState::Missing)
         );
         std::fs::write(
-            &path,
-            serde_json::json!({
+            temp.path().join("opencode.jsonc"),
+            r#"{
+                // GChat accepts the same JSONC syntax as OpenCode.
                 "provider": {
                     "gchat": {
                         "npm": "@ai-sdk/openai-compatible",
                         "options": { "baseURL": "http://localhost:2468/custom-openai", "apiKey": "gchat" },
-                        "models": { "qwen": { "name": "qwen" } }
-                    }
+                        "models": { "qwen": { "name": "qwen" } },
+                    },
                 },
-                "model": "gchat/qwen"
-            })
-            .to_string(),
+                "model": "gchat/qwen",
+            }"#,
         )
         .unwrap();
         assert_eq!(
-            opencode_configuration_state(&path),
+            opencode_configuration_state(temp.path()),
             Ok(OpenCodeConfigurationState::Ready)
         );
 
         std::fs::write(
-            &path,
+            temp.path().join("opencode.jsonc"),
             serde_json::json!({
                 "provider": {
                     "gchat": {
@@ -980,7 +975,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            opencode_configuration_state(&path),
+            opencode_configuration_state(temp.path()),
             Ok(OpenCodeConfigurationState::Invalid)
         );
     }

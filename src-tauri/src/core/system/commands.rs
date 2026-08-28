@@ -2660,8 +2660,11 @@ pub fn configure_codex(
     Ok(())
 }
 
-/// Configure OpenCode by upserting `provider.gchat` in
-/// `~/.config/opencode/opencode.json` (strict JSON, other providers preserved).
+/// Configure OpenCode by upserting `provider.gchat` in its highest-precedence
+/// global document. OpenCode accepts JSONC and merges `config.json`,
+/// `opencode.json`, then `opencode.jsonc`; we edit the same document OpenCode
+/// selects for its own global updates. Other values are preserved, though
+/// comments are removed when a JSONC document is serialized.
 #[tauri::command]
 pub fn configure_opencode(
     api_url: String,
@@ -2669,31 +2672,20 @@ pub fn configure_opencode(
     api_key: Option<String>,
 ) -> Result<(), String> {
     let home = agent_home_dir()?;
-    let dir = PathBuf::from(&home).join(".config").join("opencode");
+    let dir = super::opencode_config::config_directory(&home);
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("Failed to create ~/.config/opencode: {}", e))?;
-    let path = dir.join("opencode.json");
+    let path = super::opencode_config::writable_config_path(&dir);
 
     let mut root: serde_json::Value = if path.exists() {
-        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        if text.trim().is_empty() {
-            serde_json::json!({})
-        } else {
-            serde_json::from_str(&text).map_err(|e| {
-                format!(
-                    "Could not parse {}: {}. Fix or remove the file and try again.",
-                    path.display(),
-                    e
-                )
-            })?
-        }
+        super::opencode_config::read_config_file(&path)?
     } else {
         serde_json::json!({})
     };
 
     let obj = root
         .as_object_mut()
-        .ok_or_else(|| "opencode.json is not a JSON object".to_string())?;
+        .ok_or_else(|| format!("{} is not a JSON object", path.display()))?;
     obj.entry("$schema")
         .or_insert_with(|| serde_json::json!("https://opencode.ai/config.json"));
 
