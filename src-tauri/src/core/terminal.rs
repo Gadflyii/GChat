@@ -563,7 +563,8 @@ pub fn terminal_attach(
     on_event: Channel<TerminalEvent>,
 ) -> Result<TerminalStatus, String> {
     let mut session = state.session()?;
-    if session.replay.complete {
+    let replacing_live_view = session.channel.is_some() && session.generation != 0;
+    if session.replay.complete && !replacing_live_view {
         for event in &session.replay.events {
             on_event
                 .send(event.clone())
@@ -795,9 +796,16 @@ fn opencode_config_path() -> Result<PathBuf, String> {
         .join("opencode.json"))
 }
 
-fn valid_opencode_configuration(path: &Path) -> Result<bool, String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OpenCodeConfigurationState {
+    Missing,
+    Invalid,
+    Ready,
+}
+
+fn opencode_configuration_state(path: &Path) -> Result<OpenCodeConfigurationState, String> {
     if !path.is_file() {
-        return Ok(false);
+        return Ok(OpenCodeConfigurationState::Missing);
     }
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
@@ -807,38 +815,53 @@ fn valid_opencode_configuration(path: &Path) -> Result<bool, String> {
         .pointer("/provider/gchat")
         .and_then(|value| value.as_object())
     else {
-        return Ok(false);
+        return Ok(OpenCodeConfigurationState::Missing);
     };
     if provider.get("npm").and_then(|value| value.as_str()) != Some("@ai-sdk/openai-compatible") {
-        return Ok(false);
+        return Ok(OpenCodeConfigurationState::Invalid);
     }
     let Some(base_url) = provider
         .get("options")
         .and_then(|value| value.get("baseURL"))
         .and_then(|value| value.as_str())
     else {
-        return Ok(false);
+        return Ok(OpenCodeConfigurationState::Invalid);
     };
     let Ok(base_url) = url::Url::parse(base_url) else {
-        return Ok(false);
+        return Ok(OpenCodeConfigurationState::Invalid);
     };
-    let loopback = matches!(base_url.host_str(), Some("localhost" | "127.0.0.1" | "::1"));
-    if !loopback || base_url.port_or_known_default() != Some(1337) || base_url.path() != "/v1" {
-        return Ok(false);
+    let loopback = matches!(
+        base_url.host_str(),
+        Some("localhost" | "127.0.0.1" | "::1" | "[::1]")
+    );
+    if !loopback || !matches!(base_url.scheme(), "http" | "https") {
+        return Ok(OpenCodeConfigurationState::Invalid);
+    }
+    let api_key = provider
+        .get("options")
+        .and_then(|value| value.get("apiKey"))
+        .and_then(|value| value.as_str());
+    if !matches!(api_key, Some(value) if !value.is_empty()) {
+        return Ok(OpenCodeConfigurationState::Invalid);
     }
     let Some(model) = root.get("model").and_then(|value| value.as_str()) else {
-        return Ok(false);
+        return Ok(OpenCodeConfigurationState::Invalid);
     };
     let Some(model_id) = model
         .strip_prefix("gchat/")
         .filter(|value| !value.is_empty())
     else {
-        return Ok(false);
+        return Ok(OpenCodeConfigurationState::Invalid);
     };
-    Ok(provider
+    if provider
         .get("models")
         .and_then(|value| value.as_object())
-        .is_some_and(|models| models.contains_key(model_id)))
+        .is_some_and(|models| models.contains_key(model_id))
+    {
+        Ok(OpenCodeConfigurationState::Ready)
+    } else {
+        Ok(OpenCodeConfigurationState::Invalid)
+    }
 }
 
 #[tauri::command]
@@ -846,20 +869,21 @@ pub async fn opencode_readiness(custom_path: Option<String>) -> Result<OpenCodeR
     let detection =
         super::system::commands::detect_agent_installed("opencode".to_string(), custom_path).await;
     let config_path = opencode_config_path()?;
-    let (configured, config_invalid) = match valid_opencode_configuration(&config_path) {
-        Ok(configured) => (configured, false),
+    let config_state = match opencode_configuration_state(&config_path) {
+        Ok(state) => state,
         Err(error) => {
             log::debug!("OpenCode readiness config error: {error}");
-            (false, true)
+            OpenCodeConfigurationState::Invalid
         }
     };
+    let configured = config_state == OpenCodeConfigurationState::Ready;
     let reason = if !detection.installed {
         Some(OpenCodeReadinessReason::NotInstalled)
     } else if detection.via_wsl {
         Some(OpenCodeReadinessReason::WslOnly)
-    } else if config_invalid {
+    } else if config_state == OpenCodeConfigurationState::Invalid {
         Some(OpenCodeReadinessReason::InvalidConfiguration)
-    } else if !configured {
+    } else if config_state == OpenCodeConfigurationState::Missing {
         Some(OpenCodeReadinessReason::MissingConfiguration)
     } else {
         None
@@ -916,13 +940,17 @@ mod tests {
     fn gchat_opencode_configuration_requires_the_selected_registered_model() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("opencode.json");
+        assert_eq!(
+            opencode_configuration_state(&path),
+            Ok(OpenCodeConfigurationState::Missing)
+        );
         std::fs::write(
             &path,
             serde_json::json!({
                 "provider": {
                     "gchat": {
                         "npm": "@ai-sdk/openai-compatible",
-                        "options": { "baseURL": "http://127.0.0.1:1337/v1", "apiKey": "gchat" },
+                        "options": { "baseURL": "http://localhost:2468/custom-openai", "apiKey": "gchat" },
                         "models": { "qwen": { "name": "qwen" } }
                     }
                 },
@@ -931,7 +959,10 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        assert_eq!(valid_opencode_configuration(&path), Ok(true));
+        assert_eq!(
+            opencode_configuration_state(&path),
+            Ok(OpenCodeConfigurationState::Ready)
+        );
 
         std::fs::write(
             &path,
@@ -948,7 +979,10 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        assert_eq!(valid_opencode_configuration(&path), Ok(false));
+        assert_eq!(
+            opencode_configuration_state(&path),
+            Ok(OpenCodeConfigurationState::Invalid)
+        );
     }
 
     #[cfg(unix)]
