@@ -29,10 +29,10 @@ pub struct GinferConfig {
     pub vision: bool,
     pub spec: String,
     pub draft_tokens: u32,
+    pub draft_tp: u32,
     pub kv_dtype: String,
-    pub lm_head_draft: bool,
     pub max_context: u32,
-    pub kv_capacity: String,
+    pub kv_arena_bytes: String,
     pub prefill_chunk: u32,
     pub max_concurrency: u32,
     pub no_cuda_graph: bool,
@@ -44,10 +44,10 @@ impl Default for GinferConfig {
             vision: true,
             spec: "auto".into(),
             draft_tokens: 0,
-            kv_dtype: String::new(),
-            lm_head_draft: false,
+            draft_tp: 0,
+            kv_dtype: "auto".into(),
             max_context: 0,
-            kv_capacity: String::new(),
+            kv_arena_bytes: "auto".into(),
             prefill_chunk: 0,
             max_concurrency: 0,
             no_cuda_graph: false,
@@ -92,6 +92,100 @@ fn exit_error(status: &std::process::ExitStatus, stderr: &str, stdout: &str) -> 
     )
 }
 
+/// Translate the pre-built provider profile into the current ginfer-serve
+/// command contract. `auto` values are represented by omitting an override so
+/// the engine remains the single owner of automatic model/runtime selection.
+fn build_ginfer_args(
+    model_path: &str,
+    port: u16,
+    api_key: &str,
+    config: &GinferConfig,
+) -> Result<Vec<String>, String> {
+    // ginfer-serve requires the artifact path as argv[1], before every option.
+    let mut args = vec![
+        model_path.to_owned(),
+        "--host".into(),
+        "127.0.0.1".into(),
+        "--port".into(),
+        port.to_string(),
+        "--api-key".into(),
+        api_key.to_owned(),
+    ];
+
+    if config.vision {
+        args.push("--vision".into());
+    }
+
+    match config.spec.trim().to_ascii_lowercase().as_str() {
+        "" | "auto" => {}
+        "none" => args.extend(["--spec".into(), "none".into()]),
+        "dflash" => {
+            args.extend(["--spec".into(), "dflash".into()]);
+            if config.draft_tokens > 0 {
+                args.extend(["--draft-tokens".into(), config.draft_tokens.to_string()]);
+            }
+        }
+        value => {
+            return Err(format!(
+                "unsupported speculative backend '{value}'; expected auto, none, or dflash"
+            ));
+        }
+    }
+
+    match config.draft_tp {
+        0 => {}
+        1 | 2 | 4 => args.extend(["--draft-tp".into(), config.draft_tp.to_string()]),
+        value => {
+            return Err(format!(
+                "unsupported DFlash2 tensor-parallel degree {value}; expected auto, 1, 2, or 4"
+            ));
+        }
+    }
+
+    match config.kv_dtype.trim().to_ascii_lowercase().as_str() {
+        "" | "auto" => {}
+        value @ ("bf16" | "int8" | "nvfp4") => {
+            args.extend(["--kv-dtype".into(), value.into()]);
+        }
+        value => {
+            return Err(format!(
+                "unsupported KV-cache dtype '{value}'; expected auto, bf16, int8, or nvfp4"
+            ));
+        }
+    }
+
+    if config.max_context > 0 {
+        args.extend(["--max-context".into(), config.max_context.to_string()]);
+    }
+
+    let kv_arena_bytes = config.kv_arena_bytes.trim();
+    if !kv_arena_bytes.is_empty() && !kv_arena_bytes.eq_ignore_ascii_case("auto") {
+        args.extend(["--kv-arena-bytes".into(), kv_arena_bytes.into()]);
+    }
+
+    if config.prefill_chunk > 0 {
+        args.extend(["--prefill-chunk".into(), config.prefill_chunk.to_string()]);
+    }
+
+    match config.max_concurrency {
+        0 => {}
+        value @ 1..=8 => {
+            args.extend(["--max-concurrency".into(), value.to_string()]);
+        }
+        value => {
+            return Err(format!(
+                "maximum concurrency {value} is outside GInfer's supported range 1..=8"
+            ));
+        }
+    }
+
+    if config.no_cuda_graph {
+        args.push("--no-cuda-graph".into());
+    }
+
+    Ok(args)
+}
+
 /// Core model loading logic usable without an AppHandle (CLI / test support).
 pub async fn load_ginfer_model_impl(
     process_map_arc: Arc<Mutex<HashMap<i32, GinferSession>>>,
@@ -104,7 +198,10 @@ pub async fn load_ginfer_model_impl(
     is_embedding: bool,
     timeout: u64,
 ) -> Result<SessionInfo, String> {
-    log::info!("Attempting to launch ginfer-serve at path: {:?}", binary_path);
+    log::info!(
+        "Attempting to launch ginfer-serve at path: {:?}",
+        binary_path
+    );
     log::info!("Using configuration: {:?}", config);
 
     let bin_path = Path::new(binary_path);
@@ -117,64 +214,7 @@ pub async fn load_ginfer_model_impl(
         return Err(format!("ginfer model not found at: {}", model_path));
     }
 
-    // Build the argument vector. The model path is the single positional
-    // argument and must come last.
-    let mut args: Vec<String> = vec![
-        "--host".into(),
-        "127.0.0.1".into(),
-        "--port".into(),
-        port.to_string(),
-        "--api-key".into(),
-        api_key.clone(),
-    ];
-
-    if config.vision {
-        args.push("--vision".into());
-    }
-    if !config.spec.is_empty() && config.spec != "auto" {
-        args.push("--spec".into());
-        args.push(config.spec.clone());
-        if config.draft_tokens > 0 {
-            args.push("--draft-tokens".into());
-            args.push(config.draft_tokens.to_string());
-        }
-    }
-    if !config.kv_dtype.is_empty() {
-        args.push("--kv-dtype".into());
-        args.push(config.kv_dtype.clone());
-    }
-    if config.lm_head_draft {
-        args.push("--lm-head-draft".into());
-    }
-    if config.max_context > 0 {
-        args.push("--max-context".into());
-        args.push(config.max_context.to_string());
-    }
-    if !config.kv_capacity.is_empty() {
-        args.push("--kv-capacity".into());
-        args.push(config.kv_capacity.clone());
-    }
-    if config.prefill_chunk > 0 {
-        args.push("--prefill-chunk".into());
-        args.push(config.prefill_chunk.to_string());
-    }
-    if config.max_concurrency > 0 {
-        let clamped = config.max_concurrency.clamp(1, 8);
-        if clamped != config.max_concurrency {
-            log::warn!(
-                "max_concurrency {} is outside the valid range 1..=8; clamping to {}",
-                config.max_concurrency,
-                clamped
-            );
-        }
-        args.push("--max-concurrency".into());
-        args.push(clamped.to_string());
-    }
-    if config.no_cuda_graph {
-        args.push("--no-cuda-graph".into());
-    }
-
-    args.push(model_path.clone());
+    let args = build_ginfer_args(&model_path, port, &api_key, &config)?;
 
     log::info!("Generated arguments: {:?}", args);
 
@@ -520,4 +560,85 @@ pub async fn get_all_sessions<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
 ) -> Result<Vec<SessionInfo>, String> {
     get_all_active_sessions(app_handle).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_profile_uses_engine_owned_auto_values() {
+        let args = build_ginfer_args(
+            "/models/qwen.ginfer",
+            38127,
+            "secret",
+            &GinferConfig::default(),
+        )
+        .expect("default GInfer profile should be valid");
+
+        assert_eq!(
+            args,
+            vec![
+                "/models/qwen.ginfer",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "38127",
+                "--api-key",
+                "secret",
+                "--vision",
+            ]
+        );
+    }
+
+    #[test]
+    fn explicit_profile_uses_current_ginfer_flags() {
+        let config = GinferConfig {
+            spec: "dflash".into(),
+            draft_tokens: 4,
+            draft_tp: 1,
+            kv_dtype: "nvfp4".into(),
+            max_context: 131_072,
+            kv_arena_bytes: "8589934592".into(),
+            prefill_chunk: 2048,
+            max_concurrency: 4,
+            no_cuda_graph: true,
+            ..GinferConfig::default()
+        };
+
+        let args = build_ginfer_args("C:\\models\\muse.ginfer", 9911, "key", &config)
+            .expect("explicit GInfer profile should be valid");
+
+        assert_eq!(args[0], "C:\\models\\muse.ginfer");
+        assert!(args.windows(2).any(|pair| pair == ["--spec", "dflash"]));
+        assert!(args.windows(2).any(|pair| pair == ["--draft-tokens", "4"]));
+        assert!(args.windows(2).any(|pair| pair == ["--draft-tp", "1"]));
+        assert!(args.windows(2).any(|pair| pair == ["--kv-dtype", "nvfp4"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--kv-arena-bytes", "8589934592"]));
+        assert!(!args.iter().any(|arg| arg == "--lm-head-draft"));
+        assert!(!args.iter().any(|arg| arg == "--kv-capacity"));
+    }
+
+    #[test]
+    fn retired_and_out_of_range_options_are_rejected() {
+        let mtp = GinferConfig {
+            spec: "mtp".into(),
+            ..GinferConfig::default()
+        };
+        assert!(build_ginfer_args("model.ginfer", 8080, "key", &mtp).is_err());
+
+        let invalid_draft_tp = GinferConfig {
+            draft_tp: 3,
+            ..GinferConfig::default()
+        };
+        assert!(build_ginfer_args("model.ginfer", 8080, "key", &invalid_draft_tp).is_err());
+
+        let invalid_concurrency = GinferConfig {
+            max_concurrency: 9,
+            ..GinferConfig::default()
+        };
+        assert!(build_ginfer_args("model.ginfer", 8080, "key", &invalid_concurrency).is_err());
+    }
 }

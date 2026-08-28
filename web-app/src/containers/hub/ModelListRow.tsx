@@ -55,7 +55,7 @@ export function ModelListRow({
             {name}
           </span>
           <span className="shrink-0 rounded-[5px] border border-border px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            GGUF
+            GINFER
           </span>
         </span>
         {summary && (

@@ -178,8 +178,7 @@ function HubContent() {
     }
   }, [scanLocalModelsEnabled, serviceHub, setProviders])
 
-  // The Hub only runs GGUF through the single local backend (GInfer), so the
-  // curated staff picks are always resolved as GGUF.
+  // The Hub only exposes the closed .ginfer model catalog through GInfer.
   const staffPickItems = useStaffPicks(sources)
 
   const isSearchMode = debouncedSearchValue.length > 0 || showOnlyDownloaded

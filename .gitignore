@@ -46,6 +46,7 @@ Cargo.lock
 src-tauri/resources/
 !src-tauri/resources/
 src-tauri/resources/*
+!src-tauri/resources/opencode/
 !src-tauri/resources/agent-skills/
 !src-tauri/resources/agent-skills/**
 !src-tauri/resources/llamacpp-backend/

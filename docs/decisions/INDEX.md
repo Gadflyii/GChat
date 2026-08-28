@@ -9,12 +9,14 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-220 records, 2026-05-19 → 2026-08-28.
+225 records, 2026-05-19 → 2026-08-28.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-08-28** — [Brand the embedded OpenCode TUI with the Sectile theme](2026-08-28-brand-the-embedded-opencode-tui-with-the-sectile-theme.md)
+- **2026-08-28** — [Align the bundled GInfer profile with ginfer-serve](2026-08-28-align-the-bundled-ginfer-profile-with-ginfer-serve.md)
 - **2026-08-28** — [Adopt the Sectile Prism visual identity](2026-08-28-adopt-the-sectile-prism-visual-identity.md)
 
 - **2026-08-23** — [Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app start](2026-08-23-embed-a-raw-in-frame-terminal-code-tab-that-auto-runs-opencode-at-app-start.md)

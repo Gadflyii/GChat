@@ -20,17 +20,18 @@ function asString(v, defaultValue = '') {
     return String(v);
 }
 function normalizeGinferConfig(config) {
+    const value = config ?? {};
     return {
-        vision: asBool(config.vision),
-        spec: asString(config.spec, 'auto'),
-        draft_tokens: asNumber(config.draft_tokens),
-        kv_dtype: asString(config.kv_dtype),
-        lm_head_draft: asBool(config.lm_head_draft),
-        max_context: asNumber(config.max_context),
-        kv_capacity: asString(config.kv_capacity),
-        prefill_chunk: asNumber(config.prefill_chunk),
-        max_concurrency: asNumber(config.max_concurrency),
-        no_cuda_graph: asBool(config.no_cuda_graph),
+        vision: value.vision === undefined ? true : asBool(value.vision),
+        spec: asString(value.spec, 'auto'),
+        draft_tokens: asNumber(value.draft_tokens),
+        draft_tp: asNumber(value.draft_tp),
+        kv_dtype: asString(value.kv_dtype, 'auto'),
+        max_context: asNumber(value.max_context),
+        kv_arena_bytes: asString(value.kv_arena_bytes, 'auto'),
+        prefill_chunk: asNumber(value.prefill_chunk),
+        max_concurrency: asNumber(value.max_concurrency),
+        no_cuda_graph: asBool(value.no_cuda_graph),
     };
 }
 // GInfer server commands

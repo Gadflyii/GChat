@@ -215,7 +215,7 @@ export function ModelDetailPanel({
           <div className="rounded-md bg-muted/40 p-3">
             <dt className="text-muted-foreground">{t('hub:formats')}</dt>
             <dd className="mt-1 text-sm font-semibold uppercase text-foreground">
-              GGUF
+              GINFER
             </dd>
           </div>
           <div className="rounded-md bg-muted/40 p-3">

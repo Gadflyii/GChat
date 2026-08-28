@@ -16,73 +16,91 @@
   {
     "key": "vision",
     "title": "Vision",
-    "description": "Launch the server with --vision so image inputs are accepted. Startup-only: requires a reload to change.",
+    "description": "Enable image and video inputs. Enabled by default for GInfer's multimodal model packages. Startup-only.",
     "controllerType": "checkbox",
     "controllerProps": { "value": true }
   },
   {
     "key": "spec",
     "title": "Speculative Decoding",
-    "description": "Draft backend: auto, none, mtp, or dflash. Startup-only.",
+    "description": "Auto selects the model package's DFlash2 sidecar when present; Off uses autoregressive decoding. Startup-only.",
     "controllerType": "dropdown",
     "controllerProps": {
       "value": "auto",
-      "options": ["auto", "none", "mtp", "dflash"],
+      "options": [
+        { "name": "Auto (recommended)", "value": "auto" },
+        { "name": "Off", "value": "none" },
+        { "name": "DFlash2", "value": "dflash" }
+      ],
       "recommended": "auto"
     }
   },
   {
     "key": "draft_tokens",
     "title": "Draft Tokens",
-    "description": "Number of speculative draft tokens (--draft-tokens). 0 leaves the server default.",
+    "description": "DFlash2 draft window (1-7). Auto uses the model package default, currently 4 for compatible packages.",
     "controllerType": "input",
-    "controllerProps": { "value": 0, "placeholder": "e.g 3", "type": "number", "textAlign": "right" }
+    "controllerProps": { "value": 0, "placeholder": "Auto", "type": "number", "min": 0, "max": 7, "step": 1, "textAlign": "right" }
+  },
+  {
+    "key": "draft_tp",
+    "title": "DFlash2 Tensor Parallelism",
+    "description": "Auto uses the package/runtime placement. An explicit value can run the DFlash2 body on fewer ranks than the target model. Startup-only.",
+    "controllerType": "dropdown",
+    "controllerProps": {
+      "value": "auto",
+      "options": [
+        { "name": "Auto (recommended)", "value": "auto" },
+        { "name": "TP1", "value": "1" },
+        { "name": "TP2", "value": "2" },
+        { "name": "TP4", "value": "4" }
+      ],
+      "recommended": "auto"
+    }
   },
   {
     "key": "kv_dtype",
     "title": "KV Cache Dtype",
-    "description": "KV cache storage: bf16 or int8. Empty leaves the server default. Startup-only.",
+    "description": "Auto uses GInfer's server default. Explicit storage choices are BF16, INT8, and NVFP4. Startup-only.",
     "controllerType": "dropdown",
     "controllerProps": {
-      "value": "",
-      "options": ["", "bf16", "int8"],
-      "recommended": ""
+      "value": "auto",
+      "options": [
+        { "name": "Auto (recommended)", "value": "auto" },
+        { "name": "BF16", "value": "bf16" },
+        { "name": "INT8", "value": "int8" },
+        { "name": "NVFP4", "value": "nvfp4" }
+      ],
+      "recommended": "auto"
     }
-  },
-  {
-    "key": "lm_head_draft",
-    "title": "LM Head Draft",
-    "description": "Use the LM head for drafting (--lm-head-draft). Startup-only.",
-    "controllerType": "checkbox",
-    "controllerProps": { "value": false }
   },
   {
     "key": "max_context",
     "title": "Max Context",
-    "description": "Maximum context window (--max-context). 0 leaves the server default (2048).",
+    "description": "Maximum context window. Auto uses the GInfer server default (8192) within the model's native limit.",
     "controllerType": "input",
-    "controllerProps": { "value": 0, "placeholder": "e.g 16384", "type": "number", "textAlign": "right" }
+    "controllerProps": { "value": 0, "placeholder": "Auto", "type": "number", "min": 0, "step": 128, "textAlign": "right" }
   },
   {
-    "key": "kv_capacity",
-    "title": "KV Capacity",
-    "description": "Shared KV capacity (--kv-capacity). A number or 'auto'. Empty follows max-context.",
+    "key": "kv_arena_bytes",
+    "title": "KV Arena Size",
+    "description": "Auto lets GInfer size each rank's physical KV arena from available memory. An explicit value is an exact byte count. Startup-only.",
     "controllerType": "input",
-    "controllerProps": { "value": "", "placeholder": "e.g auto" }
+    "controllerProps": { "value": "auto", "placeholder": "Auto or an exact byte count" }
   },
   {
     "key": "prefill_chunk",
     "title": "Prefill Chunk",
-    "description": "Prefill chunk size (--prefill-chunk). Must be a multiple of 128. 0 leaves the server default.",
+    "description": "Prefill chunk size. Auto uses the GInfer server default (1024); explicit values must be positive multiples of 128.",
     "controllerType": "input",
-    "controllerProps": { "value": 0, "placeholder": "e.g 2048", "type": "number", "textAlign": "right" }
+    "controllerProps": { "value": 0, "placeholder": "Auto", "type": "number", "min": 0, "step": 128, "textAlign": "right" }
   },
   {
     "key": "max_concurrency",
     "title": "Max Concurrency",
-    "description": "Maximum concurrent generations (--max-concurrency, 1-8). 0 leaves the server default.",
+    "description": "Maximum active generations (1-8). Auto uses the GInfer server default (1).",
     "controllerType": "input",
-    "controllerProps": { "value": 0, "placeholder": "e.g 4", "type": "number", "textAlign": "right" }
+    "controllerProps": { "value": 0, "placeholder": "Auto", "type": "number", "min": 0, "max": 8, "step": 1, "textAlign": "right" }
   },
   {
     "key": "no_cuda_graph",

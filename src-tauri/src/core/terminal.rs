@@ -16,6 +16,8 @@ const MAX_INPUT_BYTES: usize = 64 * 1024;
 const MAX_TERMINAL_DIMENSION: u16 = 1000;
 const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_COLS: u16 = 80;
+const GCHAT_OPENCODE_THEME: &str = include_str!("../../resources/opencode/gchat.json");
+const GCHAT_OPENCODE_TUI_CONFIG: &str = include_str!("../../resources/opencode/gchat-tui.json");
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -394,7 +396,7 @@ fn canonical_working_directory(cwd: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-fn command_for_shell(cwd: &Path) -> CommandBuilder {
+fn command_for_shell(cwd: &Path, opencode_tui_config: Option<&Path>) -> CommandBuilder {
     #[cfg(windows)]
     let mut command = {
         let mut command = CommandBuilder::new("powershell.exe");
@@ -408,6 +410,9 @@ fn command_for_shell(cwd: &Path) -> CommandBuilder {
     command.cwd(cwd.as_os_str());
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
+    if let Some(path) = opencode_tui_config {
+        command.env("OPENCODE_TUI_CONFIG", path.as_os_str());
+    }
     command
 }
 
@@ -605,6 +610,12 @@ pub fn terminal_spawn(
         TerminalLaunch::Shell => None,
         TerminalLaunch::OpenCode => Some(quote_open_code_command(request.executable.as_deref())?),
     };
+    let opencode_tui_config = match request.launch {
+        TerminalLaunch::Shell => None,
+        TerminalLaunch::OpenCode => {
+            Some(install_gchat_opencode_theme(&opencode_config_directory()?)?)
+        }
+    };
 
     let _spawn_guard = state
         .spawn_gate
@@ -648,7 +659,7 @@ pub fn terminal_spawn(
         .master
         .take_writer()
         .map_err(|error| format!("Could not open Code terminal input: {error}"))?;
-    let command = command_for_shell(&cwd);
+    let command = command_for_shell(&cwd, opencode_tui_config.as_deref());
     let mut child = pair
         .slave
         .spawn_command(command)
@@ -793,6 +804,35 @@ fn opencode_config_directory() -> Result<PathBuf, String> {
     Ok(super::system::opencode_config::config_directory(
         &super::system::commands::agent_home_dir()?,
     ))
+}
+
+fn write_managed_opencode_asset(path: &Path, content: &str) -> Result<(), String> {
+    if std::fs::read(path)
+        .ok()
+        .is_some_and(|existing| existing == content.as_bytes())
+    {
+        return Ok(());
+    }
+    std::fs::write(path, content)
+        .map_err(|error| format!("Could not write {}: {error}", path.display()))
+}
+
+/// Install the GChat theme without changing the user's normal OpenCode theme.
+/// Only the embedded process receives OPENCODE_TUI_CONFIG, while OpenCode's
+/// required global theme directory contains the shared theme definition.
+fn install_gchat_opencode_theme(config_directory: &Path) -> Result<PathBuf, String> {
+    let theme_directory = config_directory.join("themes");
+    std::fs::create_dir_all(&theme_directory).map_err(|error| {
+        format!(
+            "Could not create OpenCode theme directory {}: {error}",
+            theme_directory.display()
+        )
+    })?;
+
+    write_managed_opencode_asset(&theme_directory.join("gchat.json"), GCHAT_OPENCODE_THEME)?;
+    let tui_config = config_directory.join("gchat-tui.json");
+    write_managed_opencode_asset(&tui_config, GCHAT_OPENCODE_TUI_CONFIG)?;
+    Ok(tui_config)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -980,6 +1020,103 @@ mod tests {
         );
     }
 
+    #[test]
+    fn embedded_opencode_theme_is_complete_and_does_not_replace_global_selection() {
+        const REQUIRED_THEME_KEYS: [&str; 41] = [
+            "primary",
+            "secondary",
+            "accent",
+            "error",
+            "warning",
+            "success",
+            "info",
+            "text",
+            "textMuted",
+            "background",
+            "backgroundPanel",
+            "backgroundElement",
+            "border",
+            "borderActive",
+            "borderSubtle",
+            "diffAdded",
+            "diffRemoved",
+            "diffContext",
+            "diffHunkHeader",
+            "diffHighlightAdded",
+            "diffHighlightRemoved",
+            "diffAddedBg",
+            "diffRemovedBg",
+            "diffContextBg",
+            "diffLineNumber",
+            "diffAddedLineNumberBg",
+            "diffRemovedLineNumberBg",
+            "markdownText",
+            "markdownHeading",
+            "markdownLink",
+            "markdownLinkText",
+            "markdownCode",
+            "markdownBlockQuote",
+            "markdownEmph",
+            "markdownStrong",
+            "markdownHorizontalRule",
+            "markdownListItem",
+            "markdownListEnumeration",
+            "markdownImage",
+            "markdownImageText",
+            "markdownCodeBlock",
+        ];
+
+        let theme: serde_json::Value = serde_json::from_str(GCHAT_OPENCODE_THEME).unwrap();
+        let tokens = theme
+            .get("theme")
+            .and_then(|value| value.as_object())
+            .unwrap();
+        for key in REQUIRED_THEME_KEYS {
+            assert!(
+                tokens.contains_key(key),
+                "missing OpenCode theme token {key}"
+            );
+        }
+        for key in [
+            "syntaxComment",
+            "syntaxKeyword",
+            "syntaxFunction",
+            "syntaxVariable",
+            "syntaxString",
+            "syntaxNumber",
+            "syntaxType",
+            "syntaxOperator",
+            "syntaxPunctuation",
+        ] {
+            assert!(
+                tokens.contains_key(key),
+                "missing OpenCode syntax token {key}"
+            );
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let tui_path = install_gchat_opencode_theme(temp.path()).unwrap();
+        assert_eq!(tui_path, temp.path().join("gchat-tui.json"));
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("themes/gchat.json")).unwrap(),
+            GCHAT_OPENCODE_THEME
+        );
+        let tui: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&tui_path).unwrap()).unwrap();
+        assert_eq!(
+            tui.get("theme").and_then(|value| value.as_str()),
+            Some("gchat")
+        );
+        assert!(!temp.path().join("tui.json").exists());
+
+        std::fs::write(temp.path().join("themes/gchat.json"), "{}").unwrap();
+        install_gchat_opencode_theme(temp.path()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("themes/gchat.json")).unwrap(),
+            GCHAT_OPENCODE_THEME
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn real_pty_runs_a_shell_and_captures_output() {
@@ -999,11 +1136,18 @@ mod tests {
         let pair = pty_system.openpty(PtySize::default()).unwrap();
         let mut reader = pair.master.try_clone_reader().unwrap();
         let mut writer = pair.master.take_writer().unwrap();
-        let mut command = command_for_shell(&canonical_working_directory(&request.cwd).unwrap());
+        let tui_config = temp.path().join("gchat-tui.json");
+        let mut command = command_for_shell(
+            &canonical_working_directory(&request.cwd).unwrap(),
+            Some(&tui_config),
+        );
         command.env("PS1", "");
         let mut child = pair.slave.spawn_command(command).unwrap();
         drop(pair.slave);
         writer.write_all(b"printf '__GCHAT_PTY_OK__\\n'\r").unwrap();
+        writer
+            .write_all(b"printf '__GCHAT_TUI__%s\\n' \"$OPENCODE_TUI_CONFIG\"\r")
+            .unwrap();
         writer.write_all(b"exit\r").unwrap();
         writer.flush().unwrap();
         let mut output = String::new();
@@ -1011,6 +1155,8 @@ mod tests {
         let status = child.wait().unwrap();
         assert!(status.success());
         assert!(output.contains("__GCHAT_PTY_OK__"));
+        assert!(output.contains("__GCHAT_TUI__"));
+        assert!(output.contains("gchat-tui.json"));
         state.shutdown();
     }
 }

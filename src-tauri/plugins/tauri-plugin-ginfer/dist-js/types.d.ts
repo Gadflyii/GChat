@@ -12,15 +12,17 @@ export interface UnloadResult {
 }
 export type GinferConfig = {
     vision: boolean;
-    /** Speculative backend: `auto`, `none`, `mtp`, or `dflash`. */
+    /** Speculative backend: `auto`, `none`, or `dflash`. */
     spec: string;
+    /** Explicit DFlash2 window; 0 uses the model/server default. */
     draft_tokens: number;
-    /** KV-cache storage: `bf16` or `int8`; empty means the server default. */
+    /** DFlash2 tensor parallel degree; 0 uses automatic placement. */
+    draft_tp: number;
+    /** KV-cache storage: `auto`, `bf16`, `int8`, or `nvfp4`. */
     kv_dtype: string;
-    lm_head_draft: boolean;
     max_context: number;
-    /** Shared KV capacity: a number or `auto`; empty means follow max-context. */
-    kv_capacity: string;
+    /** Exact per-rank KV arena bytes, or `auto`. */
+    kv_arena_bytes: string;
     prefill_chunk: number;
     /** Valid range 1..8; 0 leaves the server default. */
     max_concurrency: number;

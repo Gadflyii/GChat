@@ -97,7 +97,7 @@ describe('ModelDetailPanel', () => {
     expect(screen.getByText(/^4.200$/)).toBeInTheDocument()
     expect(screen.getByText('77')).toBeInTheDocument()
     expect(screen.getByText('4B')).toBeInTheDocument()
-    expect(screen.getByText('GGUF')).toBeInTheDocument()
+    expect(screen.getByText('GINFER')).toBeInTheDocument()
     expect(screen.getByText('hub:context')).toBeInTheDocument()
     const details = screen.getByRole('heading', { name: 'hub:details' })
       .parentElement!

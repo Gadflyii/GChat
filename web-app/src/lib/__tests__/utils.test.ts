@@ -14,6 +14,9 @@ import {
 
 describe('getProviderLogo', () => {
   it('returns correct logo paths for known providers', () => {
+    expect(getProviderLogo('ginfer')).toBe(
+      '/images/model-provider/ginfer.png'
+    )
     expect(getProviderLogo('jan')).toBe('/images/model-provider/jan.png')
     expect(getProviderLogo('anthropic')).toBe(
       '/images/model-provider/anthropic.svg'

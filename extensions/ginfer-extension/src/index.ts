@@ -127,13 +127,13 @@ export default class ginfer_extension extends AIEngine {
   ): GinferConfig {
     const cfg = this.config ?? {}
     return {
-      vision: !!cfg.vision,
+      vision: cfg.vision !== false,
       spec: String(cfg.spec ?? 'auto'),
       draft_tokens: Number(cfg.draft_tokens) || 0,
-      kv_dtype: String(cfg.kv_dtype ?? ''),
-      lm_head_draft: !!cfg.lm_head_draft,
+      draft_tp: Number(cfg.draft_tp) || 0,
+      kv_dtype: String(cfg.kv_dtype ?? 'auto'),
       max_context: Number(perLoad?.max_context ?? cfg.max_context) || 0,
-      kv_capacity: String(cfg.kv_capacity ?? ''),
+      kv_arena_bytes: String(cfg.kv_arena_bytes ?? 'auto'),
       prefill_chunk: Number(cfg.prefill_chunk) || 0,
       max_concurrency: Number(cfg.max_concurrency) || 0,
       no_cuda_graph: !!cfg.no_cuda_graph,
