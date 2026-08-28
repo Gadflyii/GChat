@@ -17,24 +17,41 @@ title: "Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app 
   in-frame terminal. It *looks* like part of the app but *is* a raw PTY
   running the user's shell — GChat does not parse, host, or mediate the
   agent's UI. OpenCode is just a process inside it.
-  - Rust: new `core/terminal/` module on `portable-pty` (forkpty on Linux,
-    ConPTY on Windows). One PTY session held in app state with a bounded
-    ring buffer. Commands: `terminal_spawn(cols, rows, command?)`,
-    `terminal_write`, `terminal_resize`, `terminal_kill`,
-    `terminal_status` (running + buffered bytes); events:
-    `terminal_data`, `terminal_exited`. The shell is PowerShell on Windows
-    and `$SHELL`/bash on Linux; a command (e.g. `opencode`) is run inside
-    it.
-  - Web: `@xterm/xterm` + `@xterm/addon-fit` behind the Code tab
-    (`routes/code.tsx`). `xterm.onData → terminal_write`,
-    `terminal_data → xterm.write`, fit → `terminal_resize`. Navigating
-    away unmounts the view but the PTY keeps running; returning
-    re-attaches by reserializing the ring buffer.
-  - **Auto-start:** at app startup (web side, after the hardware gate
-    passes and OpenCode is installed + configured per the Launch page
-    state) the app calls `terminal_spawn` with `opencode` — the agent is
-    warm before the user ever opens the tab. No gate, no install, or no
-    config → no auto-spawn; the tab shows the setup state instead.
+  - Rust: new desktop-only `core/terminal/` module on `portable-pty`
+    (forkpty on Linux, ConPTY on Windows). A separately managed
+    `TerminalState` owns exactly one generation-tagged PTY session; it is not
+    folded into the unrelated application state. Commands attach an ordered
+    Tauri IPC `Channel`, spawn, write, resize, apply output flow control,
+    report status, and stop/restart the session. The shell is PowerShell on
+    Windows and `$SHELL`/bash on Linux; OpenCode is the default command within
+    that shell. App exit kills the child, closes the PTY, and waits for the
+    session threads so no coding-agent process is orphaned.
+  - Transport: PTY output is sent as generation- and sequence-tagged byte
+    frames over the ordered channel, not global Tauri events. The frontend
+    acknowledges parsed output at high/low watermarks so the bounded reader
+    queue propagates backpressure to the OS PTY. A bounded backend replay log
+    covers attachment races only. If that log has truncated, the backend says
+    that exact reconstruction is unavailable instead of replaying a byte tail
+    that may begin inside an ANSI escape sequence.
+  - Web: `@xterm/xterm` + `@xterm/addon-fit` render a persistent terminal host
+    owned by the root application layout, with `/code/` controlling its
+    visibility. `xterm.onData → terminal_write`, ordered channel frames →
+    `xterm.write`, and fit/resize → `terminal_resize`. The xterm instance stays
+    mounted while the user navigates, so its parser, alternate-screen, cursor,
+    and scrollback state remain intact without reconstructing a curses screen
+    from a truncated byte ring.
+  - Workspace: the PTY always receives an explicit canonical working
+    directory. It defaults to GChat's existing Agent workspace and the Code
+    header can select and persist another directory. Changing it requires an
+    explicit session restart; a live OpenCode process is never silently moved
+    between repositories.
+  - **Auto-start:** after the frontend channel is attached and a fresh
+    supported-hardware result is available, one root-level bootstrap owner
+    checks that OpenCode is installed and that `provider.gchat` is valid in the
+    existing OpenCode configuration. Only then does it start OpenCode. Missing
+    hardware, install, or configuration never triggers installation or rewrites
+    user files at startup; the Code tab shows the exact setup state and routes
+    configuration through the existing Integrations owner.
   - First-run wiring reuses `configure_opencode` (provider → loaded GChat
     model + `:1337/v1` + API key). Model load is not a prerequisite for
     the terminal itself; requests simply fail until a model is up.
@@ -47,7 +64,9 @@ title: "Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app 
   phase — the Launch page install remains the acquisition path (bundling
   the binary is a later, supply-chain-reviewed decision). A user who
   types directly in the frame gets a plain shell: the terminal is a
-  generic feature, OpenCode is its default payload.
+  generic feature, OpenCode is its default payload. Runtime dependencies are
+  `portable-pty` 0.9, `@xterm/xterm` 6.0, and `@xterm/addon-fit` 0.11; no
+  serializer or second agent UI is introduced.
 - **Owner:** @Gadflyii
 - **Links:** `2026-08-21-use-ginfer-as-the-sole-inference-backend-in-the-gchat-fork.md`,
   `2026-08-21-ginfer-sessions-route-through-the-1337-proxy.md`,
