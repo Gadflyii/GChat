@@ -2277,6 +2277,27 @@ pub struct AgentDetection {
     pub via_wsl: bool,
 }
 
+fn native_agent_available(detection: &AgentDetection) -> bool {
+    detection.installed && !detection.via_wsl
+}
+
+#[cfg(test)]
+mod native_agent_detection_tests {
+    use super::{native_agent_available, AgentDetection};
+
+    #[test]
+    fn a_wsl_only_executable_does_not_satisfy_a_native_install() {
+        assert!(!native_agent_available(&AgentDetection {
+            installed: true,
+            via_wsl: true,
+        }));
+        assert!(native_agent_available(&AgentDetection {
+            installed: true,
+            via_wsl: false,
+        }));
+    }
+}
+
 /// Probe whether a CLI binary is reachable on the native PATH (`which`/`where`).
 async fn detect_on_native_path(bin: &str) -> bool {
     let which_cmd = if cfg!(windows) { "where" } else { "which" };
@@ -2388,10 +2409,8 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
 ) -> bool {
     // winget itself (App Installer) must be present; it ships on Win10 1809+
     // mainline but not on LTSC / Server / stripped images.
-    if !detect_agent_installed("winget".to_string(), None)
-        .await
-        .installed
-    {
+    let winget = detect_agent_installed("winget".to_string(), None).await;
+    if !native_agent_available(&winget) {
         let _ = app_handle.emit(
             event,
             "npm not found and winget is unavailable - cannot auto-install Node.js.".to_string(),
@@ -2460,10 +2479,10 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
     }
 
     // winget adds the Node install dir to PATH; `detect_agent_installed`
-    // re-reads the registry PATH at runtime, so npm is found without a restart.
-    detect_agent_installed("npm".to_string(), None)
-        .await
-        .installed
+    // re-reads the registry PATH at runtime, so native npm is found without a
+    // restart. A WSL-only npm does not satisfy a native Windows install.
+    let npm = detect_agent_installed("npm".to_string(), None).await;
+    native_agent_available(&npm)
 }
 
 #[cfg(not(windows))]
@@ -2489,11 +2508,10 @@ pub async fn install_agent<R: Runtime>(
 
     // `detect_on_native_path` re-reads the registry PATH at runtime on Windows
     // so a Node/npm installed after the app launched (or present in the registry
-    // but not the GUI's snapshotted PATH) is found without an app restart.
-    if !detect_agent_installed(prereq.to_string(), None)
-        .await
-        .installed
-    {
+    // but not the GUI's snapshotted PATH) is found without an app restart. A
+    // prerequisite found only inside WSL cannot run a native installer.
+    let prerequisite = detect_agent_installed(prereq.to_string(), None).await;
+    if !native_agent_available(&prerequisite) {
         // For npm-based agents on Windows, try to auto-install Node.js (which
         // bundles npm) via winget before giving up, so the Launch flow works on
         // a fresh machine. Falls back to the actionable error when winget is

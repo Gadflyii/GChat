@@ -1,6 +1,8 @@
 import { Channel, invoke } from '@tauri-apps/api/core'
 import type {
   OpenCodeReadiness,
+  OpenCodeProvisionPhase,
+  OpenCodeProvisionRequest,
   TerminalEvent,
   TerminalSpawnRequest,
   TerminalStatus,
@@ -64,6 +66,86 @@ export function getOpenCodeReadiness(
   return invoke<OpenCodeReadiness>('opencode_readiness', {
     customPath: customPath || null,
   })
+}
+
+let activeOpenCodeProvision:
+  | { key: string; promise: Promise<OpenCodeReadiness> }
+  | undefined
+
+/**
+ * Own the Code tab's complete first-run path. The promise is shared while it
+ * is active because React StrictMode mounts effects twice in development; an
+ * installer must never be spawned twice.
+ */
+export function provisionOpenCode(
+  request: OpenCodeProvisionRequest,
+  onPhase?: (phase: OpenCodeProvisionPhase) => void
+): Promise<OpenCodeReadiness> {
+  // The key deliberately excludes credentials and proxy details. They remain
+  // only in the request object for the lifetime of the active operation.
+  const key = JSON.stringify({
+    customPath: request.customPath,
+    apiUrl: request.apiUrl,
+    model: request.model,
+  })
+  if (activeOpenCodeProvision) {
+    if (activeOpenCodeProvision.key === key) {
+      return activeOpenCodeProvision.promise
+    }
+    return activeOpenCodeProvision.promise
+      .catch(() => undefined)
+      .then(() => provisionOpenCode(request, onPhase))
+  }
+
+  const provision = async (): Promise<OpenCodeReadiness> => {
+    onPhase?.('checking')
+    let readiness = await getOpenCodeReadiness(request.customPath)
+
+    if (!readiness.installed || readiness.viaWsl) {
+      if (request.customPath) {
+        throw new Error(
+          `The configured OpenCode executable does not exist: ${request.customPath}`
+        )
+      }
+      onPhase?.('installing')
+      await invoke<void>('install_agent', {
+        agentId: 'opencode',
+        proxy: request.proxy,
+      })
+      readiness = await getOpenCodeReadiness()
+      if (!readiness.installed || readiness.viaWsl) {
+        throw new Error(
+          'OpenCode installation completed without a native executable on PATH.'
+        )
+      }
+    }
+
+    if (readiness.ready) return readiness
+    const model = request.model?.trim()
+    if (!model) return readiness
+
+    onPhase?.('configuring')
+    await invoke<void>('configure_opencode', {
+      apiUrl: request.apiUrl,
+      model,
+      apiKey: request.apiKey || null,
+    })
+    readiness = await getOpenCodeReadiness(request.customPath)
+    if (!readiness.ready) {
+      throw new Error(
+        `OpenCode did not accept the GChat provider configuration at ${readiness.configPath}.`
+      )
+    }
+    return readiness
+  }
+
+  const promise = provision().finally(() => {
+    if (activeOpenCodeProvision?.promise === promise) {
+      activeOpenCodeProvision = undefined
+    }
+  })
+  activeOpenCodeProvision = { key, promise }
+  return promise
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {

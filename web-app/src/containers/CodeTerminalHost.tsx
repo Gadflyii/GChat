@@ -2,12 +2,10 @@ import '@xterm/xterm/css/xterm.css'
 
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal, type ITheme } from '@xterm/xterm'
-import { Link } from '@tanstack/react-router'
 import {
   IconAlertTriangle,
   IconCode,
   IconLoader2,
-  IconPlayerPlay,
   IconRefresh,
   IconSquare,
 } from '@tabler/icons-react'
@@ -23,8 +21,10 @@ import {
 import { AgentWorkspaceSelect } from '@/containers/AgentWorkspaceSelect'
 import HeaderPage from '@/containers/HeaderPage'
 import { Button } from '@/components/ui/button'
-import { route } from '@/constants/routes'
+import { useAppState } from '@/hooks/useAppState'
 import { useHardware } from '@/hooks/useHardware'
+import { useLocalApiServer } from '@/hooks/useLocalApiServer'
+import { useProxyConfig } from '@/hooks/useProxyConfig'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTheme } from '@/hooks/useTheme'
 import { useTranslation } from '@/i18n/react-i18next-compat'
@@ -37,8 +37,8 @@ import { isAndroid, isIOS, isPlatformTauri } from '@/lib/platform/utils'
 import {
   attachTerminal,
   base64ToBytes,
-  getOpenCodeReadiness,
   getTerminalStatus,
+  provisionOpenCode,
   resizeTerminal,
   setTerminalFlow,
   spawnTerminal,
@@ -49,6 +49,7 @@ import {
 import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useLaunchSettings } from '@/stores/launch-settings-store'
 import type {
+  OpenCodeProvisionPhase,
   OpenCodeReadiness,
   TerminalEvent,
   TerminalStatus,
@@ -116,12 +117,32 @@ function terminalCellPixels(
   }
 }
 
+function currentInstallerProxy() {
+  const { proxyEnabled, proxyUrl, proxyUsername, proxyPassword, noProxy } =
+    useProxyConfig.getState()
+  if (!proxyEnabled || !proxyUrl.trim()) return undefined
+  return {
+    url: proxyUrl.trim(),
+    username: proxyUsername.trim() || undefined,
+    password: proxyPassword || undefined,
+    no_proxy: noProxy.trim() || undefined,
+  }
+}
+
 export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   const { t } = useTranslation()
   const serviceHub = useServiceHub()
   const isDark = useTheme((state) => state.isDark)
   const hardwareReady = useHardware((state) => state.hardwareReady)
   const hardwareData = useHardware((state) => state.hardwareData)
+  const activeModel = useAppState((state) => state.activeModels[0])
+  const {
+    serverHost,
+    serverPort,
+    apiPrefix,
+    apiKey,
+    defaultModelLocalApiServer,
+  } = useLocalApiServer()
   const configuredWorkspace = useCodeTerminalStore((state) => state.workspace)
   const setConfiguredWorkspace = useCodeTerminalStore(
     (state) => state.setWorkspace
@@ -142,6 +163,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   const [defaultWorkspace, setDefaultWorkspace] = useState<string>()
   const [status, setStatus] = useState<TerminalStatus>(DEFAULT_STATUS)
   const [readiness, setReadiness] = useState<OpenCodeReadiness>()
+  const [provisionPhase, setProvisionPhase] = useState<OpenCodeProvisionPhase>()
   const [readinessRefresh, setReadinessRefresh] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
@@ -360,25 +382,55 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       return
     }
     let cancelled = false
+    const connectHost = serverHost === '0.0.0.0' ? '127.0.0.1' : serverHost
+    const base = `http://${connectHost}:${serverPort}`
+    const apiUrl = `${base}${apiPrefix}`
+    const model = activeModel ?? defaultModelLocalApiServer?.model
+
     setReadiness(undefined)
-    void getOpenCodeReadiness(customOpenCodePath)
+    setProvisionPhase('checking')
+    setBusy(true)
+    setError(undefined)
+    void provisionOpenCode(
+      {
+        customPath: customOpenCodePath || undefined,
+        apiUrl,
+        model,
+        apiKey: apiKey || undefined,
+        proxy: currentInstallerProxy(),
+      },
+      (phase) => {
+        if (!cancelled) setProvisionPhase(phase)
+      }
+    )
       .then((next) => {
         if (!cancelled) setReadiness(next)
       })
       .catch((reason) => {
         if (!cancelled) setError(String(reason))
       })
+      .finally(() => {
+        if (!cancelled) {
+          setBusy(false)
+          setProvisionPhase(undefined)
+        }
+      })
     return () => {
       cancelled = true
     }
   }, [
     attached,
+    activeModel,
+    apiKey,
+    apiPrefix,
     customOpenCodePath,
+    defaultModelLocalApiServer?.model,
     desktopTerminalAvailable,
     hardware.supported,
     hardwareReady,
     readinessRefresh,
-    visible,
+    serverHost,
+    serverPort,
   ])
 
   const startSession = useCallback(async () => {
@@ -478,6 +530,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   const running = status.phase === 'running' || status.phase === 'stopping'
   const workspaceChanged =
     running && Boolean(workspace) && status.cwd !== workspace
+  const configuredModel = activeModel ?? defaultModelLocalApiServer?.model
   const setupState = !desktopTerminalAvailable
     ? 'desktop'
     : !hardwareReady
@@ -488,7 +541,9 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
           ? 'checking'
           : readiness.ready
             ? undefined
-            : readiness.reason
+            : !configuredModel
+              ? 'model_unavailable'
+              : readiness.reason
 
   return (
     <section
@@ -582,30 +637,30 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
                 {setupState === 'desktop'
                   ? t('code:desktopOnly')
                   : setupState === 'checking' || busy
-                    ? t('code:checking')
+                    ? provisionPhase === 'installing'
+                      ? t('code:installing')
+                      : provisionPhase === 'configuring'
+                        ? t('code:configuring')
+                        : t('code:checking')
                     : setupState === 'hardware'
                       ? hardware.supported
                         ? t('code:unsupportedHardware')
                         : hardware.reason
-                      : setupState === 'wsl_only'
-                        ? t('code:wslOnly')
-                        : setupState === 'invalid_configuration'
-                          ? t('code:invalidConfiguration')
-                          : setupState === 'missing_configuration'
-                            ? t('code:missingConfiguration')
-                            : t('code:notInstalled')}
+                      : setupState === 'model_unavailable'
+                        ? t('code:modelUnavailable')
+                        : setupState === 'wsl_only'
+                          ? t('code:wslOnly')
+                          : setupState === 'invalid_configuration'
+                            ? t('code:invalidConfiguration')
+                            : setupState === 'missing_configuration'
+                              ? t('code:missingConfiguration')
+                              : t('code:notInstalled')}
               </p>
               {!busy &&
                 setupState !== 'checking' &&
                 setupState !== 'hardware' &&
                 setupState !== 'desktop' && (
-                  <div className="mt-5 flex justify-center gap-2">
-                    <Button asChild>
-                      <Link to={route.launch.index}>
-                        <IconPlayerPlay />
-                        {t('code:openIntegrations')}
-                      </Link>
-                    </Button>
+                  <div className="mt-5 flex justify-center">
                     <Button
                       variant="outline"
                       onClick={() => setReadinessRefresh((value) => value + 1)}

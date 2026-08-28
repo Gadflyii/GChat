@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   terminalConstructed: vi.fn(),
   attachTerminal: vi.fn(),
   spawnTerminal: vi.fn(),
-  getOpenCodeReadiness: vi.fn(),
+  provisionOpenCode: vi.fn(),
   setTerminalFlow: vi.fn(),
   writeTerminal: vi.fn(),
   resizeTerminal: vi.fn(),
@@ -60,7 +60,7 @@ vi.mock('@xterm/addon-fit', () => ({
 vi.mock('@/services/terminal/tauri', () => ({
   attachTerminal: mocks.attachTerminal,
   spawnTerminal: mocks.spawnTerminal,
-  getOpenCodeReadiness: mocks.getOpenCodeReadiness,
+  provisionOpenCode: mocks.provisionOpenCode,
   setTerminalFlow: mocks.setTerminalFlow,
   writeTerminal: mocks.writeTerminal,
   resizeTerminal: mocks.resizeTerminal,
@@ -119,6 +119,35 @@ vi.mock('@/hooks/useHardware', () => {
   }
 })
 
+const runtimeState = vi.hoisted(() => ({ activeModels: ['qwen'] as string[] }))
+
+vi.mock('@/hooks/useAppState', () => ({
+  useAppState: (selector: (value: typeof runtimeState) => unknown) =>
+    selector(runtimeState),
+}))
+
+vi.mock('@/hooks/useLocalApiServer', () => ({
+  useLocalApiServer: () => ({
+    serverHost: '127.0.0.1',
+    serverPort: 1337,
+    apiPrefix: '/v1',
+    apiKey: 'gchat',
+    defaultModelLocalApiServer: null,
+  }),
+}))
+
+vi.mock('@/hooks/useProxyConfig', () => ({
+  useProxyConfig: {
+    getState: () => ({
+      proxyEnabled: false,
+      proxyUrl: '',
+      proxyUsername: '',
+      proxyPassword: '',
+      noProxy: '',
+    }),
+  },
+}))
+
 vi.mock('@/hooks/useTheme', () => {
   const state = { isDark: true }
   const useTheme = Object.assign(
@@ -162,19 +191,16 @@ vi.mock('@/components/ui/button', () => ({
     size?: string
   }) => <button {...props}>{children}</button>,
 }))
-vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a href="/launch/">{children}</a>,
-}))
-
 describe('CodeTerminalHost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    runtimeState.activeModels = ['qwen']
     mocks.attachTerminal.mockResolvedValue({
       phase: 'idle',
       generation: 0,
       replayComplete: true,
     })
-    mocks.getOpenCodeReadiness.mockResolvedValue({
+    mocks.provisionOpenCode.mockResolvedValue({
       ready: true,
       installed: true,
       configured: true,
@@ -195,36 +221,41 @@ describe('CodeTerminalHost', () => {
 
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
-    expect(mocks.getOpenCodeReadiness).toHaveBeenCalledTimes(1)
+    expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
     expect(mocks.attachTerminal.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.spawnTerminal.mock.invocationCallOrder[0]
     )
 
     rerender(<CodeTerminalHost visible />)
-    await waitFor(() =>
-      expect(mocks.getOpenCodeReadiness).toHaveBeenCalledTimes(2)
-    )
 
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
+    expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
   })
 
-  it('routes missing setup to Integrations without starting a PTY', async () => {
-    mocks.getOpenCodeReadiness.mockResolvedValue({
+  it('installs in the background and waits for a model before configuring', async () => {
+    runtimeState.activeModels = []
+    mocks.provisionOpenCode.mockResolvedValue({
       ready: false,
-      installed: false,
+      installed: true,
       configured: false,
       viaWsl: false,
-      configPath: '/home/user/.config/opencode/opencode.json',
-      reason: 'not_installed',
+      configPath: '/home/user/.config/opencode/opencode.jsonc',
+      reason: 'missing_configuration',
     })
 
     render(<CodeTerminalHost visible />)
 
-    expect(await screen.findByText('code:notInstalled')).toBeInTheDocument()
-    expect(screen.getByText('code:openIntegrations')).toBeInTheDocument()
+    expect(await screen.findByText('code:modelUnavailable')).toBeInTheDocument()
+    expect(mocks.provisionOpenCode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiUrl: 'http://127.0.0.1:1337/v1',
+        model: undefined,
+      }),
+      expect.any(Function)
+    )
     expect(mocks.spawnTerminal).not.toHaveBeenCalled()
   })
 })

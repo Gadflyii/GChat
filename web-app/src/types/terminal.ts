@@ -60,6 +60,21 @@ export type OpenCodeReadiness = {
   reason?: OpenCodeReadinessReason
 }
 
+export type OpenCodeProvisionPhase = 'checking' | 'installing' | 'configuring'
+
+export type OpenCodeProvisionRequest = {
+  customPath?: string
+  apiUrl: string
+  model?: string
+  apiKey?: string
+  proxy?: {
+    url: string
+    username?: string
+    password?: string
+    no_proxy?: string
+  }
+}
+
 export type TerminalSpawnRequest = {
   cwd: string
   rows: number
