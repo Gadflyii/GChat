@@ -63,7 +63,7 @@ export function ChatAgentModeSwitch({
               <span
                 data-testid="agent-mode-attention-dot"
                 aria-hidden="true"
-                className="absolute right-2 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-blue-500"
+                className="absolute right-2 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-primary"
               />
             )}
           </button>

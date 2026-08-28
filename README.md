@@ -1,371 +1,311 @@
-<img src="assets/logo.png" width="80" alt="GChat" />
-
 # GChat
 
-Local AI app and inference engine for agents. Run models locally with [ginfer](https://github.com/Gadflyii/ginfer) — private, on your machine.
-
-<a href="https://github.com/Gadflyii/gchat/stargazers"><img src="https://img.shields.io/github/stars/Gadflyii/gchat?style=flat&logo=github&label=Stars&color=f5c542" alt="Stars" /></a>&nbsp;
-<a href="https://github.com/Gadflyii/gchat/network/members"><img src="https://img.shields.io/github/forks/Gadflyii/gchat?style=flat&logo=github&label=Forks&color=4ac1f2" alt="Forks" /></a>&nbsp;
-<a href="https://github.com/Gadflyii/gchat/graphs/contributors"><img src="https://img.shields.io/github/contributors/Gadflyii/gchat?style=flat&logo=github&label=Contributors&color=ff69b4" alt="Contributors" /></a>&nbsp;
-<a href="https://github.com/Gadflyii/gchat/commits/main"><img src="https://img.shields.io/github/last-commit/Gadflyii/gchat?style=flat&label=Last%20Commit&color=blueviolet" alt="Last Commit" /></a>&nbsp;
-<img src="https://img.shields.io/badge/Built_with-Tauri-FFC131?style=flat&logo=tauri&logoColor=white" alt="Tauri" />&nbsp;
-<img src="https://img.shields.io/badge/Runtime-Node.js_≥20-339933?style=flat&logo=nodedotjs&logoColor=white" alt="Node.js" />
-
-[Models on Hugging Face](https://huggingface.co/collections/GadflyII/ginfer-models) · [Bug Reports](https://github.com/Gadflyii/gchat/issues)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/gchat-lockup-reversed.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/gchat-lockup.png">
+    <img alt="GChat by Sectile Research Laboratories" src="assets/gchat-lockup.png" width="520">
+  </picture>
+</p>
 
 <p align="center">
-  <img src="assets/preview.png" width="100%" alt="GChat — local AI chat in action" />
+  <strong>The local desktop workspace for GInfer chat, agents, tools, and coding.</strong>
+</p>
+
+<p align="center">
+  <a href="https://sectilelabs.ai"><img alt="Sectile Research Laboratories" src="https://img.shields.io/badge/Sectile%20Research%20Laboratories-0b6b6b?style=flat-square"></a>
+  <img alt="Windows and Linux release targets" src="https://img.shields.io/badge/release%20targets-Windows%20%7C%20Linux-20242b?style=flat-square">
+  <img alt="GInfer engine" src="https://img.shields.io/badge/engine-GInfer-0b6b6b?style=flat-square">
+  <img alt="Tauri 2" src="https://img.shields.io/badge/desktop-Tauri%202-24c8db?style=flat-square&logo=tauri&logoColor=white">
+  <img alt="React 19" src="https://img.shields.io/badge/UI-React%2019-087ea4?style=flat-square&logo=react&logoColor=white">
+  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-d97706?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="#at-a-glance">Scope</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#agent-workflows">Agents</a> ·
+  <a href="#code-with-local-models">Code</a> ·
+  <a href="#local-api">Local API</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#release-status">Releases</a> ·
+  <a href="#about-sectile-research-laboratories">About</a>
 </p>
 
 ---
-### 📦 Download
 
-Releases are in progress — build from source with the instructions below.
+GChat is the desktop client we are building at Sectile Research Laboratories around
+[GInfer](https://github.com/Gadflyii/ginfer). It owns model acquisition, engine lifecycle,
+conversations, tool calling, agent workflows, coding-agent integration, and the local API surface.
+GInfer remains the single local inference backend.
 
----
+The first Sectile release is in development. The current tree already contains the managed GInfer
+runtime, chat and tool surfaces, the autonomous Rust agent, skills and workspace controls, model
+downloads, external coding-agent setup, and `gchat-cli`. The embedded Code workspace, visual loop
+builder, dispatcher, Windows GInfer integration, and matched installers are still being completed.
 
-### 🔌 Use It as an API
+## At a glance
 
-GChat runs an **OpenAI-compatible server at `http://localhost:1337/v1`** — a drop-in replacement for the OpenAI SDK. Load a model in the app, then point any client at it:
+| | GChat release scope |
+| --- | --- |
+| **Desktop** | Tauri 2 shell with a React interface |
+| **Inference** | GInfer only; one resident `.ginfer` model behind the application |
+| **Conversations** | Streaming chat, reasoning, vision where the model permits it, tool calling, artifacts, projects |
+| **Agents** | Bounded autonomous loop, skills, local workspace, approvals, attachments, tools, cancellation |
+| **Coding** | External coding-agent configuration and `gchat-cli` today; embedded OpenCode terminal in development |
+| **Local API** | OpenAI-compatible facade at `http://127.0.0.1:1337/v1` |
+| **Models** | Curated version-3 `.ginfer` packages with install and local lifecycle management |
+| **Release targets** | Windows 10/11 x64 and Linux x86-64; first matched installers are in development |
+| **Hardware** | NVIDIA CUDA, with GInfer packages admitted by model, storage profile, SM image, and topology |
+| **Data** | Conversations, settings, model state, and workspaces remain local by default |
+
+## Architecture
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Geist, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif","fontSize":"14px","background":"#fafbfc","primaryColor":"#f1f3f5","primaryTextColor":"#0a0c0f","primaryBorderColor":"#0b6b6b","secondaryColor":"#fafbfc","secondaryTextColor":"#0a0c0f","secondaryBorderColor":"#e3e5e8","tertiaryColor":"#fafbfc","tertiaryTextColor":"#5a6068","tertiaryBorderColor":"#e3e5e8","lineColor":"#5a6068","textColor":"#0a0c0f","clusterBkg":"#fafbfc","clusterBorder":"#e3e5e8","edgeLabelBackground":"#fafbfc"},"flowchart":{"curve":"linear","nodeSpacing":30,"rankSpacing":44,"padding":14}}}%%
+flowchart LR
+    U["Chat · Agent · Code"] --> D["GChat desktop"]
+    M["Model manager"] --> D
+    S["Skills · tools · workspaces"] --> D
+
+    D --> P["Managed GInfer process"]
+    P --> G["NVIDIA GPU"]
+
+    D --> A["OpenAI-compatible :1337/v1"]
+    E["OpenCode · Codex · IDEs · SDKs"] --> A
+    A --> P
+
+    H["Sectile .ginfer packages"] --> M
+
+    classDef ink fill:#0a0c0f,stroke:#0a0c0f,color:#fafbfc;
+    classDef accent fill:#fafbfc,stroke:#0b6b6b,stroke-width:1.5px,color:#0a0c0f;
+    classDef quiet fill:#f1f3f5,stroke:#e3e5e8,color:#5a6068;
+    class U,E,S,H quiet;
+    class D,A,M accent;
+    class P,G ink;
+```
+
+The desktop application and command-line client share the same GChat data root. A model downloaded
+through the UI is available to `gchat-cli`; engine ownership and process state stay explicit so two
+frontends do not silently load competing copies of the same model.
+
+## Desktop experience
+
+### Managed GInfer
+
+GChat probes the host before exposing local inference, installs and drives the GInfer extension,
+starts `ginfer-serve`, waits for readiness, and presents model load failures as product state. The
+application does not contain a llama.cpp, MLX, or generic fallback route. A host outside the current
+NVIDIA/CUDA contract receives a clear unsupported state instead of falling through to a different
+engine.
+
+### Model manager
+
+The model pipeline is limited to curated `.ginfer` packages. GChat owns catalog presentation,
+download progress, pause and resume, storage, installation state, and local lifecycle. GInfer owns
+artifact validation and execution; the desktop client does not quantize, split, or repack weights.
+
+### Chat and tools
+
+Regular conversations stream through the same local engine used by the API and agent surfaces.
+GChat preserves reasoning content, supports image input on qualified model routes, renders tool
+activity, manages MCP connections, and provides artifact previews for generated HTML and code.
+
+## Agent workflows
+
+The in-process agent is a separate bounded execution route with a grammar-constrained tool
+protocol. It maintains a per-thread workspace, streams activity over Tauri IPC, and stops on reply,
+finish, cancellation, failure, breaker, or the configured step limit.
+
+Current tool families include:
+
+- filesystem reads, writes, edits, diffs, archives, and trash;
+- Git inspection;
+- guarded shell and process operations;
+- HTTP, web search, and page extraction;
+- clipboard and desktop notifications;
+- vision description when the active GInfer model is vision-capable;
+- skill discovery and execution.
+
+Mutating or stateful work is serialized, pure reads may run concurrently, and dangerous operations
+pass through path confinement, shell guards, and approval policy. The release target adds a visual
+loop builder and dispatcher on top of this execution core; those surfaces are not yet complete.
+
+## Code with local models
+
+GChat can detect, install, configure, and launch external coding agents against the local API.
+OpenCode, Codex, Claude Code, Cline, Goose, OpenHands, Kilo Code, and other supported clients share
+the model already managed by GChat rather than starting a second inference backend.
+
+The Code tab is in development. It will embed a persistent PTY running the real OpenCode TUI, so
+navigation does not terminate the coding session and GChat does not reimplement an upstream agent
+interface. Until that surface lands, the Launch page and `gchat-cli launch` provide the supported
+entry points.
 
 ```bash
-curl http://localhost:1337/v1/chat/completions \
-  -H "Content-Type: application/json" \
+gchat-cli models list
+gchat-cli launch opencode
+```
+
+## Local API
+
+The desktop facade listens on loopback by default:
+
+```bash
+curl http://127.0.0.1:1337/v1/chat/completions \
+  -H 'content-type: application/json' \
   -d '{
-    "model": "<model-id-loaded-in-gchat>",
-    "messages": [{ "role": "user", "content": "Say hello in one word" }]
+    "model": "<loaded-ginfer-model>",
+    "messages": [{"role": "user", "content": "Summarize the active task."}]
   }'
 ```
+
+OpenAI-compatible SDKs use the same endpoint:
 
 ```python
 from openai import OpenAI
 
-# GChat is OpenAI API-compatible — only the base_url changes.
-client = OpenAI(base_url="http://localhost:1337/v1", api_key="not-needed")
-
-resp = client.chat.completions.create(
-    model="<model-id-loaded-in-gchat>",
-    messages=[{"role": "user", "content": "Say hello in one word"}],
+client = OpenAI(base_url="http://127.0.0.1:1337/v1", api_key="gchat")
+response = client.chat.completions.create(
+    model="<loaded-ginfer-model>",
+    messages=[{"role": "user", "content": "Draft a test plan."}],
 )
-print(resp.choices[0].message.content)
+print(response.choices[0].message.content)
 ```
 
-Bound to `127.0.0.1` by default; set `host: 0.0.0.0` to expose it on your LAN. Works with any agent, CLI, or IDE plugin that speaks the OpenAI API — see [Launch With](#-launch-with) below.
+The server stays bound to `127.0.0.1` unless the user explicitly enables LAN access. Standard
+OpenAI request and streaming behavior is treated as an external compatibility contract.
 
----
+## Command-line client
 
-### ✨ Features
-
-**Local models**
-
-- Single inference engine, [ginfer](https://github.com/Gadflyii/ginfer) — C++/CUDA, purpose-built for the `.ginfer` model format
-- Models from the curated [GadflyII/ginfer-models](https://huggingface.co/collections/GadflyII/ginfer-models) Hugging Face collection (int-autoround and NVFP4 quantizations), with the HF download pipeline narrowed to `.ginfer` artifacts
-- Automatic reasoning-context tracking for chain-of-thought models
-- Auto context-window expansion with overflow notifications
-- Local model cache under the data folder (`<data>/ginfer/models/`)
-
-**Cloud models**
-
-- Built-in providers: OpenAI, Anthropic, Mistral, Groq, MiniMax, Qwen, Moonshot
-- Bring your own key, switch model per chat, mix local and cloud freely
-
-**Tools & integrations**
-
-- One-click agent launch — launch coding agents like Claude Code, Codex CLI, Cline, OpenCode, Droid, Goose, OpenHands, Copilot CLI, Kilo Code and Zed in one click from the Integrations tab
-- Artifacts — live preview panel for HTML/CSS/JS code with copy, download and print
-- Connect multiple [MCP](https://modelcontextprotocol.io/) servers — bring your own tools, file access, web search
-- Custom assistants with per-assistant system prompts
-- Projects with conversation tree view in the sidebar
-
-**Local API**
-
-- OpenAI-compatible server at `http://localhost:1337/v1` — drop-in replacement for the OpenAI SDK
-- Works with any agent, CLI, or IDE plugin that speaks the OpenAI API
-- Bound to `127.0.0.1` by default; set `host: 0.0.0.0` to expose on LAN
-
-**Privacy**
-
-- Everything runs locally when you want it to — local server is loopback-only by default
-- Your conversations and keys stay on your machine
-
----
-
-### ⚙️ Inference Engine
-
-One engine under the hood, exposed through the OpenAI-compatible API at `http://localhost:1337/v1`:
-
-- **[ginfer](https://github.com/Gadflyii/ginfer)** — our C++/CUDA inference engine. Models ship as `.ginfer` containers from the [GadflyII/ginfer-models](https://huggingface.co/collections/GadflyII/ginfer-models) collection, and `ginfer-serve` (an OpenAI-compatible HTTP server) does the serving. The app drives `ginfer-serve`'s process lifecycle through `extensions/ginfer-extension/` (provider `ginfer`) and `src-tauri/plugins/tauri-plugin-ginfer/`.
-
-Hardware: **Linux x86_64 with an NVIDIA GPU** — CUDA 13.1 and compute capability SM 86 / 89 / 120a. The app probes the GPU on first launch and surfaces a clear "unsupported" state everywhere else; a Windows port of ginfer is planned.
-
----
-
-### 🚀 Launch With
-
-GChat runs an OpenAI-compatible server at `http://localhost:1337/v1`, so **any agent, CLI, IDE plugin, or app that speaks the OpenAI API can run on top of your local models** — no extra glue needed. Just point its base URL at GChat and you're done.
-
-A few projects already ship first-class support with their own setup docs:
-
-| Tool | What it is | Setup |
-| --- | --- | --- |
-| **[OpenCode](https://opencode.ai/)** | Open-source TUI coding agent. Add GChat as a local provider in `opencode.json`. | [Setup&nbsp;guide&nbsp;→](https://opencode.ai/docs/providers/#atomic-chat) |
-| **[Goose](https://github.com/block/goose)** | Open-source extensible AI agent (CLI, desktop, API). | [Setup&nbsp;guide&nbsp;→](https://goose-docs.ai/docs/getting-started/providers/#local-llms) |
-| **[nanobot](https://github.com/HKUDS/nanobot)** | Ultra-lightweight personal AI agent with chat channels, MCP, and WebUI. | [Repo&nbsp;→](https://github.com/HKUDS/nanobot) |
-| **[nanoclaw](https://github.com/qwibitai/nanoclaw)** | Containerized agent runtime that calls GChat as an MCP tool. | [Skill&nbsp;guide&nbsp;→](https://github.com/qwibitai/nanoclaw/blob/main/.claude/skills/add-atomic-chat-tool/SKILL.md) |
-| **[OpenClaude](https://github.com/Gitlawb/openclaude)** | Open-source coding-agent CLI for cloud and local models. Lists GChat as a supported provider. | [Providers&nbsp;list&nbsp;→](https://github.com/Gitlawb/openclaude#supported-providers) |
-| **[Kilo Code](https://kilo.ai/)** | Open-source AI coding agent for VS Code, JetBrains, and CLI. Ships with first-class GChat provider support and auto-discovery. | [Setup&nbsp;guide&nbsp;→](https://kilo.ai/docs/ai-providers/atomic-chat) |
-| **[Hermes Desktop](https://github.com/fathah/hermes-desktop)** | Native desktop companion for Hermes Agent. Includes a GChat local preset at `http://localhost:1337/v1`. | [Repo&nbsp;→](https://github.com/fathah/hermes-desktop) |
-| **[Hermes Workspace](https://github.com/outsourc-e/hermes-workspace)** | Local-first agent workspace built on Nous Research's Hermes. Uses GChat as its inference backend. | [Repo&nbsp;→](https://github.com/outsourc-e/hermes-workspace) |
-
-> Built something that runs on GChat? [Open a PR](https://github.com/Gadflyii/gchat/pulls) and we'll add it here.
-
----
-
-### 🛠️ Build from Source
-
-#### Prerequisites
-
-- Node.js ≥ 20.0.0
-- Yarn ≥ 4.5.3
-- Make ≥ 3.81
-- Rust (for Tauri)
-- (Apple Silicon) MetalToolchain `xcodebuild -downloadComponent MetalToolchain`
-
-#### Run with Make
+`gchat-cli` uses the same model directory and engine integration as the desktop application.
 
 ```bash
-git clone https://github.com/Gadflyii/gchat
+# List installed chat packages.
+gchat-cli models list
+
+# Load a model and expose it through a standalone local endpoint.
+gchat-cli serve <model-id>
+
+# Load a model, configure a supported coding agent, and launch it.
+gchat-cli launch opencode
+
+# Inspect the desktop application's local API server.
+gchat-cli server status
+```
+
+Standalone `gchat-cli serve` defaults to port `6767`; the desktop facade defaults to port `1337`.
+
+## Quick start
+
+### Development prerequisites
+
+- Node.js 20 or newer;
+- Yarn 4.5.3;
+- Rust and the Tauri 2 platform prerequisites;
+- GNU Make;
+- a supported NVIDIA/CUDA host for live GInfer inference.
+
+The deterministic frontend and Rust checks do not require a model.
+
+### Build and run
+
+```bash
+git clone https://github.com/sectilelabs/gchat.git
 cd gchat
+
 make dev
 ```
 
-This handles everything: installs dependencies, builds core components, and launches the app.
+After the first setup, `yarn dev` runs the normal hot loop.
 
-**Available make targets:**
-
-- `make dev` — full development setup and launch
-- `make build` — production build
-- `make test` — run tests and linting
-- `make clean` — delete everything and start fresh
-
-#### Manual Commands
+### Verify
 
 ```bash
-yarn install
-yarn build:tauri:plugin:api
-yarn build:core
-yarn build:extensions
-yarn dev
+make verify-fast
+make verify
 ```
 
----
+`make verify-fast` runs lint, TypeScript checks, quality guards, Vitest, and the critical coverage
+floors. `make verify` adds every Rust suite supported by the current platform.
 
-### 💻 System Requirements
+## Release status
 
-- **Linux**: x86_64, glibc ≥ 2.35 (Ubuntu 22.04+, Debian 12+, Fedora 40+, Arch, Mint, Pop!_OS) with an **NVIDIA GPU** — CUDA 13.1 driver (581.15+) and compute capability SM 86 / 89 / 120a (e.g. RTX 30/40/50-series, H100). Without a qualifying GPU the app surfaces an unsupported-hardware state and local inference is unavailable.
-- **Windows**: 10/11 x64 — supported once the ginfer Windows port ships.
-- Other platforms (macOS, mobile): not supported by the ginfer engine.
+The first Sectile distribution is being prepared as a matched set:
 
----
+| Channel | Release deliverable |
+| --- | --- |
+| **Windows** | Native Windows 10/11 x64 installer with GChat, GInfer, local server, CLI, and model manager |
+| **Linux** | Native x86-64 AppImage with the same managed engine and application surfaces |
+| **GInfer packages** | Architecture-specific engine builds matched to the supported NVIDIA SM families |
+| **Model packages** | Version-3 `.ginfer` artifacts distributed separately from the application |
 
-### 🐧 Running on Linux
+Windows remains gated until the native GInfer port and its packaged lifecycle pass the release
+matrix. Linux is the current development host. Installer links will appear when the complete
+application, engine, and model contract is ready; the README does not present placeholder downloads
+as released assets.
 
-GChat ships as a single self-contained `.AppImage` — no installer, no root:
+## Data and security
 
-```bash
-chmod +x GChat_*_amd64.AppImage
-./GChat_*_amd64.AppImage
-```
+- The local API is loopback-only by default.
+- Conversations, settings, agent sessions, and workspaces are stored under the GChat data root.
+- Model packages live under `<data>/ginfer/models/`.
+- Agent paths are canonicalized and confined to the active workspace unless a scoped approval
+  allows the exact outside operation.
+- Shell commands pass through allow, approval-required, or hard-block policy before execution.
+- Attachments are staged into bounded turn-local storage; source paths and base64 payloads are not
+  retained in the durable transcript.
 
-If prompted about FUSE on first launch: `sudo apt install fuse libfuse2` (Debian/Ubuntu) or `sudo dnf install fuse fuse-libs` (Fedora). The NVIDIA GPU (CUDA 13.1, SM 86/89/120a) is auto-detected on first launch; only `.ginfer` models run on GChat.
+## Product boundaries
 
----
+GChat owns the desktop experience, application server facade, model discovery and downloads,
+conversations, tools, agents, coding integrations, and local workflow state. GInfer owns model
+loading, K/V state, scheduling, CUDA execution, speculative decoding, and protocol serving.
+Quantization, calibration, conversion, TP partitioning, and model-package production remain outside
+the desktop application.
 
-### 🧯 Troubleshooting
+## Documentation
 
-If something isn't working:
+- [Development workflow](DEVELOP.md)
+- [Contributing](CONTRIBUTING.md)
+- [Engineering decisions](docs/decisions/INDEX.md)
+- [Agent architecture](src-tauri/src/core/agent/ARCHITECTURE.md)
+- [GInfer serving contract](https://github.com/Gadflyii/ginfer/blob/main/docs/serving.md)
 
-1. Copy your error logs and system specs
-2. Open an issue on [GitHub](https://github.com/Gadflyii/gchat/issues)
+## About Sectile Research Laboratories
 
----
+Sectile Research Laboratories develops and licenses AI technology. The work spans a model
+architecture, training platform, inference engine, agent harness, and middleware for rules,
+routing, logging, and compliance. GChat is the local user and agent workspace for that stack.
 
-### 👥 Contributors
+Sectile is not an AI service provider. Commercial engagement is through architecture licensing,
+joint development, and professional services.
 
-GChat is built by a small core team with contributions from the upstream projects it grew out of. Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started.
+- Web: [sectilelabs.ai](https://sectilelabs.ai)
+- Partnerships: [partners@sectilelabs.ai](mailto:partners@sectilelabs.ai)
 
-<a href="https://github.com/Vect0rM"><img src="https://images.weserv.nl/?url=https://github.com/Vect0rM.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Vect0rM" /></a>
-<a href="https://github.com/dtorey-d"><img src="https://images.weserv.nl/?url=https://github.com/dtorey-d.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="dtorey-d" /></a>
-<a href="https://github.com/danyurkin"><img src="https://images.weserv.nl/?url=https://github.com/danyurkin.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="danyurkin" /></a>
-<a href="https://github.com/MaxKoshJob"><img src="https://images.weserv.nl/?url=https://github.com/MaxKoshJob.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="MaxKoshJob" /></a>
-<a href="https://github.com/Albert-Atomic"><img src="https://images.weserv.nl/?url=https://github.com/Albert-Atomic.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Albert-Atomic" /></a>
-<a href="https://github.com/yanalialiuk"><img src="https://images.weserv.nl/?url=https://github.com/yanalialiuk.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="yanalialiuk" /></a>
-<a href="https://github.com/corevibe555"><img src="https://images.weserv.nl/?url=https://github.com/corevibe555.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="corevibe555" /></a>
-<a href="https://github.com/claytonlin1110"><img src="https://images.weserv.nl/?url=https://github.com/claytonlin1110.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="claytonlin1110" /></a>
-<a href="https://github.com/urmauur"><img src="https://images.weserv.nl/?url=https://github.com/urmauur.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="urmauur" /></a>
-<a href="https://github.com/hohieuai"><img src="https://images.weserv.nl/?url=https://github.com/hohieuai.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="hohieuai" /></a>
-<a href="https://github.com/Vanalite"><img src="https://images.weserv.nl/?url=https://github.com/Vanalite.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Vanalite" /></a>
-<a href="https://github.com/Minh141120"><img src="https://images.weserv.nl/?url=https://github.com/Minh141120.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Minh141120" /></a>
-<a href="https://github.com/hiento09"><img src="https://images.weserv.nl/?url=https://github.com/hiento09.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="hiento09" /></a>
-<a href="https://github.com/hahuyhoang411"><img src="https://images.weserv.nl/?url=https://github.com/hahuyhoang411.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="hahuyhoang411" /></a>
-<a href="https://github.com/hiro-v"><img src="https://images.weserv.nl/?url=https://github.com/hiro-v.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="hiro-v" /></a>
-<a href="https://github.com/qnixsynapse"><img src="https://images.weserv.nl/?url=https://github.com/qnixsynapse.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="qnixsynapse" /></a>
-<a href="https://github.com/namchuai"><img src="https://images.weserv.nl/?url=https://github.com/namchuai.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="namchuai" /></a>
-<a href="https://github.com/dan-menlo"><img src="https://images.weserv.nl/?url=https://github.com/dan-menlo.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="dan-menlo" /></a>
-<a href="https://github.com/freelerobot"><img src="https://images.weserv.nl/?url=https://github.com/freelerobot.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="freelerobot" /></a>
-<a href="https://github.com/ramonpzg"><img src="https://images.weserv.nl/?url=https://github.com/ramonpzg.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="ramonpzg" /></a>
-<a href="https://github.com/ux-han"><img src="https://images.weserv.nl/?url=https://github.com/ux-han.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="ux-han" /></a>
-<a href="https://github.com/aindrajaya"><img src="https://images.weserv.nl/?url=https://github.com/aindrajaya.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="aindrajaya" /></a>
-<a href="https://github.com/dinhlongviolin1"><img src="https://images.weserv.nl/?url=https://github.com/dinhlongviolin1.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="dinhlongviolin1" /></a>
-<a href="https://github.com/louis-jan"><img src="https://images.weserv.nl/?url=https://github.com/louis-jan.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="louis-jan" /></a>
-<a href="https://github.com/LazyYuuki"><img src="https://images.weserv.nl/?url=https://github.com/LazyYuuki.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="LazyYuuki" /></a>
-<a href="https://github.com/eckartal"><img src="https://images.weserv.nl/?url=https://github.com/eckartal.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="eckartal" /></a>
-<a href="https://github.com/david-menloai"><img src="https://images.weserv.nl/?url=https://github.com/david-menloai.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="david-menloai" /></a>
-<a href="https://github.com/Van-QA"><img src="https://images.weserv.nl/?url=https://github.com/Van-QA.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Van-QA" /></a>
-<a href="https://github.com/gau-nernst"><img src="https://images.weserv.nl/?url=https://github.com/gau-nernst.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="gau-nernst" /></a>
-<a href="https://github.com/github-roushan"><img src="https://images.weserv.nl/?url=https://github.com/github-roushan.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="github-roushan" /></a>
-<a href="https://github.com/tikikun"><img src="https://images.weserv.nl/?url=https://github.com/tikikun.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="tikikun" /></a>
-<a href="https://github.com/markmehere"><img src="https://images.weserv.nl/?url=https://github.com/markmehere.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="markmehere" /></a>
-<a href="https://github.com/samhvw8"><img src="https://images.weserv.nl/?url=https://github.com/samhvw8.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="samhvw8" /></a>
-<a href="https://github.com/danielcwq"><img src="https://images.weserv.nl/?url=https://github.com/danielcwq.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="danielcwq" /></a>
-<a href="https://github.com/bob-ros2"><img src="https://images.weserv.nl/?url=https://github.com/bob-ros2.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="bob-ros2" /></a>
-<a href="https://github.com/dev-miro26"><img src="https://images.weserv.nl/?url=https://github.com/dev-miro26.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="dev-miro26" /></a>
-<a href="https://github.com/shmutalov"><img src="https://images.weserv.nl/?url=https://github.com/shmutalov.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="shmutalov" /></a>
-<a href="https://github.com/drakehere"><img src="https://images.weserv.nl/?url=https://github.com/drakehere.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="drakehere" /></a>
-<a href="https://github.com/dataCenter430"><img src="https://images.weserv.nl/?url=https://github.com/dataCenter430.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="dataCenter430" /></a>
-<a href="https://github.com/lugnicca"><img src="https://images.weserv.nl/?url=https://github.com/lugnicca.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="lugnicca" /></a>
-<a href="https://github.com/ethanova"><img src="https://images.weserv.nl/?url=https://github.com/ethanova.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="ethanova" /></a>
-<a href="https://github.com/thewulf7"><img src="https://images.weserv.nl/?url=https://github.com/thewulf7.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="thewulf7" /></a>
-<a href="https://github.com/linhtran174"><img src="https://images.weserv.nl/?url=https://github.com/linhtran174.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="linhtran174" /></a>
-<a href="https://github.com/avb-is-me"><img src="https://images.weserv.nl/?url=https://github.com/avb-is-me.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="avb-is-me" /></a>
-<a href="https://github.com/vansangpfiev"><img src="https://images.weserv.nl/?url=https://github.com/vansangpfiev.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="vansangpfiev" /></a>
-<a href="https://github.com/cmppoon"><img src="https://images.weserv.nl/?url=https://github.com/cmppoon.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="cmppoon" /></a>
-<a href="https://github.com/Ssstars"><img src="https://images.weserv.nl/?url=https://github.com/Ssstars.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Ssstars" /></a>
-<a href="https://github.com/fredatgithub"><img src="https://images.weserv.nl/?url=https://github.com/fredatgithub.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="fredatgithub" /></a>
-<a href="https://github.com/px100"><img src="https://images.weserv.nl/?url=https://github.com/px100.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="px100" /></a>
-<a href="https://github.com/sharunkumar"><img src="https://images.weserv.nl/?url=https://github.com/sharunkumar.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="sharunkumar" /></a>
-<a href="https://github.com/atoz96"><img src="https://images.weserv.nl/?url=https://github.com/atoz96.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="atoz96" /></a>
-<a href="https://github.com/since-2017-hub"><img src="https://images.weserv.nl/?url=https://github.com/since-2017-hub.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="since-2017-hub" /></a>
-<a href="https://github.com/bytrangle"><img src="https://images.weserv.nl/?url=https://github.com/bytrangle.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="bytrangle" /></a>
-<a href="https://github.com/SuperCowProducts"><img src="https://images.weserv.nl/?url=https://github.com/SuperCowProducts.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="SuperCowProducts" /></a>
-<a href="https://github.com/bxdoan"><img src="https://images.weserv.nl/?url=https://github.com/bxdoan.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="bxdoan" /></a>
-<a href="https://github.com/gabrielle-ong"><img src="https://images.weserv.nl/?url=https://github.com/gabrielle-ong.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="gabrielle-ong" /></a>
-<a href="https://github.com/trilh-dev"><img src="https://images.weserv.nl/?url=https://github.com/trilh-dev.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="trilh-dev" /></a>
-<a href="https://github.com/gary149"><img src="https://images.weserv.nl/?url=https://github.com/gary149.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="gary149" /></a>
-<a href="https://github.com/DistractionRectangle"><img src="https://images.weserv.nl/?url=https://github.com/DistractionRectangle.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="DistractionRectangle" /></a>
-<a href="https://github.com/marknguyen1302"><img src="https://images.weserv.nl/?url=https://github.com/marknguyen1302.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="marknguyen1302" /></a>
-<a href="https://github.com/cuhong"><img src="https://images.weserv.nl/?url=https://github.com/cuhong.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="cuhong" /></a>
-<a href="https://github.com/mykh-hailo"><img src="https://images.weserv.nl/?url=https://github.com/mykh-hailo.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="mykh-hailo" /></a>
-<a href="https://github.com/DESU-CLUB"><img src="https://images.weserv.nl/?url=https://github.com/DESU-CLUB.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="DESU-CLUB" /></a>
-<a href="https://github.com/0xgokuz"><img src="https://images.weserv.nl/?url=https://github.com/0xgokuz.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="0xgokuz" /></a>
-<a href="https://github.com/new5558"><img src="https://images.weserv.nl/?url=https://github.com/new5558.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="new5558" /></a>
-<a href="https://github.com/linuxid10t"><img src="https://images.weserv.nl/?url=https://github.com/linuxid10t.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="linuxid10t" /></a>
-<a href="https://github.com/0rzech"><img src="https://images.weserv.nl/?url=https://github.com/0rzech.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="0rzech" /></a>
-<a href="https://github.com/Kuzmich55"><img src="https://images.weserv.nl/?url=https://github.com/Kuzmich55.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Kuzmich55" /></a>
-<a href="https://github.com/Crystora"><img src="https://images.weserv.nl/?url=https://github.com/Crystora.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Crystora" /></a>
-<a href="https://github.com/mmngn"><img src="https://images.weserv.nl/?url=https://github.com/mmngn.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="mmngn" /></a>
-<a href="https://github.com/statxc"><img src="https://images.weserv.nl/?url=https://github.com/statxc.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="statxc" /></a>
-<a href="https://github.com/vikram761"><img src="https://images.weserv.nl/?url=https://github.com/vikram761.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="vikram761" /></a>
-<a href="https://github.com/MrAlaminH"><img src="https://images.weserv.nl/?url=https://github.com/MrAlaminH.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="MrAlaminH" /></a>
-<a href="https://github.com/Lokimorty"><img src="https://images.weserv.nl/?url=https://github.com/Lokimorty.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Lokimorty" /></a>
-<a href="https://github.com/copyhold"><img src="https://images.weserv.nl/?url=https://github.com/copyhold.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="copyhold" /></a>
-<a href="https://github.com/STRRL"><img src="https://images.weserv.nl/?url=https://github.com/STRRL.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="STRRL" /></a>
-<a href="https://github.com/Dexterity104"><img src="https://images.weserv.nl/?url=https://github.com/Dexterity104.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Dexterity104" /></a>
-<a href="https://github.com/QuentinMacheda"><img src="https://images.weserv.nl/?url=https://github.com/QuentinMacheda.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="QuentinMacheda" /></a>
-<a href="https://github.com/Gri-ffin"><img src="https://images.weserv.nl/?url=https://github.com/Gri-ffin.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Gri-ffin" /></a>
-<a href="https://github.com/eltociear"><img src="https://images.weserv.nl/?url=https://github.com/eltociear.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="eltociear" /></a>
-<a href="https://github.com/jamesdam"><img src="https://images.weserv.nl/?url=https://github.com/jamesdam.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="jamesdam" /></a>
-<a href="https://github.com/razzeee"><img src="https://images.weserv.nl/?url=https://github.com/razzeee.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="razzeee" /></a>
-<a href="https://github.com/metaspartan"><img src="https://images.weserv.nl/?url=https://github.com/metaspartan.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="metaspartan" /></a>
-<a href="https://github.com/locnguyen1986"><img src="https://images.weserv.nl/?url=https://github.com/locnguyen1986.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="locnguyen1986" /></a>
-<a href="https://github.com/irfanpena"><img src="https://images.weserv.nl/?url=https://github.com/irfanpena.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="irfanpena" /></a>
-<a href="https://github.com/cs-cat"><img src="https://images.weserv.nl/?url=https://github.com/cs-cat.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="cs-cat" /></a>
-<a href="https://github.com/theproductiveprogrammer"><img src="https://images.weserv.nl/?url=https://github.com/theproductiveprogrammer.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="theproductiveprogrammer" /></a>
-<a href="https://github.com/Diane0111"><img src="https://images.weserv.nl/?url=https://github.com/Diane0111.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Diane0111" /></a>
-<a href="https://github.com/GenkaOk"><img src="https://images.weserv.nl/?url=https://github.com/GenkaOk.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="GenkaOk" /></a>
-<a href="https://github.com/Helloyunho"><img src="https://images.weserv.nl/?url=https://github.com/Helloyunho.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Helloyunho" /></a>
-<a href="https://github.com/janpio"><img src="https://images.weserv.nl/?url=https://github.com/janpio.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="janpio" /></a>
-<a href="https://github.com/kamal"><img src="https://images.weserv.nl/?url=https://github.com/kamal.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="kamal" /></a>
-<a href="https://github.com/Louis454545"><img src="https://images.weserv.nl/?url=https://github.com/Louis454545.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Louis454545" /></a>
-<a href="https://github.com/tuananhlai"><img src="https://images.weserv.nl/?url=https://github.com/tuananhlai.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="tuananhlai" /></a>
-<a href="https://github.com/MauroDruwel"><img src="https://images.weserv.nl/?url=https://github.com/MauroDruwel.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="MauroDruwel" /></a>
-<a href="https://github.com/zwpaper"><img src="https://images.weserv.nl/?url=https://github.com/zwpaper.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="zwpaper" /></a>
-<a href="https://github.com/Realmbird"><img src="https://images.weserv.nl/?url=https://github.com/Realmbird.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Realmbird" /></a>
-<a href="https://github.com/reneleonhardt"><img src="https://images.weserv.nl/?url=https://github.com/reneleonhardt.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="reneleonhardt" /></a>
-<a href="https://github.com/RONNCC"><img src="https://images.weserv.nl/?url=https://github.com/RONNCC.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="RONNCC" /></a>
-<a href="https://github.com/SamPatt"><img src="https://images.weserv.nl/?url=https://github.com/SamPatt.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="SamPatt" /></a>
-<a href="https://github.com/mesaugat"><img src="https://images.weserv.nl/?url=https://github.com/mesaugat.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="mesaugat" /></a>
-<a href="https://github.com/0saurabh0"><img src="https://images.weserv.nl/?url=https://github.com/0saurabh0.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="0saurabh0" /></a>
-<a href="https://github.com/sesajad"><img src="https://images.weserv.nl/?url=https://github.com/sesajad.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="sesajad" /></a>
-<a href="https://github.com/sdhrt"><img src="https://images.weserv.nl/?url=https://github.com/sdhrt.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="sdhrt" /></a>
-<a href="https://github.com/lucido-simon"><img src="https://images.weserv.nl/?url=https://github.com/lucido-simon.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="lucido-simon" /></a>
-<a href="https://github.com/Haleshot"><img src="https://images.weserv.nl/?url=https://github.com/Haleshot.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Haleshot" /></a>
-<a href="https://github.com/vabatista"><img src="https://images.weserv.nl/?url=https://github.com/vabatista.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="vabatista" /></a>
-<a href="https://github.com/volodya-lombrozo"><img src="https://images.weserv.nl/?url=https://github.com/volodya-lombrozo.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="volodya-lombrozo" /></a>
-<a href="https://github.com/ynshung"><img src="https://images.weserv.nl/?url=https://github.com/ynshung.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="ynshung" /></a>
-<a href="https://github.com/cashcon57"><img src="https://images.weserv.nl/?url=https://github.com/cashcon57.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="cashcon57" /></a>
-<a href="https://github.com/ddri"><img src="https://images.weserv.nl/?url=https://github.com/ddri.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="ddri" /></a>
-<a href="https://github.com/hooray804"><img src="https://images.weserv.nl/?url=https://github.com/hooray804.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="hooray804" /></a>
-<a href="https://github.com/ldebs"><img src="https://images.weserv.nl/?url=https://github.com/ldebs.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="ldebs" /></a>
-<a href="https://github.com/oolokioo7"><img src="https://images.weserv.nl/?url=https://github.com/oolokioo7.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="oolokioo7" /></a>
-<a href="https://github.com/phoval"><img src="https://images.weserv.nl/?url=https://github.com/phoval.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="phoval" /></a>
-<a href="https://github.com/theishangoswami"><img src="https://images.weserv.nl/?url=https://github.com/theishangoswami.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="theishangoswami" /></a>
-<a href="https://github.com/utenadev"><img src="https://images.weserv.nl/?url=https://github.com/utenadev.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="utenadev" /></a>
-<a href="https://github.com/zhhanging"><img src="https://images.weserv.nl/?url=https://github.com/zhhanging.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="zhhanging" /></a>
-<a href="https://github.com/mishrababhishek"><img src="https://images.weserv.nl/?url=https://github.com/mishrababhishek.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="mishrababhishek" /></a>
-<a href="https://github.com/sr-albert"><img src="https://images.weserv.nl/?url=https://github.com/sr-albert.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="sr-albert" /></a>
-<a href="https://github.com/gdmka"><img src="https://images.weserv.nl/?url=https://github.com/gdmka.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="gdmka" /></a>
-<a href="https://github.com/deining"><img src="https://images.weserv.nl/?url=https://github.com/deining.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="deining" /></a>
-<a href="https://github.com/Angelopgit"><img src="https://images.weserv.nl/?url=https://github.com/Angelopgit.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Angelopgit" /></a>
-<a href="https://github.com/anebot"><img src="https://images.weserv.nl/?url=https://github.com/anebot.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="anebot" /></a>
-<a href="https://github.com/B0sh"><img src="https://images.weserv.nl/?url=https://github.com/B0sh.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="B0sh" /></a>
-<a href="https://github.com/chindris-mihai-alexandru"><img src="https://images.weserv.nl/?url=https://github.com/chindris-mihai-alexandru.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="chindris-mihai-alexandru" /></a>
-<a href="https://github.com/EndlessLucky"><img src="https://images.weserv.nl/?url=https://github.com/EndlessLucky.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="EndlessLucky" /></a>
-<a href="https://github.com/mooncool"><img src="https://images.weserv.nl/?url=https://github.com/mooncool.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="mooncool" /></a>
-<a href="https://github.com/Jasper-256"><img src="https://images.weserv.nl/?url=https://github.com/Jasper-256.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Jasper-256" /></a>
-<a href="https://github.com/trunghaiy"><img src="https://images.weserv.nl/?url=https://github.com/trunghaiy.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="trunghaiy" /></a>
-<a href="https://github.com/niesink"><img src="https://images.weserv.nl/?url=https://github.com/niesink.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="niesink" /></a>
-<a href="https://github.com/maxx-ukoo"><img src="https://images.weserv.nl/?url=https://github.com/maxx-ukoo.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="maxx-ukoo" /></a>
-<a href="https://github.com/myakura"><img src="https://images.weserv.nl/?url=https://github.com/myakura.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="myakura" /></a>
-<a href="https://github.com/matthewbcool"><img src="https://images.weserv.nl/?url=https://github.com/matthewbcool.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="matthewbcool" /></a>
-<a href="https://github.com/MichalZem"><img src="https://images.weserv.nl/?url=https://github.com/MichalZem.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="MichalZem" /></a>
-<a href="https://github.com/Marco-9456"><img src="https://images.weserv.nl/?url=https://github.com/Marco-9456.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Marco-9456" /></a>
-<a href="https://github.com/eren-karakus0"><img src="https://images.weserv.nl/?url=https://github.com/eren-karakus0.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="eren-karakus0" /></a>
-<a href="https://github.com/thunhuanh"><img src="https://images.weserv.nl/?url=https://github.com/thunhuanh.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="thunhuanh" /></a>
-<a href="https://github.com/Fieldnote-Echo"><img src="https://images.weserv.nl/?url=https://github.com/Fieldnote-Echo.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Fieldnote-Echo" /></a>
-<a href="https://github.com/Eruis2579"><img src="https://images.weserv.nl/?url=https://github.com/Eruis2579.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="Eruis2579" /></a>
-<a href="https://github.com/akaMrNagar"><img src="https://images.weserv.nl/?url=https://github.com/akaMrNagar.png&w=110&h=110&fit=cover&mask=circle" width="48" height="48" alt="akaMrNagar" /></a>
+## License
 
----
+GChat is available under the [Apache License 2.0](LICENSE).
 
-### ⭐ Star History
+## Upstream acknowledgement
 
-<a href="https://star-history.com/#Gadflyii/gchat&Date">
-  <img src="https://api.star-history.com/svg?repos=Gadflyii/gchat&type=Date&cache=1" width="100%" alt="Star History" />
-</a>
-
----
-
-### 📄 License
-
-Apache 2.0 — see [LICENSE](LICENSE) for details.
-
-### 🙏 Acknowledgements
-
-Built on the shoulders of giants:
-
-- [ginfer](https://github.com/Gadflyii/ginfer) — the inference engine
-- [Tauri](https://tauri.app/)
-- [Scalar](https://github.com/scalar/scalar)
-
----
-
-### 🌱 Heritage
-
-GChat is a fork of [Atomic Chat](https://github.com/AtomicBot-ai/Atomic-Chat), which began as a fork of [**Jan**](https://github.com/menloresearch/jan) by [Menlo Research](https://menlo.ai/) — an excellent open-source local-AI app. We're grateful to the upstream teams and their contributors for the foundation they built. GChat is the interface for our own inference engine, ginfer, and has its own direction, models, and roadmap. 🙏
+GChat began as a fork of [Atomic Chat](https://github.com/AtomicBot-ai/Atomic-Chat), which is a hard
+fork of [Jan](https://github.com/janhq/jan). We thank both projects and their contributors for the
+desktop foundation.
 
 ---
 
 <p align="center">
-  <sub>© 2026 GChat · Built with ❤️</sub>
+  <a href="https://sectilelabs.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/sectile-lockup-reversed.png">
+      <source media="(prefers-color-scheme: light)" srcset="assets/sectile-lockup.png">
+      <img alt="Sectile Research Laboratories" src="assets/sectile-lockup.png" width="300">
+    </picture>
+  </a>
+</p>
+
+<p align="center">
+  <sub>Built and maintained by <a href="https://sectilelabs.ai">Sectile Research Laboratories</a> · <a href="https://sectilelabs.ai">sectilelabs.ai</a></sub>
 </p>

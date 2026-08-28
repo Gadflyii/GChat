@@ -9,11 +9,15 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-218 records, 2026-05-19 → 2026-08-21.
+220 records, 2026-05-19 → 2026-08-28.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
+
+- **2026-08-28** — [Adopt the Sectile Prism visual identity](2026-08-28-adopt-the-sectile-prism-visual-identity.md)
+
+- **2026-08-23** — [Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app start](2026-08-23-embed-a-raw-in-frame-terminal-code-tab-that-auto-runs-opencode-at-app-start.md)
 
 - **2026-08-21** — [Route ginfer sessions through the 1337 proxy like the other local backends](2026-08-21-ginfer-sessions-route-through-the-1337-proxy.md)
 - **2026-08-21** — [Use ginfer as the sole inference backend in the gchat fork](2026-08-21-use-ginfer-as-the-sole-inference-backend-in-the-gchat-fork.md)
@@ -284,4 +288,3 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-07-28** — [Isolate the unstable Tauri IPC test API](2026-07-28-isolate-tauri-ipc-test-api.md)
 - **2026-07-23** — [Isolate the Windows Common Controls test manifest by feature](2026-07-23-isolate-the-windows-common-controls-test-manifest-by-feature.md)
 - **2026-07-20** — [Open Agent-referenced files from assistant summaries](2026-07-20-open-agent-referenced-files-from-assistant-summaries.md)
-

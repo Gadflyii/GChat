@@ -44,7 +44,7 @@ const ReasoningToggle = memo(function ReasoningToggle({
             size="icon-xs"
             className={cn(
               enabled &&
-                'bg-blue-500/10 text-blue-500 hover:bg-blue-500/15 hover:text-blue-500',
+                'bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary',
               className
             )}
             aria-label={label}
@@ -53,7 +53,7 @@ const ReasoningToggle = memo(function ReasoningToggle({
           >
             <IconBulb
               size={18}
-              className={cn(enabled ? 'text-blue-500' : 'text-muted-foreground')}
+              className={cn(enabled ? 'text-primary' : 'text-muted-foreground')}
             />
           </Button>
         </TooltipTrigger>

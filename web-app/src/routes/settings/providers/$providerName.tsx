@@ -529,15 +529,15 @@ function ProviderDetail() {
                           className="![>p]:text-muted-foreground select-none"
                           content={setting.description}
                           components={{
-                            // Make links open in a new tab, with the
-                            // product brand colour #1F7CFF.
+                            // Make links open in a new tab with the active
+                            // Sectile brand accent.
                             a: ({ style, ...props }) => {
                               return (
                                 <a
                                   {...props}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  style={{ color: '#1F7CFF', ...style }}
+                                  style={{ color: 'var(--primary)', ...style }}
                                 />
                               )
                             },

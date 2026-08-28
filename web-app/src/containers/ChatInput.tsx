@@ -2336,7 +2336,7 @@ const ChatInput = memo(function ChatInput({
                 {selectedAgentSkill && (
                   <span
                     ref={agentSkillTokenRef}
-                    className="pointer-events-none absolute left-4 top-3 whitespace-nowrap text-sm font-medium leading-6 text-blue-600 dark:text-blue-400"
+                    className="pointer-events-none absolute left-4 top-3 whitespace-nowrap text-sm font-medium leading-6 text-primary"
                     data-testid="agent-skill-inline-token"
                   >
                     /{selectedAgentSkill.name}

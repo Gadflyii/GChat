@@ -5,14 +5,14 @@ import { useTheme } from './useTheme'
 
 export type FontSize = '14px' | '15px' | '16px' | '18px' | '20px'
 
-//* Единственный пресет: нейтральный сайдбар без фиолетового/брендового акцента (--primary из index.css)
-const ACCENT_THUMB = '#737373'
+// The single interface preset follows the locked Sectile Prism palette.
+const ACCENT_THUMB = '#3dd3c8'
 export const ACCENT_COLORS = [
   {
     name: 'Primary',
     value: 'primary',
     thumb: ACCENT_THUMB,
-    sidebar: { light: '#f5f5f5', dark: '#2c2c2c' },
+    sidebar: { light: '#f4f6f7', dark: '#0d0f12' },
   },
 ] as const
 
@@ -116,7 +116,7 @@ export const useInterfaceSettings = create<InterfaceSettingsState>()(
             state.fontSize = '16px'
           }
 
-          // Migrate accent: если сохранённый пресет больше не существует — применить единственный
+          // Migrate any retired preset to the single Sectile brand preset.
           const colorExists = ACCENT_COLORS.some((c) => c.value === state.accentColor)
           if (!colorExists) {
             state.accentColor = DEFAULT_ACCENT_COLOR

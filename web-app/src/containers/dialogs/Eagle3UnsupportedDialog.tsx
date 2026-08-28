@@ -46,7 +46,7 @@ export function Eagle3UnsupportedDialog({
               href="https://huggingface.co/RedHatAI"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: '#1F7CFF' }}
+              style={{ color: 'var(--primary)' }}
               className="underline underline-offset-2 whitespace-nowrap"
             >
               RedHatAI

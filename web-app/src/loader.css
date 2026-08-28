@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  background: hsl(0, 0%, 100%);
+  background: #fafbfc;
   z-index: 9999;
   opacity: 1;
   transition: opacity 0.3s ease-in-out;
@@ -16,22 +16,18 @@
 /* Light mode (default) */
 @media (prefers-color-scheme: light) {
   #initial-loader {
-    background: rgb(255, 255, 255);
+    background: #fafbfc;
   }
 }
 
 /* Dark mode */
 @media (prefers-color-scheme: dark) {
   #initial-loader {
-    background: rgb(25, 25, 25);
-  }
-
-  #initial-loader .loader-logo-spin img {
-    filter: invert(1);
+    background: #08090b;
   }
 }
 
-/* Вращение логотипа (без «помахивания»); инверсия только на img внутри */
+/* Rotate the standalone mark without altering its locked brand colors. */
 #initial-loader .loader-logo-spin {
   width: 5rem;
   height: 5rem;

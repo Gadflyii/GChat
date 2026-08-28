@@ -161,7 +161,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
                   />
                   <span>{t('common:launch')}</span>
                   {!integrationsBadgeSeen && (
-                    <span className="ml-auto shrink-0 rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600 dark:bg-blue-400/15 dark:text-blue-400">
+                    <span className="ml-auto shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-primary">
                       {t('common:newBadge')}
                     </span>
                   )}

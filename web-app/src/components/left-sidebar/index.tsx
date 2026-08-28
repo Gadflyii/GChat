@@ -95,28 +95,22 @@ export function LeftSidebar() {
           </div>
           <div
             className={cn(
-              'mt-1 flex w-full items-center justify-start gap-2 pl-2',
+              'mt-1 flex h-11 w-full items-center justify-start pl-2',
               IS_MACOS && 'mt-3'
             )}
           >
-            <div
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-neutral-950 p-[3px] shadow-sm dark:bg-white dark:shadow-none"
-              title="GChat"
-            >
-              <img
-                src="/images/transparent-logo.png"
-                alt="GChat"
-                className="size-full min-h-0 min-w-0 object-contain invert dark:invert-0"
-              />
-            </div>
-            <span
-              className="text-sidebar-foreground text-sm font-semibold shrink-0 tracking-tight"
-              role="img"
-              aria-label="GChat"
-            >
-              GChat
-            </span>
-            
+            <img
+              src="/images/gchat-lockup.png"
+              alt="GChat by Sectile Research Laboratories"
+              className="h-10 w-auto object-contain dark:hidden"
+              draggable={false}
+            />
+            <img
+              src="/images/gchat-lockup-reversed.png"
+              alt="GChat by Sectile Research Laboratories"
+              className="hidden h-10 w-auto object-contain dark:block"
+              draggable={false}
+            />
           </div>
           <div className="mt-[6px] px-1">
             <ChatAgentModeSwitch

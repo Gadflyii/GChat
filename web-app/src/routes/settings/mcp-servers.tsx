@@ -618,7 +618,7 @@ function MCPServersDesktop() {
                                     href="https://chromewebstore.google.com/detail/jan-browser-mcp/mkciifcjehgnpaigoiaakdgabbpfppal"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-500 hover:underline"
+                                    className="text-primary hover:underline"
                                   >
                                     Install Extension →
                                   </a>
