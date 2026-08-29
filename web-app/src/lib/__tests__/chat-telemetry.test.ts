@@ -239,6 +239,8 @@ describe('agentOutcome / agentResponseShape', () => {
       startedAtMs: 1000,
       finishedAtMs: 4500,
       trace: {
+        stages: [],
+        handoffs: [],
         assistantText: 'done',
         reasoning: { 0: 'step one' },
         tools: [

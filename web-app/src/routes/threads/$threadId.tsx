@@ -113,7 +113,10 @@ import { useAgentMode } from '@/hooks/useAgentMode'
 import { AgentWorkspaceLayout } from '@/containers/AgentWorkspaceLayout'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useAgentRun } from '@/hooks/useAgentRun'
-import { readAgentSkillName } from '@/lib/agent-skill-selection'
+import {
+  readAgentDefinitionId,
+  readAgentSkillName,
+} from '@/lib/agent-skill-selection'
 import {
   buildAgentUIMessage,
   claimAgentRunPersistence,
@@ -152,6 +155,7 @@ const agentAttachmentsFromMessage = (
   files: InitialMessageFile[]
   documents: Attachment[]
   agentSkillName?: string
+  agentDefinitionId?: string
 } => {
   const metadata = (message.metadata ?? {}) as Record<string, unknown>
   const storedText = metadata.agent_input_text
@@ -212,8 +216,9 @@ const agentAttachmentsFromMessage = (
   })
 
   const agentSkillName = readAgentSkillName(metadata)
+  const agentDefinitionId = readAgentDefinitionId(metadata)
 
-  return { text, files, documents, agentSkillName }
+  return { text, files, documents, agentSkillName, agentDefinitionId }
 }
 
 type SearchParams = {
@@ -816,6 +821,7 @@ function ThreadDetail() {
       files?: InitialMessageFile[],
       documentsFromPayload?: Attachment[],
       agentSkillName?: string,
+      agentDefinitionId?: string,
       persistUserMessage = true,
       // Distinguishes a fresh send from a retry of the same prompt, so the
       // funnel does not read regenerations as new conversations.
@@ -911,6 +917,9 @@ function ThreadDetail() {
           ...(userMessage.metadata ?? {}),
           agent_input_text: text,
           ...(agentSkillName ? { agent_skill_name: agentSkillName } : {}),
+          ...(agentDefinitionId
+            ? { agent_definition_id: agentDefinitionId }
+            : {}),
           image_attachment_names: mediaAttachments.map(
             (attachment) => attachment.name
           ),
@@ -950,6 +959,7 @@ function ThreadDetail() {
             session_id: threadId,
             model_id: selectedModel.id,
             user_message: text,
+            definition_id: agentDefinitionId,
             selected_skill: agentSkillName,
             attachments: ipcAttachments,
             working_dir: workingDir,
@@ -1003,7 +1013,8 @@ function ThreadDetail() {
       text: string,
       files?: InitialMessageFile[],
       documentsFromPayload?: Attachment[],
-      agentSkillName?: string
+      agentSkillName?: string,
+      agentDefinitionId?: string
     ) => {
       if (
         resolveMessageExecutionRoute(
@@ -1014,7 +1025,8 @@ function ThreadDetail() {
           text,
           files,
           documentsFromPayload,
-          agentSkillName
+          agentSkillName,
+          agentDefinitionId
         )
         return
       }
@@ -1255,7 +1267,8 @@ function ThreadDetail() {
           message.text,
           message.files,
           message.documents,
-          message.agentSkillName
+          message.agentSkillName,
+          message.agentDefinitionId
         )
       } catch (error) {
         console.error('[ThreadPage] Failed to process initial message:', error)
@@ -1268,9 +1281,16 @@ function ThreadDetail() {
     async (
       text: string,
       files?: InitialMessageFile[],
-      agentSkillName?: string
+      agentSkillName?: string,
+      agentDefinitionId?: string
     ) => {
-      await processAndSendMessage(text, files, undefined, agentSkillName)
+      await processAndSendMessage(
+        text,
+        files,
+        undefined,
+        agentSkillName,
+        agentDefinitionId
+      )
     },
     [processAndSendMessage]
   )
@@ -1316,6 +1336,7 @@ function ThreadDetail() {
           files: agentFiles,
           documents: agentDocuments,
           agentSkillName,
+          agentDefinitionId,
         } = agentAttachmentsFromMessage(userMessage)
         const retainedMessages = currentLocalMessages.slice(
           0,
@@ -1335,6 +1356,7 @@ function ThreadDetail() {
           agentFiles,
           agentDocuments,
           agentSkillName,
+          agentDefinitionId,
           false,
           'regenerate'
         )

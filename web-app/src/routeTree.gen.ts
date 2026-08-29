@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SkillsIndexRouteImport } from './routes/skills/index'
 import { Route as LaunchIndexRouteImport } from './routes/launch/index'
 import { Route as HubIndexRouteImport } from './routes/hub/index'
+import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as ThreadsThreadIdRouteImport } from './routes/threads/$threadId'
 import { Route as SettingsShortcutsRouteImport } from './routes/settings/shortcuts'
 import { Route as SettingsPrivacyRouteImport } from './routes/settings/privacy'
@@ -69,6 +70,11 @@ const LaunchIndexRoute = LaunchIndexRouteImport.update({
 const HubIndexRoute = HubIndexRouteImport.update({
   id: '/hub/',
   path: '/hub/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsIndexRoute = AgentsIndexRouteImport.update({
+  id: '/agents/',
+  path: '/agents/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ThreadsThreadIdRoute = ThreadsThreadIdRouteImport.update({
@@ -190,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
+  '/agents/': typeof AgentsIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
   '/skills/': typeof SkillsIndexRoute
@@ -218,6 +225,7 @@ export interface FileRoutesByTo {
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
+  '/agents': typeof AgentsIndexRoute
   '/hub': typeof HubIndexRoute
   '/launch': typeof LaunchIndexRoute
   '/skills': typeof SkillsIndexRoute
@@ -247,6 +255,7 @@ export interface FileRoutesById {
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
+  '/agents/': typeof AgentsIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
   '/skills/': typeof SkillsIndexRoute
@@ -277,6 +286,7 @@ export interface FileRouteTypes {
     | '/settings/privacy'
     | '/settings/shortcuts'
     | '/threads/$threadId'
+    | '/agents/'
     | '/hub/'
     | '/launch/'
     | '/skills/'
@@ -305,6 +315,7 @@ export interface FileRouteTypes {
     | '/settings/privacy'
     | '/settings/shortcuts'
     | '/threads/$threadId'
+    | '/agents'
     | '/hub'
     | '/launch'
     | '/skills'
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | '/settings/privacy'
     | '/settings/shortcuts'
     | '/threads/$threadId'
+    | '/agents/'
     | '/hub/'
     | '/launch/'
     | '/skills/'
@@ -362,6 +374,7 @@ export interface RootRouteChildren {
   SettingsPrivacyRoute: typeof SettingsPrivacyRoute
   SettingsShortcutsRoute: typeof SettingsShortcutsRoute
   ThreadsThreadIdRoute: typeof ThreadsThreadIdRoute
+  AgentsIndexRoute: typeof AgentsIndexRoute
   HubIndexRoute: typeof HubIndexRoute
   LaunchIndexRoute: typeof LaunchIndexRoute
   SkillsIndexRoute: typeof SkillsIndexRoute
@@ -418,6 +431,13 @@ declare module '@tanstack/react-router' {
       path: '/hub'
       fullPath: '/hub/'
       preLoaderRoute: typeof HubIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents/': {
+      id: '/agents/'
+      path: '/agents'
+      fullPath: '/agents/'
+      preLoaderRoute: typeof AgentsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/threads/$threadId': {
@@ -578,6 +598,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsPrivacyRoute: SettingsPrivacyRoute,
   SettingsShortcutsRoute: SettingsShortcutsRoute,
   ThreadsThreadIdRoute: ThreadsThreadIdRoute,
+  AgentsIndexRoute: AgentsIndexRoute,
   HubIndexRoute: HubIndexRoute,
   LaunchIndexRoute: LaunchIndexRoute,
   SkillsIndexRoute: SkillsIndexRoute,

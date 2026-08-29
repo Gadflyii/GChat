@@ -13,7 +13,10 @@ function finishedRun(): AgentRunState {
     finishedAtMs: 3_500,
     status: 'finished',
     approvalResolving: false,
+    folderAccessResolving: false,
     trace: {
+      stages: [],
+      handoffs: [],
       reasoning: { 1: 'second', 0: 'first' },
       assistantText: 'Done',
       tools: [

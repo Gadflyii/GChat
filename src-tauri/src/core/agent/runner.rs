@@ -65,10 +65,41 @@ pub struct RunTurnInput<'a> {
     pub bundled_script_runtime: Option<&'a Path>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentTurnOutcome {
+    pub reply: Option<String>,
+    pub reason: String,
+    pub step_count: u32,
+}
+
+pub struct RunTurnOptions<'a> {
+    pub slot_id: i32,
+    pub additional_skills: &'a [String],
+}
+
+impl Default for RunTurnOptions<'_> {
+    fn default() -> Self {
+        Self {
+            slot_id: AGENT_SLOT_ID,
+            additional_skills: &[],
+        }
+    }
+}
+
 pub async fn run_turn(
     input: RunTurnInput<'_>,
-    mut emit: impl FnMut(AgentEvent) -> Result<(), String>,
+    emit: impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<(), String> {
+    run_turn_with_options(input, RunTurnOptions::default(), emit)
+        .await
+        .map(|_| ())
+}
+
+pub async fn run_turn_with_options(
+    input: RunTurnInput<'_>,
+    options: RunTurnOptions<'_>,
+    mut emit: impl FnMut(AgentEvent) -> Result<(), String>,
+) -> Result<AgentTurnOutcome, String> {
     emit(AgentEvent::TurnStarted {
         run_id: input.run_id.to_owned(),
         session_id: input.session_id.to_owned(),
@@ -79,6 +110,23 @@ pub async fn run_turn(
     let loaded_tools = tools::tool_view::LoadedTools::restore(&input.session.loaded_tools);
     let loaded_skills = LoadedSkills::restore(&input.session.loaded_skills, input.skill_registry);
     if let Some(selected_skill) = input.selected_skill {
+        let outcome = loaded_skills
+            .view(selected_skill, input.skill_registry)
+            .await;
+        if outcome.status != ToolStatus::Ok {
+            let message = outcome.summary;
+            emit(AgentEvent::StepError {
+                message: message.clone(),
+                category: "skill".into(),
+            })?;
+            emit(AgentEvent::TurnFinished {
+                reason: "failed".into(),
+                step_count: 0,
+            })?;
+            return Err(message);
+        }
+    }
+    for selected_skill in options.additional_skills {
         let outcome = loaded_skills
             .view(selected_skill, input.skill_registry)
             .await;
@@ -153,7 +201,7 @@ pub async fn run_turn(
             input.model_profile,
         );
         notice = None;
-        let request = CompletionRequest::tool_call(prompt, tool_grammar.clone(), AGENT_SLOT_ID);
+        let request = CompletionRequest::tool_call(prompt, tool_grammar.clone(), options.slot_id);
         let completion = complete_with_deadline(input.client, &request, input.cancellation).await;
         let mut previous_output = String::new();
         let mut parsed = match completion {
@@ -386,7 +434,11 @@ pub async fn run_turn(
                 step_count: step_index + 1,
             })?;
             finish_session(input.session, &loaded_tools, &loaded_skills, Some(&reply)).await;
-            return Ok(());
+            return Ok(AgentTurnOutcome {
+                reply: Some(reply),
+                reason: "reply".into(),
+                step_count: step_index + 1,
+            });
         }
 
         let tool_context = ToolContext {
@@ -450,7 +502,11 @@ pub async fn run_turn(
                 step_count: step_index + 1,
             })?;
             finish_session(input.session, &loaded_tools, &loaded_skills, Some(&text)).await;
-            return Ok(());
+            return Ok(AgentTurnOutcome {
+                reply: Some(text),
+                reason: reason.into(),
+                step_count: step_index + 1,
+            });
         }
     }
 
@@ -462,7 +518,11 @@ pub async fn run_turn(
         step_count: max_steps,
     })?;
     finish_session(input.session, &loaded_tools, &loaded_skills, Some(&text)).await;
-    Ok(())
+    Ok(AgentTurnOutcome {
+        reply: Some(text),
+        reason: "max_steps".into(),
+        step_count: max_steps,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -691,8 +751,13 @@ async fn finish_session(
 fn finish_cancelled(
     step_count: u32,
     emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
-) -> Result<(), String> {
+) -> Result<AgentTurnOutcome, String> {
     emit(AgentEvent::TurnFinished {
+        reason: "cancelled".into(),
+        step_count,
+    })?;
+    Ok(AgentTurnOutcome {
+        reply: None,
         reason: "cancelled".into(),
         step_count,
     })

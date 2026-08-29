@@ -11,6 +11,8 @@ export function createAgentRunState(): AgentRunState {
     approvalResolving: false,
     folderAccessResolving: false,
     trace: {
+      stages: [],
+      handoffs: [],
       reasoning: {},
       assistantText: '',
       tools: [],
@@ -61,6 +63,69 @@ export function reduceAgentRunState(
         runId: event.run_id,
         startedAtMs: state.startedAtMs ?? nowMs,
         status: 'running',
+        trace: {
+          ...createAgentRunState().trace,
+          definition: state.trace.definition,
+        },
+      }
+    case 'orchestration_started':
+      return {
+        ...state,
+        trace: {
+          ...state.trace,
+          definition: {
+            id: event.definition_id,
+            name: event.definition_name,
+            kind: event.kind,
+          },
+        },
+      }
+    case 'stage_started':
+      return {
+        ...state,
+        status: 'running',
+        trace: {
+          ...state.trace,
+          stages: [
+            ...state.trace.stages,
+            {
+              id: event.stage_id,
+              name: event.name,
+              role: event.role,
+              status: 'running',
+              ...(event.cycle === null ? {} : { cycle: event.cycle }),
+            },
+          ],
+        },
+      }
+    case 'stage_finished':
+      return {
+        ...state,
+        trace: {
+          ...state.trace,
+          stages: state.trace.stages.map((stage) =>
+            stage.id === event.stage_id
+              ? {
+                  ...stage,
+                  status: 'finished',
+                  summary: event.summary,
+                  stepCount: event.step_count,
+                  durationMs: event.duration_ms,
+                }
+              : stage
+          ),
+        },
+      }
+    case 'handoff':
+      return {
+        ...state,
+        trace: {
+          ...state.trace,
+          handoffs: [
+            ...state.trace.handoffs,
+            { from: event.from, to: event.to, summary: event.summary },
+          ],
+        },
       }
     case 'step_started':
       return {

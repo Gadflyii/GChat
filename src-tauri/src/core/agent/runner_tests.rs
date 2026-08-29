@@ -70,6 +70,10 @@ async fn run_script(
 fn event_kind(event: &AgentEvent) -> &'static str {
     match event {
         AgentEvent::TurnStarted { .. } => "turn_started",
+        AgentEvent::OrchestrationStarted { .. } => "orchestration_started",
+        AgentEvent::StageStarted { .. } => "stage_started",
+        AgentEvent::StageFinished { .. } => "stage_finished",
+        AgentEvent::Handoff { .. } => "handoff",
         AgentEvent::StepStarted { .. } => "step_started",
         AgentEvent::ReasoningDelta { .. } => "reasoning_delta",
         AgentEvent::AssistantDelta { .. } => "assistant_delta",

@@ -11,16 +11,22 @@ The agent backend is isolated from regular GChat conversations and from
 the Vercel AI SDK path. It talks directly to the active local model session
 over native `/completion`.
 
-Iterations 1 and 1b are implemented. Agent turns also accept bounded local
-file and image attachments. Memory, tasks, browser automation, skills, dynamic
-MCP tools, window control, and filesystem watchers are deferred.
+The bounded executor, reusable skills, attachments, durable sessions, and
+Agent Studio orchestration are implemented. Agent Studio composes the same
+executor as a Standard Agent, evaluator-driven Goal Loop, Coordinator Team,
+or acyclic Workflow. Memory, tasks, browser automation, dynamic MCP tools,
+window control, and filesystem watchers are deferred.
 
 ## Current architecture
 
 ### Entry points and transport
 
-- `agent_run_turn` starts a bounded agent turn and streams `AgentEvent` values
-  over a Tauri IPC channel.
+- `agent_run_turn` resolves a saved definition, starts its bounded execution,
+  and streams executor and orchestration `AgentEvent` values over a Tauri IPC
+  channel.
+- `agent_list_definitions`, `agent_save_definition`, and related commands own
+  the schema-versioned Agent Studio registry. Built-in templates are immutable
+  starting points rather than hidden runtime branches.
 - `agent_cancel_turn` cancels a run by its caller-provided `run_id`.
 - `agent_resolve_approval` resolves a pending approval by its generated
   approval id.
@@ -29,7 +35,28 @@ MCP tools, window control, and filesystem watchers are deferred.
 - Image analysis uses a separate, non-streaming `/v1/chat/completions` request
   to the same active session. It never uses the grammar-constrained agent slot.
 - Every completion uses the static tool grammar, `cache_prompt`, and a stable
-  slot id. The local API server on port 1337 is not part of this path.
+  slot id. Composite stages use distinct slot ids when they execute in
+  parallel. The local API server on port 1337 is not part of this path.
+
+### Agent Studio orchestration
+
+- Standard Agents use the owning thread's durable session and workspace.
+- Goal Loops alternate a shared-workspace executor with an isolated evaluator
+  for at most eight cycles. The evaluator must return a bare `PASS` first line
+  or actionable `REVISE` feedback.
+- Coordinator Teams plan once, run up to eight specialist roles with bounded
+  parallelism, and synthesize one final result. Specialists receive isolated
+  writable workspaces and read-only source access; synthesis owns main-workspace
+  writes.
+- Workflows are validated acyclic graphs with exactly one final node. Graph
+  levels may execute concurrently only with isolated workspaces; a shared
+  workspace stage must occupy its level alone.
+- Parent cancellation, approval policy, model identity, and failure semantics
+  govern every child stage. Stage session state is isolated; the final result
+  alone is committed to the owning thread session.
+- Completed runs retain bounded stage summaries, timings, and final output for
+  the latest 100 runs. Composite scratch and artifact workspaces live under
+  `<data>/agent-runs/`.
 
 ### Prompt and grammar
 

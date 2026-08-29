@@ -409,6 +409,19 @@ pub fn default_system_persona() -> String {
     DEFAULT_SYSTEM_PERSONA_LINES.join("\n")
 }
 
+pub fn compose_agent_persona(instructions: &str, output_contract: &str) -> String {
+    let mut persona = default_system_persona();
+    if !instructions.trim().is_empty() {
+        persona.push_str("\n\nAssigned role:\n");
+        persona.push_str(instructions.trim());
+    }
+    if !output_contract.trim().is_empty() {
+        persona.push_str("\n\nRequired output contract:\n");
+        persona.push_str(output_contract.trim());
+    }
+    persona
+}
+
 /// Render one `Frequent` tool with its full `args` schema and any examples.
 /// Ported from `formatToolFrequent` (`stable-prefix.ts`).
 fn format_tool_frequent(descriptor: &ToolDescriptor) -> String {

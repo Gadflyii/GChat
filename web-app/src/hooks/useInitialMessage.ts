@@ -14,6 +14,7 @@ export type InitialMessagePayload = {
   files?: InitialMessageFile[]
   documents?: Attachment[]
   agentSkillName?: string
+  agentDefinitionId?: string
 }
 
 type InitialMessageStore = {

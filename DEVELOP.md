@@ -69,6 +69,10 @@ Dev (`make dev-windows` / `yarn dev`) and the installed `GChat.exe` **share the 
 |---|---|---|
 | `%APPDATA%\GChat\data\ginfer\models\` | Downloaded `.ginfer` models (local ginfer model cache) | factory reset (UI), `make clean-windows-all`, uninstaller |
 | `%APPDATA%\GChat\data\threads\` | Chat history | factory reset, `make clean-windows-all`, uninstaller |
+| `%APPDATA%\GChat\data\agent-definitions.json` | Saved Agent Studio definitions | factory reset, `make clean-windows-all`, uninstaller |
+| `%APPDATA%\GChat\data\agent-runs.json` | Bounded Agent Studio run history (latest 100) | factory reset, `make clean-windows-all`, uninstaller |
+| `%APPDATA%\GChat\data\agent-runs\` | Isolated scratch/artifact workspaces for composite Agent runs | factory reset, `make clean-windows-all`, uninstaller |
+| `%APPDATA%\GChat\data\agent-skills\` | Installed and authored Agent skills | factory reset, `make clean-windows-all`, uninstaller |
 | `%APPDATA%\GChat\data\extensions\` | Installed extensions (`@gchat/*`) | factory reset, `make clean-windows-all`, uninstaller |
 | `%APPDATA%\GChat\data\logs\app.log` | Application logs (`tauri_plugin_log`) | factory reset, `make clean-windows-all`, uninstaller |
 | `%APPDATA%\GChat\data\store.json` | Migration / version store | factory reset, `make clean-windows-all`, uninstaller |

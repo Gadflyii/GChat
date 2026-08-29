@@ -420,6 +420,7 @@ export const MessageItem = memo(
           ({ tool }) => tool !== 'reply' && tool !== 'finish'
         ).length ?? 0
       const toolCount = block.tools.length || summaryToolCount
+      const stages = block.agentSummary?.stages ?? []
       const durationSeconds = Number(
         Math.max(0.1, (block.durationMs ?? 100) / 1000).toFixed(1)
       )
@@ -432,8 +433,30 @@ export const MessageItem = memo(
           durationLabel={t('activity.workedFor', {
             count: durationSeconds,
           })}
-          hasDetails={toolCount > 0}
+          hasDetails={toolCount > 0 || stages.length > 0}
         >
+          {stages.length > 0 && (
+            <ActivityDetail
+              label={`${block.agentSummary?.definition?.name ?? 'Agent'} · ${stages.length} ${stages.length === 1 ? 'stage' : 'stages'}`}
+            >
+              {stages.map((stage) => (
+                <div
+                  key={`${block.key}-stage-${stage.id}`}
+                  className="flex items-center gap-2 py-1 text-xs"
+                >
+                  <span className="min-w-0 flex-1 truncate text-foreground/80">
+                    {stage.name}
+                  </span>
+                  <span className="shrink-0 text-muted-foreground">
+                    {stage.step_count ?? 0} steps
+                    {stage.duration_ms !== undefined
+                      ? ` · ${stage.duration_ms} ms`
+                      : ''}
+                  </span>
+                </div>
+              ))}
+            </ActivityDetail>
+          )}
           {toolCount > 0 && (
             <ActivityDetail
               label={t(

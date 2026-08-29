@@ -114,8 +114,10 @@ activity, manages MCP connections, and provides artifact previews for generated 
 ## Agent workflows
 
 The in-process agent is a separate bounded execution route with a grammar-constrained tool
-protocol. It maintains a per-thread workspace, streams activity over Tauri IPC, and stops on reply,
-finish, cancellation, failure, breaker, or the configured step limit.
+protocol. Agent Studio builds reusable Standard Agents, evaluator-driven Goal Loops, bounded
+Coordinator Teams, and acyclic Workflows over that same executor. It maintains per-thread and
+isolated stage workspaces, streams activity over Tauri IPC, records a bounded run trace, and stops
+on reply, finish, cancellation, failure, breaker, or the configured step limit.
 
 Current tool families include:
 
@@ -128,8 +130,10 @@ Current tool families include:
 - skill discovery and execution.
 
 Mutating or stateful work is serialized, pure reads may run concurrently, and dangerous operations
-pass through path confinement, shell guards, and approval policy. The release target adds a visual
-loop builder and dispatcher on top of this execution core; those surfaces are not yet complete.
+pass through path confinement, shell guards, and approval policy. Parallel team members and
+workflow branches use isolated writable workspaces with read-only source access; a shared-workspace
+stage must occupy its graph level alone. Skills can be assigned to the complete
+definition or to individual roles.
 
 ## Code with local models
 

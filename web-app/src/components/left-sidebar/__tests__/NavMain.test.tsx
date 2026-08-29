@@ -118,14 +118,17 @@ describe('NavMain', () => {
     ).toHaveAttribute('data-active', 'true')
   })
 
-  it('shows Skills only in Agent mode', () => {
+  it('shows Agent Studio directly after Code in both modes', () => {
     const { rerender } = render(<NavMain mode="chat" />)
 
-    expect(screen.queryByText('common:skills')).not.toBeInTheDocument()
+    const codeLink = screen.getByText('common:code').closest('li')
+    const studioLink = screen.getByText('Agent Studio').closest('li')
+    expect(studioLink).toBeInTheDocument()
+    expect(codeLink?.nextElementSibling).toBe(studioLink)
 
     rerender(<NavMain mode="agent" />)
 
-    expect(screen.getByText('common:skills')).toBeInTheDocument()
+    expect(screen.getByText('Agent Studio')).toBeInTheDocument()
   })
 
   it('labels the new conversation action for the active mode', () => {

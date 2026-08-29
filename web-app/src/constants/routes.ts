@@ -32,6 +32,9 @@ export const route = {
   code: {
     index: '/code/',
   },
+  agents: {
+    index: '/agents/',
+  },
   skills: {
     index: '/skills/',
   },

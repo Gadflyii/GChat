@@ -37,6 +37,15 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
   return {
     run_id: state.runId ?? '',
     status: state.status,
+    definition: state.trace.definition,
+    stages: state.trace.stages.map((stage) => ({
+      id: stage.id,
+      name: stage.name,
+      role: stage.role,
+      status: stage.status,
+      step_count: stage.stepCount,
+      duration_ms: stage.durationMs,
+    })),
     finish_reason: state.trace.finishReason,
     step_count: state.trace.stepCount,
     duration_ms: durationMs,

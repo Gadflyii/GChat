@@ -6,7 +6,6 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { BlocksIcon } from '@/components/animated-icon/blocks'
-import { FileTextIcon } from '@/components/animated-icon/file-text'
 import { FolderPlusIcon } from '@/components/animated-icon/folder-plus'
 import { ListTodoIcon } from '@/components/animated-icon/list-todo'
 import { MessageCircleIcon } from '@/components/animated-icon/message-circle'
@@ -22,7 +21,7 @@ import { useProjectDialog } from '@/hooks/useProjectDialog'
 import { useSearchDialog } from '@/hooks/useSearchDialog'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
 import type { SidebarMode } from '@/hooks/useAgentMode'
-import { IconTerminal2 } from '@tabler/icons-react'
+import { IconSparkles, IconTerminal2 } from '@tabler/icons-react'
 
 type AnimatedIconHandle = {
   startAnimation: () => void
@@ -35,7 +34,6 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
   const { pathname } = useLocation()
   const newChatIconRef = useRef<AnimatedIconHandle>(null)
   const modelsIconRef = useRef<AnimatedIconHandle>(null)
-  const skillsIconRef = useRef<AnimatedIconHandle>(null)
   const projectIconRef = useRef<AnimatedIconHandle>(null)
   const integrationsIconRef = useRef<PlugIconHandle>(null)
   const integrationsBadgeSeen = useGeneralSetting(
@@ -103,6 +101,18 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
         <SidebarMenuItem>
           <SidebarMenuButton
             asChild
+            isActive={pathname.startsWith('/agents')}
+            className="data-[active=true]:bg-sidebar-foreground/15"
+          >
+            <Link to={route.agents.index}>
+              <IconSparkles className="size-4 text-foreground/70" />
+              <span>Agent Studio</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
             isActive={pathname.startsWith('/hub')}
             className="data-[active=true]:bg-sidebar-foreground/15"
             onMouseEnter={() => modelsIconRef.current?.startAnimation()}
@@ -118,26 +128,6 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        {mode === 'agent' && (
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname.startsWith('/skills')}
-              className="data-[active=true]:bg-sidebar-foreground/15"
-              onMouseEnter={() => skillsIconRef.current?.startAnimation()}
-              onMouseLeave={() => skillsIconRef.current?.stopAnimation()}
-            >
-              <Link to={route.skills.index}>
-                <FileTextIcon
-                  ref={skillsIconRef}
-                  className="text-foreground/70"
-                  size={16}
-                />
-                <span>{t('common:skills')}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        )}
         {mode === 'chat' && (
           <>
             <SidebarMenuItem>

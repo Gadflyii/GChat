@@ -24,12 +24,101 @@ export type AgentTurnRequest = {
   session_id: string
   model_id: string
   user_message: string
+  definition_id?: string
   selected_skill?: string
   attachments?: AgentAttachment[]
   working_dir?: string
   external_roots?: Array<{ path: string; can_edit: boolean }>
   max_steps?: number
   auto_approve: boolean
+}
+
+export type AgentStrategyKind =
+  | 'standard'
+  | 'goal_loop'
+  | 'coordinator'
+  | 'workflow'
+
+export type AgentRole = {
+  id: string
+  name: string
+  instructions: string
+  skills: string[]
+  maxSteps: number
+}
+
+export type AgentWorkflowNode = AgentRole & {
+  workspace: 'isolated' | 'shared'
+}
+
+export type AgentWorkflowEdge = {
+  from: string
+  to: string
+}
+
+type AgentDefinitionBase = {
+  schemaVersion: 1
+  id: string
+  name: string
+  description: string
+  instructions: string
+  skills: string[]
+  maxSteps: number
+  outputContract: string
+  builtIn: boolean
+}
+
+export type AgentDefinition = AgentDefinitionBase &
+  (
+    | { kind: 'standard' }
+    | {
+        kind: 'goal_loop'
+        maxCycles: number
+        successCriteria: string
+        evaluatorInstructions: string
+      }
+    | {
+        kind: 'coordinator'
+        maxParallel: number
+        coordinatorInstructions: string
+        synthesisInstructions: string
+        workers: AgentRole[]
+      }
+    | {
+        kind: 'workflow'
+        nodes: AgentWorkflowNode[]
+        edges: AgentWorkflowEdge[]
+      }
+  )
+
+export type AgentTemplate = {
+  id: string
+  name: string
+  description: string
+  definition: AgentDefinition
+}
+
+export type AgentRunRecord = {
+  schemaVersion: 1
+  id: string
+  runId: string
+  sessionId: string
+  definitionId: string
+  definitionName: string
+  kind: AgentStrategyKind
+  status: 'finished' | 'failed' | 'cancelled'
+  startedAtMs: number
+  finishedAtMs: number
+  totalSteps: number
+  finalReply: string
+  stages: Array<{
+    stageId: string
+    name: string
+    status: string
+    summary: string
+    stepCount: number
+    durationMs: number
+  }>
 }
 
 export type AgentWorkspaceRequest = {
@@ -108,6 +197,29 @@ export type AgentToolExecution = {
 
 export type AgentEvent =
   | { type: 'turn_started'; run_id: string; session_id: string }
+  | {
+      type: 'orchestration_started'
+      definition_id: string
+      definition_name: string
+      kind: AgentStrategyKind
+    }
+  | {
+      type: 'stage_started'
+      stage_id: string
+      name: string
+      role: string
+      cycle: number | null
+    }
+  | {
+      type: 'stage_finished'
+      stage_id: string
+      name: string
+      status: string
+      summary: string
+      step_count: number
+      duration_ms: number
+    }
+  | { type: 'handoff'; from: string; to: string; summary: string }
   | { type: 'step_started'; step_index: number }
   | { type: 'reasoning_delta'; step_index: number; text: string }
   | { type: 'assistant_delta'; text: string }
@@ -198,6 +310,22 @@ export type AgentRunError = {
 }
 
 export type AgentRunTrace = {
+  definition?: {
+    id: string
+    name: string
+    kind: AgentStrategyKind
+  }
+  stages: Array<{
+    id: string
+    name: string
+    role: string
+    status: 'running' | 'finished'
+    cycle?: number
+    summary?: string
+    stepCount?: number
+    durationMs?: number
+  }>
+  handoffs: Array<{ from: string; to: string; summary: string }>
   reasoning: Record<number, string>
   assistantText: string
   tools: AgentRunToolTrace[]
@@ -222,6 +350,19 @@ export type AgentRunState = {
 export type AgentRunSummary = {
   run_id: string
   status: AgentRunStatus
+  definition?: {
+    id: string
+    name: string
+    kind: AgentStrategyKind
+  }
+  stages: Array<{
+    id: string
+    name: string
+    role: string
+    status: 'running' | 'finished'
+    step_count?: number
+    duration_ms?: number
+  }>
   finish_reason?: AgentTurnFinishReason
   step_count?: number
   duration_ms?: number

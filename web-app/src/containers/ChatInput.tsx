@@ -35,6 +35,7 @@ import {
   IconLoader2,
   IconWorld,
   IconMusic,
+  IconSparkles,
 } from '@tabler/icons-react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -124,6 +125,7 @@ import {
   type AgentSkillSlashQuery,
 } from '@/containers/agentSkillSlash'
 import { useAgentSkills } from '@/hooks/useAgentSkills'
+import { useAgentDefinitions } from '@/hooks/useAgentDefinitions'
 import type { AgentSkill } from '@/services/agent/skills'
 
 type ChatInputProps = {
@@ -132,11 +134,13 @@ type ChatInputProps = {
   model?: ThreadModel
   initialMessage?: boolean
   preselectedAgentSkillName?: string
+  preselectedAgentDefinitionId?: string
   projectId?: string
   onSubmit?: (
     text: string,
     files?: InitialMessageFile[],
-    agentSkillName?: string
+    agentSkillName?: string,
+    agentDefinitionId?: string
   ) => void
   onStop?: () => void
   chatStatus?: ChatStatus
@@ -146,6 +150,7 @@ const ChatInput = memo(function ChatInput({
   className,
   initialMessage,
   preselectedAgentSkillName,
+  preselectedAgentDefinitionId,
   projectId,
   onSubmit,
   onStop,
@@ -196,6 +201,11 @@ const ChatInput = memo(function ChatInput({
     isAgentMode && !projectId && isAgentProviderSelected
   const { skills: agentSkills, loading: agentSkillsLoading } =
     useAgentSkills(effectiveAgentMode)
+  const { definitions: agentDefinitions } =
+    useAgentDefinitions(effectiveAgentMode)
+  const [selectedAgentDefinitionId, setSelectedAgentDefinitionId] = useState(
+    preselectedAgentDefinitionId ?? 'general'
+  )
   const [selectedAgentSkill, setSelectedAgentSkill] =
     useState<AgentSkill | null>(null)
   const preselectedAgentSkillAppliedRef = useRef<string | null>(null)
@@ -226,9 +236,25 @@ const ChatInput = memo(function ChatInput({
   useEffect(() => {
     if (effectiveAgentMode) return
     setSelectedAgentSkill(null)
+    setSelectedAgentDefinitionId('general')
     setAgentSkillSlashQuery(null)
     setAgentSkillMenuOpen(false)
   }, [effectiveAgentMode])
+
+  useEffect(() => {
+    if (!effectiveAgentMode) return
+    const requested = preselectedAgentDefinitionId ?? selectedAgentDefinitionId
+    if (agentDefinitions.some((definition) => definition.id === requested)) {
+      setSelectedAgentDefinitionId(requested)
+    } else if (agentDefinitions.length > 0) {
+      setSelectedAgentDefinitionId('general')
+    }
+  }, [
+    agentDefinitions,
+    effectiveAgentMode,
+    preselectedAgentDefinitionId,
+    selectedAgentDefinitionId,
+  ])
 
   useEffect(() => {
     if (!preselectedAgentSkillName) {
@@ -627,11 +653,17 @@ const ChatInput = memo(function ChatInput({
           url: att.dataUrl!,
         }))
 
-      onSubmit(
-        prompt,
-        files.length > 0 ? files : undefined,
-        selectedAgentSkill?.name
-      )
+      const submissionFiles = files.length > 0 ? files : undefined
+      if (effectiveAgentMode) {
+        onSubmit(
+          prompt,
+          submissionFiles,
+          selectedAgentSkill?.name,
+          selectedAgentDefinitionId
+        )
+      } else {
+        onSubmit(prompt, submissionFiles, selectedAgentSkill?.name)
+      }
       setPrompt('')
       setSelectedAgentSkill(null)
       clearAttachmentsForThread(attachmentsKey)
@@ -668,6 +700,9 @@ const ChatInput = memo(function ChatInput({
         files: files.length > 0 ? files : [],
         documents: docsSnapshot.length > 0 ? docsSnapshot : undefined,
         agentSkillName: selectedAgentSkill?.name,
+        agentDefinitionId: effectiveAgentMode
+          ? selectedAgentDefinitionId
+          : undefined,
       }
 
       // Clear input UI immediately so the chip and text disappear in the
@@ -2542,6 +2577,23 @@ const ChatInput = memo(function ChatInput({
 
                   {effectiveAgentMode && (
                     <>
+                      <label className="mb-1 flex h-8 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
+                        <IconSparkles className="size-3.5 shrink-0 text-primary" />
+                        <select
+                          aria-label="Agent definition"
+                          className="min-w-0 flex-1 bg-transparent outline-none"
+                          value={selectedAgentDefinitionId}
+                          onChange={(event) =>
+                            setSelectedAgentDefinitionId(event.target.value)
+                          }
+                        >
+                          {agentDefinitions.map((definition) => (
+                            <option key={definition.id} value={definition.id}>
+                              {definition.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       <AgentExternalFolderButton workspaceKey={agentModeKey} />
                       <AgentApprovalModeSelect
                         mode={approvalMode}

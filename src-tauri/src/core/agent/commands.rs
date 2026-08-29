@@ -10,21 +10,21 @@ use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
 use tauri_plugin_ginfer::state::GinferState;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use super::approval::ApprovalGate;
 use super::attachments::stage_attachments;
+use super::definitions::get_definition;
 use super::folder_access::FolderAccessGate;
 use super::llm_client::{
     find_session_by_model_and_backend, find_session_by_model_id, ContextExpansionHook,
     LlamaClientError, LlamaServerClient, LlamaSessionTarget,
 };
 use super::model_profile::{detect_model_profile, AgentModelProfile};
+use super::orchestrator::{run_definition, OrchestrationInput};
 use super::path_policy::{canonical_directory, expand_home, lexical_normalize, EditableRoots};
-use super::prompt::{
-    build_stable_prefix_for_profile, CapabilitiesSummary, SkillDescriptor,
-    DEFAULT_MAX_PARALLEL_TOOL_CALLS, ITERATION_ONE_TOOLS,
-};
-use super::runner::{run_turn, RunTurnInput, MAX_STEPS};
+use super::prompt::{CapabilitiesSummary, SkillDescriptor};
+use super::runs::{now_ms, record_run, AgentRunRecord};
 use super::session::{load_session, save_session, validate_session_id};
 use super::skills::load_registry;
 use super::tools::DesktopServices;
@@ -147,13 +147,9 @@ impl<R: Runtime> ContextExpansionHook for AgentContextExpansion<R> {
             ));
         }
         let ginfer_state: State<GinferState> = self.app_handle.state();
-        find_session_by_model_and_backend(
-            &target.model_id,
-            target.backend,
-            &ginfer_state,
-        )
-        .await
-        .map_err(|error| error.to_string())
+        find_session_by_model_and_backend(&target.model_id, target.backend, &ginfer_state)
+            .await
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -366,6 +362,10 @@ pub async fn agent_run_turn<R: Runtime>(
 ) -> Result<(), String> {
     validate_request(&request)?;
     let data_folder = get_jan_data_folder_path(app_handle.clone());
+    let definition = get_definition(
+        &data_folder,
+        request.definition_id.as_deref().unwrap_or("general"),
+    )?;
     state
         .agent_approval_allowlist
         .lock()
@@ -452,14 +452,6 @@ pub async fn agent_run_turn<R: Runtime>(
             AgentModelProfile::Plain
         }
     };
-    let stable_prefix = build_stable_prefix_for_profile(
-        ITERATION_ONE_TOOLS,
-        &skill_descriptors,
-        &capabilities,
-        DEFAULT_MAX_PARALLEL_TOOL_CALLS,
-        None,
-        model_profile,
-    );
     let approval_events = on_event.clone();
     let approval = ApprovalGate::new(
         request.run_id.clone(),
@@ -492,19 +484,25 @@ pub async fn agent_run_turn<R: Runtime>(
         let _session_guard = session_lock.lock().await;
         match load_session(&data_folder, &request.session_id).await {
             Ok(mut session) => {
-                let run_result = run_turn(
-                    RunTurnInput {
+                let started_at_ms = now_ms();
+                let storage_id = Uuid::new_v4().to_string();
+                let mut recorded_events = Vec::new();
+                let run_result = run_definition(
+                    OrchestrationInput {
                         run_id: &request.run_id,
+                        storage_id: &storage_id,
                         session_id: &request.session_id,
                         user_message: &user_message,
                         selected_skill: request.selected_skill.as_deref(),
-                        stable_prefix: &stable_prefix,
+                        definition: &definition,
+                        capabilities: &capabilities,
+                        skill_descriptors: &skill_descriptors,
                         model_profile,
                         working_dir: &working_dir,
                         editable_roots: &editable_roots,
                         external_read_only_roots: &trusted_read_roots[..external_read_only_count],
                         trusted_read_roots: &trusted_read_roots,
-                        max_steps: request.max_steps.unwrap_or(MAX_STEPS),
+                        max_steps_override: request.max_steps,
                         client: &client,
                         approval: &approval,
                         folder_access: &folder_access,
@@ -513,12 +511,28 @@ pub async fn agent_run_turn<R: Runtime>(
                         session: &mut session,
                         skill_registry: &skill_registry,
                         bundled_script_runtime: bundled_script_runtime.as_deref(),
+                        data_folder: &data_folder,
                     },
-                    |event| on_event.send(event).map_err(|error| error.to_string()),
+                    |event| {
+                        recorded_events.push(event.clone());
+                        on_event.send(event).map_err(|error| error.to_string())
+                    },
                 )
                 .await;
+                let record = AgentRunRecord::completed(
+                    &storage_id,
+                    &request.run_id,
+                    &request.session_id,
+                    &definition,
+                    started_at_ms,
+                    &recorded_events,
+                    &run_result,
+                );
+                if let Err(error) = record_run(&data_folder, record) {
+                    log::warn!("Failed to record Agent Studio run: {error}");
+                }
                 match save_session(&data_folder, &session).await {
-                    Ok(()) => run_result,
+                    Ok(()) => run_result.map(|_| ()),
                     Err(error) => Err(error),
                 }
             }

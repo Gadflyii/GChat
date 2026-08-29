@@ -111,6 +111,10 @@ pub struct AgentTurnRequest {
     pub model_id: String,
     /// The user's message for this turn.
     pub user_message: String,
+    /// Saved Agent Studio definition to execute. Defaults to the built-in
+    /// General Agent.
+    #[serde(default)]
+    pub definition_id: Option<String>,
     /// Optional enabled skill that must be loaded before the first inference.
     #[serde(default)]
     pub selected_skill: Option<String>,
@@ -222,6 +226,30 @@ pub enum AgentEvent {
     TurnStarted {
         run_id: String,
         session_id: String,
+    },
+    OrchestrationStarted {
+        definition_id: String,
+        definition_name: String,
+        kind: String,
+    },
+    StageStarted {
+        stage_id: String,
+        name: String,
+        role: String,
+        cycle: Option<u32>,
+    },
+    StageFinished {
+        stage_id: String,
+        name: String,
+        status: String,
+        summary: String,
+        step_count: u32,
+        duration_ms: u64,
+    },
+    Handoff {
+        from: String,
+        to: String,
+        summary: String,
     },
     StepStarted {
         step_index: u32,
