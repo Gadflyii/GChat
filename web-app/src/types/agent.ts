@@ -39,12 +39,19 @@ export type AgentStrategyKind =
   | 'coordinator'
   | 'workflow'
 
+export type AgentModelInstance = {
+  id: string
+  modelId: string
+  port: number
+}
+
 export type AgentRole = {
   id: string
   name: string
   instructions: string
   skills: string[]
   maxSteps: number
+  modelInstanceId: string | null
 }
 
 export type AgentWorkflowNode = AgentRole & {
@@ -57,7 +64,7 @@ export type AgentWorkflowEdge = {
 }
 
 type AgentDefinitionBase = {
-  schemaVersion: 1
+  schemaVersion: 2
   id: string
   name: string
   description: string
@@ -65,6 +72,7 @@ type AgentDefinitionBase = {
   skills: string[]
   maxSteps: number
   outputContract: string
+  modelInstanceId: string | null
   builtIn: boolean
 }
 
@@ -76,12 +84,14 @@ export type AgentDefinition = AgentDefinitionBase &
         maxCycles: number
         successCriteria: string
         evaluatorInstructions: string
+        evaluatorModelInstanceId: string | null
       }
     | {
         kind: 'coordinator'
         maxParallel: number
         coordinatorInstructions: string
         synthesisInstructions: string
+        synthesisModelInstanceId: string | null
         workers: AgentRole[]
       }
     | {
@@ -99,7 +109,7 @@ export type AgentTemplate = {
 }
 
 export type AgentRunRecord = {
-  schemaVersion: 1
+  schemaVersion: 2
   id: string
   runId: string
   sessionId: string
@@ -111,6 +121,7 @@ export type AgentRunRecord = {
   finishedAtMs: number
   totalSteps: number
   finalReply: string
+  defaultModelInstanceId: string
   stages: Array<{
     stageId: string
     name: string
@@ -118,6 +129,8 @@ export type AgentRunRecord = {
     summary: string
     stepCount: number
     durationMs: number
+    modelInstanceId: string
+    modelId: string
   }>
 }
 
@@ -202,6 +215,7 @@ export type AgentEvent =
       definition_id: string
       definition_name: string
       kind: AgentStrategyKind
+      default_model_instance_id: string
     }
   | {
       type: 'stage_started'
@@ -209,6 +223,7 @@ export type AgentEvent =
       name: string
       role: string
       cycle: number | null
+      model_instance_id: string
     }
   | {
       type: 'stage_finished'
@@ -218,6 +233,8 @@ export type AgentEvent =
       summary: string
       step_count: number
       duration_ms: number
+      model_instance_id: string
+      model_id: string
     }
   | { type: 'handoff'; from: string; to: string; summary: string }
   | { type: 'step_started'; step_index: number }
@@ -314,6 +331,7 @@ export type AgentRunTrace = {
     id: string
     name: string
     kind: AgentStrategyKind
+    modelInstanceId: string
   }
   stages: Array<{
     id: string
@@ -324,6 +342,7 @@ export type AgentRunTrace = {
     summary?: string
     stepCount?: number
     durationMs?: number
+    modelInstanceId: string
   }>
   handoffs: Array<{ from: string; to: string; summary: string }>
   reasoning: Record<number, string>
@@ -354,6 +373,7 @@ export type AgentRunSummary = {
     id: string
     name: string
     kind: AgentStrategyKind
+    model_instance_id: string
   }
   stages: Array<{
     id: string
@@ -362,6 +382,7 @@ export type AgentRunSummary = {
     status: 'running' | 'finished'
     step_count?: number
     duration_ms?: number
+    model_instance_id: string
   }>
   finish_reason?: AgentTurnFinishReason
   step_count?: number

@@ -247,6 +247,8 @@ const ChatInput = memo(function ChatInput({
     if (agentDefinitions.some((definition) => definition.id === requested)) {
       setSelectedAgentDefinitionId(requested)
     } else if (agentDefinitions.length > 0) {
+      setSelectedAgentDefinitionId(agentDefinitions[0].id)
+    } else {
       setSelectedAgentDefinitionId('general')
     }
   }, [
@@ -2577,23 +2579,25 @@ const ChatInput = memo(function ChatInput({
 
                   {effectiveAgentMode && (
                     <>
-                      <label className="mb-1 flex h-8 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
-                        <IconSparkles className="size-3.5 shrink-0 text-primary" />
-                        <select
-                          aria-label="Agent definition"
-                          className="min-w-0 flex-1 bg-transparent outline-none"
-                          value={selectedAgentDefinitionId}
-                          onChange={(event) =>
-                            setSelectedAgentDefinitionId(event.target.value)
-                          }
-                        >
-                          {agentDefinitions.map((definition) => (
-                            <option key={definition.id} value={definition.id}>
-                              {definition.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      {agentDefinitions.length > 0 && (
+                        <label className="mb-1 flex h-8 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
+                          <IconSparkles className="size-3.5 shrink-0 text-primary" />
+                          <select
+                            aria-label="Agent definition"
+                            className="min-w-0 flex-1 bg-transparent outline-none"
+                            value={selectedAgentDefinitionId}
+                            onChange={(event) =>
+                              setSelectedAgentDefinitionId(event.target.value)
+                            }
+                          >
+                            {agentDefinitions.map((definition) => (
+                              <option key={definition.id} value={definition.id}>
+                                {definition.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                       <AgentExternalFolderButton workspaceKey={agentModeKey} />
                       <AgentApprovalModeSelect
                         mode={approvalMode}

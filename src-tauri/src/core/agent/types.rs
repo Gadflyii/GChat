@@ -231,12 +231,14 @@ pub enum AgentEvent {
         definition_id: String,
         definition_name: String,
         kind: String,
+        default_model_instance_id: String,
     },
     StageStarted {
         stage_id: String,
         name: String,
         role: String,
         cycle: Option<u32>,
+        model_instance_id: String,
     },
     StageFinished {
         stage_id: String,
@@ -245,6 +247,8 @@ pub enum AgentEvent {
         summary: String,
         step_count: u32,
         duration_ms: u64,
+        model_instance_id: String,
+        model_id: String,
     },
     Handoff {
         from: String,

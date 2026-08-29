@@ -14,7 +14,7 @@ use super::runner::AgentTurnOutcome;
 use super::types::AgentEvent;
 
 const RUN_HISTORY_FILE: &str = "agent-runs.json";
-const RUN_HISTORY_SCHEMA_VERSION: u32 = 1;
+const RUN_HISTORY_SCHEMA_VERSION: u32 = 2;
 const MAX_RUN_HISTORY: usize = 100;
 static RUN_HISTORY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -33,6 +33,7 @@ pub struct AgentRunRecord {
     pub finished_at_ms: u64,
     pub total_steps: u32,
     pub final_reply: String,
+    pub default_model_instance_id: String,
     pub stages: Vec<AgentRunStage>,
 }
 
@@ -45,6 +46,8 @@ pub struct AgentRunStage {
     pub summary: String,
     pub step_count: u32,
     pub duration_ms: u64,
+    pub model_instance_id: String,
+    pub model_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +77,8 @@ impl AgentRunRecord {
                     summary,
                     step_count,
                     duration_ms,
+                    model_instance_id,
+                    model_id,
                 } => Some(AgentRunStage {
                     stage_id: stage_id.clone(),
                     name: name.clone(),
@@ -81,6 +86,8 @@ impl AgentRunRecord {
                     summary: summary.clone(),
                     step_count: *step_count,
                     duration_ms: *duration_ms,
+                    model_instance_id: model_instance_id.clone(),
+                    model_id: model_id.clone(),
                 }),
                 _ => None,
             })
@@ -105,6 +112,16 @@ impl AgentRunRecord {
                 _ => None,
             })
             .unwrap_or_else(|| "standard".into());
+        let default_model_instance_id = events
+            .iter()
+            .find_map(|event| match event {
+                AgentEvent::OrchestrationStarted {
+                    default_model_instance_id,
+                    ..
+                } => Some(default_model_instance_id.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
         Self {
             schema_version: RUN_HISTORY_SCHEMA_VERSION,
             id: id.into(),
@@ -118,6 +135,7 @@ impl AgentRunRecord {
             finished_at_ms: now_ms(),
             total_steps,
             final_reply,
+            default_model_instance_id,
             stages,
         }
     }
@@ -241,5 +259,45 @@ mod tests {
         assert_eq!(runs.len(), 100);
         assert_eq!(runs[0].run_id, "run-104");
         assert_eq!(runs[99].run_id, "run-5");
+    }
+
+    #[test]
+    fn records_the_resolved_model_for_each_stage() {
+        let outcome = Ok(AgentTurnOutcome {
+            reply: Some("done".into()),
+            reason: "reply".into(),
+            step_count: 2,
+        });
+        let events = vec![
+            AgentEvent::OrchestrationStarted {
+                definition_id: "team".into(),
+                definition_name: "Team".into(),
+                kind: "coordinator".into(),
+                default_model_instance_id: "coordinator-model".into(),
+            },
+            AgentEvent::StageFinished {
+                stage_id: "researcher".into(),
+                name: "Researcher".into(),
+                status: "reply".into(),
+                summary: "report".into(),
+                step_count: 2,
+                duration_ms: 50,
+                model_instance_id: "research-model".into(),
+                model_id: "research-model".into(),
+            },
+        ];
+
+        let record = AgentRunRecord::completed(
+            "record",
+            "run",
+            "session",
+            &general_agent(),
+            10,
+            &events,
+            &outcome,
+        );
+
+        assert_eq!(record.default_model_instance_id, "coordinator-model");
+        assert_eq!(record.stages[0].model_instance_id, "research-model");
     }
 }

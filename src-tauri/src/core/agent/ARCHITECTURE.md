@@ -8,8 +8,8 @@ decision log in `AGENTS.md`.
 ## Status and scope
 
 The agent backend is isolated from regular GChat conversations and from
-the Vercel AI SDK path. It talks directly to the active local model session
-over native `/completion`.
+the Vercel AI SDK path. It talks directly to the local model instance assigned
+to each stage over native `/completion`.
 
 The bounded executor, reusable skills, attachments, durable sessions, and
 Agent Studio orchestration are implemented. Agent Studio composes the same
@@ -25,15 +25,20 @@ window control, and filesystem watchers are deferred.
   and streams executor and orchestration `AgentEvent` values over a Tauri IPC
   channel.
 - `agent_list_definitions`, `agent_save_definition`, and related commands own
-  the schema-versioned Agent Studio registry. Built-in templates are immutable
-  starting points rather than hidden runtime branches.
+  the schema-versioned Agent Studio registry. The General Agent is a hidden
+  runtime fallback and draft authority; the registry exposes only saved user
+  definitions. Built-in templates remain immutable starting points.
+- `agent_list_model_instances` exposes loaded non-embedding GInfer sessions as
+  stable registered model IDs without exposing their API keys.
 - `agent_cancel_turn` cancels a run by its caller-provided `run_id`.
 - `agent_resolve_approval` resolves a pending approval by its generated
   approval id.
-- `LlamaServerClient` resolves the active local model session and calls its
-  `/completion` endpoint directly.
+- Each distinct model instance assigned to a run owns one `LlamaServerClient`
+  and detected model profile. Stages call that instance's `/completion`
+  endpoint directly.
 - Image analysis uses a separate, non-streaming `/v1/chat/completions` request
-  to the same active session. It never uses the grammar-constrained agent slot.
+  to the current stage's assigned session. It never uses the
+  grammar-constrained agent slot.
 - Every completion uses the static tool grammar, `cache_prompt`, and a stable
   slot id. Composite stages use distinct slot ids when they execute in
   parallel. The local API server on port 1337 is not part of this path.
@@ -41,6 +46,11 @@ window control, and filesystem watchers are deferred.
 ### Agent Studio orchestration
 
 - Standard Agents use the owning thread's durable session and workspace.
+- A definition may inherit the active chat model or pin a loaded registered
+  model as its default. Evaluators, synthesizers, coordinator workers, and
+  workflow nodes may override that default independently. Every distinct
+  assignment is resolved before the first stage starts; an unloaded pinned
+  instance fails the run without partial execution.
 - Goal Loops alternate a shared-workspace executor with an isolated evaluator
   for at most eight cycles. The evaluator must return a bare `PASS` first line
   or actionable `REVISE` feedback.
@@ -51,12 +61,12 @@ window control, and filesystem watchers are deferred.
 - Workflows are validated acyclic graphs with exactly one final node. Graph
   levels may execute concurrently only with isolated workspaces; a shared
   workspace stage must occupy its level alone.
-- Parent cancellation, approval policy, model identity, and failure semantics
-  govern every child stage. Stage session state is isolated; the final result
-  alone is committed to the owning thread session.
-- Completed runs retain bounded stage summaries, timings, and final output for
-  the latest 100 runs. Composite scratch and artifact workspaces live under
-  `<data>/agent-runs/`.
+- Parent cancellation, approval policy, and failure semantics govern every
+  child stage. Stage session and model identity are explicit and isolated; the
+  final result alone is committed to the owning thread session.
+- Completed runs retain bounded stage summaries, timings, resolved model
+  assignments, and final output for the latest 100 runs. Composite scratch and
+  artifact workspaces live under `<data>/agent-runs/`.
 
 ### Prompt and grammar
 
@@ -137,10 +147,10 @@ valid only as the final call and executes after all preceding calls finish.
   persisted in the Agent session transcript.
 - Documents remain on the existing `os.fs.read_document` parser path. Text and
   source files use `os.fs.read`; archives use the archive tools.
-- Image turns are rejected before staging when the active session is not
-  vision-capable. `vision.describe` repeats the capability check at execution
-  time so a restarted or replaced text-only session produces a structured tool
-  error instead of guessed output.
+- Image turns are rejected before staging when any assigned stage session is
+  not vision-capable. `vision.describe` repeats the capability check at
+  execution time so a restarted or replaced text-only session produces a
+  structured tool error instead of guessed output.
 
 ## Test pyramid
 

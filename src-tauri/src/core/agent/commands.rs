@@ -1,5 +1,6 @@
 //! Tauri commands for starting and cancelling an isolated agent turn.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
@@ -14,14 +15,14 @@ use uuid::Uuid;
 
 use super::approval::ApprovalGate;
 use super::attachments::stage_attachments;
-use super::definitions::get_definition;
+use super::definitions::{get_definition, AgentDefinition, AgentStrategy};
 use super::folder_access::FolderAccessGate;
 use super::llm_client::{
     find_session_by_model_and_backend, find_session_by_model_id, ContextExpansionHook,
     LlamaClientError, LlamaServerClient, LlamaSessionTarget,
 };
-use super::model_profile::{detect_model_profile, AgentModelProfile};
-use super::orchestrator::{run_definition, OrchestrationInput};
+use super::model_profile::detect_model_profile;
+use super::orchestrator::{run_definition, AgentModelRoute, AgentModelRoutes, OrchestrationInput};
 use super::path_policy::{canonical_directory, expand_home, lexical_normalize, EditableRoots};
 use super::prompt::{CapabilitiesSummary, SkillDescriptor};
 use super::runs::{now_ms, record_run, AgentRunRecord};
@@ -96,6 +97,35 @@ pub struct AgentWorkspaceText {
     pub path: String,
     pub content: String,
     pub truncated: bool,
+}
+
+/// A currently loaded, non-embedding GInfer instance that Agent Studio may bind.
+/// GChat currently owns at most one live instance for each registered model ID,
+/// so the stable instance ID is that exact registered ID rather than a PID/port.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentModelInstance {
+    pub id: String,
+    pub model_id: String,
+    pub port: u16,
+}
+
+#[tauri::command]
+pub async fn agent_list_model_instances(
+    ginfer_state: State<'_, GinferState>,
+) -> Result<Vec<AgentModelInstance>, String> {
+    let sessions = ginfer_state.ginfer_process.lock().await;
+    let mut instances = sessions
+        .values()
+        .filter(|session| !session.info.is_embedding)
+        .map(|session| AgentModelInstance {
+            id: session.info.model_id.clone(),
+            model_id: session.info.model_id.clone(),
+            port: session.info.port,
+        })
+        .collect::<Vec<_>>();
+    instances.sort_by(|left, right| left.model_id.cmp(&right.model_id));
+    Ok(instances)
 }
 
 #[tauri::command]
@@ -384,14 +414,27 @@ pub async fn agent_run_turn<R: Runtime>(
     }
     let editable_roots = EditableRoots::new(&working_dir, &editable_external_roots).await?;
     let ginfer_state: State<GinferState> = app_handle.state();
-    let target = find_session_by_model_id(&request.model_id, &ginfer_state)
-        .await
-        .map_err(|error| error.to_string())?;
     let has_images = request
         .attachments
         .iter()
         .any(|attachment| attachment.kind == super::types::AgentAttachmentKind::Image);
-    ensure_vision_requirement(has_images, target.has_vision)?;
+    let cancellation = CancellationToken::new();
+    let context_expansion = Arc::new(AgentContextExpansion {
+        app_handle: app_handle.clone(),
+        state: state.auto_increase_ctx.clone(),
+    });
+    let model_routes = resolve_agent_model_routes(
+        &definition,
+        &request.model_id,
+        &ginfer_state,
+        context_expansion,
+        &cancellation,
+    )
+    .await?;
+    for instance_id in required_model_instance_ids(&definition, &request.model_id) {
+        let route = model_routes.route(&instance_id)?;
+        ensure_vision_requirement(has_images, route.client.target().has_vision)?;
+    }
     let staged = stage_attachments(&data_folder, &request.session_id, &request.attachments).await?;
     let user_message = staged.append_manifest(&request.user_message);
     let mut trusted_read_roots = read_only_external_roots;
@@ -399,14 +442,6 @@ pub async fn agent_run_turn<R: Runtime>(
     if let Some(attachment_root) = staged.trusted_root.as_ref() {
         trusted_read_roots.push(attachment_root.clone());
     }
-    let cancellation = CancellationToken::new();
-    let context_expansion = Arc::new(AgentContextExpansion {
-        app_handle: app_handle.clone(),
-        state: state.auto_increase_ctx.clone(),
-    });
-    let client = LlamaServerClient::new(&target)
-        .map_err(|error| error.to_string())?
-        .with_context_expansion(context_expansion);
     let (cancel_tx, cancel_rx) = oneshot::channel();
     {
         let mut cancellations = state.tool_call_cancellations.lock().await;
@@ -444,14 +479,6 @@ pub async fn agent_run_turn<R: Runtime>(
             dangerous: record.manifest.dangerous,
         })
         .collect::<Vec<_>>();
-    let model_profile = match client.fetch_props(&cancellation).await {
-        Ok(props) => detect_model_profile(&props),
-        Err(LlamaClientError::Cancelled) => AgentModelProfile::Plain,
-        Err(error) => {
-            log::warn!("Agent model-profile probe failed; using plain profile: {error}");
-            AgentModelProfile::Plain
-        }
-    };
     let approval_events = on_event.clone();
     let approval = ApprovalGate::new(
         request.run_id.clone(),
@@ -497,13 +524,13 @@ pub async fn agent_run_turn<R: Runtime>(
                         definition: &definition,
                         capabilities: &capabilities,
                         skill_descriptors: &skill_descriptors,
-                        model_profile,
+                        active_model_instance_id: &request.model_id,
                         working_dir: &working_dir,
                         editable_roots: &editable_roots,
                         external_read_only_roots: &trusted_read_roots[..external_read_only_count],
                         trusted_read_roots: &trusted_read_roots,
                         max_steps_override: request.max_steps,
-                        client: &client,
+                        model_routes: &model_routes,
                         approval: &approval,
                         folder_access: &folder_access,
                         desktop: &desktop,
@@ -557,6 +584,88 @@ fn resolve_bundled_script_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Opti
         .ok()
         .map(|root| root.join("resources/bin").join(executable))
         .filter(|path| path.is_file())
+}
+
+fn required_model_instance_ids(
+    definition: &AgentDefinition,
+    active_model_instance_id: &str,
+) -> Vec<String> {
+    let default = definition
+        .model_instance_id
+        .as_deref()
+        .unwrap_or(active_model_instance_id);
+    let mut ids = BTreeSet::from([default.to_owned()]);
+    match &definition.strategy {
+        AgentStrategy::Standard => {}
+        AgentStrategy::GoalLoop {
+            evaluator_model_instance_id,
+            ..
+        } => {
+            if let Some(id) = evaluator_model_instance_id {
+                ids.insert(id.clone());
+            }
+        }
+        AgentStrategy::Coordinator {
+            synthesis_model_instance_id,
+            workers,
+            ..
+        } => {
+            if let Some(id) = synthesis_model_instance_id {
+                ids.insert(id.clone());
+            }
+            ids.extend(
+                workers
+                    .iter()
+                    .filter_map(|worker| worker.model_instance_id.clone()),
+            );
+        }
+        AgentStrategy::Workflow { nodes, .. } => {
+            ids.extend(
+                nodes
+                    .iter()
+                    .filter_map(|node| node.model_instance_id.clone()),
+            );
+        }
+    }
+    ids.into_iter().collect()
+}
+
+async fn resolve_agent_model_routes<R: Runtime>(
+    definition: &AgentDefinition,
+    active_model_instance_id: &str,
+    ginfer_state: &GinferState,
+    context_expansion: Arc<AgentContextExpansion<R>>,
+    cancellation: &CancellationToken,
+) -> Result<AgentModelRoutes, String> {
+    let mut routes = Vec::new();
+    for instance_id in required_model_instance_ids(definition, active_model_instance_id) {
+        let target = find_session_by_model_id(&instance_id, ginfer_state)
+            .await
+            .map_err(|_| {
+                format!(
+                    "Assigned Agent model instance `{instance_id}` is not loaded. Load it before starting this run."
+                )
+            })?;
+        let client = LlamaServerClient::new(&target)
+            .map_err(|error| error.to_string())?
+            .with_context_expansion(context_expansion.clone());
+        let props = client.fetch_props(cancellation).await.map_err(|error| match error {
+            LlamaClientError::Cancelled => {
+                "Agent model-instance validation was cancelled".to_owned()
+            }
+            other => {
+                format!("Assigned Agent model instance `{instance_id}` is not healthy: {other}")
+            }
+        })?;
+        let model_profile = detect_model_profile(&props);
+        routes.push(AgentModelRoute {
+            instance_id,
+            model_id: target.model_id.clone(),
+            model_profile,
+            client,
+        });
+    }
+    AgentModelRoutes::new(routes)
 }
 
 fn ensure_vision_requirement(has_images: bool, has_vision: bool) -> Result<(), String> {
@@ -824,6 +933,41 @@ mod tests {
 
     use super::*;
     use crate::core::agent::test_support::TestWorkspace;
+
+    #[test]
+    fn resolves_every_explicit_stage_model_before_a_run() {
+        let mut definition = crate::core::agent::definitions::general_agent();
+        definition.model_instance_id = Some("coordinator-model".into());
+        definition.strategy = AgentStrategy::Coordinator {
+            max_parallel: 2,
+            coordinator_instructions: "Plan".into(),
+            synthesis_instructions: "Synthesize".into(),
+            synthesis_model_instance_id: Some("synthesis-model".into()),
+            workers: vec![
+                crate::core::agent::definitions::AgentRole {
+                    id: "one".into(),
+                    name: "One".into(),
+                    instructions: "Work".into(),
+                    skills: Vec::new(),
+                    max_steps: 4,
+                    model_instance_id: Some("worker-model".into()),
+                },
+                crate::core::agent::definitions::AgentRole {
+                    id: "two".into(),
+                    name: "Two".into(),
+                    instructions: "Work".into(),
+                    skills: Vec::new(),
+                    max_steps: 4,
+                    model_instance_id: None,
+                },
+            ],
+        };
+
+        assert_eq!(
+            required_model_instance_ids(&definition, "active-model"),
+            vec!["coordinator-model", "synthesis-model", "worker-model"]
+        );
+    }
 
     #[cfg(windows)]
     fn create_junction(link: &Path, target: &Path) {

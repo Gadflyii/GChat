@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   listAgentDefinitions,
+  newAgentDefinition,
   saveAgentDefinition,
   deleteAgentDefinition,
 } from '@/services/agent/definitions'
@@ -36,10 +37,7 @@ export function useAgentDefinitions(enabled = true) {
             candidate.id === saved.id ? saved : candidate
           )
         : [...current, saved]
-      return next.sort((left, right) => {
-        if (left.builtIn !== right.builtIn) return left.builtIn ? -1 : 1
-        return left.name.localeCompare(right.name)
-      })
+      return next.sort((left, right) => left.name.localeCompare(right.name))
     })
     return saved
   }, [])
@@ -51,5 +49,7 @@ export function useAgentDefinitions(enabled = true) {
     )
   }, [])
 
-  return { definitions, loading, error, load, save, remove }
+  const createDraft = useCallback(() => newAgentDefinition(), [])
+
+  return { definitions, loading, error, load, save, remove, createDraft }
 }

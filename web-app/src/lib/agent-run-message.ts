@@ -37,7 +37,14 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
   return {
     run_id: state.runId ?? '',
     status: state.status,
-    definition: state.trace.definition,
+    definition: state.trace.definition
+      ? {
+          id: state.trace.definition.id,
+          name: state.trace.definition.name,
+          kind: state.trace.definition.kind,
+          model_instance_id: state.trace.definition.modelInstanceId,
+        }
+      : undefined,
     stages: state.trace.stages.map((stage) => ({
       id: stage.id,
       name: stage.name,
@@ -45,6 +52,7 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
       status: stage.status,
       step_count: stage.stepCount,
       duration_ms: stage.durationMs,
+      model_instance_id: stage.modelInstanceId,
     })),
     finish_reason: state.trace.finishReason,
     step_count: state.trace.stepCount,

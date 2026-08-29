@@ -87,6 +87,29 @@ describe('useAgentRun', () => {
     expect(finished.finishedAtMs).toBe(4_250)
   })
 
+  it('tracks the model instance assigned to every live stage', () => {
+    const orchestrated = reduceAgentRunState(createAgentRunState(), {
+      type: 'orchestration_started',
+      definition_id: 'team',
+      definition_name: 'Team',
+      kind: 'coordinator',
+      default_model_instance_id: 'coordinator-model',
+    })
+    const running = reduceAgentRunState(orchestrated, {
+      type: 'stage_started',
+      stage_id: 'researcher',
+      name: 'Researcher',
+      role: 'worker',
+      cycle: null,
+      model_instance_id: 'research-model',
+    })
+
+    expect(running.trace.definition?.modelInstanceId).toBe(
+      'coordinator-model'
+    )
+    expect(running.trace.stages[0].modelInstanceId).toBe('research-model')
+  })
+
   it('clears a pending approval on execution, error, and terminal events', () => {
     const approval: AgentEvent = {
       type: 'approval_requested',

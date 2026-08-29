@@ -49,7 +49,7 @@ builder, dispatcher, Windows GInfer integration, and matched installers are stil
 | | GChat release scope |
 | --- | --- |
 | **Desktop** | Tauri 2 shell with a React interface |
-| **Inference** | GInfer only; one resident `.ginfer` model behind the application |
+| **Inference** | GInfer only; registered resident `.ginfer` model instances with explicit chat and Agent-stage routing |
 | **Conversations** | Streaming chat, reasoning, vision where the model permits it, tool calling, artifacts, projects |
 | **Agents** | Bounded autonomous loop, skills, local workspace, approvals, attachments, tools, cancellation |
 | **Coding** | External coding-agent configuration and `gchat-cli` today; embedded OpenCode terminal in development |
@@ -118,6 +118,11 @@ protocol. Agent Studio builds reusable Standard Agents, evaluator-driven Goal Lo
 Coordinator Teams, and acyclic Workflows over that same executor. It maintains per-thread and
 isolated stage workspaces, streams activity over Tauri IPC, records a bounded run trace, and stops
 on reply, finish, cancellation, failure, breaker, or the configured step limit.
+The default General Agent remains an implicit runtime fallback; Agent Studio and the task picker
+show only agents the user has created. A definition can follow the active chat model or pin a
+loaded GInfer instance, with independent overrides for evaluators, specialists, synthesizers, and
+workflow nodes. GChat validates every assigned instance before execution and includes the resolved
+model in live and saved stage traces.
 
 Current tool families include:
 

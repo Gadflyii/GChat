@@ -25,11 +25,13 @@ import { useAgentDefinitions } from '@/hooks/useAgentDefinitions'
 import { useAgentMode } from '@/hooks/useAgentMode'
 import { useAgentSkills } from '@/hooks/useAgentSkills'
 import {
+  listAgentModelInstances,
   listAgentRuns,
   listAgentTemplates,
 } from '@/services/agent/definitions'
 import type {
   AgentDefinition,
+  AgentModelInstance,
   AgentRole,
   AgentRunRecord,
   AgentStrategyKind,
@@ -71,21 +73,6 @@ const KIND_META: Record<
   },
 }
 
-function newDefinition(kind: AgentStrategyKind = 'standard'): AgentDefinition {
-  const base = {
-    schemaVersion: 1 as const,
-    id: '',
-    name: 'Untitled Agent',
-    description: '',
-    instructions: '',
-    skills: [],
-    maxSteps: 25,
-    outputContract: '',
-    builtIn: false,
-  }
-  return withKind(base, kind)
-}
-
 function withKind(
   base: Omit<AgentDefinition, 'kind'>,
   kind: AgentStrategyKind
@@ -102,6 +89,7 @@ function withKind(
           'The requested outcome is complete, correct, and directly usable.',
         evaluatorInstructions:
           'Evaluate the result against every success criterion. Return PASS only when all are met; otherwise return REVISE with concrete corrective feedback.',
+        evaluatorModelInstanceId: null,
       }
     case 'coordinator':
       return {
@@ -112,6 +100,7 @@ function withKind(
           'Decompose the goal into concise, non-overlapping assignments.',
         synthesisInstructions:
           'Reconcile the specialist reports and deliver one coherent result.',
+        synthesisModelInstanceId: null,
         workers: [newRole('researcher', 'Researcher')],
       }
     case 'workflow':
@@ -125,7 +114,14 @@ function withKind(
 }
 
 function newRole(id: string, name: string): AgentRole {
-  return { id, name, instructions: '', skills: [], maxSteps: 12 }
+  return {
+    id,
+    name,
+    instructions: '',
+    skills: [],
+    maxSteps: 12,
+    modelInstanceId: null,
+  }
 }
 
 function newNode(
@@ -151,15 +147,17 @@ function slug(value: string): string {
 
 export function AgentStudioPage() {
   const navigate = useNavigate()
-  const { definitions, loading, error, save, remove } =
+  const { definitions, loading, error, load, save, remove, createDraft } =
     useAgentDefinitions()
   const { skills } = useAgentSkills()
   const [view, setView] = useState<StudioView>('definitions')
   const [draft, setDraft] = useState<AgentDefinition | null>(null)
   const [templates, setTemplates] = useState<AgentTemplate[]>([])
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
+  const [modelInstances, setModelInstances] = useState<AgentModelInstance[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     if (!draft && definitions.length > 0) {
@@ -168,16 +166,33 @@ export function AgentStudioPage() {
   }, [definitions, draft])
 
   useEffect(() => {
-    void Promise.all([listAgentTemplates(), listAgentRuns()])
-      .then(([nextTemplates, nextRuns]) => {
+    void Promise.all([
+      listAgentTemplates(),
+      listAgentRuns(),
+      listAgentModelInstances(),
+    ])
+      .then(([nextTemplates, nextRuns, nextModelInstances]) => {
         setTemplates(nextTemplates)
         setRuns(nextRuns)
+        setModelInstances(nextModelInstances)
         setSelectedRunId((current) => current ?? nextRuns[0]?.id ?? null)
       })
       .catch((reason) => toast.error(String(reason)))
   }, [])
 
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
+
+  const createAgent = async () => {
+    setCreating(true)
+    try {
+      setDraft(await createDraft())
+      setView('definitions')
+    } catch (reason) {
+      toast.error(String(reason))
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const edit = (definition: AgentDefinition) => {
     setDraft(cloneDefinition(definition))
@@ -217,7 +232,11 @@ export function AgentStudioPage() {
   }
 
   const deleteDraft = async () => {
-    if (!draft || draft.builtIn) return
+    if (!draft) return
+    if (!draft.id) {
+      setDraft(null)
+      return
+    }
     try {
       await remove(draft.id)
       setDraft(null)
@@ -283,7 +302,31 @@ export function AgentStudioPage() {
         </div>
       </HeaderPage>
 
-      {view === 'definitions' && (
+      {view === 'definitions' && !draft && definitions.length === 0 ? (
+        <div className="flex min-h-0 items-center justify-center">
+          {!loading && !error && (
+            <Button
+              size="lg"
+              disabled={creating}
+              onClick={() => void createAgent()}
+            >
+              <IconPlus /> {creating ? 'Creating…' : 'Create agent'}
+            </Button>
+          )}
+          {!loading && error && (
+            <div className="text-center">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button
+                className="mt-3"
+                variant="outline"
+                onClick={() => void load()}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : view === 'definitions' ? (
         <div className="grid min-h-0 grid-cols-[280px_minmax(420px,1fr)_300px]">
           <aside className="min-h-0 overflow-y-auto border-r p-3">
             <div className="mb-3 flex items-center justify-between">
@@ -294,7 +337,8 @@ export function AgentStudioPage() {
                 size="icon-sm"
                 variant="ghost"
                 title="New agent"
-                onClick={() => setDraft(newDefinition())}
+                disabled={creating}
+                onClick={() => void createAgent()}
               >
                 <IconPlus />
               </Button>
@@ -328,7 +372,6 @@ export function AgentStudioPage() {
                     </p>
                     <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
                       <span>{meta.label}</span>
-                      {definition.builtIn && <span>Built in</span>}
                     </div>
                   </button>
                 )
@@ -340,19 +383,13 @@ export function AgentStudioPage() {
             {draft ? (
               <DefinitionEditor
                 draft={draft}
+                modelInstances={modelInstances}
                 skills={skills
                   .filter((skill) => skill.enabled && skill.compatible)
                   .map((skill) => skill.name)}
                 onChange={setDraft}
               />
-            ) : (
-              <EmptyPanel
-                title="Create an agent"
-                body="Start from a blank definition or choose a proven template."
-                action="New standard agent"
-                onAction={() => setDraft(newDefinition())}
-              />
-            )}
+            ) : null}
           </main>
 
           <aside className="min-h-0 overflow-y-auto border-l bg-muted/15 p-4">
@@ -364,11 +401,14 @@ export function AgentStudioPage() {
                 onDelete={() => void deleteDraft()}
                 onDuplicate={() => startFrom(draft)}
                 onTry={() => tryInChat(draft)}
+                saved={definitions.some(
+                  (definition) => definition.id === draft.id
+                )}
               />
             )}
           </aside>
         </div>
-      )}
+      ) : null}
 
       {view === 'templates' && (
         <div className="min-h-0 overflow-y-auto p-6">
@@ -436,10 +476,12 @@ function StudioTab({
 function DefinitionEditor({
   draft,
   skills,
+  modelInstances,
   onChange,
 }: {
   draft: AgentDefinition
   skills: string[]
+  modelInstances: AgentModelInstance[]
   onChange: (definition: AgentDefinition) => void
 }) {
   const common = (patch: Partial<AgentDefinition>) =>
@@ -455,14 +497,12 @@ function DefinitionEditor({
           <Field label="Name">
             <Input
               value={draft.name}
-              disabled={draft.builtIn}
               onChange={(event) => common({ name: event.target.value })}
             />
           </Field>
           <Field label="Identifier">
             <Input
               value={draft.id}
-              disabled={draft.builtIn}
               placeholder="created-from-name"
               onChange={(event) => common({ id: slug(event.target.value) })}
             />
@@ -471,7 +511,6 @@ function DefinitionEditor({
         <Field label="Description" className="mt-4">
           <Input
             value={draft.description}
-            disabled={draft.builtIn}
             onChange={(event) => common({ description: event.target.value })}
           />
         </Field>
@@ -487,7 +526,6 @@ function DefinitionEditor({
               <button
                 key={kind}
                 type="button"
-                disabled={draft.builtIn}
                 className={cn(
                   'rounded-xl border p-3 text-left transition hover:bg-accent',
                   draft.kind === kind && 'border-primary bg-primary/5'
@@ -504,6 +542,7 @@ function DefinitionEditor({
                         skills: draft.skills,
                         maxSteps: draft.maxSteps,
                         outputContract: draft.outputContract,
+                        modelInstanceId: draft.modelInstanceId,
                         builtIn: draft.builtIn,
                       },
                       kind
@@ -522,12 +561,25 @@ function DefinitionEditor({
         </div>
       </section>
 
+      <section>
+        <ModelInstanceSelect
+          label="Default model instance"
+          value={draft.modelInstanceId}
+          instances={modelInstances}
+          inheritLabel="Active chat model at run start"
+          onChange={(modelInstanceId) => common({ modelInstanceId })}
+        />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Every stage inherits this instance unless that role has an explicit
+          override. Assigned instances must already be loaded when a run starts.
+        </p>
+      </section>
+
       <section className="grid gap-4">
         <Field label="Role and operating instructions">
           <Textarea
             rows={7}
             value={draft.instructions}
-            disabled={draft.builtIn}
             placeholder="Define what this agent owns, how it should reason, and the boundaries it must respect."
             onChange={(event) => common({ instructions: event.target.value })}
           />
@@ -539,7 +591,6 @@ function DefinitionEditor({
               min={1}
               max={25}
               value={draft.maxSteps}
-              disabled={draft.builtIn}
               onChange={(event) =>
                 common({ maxSteps: Number(event.target.value) })
               }
@@ -548,7 +599,6 @@ function DefinitionEditor({
           <Field label="Output contract">
             <Input
               value={draft.outputContract}
-              disabled={draft.builtIn}
               placeholder="Optional: required structure, artifact, or acceptance format"
               onChange={(event) => common({ outputContract: event.target.value })}
             />
@@ -557,19 +607,32 @@ function DefinitionEditor({
         <SkillPicker
           available={skills}
           selected={draft.skills}
-          disabled={draft.builtIn}
           onChange={(next) => common({ skills: next })}
         />
       </section>
 
       {draft.kind === 'goal_loop' && (
-        <GoalLoopEditor draft={draft} onChange={onChange} />
+        <GoalLoopEditor
+          draft={draft}
+          onChange={onChange}
+          modelInstances={modelInstances}
+        />
       )}
       {draft.kind === 'coordinator' && (
-        <CoordinatorEditor draft={draft} onChange={onChange} skills={skills} />
+        <CoordinatorEditor
+          draft={draft}
+          onChange={onChange}
+          skills={skills}
+          modelInstances={modelInstances}
+        />
       )}
       {draft.kind === 'workflow' && (
-        <WorkflowEditor draft={draft} onChange={onChange} skills={skills} />
+        <WorkflowEditor
+          draft={draft}
+          onChange={onChange}
+          skills={skills}
+          modelInstances={modelInstances}
+        />
       )}
     </div>
   )
@@ -578,9 +641,11 @@ function DefinitionEditor({
 function GoalLoopEditor({
   draft,
   onChange,
+  modelInstances,
 }: {
   draft: Extract<AgentDefinition, { kind: 'goal_loop' }>
   onChange: (definition: AgentDefinition) => void
+  modelInstances: AgentModelInstance[]
 }) {
   return (
     <section className="space-y-4 rounded-2xl border bg-muted/15 p-4">
@@ -597,6 +662,15 @@ function GoalLoopEditor({
           }
         />
       </Field>
+      <ModelInstanceSelect
+        label="Evaluator model instance"
+        value={draft.evaluatorModelInstanceId}
+        instances={modelInstances}
+        inheritLabel="Agent default"
+        onChange={(evaluatorModelInstanceId) =>
+          onChange({ ...draft, evaluatorModelInstanceId })
+        }
+      />
       <Field label="Success criteria">
         <Textarea
           rows={4}
@@ -623,10 +697,12 @@ function CoordinatorEditor({
   draft,
   onChange,
   skills,
+  modelInstances,
 }: {
   draft: Extract<AgentDefinition, { kind: 'coordinator' }>
   onChange: (definition: AgentDefinition) => void
   skills: string[]
+  modelInstances: AgentModelInstance[]
 }) {
   const updateWorker = (index: number, worker: AgentRole) =>
     onChange({
@@ -662,6 +738,17 @@ function CoordinatorEditor({
           />
         </Field>
       </div>
+      <div className="max-w-md">
+        <ModelInstanceSelect
+          label="Synthesizer model instance"
+          value={draft.synthesisModelInstanceId}
+          instances={modelInstances}
+          inheritLabel="Agent default"
+          onChange={(synthesisModelInstanceId) =>
+            onChange({ ...draft, synthesisModelInstanceId })
+          }
+        />
+      </div>
       <Field label="Maximum parallel workers">
         <Input
           className="max-w-40"
@@ -680,6 +767,7 @@ function CoordinatorEditor({
             key={`${worker.id}-${index}`}
             role={worker}
             skills={skills}
+            modelInstances={modelInstances}
             onChange={(next) => updateWorker(index, next)}
             onDelete={() =>
               onChange({
@@ -718,10 +806,12 @@ function WorkflowEditor({
   draft,
   onChange,
   skills,
+  modelInstances,
 }: {
   draft: Extract<AgentDefinition, { kind: 'workflow' }>
   onChange: (definition: AgentDefinition) => void
   skills: string[]
+  modelInstances: AgentModelInstance[]
 }) {
   const updateNode = (index: number, node: AgentWorkflowNode) => {
     const previousId = draft.nodes[index].id
@@ -754,6 +844,7 @@ function WorkflowEditor({
               <RoleEditor
                 role={node}
                 skills={skills}
+                modelInstances={modelInstances}
                 onChange={(next) => updateNode(index, { ...node, ...next })}
                 onDelete={() =>
                   onChange({
@@ -828,11 +919,13 @@ function WorkflowEditor({
 function RoleEditor({
   role,
   skills,
+  modelInstances,
   onChange,
   onDelete,
 }: {
   role: AgentRole
   skills: string[]
+  modelInstances: AgentModelInstance[]
   onChange: (role: AgentRole) => void
   onDelete: () => void
 }) {
@@ -879,6 +972,13 @@ function RoleEditor({
           onChange={(event) => onChange({ ...role, instructions: event.target.value })}
         />
       </Field>
+      <ModelInstanceSelect
+        label="Model instance"
+        value={role.modelInstanceId}
+        instances={modelInstances}
+        inheritLabel="Agent default"
+        onChange={(modelInstanceId) => onChange({ ...role, modelInstanceId })}
+      />
       <SkillPicker
         available={skills}
         selected={role.skills}
@@ -888,15 +988,55 @@ function RoleEditor({
   )
 }
 
+function ModelInstanceSelect({
+  label,
+  value,
+  instances,
+  inheritLabel,
+  onChange,
+}: {
+  label: string
+  value: string | null
+  instances: AgentModelInstance[]
+  inheritLabel: string
+  onChange: (value: string | null) => void
+}) {
+  const selectedIsUnavailable =
+    value !== null && !instances.some((instance) => instance.id === value)
+  return (
+    <Field label={label} className="mt-3">
+      <select
+        aria-label={label}
+        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value || null)}
+      >
+        <option value="">{inheritLabel}</option>
+        {selectedIsUnavailable && (
+          <option value={value ?? ''}>{value} (not loaded)</option>
+        )}
+        {instances.map((instance) => (
+          <option key={instance.id} value={instance.id}>
+            {instance.modelId} · port {instance.port}
+          </option>
+        ))}
+      </select>
+      {instances.length === 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          No GInfer model instances are loaded.
+        </p>
+      )}
+    </Field>
+  )
+}
+
 function SkillPicker({
   available,
   selected,
-  disabled = false,
   onChange,
 }: {
   available: string[]
   selected: string[]
-  disabled?: boolean
   onChange: (skills: string[]) => void
 }) {
   return (
@@ -914,7 +1054,7 @@ function SkillPicker({
               <button
                 key={skill}
                 type="button"
-                disabled={disabled || (!active && selected.length >= 6)}
+                disabled={!active && selected.length >= 6}
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs transition',
                   active && 'border-primary bg-primary/10 text-primary'
@@ -944,6 +1084,7 @@ function DefinitionInspector({
   onDelete,
   onDuplicate,
   onTry,
+  saved,
 }: {
   draft: AgentDefinition
   saving: boolean
@@ -951,6 +1092,7 @@ function DefinitionInspector({
   onDelete: () => void
   onDuplicate: () => void
   onTry: () => void
+  saved: boolean
 }) {
   const meta = KIND_META[draft.kind]
   const stageCount =
@@ -961,6 +1103,24 @@ function DefinitionInspector({
         : draft.kind === 'goal_loop'
           ? draft.maxCycles * 2
           : 1
+  const explicitModels = new Set<string>()
+  if (draft.modelInstanceId) explicitModels.add(draft.modelInstanceId)
+  if (draft.kind === 'goal_loop' && draft.evaluatorModelInstanceId) {
+    explicitModels.add(draft.evaluatorModelInstanceId)
+  }
+  if (draft.kind === 'coordinator') {
+    if (draft.synthesisModelInstanceId) {
+      explicitModels.add(draft.synthesisModelInstanceId)
+    }
+    draft.workers.forEach((worker) => {
+      if (worker.modelInstanceId) explicitModels.add(worker.modelInstanceId)
+    })
+  }
+  if (draft.kind === 'workflow') {
+    draft.nodes.forEach((node) => {
+      if (node.modelInstanceId) explicitModels.add(node.modelInstanceId)
+    })
+  }
   return (
     <div className="space-y-5">
       <div>
@@ -974,34 +1134,34 @@ function DefinitionInspector({
         <Stat label="Stages" value={String(stageCount)} />
         <Stat label="Skills" value={String(draft.skills.length)} />
         <Stat label="Max steps" value={String(draft.maxSteps)} />
-        <Stat label="Model" value="Active GInfer" />
+        <Stat
+          label="Model routing"
+          value={explicitModels.size === 0 ? 'Active model' : `${explicitModels.size} fixed`}
+        />
       </dl>
       <div className="rounded-xl border p-3 text-xs text-muted-foreground">
-        One resident model serves every stage. Cancellation and approval policy
-        cascade from the parent run. Parallel workers receive isolated writable
-        workspaces and read-only access to the source workspace.
+        The active chat model is the default unless this definition fixes one.
+        Evaluators, workers, synthesizers, and workflow nodes can override it.
+        Every assigned instance is validated before execution; cancellation and
+        approval policy still cascade from the parent run.
       </div>
       <div className="grid gap-2">
         <Button disabled={!draft.id} onClick={onTry}>
           <IconPlayerPlay /> Try in a task
         </Button>
-        {draft.builtIn ? (
-          <Button variant="outline" onClick={onDuplicate}>
-            <IconCopy /> Duplicate to edit
-          </Button>
-        ) : (
+        <Button variant="outline" disabled={saving} onClick={onSave}>
+          {saving ? 'Saving…' : 'Save definition'}
+        </Button>
+        {saved && (
           <>
-            <Button variant="outline" disabled={saving} onClick={onSave}>
-              {saving ? 'Saving…' : 'Save definition'}
-            </Button>
             <Button variant="ghost" onClick={onDuplicate}>
               <IconCopy /> Duplicate
             </Button>
-            <Button variant="ghost" className="text-destructive" onClick={onDelete}>
-              <IconTrash /> Delete
-            </Button>
           </>
         )}
+        <Button variant="ghost" className="text-destructive" onClick={onDelete}>
+          <IconTrash /> {saved ? 'Delete' : 'Discard'}
+        </Button>
       </div>
     </div>
   )
@@ -1065,6 +1225,9 @@ function RunInspector({
                 {selected.status} · {selected.totalSteps} tool steps ·{' '}
                 {Math.max(0, selected.finishedAtMs - selected.startedAtMs)} ms
               </p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                default: {selected.defaultModelInstanceId}
+              </p>
             </div>
             {selected.stages.length > 0 && (
               <section className="space-y-2">
@@ -1079,6 +1242,9 @@ function RunInspector({
                     </div>
                     <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
                       {stage.summary}
+                    </p>
+                    <p className="mt-2 font-mono text-[11px] text-muted-foreground">
+                      {stage.modelInstanceId}
                     </p>
                   </article>
                 ))}

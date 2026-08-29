@@ -5,10 +5,21 @@ import { useChatAttachments } from '@/hooks/useChatAttachments'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { usePrompt } from '@/hooks/usePrompt'
 import { seedServiceHub } from '@/test/service-hub'
+import { TEMPORARY_CHAT_ID } from '@/constants/chat'
+import type { AgentDefinition } from '@/types/agent'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   downscaleImageDataUrl: vi.fn(),
+}))
+const agentDefinitions = vi.hoisted(() => ({
+  value: [] as AgentDefinition[],
+}))
+const agentModeState = vi.hoisted(() => ({
+  agentThreads: {} as Record<string, boolean>,
+  approvalModes: {} as Record<string, 'manual' | 'skip'>,
+  setAgentMode: vi.fn(),
+  setApprovalMode: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -48,16 +59,15 @@ vi.mock('@/hooks/useAgentSkills', () => ({
   useAgentSkills: () => ({ skills: [], loading: false }),
 }))
 
+vi.mock('@/hooks/useAgentDefinitions', () => ({
+  useAgentDefinitions: () => ({ definitions: agentDefinitions.value }),
+}))
+
 vi.mock('@/hooks/useAgentMode', () => {
-  const state = {
-    agentThreads: {},
-    approvalModes: {},
-    setAgentMode: vi.fn(),
-    setApprovalMode: vi.fn(),
-  }
-  const useAgentMode = (selector: (value: typeof state) => unknown) =>
-    selector(state)
-  useAgentMode.getState = () => state
+  const useAgentMode = (
+    selector: (value: typeof agentModeState) => unknown
+  ) => selector(agentModeState)
+  useAgentMode.getState = () => agentModeState
   return { useAgentMode }
 })
 
@@ -116,6 +126,11 @@ describe('ChatInput', () => {
     seedServiceHub()
     usePrompt.setState({ prompt: '' })
     useChatAttachments.setState({ attachmentsByThread: {} })
+    agentDefinitions.value = []
+    agentModeState.agentThreads = {}
+    agentModeState.approvalModes = {}
+    agentModeState.setAgentMode.mockReset()
+    agentModeState.setApprovalMode.mockReset()
 
     const model = {
       id: 'test-model',
@@ -169,6 +184,51 @@ describe('ChatInput', () => {
     )
     await waitFor(() => expect(input).toHaveValue(''))
     unmount()
+  })
+
+  it('shows the Agent picker only when a user definition exists', () => {
+    const model = {
+      id: 'agent-model',
+      capabilities: [],
+      settings: {},
+    } as Model
+    useModelProvider.setState({
+      providers: [
+        {
+          provider: 'ginfer',
+          active: true,
+          models: [model],
+          settings: [],
+        } as ModelProvider,
+      ],
+      selectedProvider: 'ginfer',
+      selectedModel: model,
+    })
+    agentModeState.agentThreads = { [TEMPORARY_CHAT_ID]: true }
+
+    const empty = render(<ChatInput initialMessage />)
+    expect(screen.queryByLabelText('Agent definition')).not.toBeInTheDocument()
+    empty.unmount()
+
+    agentDefinitions.value = [
+      {
+        schemaVersion: 2,
+        id: 'researcher',
+        name: 'Researcher',
+        description: '',
+        instructions: '',
+        skills: [],
+        maxSteps: 25,
+        outputContract: '',
+        modelInstanceId: null,
+        kind: 'standard',
+        builtIn: false,
+      },
+    ]
+    render(<ChatInput initialMessage />)
+
+    expect(screen.getByLabelText('Agent definition')).toHaveValue('researcher')
+    expect(screen.queryByRole('option', { name: 'General Agent' })).not.toBeInTheDocument()
   })
 
   it('asks for a model instead of sending when none is selected', async () => {

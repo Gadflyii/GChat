@@ -444,8 +444,13 @@ export const MessageItem = memo(
                   key={`${block.key}-stage-${stage.id}`}
                   className="flex items-center gap-2 py-1 text-xs"
                 >
-                  <span className="min-w-0 flex-1 truncate text-foreground/80">
-                    {stage.name}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-foreground/80">
+                      {stage.name}
+                    </span>
+                    <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                      {stage.model_instance_id}
+                    </span>
                   </span>
                   <span className="shrink-0 text-muted-foreground">
                     {stage.step_count ?? 0} steps

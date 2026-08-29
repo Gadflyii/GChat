@@ -36,13 +36,13 @@ pub struct OrchestrationInput<'a> {
     pub definition: &'a AgentDefinition,
     pub capabilities: &'a CapabilitiesSummary,
     pub skill_descriptors: &'a [SkillDescriptor],
-    pub model_profile: AgentModelProfile,
+    pub active_model_instance_id: &'a str,
     pub working_dir: &'a Path,
     pub editable_roots: &'a EditableRoots,
     pub external_read_only_roots: &'a [PathBuf],
     pub trusted_read_roots: &'a [PathBuf],
     pub max_steps_override: Option<u32>,
-    pub client: &'a LlamaServerClient,
+    pub model_routes: &'a AgentModelRoutes,
     pub approval: &'a dyn ApprovalHook,
     pub folder_access: &'a dyn FolderAccessHook,
     pub desktop: &'a dyn DesktopServices,
@@ -57,12 +57,12 @@ struct StageContext<'a> {
     run_id: &'a str,
     capabilities: &'a CapabilitiesSummary,
     skill_descriptors: &'a [SkillDescriptor],
-    model_profile: AgentModelProfile,
+    default_model_instance_id: &'a str,
     working_dir: &'a Path,
     editable_roots: &'a EditableRoots,
     external_read_only_roots: &'a [PathBuf],
     trusted_read_roots: &'a [PathBuf],
-    client: &'a LlamaServerClient,
+    model_routes: &'a AgentModelRoutes,
     approval: &'a dyn ApprovalHook,
     folder_access: &'a dyn FolderAccessHook,
     desktop: &'a dyn DesktopServices,
@@ -84,6 +84,7 @@ struct StageSpec {
     workspace: StageWorkspace,
     message: String,
     cycle: Option<u32>,
+    model_instance_id: String,
 }
 
 struct StageResult {
@@ -91,6 +92,42 @@ struct StageResult {
     name: String,
     outcome: AgentTurnOutcome,
     duration_ms: u64,
+    model_instance_id: String,
+    model_id: String,
+}
+
+pub struct AgentModelRoute {
+    pub instance_id: String,
+    pub model_id: String,
+    pub model_profile: AgentModelProfile,
+    pub client: LlamaServerClient,
+}
+
+pub struct AgentModelRoutes {
+    routes: HashMap<String, AgentModelRoute>,
+}
+
+impl AgentModelRoutes {
+    pub fn new(routes: Vec<AgentModelRoute>) -> Result<Self, String> {
+        let mut by_instance = HashMap::with_capacity(routes.len());
+        for route in routes {
+            if by_instance
+                .insert(route.instance_id.clone(), route)
+                .is_some()
+            {
+                return Err("Duplicate Agent model-instance route".into());
+            }
+        }
+        Ok(Self {
+            routes: by_instance,
+        })
+    }
+
+    pub fn route(&self, instance_id: &str) -> Result<&AgentModelRoute, String> {
+        self.routes.get(instance_id).ok_or_else(|| {
+            format!("Agent model instance `{instance_id}` was not resolved before execution")
+        })
+    }
 }
 
 pub async fn run_definition(
@@ -108,6 +145,11 @@ pub async fn run_definition(
         definition_id: input.definition.id.clone(),
         definition_name: input.definition.name.clone(),
         kind: kind.into(),
+        default_model_instance_id: resolved_model_instance_id(
+            input.definition.model_instance_id.as_deref(),
+            input.active_model_instance_id,
+        )
+        .into(),
     })?;
 
     let run_root = input.data_folder.join("agent-runs").join(input.storage_id);
@@ -116,16 +158,20 @@ pub async fn run_definition(
             .await
             .map_err(|error| format!("Failed to create Agent run workspace: {error}"))?;
     }
+    let default_model_instance_id = resolved_model_instance_id(
+        input.definition.model_instance_id.as_deref(),
+        input.active_model_instance_id,
+    );
     let stage_context = StageContext {
         run_id: input.run_id,
         capabilities: input.capabilities,
         skill_descriptors: input.skill_descriptors,
-        model_profile: input.model_profile,
+        default_model_instance_id,
         working_dir: input.working_dir,
         editable_roots: input.editable_roots,
         external_read_only_roots: input.external_read_only_roots,
         trusted_read_roots: input.trusted_read_roots,
-        client: input.client,
+        model_routes: input.model_routes,
         approval: input.approval,
         folder_access: input.folder_access,
         desktop: input.desktop,
@@ -138,6 +184,7 @@ pub async fn run_definition(
 
     let outcome = match &input.definition.strategy {
         AgentStrategy::Standard => {
+            let route = input.model_routes.route(default_model_instance_id)?;
             let persona = compose_agent_persona(
                 &input.definition.instructions,
                 &input.definition.output_contract,
@@ -148,7 +195,7 @@ pub async fn run_definition(
                 input.capabilities,
                 DEFAULT_MAX_PARALLEL_TOOL_CALLS,
                 Some(&persona),
-                input.model_profile,
+                route.model_profile,
             );
             run_turn_with_options(
                 RunTurnInput {
@@ -157,7 +204,7 @@ pub async fn run_definition(
                     user_message: input.user_message,
                     selected_skill: None,
                     stable_prefix: &stable_prefix,
-                    model_profile: input.model_profile,
+                    model_profile: route.model_profile,
                     working_dir: input.working_dir,
                     editable_roots: input.editable_roots,
                     external_read_only_roots: input.external_read_only_roots,
@@ -165,7 +212,7 @@ pub async fn run_definition(
                     max_steps: input
                         .max_steps_override
                         .unwrap_or(input.definition.max_steps),
-                    client: input.client,
+                    client: &route.client,
                     approval: input.approval,
                     folder_access: input.folder_access,
                     desktop: input.desktop,
@@ -186,6 +233,7 @@ pub async fn run_definition(
             max_cycles,
             success_criteria,
             evaluator_instructions,
+            evaluator_model_instance_id,
         } => {
             run_goal_loop(
                 &stage_context,
@@ -195,6 +243,7 @@ pub async fn run_definition(
                 *max_cycles,
                 success_criteria,
                 evaluator_instructions,
+                evaluator_model_instance_id.as_deref(),
                 &mut emit,
             )
             .await?
@@ -203,6 +252,7 @@ pub async fn run_definition(
             max_parallel,
             coordinator_instructions,
             synthesis_instructions,
+            synthesis_model_instance_id,
             workers,
         } => {
             run_coordinator(
@@ -213,6 +263,7 @@ pub async fn run_definition(
                 *max_parallel,
                 coordinator_instructions,
                 synthesis_instructions,
+                synthesis_model_instance_id.as_deref(),
                 workers,
                 &mut emit,
             )
@@ -260,6 +311,7 @@ async fn run_goal_loop(
     max_cycles: u32,
     success_criteria: &str,
     evaluator_instructions: &str,
+    evaluator_model_instance_id: Option<&str>,
     emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
     let mut feedback = String::new();
@@ -285,6 +337,7 @@ async fn run_goal_loop(
             workspace: StageWorkspace::Shared,
             message,
             cycle: Some(cycle),
+            model_instance_id: context.default_model_instance_id.into(),
         };
         emit_stage_started(&executor, emit)?;
         let executor_result = execute_stage(context, executor, 0).await?;
@@ -310,6 +363,11 @@ async fn run_goal_loop(
                 clip(&executor_reply)
             ),
             cycle: Some(cycle),
+            model_instance_id: resolved_model_instance_id(
+                evaluator_model_instance_id,
+                context.default_model_instance_id,
+            )
+            .into(),
         };
         emit_stage_started(&evaluator, emit)?;
         let evaluator_result = execute_stage(context, evaluator, 1).await?;
@@ -346,6 +404,7 @@ async fn run_coordinator(
     max_parallel: usize,
     coordinator_instructions: &str,
     synthesis_instructions: &str,
+    synthesis_model_instance_id: Option<&str>,
     workers: &[super::definitions::AgentRole],
     emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
@@ -367,6 +426,7 @@ async fn run_coordinator(
                 .join("\n")
         ),
         cycle: None,
+        model_instance_id: context.default_model_instance_id.into(),
     };
     emit_stage_started(&plan, emit)?;
     let plan_result = execute_stage(context, plan, 0).await?;
@@ -392,6 +452,11 @@ async fn run_coordinator(
                 clip(&plan_text)
             ),
             cycle: None,
+            model_instance_id: resolved_model_instance_id(
+                worker.model_instance_id.as_deref(),
+                context.default_model_instance_id,
+            )
+            .into(),
         })
         .collect::<Vec<_>>();
     for worker in &worker_specs {
@@ -442,6 +507,11 @@ async fn run_coordinator(
                 .join("\n\n")
         ),
         cycle: None,
+        model_instance_id: resolved_model_instance_id(
+            synthesis_model_instance_id,
+            context.default_model_instance_id,
+        )
+        .into(),
     };
     emit_stage_started(&synthesis, emit)?;
     let synthesis_result = execute_stage(context, synthesis, 0).await?;
@@ -505,6 +575,11 @@ async fn run_workflow(
                         )
                     },
                     cycle: None,
+                    model_instance_id: resolved_model_instance_id(
+                        node.model_instance_id.as_deref(),
+                        context.default_model_instance_id,
+                    )
+                    .into(),
                 }
             })
             .collect::<Vec<_>>();
@@ -558,6 +633,7 @@ async fn execute_stage(
         return Err("Agent run was cancelled".into());
     }
     let started = Instant::now();
+    let route = context.model_routes.route(&spec.model_instance_id)?;
     let persona = compose_agent_persona(&spec.instructions, &spec.output_contract);
     let stable_prefix = build_stable_prefix_for_profile(
         ITERATION_ONE_TOOLS,
@@ -565,7 +641,7 @@ async fn execute_stage(
         context.capabilities,
         DEFAULT_MAX_PARALLEL_TOOL_CALLS,
         Some(&persona),
-        context.model_profile,
+        route.model_profile,
     );
     let mut session = AgentSessionState::new(format!("{}:{}", context.run_id, spec.id));
 
@@ -581,6 +657,7 @@ async fn execute_stage(
                 context.external_read_only_roots,
                 context.trusted_read_roots,
                 &mut session,
+                route,
             )
             .await?
         }
@@ -607,6 +684,7 @@ async fn execute_stage(
                 &trusted_read_roots,
                 &trusted_read_roots,
                 &mut session,
+                route,
             )
             .await?
         }
@@ -617,6 +695,8 @@ async fn execute_stage(
         name: spec.name,
         outcome,
         duration_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+        model_instance_id: route.instance_id.clone(),
+        model_id: route.model_id.clone(),
     })
 }
 
@@ -631,6 +711,7 @@ async fn run_stage_with_workspace(
     external_read_only_roots: &[PathBuf],
     trusted_read_roots: &[PathBuf],
     session: &mut AgentSessionState,
+    route: &AgentModelRoute,
 ) -> Result<AgentTurnOutcome, String> {
     run_turn_with_options(
         RunTurnInput {
@@ -639,13 +720,13 @@ async fn run_stage_with_workspace(
             user_message: &spec.message,
             selected_skill: None,
             stable_prefix,
-            model_profile: context.model_profile,
+            model_profile: route.model_profile,
             working_dir,
             editable_roots,
             external_read_only_roots,
             trusted_read_roots,
             max_steps: spec.max_steps.clamp(1, MAX_STEPS),
-            client: context.client,
+            client: &route.client,
             approval: context.approval,
             folder_access: context.folder_access,
             desktop: context.desktop,
@@ -672,6 +753,7 @@ fn emit_stage_started(
         name: spec.name.clone(),
         role: spec.role.clone(),
         cycle: spec.cycle,
+        model_instance_id: spec.model_instance_id.clone(),
     })
 }
 
@@ -686,7 +768,13 @@ fn emit_stage_finished(
         summary: clip(result.outcome.reply.as_deref().unwrap_or_default()),
         step_count: result.outcome.step_count,
         duration_ms: result.duration_ms,
+        model_instance_id: result.model_instance_id.clone(),
+        model_id: result.model_id.clone(),
     })
+}
+
+fn resolved_model_instance_id<'a>(binding: Option<&'a str>, inherited: &'a str) -> &'a str {
+    binding.unwrap_or(inherited)
 }
 
 fn combined_skills(shared: &[String], selected: Option<&str>) -> Result<Vec<String>, String> {
@@ -744,6 +832,12 @@ fn clip(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::agent::definitions::general_agent;
+    use crate::core::agent::test_support::{
+        RecordingApproval, RecordingDesktop, RecordingFolderAccess,
+        ScriptedCompletionServer, ScriptedResponse, TestWorkspace,
+    };
+    use tokio_util::sync::CancellationToken;
 
     #[test]
     fn evaluator_requires_a_bare_pass_first_line() {
@@ -763,6 +857,111 @@ mod tests {
         assert_eq!(
             merge_skill_lists(&shared, &["research".into(), "review".into()]),
             vec!["code", "research", "review"]
+        );
+    }
+
+    #[tokio::test]
+    async fn routes_goal_loop_stages_to_their_assigned_model_instances() {
+        let executor = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+            r#"[{"tool":"reply","args":{"text":"executor result"}}]"#,
+        )])
+        .await;
+        let evaluator = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+            r#"[{"tool":"reply","args":{"text":"PASS"}}]"#,
+        )])
+        .await;
+        let routes = AgentModelRoutes::new(vec![
+            AgentModelRoute {
+                instance_id: "executor-model".into(),
+                model_id: "executor-model".into(),
+                model_profile: AgentModelProfile::Plain,
+                client: executor.client(),
+            },
+            AgentModelRoute {
+                instance_id: "evaluator-model".into(),
+                model_id: "evaluator-model".into(),
+                model_profile: AgentModelProfile::Plain,
+                client: evaluator.client(),
+            },
+        ])
+        .unwrap();
+        let mut definition = general_agent();
+        definition.id = "routed-loop".into();
+        definition.model_instance_id = Some("executor-model".into());
+        definition.strategy = AgentStrategy::GoalLoop {
+            max_cycles: 1,
+            success_criteria: "Complete".into(),
+            evaluator_instructions: "Evaluate".into(),
+            evaluator_model_instance_id: Some("evaluator-model".into()),
+        };
+        let workspace = TestWorkspace::new();
+        let editable_roots = EditableRoots::new(workspace.path(), &[]).await.unwrap();
+        let capabilities = CapabilitiesSummary {
+            platform: "linux".into(),
+            arch: "x86_64".into(),
+            browser_channel: "none".into(),
+            working_dir: workspace.path().display().to_string(),
+            has_clipboard: false,
+            has_wmctrl: false,
+            has_notifications: false,
+        };
+        let approval = RecordingApproval::deny();
+        let folder_access = RecordingFolderAccess::deny();
+        let desktop = RecordingDesktop::default();
+        let cancellation = CancellationToken::new();
+        let skill_registry = workspace.skill_registry();
+        let mut session = AgentSessionState::new("session");
+        let mut events = Vec::new();
+
+        let outcome = run_definition(
+            OrchestrationInput {
+                run_id: "run",
+                storage_id: "storage",
+                session_id: "session",
+                user_message: "complete the goal",
+                selected_skill: None,
+                definition: &definition,
+                capabilities: &capabilities,
+                skill_descriptors: &[],
+                active_model_instance_id: "active-model",
+                working_dir: workspace.path(),
+                editable_roots: &editable_roots,
+                external_read_only_roots: &[],
+                trusted_read_roots: &[],
+                max_steps_override: None,
+                model_routes: &routes,
+                approval: &approval,
+                folder_access: &folder_access,
+                desktop: &desktop,
+                cancellation: &cancellation,
+                session: &mut session,
+                skill_registry: &skill_registry,
+                bundled_script_runtime: None,
+                data_folder: workspace.path(),
+            },
+            |event| {
+                events.push(event);
+                Ok(())
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.reply.as_deref(), Some("executor result"));
+        assert_eq!(executor.requests().len(), 1);
+        assert_eq!(evaluator.requests().len(), 1);
+        assert_eq!(
+            events
+                .iter()
+                .filter_map(|event| match event {
+                    AgentEvent::StageStarted {
+                        model_instance_id,
+                        ..
+                    } => Some(model_instance_id.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            vec!["executor-model", "evaluator-model"]
         );
     }
 }

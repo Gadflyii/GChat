@@ -77,6 +77,7 @@ export function reduceAgentRunState(
             id: event.definition_id,
             name: event.definition_name,
             kind: event.kind,
+            modelInstanceId: event.default_model_instance_id,
           },
         },
       }
@@ -93,6 +94,7 @@ export function reduceAgentRunState(
               name: event.name,
               role: event.role,
               status: 'running',
+              modelInstanceId: event.model_instance_id,
               ...(event.cycle === null ? {} : { cycle: event.cycle }),
             },
           ],
