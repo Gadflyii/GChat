@@ -231,6 +231,30 @@ yarn config set -H enableImmutableInstalls false 2>&1 | Out-Null
 yarn install
 if ($LASTEXITCODE -ne 0) { Write-Host 'yarn install failed' -ForegroundColor Red; exit 1 }
 
+# Tauri's bundler patches an updater bundle-type marker into the finished
+# executable. The CLI and Rust crate must use the same marker contract; a
+# minor-version mismatch can otherwise produce a valid installer whose updater
+# cannot identify whether it is NSIS or MSI.
+$tauriCliVersion = ((yarn tauri --version 2>&1) | Out-String).Trim()
+if (($LASTEXITCODE -ne 0) -or ($tauriCliVersion -notmatch '^tauri-cli (\d+)\.(\d+)\.')) {
+    Write-Host "[FATAL] Could not determine the installed Tauri CLI version: $tauriCliVersion" -ForegroundColor Red
+    exit 1
+}
+$tauriCliMajorMinor = "$($Matches[1]).$($Matches[2])"
+
+$cargoLock = Get-Content (Join-Path $projectRoot 'src-tauri\Cargo.lock') -Raw
+if ($cargoLock -notmatch '(?ms)\[\[package\]\]\s*name = "tauri"\s*version = "(\d+)\.(\d+)\.') {
+    Write-Host '[FATAL] Could not determine the resolved Tauri crate version from src-tauri\Cargo.lock.' -ForegroundColor Red
+    exit 1
+}
+$tauriCrateMajorMinor = "$($Matches[1]).$($Matches[2])"
+if ($tauriCliMajorMinor -ne $tauriCrateMajorMinor) {
+    Write-Host "[FATAL] Tauri version mismatch: CLI $tauriCliMajorMinor, Rust crate $tauriCrateMajorMinor." -ForegroundColor Red
+    Write-Host 'Align @tauri-apps/cli with the resolved tauri crate before building updater packages.' -ForegroundColor Yellow
+    exit 1
+}
+Write-Host "  $tauriCliVersion (matches Rust tauri $tauriCrateMajorMinor.x)"
+
 # ── Build tauri plugin API ────────────────────────────────────
 Write-Step 'yarn build:tauri:plugin:api'
 yarn build:tauri:plugin:api
