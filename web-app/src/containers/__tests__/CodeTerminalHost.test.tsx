@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
 
@@ -195,6 +195,7 @@ describe('CodeTerminalHost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     runtimeState.activeModels = ['qwen']
+    mocks.writeTerminal.mockResolvedValue(undefined)
     mocks.attachTerminal.mockResolvedValue({
       phase: 'idle',
       generation: 0,
@@ -233,6 +234,22 @@ describe('CodeTerminalHost', () => {
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
     expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  it('toggles the OpenCode token sidebar through its native keybinding', async () => {
+    render(<CodeTerminalHost visible />)
+
+    const toggle = await screen.findByRole('button', {
+      name: 'code:toggleTokenSidebar',
+    })
+    expect(toggle).toBeEnabled()
+    expect(toggle).toHaveAttribute('title', 'code:toggleTokenSidebar')
+    fireEvent.click(toggle)
+
+    expect(mocks.writeTerminal).toHaveBeenCalledWith(
+      1,
+      Uint8Array.of(0x18, 0x62)
+    )
   })
 
   it('installs in the background and waits for a model before configuring', async () => {

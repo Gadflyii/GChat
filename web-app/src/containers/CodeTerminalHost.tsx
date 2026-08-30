@@ -5,6 +5,7 @@ import { Terminal, type ITheme } from '@xterm/xterm'
 import {
   IconAlertTriangle,
   IconCode,
+  IconLayoutSidebarRightCollapse,
   IconLoader2,
   IconRefresh,
   IconSquare,
@@ -504,6 +505,18 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     }
   }, [updateStatus])
 
+  const toggleTokenSidebar = useCallback(() => {
+    const generation = generationRef.current
+    if (generation === 0 || statusRef.current.phase !== 'running') return
+    // OpenCode's session.sidebar.toggle action is bound to <leader>b by
+    // default; the default leader is Ctrl+X. Send the key chord through the
+    // native PTY so the embedded TUI remains the sole owner of sidebar state.
+    void writeTerminal(generation, Uint8Array.of(0x18, 0x62)).catch((reason) =>
+      setError(String(reason))
+    )
+    terminalRef.current?.focus()
+  }, [])
+
   const restart = useCallback(async () => {
     setBusy(true)
     setError(undefined)
@@ -590,6 +603,18 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
                 {workspaceChanged
                   ? t('code:restartWorkspace')
                   : t('code:restart')}
+              </Button>
+            )}
+            {running && (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                disabled={busy || status.phase === 'stopping'}
+                aria-label={t('code:toggleTokenSidebar')}
+                title={t('code:toggleTokenSidebar')}
+                onClick={toggleTokenSidebar}
+              >
+                <IconLayoutSidebarRightCollapse />
               </Button>
             )}
             {running && (

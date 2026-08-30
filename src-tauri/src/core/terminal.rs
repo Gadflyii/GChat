@@ -422,13 +422,44 @@ fn default_open_code_command(windows: bool) -> &'static str {
         // bare-name resolution prefers the .ps1 shim, which is blocked on a
         // default Restricted execution policy. Naming the application shim
         // explicitly preserves the user's policy and works in the same PTY.
-        "opencode.cmd\r"
+        "opencode.cmd"
     } else {
-        "opencode\r"
+        "opencode"
     }
 }
 
-fn quote_open_code_command(executable: Option<&str>) -> Result<Vec<u8>, String> {
+fn shell_literal(value: &str, windows: bool) -> String {
+    if windows {
+        format!("'{}'", value.replace('\'', "''"))
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
+    }
+}
+
+fn windows_cli_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    value
+        .strip_prefix(r"\\?\UNC\")
+        .map(|rest| format!(r"\\{rest}"))
+        .or_else(|| value.strip_prefix(r"\\?\").map(str::to_string))
+        .unwrap_or_else(|| value.into_owned())
+}
+
+fn format_open_code_command(executable: Option<&str>, cwd: &Path, windows: bool) -> String {
+    let workspace = if windows {
+        windows_cli_path(cwd)
+    } else {
+        cwd.to_string_lossy().into_owned()
+    };
+    let executable = match executable {
+        Some(path) if windows => format!("& {}", shell_literal(path, true)),
+        Some(path) => shell_literal(path, false),
+        None => default_open_code_command(windows).to_string(),
+    };
+    format!("{executable} {}\r", shell_literal(&workspace, windows))
+}
+
+fn quote_open_code_command(executable: Option<&str>, cwd: &Path) -> Result<Vec<u8>, String> {
     let executable = executable.map(str::trim).filter(|path| !path.is_empty());
     if let Some(path) = executable {
         let path = Path::new(path);
@@ -438,16 +469,10 @@ fn quote_open_code_command(executable: Option<&str>) -> Result<Vec<u8>, String> 
     }
 
     #[cfg(windows)]
-    let command = match executable {
-        Some(path) => format!("& '{}'\r", path.replace('\'', "''")),
-        None => default_open_code_command(true).to_string(),
-    };
+    let command = format_open_code_command(executable, cwd, true);
 
     #[cfg(not(windows))]
-    let command = match executable {
-        Some(path) => format!("'{}'\r", path.replace('\'', "'\\''")),
-        None => default_open_code_command(false).to_string(),
-    };
+    let command = format_open_code_command(executable, cwd, false);
 
     Ok(command.into_bytes())
 }
@@ -620,7 +645,10 @@ pub fn terminal_spawn(
         .to_string();
     let launch_command = match request.launch {
         TerminalLaunch::Shell => None,
-        TerminalLaunch::OpenCode => Some(quote_open_code_command(request.executable.as_deref())?),
+        TerminalLaunch::OpenCode => Some(quote_open_code_command(
+            request.executable.as_deref(),
+            &cwd,
+        )?),
     };
     let opencode_tui_config = match request.launch {
         TerminalLaunch::Shell => None,
@@ -952,8 +980,20 @@ mod tests {
 
     #[test]
     fn default_opencode_command_uses_the_windows_application_shim() {
-        assert_eq!(default_open_code_command(true), "opencode.cmd\r");
-        assert_eq!(default_open_code_command(false), "opencode\r");
+        assert_eq!(default_open_code_command(true), "opencode.cmd");
+        assert_eq!(default_open_code_command(false), "opencode");
+    }
+
+    #[test]
+    fn opencode_receives_the_workspace_as_its_project_path() {
+        assert_eq!(
+            format_open_code_command(None, Path::new(r"\\?\C:\Users\Ron\Agent Work"), true),
+            "opencode.cmd 'C:\\Users\\Ron\\Agent Work'\r"
+        );
+        assert_eq!(
+            format_open_code_command(None, Path::new("/home/ron/agent work"), false),
+            "opencode '/home/ron/agent work'\r"
+        );
     }
 
     fn output_event(sequence: u64, bytes: usize) -> TerminalEvent {

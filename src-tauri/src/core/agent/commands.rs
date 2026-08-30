@@ -25,7 +25,7 @@ use super::orchestrator::{run_definition, AgentModelRoute, AgentModelRoutes, Orc
 use super::path_policy::{canonical_directory, expand_home, lexical_normalize, EditableRoots};
 use super::prompt::{CapabilitiesSummary, SkillDescriptor};
 use super::runs::{now_ms, record_run, AgentRunRecord};
-use super::session::{load_session, save_session, validate_session_id};
+use super::session::{load_session, reset_session, save_session, validate_session_id};
 use super::skills::load_registry;
 use super::tools::DesktopServices;
 use super::types::{
@@ -109,6 +109,14 @@ pub struct AgentModelInstance {
     pub port: u16,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentContextCompactionResult {
+    pub status: String,
+    pub summarized_turns: usize,
+    pub retained_turns: usize,
+}
+
 #[tauri::command]
 pub async fn agent_list_model_instances(
     ginfer_state: State<'_, GinferState>,
@@ -125,6 +133,65 @@ pub async fn agent_list_model_instances(
         .collect::<Vec<_>>();
     instances.sort_by(|left, right| left.model_id.cmp(&right.model_id));
     Ok(instances)
+}
+
+#[tauri::command]
+pub async fn agent_reset_session<R: Runtime>(
+    app_handle: AppHandle<R>,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    validate_session_id(&session_id)?;
+    let session_lock = get_session_lock(&state.agent_session_locks, &session_id).await;
+    let _session_guard = session_lock.lock().await;
+    reset_session(&get_jan_data_folder_path(app_handle), &session_id).await
+}
+
+#[tauri::command]
+pub async fn agent_compact_session<R: Runtime>(
+    app_handle: AppHandle<R>,
+    state: State<'_, AppState>,
+    ginfer_state: State<'_, GinferState>,
+    session_id: String,
+    model_id: String,
+) -> Result<AgentContextCompactionResult, String> {
+    validate_session_id(&session_id)?;
+    if model_id.trim().is_empty() {
+        return Err("model_id must not be empty".into());
+    }
+
+    let session_lock = get_session_lock(&state.agent_session_locks, &session_id).await;
+    let _session_guard = session_lock.lock().await;
+    let data_folder = get_jan_data_folder_path(app_handle);
+    let mut session = load_session(&data_folder, &session_id).await?;
+    let Some(plan) = session.manual_checkpoint_plan() else {
+        return Ok(AgentContextCompactionResult {
+            status: "nothing_to_compact".into(),
+            summarized_turns: 0,
+            retained_turns: session.turns.len(),
+        });
+    };
+
+    let target = find_session_by_model_id(&model_id, &ginfer_state)
+        .await
+        .map_err(|error| error.to_string())?;
+    let client = GinferClient::new(&target).map_err(|error| error.to_string())?;
+    let cancellation = CancellationToken::new();
+    let checkpoint = client
+        .checkpoint_conversation(session.checkpoint.as_deref(), &plan.source, &cancellation)
+        .await
+        .map_err(|error| error.to_string())?
+        .content;
+    let summarized_turns = plan.dropped_turns;
+    session.apply_checkpoint(&plan, checkpoint.trim().to_owned());
+    let retained_turns = session.turns.len();
+    save_session(&data_folder, &session).await?;
+
+    Ok(AgentContextCompactionResult {
+        status: "compacted".into(),
+        summarized_turns,
+        retained_turns,
+    })
 }
 
 #[tauri::command]
@@ -577,6 +644,7 @@ pub async fn agent_run_turn<R: Runtime>(
                     &storage_id,
                     &request.run_id,
                     &request.session_id,
+                    &user_message,
                     &definition,
                     started_at_ms,
                     &recorded_events,

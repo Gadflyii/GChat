@@ -18,9 +18,7 @@ use crate::core::server::api_request_analytics::{
     ApiRequestAggregator, ApiRequestObservation, ApiRequestSummary, API_REQUEST_SUMMARY_CHANNEL,
     API_REQUEST_SUMMARY_WINDOW_SECS,
 };
-use crate::core::server::context_expansion::{
-    is_context_limit_error as shared_is_context_limit_error,
-};
+use crate::core::server::context_expansion::is_context_limit_error as shared_is_context_limit_error;
 use crate::core::state::{ProviderConfig, ServerHandle};
 
 /// Immediate analytics channel retained for bind failures, which happen
@@ -131,10 +129,7 @@ pub(crate) enum StreamStep<T> {
 }
 
 /// Await the next chunk, giving up if the stream goes silent for `idle_timeout`.
-pub(crate) async fn next_stream_chunk<S, T>(
-    stream: &mut S,
-    idle_timeout: Duration,
-) -> StreamStep<T>
+pub(crate) async fn next_stream_chunk<S, T>(stream: &mut S, idle_timeout: Duration) -> StreamStep<T>
 where
     S: futures_util::Stream<Item = T> + Unpin,
 {
@@ -1758,9 +1753,7 @@ async fn inner_proxy_request<R: Runtime>(
                                 let guard = ginfer_sessions.lock().await;
                                 let info = guard
                                     .values()
-                                    .find(|s| {
-                                        model_ids_match(&s.info.model_id, model_id)
-                                    })
+                                    .find(|s| model_ids_match(&s.info.model_id, model_id))
                                     .map(|s| (s.info.port, s.info.api_key.clone()));
                                 (info, guard.len())
                             };
@@ -1857,7 +1850,8 @@ async fn inner_proxy_request<R: Runtime>(
                             "id": session.info.model_id,
                             "object": "model",
                             "created": 1,
-                            "owned_by": "ginfer"
+                            "owned_by": "ginfer",
+                            "max_model_len": session.info.max_context
                         })
                     })
                     .collect()
@@ -2351,17 +2345,18 @@ async fn inner_proxy_request<R: Runtime>(
                 // Regular passthrough - when /messages succeeds directly,
                 // the response is already in the correct format
                 loop {
-                    let chunk_result = match next_stream_chunk(&mut stream, STREAM_IDLE_TIMEOUT).await {
-                        StreamStep::Chunk(chunk_result) => chunk_result,
-                        StreamStep::Idle => {
-                            log::warn!(
-                                "Stream produced no data for {}s; giving up on the response",
-                                STREAM_IDLE_TIMEOUT.as_secs()
-                            );
-                            break;
-                        }
-                        StreamStep::Done => break,
-                    };
+                    let chunk_result =
+                        match next_stream_chunk(&mut stream, STREAM_IDLE_TIMEOUT).await {
+                            StreamStep::Chunk(chunk_result) => chunk_result,
+                            StreamStep::Idle => {
+                                log::warn!(
+                                    "Stream produced no data for {}s; giving up on the response",
+                                    STREAM_IDLE_TIMEOUT.as_secs()
+                                );
+                                break;
+                            }
+                            StreamStep::Done => break,
+                        };
                     match chunk_result {
                         Ok(chunk) => {
                             if !eta_emitted && sse_chunk_has_visible_content(&chunk) {

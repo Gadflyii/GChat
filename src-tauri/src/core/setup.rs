@@ -1,10 +1,9 @@
 use flate2::read::GzDecoder;
-#[cfg(any(target_os = "windows", test))]
-use std::path::Path;
+use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 use tar::Archive;
@@ -28,6 +27,31 @@ use super::{
 const GINFER_RUNTIME_RESOURCE_DIR: &str = "resources/ginfer";
 #[cfg(any(target_os = "windows", test))]
 const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
+const BUNDLED_EXTENSIONS_FINGERPRINT: &str = ".bundled-extensions.sha256";
+
+fn bundled_extensions_fingerprint(pre_install_path: &Path) -> Result<String, String> {
+    let mut packages = fs::read_dir(pre_install_path)
+        .map_err(|error| error.to_string())?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|extension| extension == "tgz"))
+        .collect::<Vec<_>>();
+    packages.sort();
+
+    let mut digest = Sha256::new();
+    for path in packages {
+        let name = path
+            .file_name()
+            .ok_or_else(|| format!("Bundled extension has no filename: {}", path.display()))?
+            .to_string_lossy();
+        let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+        digest.update((name.len() as u64).to_le_bytes());
+        digest.update(name.as_bytes());
+        digest.update((bytes.len() as u64).to_le_bytes());
+        digest.update(bytes);
+    }
+
+    Ok(format!("{:x}", digest.finalize()))
+}
 
 #[cfg(any(target_os = "windows", test))]
 fn remove_directory_if_present(path: &Path) -> std::io::Result<()> {
@@ -155,6 +179,8 @@ pub fn install_extensions<R: Runtime>(app: tauri::AppHandle<R>, force: bool) -> 
         .unwrap()
         .join("resources")
         .join("pre-install");
+    let bundled_fingerprint = bundled_extensions_fingerprint(&pre_install_path)?;
+    let installed_fingerprint_path = extensions_path.join(BUNDLED_EXTENSIONS_FINGERPRINT);
 
     let mut clean_up = force;
 
@@ -164,7 +190,11 @@ pub fn install_extensions<R: Runtime>(app: tauri::AppHandle<R>, force: bool) -> 
     }
     log::info!("Installing extensions. Clean up: {clean_up}");
     if !clean_up && extensions_path.exists() {
-        return Ok(());
+        let installed_fingerprint = fs::read_to_string(&installed_fingerprint_path).ok();
+        if installed_fingerprint.as_deref() == Some(bundled_fingerprint.as_str()) {
+            return Ok(());
+        }
+        log::info!("Bundled extensions changed; refreshing their installed copies");
     }
 
     // Attempt to remove extensions folder
@@ -266,6 +296,7 @@ pub fn install_extensions<R: Runtime>(app: tauri::AppHandle<R>, force: bool) -> 
         serde_json::to_string_pretty(&extensions_list).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
+    fs::write(installed_fingerprint_path, bundled_fingerprint).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -858,5 +889,25 @@ mod tests {
             "server-v2"
         );
         assert_eq!(fs::read_to_string(&model).unwrap(), "model");
+    }
+
+    #[test]
+    fn bundled_extension_fingerprint_tracks_package_content() {
+        let root = tempdir().unwrap();
+        fs::write(root.path().join("b.tgz"), "second").unwrap();
+        fs::write(root.path().join("a.tgz"), "first").unwrap();
+
+        let initial = bundled_extensions_fingerprint(root.path()).unwrap();
+        assert_eq!(initial.len(), 64);
+        assert_eq!(
+            initial,
+            bundled_extensions_fingerprint(root.path()).unwrap()
+        );
+
+        fs::write(root.path().join("a.tgz"), "updated").unwrap();
+        assert_ne!(
+            initial,
+            bundled_extensions_fingerprint(root.path()).unwrap()
+        );
     }
 }

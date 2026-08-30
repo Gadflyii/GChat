@@ -268,7 +268,12 @@ pub fn api_url_for(agent: &Agent, base_url: &str, prefix: &str) -> String {
 
 /// Write the agent's config, reusing the exact same functions the desktop
 /// Launch page invokes.
-pub fn configure(agent: &Agent, api_url: &str, model: &str, api_key: &str) -> Result<(), String> {
+pub async fn configure(
+    agent: &Agent,
+    api_url: &str,
+    model: &str,
+    api_key: &str,
+) -> Result<(), String> {
     let url = api_url.to_string();
     let model_owned = model.to_string();
     let key = Some(api_key.to_string());
@@ -279,7 +284,7 @@ pub fn configure(agent: &Agent, api_url: &str, model: &str, api_key: &str) -> Re
         "claude-code" => agents::configure_claude_code(url, model_opt, key),
         "pi" => agents::configure_pi(url, model_owned, key),
         "codex" => agents::configure_codex(url, model_owned, key),
-        "opencode" => agents::configure_opencode(url, model_owned, key),
+        "opencode" => agents::configure_opencode(url, model_owned, key).await,
         "openclaude" => agents::configure_openclaude(url, model_owned, key),
         "cline" => agents::configure_cline(url, model_owned, key),
         "dsh" => agents::configure_dsh(url, model_owned, key),

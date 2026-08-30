@@ -102,52 +102,54 @@ export function SkillsPage() {
 
   return (
     <div className="grid h-svh w-full grid-cols-[minmax(260px,360px)_1fr] grid-rows-[auto_minmax(0,1fr)]">
-      <HeaderPage>
-        <div className="flex w-full items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => void navigate({ to: route.agents.index })}
-            >
-              <IconSparkles /> Agent Studio
-            </Button>
-            <span className="text-muted-foreground">/</span>
-            <span className="font-studio text-base font-medium">
-              {t('common:skills')}
-            </span>
+      <div className="col-span-2 min-w-0">
+        <HeaderPage>
+          <div className="flex w-full items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void navigate({ to: route.agents.index })}
+              >
+                <IconSparkles /> Agent Studio
+              </Button>
+              <span className="text-muted-foreground">/</span>
+              <span className="font-studio text-base font-medium">
+                {t('common:skills')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title={t('common:refresh')}
+                disabled={loading}
+                onClick={() => void load(true)}
+              >
+                <IconRefresh className={cn(loading && 'animate-spin')} />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm">
+                    {t('common:createNewSkill')}
+                    <IconChevronDown />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-max">
+                  <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
+                    <IconClipboardText />
+                    {t('common:writeSkillInstructions')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setUploadOpen(true)}>
+                    <IconUpload />
+                    {t('common:uploadASkill')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              title={t('common:refresh')}
-              disabled={loading}
-              onClick={() => void load(true)}
-            >
-              <IconRefresh className={cn(loading && 'animate-spin')} />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm">
-                  {t('common:createNewSkill')}
-                  <IconChevronDown />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-max">
-                <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
-                  <IconClipboardText />
-                  {t('common:writeSkillInstructions')}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setUploadOpen(true)}>
-                  <IconUpload />
-                  {t('common:uploadASkill')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </HeaderPage>
+        </HeaderPage>
+      </div>
 
       <div className="min-h-0 overflow-y-auto p-3">
         {error && (
@@ -213,7 +215,7 @@ export function SkillsPage() {
         </div>
       </div>
 
-      <div className="col-start-2 row-span-2 row-start-1 min-h-0 min-w-0 overflow-y-auto p-3">
+      <div className="col-start-2 row-start-2 min-h-0 min-w-0 overflow-y-auto p-3">
         {!selected ? (
           <p className="text-sm text-muted-foreground">
             {t('common:selectSkill')}

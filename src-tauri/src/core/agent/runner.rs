@@ -13,8 +13,8 @@ use tokio_util::sync::CancellationToken;
 use super::batch_executor::{execute_batch, PlannedCall};
 use super::definitions::AgentReasoningEffort;
 use super::ginfer_client::{
-    parse_tool_calls, CompletionRequest, CompletionTiming, GinferClient, GinferClientError,
-    ParsedToolCalls,
+    looks_like_atem_tool_calls, parse_tool_calls, CompletionRequest, CompletionTiming,
+    GinferClient, GinferClientError, ParsedToolCalls,
 };
 use super::loop_guard::{
     format_forced_loop_reply, format_repeat_notice, format_veto_instruction,
@@ -197,6 +197,22 @@ pub async fn run_turn_with_options(
             estimate_tokens(&fixed_prompt),
             COMPLETION_MAX_TOKENS,
         );
+        if let Some(checkpoint_plan) = input.session.checkpoint_plan(conversation_cap)? {
+            let checkpoint_completion = input
+                .client
+                .checkpoint_conversation(
+                    input.session.checkpoint.as_deref(),
+                    &checkpoint_plan.source,
+                    input.cancellation,
+                )
+                .await
+                .map_err(|error| format!("Could not checkpoint Agent context: {error}"))?;
+            record_completion(&mut inference, &checkpoint_completion.timing);
+            input.session.apply_checkpoint(
+                &checkpoint_plan,
+                checkpoint_completion.content.trim().to_owned(),
+            );
+        }
         let conversation = input.session.render_conversation(conversation_cap);
         let prompt = build_prompt_with_workspace(
             input.stable_prefix,
@@ -764,7 +780,11 @@ async fn repair_tool_calls(
 
 fn recover_plain_text_reply(content: &str) -> Option<ParsedToolCalls> {
     let text = content.trim();
-    if text.is_empty() || text.contains('{') || text.contains('[') {
+    if text.is_empty()
+        || text.contains('{')
+        || text.contains('[')
+        || looks_like_atem_tool_calls(text)
+    {
         return None;
     }
     Some(ParsedToolCalls {

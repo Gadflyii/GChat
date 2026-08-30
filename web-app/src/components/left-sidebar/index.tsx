@@ -17,6 +17,7 @@ import {
   type SettingsIconHandle,
 } from '@/components/animated-icon/settings'
 import { useRef, useState } from 'react'
+import { ServerQuickActions } from './ServerQuickActions'
 
 import {
   Sidebar,
@@ -95,20 +96,20 @@ export function LeftSidebar() {
           </div>
           <div
             className={cn(
-              'mt-1 flex h-11 w-full items-center justify-start pl-2',
+              'mt-1 flex h-16 w-full items-center justify-start overflow-hidden pl-2',
               IS_MACOS && 'mt-3'
             )}
           >
             <img
               src="/images/gchat-lockup.png"
               alt="GChat by Sectile Research Laboratories"
-              className="h-10 w-auto object-contain dark:hidden"
+              className="h-15 max-w-none shrink-0 object-contain dark:hidden"
               draggable={false}
             />
             <img
               src="/images/gchat-lockup-reversed.png"
               alt="GChat by Sectile Research Laboratories"
-              className="hidden h-10 w-auto object-contain dark:block"
+              className="hidden h-15 max-w-none shrink-0 object-contain dark:block"
               draggable={false}
             />
           </div>
@@ -131,6 +132,7 @@ export function LeftSidebar() {
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>
+            <ServerQuickActions />
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild

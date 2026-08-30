@@ -21,6 +21,7 @@ type InitialMessageStore = {
   byThread: Record<string, InitialMessagePayload>
   set: (threadId: string, payload: InitialMessagePayload) => void
   consume: (threadId: string) => InitialMessagePayload | undefined
+  clear: (threadId: string) => void
 }
 
 export const useInitialMessage = create<InitialMessageStore>()((set, get) => ({
@@ -39,5 +40,12 @@ export const useInitialMessage = create<InitialMessageStore>()((set, get) => ({
       return { byThread: next }
     })
     return payload
+  },
+  clear: (threadId) => {
+    set((state) => {
+      const byThread = { ...state.byThread }
+      delete byThread[threadId]
+      return { byThread }
+    })
   },
 }))

@@ -177,6 +177,8 @@ pub fn run() {
         core::mcp::commands::call_tool,
         core::mcp::commands::cancel_tool_call,
         core::agent::commands::agent_run_turn,
+        core::agent::commands::agent_reset_session,
+        core::agent::commands::agent_compact_session,
         core::agent::commands::agent_cancel_turn,
         core::agent::commands::agent_resolve_approval,
         core::agent::commands::agent_resolve_folder_access,
@@ -193,6 +195,7 @@ pub fn run() {
         core::agent::definitions::agent_delete_definition,
         core::agent::definitions::agent_list_templates,
         core::agent::runs::agent_list_runs,
+        core::agent::runs::agent_delete_run,
         core::agent::skills::commands::agent_list_skills,
         core::agent::skills::commands::agent_get_skill,
         core::agent::skills::commands::agent_set_skill_enabled,
@@ -330,6 +333,8 @@ pub fn run() {
         core::mcp::commands::call_tool,
         core::mcp::commands::cancel_tool_call,
         core::agent::commands::agent_run_turn,
+        core::agent::commands::agent_reset_session,
+        core::agent::commands::agent_compact_session,
         core::agent::commands::agent_cancel_turn,
         core::agent::commands::agent_resolve_approval,
         core::agent::commands::agent_resolve_folder_access,
@@ -346,6 +351,7 @@ pub fn run() {
         core::agent::definitions::agent_delete_definition,
         core::agent::definitions::agent_list_templates,
         core::agent::runs::agent_list_runs,
+        core::agent::runs::agent_delete_run,
         core::agent::skills::commands::agent_list_skills,
         core::agent::skills::commands::agent_get_skill,
         core::agent::skills::commands::agent_set_skill_enabled,
@@ -480,10 +486,9 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
-                if let Err(e) = crate::core::notifications::ensure_aumid_registered(
-                    "app.gchat",
-                    "GChat",
-                ) {
+                if let Err(e) =
+                    crate::core::notifications::ensure_aumid_registered("app.gchat", "GChat")
+                {
                     log::warn!("Failed to register AUMID for toast notifications: {e}");
                 }
             }
@@ -612,85 +617,91 @@ pub fn run() {
             RunEvent::ExitRequested { .. } => {
                 log::info!("Application exit requested");
             }
-            RunEvent::WindowEvent { label, event: window_event, .. } => {
-                match window_event {
-                    tauri::WindowEvent::CloseRequested { .. } => {
-                        log::info!("Window close requested: {label}");
-                    }
-                    tauri::WindowEvent::Destroyed => {
-                        log::info!("Window destroyed: {label}");
-                    }
-                    _ => {}
+            RunEvent::WindowEvent {
+                label,
+                event: window_event,
+                ..
+            } => match window_event {
+                tauri::WindowEvent::CloseRequested { .. } => {
+                    log::info!("Window close requested: {label}");
                 }
-            }
+                tauri::WindowEvent::Destroyed => {
+                    log::info!("Window destroyed: {label}");
+                }
+                _ => {}
+            },
             RunEvent::Exit => {
                 let app_handle = app.clone();
 
-            #[cfg(not(any(target_os = "ios", target_os = "android")))]
-            app_handle
-                .state::<core::terminal::TerminalState>()
-                .shutdown();
+                #[cfg(not(any(target_os = "ios", target_os = "android")))]
+                app_handle
+                    .state::<core::terminal::TerminalState>()
+                    .shutdown();
 
-            #[cfg(not(any(target_os = "ios", target_os = "android")))]
-            {
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    let _ = window.emit("app-shutting-down", ());
-                    let _ = window.hide();
+                #[cfg(not(any(target_os = "ios", target_os = "android")))]
+                {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.emit("app-shutting-down", ());
+                        let _ = window.hide();
+                    }
                 }
-            }
 
-            let state = app_handle.state::<AppState>();
+                let state = app_handle.state::<AppState>();
 
-            // Check if cleanup already ran.
-            // block_on is safe here: RunEvent callbacks run on the main
-            // thread, which is never a tokio runtime worker (block_in_place
-            // is a pass-through outside a runtime).
-            let cleanup_already_running = tokio::task::block_in_place(|| {
-                tauri::async_runtime::block_on(async {
-                    let handle = state.background_cleanup_handle.lock().await;
-                    handle.is_some()
-                })
-            });
-
-            if cleanup_already_running {
-                return;
-            }
-
-            // Run cleanup synchronously and WAIT for it to complete
-            tokio::task::block_in_place(|| {
-                tauri::async_runtime::block_on(async {
-                    use crate::core::mcp::helpers::background_cleanup_mcp_servers;
-
-                    let state = app_handle.state::<AppState>();
-
-                    if let Err(e) =
-                        crate::core::server::proxy::stop_server(state.server_handle.clone()).await
-                    {
-                        log::warn!("Local API Server shutdown failed: {e}");
-                    }
-
-                    // Increase timeout to 10 seconds and log if it times out
-                    let cleanup_future = background_cleanup_mcp_servers(&app_handle, &state);
-                    match tokio::time::timeout(tokio::time::Duration::from_secs(10), cleanup_future)
-                        .await
-                    {
-                        Ok(_) => log::info!("MCP cleanup completed successfully"),
-                        Err(_) => log::warn!("MCP cleanup timed out after 10 seconds"),
-                    }
-
-                    if let Err(e) =
-                        tauri_plugin_ginfer::cleanup_ginfer_processes(app_handle.clone()).await
-                    {
-                        log::warn!("Failed to cleanup ginfer processes: {}", e);
-                    } else {
-                        log::info!("ginfer processes cleaned up successfully");
-                    }
-
-                    log::info!("App cleanup completed");
+                // Check if cleanup already ran.
+                // block_on is safe here: RunEvent callbacks run on the main
+                // thread, which is never a tokio runtime worker (block_in_place
+                // is a pass-through outside a runtime).
+                let cleanup_already_running = tokio::task::block_in_place(|| {
+                    tauri::async_runtime::block_on(async {
+                        let handle = state.background_cleanup_handle.lock().await;
+                        handle.is_some()
+                    })
                 });
-            });
+
+                if cleanup_already_running {
+                    return;
+                }
+
+                // Run cleanup synchronously and WAIT for it to complete
+                tokio::task::block_in_place(|| {
+                    tauri::async_runtime::block_on(async {
+                        use crate::core::mcp::helpers::background_cleanup_mcp_servers;
+
+                        let state = app_handle.state::<AppState>();
+
+                        if let Err(e) =
+                            crate::core::server::proxy::stop_server(state.server_handle.clone())
+                                .await
+                        {
+                            log::warn!("Local API Server shutdown failed: {e}");
+                        }
+
+                        // Increase timeout to 10 seconds and log if it times out
+                        let cleanup_future = background_cleanup_mcp_servers(&app_handle, &state);
+                        match tokio::time::timeout(
+                            tokio::time::Duration::from_secs(10),
+                            cleanup_future,
+                        )
+                        .await
+                        {
+                            Ok(_) => log::info!("MCP cleanup completed successfully"),
+                            Err(_) => log::warn!("MCP cleanup timed out after 10 seconds"),
+                        }
+
+                        if let Err(e) =
+                            tauri_plugin_ginfer::cleanup_ginfer_processes(app_handle.clone()).await
+                        {
+                            log::warn!("Failed to cleanup ginfer processes: {}", e);
+                        } else {
+                            log::info!("ginfer processes cleaned up successfully");
+                        }
+
+                        log::info!("App cleanup completed");
+                    });
+                });
+            }
+            _ => {}
         }
-        _ => {}
-    }
-});
+    });
 }

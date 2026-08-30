@@ -241,6 +241,33 @@ async fn read_observation_is_visible_to_the_next_completion() {
 }
 
 #[tokio::test]
+async fn muse_atem_call_executes_instead_of_becoming_a_plain_text_reply() {
+    let workspace = TestWorkspace::new();
+    workspace.write("atem-visible.txt", "VISIBLE");
+    let run = run_script(
+        &workspace,
+        vec![
+            ScriptedResponse::completion(
+                r#"atem:function_calls <atem:invoke name="os.fs.list"> <atem:parameter name="path">.</atem:parameter> </atem:invoke> </atem:function_calls>"#,
+            ),
+            ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"observed"}}]"#),
+        ],
+        &RecordingApproval::deny(),
+        &CancellationToken::new(),
+        3,
+    )
+    .await;
+
+    assert!(run.result.is_ok());
+    assert_eq!(
+        executed(&run.events),
+        [("os.fs.list", ToolStatus::Ok), ("reply", ToolStatus::Ok)]
+    );
+    assert_eq!(run.requests.len(), 2, "ATEM must not trigger a repair call");
+    assert!(request_prompt(&run.requests[1]).contains("atem-visible.txt"));
+}
+
+#[tokio::test]
 async fn verbose_observation_is_compact_for_the_model_but_detailed_in_the_event() {
     let workspace = TestWorkspace::new();
     let detailed = (0..30)
@@ -557,6 +584,35 @@ async fn repeated_repair_failure_finishes_as_tool_call_failure() {
     )));
     assert_eq!(finished_reason(&run.events), Some(("failed", 1)));
     assert_eq!(run.requests.len(), 2);
+}
+
+#[tokio::test]
+async fn malformed_atem_repair_is_not_published_as_a_reply() {
+    let workspace = TestWorkspace::new();
+    let run = run_script(
+        &workspace,
+        vec![
+            ScriptedResponse::completion("not-json"),
+            ScriptedResponse::completion(
+                r#"atem:function_calls <atem:invoke name="os.fs.list"><atem:parameter name="path">."#,
+            ),
+        ],
+        &RecordingApproval::deny(),
+        &CancellationToken::new(),
+        2,
+    )
+    .await;
+
+    assert!(run.result.is_err());
+    assert!(run.events.iter().any(|event| matches!(
+        event,
+        AgentEvent::StepError { category, .. } if category == "tool_call"
+    )));
+    assert!(!run
+        .events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::AssistantReply { .. })));
+    assert_eq!(finished_reason(&run.events), Some(("failed", 1)));
 }
 
 #[tokio::test]

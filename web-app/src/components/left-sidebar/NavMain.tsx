@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   SidebarMenu,
@@ -22,6 +22,19 @@ import { useSearchDialog } from '@/hooks/useSearchDialog'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
 import type { SidebarMode } from '@/hooks/useAgentMode'
 import { IconSparkles, IconTerminal2 } from '@tabler/icons-react'
+import { toast } from 'sonner'
+import { useMessages } from '@/hooks/useMessages'
+import { usePrompt } from '@/hooks/usePrompt'
+import { useInitialMessage } from '@/hooks/useInitialMessage'
+import {
+  NEW_THREAD_ATTACHMENT_KEY,
+  useChatAttachments,
+} from '@/hooks/useChatAttachments'
+import { useAgentRun } from '@/hooks/useAgentRun'
+import {
+  cancelAgentTurn,
+  resetAgentSession,
+} from '@/services/agent/tauri'
 
 type AnimatedIconHandle = {
   startAnimation: () => void
@@ -43,10 +56,42 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
   const projectDialogOpen = useProjectDialog((state) => state.open)
   const setProjectDialogOpen = useProjectDialog((state) => state.setOpen)
   const { open: searchOpen, setOpen: setSearchOpen } = useSearchDialog()
+  const [creatingConversation, setCreatingConversation] = useState(false)
 
-  const handleNewChat = () => {
-    useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, mode === 'agent')
-    navigate({ to: route.home })
+  const handleNewChat = async () => {
+    if (creatingConversation) return
+    setCreatingConversation(true)
+    try {
+      if (mode === 'agent') {
+        const run = useAgentRun.getState().getRun(TEMPORARY_CHAT_ID)
+        if (
+          run.runId &&
+          ['running', 'awaiting_approval', 'awaiting_folder_access'].includes(
+            run.status
+          )
+        ) {
+          await cancelAgentTurn(run.runId).catch(() => undefined)
+        }
+        await resetAgentSession(TEMPORARY_CHAT_ID)
+      }
+      useMessages.getState().setMessages(TEMPORARY_CHAT_ID, [])
+      usePrompt.getState().resetPrompt()
+      useInitialMessage.getState().clear(TEMPORARY_CHAT_ID)
+      useChatAttachments
+        .getState()
+        .clearAttachments(NEW_THREAD_ATTACHMENT_KEY)
+      useChatAttachments.getState().clearAttachments(TEMPORARY_CHAT_ID)
+      useAgentRun.getState().clearRun(TEMPORARY_CHAT_ID)
+      useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, mode === 'agent')
+      navigate({ to: route.home, search: {} })
+    } catch (error) {
+      toast.error(
+        mode === 'agent' ? 'Could not create a new task' : 'Could not create a new chat',
+        { description: String(error) }
+      )
+    } finally {
+      setCreatingConversation(false)
+    }
   }
 
   const handleCreateProject = async (name: string, assistantId?: string) => {
@@ -64,7 +109,8 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
         <SidebarMenuItem>
           <SidebarMenuButton
             className="font-medium"
-            onClick={handleNewChat}
+            disabled={creatingConversation}
+            onClick={() => void handleNewChat()}
             onMouseEnter={() => newChatIconRef.current?.startAnimation()}
             onMouseLeave={() => newChatIconRef.current?.stopAnimation()}
           >

@@ -12,6 +12,10 @@ pub struct SessionInfo {
     pub model_path: String, // path of the loaded model artifact
     pub is_embedding: bool,
     pub vision: bool,
+    /// Startup-fixed logical context limit requested for this resident model.
+    /// Zero means the engine selected its artifact/runtime default.
+    #[serde(default)]
+    pub max_context: u32,
     pub api_key: String,
 }
 

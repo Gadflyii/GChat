@@ -398,7 +398,10 @@ async fn run_goal_loop(
         let executor_result = execute_observed_stage(context, executor, 0, emit).await?;
         total_steps += executor_result.outcome.step_count;
         inference.merge(executor_result.outcome.inference);
-        if executor_result.outcome.reason == "cancelled" {
+        if matches!(
+            executor_result.outcome.reason.as_str(),
+            "cancelled" | "finish" | "max_steps"
+        ) {
             let mut outcome = executor_result.outcome;
             outcome.inference = inference;
             return Ok(outcome);
@@ -430,14 +433,30 @@ async fn run_goal_loop(
         let evaluator_result = execute_observed_stage(context, evaluator, 1, emit).await?;
         total_steps += evaluator_result.outcome.step_count;
         inference.merge(evaluator_result.outcome.inference);
-        if evaluator_result.outcome.reason == "cancelled" {
+        if matches!(
+            evaluator_result.outcome.reason.as_str(),
+            "cancelled" | "finish"
+        ) {
             let mut outcome = evaluator_result.outcome;
             outcome.inference = inference;
             return Ok(outcome);
         }
+        if evaluator_result.outcome.reason == "max_steps" {
+            return Ok(AgentTurnOutcome {
+                reply: last_executor,
+                reason: "max_steps".into(),
+                step_count: total_steps,
+                inference,
+            });
+        }
         feedback = evaluator_result.outcome.reply.unwrap_or_default();
         if evaluator_passed(&feedback) {
-            break;
+            return Ok(AgentTurnOutcome {
+                reply: last_executor,
+                reason: "reply".into(),
+                step_count: total_steps,
+                inference,
+            });
         }
         if cycle < max_cycles {
             emit(AgentEvent::Handoff {
@@ -449,7 +468,7 @@ async fn run_goal_loop(
     }
     Ok(AgentTurnOutcome {
         reply: last_executor,
-        reason: "reply".into(),
+        reason: "max_cycles".into(),
         step_count: total_steps,
         inference,
     })
@@ -1027,6 +1046,131 @@ mod tests {
             merge_skill_lists(&shared, &["research".into(), "review".into()]),
             vec!["code", "research", "review"]
         );
+    }
+
+    async fn run_test_goal_loop(
+        executor_responses: Vec<ScriptedResponse>,
+        evaluator_responses: Vec<ScriptedResponse>,
+        max_steps: u32,
+        max_cycles: u32,
+    ) -> (AgentTurnOutcome, usize, usize) {
+        let executor = ScriptedGinferServer::start(executor_responses).await;
+        let evaluator = ScriptedGinferServer::start(evaluator_responses).await;
+        let routes = AgentModelRoutes::new(vec![
+            AgentModelRoute {
+                instance_id: "executor-model".into(),
+                model_id: "executor-model".into(),
+                client: executor.client(),
+            },
+            AgentModelRoute {
+                instance_id: "evaluator-model".into(),
+                model_id: "evaluator-model".into(),
+                client: evaluator.client(),
+            },
+        ])
+        .unwrap();
+        let mut definition = general_agent();
+        definition.id = "test-loop".into();
+        definition.max_steps = max_steps;
+        definition.model_instance_id = Some("executor-model".into());
+        definition.strategy = AgentStrategy::GoalLoop {
+            max_cycles,
+            success_criteria: "Complete".into(),
+            evaluator_instructions: "Evaluate".into(),
+            evaluator_model_instance_id: Some("evaluator-model".into()),
+            evaluator_reasoning_effort: Some(AgentReasoningEffort::High),
+        };
+        let workspace = TestWorkspace::new();
+        let editable_roots = EditableRoots::new(workspace.path(), &[]).await.unwrap();
+        let capabilities = CapabilitiesSummary {
+            platform: "linux".into(),
+            arch: "x86_64".into(),
+            browser_channel: "none".into(),
+            working_dir: workspace.path().display().to_string(),
+            has_clipboard: false,
+            has_wmctrl: false,
+            has_notifications: false,
+        };
+        let approval = RecordingApproval::deny();
+        let folder_access = RecordingFolderAccess::deny();
+        let desktop = RecordingDesktop::default();
+        let cancellation = CancellationToken::new();
+        let skill_registry = workspace.skill_registry();
+        let mut session = AgentSessionState::new("session");
+
+        let outcome = run_definition(
+            OrchestrationInput {
+                run_id: "run",
+                storage_id: "storage",
+                session_id: "session",
+                user_message: "complete the goal",
+                selected_skill: None,
+                definition: &definition,
+                capabilities: &capabilities,
+                skill_descriptors: &[],
+                active_model_instance_id: "active-model",
+                working_dir: workspace.path(),
+                editable_roots: &editable_roots,
+                external_read_only_roots: &[],
+                trusted_read_roots: &[],
+                max_steps_override: None,
+                model_routes: &routes,
+                approval: &approval,
+                folder_access: &folder_access,
+                desktop: &desktop,
+                cancellation: &cancellation,
+                session: &mut session,
+                skill_registry: &skill_registry,
+                bundled_script_runtime: None,
+                data_folder: workspace.path(),
+            },
+            |_| Ok(()),
+        )
+        .await
+        .unwrap();
+
+        (
+            outcome,
+            executor.requests().len(),
+            evaluator.requests().len(),
+        )
+    }
+
+    #[tokio::test]
+    async fn goal_loop_stops_when_the_executor_exhausts_its_step_budget() {
+        let (outcome, executor_requests, evaluator_requests) = run_test_goal_loop(
+            vec![ScriptedResponse::completion(
+                r#"[{"tool":"os.fs.list","args":{"path":"."}}]"#,
+            )],
+            Vec::new(),
+            1,
+            3,
+        )
+        .await;
+
+        assert_eq!(outcome.reason, "max_steps");
+        assert_eq!(executor_requests, 1);
+        assert_eq!(evaluator_requests, 0);
+    }
+
+    #[tokio::test]
+    async fn goal_loop_preserves_the_last_result_when_revision_cycles_expire() {
+        let (outcome, executor_requests, evaluator_requests) = run_test_goal_loop(
+            vec![ScriptedResponse::completion(
+                r#"[{"tool":"reply","args":{"text":"best available"}}]"#,
+            )],
+            vec![ScriptedResponse::completion(
+                r#"[{"tool":"reply","args":{"text":"REVISE\nNeeds more work"}}]"#,
+            )],
+            4,
+            1,
+        )
+        .await;
+
+        assert_eq!(outcome.reason, "max_cycles");
+        assert_eq!(outcome.reply.as_deref(), Some("best available"));
+        assert_eq!(executor_requests, 1);
+        assert_eq!(evaluator_requests, 1);
     }
 
     #[tokio::test]

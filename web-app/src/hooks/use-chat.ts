@@ -173,6 +173,16 @@ export function useChat(
     transportRef.current?.setContinueFromContent(content)
   }, [])
 
+  const compactContext = useCallback(
+    async (messages: UIMessage[]) => {
+      if (!transportRef.current || !sessionId) {
+        throw new Error('The chat session is not ready for compaction.')
+      }
+      return transportRef.current.compactContext(sessionId, messages)
+    },
+    [sessionId]
+  )
+
   // Expose method to update RAG tools availability
   const updateRagToolsAvailability = useCallback(
     async (
@@ -195,5 +205,6 @@ export function useChat(
     ...chatResult,
     updateRagToolsAvailability,
     setContinueFromContent,
+    compactContext,
   }
 }

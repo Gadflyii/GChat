@@ -120,10 +120,12 @@ export function provisionOpenCode(
       }
     }
 
-    if (readiness.ready) return readiness
     const model = request.model?.trim()
     if (!model) return readiness
 
+    // The GChat provider is managed integration state, not user-authored
+    // OpenCode configuration. Refresh it even when structurally ready so a
+    // model reload can publish its current context limit and endpoint.
     onPhase?.('configuring')
     await invoke<void>('configure_opencode', {
       apiUrl: request.apiUrl,

@@ -65,6 +65,11 @@ import { extractModelErrorMessage } from '@/lib/modelErrorMessage'
 import type { ServiceHub } from '@/services'
 import { ensureRemoteProviderReady } from '@/utils/ensureRemoteProviderReady'
 import { isLocalProvider as isLocalProviderName } from '@/utils/registerRemoteProvider'
+import {
+  ginferContextPolicyForModel,
+  type GInferContextState,
+  type ManualContextCompactionResult,
+} from '@/lib/smart-context'
 
 /// Local inference backends (ginfer) get special handling at the
 /// `streamText` boundary:
@@ -226,6 +231,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
   private continueFromContent: string | null = null
   private toolsCacheKey = ''
   private toolsCacheValid = false
+  private contextState: GInferContextState = { lastCompaction: null }
 
   constructor(systemMessage?: string, threadId?: string) {
     this.systemMessage = systemMessage
@@ -411,6 +417,46 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     this.continueFromContent = content
   }
 
+  /**
+   * Run the normal GInfer request serializer far enough to create or extend
+   * the thread checkpoint. The local fetch adapter replaces the final answer
+   * with an empty synthetic stream, so `/compact` never becomes a chat turn.
+   */
+  async compactContext(
+    chatId: string,
+    messages: UIMessage[]
+  ): Promise<ManualContextCompactionResult> {
+    if (useModelProvider.getState().selectedProvider !== 'ginfer') {
+      throw new Error('/compact is available only for a loaded GInfer model.')
+    }
+    if (this.contextState.manualCompactionRequested) {
+      throw new Error('Context compaction is already running.')
+    }
+
+    this.contextState.manualCompactionRequested = true
+    this.contextState.manualCompactionResult = null
+    try {
+      const stream = await this.sendMessages({
+        chatId,
+        messages,
+        abortSignal: undefined,
+        trigger: 'regenerate-message',
+        messageId: undefined,
+      })
+      const reader = stream.getReader()
+      while (!(await reader.read()).done) {
+        // Drain the synthetic response so the AI SDK completes its request.
+      }
+      const result = this.contextState.manualCompactionResult
+      if (!result) {
+        throw new Error('GChat did not receive a context compaction result.')
+      }
+      return result
+    } finally {
+      this.contextState.manualCompactionRequested = false
+    }
+  }
+
   async sendMessages(
     options: {
       chatId: string
@@ -422,6 +468,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     } & ChatRequestOptions
   ): Promise<ReadableStream<UIMessageChunk>> {
     const requestStartedAt = Date.now()
+    this.contextState.lastCompaction = null
     ttftMark('gammaStart')
     await this.refreshTools()
     ttftMark('gammaEnd')
@@ -525,7 +572,16 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           modelId,
           effectiveProvider,
           inferenceParams ?? {},
-          hasOverride ? effectiveReasoningOverride : undefined
+          hasOverride ? effectiveReasoningOverride : undefined,
+          effectiveProviderName === 'ginfer'
+            ? ginferContextPolicyForModel(
+                this.threadId ?? options.chatId,
+                modelId,
+                updatedProvider?.models,
+                provider.models,
+                this.contextState
+              )
+            : undefined
         )
         ttftMark('deltaEnd')
       } catch (error) {
@@ -647,6 +703,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     let tokensPerSecond = 0
     let draftTokensTotal: number | null = null
     let draftTokensAccepted: number | null = null
+    let ginferFinishReason: string | null = null
 
     const uiStream = result.toUIMessageStream({
       messageMetadata: ({ part }) => {
@@ -667,6 +724,8 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           tokensPerSecond = (pm?.tokensPerSecond as number) || 0
           draftTokensTotal = (pm?.draftTokensTotal as number) ?? null
           draftTokensAccepted = (pm?.draftTokensAccepted as number) ?? null
+          ginferFinishReason =
+            (pm?.ginferFinishReason as string | undefined) ?? null
         }
 
         // Add usage and token speed to metadata on finish
@@ -705,6 +764,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
           return {
             finishReason: finishPart.finishReason,
+            ginferFinishReason,
             activityDurationMs: Math.max(0, Date.now() - requestStartedAt),
             // Provider-agnostic time to first token: `streamStartTime` is the
             // first generated delta, set above. The α→θ stage breakdown in
@@ -734,6 +794,9 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
                   }
                 : {}),
             },
+            ...(this.contextState.lastCompaction
+              ? { contextCompaction: this.contextState.lastCompaction }
+              : {}),
           }
         }
 

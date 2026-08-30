@@ -26,6 +26,26 @@ export function cancelAgentTurn(runId: string): Promise<void> {
   return invoke<void>('agent_cancel_turn', { runId })
 }
 
+export function resetAgentSession(sessionId: string): Promise<void> {
+  return invoke<void>('agent_reset_session', { sessionId })
+}
+
+export interface AgentContextCompactionResult {
+  status: 'compacted' | 'nothing_to_compact'
+  summarizedTurns: number
+  retainedTurns: number
+}
+
+export function compactAgentSession(
+  sessionId: string,
+  modelId: string
+): Promise<AgentContextCompactionResult> {
+  return invoke<AgentContextCompactionResult>('agent_compact_session', {
+    sessionId,
+    modelId,
+  })
+}
+
 export function resolveAgentApproval(
   decision: AgentApprovalDecision
 ): Promise<void> {

@@ -595,7 +595,7 @@ function SetupScreen({ onSkipped }: SetupScreenProps) {
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <div className="pointer-events-auto mx-auto my-auto flex w-full max-w-[520px] flex-col px-6 py-8 sm:py-10">
             <div className="mb-5 flex shrink-0 flex-col items-center gap-3 text-center">
-              <div className="flex h-14 shrink-0 items-center justify-center">
+              <div className="flex h-[84px] shrink-0 items-center justify-center">
                 <img
                   src="/images/gchat-lockup.png"
                   alt="GChat by Sectile Research Laboratories"

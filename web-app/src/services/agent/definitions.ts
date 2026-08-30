@@ -39,3 +39,7 @@ export function listAgentTemplates(): Promise<AgentTemplate[]> {
 export function listAgentRuns(): Promise<AgentRunRecord[]> {
   return invoke<AgentRunRecord[]>('agent_list_runs')
 }
+
+export function deleteAgentRun(id: string): Promise<void> {
+  return invoke<void>('agent_delete_run', { id })
+}

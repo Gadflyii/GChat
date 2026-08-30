@@ -8,6 +8,7 @@ export type AgentTurnFinishReason =
   | 'reply'
   | 'finish'
   | 'max_steps'
+  | 'max_cycles'
   | 'cancelled'
   | 'failed'
 
@@ -135,11 +136,15 @@ export type AgentRunRecord = {
   sessionId: string
   definitionId: string
   definitionName: string
+  userMessage: string
   kind: AgentStrategyKind
-  status: 'finished' | 'failed' | 'cancelled'
+  status: 'finished' | 'incomplete' | 'failed' | 'cancelled'
+  finishReason?: AgentTurnFinishReason | ''
   startedAtMs: number
   finishedAtMs: number
   totalSteps: number
+  maxSteps?: number
+  maxCycles?: number | null
   finalReply: string
   defaultModelInstanceId: string
   stages: Array<{
@@ -335,6 +340,7 @@ export type AgentRunStatus =
   | 'awaiting_approval'
   | 'awaiting_folder_access'
   | 'finished'
+  | 'incomplete'
   | 'failed'
   | 'cancelled'
 
@@ -367,7 +373,7 @@ export type AgentRunTrace = {
     id: string
     name: string
     role: string
-    status: 'running' | 'finished' | 'failed' | 'cancelled'
+    status: 'running' | 'finished' | 'incomplete' | 'failed' | 'cancelled'
     cycle?: number
     summary?: string
     stepCount?: number
@@ -412,7 +418,7 @@ export type AgentRunSummary = {
     id: string
     name: string
     role: string
-    status: 'running' | 'finished' | 'failed' | 'cancelled'
+    status: 'running' | 'finished' | 'incomplete' | 'failed' | 'cancelled'
     step_count?: number
     duration_ms?: number
     model_instance_id: string

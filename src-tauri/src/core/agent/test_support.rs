@@ -219,7 +219,8 @@ impl ScriptedResponse {
                 "x_ginfer": {
                     "computed_prefill_tokens": 1,
                     "prefill_seconds": 0.002,
-                    "decode_seconds": 0.004
+                    "decode_seconds": 0.004,
+                    "finish_reason": "stop_token"
                 }
             }),
             delay: Duration::ZERO,

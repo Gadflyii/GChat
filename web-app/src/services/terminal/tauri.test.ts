@@ -114,6 +114,7 @@ describe('OpenCode provisioning', () => {
         reason: 'wsl_only',
       },
       readyReadiness,
+      readyReadiness,
     ]
     mocks.invoke.mockImplementation((command: string) => {
       if (command === 'opencode_readiness')
@@ -131,17 +132,45 @@ describe('OpenCode provisioning', () => {
       'opencode_readiness',
       'install_agent',
       'opencode_readiness',
+      'configure_opencode',
+      'opencode_readiness',
+    ])
+  })
+
+  it('refreshes a ready provider so live model limits do not go stale', async () => {
+    mocks.invoke.mockImplementation((command: string) =>
+      Promise.resolve(
+        command === 'opencode_readiness' ? readyReadiness : undefined
+      )
+    )
+
+    await expect(
+      provisionOpenCode({
+        apiUrl: 'http://127.0.0.1:1337/v1',
+        model: 'qwen',
+      })
+    ).resolves.toEqual(readyReadiness)
+
+    expect(mocks.invoke.mock.calls.map(([command]) => command)).toEqual([
+      'opencode_readiness',
+      'configure_opencode',
+      'opencode_readiness',
     ])
   })
 
   it('shares one installer across StrictMode bootstrap effects', async () => {
     let resolveReadiness: ((value: typeof readyReadiness) => void) | undefined
-    mocks.invoke.mockImplementation(
-      () =>
+    let readinessCalls = 0
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command !== 'opencode_readiness') return Promise.resolve()
+      readinessCalls += 1
+      if (readinessCalls > 1) return Promise.resolve(readyReadiness)
+      return (
         new Promise((resolve) => {
           resolveReadiness = resolve
         })
-    )
+      )
+    })
     const request = {
       apiUrl: 'http://127.0.0.1:1337/v1',
       model: 'qwen',

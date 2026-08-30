@@ -59,6 +59,7 @@ import {
   type ChatTurnSource,
 } from '@/lib/chat-telemetry'
 import { classifyChatFailure, lengthBucket } from '@/lib/telemetry'
+import { extractModelErrorMessage } from '@/lib/modelErrorMessage'
 import {
   ThreadMessage,
   MessageStatus,
@@ -128,6 +129,7 @@ import {
 } from '@/lib/agent-file-links'
 import {
   cancelAgentTurn,
+  compactAgentSession,
   resolveAgentWorkspaceRoot,
   runAgentTurn,
 } from '@/services/agent/tauri'
@@ -419,6 +421,7 @@ function ThreadDetail() {
     addToolOutput,
     updateRagToolsAvailability,
     setContinueFromContent,
+    compactContext,
   } = useChat({
     sessionId: threadId,
     sessionTitle: thread?.title,
@@ -439,6 +442,9 @@ function ThreadDetail() {
     onFinish: ({ message, isAbort }) => {
       const msgMeta = message.metadata as Record<string, unknown> | undefined
       const finishReason = msgMeta?.finishReason as string | undefined
+      const ginferFinishReason = msgMeta?.ginferFinishReason as
+        | string
+        | undefined
 
       if (isAbort) {
         setIsChatRequestActive(false)
@@ -462,7 +468,9 @@ function ThreadDetail() {
         const ctxLen =
           (selectedModelState?.settings?.ctx_len?.controller_props
             ?.value as number) ?? 32768
-        const isContextLimit = totalTokens >= ctxLen * 0.9
+        const isContextLimit = ginferFinishReason
+          ? ginferFinishReason === 'context_capacity'
+          : totalTokens >= ctxLen * 0.9
 
         if (isContextLimit) {
           const autoIncrease =
@@ -1284,6 +1292,79 @@ function ThreadDetail() {
       agentSkillName?: string,
       agentDefinitionId?: string
     ) => {
+      if (text.trim().toLowerCase() === '/compact') {
+        if (files?.length) {
+          toast.error('Remove attachments before running /compact.')
+          return
+        }
+        const activeAgentRun = useAgentRun.getState().getRun(threadId)
+        if (
+          isChatRequestActive ||
+          status === CHAT_STATUS.STREAMING ||
+          status === CHAT_STATUS.SUBMITTED ||
+          activeAgentRun.status === 'running' ||
+          activeAgentRun.status === 'awaiting_approval' ||
+          activeAgentRun.status === 'awaiting_folder_access'
+        ) {
+          toast.error('Wait for the current response or Agent run to finish.')
+          return
+        }
+        const toastId = toast.loading('Compacting older conversation turns…')
+        try {
+          const isAgentThread = useAgentMode
+            .getState()
+            .isAgentMode(threadId)
+          if (isAgentThread) {
+            if (!selectedModel?.id) {
+              throw new Error('Load a GInfer model before compacting context.')
+            }
+            const result = await compactAgentSession(
+              threadId,
+              selectedModel.id
+            )
+            if (result.status === 'nothing_to_compact') {
+              toast.info('Nothing to compact yet.', { id: toastId })
+            } else {
+              toast.success(
+                `Context compacted: ${result.summarizedTurns} older entries checkpointed; ${result.retainedTurns} recent entries retained.`,
+                { id: toastId }
+              )
+            }
+            return
+          }
+
+          const result = await compactContext(chatMessagesRef.current)
+          if (result.status === 'nothing_to_compact') {
+            toast.info('Nothing to compact yet.', { id: toastId })
+          } else if (result.status === 'not_beneficial') {
+            toast.info('The checkpoint would not reduce the current context.', {
+              id: toastId,
+            })
+          } else if (result.status === 'already_compacted') {
+            toast.info('Older turns are already compacted.', { id: toastId })
+          } else {
+            const savedTokens = result.report
+              ? Math.max(
+                  0,
+                  result.report.inputTokensBefore -
+                    result.report.inputTokensAfter
+                )
+              : 0
+            toast.success(
+              savedTokens > 0
+                ? `Context compacted; ${savedTokens.toLocaleString()} prompt tokens reclaimed.`
+                : 'Context compacted.',
+              { id: toastId }
+            )
+          }
+        } catch (compactError) {
+          toast.error('Context compaction failed.', {
+            id: toastId,
+            description: extractModelErrorMessage(compactError),
+          })
+        }
+        return
+      }
       await processAndSendMessage(
         text,
         files,
@@ -1292,7 +1373,14 @@ function ThreadDetail() {
         agentDefinitionId
       )
     },
-    [processAndSendMessage]
+    [
+      compactContext,
+      isChatRequestActive,
+      processAndSendMessage,
+      selectedModel?.id,
+      status,
+      threadId,
+    ]
   )
 
   // Handle regenerate from any message (user or assistant)

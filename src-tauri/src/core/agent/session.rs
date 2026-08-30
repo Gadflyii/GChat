@@ -10,14 +10,14 @@ use super::tools::tool_view::{descriptor_for, LOADED_TOOLS_CAP};
 use super::types::{ToolCallPayload, ToolOutcome, ToolStatus};
 use crate::core::threads::utils::{get_data_dir, get_thread_dir};
 
-const SESSION_VERSION: u32 = 2;
+const SESSION_VERSION: u32 = 3;
 const SESSION_FILE_NAME: &str = "agent-session.json";
 const MAX_SESSION_FILE_BYTES: u64 = 512 * 1024;
-const MAX_TURNS: usize = 96;
+const MAX_TURNS: usize = 512;
 const MAX_USER_TEXT_CHARS: usize = 8_000;
 const MAX_REPLY_TEXT_CHARS: usize = 12_000;
 const MAX_TOOL_SUMMARY_CHARS: usize = 1_200;
-const SUMMARY_TOKEN_RESERVE: usize = 80;
+const CHECKPOINT_TOKEN_RESERVE: usize = 3_072;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -49,6 +49,14 @@ pub struct AgentSessionState {
     pub loaded_tools: Vec<String>,
     #[serde(default)]
     pub loaded_skills: Vec<LoadedSkillState>,
+    #[serde(default)]
+    pub checkpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentCheckpointPlan {
+    pub dropped_turns: usize,
+    pub source: String,
 }
 
 impl AgentSessionState {
@@ -60,6 +68,7 @@ impl AgentSessionState {
             turns: Vec::new(),
             loaded_tools: Vec::new(),
             loaded_skills: Vec::new(),
+            checkpoint: None,
         }
     }
 
@@ -111,46 +120,94 @@ impl AgentSessionState {
         self.loaded_skills = skills.into_iter().take(LOADED_SKILLS_CAP).collect();
     }
 
-    pub fn render_conversation(&self, max_tokens: usize) -> String {
+    pub fn render_conversation(&self, _max_tokens: usize) -> String {
+        let mut rendered = Vec::new();
+        if let Some(checkpoint) = &self.checkpoint {
+            rendered.push(format!(
+                "conversation checkpoint (model-generated prior session state):\n{checkpoint}"
+            ));
+        }
+        rendered.extend(self.turns.iter().map(render_turn));
+        rendered.join("\n")
+    }
+
+    pub fn checkpoint_plan(
+        &self,
+        max_tokens: usize,
+    ) -> Result<Option<AgentCheckpointPlan>, String> {
         let rendered = self.turns.iter().map(render_turn).collect::<Vec<_>>();
-        let costs = rendered
+        let checkpoint_tokens = self.checkpoint.as_deref().map(estimate_tokens).unwrap_or(0);
+        let turn_tokens = rendered
             .iter()
             .map(|turn| estimate_tokens(turn) + 1)
             .collect::<Vec<_>>();
-        if costs.iter().sum::<usize>() <= max_tokens {
-            return rendered.join("\n");
+        if checkpoint_tokens + turn_tokens.iter().sum::<usize>() <= max_tokens {
+            return Ok(None);
         }
 
-        let budget = max_tokens.saturating_sub(SUMMARY_TOKEN_RESERVE).max(1);
-        let mut used = 0usize;
-        let mut start = self.turns.len();
-        for index in (0..self.turns.len()).rev() {
-            if used + costs[index] > budget {
-                break;
-            }
-            used += costs[index];
-            start = index;
-        }
-        if let Some(last_user) = self
+        let user_starts = self
             .turns
             .iter()
-            .rposition(|turn| matches!(turn, AgentSessionTurn::User { .. }))
-        {
-            start = start.min(last_user);
+            .enumerate()
+            .filter_map(|(index, turn)| {
+                matches!(turn, AgentSessionTurn::User { .. }).then_some(index)
+            })
+            .collect::<Vec<_>>();
+        for retained_user_turns in [2usize, 1] {
+            let Some(&start) =
+                user_starts.get(user_starts.len().saturating_sub(retained_user_turns))
+            else {
+                continue;
+            };
+            if start == 0 {
+                continue;
+            }
+            let retained_tokens = turn_tokens.iter().skip(start).sum::<usize>();
+            let checkpoint_budget = checkpoint_tokens.max(CHECKPOINT_TOKEN_RESERVE);
+            if checkpoint_budget + retained_tokens <= max_tokens {
+                return Ok(Some(AgentCheckpointPlan {
+                    dropped_turns: start,
+                    source: rendered[..start].join("\n"),
+                }));
+            }
         }
+        Err("The current Agent turn is too large to preserve intact in the loaded model's context. Reduce its attachment or tool-result payload.".into())
+    }
+
+    /// Plan an explicit `/compact` operation. Keep the two newest complete
+    /// user turns as the live working set and checkpoint everything before
+    /// their boundary. Tool calls and results remain attached to their user
+    /// turn because the cut can occur only at a user-turn start.
+    pub fn manual_checkpoint_plan(&self) -> Option<AgentCheckpointPlan> {
+        let user_starts = self
+            .turns
+            .iter()
+            .enumerate()
+            .filter_map(|(index, turn)| {
+                matches!(turn, AgentSessionTurn::User { .. }).then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let &start = user_starts.get(user_starts.len().checked_sub(2)?)?;
         if start == 0 {
-            return rendered.join("\n");
+            return None;
         }
-        let mut packed = vec![render_dropped_summary(&self.turns[..start])];
-        packed.extend(rendered.into_iter().skip(start));
-        packed.join("\n")
+        Some(AgentCheckpointPlan {
+            dropped_turns: start,
+            source: self.turns[..start]
+                .iter()
+                .map(render_turn)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        })
+    }
+
+    pub fn apply_checkpoint(&mut self, plan: &AgentCheckpointPlan, checkpoint: String) {
+        self.turns.drain(..plan.dropped_turns);
+        self.checkpoint = Some(checkpoint);
     }
 
     fn push_turn(&mut self, turn: AgentSessionTurn) {
         self.turns.push(turn);
-        if self.turns.len() > MAX_TURNS {
-            self.turns.drain(..self.turns.len() - MAX_TURNS);
-        }
     }
 
     fn validate(&self, expected_session_id: &str) -> Result<(), String> {
@@ -210,28 +267,6 @@ impl AgentSessionState {
     }
 }
 
-fn render_dropped_summary(turns: &[AgentSessionTurn]) -> String {
-    let users = turns
-        .iter()
-        .filter(|turn| matches!(turn, AgentSessionTurn::User { .. }))
-        .count();
-    let tool_calls = turns
-        .iter()
-        .filter(|turn| matches!(turn, AgentSessionTurn::AssistantToolCall { .. }))
-        .count();
-    let replies = turns
-        .iter()
-        .filter(|turn| matches!(turn, AgentSessionTurn::AssistantReply { .. }))
-        .count();
-    format!(
-        "summary: {} older turns dropped ({} user, {} tool calls, {} replies)",
-        turns.len(),
-        users,
-        tool_calls,
-        replies
-    )
-}
-
 pub fn validate_session_id(session_id: &str) -> Result<(), String> {
     if session_id.is_empty() || session_id.len() > 128 {
         return Err("session_id must be a non-empty path component".into());
@@ -261,7 +296,7 @@ pub async fn load_session(data_dir: &Path, session_id: &str) -> Result<AgentSess
         .map_err(|error| format!("Could not read agent session: {error}"))?;
     let mut state: AgentSessionState = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Could not parse agent session: {error}"))?;
-    if state.version == 1 {
+    if state.version == 1 || state.version == 2 {
         state.version = SESSION_VERSION;
     }
     state.validate(session_id)?;
@@ -294,6 +329,25 @@ pub async fn save_session(data_dir: &Path, state: &AgentSessionState) -> Result<
     atomic_replace(&temp_path, &path)
         .await
         .map_err(|error| format!("Could not replace agent session: {error}"))
+}
+
+pub async fn reset_session(data_dir: &Path, session_id: &str) -> Result<(), String> {
+    validate_session_id(session_id)?;
+    let thread_dir = get_thread_dir(data_dir, session_id);
+    match tokio::fs::metadata(&thread_dir).await {
+        Ok(metadata) if !metadata.is_dir() => {
+            return Err("Agent thread path is not a directory".into());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("Could not inspect agent thread directory: {error}")),
+    }
+    let path = session_file_path(data_dir, session_id).await?;
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("Could not reset agent session: {error}")),
+    }
 }
 
 async fn session_file_path(data_dir: &Path, session_id: &str) -> Result<PathBuf, String> {
@@ -430,7 +484,8 @@ mod tests {
     impl SessionFixture {
         fn new(session_ids: &[&str]) -> Self {
             let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("target").join("agent-session-tests")
+                .join("target")
+                .join("agent-session-tests")
                 .join(uuid::Uuid::new_v4().to_string());
             std::fs::create_dir_all(get_data_dir(&data_dir)).expect("create threads root");
             for session_id in session_ids {
@@ -517,6 +572,22 @@ mod tests {
             .contains("key: Error: database connection failed"));
     }
 
+    #[tokio::test]
+    async fn reset_removes_only_the_agent_session_state() {
+        let fixture = SessionFixture::new(&["thread-a"]);
+        let state = AgentSessionState::new("thread-a");
+        save_session(&fixture.data_dir, &state).await.unwrap();
+        let sibling = get_thread_dir(&fixture.data_dir, "thread-a").join("messages.jsonl");
+        tokio::fs::write(&sibling, b"message").await.unwrap();
+
+        reset_session(&fixture.data_dir, "thread-a").await.unwrap();
+
+        assert!(!get_thread_dir(&fixture.data_dir, "thread-a")
+            .join(SESSION_FILE_NAME)
+            .exists());
+        assert!(sibling.exists());
+    }
+
     #[test]
     fn concise_mutation_results_are_left_unchanged() {
         let mut state = AgentSessionState::new("thread-a");
@@ -533,19 +604,67 @@ mod tests {
     }
 
     #[test]
-    fn token_budget_drops_old_turns_but_preserves_latest_user() {
+    fn token_budget_plans_a_complete_turn_checkpoint_without_dropping_state() {
         let mut state = AgentSessionState::new("thread-a");
-        state.push_user(&format!("old question {}", "detail ".repeat(120)));
-        state.push_reply(&format!("old answer {}", "detail ".repeat(120)));
+        state.push_user(&format!("old question {}", "detail ".repeat(1_200)));
+        state.push_reply(&format!("old answer {}", "detail ".repeat(1_200)));
         state.push_user("latest question");
 
-        let rendered = state.render_conversation(40);
+        let plan = state
+            .checkpoint_plan(3_100)
+            .expect("checkpoint planning")
+            .expect("oversized session requires checkpoint");
+        assert_eq!(plan.dropped_turns, 2);
+        assert!(plan.source.contains("old question"));
+        assert!(plan.source.contains("old answer"));
+        assert!(!plan.source.contains("latest question"));
 
-        assert!(rendered
-            .starts_with("summary: 2 older turns dropped (1 user, 0 tool calls, 1 replies)"));
+        state.apply_checkpoint(&plan, "## Objective\nPreserve the old work.".into());
+        let rendered = state.render_conversation(3_100);
+        assert!(rendered.contains("conversation checkpoint"));
+        assert!(rendered.contains("Preserve the old work"));
         assert!(rendered.contains("USER: latest question"));
         assert!(!rendered.contains("old question"));
-        assert!(!rendered.contains("old answer"));
+    }
+
+    #[test]
+    fn manual_checkpoint_keeps_two_complete_user_turns_and_their_tools() {
+        let mut state = AgentSessionState::new("thread-a");
+        state.push_user("old question");
+        state.push_reply("old answer");
+        state.push_user("middle question");
+        state.push_tool_observations(
+            &[ToolCallPayload {
+                tool: "os.fs.read".into(),
+                args: serde_json::json!({"path": "middle.txt"}),
+            }],
+            &[ToolOutcome::ok("middle result")],
+        );
+        state.push_reply("middle answer");
+        state.push_user("current question");
+
+        let plan = state
+            .manual_checkpoint_plan()
+            .expect("three user turns permit manual compaction");
+        assert_eq!(plan.dropped_turns, 2);
+        assert!(plan.source.contains("old question"));
+        assert!(!plan.source.contains("middle question"));
+
+        state.apply_checkpoint(&plan, "## Objective\nPreserve old work.".into());
+        let rendered = state.render_conversation(32_000);
+        assert!(rendered.contains("middle question"));
+        assert!(rendered.contains("middle result"));
+        assert!(rendered.contains("current question"));
+        assert!(!rendered.contains("old question"));
+    }
+
+    #[test]
+    fn manual_checkpoint_requires_history_older_than_two_user_turns() {
+        let mut state = AgentSessionState::new("thread-a");
+        state.push_user("first");
+        state.push_reply("answer");
+        state.push_user("second");
+        assert_eq!(state.manual_checkpoint_plan(), None);
     }
 
     #[tokio::test]

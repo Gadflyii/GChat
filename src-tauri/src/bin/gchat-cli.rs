@@ -18,8 +18,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 // The lib target is named "app_lib" (see [lib] section in Cargo.toml).
 use app_lib::core::cli::{
     cli_get_data_folder, discover_ginfer_binary, download_hf_model, fetch_hf_ginfer_files,
-    init_ginfer_state, integrations, list_chat_models, load_ginfer_model_impl,
-    looks_like_hf_repo, resolve_model_by_id, GinferConfig, HfFileInfo,
+    init_ginfer_state, integrations, list_chat_models, load_ginfer_model_impl, looks_like_hf_repo,
+    resolve_model_by_id, GinferConfig, HfFileInfo,
 };
 use app_lib::core::server::state_file::{self, LocalApiServerState};
 
@@ -455,9 +455,7 @@ async fn fetch_server_models(
 
     let resp = req.send().await.map_err(|e| e.to_string())?;
     if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err(
-            "server requires an API key — pass --api-key or set GCHAT_API_KEY".to_string(),
-        );
+        return Err("server requires an API key — pass --api-key or set GCHAT_API_KEY".to_string());
     }
     if !resp.status().is_success() {
         return Err(format!("server returned {}", resp.status()));
@@ -1101,7 +1099,7 @@ async fn handle_launch(args: LaunchArgs) {
     let base_url = format!("http://127.0.0.1:{actual_port}");
     let api_url = integrations::api_url_for(agent, &base_url, "/v1");
 
-    if let Err(e) = integrations::configure(agent, &api_url, &model_id, &args.api_key) {
+    if let Err(e) = integrations::configure(agent, &api_url, &model_id, &args.api_key).await {
         kill_process(pid);
         fail(format!("could not configure {}: {e}", agent.name));
     }

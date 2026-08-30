@@ -9,7 +9,6 @@
     "darkText": "#f3f5f7",
     "darkMuted": "#8a9098",
     "darkPrimary": "#3dd3c8",
-    "darkSignal": "#f2ec5d",
     "darkBlue": "#68aee8",
     "darkPurple": "#b69cff",
     "darkRed": "#f2777a",
@@ -22,7 +21,6 @@
     "lightText": "#0a0c0f",
     "lightMuted": "#5a6068",
     "lightPrimary": "#0b6b6b",
-    "lightSignal": "#716d00",
     "lightBlue": "#1769aa",
     "lightPurple": "#7147a8",
     "lightRed": "#b4232c",
@@ -38,16 +36,16 @@
       "light": "lightBlue"
     },
     "accent": {
-      "dark": "darkSignal",
-      "light": "lightSignal"
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
     },
     "error": {
       "dark": "darkRed",
       "light": "lightRed"
     },
     "warning": {
-      "dark": "darkSignal",
-      "light": "lightSignal"
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
     },
     "success": {
       "dark": "darkGreen",
@@ -158,16 +156,16 @@
       "light": "lightGreen"
     },
     "markdownBlockQuote": {
-      "dark": "darkSignal",
-      "light": "lightSignal"
+      "dark": "darkMuted",
+      "light": "lightMuted"
     },
     "markdownEmph": {
       "dark": "darkPurple",
       "light": "lightPurple"
     },
     "markdownStrong": {
-      "dark": "darkSignal",
-      "light": "lightSignal"
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
     },
     "markdownHorizontalRule": {
       "dark": "darkBorder",
@@ -214,8 +212,8 @@
       "light": "lightGreen"
     },
     "syntaxNumber": {
-      "dark": "darkSignal",
-      "light": "lightSignal"
+      "dark": "darkBlue",
+      "light": "lightBlue"
     },
     "syntaxType": {
       "dark": "darkPrimary",

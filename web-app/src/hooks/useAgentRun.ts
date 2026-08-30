@@ -117,6 +117,9 @@ export function reduceAgentRunState(
                       ? 'cancelled'
                       : event.status === 'failed'
                         ? 'failed'
+                        : event.status === 'max_steps' ||
+                            event.status === 'max_cycles'
+                          ? 'incomplete'
                         : 'finished',
                   summary: event.summary,
                   stepCount: event.step_count,
@@ -263,6 +266,8 @@ export function reduceAgentRunState(
           ? 'cancelled'
           : event.reason === 'failed'
             ? 'failed'
+            : event.reason === 'max_steps' || event.reason === 'max_cycles'
+              ? 'incomplete'
             : 'finished'
       return {
         ...state,

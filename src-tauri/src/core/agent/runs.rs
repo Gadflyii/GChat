@@ -9,7 +9,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::core::app::commands::get_jan_data_folder_path;
 
-use super::definitions::{AgentDefinition, AgentReasoningEffort};
+use super::definitions::{AgentDefinition, AgentReasoningEffort, AgentStrategy};
 use super::runner::AgentTurnOutcome;
 use super::types::{AgentEvent, AgentInferenceMetrics};
 
@@ -27,11 +27,19 @@ pub struct AgentRunRecord {
     pub session_id: String,
     pub definition_id: String,
     pub definition_name: String,
+    #[serde(default)]
+    pub user_message: String,
     pub kind: String,
     pub status: String,
+    #[serde(default)]
+    pub finish_reason: String,
     pub started_at_ms: u64,
     pub finished_at_ms: u64,
     pub total_steps: u32,
+    #[serde(default)]
+    pub max_steps: u32,
+    #[serde(default)]
+    pub max_cycles: Option<u32>,
     pub final_reply: String,
     pub default_model_instance_id: String,
     pub stages: Vec<AgentRunStage>,
@@ -66,6 +74,7 @@ impl AgentRunRecord {
         id: &str,
         run_id: &str,
         session_id: &str,
+        user_message: &str,
         definition: &AgentDefinition,
         started_at_ms: u64,
         events: &[AgentEvent],
@@ -101,17 +110,26 @@ impl AgentRunRecord {
             })
             .collect::<Vec<_>>();
         let completed_stage_steps = stages.iter().map(|stage| stage.step_count).sum();
-        let (status, total_steps, final_reply) = match result {
-            Ok(outcome) => (
-                if outcome.reason == "cancelled" {
-                    "cancelled"
-                } else {
-                    "finished"
-                },
-                outcome.step_count,
-                outcome.reply.clone().unwrap_or_default(),
+        let (status, finish_reason, total_steps, final_reply) = match result {
+            Ok(outcome) => {
+                let status = match outcome.reason.as_str() {
+                    "cancelled" => "cancelled",
+                    "max_steps" | "max_cycles" => "incomplete",
+                    _ => "finished",
+                };
+                (
+                    status,
+                    outcome.reason.clone(),
+                    outcome.step_count,
+                    outcome.reply.clone().unwrap_or_default(),
+                )
+            }
+            Err(error) => (
+                "failed",
+                "failed".into(),
+                completed_stage_steps,
+                error.clone(),
             ),
-            Err(error) => ("failed", completed_stage_steps, error.clone()),
         };
         let kind = events
             .iter()
@@ -137,11 +155,18 @@ impl AgentRunRecord {
             session_id: session_id.into(),
             definition_id: definition.id.clone(),
             definition_name: definition.name.clone(),
+            user_message: user_message.into(),
             kind,
             status: status.into(),
+            finish_reason,
             started_at_ms,
             finished_at_ms: now_ms(),
             total_steps,
+            max_steps: definition.max_steps,
+            max_cycles: match &definition.strategy {
+                AgentStrategy::GoalLoop { max_cycles, .. } => Some(*max_cycles),
+                _ => None,
+            },
             final_reply,
             default_model_instance_id,
             stages,
@@ -170,6 +195,23 @@ pub fn record_run(data_folder: &Path, record: AgentRunRecord) -> Result<(), Stri
 
 pub fn list_runs(data_folder: &Path) -> Result<Vec<AgentRunRecord>, String> {
     Ok(read_history(data_folder)?.runs)
+}
+
+pub fn delete_run(data_folder: &Path, id: &str) -> Result<(), String> {
+    uuid::Uuid::parse_str(id).map_err(|_| "Agent run id is invalid".to_string())?;
+    let _guard = RUN_HISTORY_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "Agent run-history lock is poisoned".to_string())?;
+    let mut history = read_history(data_folder)?;
+    let before = history.runs.len();
+    history.runs.retain(|run| run.id != id);
+    if history.runs.len() == before {
+        return Err(format!("Agent run '{id}' was not found"));
+    }
+    write_history(data_folder, &history)?;
+    prune_run_workspace(data_folder, id);
+    Ok(())
 }
 
 fn prune_run_workspace(data_folder: &Path, id: &str) {
@@ -239,6 +281,14 @@ pub async fn agent_list_runs<R: Runtime>(
     list_runs(&get_jan_data_folder_path(app_handle))
 }
 
+#[tauri::command]
+pub async fn agent_delete_run<R: Runtime>(
+    app_handle: AppHandle<R>,
+    id: String,
+) -> Result<(), String> {
+    delete_run(&get_jan_data_folder_path(app_handle), &id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,6 +310,7 @@ mod tests {
                     &uuid::Uuid::new_v4().to_string(),
                     &format!("run-{index}"),
                     "session",
+                    &format!("task-{index}"),
                     &general_agent(),
                     index,
                     &[],
@@ -312,6 +363,7 @@ mod tests {
             "record",
             "run",
             "session",
+            "investigate",
             &general_agent(),
             10,
             &events,
@@ -319,7 +371,77 @@ mod tests {
         );
 
         assert_eq!(record.default_model_instance_id, "coordinator-model");
+        assert_eq!(record.user_message, "investigate");
         assert_eq!(record.stages[0].model_instance_id, "research-model");
         assert_eq!(record.stages[0].inference.generated_tokens, 50.0);
+    }
+
+    #[test]
+    fn records_exhausted_execution_budgets_as_incomplete() {
+        let mut definition = general_agent();
+        definition.max_steps = 7;
+        definition.strategy = AgentStrategy::GoalLoop {
+            max_cycles: 3,
+            success_criteria: "Complete".into(),
+            evaluator_instructions: "Evaluate".into(),
+            evaluator_model_instance_id: None,
+            evaluator_reasoning_effort: None,
+        };
+        let outcome = Ok(AgentTurnOutcome {
+            reply: Some("best available".into()),
+            reason: "max_cycles".into(),
+            step_count: 21,
+            inference: AgentInferenceMetrics::default(),
+        });
+
+        let record = AgentRunRecord::completed(
+            "record",
+            "run",
+            "session",
+            "task",
+            &definition,
+            10,
+            &[],
+            &outcome,
+        );
+
+        assert_eq!(record.status, "incomplete");
+        assert_eq!(record.finish_reason, "max_cycles");
+        assert_eq!(record.max_steps, 7);
+        assert_eq!(record.max_cycles, Some(3));
+        assert_eq!(record.final_reply, "best available");
+    }
+
+    #[test]
+    fn deletes_one_run_and_its_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let outcome = Ok(AgentTurnOutcome {
+            reply: Some("done".into()),
+            reason: "reply".into(),
+            step_count: 1,
+            inference: AgentInferenceMetrics::default(),
+        });
+        record_run(
+            root.path(),
+            AgentRunRecord::completed(
+                &id,
+                "run",
+                "session",
+                "task",
+                &general_agent(),
+                1,
+                &[],
+                &outcome,
+            ),
+        )
+        .unwrap();
+        let workspace = root.path().join("agent-runs").join(&id);
+        std::fs::create_dir_all(&workspace).unwrap();
+
+        delete_run(root.path(), &id).unwrap();
+
+        assert!(list_runs(root.path()).unwrap().is_empty());
+        assert!(!workspace.exists());
     }
 }

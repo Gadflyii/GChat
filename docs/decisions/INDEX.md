@@ -9,12 +9,13 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-233 records, 2026-05-19 → 2026-08-30.
+239 records, 2026-05-19 → 2026-08-30.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-08-30** — [Own context compaction in GChat](2026-08-30-own-context-compaction-in-gchat.md)
 - **2026-08-30** — [Default GInfer reasoning to high](2026-08-30-default-ginfer-reasoning-to-high.md)
 - **2026-08-30** — [Make GInfer model controls match its startup contract](2026-08-30-make-ginfer-model-controls-match-its-startup-contract.md)
 - **2026-08-30** — [Bind GInfer public model IDs to GChat model IDs](2026-08-30-bind-ginfer-public-model-ids-to-gchat-model-ids.md)
@@ -66,8 +67,11 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-06-02** — [Add a `/v1/responses` translation shim to the local proxy so Codex CLI works on llama.cpp models](2026-06-02-add-a-v1-responses-translation-shim-to-the-local-proxy-so-codex.md)
 - **2026-06-01** — [Add a "Launch" page to install + configure external coding agents / assistants against the local OpenAI-compatible API](2026-06-01-add-a-launch-page-to-install-configure-external-coding-agents.md)
 
-## Agent mode — autonomous loop, tools, skills, workspace (43)
+## Agent mode — autonomous loop, tools, skills, workspace (46)
 
+- **2026-08-30** — [Teach Agent composition and preserve incomplete runs](2026-08-30-teach-agent-composition-and-preserve-incomplete-runs.md)
+- **2026-08-30** — [Make Agent task and run actions own their lifecycle](2026-08-30-make-agent-task-and-run-actions-own-their-lifecycle.md)
+- **2026-08-30** — [Accept Muse ATEM Agent tool calls](2026-08-30-accept-muse-atem-agent-tool-calls.md)
 - **2026-08-29** — [Route Agent inference through GInfer's native OpenAI contract](2026-08-29-route-agent-inference-through-ginfer-native-openai-contract.md)
 - **2026-08-29** — [Bind Agent stages to loaded GInfer model instances](2026-08-29-bind-agent-stages-to-loaded-ginfer-model-instances.md)
 - **2026-08-29** — [Build Agent Studio on one versioned orchestration runtime](2026-08-29-build-agent-studio-on-one-versioned-orchestration-runtime.md)
@@ -244,8 +248,9 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-06-10** — [Throttle crashloop `model_load` failure spam client-side; confirm `model_load.status` / api 404-noise are already-fixed-pending-rollout, not code bugs (ATO-130: ATO-133 + ATO-131 + ATO-132)](2026-06-10-throttle-crashloop-model-load-failure-spam-client-side-confirm.md)
 - **2026-06-09** — [Add zero-PII Sentry crash/error tracking to both the React frontend and the Rust/Tauri desktop, gated behind `productAnalytic` (ATO-113)](2026-06-09-add-zero-pii-sentry-crash-error-tracking-to-both-the-react.md)
 
-## Packaging, installers, autostart & platform policy (15)
+## Packaging, installers, autostart & platform policy (16)
 
+- **2026-08-30** — [Refresh bundled extensions by content](2026-08-30-refresh-bundled-extensions-by-content.md)
 - **2026-08-30** — [Bundle the producer-final GInfer runtime in Windows installers](2026-08-30-bundle-the-producer-final-ginfer-runtime-in-windows-installers.md)
 - **2026-08-28** — [Stage WSL Windows release builds on the native filesystem](2026-08-28-stage-wsl-windows-release-builds-on-the-native-filesystem.md)
 - **2026-08-19** — [Leave launch at startup off for new installs](2026-08-19-leave-launch-at-startup-off-for-new-installs.md)
@@ -262,8 +267,9 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-05-22** — [Pin static WiX `upgradeCode` to legacy Jan UUID for in-place MSI upgrades](2026-05-22-pin-static-wix-upgradecode-to-legacy-jan-uuid-for-in-place-msi.md)
 - **2026-05-19** — [Product identity is "Atomic Chat"; new code stops carrying Jan branding](2026-05-19-product-identity-is-atomic-chat-new-code-stops-carrying-jan.md)
 
-## UI / UX (23)
+## UI / UX (24)
 
+- **2026-08-30** — [Keep embedded OpenCode stock behind a managed adapter](2026-08-30-keep-embedded-opencode-stock-behind-a-managed-adapter.md)
 - **2026-08-21** — [Never list TurboQuant next to upstream llama.cpp](2026-08-21-never-list-turboquant-next-to-upstream-llama-cpp.md)
 - **2026-08-21** — [Keep attachments when a message is edited in a chat thread](2026-08-21-keep-attachments-when-a-message-is-edited-in-a-chat-thread.md)
 - **2026-08-21** — [Edit messages inline in the transcript instead of in a modal dialog](2026-08-21-edit-messages-inline-in-the-transcript-instead-of-a-modal.md)

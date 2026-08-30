@@ -467,7 +467,15 @@ export default class ginfer_extension extends AIEngine {
     }
 
     const completionResponse = (await response.json()) as chatCompletion
-    if (completionResponse.choices?.[0]?.finish_reason === 'length') {
+    const exactFinishReason = (
+      completionResponse as chatCompletion & {
+        x_ginfer?: { finish_reason?: string }
+      }
+    ).x_ginfer?.finish_reason
+    if (
+      completionResponse.choices?.[0]?.finish_reason === 'length' &&
+      exactFinishReason === 'context_capacity'
+    ) {
       throw new Error('the request exceeds the available context size.')
     }
 

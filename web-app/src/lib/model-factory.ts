@@ -57,6 +57,12 @@ import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 import { ttftPreBegin } from '@/lib/ttft-timing'
 import { extractModelErrorMessage } from '@/lib/modelErrorMessage'
+import {
+  prepareGInferContextRequest,
+  SmartContextError,
+  smartContextErrorResponse,
+  type GInferContextPolicy,
+} from '@/lib/smart-context'
 
 /**
  * Inactivity budget (seconds) handed to `stream_local_http` on this generic
@@ -104,6 +110,14 @@ interface ServerUsage {
 interface ProviderMetricsChunk {
   usage?: ServerUsage
   timings?: ServerTimings
+  x_ginfer?: GinferMetrics
+}
+
+interface GinferMetrics {
+  computed_prefill_tokens?: number
+  prefill_tokens_per_second?: number
+  decode_tokens_per_second?: number
+  finish_reason?: string
 }
 
 interface NormalizedMetrics {
@@ -113,6 +127,7 @@ interface NormalizedMetrics {
   promptPerSecond: number | null
   draftTokensTotal: number | null
   draftTokensAccepted: number | null
+  ginferFinishReason: string | null
 }
 
 const buildFromUsage = (usage: ServerUsage): NormalizedMetrics => ({
@@ -122,6 +137,7 @@ const buildFromUsage = (usage: ServerUsage): NormalizedMetrics => ({
   promptPerSecond: usage.prompt_tps ?? null,
   draftTokensTotal: null,
   draftTokensAccepted: null,
+  ginferFinishReason: null,
 })
 
 const buildFromTimings = (timings: ServerTimings): NormalizedMetrics => ({
@@ -131,13 +147,25 @@ const buildFromTimings = (timings: ServerTimings): NormalizedMetrics => ({
   promptPerSecond: timings.prompt_per_second ?? null,
   draftTokensTotal: timings.draft_n ?? null,
   draftTokensAccepted: timings.draft_n_accepted ?? null,
+  ginferFinishReason: null,
+})
+
+const buildFromGinfer = (metrics: GinferMetrics): NormalizedMetrics => ({
+  promptTokens: metrics.computed_prefill_tokens ?? null,
+  completionTokens: null,
+  tokensPerSecond: metrics.decode_tokens_per_second ?? null,
+  promptPerSecond: metrics.prefill_tokens_per_second ?? null,
+  draftTokensTotal: null,
+  draftTokensAccepted: null,
+  ginferFinishReason: metrics.finish_reason ?? null,
 })
 
 const hasAnyMetric = (m: NormalizedMetrics): boolean =>
   m.promptTokens != null ||
   m.completionTokens != null ||
   m.tokensPerSecond != null ||
-  m.promptPerSecond != null
+  m.promptPerSecond != null ||
+  m.ginferFinishReason != null
 
 /**
  * Merge `usage` (mlx-vlm shape) and `timings` (llama.cpp / dflash shape)
@@ -150,11 +178,13 @@ const hasAnyMetric = (m: NormalizedMetrics): boolean =>
  */
 const mergeMetrics = (
   usage: ServerUsage | undefined,
-  timings: ServerTimings | undefined
+  timings: ServerTimings | undefined,
+  ginfer: GinferMetrics | undefined
 ): NormalizedMetrics | null => {
-  if (!usage && !timings) return null
+  if (!usage && !timings && !ginfer) return null
   const u = usage ? buildFromUsage(usage) : null
   const t = timings ? buildFromTimings(timings) : null
+  const g = ginfer ? buildFromGinfer(ginfer) : null
 
   const pickCount = (
     a: number | null | undefined,
@@ -173,13 +203,20 @@ const mergeMetrics = (
   const merged: NormalizedMetrics = {
     promptTokens: pickCount(u?.promptTokens, t?.promptTokens),
     completionTokens: pickCount(u?.completionTokens, t?.completionTokens),
-    tokensPerSecond: pickRate(u?.tokensPerSecond, t?.tokensPerSecond),
-    promptPerSecond: pickRate(u?.promptPerSecond, t?.promptPerSecond),
+    tokensPerSecond: pickRate(
+      g?.tokensPerSecond,
+      pickRate(u?.tokensPerSecond, t?.tokensPerSecond)
+    ),
+    promptPerSecond: pickRate(
+      g?.promptPerSecond,
+      pickRate(u?.promptPerSecond, t?.promptPerSecond)
+    ),
     draftTokensTotal: pickCount(u?.draftTokensTotal, t?.draftTokensTotal),
     draftTokensAccepted: pickCount(
       u?.draftTokensAccepted,
       t?.draftTokensAccepted
     ),
+    ginferFinishReason: g?.ginferFinishReason ?? null,
   }
   return hasAnyMetric(merged) ? merged : null
 }
@@ -194,13 +231,14 @@ const mergeMetrics = (
 const providerMetadataExtractor: MetadataExtractor = {
   extractMetadata: async ({ parsedBody }: { parsedBody: unknown }) => {
     const body = parsedBody as ProviderMetricsChunk
-    const merged = mergeMetrics(body?.usage, body?.timings)
+    const merged = mergeMetrics(body?.usage, body?.timings, body?.x_ginfer)
     if (!merged) return undefined
     return { providerMetadata: { ...merged } }
   },
   createStreamExtractor: () => {
     let lastUsage: ServerUsage | undefined
     let lastTimings: ServerTimings | undefined
+    let lastGinfer: GinferMetrics | undefined
 
     return {
       processChunk: (parsedChunk: unknown) => {
@@ -214,9 +252,12 @@ const providerMetadataExtractor: MetadataExtractor = {
         if (chunk?.timings) {
           lastTimings = chunk.timings
         }
+        if (chunk?.x_ginfer) {
+          lastGinfer = chunk.x_ginfer
+        }
       },
       buildMetadata: () => {
-        const merged = mergeMetrics(lastUsage, lastTimings)
+        const merged = mergeMetrics(lastUsage, lastTimings, lastGinfer)
         if (!merged) return undefined
         return { providerMetadata: { ...merged } }
       },
@@ -261,7 +302,8 @@ function createCustomFetch(
  */
 function createLocalStreamingFetch(
   fallbackFetch: typeof httpFetch,
-  parameters: Record<string, unknown>
+  parameters: Record<string, unknown>,
+  contextPolicy?: GInferContextPolicy
 ): typeof httpFetch {
   const normalFetch = createCustomFetch(fallbackFetch, parameters)
 
@@ -301,6 +343,65 @@ function createLocalStreamingFetch(
         })
       else if (Array.isArray(h)) for (const [k, v] of h) hdrs[k] = String(v)
       else for (const [k, v] of Object.entries(h)) hdrs[k] = String(v)
+    }
+
+    if (contextPolicy && /\/chat\/completions(?:\?.*)?$/.test(urlStr)) {
+      try {
+        const parsedBody = JSON.parse(bodyStr) as Record<string, unknown>
+        const prepared = await prepareGInferContextRequest(
+          urlStr,
+          parsedBody,
+          hdrs,
+          fallbackFetch,
+          contextPolicy,
+          init?.signal ?? undefined
+        )
+        bodyStr = prepared.body
+        if (contextPolicy.state?.manualCompactionRequested) {
+          const preparedBody = JSON.parse(bodyStr) as Record<string, unknown>
+          const created = Math.floor(Date.now() / 1_000)
+          const model = String(preparedBody.model ?? '')
+          const chunks = [
+            {
+              id: 'gchat-context-compact',
+              object: 'chat.completion.chunk',
+              created,
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { role: 'assistant', content: '' },
+                  finish_reason: null,
+                },
+              ],
+            },
+            {
+              id: 'gchat-context-compact',
+              object: 'chat.completion.chunk',
+              created,
+              model,
+              choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+              usage: {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+              },
+            },
+          ]
+          return new Response(
+            `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+            {
+              status: 200,
+              headers: { 'Content-Type': 'text/event-stream' },
+            }
+          )
+        }
+      } catch (error) {
+        if (error instanceof SmartContextError) {
+          return smartContextErrorResponse(error)
+        }
+        throw error
+      }
     }
 
     const chunks: string[] = []
@@ -624,7 +725,8 @@ export class ModelFactory {
     modelId: string,
     provider: ProviderObject,
     parameters: Record<string, unknown> = {},
-    reasoningOverride?: Record<string, unknown>
+    reasoningOverride?: Record<string, unknown>,
+    contextPolicy?: GInferContextPolicy
   ): Promise<LanguageModel> {
     const providerName = provider.provider.toLowerCase()
     const override = reasoningOverride ?? {}
@@ -640,7 +742,12 @@ export class ModelFactory {
 
     switch (providerName) {
       case 'ginfer':
-        return this.createGinferModel(modelId, provider, localInjected)
+        return this.createGinferModel(
+          modelId,
+          provider,
+          localInjected,
+          contextPolicy
+        )
 
       case 'anthropic':
         return this.createAnthropicModel(modelId, provider, override)
@@ -688,7 +795,8 @@ export class ModelFactory {
   private static async createGinferModel(
     modelId: string,
     provider?: ProviderObject,
-    parameters: Record<string, unknown> = {}
+    parameters: Record<string, unknown> = {},
+    contextPolicy?: GInferContextPolicy
   ): Promise<LanguageModel> {
     const sessionInfo = await ModelFactory.resolveLocalSession(
       'ginfer',
@@ -696,7 +804,11 @@ export class ModelFactory {
       provider
     )
 
-    const customFetch = createLocalStreamingFetch(httpFetch, parameters)
+    const customFetch = createLocalStreamingFetch(
+      httpFetch,
+      parameters,
+      contextPolicy
+    )
 
     const model = new OpenAICompatibleChatLanguageModel(modelId, {
       provider: 'ginfer',

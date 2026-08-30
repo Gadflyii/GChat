@@ -107,6 +107,17 @@ export const MessageItem = memo(
       url: string
       filename?: string
     } | null>(null)
+    const contextCompaction = (
+      message.metadata as
+        | {
+            contextCompaction?: {
+              summarizedMessages?: number
+              inputTokensBefore?: number
+              inputTokensAfter?: number
+            }
+          }
+        | undefined
+    )?.contextCompaction
     // Editing state is deliberately local: the memo comparator below does not
     // compare `onEdit` or any edit prop, so an `editingMessageId` lifted to the
     // thread route would go stale for every non-last message.
@@ -426,6 +437,9 @@ export const MessageItem = memo(
         ).length ?? 0
       const toolCount = block.tools.length || summaryToolCount
       const stages = block.agentSummary?.stages ?? []
+      const finishReason = block.agentSummary?.finish_reason
+      const incompleteReason =
+        finishReason === 'max_steps' || finishReason === 'max_cycles'
       const instanceMetrics = aggregateAgentMetrics(
         stages.map((stage) => ({
           modelInstanceId: stage.model_instance_id,
@@ -452,8 +466,17 @@ export const MessageItem = memo(
           durationLabel={t('activity.workedFor', {
             count: durationSeconds,
           })}
-          hasDetails={toolCount > 0 || stages.length > 0}
+          hasDetails={toolCount > 0 || stages.length > 0 || incompleteReason}
         >
+          {incompleteReason && (
+            <ActivityDetail label="Run outcome">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                {finishReason === 'max_steps'
+                  ? 'Step limit reached. A stage used its full model-step budget without returning a completed result.'
+                  : 'Revision limit reached. The evaluator did not return PASS; the best available executor result was preserved.'}
+              </div>
+            </ActivityDetail>
+          )}
           {stages.length > 0 && (
             <ActivityDetail
               label={`${block.agentSummary?.definition?.name ?? 'Agent'} · ${stages.length} ${stages.length === 1 ? 'stage' : 'stages'}`}
@@ -625,6 +648,14 @@ export const MessageItem = memo(
         {/* Message actions for assistant messages (non-tool) */}
         {message.role === 'assistant' && (
           <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs mt-1">
+            {contextCompaction && (
+              <span
+                className="rounded-full border border-primary/25 bg-primary/8 px-2 py-0.5 text-primary/85"
+                title={`GChat preserved the full transcript and sent a structured checkpoint for ${contextCompaction.summarizedMessages ?? 0} earlier messages (${contextCompaction.inputTokensBefore ?? 0} → ${contextCompaction.inputTokensAfter ?? 0} prompt tokens).`}
+              >
+                Earlier conversation checkpointed
+              </span>
+            )}
             <div
               className={cn(
                 'flex items-center gap-1',

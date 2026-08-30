@@ -9,6 +9,7 @@ import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { seedServiceHub } from '@/test/service-hub'
 import { CustomChatTransport } from '../custom-chat-transport'
 import { ModelFactory } from '../model-factory'
+import type { GInferContextState } from '../smart-context'
 
 type ModelStreamPart =
   | { type: 'stream-start'; warnings: [] }
@@ -247,5 +248,54 @@ describe('CustomChatTransport production harness', () => {
     expect(createModel.mock.calls[3]?.[3]).toEqual({
       reasoning_effort: 'none',
     })
+  })
+
+  it('runs manual compaction as a hidden request and drains its response', async () => {
+    const transport = new CustomChatTransport()
+    const contextState = (
+      transport as unknown as { contextState: GInferContextState }
+    ).contextState
+    const send = vi.spyOn(transport, 'sendMessages').mockImplementation(
+      async () =>
+        new ReadableStream({
+          start(controller) {
+            contextState.manualCompactionResult = {
+              status: 'compacted',
+              report: {
+                inputTokensBefore: 4_000,
+                inputTokensAfter: 1_000,
+                summarizedMessages: 4,
+                retainedMessages: 3,
+                reusedCheckpoint: false,
+              },
+            }
+            controller.enqueue({ type: 'finish' })
+            controller.close()
+          },
+        }) as never
+    )
+
+    await expect(
+      transport.compactContext('chat-1', [userMessage])
+    ).resolves.toMatchObject({
+      status: 'compacted',
+      report: { inputTokensBefore: 4_000, inputTokensAfter: 1_000 },
+    })
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: 'chat-1',
+        messages: [userMessage],
+      })
+    )
+    expect(contextState.manualCompactionRequested).toBe(false)
+  })
+
+  it('rejects manual compaction without GInfer', async () => {
+    useModelProvider.setState({ selectedProvider: 'openai' })
+    const transport = new CustomChatTransport()
+
+    await expect(
+      transport.compactContext('chat-1', [userMessage])
+    ).rejects.toThrow('/compact is available only for a loaded GInfer model.')
   })
 })

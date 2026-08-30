@@ -15,6 +15,7 @@
   "restart": "Restart OpenCode",
   "restartWorkspace": "Restart in workspace",
   "stop": "Stop terminal",
+  "toggleTokenSidebar": "Toggle token sidebar",
   "workspaceUnavailable": "The Code workspace is not available.",
   "stopTimeout": "The existing Code terminal did not stop in time.",
   "replayUnavailable": "The terminal was detached long enough to lose exact screen state. Restart OpenCode for a clean display.",

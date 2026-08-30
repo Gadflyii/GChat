@@ -668,10 +668,7 @@ fn remove_legacy_cli_binary(dir: &std::path::Path) {
         return;
     }
     if !is_our_cli_binary(&legacy) {
-        log::info!(
-            "Leaving {} alone — not a GChat binary",
-            legacy.display()
-        );
+        log::info!("Leaving {} alone — not a GChat binary", legacy.display());
         return;
     }
     match std::fs::remove_file(&legacy) {
@@ -759,7 +756,12 @@ pub fn install_jan_cli_sync<R: Runtime>(
         // bundled name differs from the install name.
         if bundled.exists() && bundled != dest {
             if let Err(e) = std::fs::rename(&bundled, &dest) {
-                log::warn!("Could not rename {} to {}: {}", bundled.display(), dest.display(), e);
+                log::warn!(
+                    "Could not rename {} to {}: {}",
+                    bundled.display(),
+                    dest.display(),
+                    e
+                );
             }
         }
         // Older builds put `jan.exe` on PATH here; drop it so it stops shadowing Jan.ai.
@@ -1563,12 +1565,7 @@ fn rebuild_custom_providers(
 
 /// Add or update only the `gchat` entry in `custom_providers`,
 /// leaving all other user entries (Telegram, WhatsApp, etc.) intact.
-fn upsert_gchat_provider(
-    content: &str,
-    api_url: &str,
-    model: &str,
-    context_length: u32,
-) -> String {
+fn upsert_gchat_provider(content: &str, api_url: &str, model: &str, context_length: u32) -> String {
     let (before, mut entries, after) = split_custom_providers(content);
 
     entries.retain(|e| !entry_is_ours(e));
@@ -2683,8 +2680,46 @@ pub fn configure_codex(
 /// `opencode.json`, then `opencode.jsonc`; we edit the same document OpenCode
 /// selects for its own global updates. Other values are preserved, though
 /// comments are removed when a JSONC document is serialized.
+fn opencode_model_context(models: &serde_json::Value, model: &str) -> Option<u32> {
+    models
+        .get("data")?
+        .as_array()?
+        .iter()
+        .find(|entry| entry.get("id").and_then(|value| value.as_str()) == Some(model))?
+        .get("max_model_len")?
+        .as_u64()
+        .filter(|value| *value > 0 && *value <= u32::MAX as u64)
+        .map(|value| value as u32)
+}
+
+async fn fetch_opencode_model_context(
+    api_url: &str,
+    model: &str,
+    api_key: Option<&str>,
+) -> Option<u32> {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .ok()?;
+    let mut request = client.get(format!("{}/models", api_url.trim_end_matches('/')));
+    if let Some(key) = api_key.filter(|key| !key.is_empty()) {
+        request = request.bearer_auth(key);
+    }
+    let models = request
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    opencode_model_context(&models, model)
+}
+
 #[tauri::command]
-pub fn configure_opencode(
+pub async fn configure_opencode(
     api_url: String,
     model: String,
     api_key: Option<String>,
@@ -2718,8 +2753,19 @@ pub fn configure_opencode(
         .as_deref()
         .filter(|k| !k.is_empty())
         .unwrap_or("gchat");
+    let context = fetch_opencode_model_context(&api_url, &model, api_key.as_deref()).await;
+    let mut model_config = serde_json::json!({ "name": model });
+    if let Some(context) = context {
+        model_config.as_object_mut().unwrap().insert(
+            "limit".into(),
+            serde_json::json!({
+                "context": context,
+                "output": context.min(65_536),
+            }),
+        );
+    }
     let mut models = serde_json::Map::new();
-    models.insert(model.clone(), serde_json::json!({ "name": model }));
+    models.insert(model.clone(), model_config);
 
     provider.as_object_mut().unwrap().insert(
         "gchat".to_string(),
@@ -2742,7 +2788,12 @@ pub fn configure_opencode(
     let pretty = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
     std::fs::write(&path, pretty + "\n")
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
-    log::info!("OpenCode configured: baseURL={}, model={}", api_url, model);
+    log::info!(
+        "OpenCode configured: baseURL={}, model={}, context={:?}",
+        api_url,
+        model,
+        context
+    );
     Ok(())
 }
 
@@ -3710,10 +3761,7 @@ fn dsh_route_node(api_url: &str, model: &str, with_key: bool) -> serde_yaml::Val
     model_entry.insert(ykey("maxTokens"), Value::from(DSH_MAX_TOKENS));
 
     let mut route = Mapping::new();
-    route.insert(
-        ykey("displayName"),
-        Value::String("GChat".to_string()),
-    );
+    route.insert(ykey("displayName"), Value::String("GChat".to_string()));
     route.insert(ykey("api"), Value::String("openai-completions".to_string()));
     route.insert(ykey("baseURL"), Value::String(api_url.to_string()));
     if with_key {
@@ -4697,6 +4745,18 @@ mod tests {
         let path = dir.join(name);
         std::fs::write(&path, contents).expect("write temp file");
         TempFile(path)
+    }
+
+    #[test]
+    fn opencode_context_uses_the_selected_live_model() {
+        let models = serde_json::json!({
+            "data": [
+                {"id": "other", "max_model_len": 4096},
+                {"id": "muse", "max_model_len": 32768}
+            ]
+        });
+        assert_eq!(opencode_model_context(&models, "muse"), Some(32768));
+        assert_eq!(opencode_model_context(&models, "missing"), None);
     }
 
     /// `remove_legacy_cli_binary` deletes files on the user's PATH, so the
