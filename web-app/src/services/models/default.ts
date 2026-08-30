@@ -611,11 +611,21 @@ export class DefaultModelsService implements ModelsService {
 
   async stopAllModels(): Promise<void> {
     const activeByProvider = await this.getLocalActiveModelsByProvider()
-    await Promise.all(
+    const results = await Promise.all(
       activeByProvider.flatMap(({ provider, models }) =>
         models.map((model) => this.stopModel(model, provider))
       )
     )
+    const failures = results.filter(
+      (result): result is UnloadResult => result != null && !result.success
+    )
+    if (failures.length > 0) {
+      throw new Error(
+        failures
+          .map((result) => result.error || 'A GInfer model did not stop')
+          .join('\n')
+      )
+    }
   }
 
   async startModel(
@@ -632,7 +642,41 @@ export class DefaultModelsService implements ModelsService {
     // Find the model configuration to get settings
     const modelConfig = provider.models.find((m) => m.id === model)
 
-    // Key mapping function to transform setting keys
+    // GInfer owns a startup-fixed logical context limit and has no partial
+    // CPU/GPU offload path. Do not translate its settings through the retired
+    // llama.cpp contract.
+    if (provider.provider === 'ginfer') {
+      const contextProps =
+        modelConfig?.settings?.ctx_len?.controller_props?.value
+      const configuredContext = Number(contextProps)
+      const declaredMaximum = Number(
+        (
+          modelConfig?.settings?.ctx_len?.controller_props as
+            | (ControllerProps & { max?: number })
+            | undefined
+        )?.max
+      )
+      const maxContext =
+        Number.isFinite(configuredContext) && configuredContext > 0
+          ? configuredContext
+          : declaredMaximum
+      const settings =
+        Number.isFinite(maxContext) && maxContext > 0
+          ? { max_context: maxContext }
+          : undefined
+
+      return engine
+        .load(model, settings, false, bypassAutoUnload)
+        .catch((error) => {
+          console.error(
+            `Failed to start model ${model} for provider ${provider.provider}:`,
+            error
+          )
+          throw error
+        })
+    }
+
+    // Key mapping function to transform setting keys for non-GInfer engines.
     const mapSettingKey = (key: string): string => {
       const keyMappings: Record<string, string> = {
         ctx_len: 'ctx_size',

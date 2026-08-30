@@ -344,12 +344,18 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
       setSearchValue('')
       setOpen(false)
 
-      // Optimistically update the global model-provider selection so the
+      // Optimistically update the global model-provider selection and its
+      // persisted default so the user's explicit choice wins even if loading
+      // fails and another model is discovered before the next launch.
       // provider avatar, capabilities and support-status icons re-render
       // instantly — without waiting for stopAllModels / server restart /
       // registerRemoteProvider to complete inside switchToModel. switchToModel
       // will call this again at the end (idempotent) once the switch is done.
        selectModelProvider(
+         searchableModel.provider.provider,
+         searchableModel.model.id
+       )
+       setLastUsedModel(
          searchableModel.provider.provider,
          searchableModel.model.id
        )

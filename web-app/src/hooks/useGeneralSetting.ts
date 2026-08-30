@@ -23,10 +23,9 @@ type GeneralSettingState = {
   disableReasoning: boolean
   reasoningBudget: ReasoningBudgetLevel
   /**
-   * Restore the last used model — and therefore spawn its engine — while the
-   * app is starting. Off by default so a cold launch stays cold: the user
-   * picks a model in the model selector and only then is one loaded. Existing
-   * installs keep whatever they already persisted (no migration on purpose).
+   * Restore the selected default model — and therefore spawn its engine —
+   * while the app is starting. On by default so a machine with a GInfer model
+   * is ready to chat without a separate load step.
    */
   preloadModelOnStartup: boolean
   maxImageSizePx: number
@@ -49,15 +48,29 @@ type GeneralSettingState = {
   removeLocalScanFolder: (folder: string) => void
 }
 
+export function migrateGeneralSettings(
+  persistedState: unknown,
+  version: number
+): GeneralSettingState {
+  const state = persistedState as Partial<GeneralSettingState>
+  return {
+    ...state,
+    ...(version < 1
+      ? { disableReasoning: false, reasoningBudget: 'high' as const }
+      : {}),
+    ...(version < 2 ? { preloadModelOnStartup: true } : {}),
+  } as GeneralSettingState
+}
+
 export const useGeneralSetting = create<GeneralSettingState>()(
   persist(
     (set) => ({
       currentLanguage: 'en',
       spellCheckChatInput: true,
       tokenCounterCompact: true,
-      disableReasoning: true,
-      reasoningBudget: 'medium',
-      preloadModelOnStartup: false,
+      disableReasoning: false,
+      reasoningBudget: 'high',
+      preloadModelOnStartup: true,
       maxImageSizePx: DEFAULT_MAX_IMAGE_SIZE_PX,
       huggingfaceToken: undefined,
       scanLocalModels: true,
@@ -109,6 +122,8 @@ export const useGeneralSetting = create<GeneralSettingState>()(
     {
       name: localStorageKey.settingGeneral,
       storage: createJSONStorage(() => localStorage),
+      version: 2,
+      migrate: migrateGeneralSettings,
     }
   )
 )

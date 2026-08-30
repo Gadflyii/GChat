@@ -50,6 +50,7 @@ import {
 import { hydrateActiveModelsForRunningServer } from '@/utils/activeModelsSync'
 import { ensureRemoteProviderReady } from '@/utils/ensureRemoteProviderReady'
 import { reconcileLaunchAtStartup } from '@/lib/launchAtStartup'
+import { getLastUsedModel } from '@/utils/getModelToStart'
 
 const safeRegisterRemoteProvider = async (provider: ModelProvider) => {
   try {
@@ -369,6 +370,53 @@ export function DataProvider() {
       }
       const providerName = provider?.provider ?? LOCAL_LLAMACPP_PROVIDER
       console.log('[LocalAPI] Provider for model:', providerName)
+
+      // The first usable model owns the default until the user chooses a
+      // different one. Reserve that default before loading so two imports that
+      // finish close together cannot race and let the later model win.
+      const modelState = useModelProvider.getState()
+      const defaultCandidates = [
+        getLastUsedModel(),
+        modelState.selectedModel && modelState.selectedProvider
+          ? {
+              provider: modelState.selectedProvider,
+              model: modelState.selectedModel.id,
+            }
+          : null,
+      ]
+      const existingDefault = defaultCandidates.find((candidate) => {
+        if (!candidate) return false
+        const candidateProvider = storeProviders.find(
+          (item) =>
+            item.provider === candidate.provider && item.active !== false
+        )
+        const candidateModel = candidateProvider?.models.find(
+          (item) => item.id === candidate.model
+        )
+        return Boolean(
+          candidateModel && !(candidateModel as { missing?: boolean }).missing
+        )
+      })
+
+      if (
+        existingDefault &&
+        (existingDefault.provider !== providerName ||
+          existingDefault.model !== modelId)
+      ) {
+        console.log(
+          '[LocalAPI] Keeping existing default model after import:',
+          existingDefault.model
+        )
+        return
+      }
+
+      if (!existingDefault) {
+        modelState.selectModelProvider(providerName, modelId)
+        localStorage.setItem(
+          localStorageKey.lastUsedModel,
+          JSON.stringify({ provider: providerName, model: modelId })
+        )
+      }
 
       console.log(
         '[LocalAPI] Current server status:',

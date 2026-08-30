@@ -13,6 +13,59 @@ import { invoke } from '@tauri-apps/api/core'
 import { DefaultProvidersService } from './default'
 import { getModelCapabilities } from '@/lib/models'
 
+const GINFER_LEGACY_CONTEXT_DEFAULT = 16_384
+const GINFER_SERVER_CONTEXT_FALLBACK = 8_192
+
+function settingsForRuntimeModel(
+  providerName: string,
+  model: unknown
+): Record<string, ProviderSetting> {
+  if (providerName === 'ginfer') {
+    const advertisedContext = Number(
+      (model as { nativeContextTokens?: unknown }).nativeContextTokens
+    )
+    const nativeContext =
+      Number.isFinite(advertisedContext) && advertisedContext > 0
+        ? advertisedContext
+        : GINFER_SERVER_CONTEXT_FALLBACK
+
+    return {
+      auto_increase_ctx_len: structuredClone(modelSettings.auto_increase_ctx_len),
+      ctx_len: {
+        ...structuredClone(modelSettings.ctx_len),
+        description:
+          'Per-request context limit. GInfer reloads the model when this startup-fixed value changes.',
+        controller_props: {
+          ...modelSettings.ctx_len.controller_props,
+          value: nativeContext,
+          placeholder: String(nativeContext),
+          min: 1_024,
+          max: nativeContext,
+          step: 1_024,
+        },
+      },
+    } as Record<string, ProviderSetting>
+  }
+
+  return Object.values(modelSettings).reduce(
+    (acc, setting) => {
+      let value = setting.controller_props.value
+      if (setting.key === 'ctx_len') {
+        value = GINFER_LEGACY_CONTEXT_DEFAULT
+      }
+      acc[setting.key] = {
+        ...setting,
+        controller_props: {
+          ...setting.controller_props,
+          value,
+        },
+      }
+      return acc
+    },
+    {} as Record<string, ProviderSetting>
+  )
+}
+
 /**
  * Turn a raw `get_local_http` failure (e.g. `HTTP 404: 404 page not found`,
  * `Request failed: …`) into a concrete, user-readable reason. Mirrors the
@@ -201,23 +254,7 @@ export class TauriProvidersService extends DefaultProvidersService {
                 // Absolute weights path, for deduping scan candidates.
                 path: (model as { path?: string }).path,
                 provider: providerName,
-                settings: Object.values(modelSettings).reduce(
-                  (acc, setting) => {
-                    let value = setting.controller_props.value
-                    if (setting.key === 'ctx_len') {
-                      value = 16384 // Default context length for Llama.cpp models
-                    }
-                    acc[setting.key] = {
-                      ...setting,
-                      controller_props: {
-                        ...setting.controller_props,
-                        value: value,
-                      },
-                    }
-                    return acc
-                  },
-                  {} as Record<string, ProviderSetting>
-                ),
+                settings: settingsForRuntimeModel(providerName, model),
               } as Model
             })
           ),

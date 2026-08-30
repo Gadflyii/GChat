@@ -816,10 +816,13 @@ async fn execute_stage(
 
 async fn execute_observed_stage(
     context: &StageContext<'_>,
-    spec: StageSpec,
+    mut spec: StageSpec,
     worker_index: i32,
     emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<StageResult, String> {
+    if spec.reasoning_effort.is_none() {
+        spec.reasoning_effort = Some(AgentReasoningEffort::High);
+    }
     emit_stage_started(&spec, emit)?;
     let failure_spec = spec.clone();
     let started = Instant::now();

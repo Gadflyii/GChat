@@ -75,13 +75,6 @@
     }
   },
   {
-    "key": "max_context",
-    "title": "Max Context",
-    "description": "Maximum context window. Auto uses the GInfer server default (8192) within the model's native limit.",
-    "controllerType": "input",
-    "controllerProps": { "value": 0, "placeholder": "Auto", "type": "number", "min": 0, "step": 128, "textAlign": "right" }
-  },
-  {
     "key": "kv_arena_bytes",
     "title": "KV Arena Size",
     "description": "Auto lets GInfer size each rank's physical KV arena from available memory. An explicit value is an exact byte count. Startup-only.",

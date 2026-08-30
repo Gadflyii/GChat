@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import DropdownModelProvider from '../DropdownModelProvider'
 import { getModelDisplayName } from '@/lib/utils'
@@ -29,9 +29,9 @@ type Model = {
 type MockHookReturn = {
   providers: ModelProvider[]
   selectedProvider: string
-  selectedModel: Model
+  selectedModel: Model | null
   getProviderByName: (name: string) => ModelProvider | undefined
-  selectModelProvider: () => void
+  selectModelProvider: (provider: string, model: string) => void
   getModelBy: (id: string) => Model | undefined
   updateProvider: () => void
 }
@@ -191,6 +191,51 @@ describe('DropdownModelProvider - Display Name Integration', () => {
     expect(screen.getAllByText('Custom Model 1')).toHaveLength(2) // One in trigger, one in dropdown
     // Model ID should not be visible as text (it's only in title attributes)
     expect(screen.queryByDisplayValue('model1.gguf')).not.toBeInTheDocument()
+  })
+
+  it('marks the first detected GInfer model as the persisted default', async () => {
+    const selectModelProvider = vi.fn()
+    const ginferProviders = [
+      {
+        provider: 'ginfer',
+        active: true,
+        models: [
+          {
+            id: 'muse_glimmer_30b_nvfp4_dflash2',
+            displayName: 'Muse Glimmer 30B',
+            capabilities: ['completion'],
+          },
+        ],
+        settings: [],
+      },
+    ]
+    localStorage.clear()
+    mockModelProvider({
+      providers: ginferProviders,
+      selectedProvider: 'ginfer',
+      selectedModel: null,
+      getProviderByName: vi.fn((name: string) =>
+        ginferProviders.find((provider) => provider.provider === name)
+      ),
+      selectModelProvider,
+      getModelBy: vi.fn(),
+      updateProvider: vi.fn(),
+    })
+
+    render(<DropdownModelProvider />)
+
+    await waitFor(() =>
+      expect(selectModelProvider).toHaveBeenCalledWith(
+        'ginfer',
+        'muse_glimmer_30b_nvfp4_dflash2'
+      )
+    )
+    expect(
+      JSON.parse(localStorage.getItem('last-used-model') ?? 'null')
+    ).toEqual({
+      provider: 'ginfer',
+      model: 'muse_glimmer_30b_nvfp4_dflash2',
+    })
   })
 
   it('should fall back to model ID when no displayName is set', () => {

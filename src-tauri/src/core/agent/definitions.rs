@@ -198,7 +198,7 @@ pub fn general_agent() -> AgentDefinition {
         max_steps: MAX_STEPS,
         output_contract: String::new(),
         model_instance_id: None,
-        reasoning_effort: None,
+        reasoning_effort: Some(AgentReasoningEffort::High),
         strategy: AgentStrategy::Standard,
         built_in: true,
     }
@@ -294,7 +294,7 @@ fn template(id: &str, name: &str, description: &str, strategy: AgentStrategy) ->
             max_steps: MAX_STEPS,
             output_contract: String::new(),
             model_instance_id: None,
-            reasoning_effort: None,
+            reasoning_effort: Some(AgentReasoningEffort::High),
             strategy,
             built_in: false,
         },
@@ -843,7 +843,7 @@ mod tests {
         assert_eq!(draft.max_steps, MAX_STEPS);
         assert_eq!(draft.schema_version, 3);
         assert_eq!(draft.model_instance_id, None);
-        assert_eq!(draft.reasoning_effort, None);
+        assert_eq!(draft.reasoning_effort, Some(AgentReasoningEffort::High));
     }
 
     #[test]

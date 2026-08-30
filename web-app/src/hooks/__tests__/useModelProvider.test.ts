@@ -170,7 +170,9 @@ describe('useModelProvider - displayName functionality', () => {
             settings: {
               ctx_len: {
                 controller_props: {
-                  value: 16384,
+                  value: 262144,
+                  min: 1024,
+                  max: 262144,
                 },
               },
             },
@@ -188,6 +190,60 @@ describe('useModelProvider - displayName functionality', () => {
     expect(provider?.models[0].settings?.ctx_len?.controller_props?.value).toBe(
       48000
     )
+  })
+
+  it('upgrades the retired GInfer context default and removes legacy settings', () => {
+    const { result } = renderHook(() => useModelProvider())
+    const persisted = {
+      provider: 'ginfer',
+      active: true,
+      models: [
+        {
+          id: 'muse_glimmer_30b_nvfp4_dflash2',
+          settings: {
+            ctx_len: { controller_props: { value: 16384 } },
+            ngl: { controller_props: { value: 100 } },
+          },
+        },
+      ],
+      settings: [],
+    } as any
+    act(() => {
+      useModelProvider.setState({
+        providers: [persisted],
+        selectedProvider: 'ginfer',
+        selectedModel: null,
+        deletedModels: [],
+      })
+    })
+
+    act(() => {
+      result.current.setProviders([
+        {
+          ...persisted,
+          persist: true,
+          models: [
+            {
+              id: 'muse_glimmer_30b_nvfp4_dflash2',
+              settings: {
+                ctx_len: {
+                  controller_props: {
+                    value: 131072,
+                    min: 1024,
+                    max: 131072,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      ] as any)
+    })
+
+    const settings = result.current.getProviderByName('ginfer')?.models[0]
+      .settings
+    expect(settings?.ctx_len?.controller_props?.value).toBe(131072)
+    expect(settings).not.toHaveProperty('ngl')
   })
 
   it('should provide basic functionality without breaking existing behavior', () => {
@@ -349,7 +405,15 @@ describe('useModelProvider - displayName functionality', () => {
           models: [
             {
               ...provider.models[0],
-              settings: {},
+              settings: {
+                ctx_len: {
+                  controller_props: {
+                    value: 131072,
+                    min: 1024,
+                    max: 131072,
+                  },
+                },
+              },
             },
           ],
         },

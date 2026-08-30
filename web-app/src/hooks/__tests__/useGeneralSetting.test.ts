@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useGeneralSetting } from '../useGeneralSetting'
+import {
+  migrateGeneralSettings,
+  useGeneralSetting,
+} from '../useGeneralSetting'
 
 // Mock constants
 vi.mock('@/constants/localStorage', () => ({
@@ -41,6 +44,9 @@ describe('useGeneralSetting', () => {
       currentLanguage: 'en',
       spellCheckChatInput: true,
       tokenCounterCompact: true,
+      disableReasoning: false,
+      reasoningBudget: 'high',
+      preloadModelOnStartup: true,
       huggingfaceToken: undefined,
     })
 
@@ -60,10 +66,24 @@ describe('useGeneralSetting', () => {
 
     expect(result.current.currentLanguage).toBe('en')
     expect(result.current.spellCheckChatInput).toBe(true)
+    expect(result.current.disableReasoning).toBe(false)
+    expect(result.current.reasoningBudget).toBe('high')
+    expect(result.current.preloadModelOnStartup).toBe(true)
     expect(result.current.huggingfaceToken).toBeUndefined()
     expect(typeof result.current.setCurrentLanguage).toBe('function')
     expect(typeof result.current.setSpellCheckChatInput).toBe('function')
     expect(typeof result.current.setHuggingfaceToken).toBe('function')
+  })
+
+  it('migrates the old cold-start default once and preserves later opt-outs', () => {
+    expect(
+      migrateGeneralSettings({ preloadModelOnStartup: false }, 1)
+        .preloadModelOnStartup
+    ).toBe(true)
+    expect(
+      migrateGeneralSettings({ preloadModelOnStartup: false }, 2)
+        .preloadModelOnStartup
+    ).toBe(false)
   })
 
   describe('setCurrentLanguage', () => {

@@ -416,6 +416,18 @@ fn command_for_shell(cwd: &Path, opencode_tui_config: Option<&Path>) -> CommandB
     command
 }
 
+fn default_open_code_command(windows: bool) -> &'static str {
+    if windows {
+        // npm/nvm installs both opencode.ps1 and opencode.cmd. PowerShell's
+        // bare-name resolution prefers the .ps1 shim, which is blocked on a
+        // default Restricted execution policy. Naming the application shim
+        // explicitly preserves the user's policy and works in the same PTY.
+        "opencode.cmd\r"
+    } else {
+        "opencode\r"
+    }
+}
+
 fn quote_open_code_command(executable: Option<&str>) -> Result<Vec<u8>, String> {
     let executable = executable.map(str::trim).filter(|path| !path.is_empty());
     if let Some(path) = executable {
@@ -428,13 +440,13 @@ fn quote_open_code_command(executable: Option<&str>) -> Result<Vec<u8>, String> 
     #[cfg(windows)]
     let command = match executable {
         Some(path) => format!("& '{}'\r", path.replace('\'', "''")),
-        None => "opencode\r".to_string(),
+        None => default_open_code_command(true).to_string(),
     };
 
     #[cfg(not(windows))]
     let command = match executable {
         Some(path) => format!("'{}'\r", path.replace('\'', "'\\''")),
-        None => "opencode\r".to_string(),
+        None => default_open_code_command(false).to_string(),
     };
 
     Ok(command.into_bytes())
@@ -937,6 +949,12 @@ pub async fn opencode_readiness(custom_path: Option<String>) -> Result<OpenCodeR
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_opencode_command_uses_the_windows_application_shim() {
+        assert_eq!(default_open_code_command(true), "opencode.cmd\r");
+        assert_eq!(default_open_code_command(false), "opencode\r");
+    }
 
     fn output_event(sequence: u64, bytes: usize) -> TerminalEvent {
         TerminalEvent::Output {

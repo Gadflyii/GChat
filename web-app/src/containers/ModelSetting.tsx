@@ -37,6 +37,11 @@ const LEGACY_SAMPLING_KEYS = new Set<string>([
   'frequency_penalty',
 ])
 
+const GINFER_MODEL_SETTING_KEYS = new Set([
+  'auto_increase_ctx_len',
+  'ctx_len',
+])
+
 const RESTART_REQUIRED_SETTINGS = new Set([
   'ctx_len',
   'ngl',
@@ -167,6 +172,12 @@ export function ModelSetting({
             return acc
           }, [])
           .filter(([key]) => {
+            if (
+              provider.provider === 'ginfer' &&
+              !GINFER_MODEL_SETTING_KEYS.has(key)
+            ) {
+              return false
+            }
             // Sampling now lives solely in the global Sampling popover
             // (model bar). Hide the legacy load-time sampling controls here
             // so there is exactly one place to tune sampling. The persisted

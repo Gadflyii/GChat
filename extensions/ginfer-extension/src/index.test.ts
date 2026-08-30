@@ -25,5 +25,6 @@ describe('bundled GInfer profile', () => {
     expect(values('kv_dtype')).toEqual(['auto', 'bf16', 'int8', 'nvfp4'])
     expect(setting('lm_head_draft')).toBeUndefined()
     expect(setting('kv_capacity')).toBeUndefined()
+    expect(setting('max_context')).toBeUndefined()
   })
 })

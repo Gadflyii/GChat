@@ -5,6 +5,48 @@ import { getServiceHub } from '@/hooks/useServiceHub'
 
 /** The local provider selected by default on fresh installs. */
 const GINFER_DEFAULT_PROVIDER = 'ginfer'
+const GINFER_LEGACY_CONTEXT_DEFAULT = 16_384
+
+function mergeGinferModelSettings(
+  incoming: Model['settings'],
+  persisted?: Model['settings']
+): Model['settings'] {
+  if (!incoming) return incoming
+
+  return Object.fromEntries(
+    Object.entries(incoming).map(([key, setting]) => {
+      const persistedValue = persisted?.[key]?.controller_props?.value
+      let value = persistedValue ?? setting.controller_props?.value
+
+      if (key === 'ctx_len') {
+        const bounds = setting.controller_props as
+          | (ControllerProps & { min?: number; max?: number })
+          | undefined
+        const fallback = Number(setting.controller_props?.value)
+        const minimum = Number(bounds?.min) || 1
+        const maximum = Number(bounds?.max) || fallback
+        const numeric = Number(value)
+        value =
+          numeric === GINFER_LEGACY_CONTEXT_DEFAULT ||
+          !Number.isFinite(numeric) ||
+          numeric <= 0
+            ? fallback
+            : Math.min(Math.max(numeric, minimum), maximum)
+      }
+
+      return [
+        key,
+        {
+          ...setting,
+          controller_props: {
+            ...setting.controller_props,
+            value,
+          },
+        },
+      ]
+    })
+  ) as Model['settings']
+}
 
 /**
  * Local backend provider ids retired by the single-ginfer strip. Persisted
@@ -125,7 +167,13 @@ export const useModelProvider = create<ModelProviderState>()(
                       .slice(0, 2)
                       .join(getServiceHub().path().sep()) === model.id
                 )
-              const settings = persistedModel?.settings || model.settings
+              const settings =
+                provider.provider === GINFER_DEFAULT_PROVIDER
+                  ? mergeGinferModelSettings(
+                      model.settings,
+                      persistedModel?.settings
+                    )
+                  : persistedModel?.settings || model.settings
               const existingModel = models.find((m) => m.id === model.id)
               const mergedCapabilities = [
                 ...(model.capabilities || []),

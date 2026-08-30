@@ -70,6 +70,42 @@ function setSelectedModel(providerName: string) {
   })
 }
 
+function setSelectedModelWithContext(
+  providerName: string,
+  value: unknown,
+  max: number
+) {
+  const model = {
+    id: 'muse_glimmer_30b_nvfp4_dflash2',
+    name: 'Muse Glimmer 30B',
+    settings: {
+      ctx_len: {
+        key: 'ctx_len',
+        title: 'Context Size',
+        description: 'Size of the prompt context.',
+        controller_type: 'input',
+        controller_props: {
+          type: 'number',
+          value,
+          min: 1024,
+          max,
+          step: 1024,
+        },
+      },
+    },
+  } as Model
+  const provider = {
+    provider: providerName,
+    models: [model],
+  } as ModelProvider
+
+  useModelProvider.setState({
+    providers: [provider],
+    selectedProvider: providerName,
+    selectedModel: model,
+  })
+}
+
 describe('ContextSizeControl', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -129,7 +165,7 @@ describe('ContextSizeControl', () => {
     )
     expect(screen.getByRole('slider')).toHaveAttribute(
       'aria-valuemax',
-      '524288'
+      '65536'
     )
   })
 
@@ -176,7 +212,7 @@ describe('ContextSizeControl', () => {
     }
   )
 
-  it('persists the edited context size through the model provider store', () => {
+  it('does not allow the context slider past the configured model maximum', () => {
     setSelectedModel('ginfer')
     render(<ContextSizeControl />)
 
@@ -188,7 +224,7 @@ describe('ContextSizeControl', () => {
     expect(
       useModelProvider.getState().selectedModel?.settings?.ctx_len
         ?.controller_props.value
-    ).toBe(524288)
+    ).toBe(65536)
   })
 
   it('uses the model training limit when the engine provides one', async () => {
@@ -213,6 +249,19 @@ describe('ContextSizeControl', () => {
     engineManager.mockRestore()
   })
 
+  it('uses the declared Glimmer context when the stored value is unset', () => {
+    setSelectedModelWithContext('ginfer', 0, 131072)
+    render(<ContextSizeControl />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Context usage:/ }))
+
+    expect(screen.getAllByText('128.0K')).toHaveLength(2)
+    expect(screen.getByRole('slider')).toHaveAttribute(
+      'aria-valuenow',
+      '131072'
+    )
+  })
+
   it('restarts a running model after the context size changes', async () => {
     vi.useFakeTimers()
     getActiveModels.mockResolvedValue(['test-model'])
@@ -233,7 +282,7 @@ describe('ContextSizeControl', () => {
       await Promise.resolve()
     })
 
-    expect(stopModel).toHaveBeenCalledWith('test-model')
+    expect(stopModel).toHaveBeenCalledWith('test-model', 'ginfer')
     expect(startModel).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'ginfer' }),
       'test-model',

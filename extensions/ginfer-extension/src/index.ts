@@ -31,6 +31,7 @@ import {
 } from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
 import { resolveBinaryPath, randomApiKey } from './util'
 import { checkGinferHardware } from './hardware'
+import { ginferModelProfile } from './model-profile'
 
 /**
  * Override the default app.log function to use the Tauri logging system.
@@ -188,6 +189,7 @@ export default class ginfer_extension extends AIEngine {
       modelConfig.model_path,
     ])
 
+    const profile = ginferModelProfile(modelId, modelConfig.name)
     return {
       id: modelId,
       name: modelConfig.name ?? modelId,
@@ -198,6 +200,7 @@ export default class ginfer_extension extends AIEngine {
       source: modelConfig.source,
       path: resolvedPath,
       missing: !(await fs.existsSync(resolvedPath).catch(() => true)),
+      nativeContextTokens: profile?.nativeContextTokens,
     } as modelInfo
   }
 
@@ -241,6 +244,7 @@ export default class ginfer_extension extends AIEngine {
         gchatDataFolderPath,
         modelConfig.model_path,
       ])
+      const profile = ginferModelProfile(modelId, modelConfig.name)
       modelInfos.push({
         id: modelId,
         name: modelConfig.name ?? modelId,
@@ -252,6 +256,7 @@ export default class ginfer_extension extends AIEngine {
         source: modelConfig.source,
         path: resolvedPath,
         missing: !(await fs.existsSync(resolvedPath).catch(() => true)),
+        nativeContextTokens: profile?.nativeContextTokens,
       } as modelInfo)
     }
 
@@ -366,10 +371,48 @@ export default class ginfer_extension extends AIEngine {
     }
   }
 
-  override async unload(sessionId: string): Promise<UnloadResult> {
-    const pid = Number(sessionId)
+  override async unload(modelOrSessionId: string): Promise<UnloadResult> {
+    const numericPid = Number(modelOrSessionId)
+    const session =
+      Number.isInteger(numericPid) && numericPid > 0
+        ? undefined
+        : await findSessionByModel(modelOrSessionId)
+    const pid = session?.pid ?? numericPid
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return {
+        success: false,
+        error: `No active GInfer session found for '${modelOrSessionId}'`,
+      }
+    }
     const result = await unloadGinferModel(pid)
     return { success: result.success, error: result.error }
+  }
+
+  async getMaxCtxTrain(modelId: string): Promise<number | undefined> {
+    const model = await this.get(modelId)
+    return ginferModelProfile(modelId, model?.name)?.nativeContextTokens
+  }
+
+  async getLoadedContext(modelId: string): Promise<number | undefined> {
+    const session = await findSessionByModel(modelId)
+    if (!session) return undefined
+
+    const response = await globalThis.fetch(
+      `http://localhost:${session.port}/v1/models`,
+      {
+        headers: { Authorization: `Bearer ${session.api_key}` },
+      }
+    )
+    if (!response.ok) return undefined
+    const payload = (await response.json()) as {
+      data?: Array<{ id?: string; max_model_len?: number | string }>
+    }
+    const advertised = payload.data?.find((candidate) =>
+      candidate.id === modelId ||
+      candidate.id?.replace(/\./g, '_') === modelId.replace(/\./g, '_')
+    )
+    const value = Number(advertised?.max_model_len)
+    return Number.isFinite(value) && value > 0 ? value : undefined
   }
 
   override async chat(

@@ -9,12 +9,14 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-230 records, 2026-05-19 → 2026-08-30.
+233 records, 2026-05-19 → 2026-08-30.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-08-30** — [Default GInfer reasoning to high](2026-08-30-default-ginfer-reasoning-to-high.md)
+- **2026-08-30** — [Make GInfer model controls match its startup contract](2026-08-30-make-ginfer-model-controls-match-its-startup-contract.md)
 - **2026-08-30** — [Bind GInfer public model IDs to GChat model IDs](2026-08-30-bind-ginfer-public-model-ids-to-gchat-model-ids.md)
 - **2026-08-30** — [Bundle the producer-final GInfer runtime in Windows installers](2026-08-30-bundle-the-producer-final-ginfer-runtime-in-windows-installers.md)
 - **2026-08-28** — [Brand the embedded OpenCode TUI with the Sectile theme](2026-08-28-brand-the-embedded-opencode-tui-with-the-sectile-theme.md)
@@ -195,8 +197,9 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-05-19** — [Use `AtomicBot-ai/atomic-llama-cpp-turboquant` as the LLM backend](2026-05-19-use-atomicbot-ai-atomic-llama-cpp-turboquant-as-the-llm-backend.md)
 - **2026-05-19** — [Ship upstream `ggml-org/llama.cpp` as a second macOS provider, no fork](2026-05-19-ship-upstream-ggml-org-llama-cpp-as-a-second-macos-provider-no.md)
 
-## Models, Hub & downloads (27)
+## Models, Hub & downloads (28)
 
+- **2026-08-30** — [Autoload the first GInfer model as the persisted default](2026-08-30-autoload-the-first-ginfer-model-as-the-persisted-default.md)
 - **2026-08-19** — [Do not preload a model on startup](2026-08-19-do-not-preload-a-model-on-startup.md)
 - **2026-08-19** — [Offer a low-spec model tier in onboarding](2026-08-19-offer-a-low-spec-model-tier-in-onboarding.md)
 - **2026-08-19** — [Delete only what a failed download wrote](2026-08-19-delete-only-what-a-failed-download-wrote.md)

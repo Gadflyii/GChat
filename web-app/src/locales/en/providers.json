@@ -13,6 +13,8 @@
   "importModelError": "Failed to import model:",
   "stop": "Stop",
   "start": "Start",
+  "reload": "Reload",
+  "reloadSuccess": "Reloaded {{model}} with the current startup settings.",
   "noModelFound": "No model found",
   "noModelFoundDesc": "Available models will be listed here. If you don't have any models yet, visit the Hub to download.",
   "configuration": "Configuration",

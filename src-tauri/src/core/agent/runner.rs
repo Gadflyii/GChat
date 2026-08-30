@@ -99,6 +99,7 @@ pub async fn run_turn_with_options(
     options: RunTurnOptions<'_>,
     mut emit: impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
+    let reasoning_effort = Some(input.reasoning_effort.unwrap_or(AgentReasoningEffort::High));
     emit(AgentEvent::TurnStarted {
         run_id: input.run_id.to_owned(),
         session_id: input.session_id.to_owned(),
@@ -206,7 +207,7 @@ pub async fn run_turn_with_options(
             notice.as_deref(),
         );
         notice = None;
-        let request = CompletionRequest::tool_call(prompt, input.reasoning_effort);
+        let request = CompletionRequest::tool_call(prompt, reasoning_effort);
         let completion = complete_with_deadline(input.client, &request, input.cancellation).await;
         let mut previous_output = String::new();
         let mut parsed = match completion {
@@ -475,7 +476,7 @@ pub async fn run_turn_with_options(
             editable_roots: input.editable_roots,
             trusted_read_roots: input.trusted_read_roots,
             client: Some(input.client),
-            reasoning_effort: input.reasoning_effort,
+            reasoning_effort,
             inference: Some(&tool_inference),
             approval: input.approval,
             folder_access: input.folder_access,
@@ -732,9 +733,47 @@ async fn repair_tool_calls(
     request.prompt = repair_prompt;
     request.max_tokens = REPAIR_MAX_TOKENS;
     let completion = complete_with_deadline(client, &request, cancellation).await?;
-    let parsed = parse_and_validate(&completion.content)
-        .map_err(|error| GinferClientError::InvalidResponse(format!("Repair failed: {error}")))?;
+    let parsed = match parse_and_validate(&completion.content) {
+        Ok(parsed) => parsed,
+        Err(error) => recover_plain_text_reply(&completion.content).ok_or_else(|| {
+            let excerpt = completion
+                .content
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(240)
+                .collect::<String>();
+            GinferClientError::InvalidResponse(format!(
+                "Repair failed: {error}; GInfer returned {} non-whitespace characters{}",
+                completion
+                    .content
+                    .chars()
+                    .filter(|ch| !ch.is_whitespace())
+                    .count(),
+                if excerpt.is_empty() {
+                    String::new()
+                } else {
+                    format!("; output excerpt: {excerpt}")
+                }
+            ))
+        })?,
+    };
     Ok((parsed, completion.timing))
+}
+
+fn recover_plain_text_reply(content: &str) -> Option<ParsedToolCalls> {
+    let text = content.trim();
+    if text.is_empty() || text.contains('{') || text.contains('[') {
+        return None;
+    }
+    Some(ParsedToolCalls {
+        calls: vec![ToolCallPayload {
+            tool: "reply".into(),
+            args: serde_json::json!({"text": text}),
+        }],
+        reasoning: None,
+    })
 }
 
 async fn complete_with_deadline(

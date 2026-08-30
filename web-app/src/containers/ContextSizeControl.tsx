@@ -22,10 +22,10 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTokensCount } from '@/hooks/useTokensCount'
 import { cn, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
-import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
+import { restartLocalModel } from '@/utils/restartLocalModel'
 
 const LOCAL_CONTEXT_PROVIDERS = new Set([LOCAL_LLAMACPP_PROVIDER])
-const FALLBACK_MAX_CONTEXT = 512 * 1024
+const FALLBACK_MAX_CONTEXT = 8 * 1024
 
 interface ContextSizeControlProps {
   messages?: ThreadMessage[]
@@ -146,34 +146,41 @@ export function ContextSizeControl({
   const configuredMax = Number(
     selectedContextProps?.max
   )
-  const fallbackMaxContext = Math.max(
-    FALLBACK_MAX_CONTEXT,
-    configuredMax > 0 ? configuredMax : 0
+  const fallbackMaxContext =
+    configuredMax > 0 ? configuredMax : FALLBACK_MAX_CONTEXT
+  const configuredMin = Math.max(
+    1,
+    Number(selectedContextProps?.min) || 1024
   )
+  const configuredContext =
+    Number.isFinite(contextValue) && contextValue >= configuredMin
+      ? Math.min(contextValue, fallbackMaxContext)
+      : fallbackMaxContext
   const [maxContext, setMaxContext] = useState(fallbackMaxContext)
-  const [draftContext, setDraftContext] = useState(
-    contextValue > 0 ? contextValue : 0
-  )
+  const [draftContext, setDraftContext] = useState(configuredContext)
+  const [loadedContext, setLoadedContext] = useState<number | undefined>()
+  const [isActive, setIsActive] = useState(false)
+  const [isRestarting, setIsRestarting] = useState(false)
 
   const restartModel = useMemo(
     () =>
-      debounce(async (modelId: string, providerName: string) => {
-        try {
-          await serviceHub.models().stopModel(modelId)
-          const freshProvider =
-            useModelProvider.getState().getProviderByName(providerName)
-          if (freshProvider) {
-            await serviceHub.models().startModel(freshProvider, modelId, true)
+      debounce(
+        async (modelId: string, providerName: string, context: number) => {
+          setIsRestarting(true)
+          try {
+            await restartLocalModel(serviceHub, providerName, modelId)
+            setLoadedContext(context)
+          } catch (error) {
+            console.error(
+              'Failed to restart model after context size change:',
+              error
+            )
+          } finally {
+            setIsRestarting(false)
           }
-          const activeModels = await serviceHub.models().getActiveModels()
-          syncActiveModelsFromEngines(activeModels || [])
-        } catch (error) {
-          console.error(
-            'Failed to restart model after context size change:',
-            error
-          )
-        }
-      }, 500),
+        },
+        500
+      ),
     [serviceHub]
   )
 
@@ -183,8 +190,16 @@ export function ContextSizeControl({
     const currentValue = Number(
       selectedModel?.settings?.ctx_len?.controller_props?.value
     )
-    setDraftContext(currentValue > 0 ? currentValue : 0)
+    const hasConfiguredContext =
+      Number.isFinite(currentValue) && currentValue >= configuredMin
+    setDraftContext(
+      hasConfiguredContext
+        ? Math.min(currentValue, fallbackMaxContext)
+        : fallbackMaxContext
+    )
     setMaxContext(fallbackMaxContext)
+    setLoadedContext(undefined)
+    setIsActive(false)
 
     if (!selectedProvider || !selectedModel) return
 
@@ -195,6 +210,7 @@ export function ContextSizeControl({
         const engine = EngineManager.instance().get(selectedProvider) as
           | (AIEngine & {
               getMaxCtxTrain?: (id: string) => Promise<number | undefined>
+              getLoadedContext?: (id: string) => Promise<number | undefined>
             })
           | undefined
         if (engine && typeof engine.getMaxCtxTrain === 'function') {
@@ -203,13 +219,33 @@ export function ContextSizeControl({
             resolvedMax = modelMax
           }
         }
+        const activeModels = await serviceHub
+          .models()
+          .getActiveModels(selectedProvider)
+        const active = activeModels.includes(selectedModel.id)
+        if (!cancelled && active) setIsActive(true)
+        if (
+          active &&
+          engine &&
+          typeof engine.getLoadedContext === 'function'
+        ) {
+          const actual = await engine.getLoadedContext(selectedModel.id)
+          if (!cancelled) setLoadedContext(actual)
+        }
       } catch (error) {
         console.warn(
           `Failed to resolve maximum context for ${selectedProvider}/${selectedModel?.id}:`,
           error
         )
       }
-      if (!cancelled) setMaxContext(resolvedMax)
+      if (!cancelled) {
+        if (resolvedMax !== fallbackMaxContext) {
+          setMaxContext(resolvedMax)
+        }
+        if (!hasConfiguredContext) {
+          setDraftContext(resolvedMax)
+        }
+      }
     }
 
     void resolveMaxContext()
@@ -218,9 +254,11 @@ export function ContextSizeControl({
     }
   }, [
     configuredMax,
+    configuredMin,
     fallbackMaxContext,
     selectedModel,
     selectedProvider,
+    serviceHub,
   ])
 
   if (
@@ -240,9 +278,8 @@ export function ContextSizeControl({
 
   const contextControllerProps =
     contextSetting.controller_props as NumericControllerProps
-  const currentContext = Number(contextControllerProps.value) || 0
-  const sliderMin = Math.max(1, Number(contextControllerProps.min) || 1024)
-  const sliderMax = Math.max(sliderMin, currentContext, maxContext || 0)
+  const sliderMin = configuredMin
+  const sliderMax = Math.max(sliderMin, maxContext || 0)
   const sliderStep = Math.max(1, Number(contextControllerProps.step) || 1024)
 
   const handleContextChange = (value: string | boolean | number) => {
@@ -250,6 +287,11 @@ export function ContextSizeControl({
       (model) => model.id === selectedModel.id
     )
     if (modelIndex === -1) return
+
+    const numericValue = Number(value)
+    if (!Number.isFinite(numericValue)) return
+    const clampedValue = Math.min(Math.max(numericValue, sliderMin), sliderMax)
+    setDraftContext(clampedValue)
 
     const updatedModels = [...provider.models]
     updatedModels[modelIndex] = {
@@ -260,7 +302,7 @@ export function ContextSizeControl({
           ...contextSetting,
           controller_props: {
             ...contextSetting.controller_props,
-            value,
+            value: clampedValue,
           },
         },
       },
@@ -270,10 +312,12 @@ export function ContextSizeControl({
 
     serviceHub
       .models()
-      .getActiveModels()
+      .getActiveModels(provider.provider)
       .then((activeModels) => {
-        if (activeModels.includes(selectedModel.id)) {
-          restartModel(selectedModel.id, provider.provider)
+        const active = activeModels.includes(selectedModel.id)
+        setIsActive(active)
+        if (active) {
+          restartModel(selectedModel.id, provider.provider, clampedValue)
         }
       })
       .catch((error) => {
@@ -382,6 +426,13 @@ export function ContextSizeControl({
                 {contextSetting.description}
               </div>
             )}
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              {isRestarting
+                ? 'Reloading GInfer…'
+                : isActive && loadedContext
+                  ? `Loaded at ${formatContextSize(loadedContext)}`
+                  : 'Applies when the model starts'}
+            </div>
           </div>
           <Slider
             aria-label={contextSetting.title}
@@ -390,6 +441,7 @@ export function ContextSizeControl({
             min={sliderMin}
             max={sliderMax}
             step={sliderStep}
+            disabled={isRestarting}
             onValueChange={([value]) => setDraftContext(value)}
             onValueCommit={([value]) => handleContextChange(value)}
           />

@@ -57,6 +57,7 @@ import { EMBEDDING_MODEL_ID } from '@/constants/models'
 import { getModelCapabilities } from '@/lib/models'
 import { useModelLoad } from '@/hooks/useModelLoad'
 import { switchToModel } from '@/utils/switchModel'
+import { restartLocalModel } from '@/utils/restartLocalModel'
 import { useAppState } from '@/hooks/useAppState'
 import { useShallow } from 'zustand/shallow'
 import { DialogAddModel } from '@/containers/dialogs/AddModel'
@@ -358,12 +359,34 @@ function ProviderDetail() {
     }
   }
 
-  const handleStopModel = async () => {
+  const handleReloadModel = async (modelId: string) => {
+    if (!provider) return
+    setLoadingModels((current) => [...current, modelId])
+    try {
+      await restartLocalModel(serviceHub, provider.provider, modelId)
+      toast.success(t('providers:reload'), {
+        description: t('providers:reloadSuccess', { model: modelId }),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      toast.error(t('providers:reload'), { description: message })
+      setModelLoadError(error as ErrorObject)
+    } finally {
+      setLoadingModels((current) => current.filter((id) => id !== modelId))
+    }
+  }
+
+  const handleStopModel = async (modelId: string) => {
     if (!provider) return
     try {
       const isLocalEngine = isLocalProvider(provider.provider)
       if (isLocalEngine) {
-        await serviceHub.models().stopAllModels()
+        const result = await serviceHub
+          .models()
+          .stopModel(modelId, provider.provider)
+        if (result && !result.success) {
+          throw new Error(result.error || `Failed to stop '${modelId}'`)
+        }
       } else {
         // Cloud "stop": drop the proxy registration so incoming chat requests
         // for this provider's models stop being routed upstream. Local engines
@@ -388,6 +411,9 @@ function ProviderDetail() {
       }
     } catch (error) {
       console.error('Error stopping model:', error)
+      toast.error(t('providers:stop'), {
+        description: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -694,11 +720,31 @@ function ProviderDetail() {
 
                                   if (isActive) {
                                     return (
-                                      <div className="ml-2">
+                                      <div className="ml-2 flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={isLoading}
+                                          onClick={() =>
+                                            handleReloadModel(model.id)
+                                          }
+                                        >
+                                          {isLoading ? (
+                                            <IconLoader
+                                              size={16}
+                                              className="animate-spin"
+                                            />
+                                          ) : (
+                                            t('providers:reload')
+                                          )}
+                                        </Button>
                                         <Button
                                           size="sm"
                                           variant="destructive"
-                                          onClick={() => handleStopModel()}
+                                          disabled={isLoading}
+                                          onClick={() =>
+                                            handleStopModel(model.id)
+                                          }
                                         >
                                           {t('providers:stop')}
                                         </Button>

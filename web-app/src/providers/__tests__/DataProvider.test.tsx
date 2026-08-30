@@ -36,6 +36,7 @@ vi.mock('@/hooks/useModelProvider', () => {
     selectedModel: null,
     selectedProvider: 'llamacpp-upstream',
     getProviderByName: vi.fn(),
+    selectModelProvider: vi.fn(),
     setProviders: mocks.setProviders,
     updateProvider: vi.fn(),
   }
@@ -309,8 +310,59 @@ describe('DataProvider', () => {
         isAutoStart: true,
       })
     )
+    expect(
+      JSON.parse(localStorage.getItem('last-used-model') ?? 'null')
+    ).toEqual({
+      provider: 'llamacpp-upstream',
+      model: 'imported-model',
+    })
 
     state.providers = []
+    unmount()
+  })
+
+  it('does not replace the persisted default when another model is imported', async () => {
+    const { useModelProvider } = await import('@/hooks/useModelProvider')
+    const { events } = await import('@gchat/core')
+    const state = useModelProvider.getState() as unknown as {
+      providers: unknown[]
+      selectedProvider: string
+      selectedModel: { id: string } | null
+    }
+    state.providers = [
+      {
+        provider: 'ginfer',
+        active: true,
+        models: [{ id: 'default-model' }, { id: 'imported-model' }],
+        settings: [],
+      },
+    ]
+    state.selectedProvider = 'ginfer'
+    state.selectedModel = { id: 'default-model' }
+    localStorage.setItem(
+      'last-used-model',
+      JSON.stringify({ provider: 'ginfer', model: 'default-model' })
+    )
+
+    const { unmount } = render(<DataProvider />)
+    await waitFor(() => {
+      expect(events.on).toHaveBeenCalledWith(
+        'onModelImported',
+        expect.any(Function)
+      )
+    })
+
+    const handler = vi
+      .mocked(events.on)
+      .mock.calls.find(([event]) => event === 'onModelImported')?.[1] as (
+      data?: Record<string, unknown>
+    ) => Promise<void>
+    await handler({ modelId: 'imported-model' })
+
+    expect(mocks.switchToModel).not.toHaveBeenCalled()
+
+    state.providers = []
+    state.selectedModel = null
     unmount()
   })
 

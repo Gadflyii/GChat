@@ -286,8 +286,8 @@
     "launchAtStartup": "Launch at startup",
     "launchAtStartupDesc": "Automatically start GChat when you log in to your computer.",
     "launchAtStartupError": "Failed to update the launch at startup setting.",
-    "preloadModelOnStartup": "Preload last used model on startup",
-    "preloadModelOnStartupDesc": "Off by default so the app opens fast. Leave it off and GChat loads a model only after you pick one in the model selector."
+    "preloadModelOnStartup": "Load default model on startup",
+    "preloadModelOnStartupDesc": "On by default so GChat is ready to use after launch. Turn it off to open GChat without loading the selected model."
   },
   "extensions": {
     "title": "Extensions"

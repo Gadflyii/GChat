@@ -458,6 +458,32 @@ async fn malformed_completion_is_repaired_once() {
 }
 
 #[tokio::test]
+async fn repaired_plain_text_becomes_a_terminal_reply() {
+    let workspace = TestWorkspace::new();
+    let run = run_script(
+        &workspace,
+        vec![
+            ScriptedResponse::completion("not-json"),
+            ScriptedResponse::completion("The requested work is complete."),
+        ],
+        &RecordingApproval::deny(),
+        &CancellationToken::new(),
+        2,
+    )
+    .await;
+
+    assert!(run.result.is_ok());
+    assert_eq!(
+        run.events.iter().find_map(|event| match event {
+            AgentEvent::AssistantReply { text } => Some(text.as_str()),
+            _ => None,
+        }),
+        Some("The requested work is complete.")
+    );
+    assert_eq!(finished_reason(&run.events), Some(("reply", 1)));
+}
+
+#[tokio::test]
 async fn timed_out_completion_is_repaired_once() {
     let workspace = TestWorkspace::new();
     let run = run_script(
@@ -516,7 +542,7 @@ async fn repeated_repair_failure_finishes_as_tool_call_failure() {
         &workspace,
         vec![
             ScriptedResponse::completion("not-json"),
-            ScriptedResponse::completion("still-not-json"),
+            ScriptedResponse::completion(r#"{"tool":"reply""#),
         ],
         &RecordingApproval::deny(),
         &CancellationToken::new(),

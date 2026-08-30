@@ -324,9 +324,86 @@ describe('DefaultModelsService', () => {
 
       expect(mockEngine.unload).not.toHaveBeenCalled()
     })
+
+    it('rejects when an active model does not stop', async () => {
+      const ginferEngine = {
+        ...mockEngine,
+        getLoadedModels: vi.fn().mockResolvedValue(['model1']),
+        unload: vi.fn().mockResolvedValue({
+          success: false,
+          error: 'process remained active',
+        }),
+      }
+      mockEngineManager.get.mockImplementation((provider?: string) =>
+        provider === 'ginfer' ? ginferEngine : undefined
+      )
+
+      await expect(modelsService.stopAllModels()).rejects.toThrow(
+        'process remained active'
+      )
+    })
   })
 
   describe('startModel', () => {
+    it('passes only GInfer-owned startup settings to GInfer', async () => {
+      const provider = {
+        provider: 'ginfer',
+        models: [
+          {
+            id: 'model1',
+            settings: {
+              ctx_len: { controller_props: { value: 131072 } },
+              ngl: { controller_props: { value: 100 } },
+            },
+          },
+        ],
+      } as any
+      mockEngine.getLoadedModels.mockResolvedValue({ includes: () => false })
+      mockEngine.load.mockResolvedValue({ id: 'session1' })
+
+      await modelsService.startModel(provider, 'model1')
+
+      expect(mockEngine.load).toHaveBeenCalledWith(
+        'model1',
+        { max_context: 131072 },
+        false,
+        false
+      )
+    })
+
+    it('uses the declared GInfer context when its stored value is unset', async () => {
+      const provider = {
+        provider: 'ginfer',
+        models: [
+          {
+            id: 'muse_glimmer_30b_nvfp4_dflash2',
+            settings: {
+              ctx_len: {
+                controller_props: {
+                  value: 0,
+                  max: 131072,
+                },
+              },
+            },
+          },
+        ],
+      } as any
+      mockEngine.getLoadedModels.mockResolvedValue({ includes: () => false })
+      mockEngine.load.mockResolvedValue({ id: 'session1' })
+
+      await modelsService.startModel(
+        provider,
+        'muse_glimmer_30b_nvfp4_dflash2'
+      )
+
+      expect(mockEngine.load).toHaveBeenCalledWith(
+        'muse_glimmer_30b_nvfp4_dflash2',
+        { max_context: 131072 },
+        false,
+        false
+      )
+    })
+
     it('should start model successfully', async () => {
       const mockSettings = {
         ctx_len: { controller_props: { value: 4096 } },

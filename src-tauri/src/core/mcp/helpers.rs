@@ -534,12 +534,30 @@ async fn schedule_mcp_start_task<R: Runtime>(
         };
         if config_params.command.clone() == "uvx" && can_override_uvx(uv_path.display().to_string())
         {
-            let mut cache_dir = app_path.clone();
-            cache_dir.push(".uvx");
+            let runtime_dir = app_path.join(".uvx");
+            let cache_dir = runtime_dir.join("cache");
+            let python_dir = runtime_dir.join("python");
+            let tool_dir = runtime_dir.join("tools");
+            for directory in [&cache_dir, &python_dir, &tool_dir] {
+                std::fs::create_dir_all(directory).map_err(|error| {
+                    format!(
+                        "Failed to prepare the bundled uv runtime at {}: {error}",
+                        directory.display()
+                    )
+                })?;
+            }
             cmd = Command::new(uv_path);
             cmd.arg("tool");
             cmd.arg("run");
-            cmd.env("UV_CACHE_DIR", cache_dir.to_str().unwrap());
+            cmd.env("UV_CACHE_DIR", &cache_dir);
+            cmd.env("UV_PYTHON_INSTALL_DIR", &python_dir);
+            cmd.env("UV_TOOL_DIR", &tool_dir);
+            // Keep the embedded runtime self-contained. In particular, do not
+            // inspect a user-level uv Python junction that Windows may classify
+            // as an untrusted mount point; uv will download a managed Python
+            // into GChat's local data directory on first use instead.
+            cmd.env("UV_MANAGED_PYTHON", "1");
+            cmd.env("UV_NO_CONFIG", "1");
         }
         #[cfg(windows)]
         {
@@ -975,8 +993,6 @@ async fn kill_process_by_pid(pid: u32) -> Result<(), String> {
 
     Ok(())
 }
-
-
 
 #[cfg(unix)]
 pub(crate) async fn kill_process_tree_by_pid(pid: u32) -> Result<(), String> {
