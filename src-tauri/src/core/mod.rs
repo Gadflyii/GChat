@@ -7,6 +7,7 @@ pub mod downloads;
 pub mod extensions;
 pub mod filesystem;
 pub mod http;
+pub mod ginfer_models;
 pub mod mcp;
 #[cfg(target_os = "windows")]
 pub mod notifications;

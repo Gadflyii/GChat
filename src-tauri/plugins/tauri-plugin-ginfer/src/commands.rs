@@ -97,6 +97,7 @@ fn exit_error(status: &std::process::ExitStatus, stderr: &str, stdout: &str) -> 
 /// the engine remains the single owner of automatic model/runtime selection.
 fn build_ginfer_args(
     model_path: &str,
+    model_id: &str,
     port: u16,
     api_key: &str,
     config: &GinferConfig,
@@ -110,6 +111,8 @@ fn build_ginfer_args(
         port.to_string(),
         "--api-key".into(),
         api_key.to_owned(),
+        "--model-id".into(),
+        model_id.to_owned(),
     ];
 
     if config.vision {
@@ -214,7 +217,7 @@ pub async fn load_ginfer_model_impl(
         return Err(format!("ginfer model not found at: {}", model_path));
     }
 
-    let args = build_ginfer_args(&model_path, port, &api_key, &config)?;
+    let args = build_ginfer_args(&model_path, &model_id, port, &api_key, &config)?;
 
     log::info!("Generated arguments: {:?}", args);
 
@@ -571,6 +574,7 @@ mod tests {
     fn default_profile_uses_engine_owned_auto_values() {
         let args = build_ginfer_args(
             "/models/qwen.ginfer",
+            "qwen-local",
             38127,
             "secret",
             &GinferConfig::default(),
@@ -587,6 +591,8 @@ mod tests {
                 "38127",
                 "--api-key",
                 "secret",
+                "--model-id",
+                "qwen-local",
                 "--vision",
             ]
         );
@@ -607,8 +613,14 @@ mod tests {
             ..GinferConfig::default()
         };
 
-        let args = build_ginfer_args("C:\\models\\muse.ginfer", 9911, "key", &config)
-            .expect("explicit GInfer profile should be valid");
+        let args = build_ginfer_args(
+            "C:\\models\\muse.ginfer",
+            "muse_glimmer_30b_nvfp4_dflash2",
+            9911,
+            "key",
+            &config,
+        )
+        .expect("explicit GInfer profile should be valid");
 
         assert_eq!(args[0], "C:\\models\\muse.ginfer");
         assert!(args.windows(2).any(|pair| pair == ["--spec", "dflash"]));
@@ -628,18 +640,22 @@ mod tests {
             spec: "mtp".into(),
             ..GinferConfig::default()
         };
-        assert!(build_ginfer_args("model.ginfer", 8080, "key", &mtp).is_err());
+        assert!(build_ginfer_args("model.ginfer", "model", 8080, "key", &mtp).is_err());
 
         let invalid_draft_tp = GinferConfig {
             draft_tp: 3,
             ..GinferConfig::default()
         };
-        assert!(build_ginfer_args("model.ginfer", 8080, "key", &invalid_draft_tp).is_err());
+        assert!(
+            build_ginfer_args("model.ginfer", "model", 8080, "key", &invalid_draft_tp).is_err()
+        );
 
         let invalid_concurrency = GinferConfig {
             max_concurrency: 9,
             ..GinferConfig::default()
         };
-        assert!(build_ginfer_args("model.ginfer", 8080, "key", &invalid_concurrency).is_err());
+        assert!(
+            build_ginfer_args("model.ginfer", "model", 8080, "key", &invalid_concurrency).is_err()
+        );
     }
 }

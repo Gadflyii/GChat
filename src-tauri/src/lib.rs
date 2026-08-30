@@ -97,6 +97,7 @@ pub fn run() {
         core::filesystem::commands::write_file_sync,
         core::filesystem::commands::write_yaml,
         core::filesystem::commands::read_yaml,
+        core::ginfer_models::adopt_root_ginfer_models,
         core::filesystem::commands::decompress,
         core::filesystem::commands::normalize_backend_layout,
         core::filesystem::commands::open_dialog,
@@ -467,6 +468,15 @@ pub fn run() {
             // init so its actions are recorded in app.log.
             #[cfg(not(any(target_os = "ios", target_os = "android")))]
             crate::core::process_reaper::reap_orphan_backends(app.handle());
+
+            #[cfg(target_os = "windows")]
+            {
+                if setup::install_bundled_ginfer(app.handle().clone())? {
+                    log::info!("Installed the bundled GInfer Windows runtime");
+                } else {
+                    log::info!("Bundled GInfer Windows runtime is already current");
+                }
+            }
 
             #[cfg(target_os = "windows")]
             {

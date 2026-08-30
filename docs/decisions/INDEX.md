@@ -9,12 +9,14 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-228 records, 2026-05-19 → 2026-08-29.
+230 records, 2026-05-19 → 2026-08-30.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-08-30** — [Bind GInfer public model IDs to GChat model IDs](2026-08-30-bind-ginfer-public-model-ids-to-gchat-model-ids.md)
+- **2026-08-30** — [Bundle the producer-final GInfer runtime in Windows installers](2026-08-30-bundle-the-producer-final-ginfer-runtime-in-windows-installers.md)
 - **2026-08-28** — [Brand the embedded OpenCode TUI with the Sectile theme](2026-08-28-brand-the-embedded-opencode-tui-with-the-sectile-theme.md)
 - **2026-08-28** — [Align the bundled GInfer profile with ginfer-serve](2026-08-28-align-the-bundled-ginfer-profile-with-ginfer-serve.md)
 - **2026-08-28** — [Adopt the Sectile Prism visual identity](2026-08-28-adopt-the-sectile-prism-visual-identity.md)
@@ -239,8 +241,9 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-06-10** — [Throttle crashloop `model_load` failure spam client-side; confirm `model_load.status` / api 404-noise are already-fixed-pending-rollout, not code bugs (ATO-130: ATO-133 + ATO-131 + ATO-132)](2026-06-10-throttle-crashloop-model-load-failure-spam-client-side-confirm.md)
 - **2026-06-09** — [Add zero-PII Sentry crash/error tracking to both the React frontend and the Rust/Tauri desktop, gated behind `productAnalytic` (ATO-113)](2026-06-09-add-zero-pii-sentry-crash-error-tracking-to-both-the-react.md)
 
-## Packaging, installers, autostart & platform policy (14)
+## Packaging, installers, autostart & platform policy (15)
 
+- **2026-08-30** — [Bundle the producer-final GInfer runtime in Windows installers](2026-08-30-bundle-the-producer-final-ginfer-runtime-in-windows-installers.md)
 - **2026-08-28** — [Stage WSL Windows release builds on the native filesystem](2026-08-28-stage-wsl-windows-release-builds-on-the-native-filesystem.md)
 - **2026-08-19** — [Leave launch at startup off for new installs](2026-08-19-leave-launch-at-startup-off-for-new-installs.md)
 - **2026-08-05** — [Default autostart on only for clean desktop installs](2026-08-05-default-autostart-on-only-for-clean-desktop-installs.md)

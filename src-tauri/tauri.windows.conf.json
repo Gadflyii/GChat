@@ -27,7 +27,7 @@
   },
   "bundle": {
     "targets": ["nsis", "msi"],
-    "resources": ["resources/pre-install/**/*", "resources/LICENSE", "resources/agent-skills/**/*", "resources/bin/gchat-cli.exe"],
+    "resources": ["resources/pre-install/**/*", "resources/LICENSE", "resources/agent-skills/**/*", "resources/bin/gchat-cli.exe", "resources/ginfer/**/*"],
     "externalBin": ["resources/bin/bun", "resources/bin/uv"],
     "windows": {
       "wix": {

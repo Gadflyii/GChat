@@ -59,6 +59,11 @@ export interface GinferModelConfig {
   source?: string
 }
 
+interface GinferAdoptionReport {
+  adopted: Array<{ modelId: string; modelPath: string }>
+  rejected: Array<{ filename: string; reason: string }>
+}
+
 /**
  * Modality capabilities of the registered .ginfer artifacts: every
  * published family (Qwen, Muse Glimmer) is multimodal — media routes
@@ -87,10 +92,6 @@ export default class ginfer_extension extends AIEngine {
   private timeout: number = 600
   private autoUnload: boolean = true
   private loadingModels = new Map<string, Promise<SessionInfo>>()
-  /// pid -> advertised model id returned by the server's /v1/models.
-  /// ginfer requires the wire `model` field to equal the artifact's own
-  /// identity, so chat() must send this, not the app-level model id.
-  private advertisedModelId = new Map<number, string>()
 
   override async onLoad(): Promise<void> {
     super.onLoad() // Calls registerEngine() from AIEngine
@@ -119,7 +120,6 @@ export default class ginfer_extension extends AIEngine {
 
   override async onUnload(): Promise<void> {
     this.loadingModels.clear()
-    this.advertisedModelId.clear()
   }
 
   private buildGinferConfig(
@@ -155,7 +155,24 @@ export default class ginfer_extension extends AIEngine {
     return this.providerPath
   }
 
+  private async adoptRootArtifacts(): Promise<void> {
+    const report = await invoke<GinferAdoptionReport>(
+      'adopt_root_ginfer_models'
+    )
+    for (const adopted of report.adopted) {
+      logger.info(
+        `Adopted root GInfer artifact as model '${adopted.modelId}' at ${adopted.modelPath}`
+      )
+    }
+    for (const rejected of report.rejected) {
+      logger.warn(
+        `Did not adopt root GInfer artifact '${rejected.filename}': ${rejected.reason}`
+      )
+    }
+  }
+
   override async get(modelId: string): Promise<modelInfo | undefined> {
+    await this.adoptRootArtifacts()
     const path = await joinPath([
       await this.getProviderPath(),
       'models',
@@ -185,6 +202,7 @@ export default class ginfer_extension extends AIEngine {
   }
 
   override async list(): Promise<modelInfo[]> {
+    await this.adoptRootArtifacts()
     const modelsDir = await joinPath([await this.getProviderPath(), 'models'])
     if (!(await fs.existsSync(modelsDir))) {
       await fs.mkdir(modelsDir)
@@ -337,17 +355,6 @@ export default class ginfer_extension extends AIEngine {
         throw new Error(`Failed to load ${modelId}: ${msg}`)
       }
 
-      try {
-        const res = await fetch(`http://127.0.0.1:${session.port}/v1/models`)
-        const json: any = await res.json()
-        const id = json?.data?.[0]?.id
-        if (id) {
-          this.advertisedModelId.set(session.pid, id)
-        }
-      } catch (e) {
-        logger.warn(`Could not discover advertised model id for ${modelId}:`, e)
-      }
-
       return session
     })()
 
@@ -361,7 +368,6 @@ export default class ginfer_extension extends AIEngine {
 
   override async unload(sessionId: string): Promise<UnloadResult> {
     const pid = Number(sessionId)
-    this.advertisedModelId.delete(pid)
     const result = await unloadGinferModel(pid)
     return { success: result.success, error: result.error }
   }
@@ -393,7 +399,6 @@ export default class ginfer_extension extends AIEngine {
 
     const bodyOpts = {
       ...opts,
-      model: this.advertisedModelId.get(sessionInfo.pid) ?? opts.model,
       stream: !!opts.stream,
     }
     const body = JSON.stringify(bodyOpts)

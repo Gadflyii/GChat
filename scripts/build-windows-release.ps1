@@ -4,19 +4,40 @@
 # Mirrors CI pipeline from release.yml: NSIS + MSI installers.
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 `
+#     -GinferRuntimeArchive C:\path\to\ginfer-windows-x64-sm120a.zip
 #   - or -
 #   make build-windows-release
 
 param(
     # Internal flags used when a build is relaunched from the native mirror.
     [switch]$NativeMirror,
-    [string]$SourceRoot
+    [string]$SourceRoot,
+    # Producer-final archive emitted by ginfer's packaging/windows/build.ps1.
+    [string]$GinferRuntimeArchive
 )
 
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = $PSScriptRoot | Split-Path
+
+if (-not $GinferRuntimeArchive) {
+    $workspaceRoot = Split-Path -Parent $projectRoot
+    $runtimeCandidates = @(
+        (Join-Path $workspaceRoot 'ginfer-windows\out\windows\ginfer-windows-x64-sm120a.zip'),
+        (Join-Path $workspaceRoot 'ginfer\out\windows\ginfer-windows-x64-sm120a.zip')
+    )
+    $GinferRuntimeArchive = $runtimeCandidates |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        Select-Object -First 1
+}
+if (-not $GinferRuntimeArchive -or
+    -not (Test-Path -LiteralPath $GinferRuntimeArchive -PathType Leaf)) {
+    Write-Host '[FATAL] A GInfer Windows runtime archive is required.' -ForegroundColor Red
+    Write-Host 'Build GInfer first, then pass -GinferRuntimeArchive <ginfer-windows-x64-sm120a.zip>.' -ForegroundColor Yellow
+    exit 1
+}
+$GinferRuntimeArchive = (Resolve-Path -LiteralPath $GinferRuntimeArchive).Path
 
 if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
     $nativeBuildRoot = if ($env:GCHAT_WINDOWS_BUILD_ROOT) {
@@ -69,9 +90,13 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
         exit $robocopyExit
     }
 
+    $nativeRuntimeArchive = Join-Path $nativeBuildRoot 'ginfer-windows-x64-sm120a.zip'
+    Copy-Item -LiteralPath $GinferRuntimeArchive -Destination $nativeRuntimeArchive -Force
+
     $nativeScript = Join-Path $nativeSourceRoot 'scripts\build-windows-release.ps1'
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $nativeScript `
-        -NativeMirror -SourceRoot $projectRoot
+        -NativeMirror -SourceRoot $projectRoot `
+        -GinferRuntimeArchive $nativeRuntimeArchive
     exit $LASTEXITCODE
 }
 
@@ -276,11 +301,64 @@ yarn download:bin
 if ($LASTEXITCODE -ne 0) { Write-Host 'download:bin failed' -ForegroundColor Red; exit 1 }
 
 # ── Local inference backend (ginfer) ──────────────────────────
-# GChat has a single local backend: ginfer. Its Windows build has not
-# shipped yet (see docs/decisions — ginfer as the sole inference
-# backend), so release artifacts do not bundle a backend binary.
-Write-Step 'ginfer backend'
-Write-Host '  Windows build of ginfer not shipped yet — no backend bundled.' -ForegroundColor Yellow
+Write-Step 'Staging bundled GInfer runtime'
+$ginferResourceDir = Join-Path $projectRoot 'src-tauri\resources\ginfer'
+if (Test-Path -LiteralPath $ginferResourceDir) {
+    Remove-Item -LiteralPath $ginferResourceDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $ginferResourceDir -Force | Out-Null
+Expand-Archive -LiteralPath $GinferRuntimeArchive -DestinationPath $ginferResourceDir -Force
+
+$ginferManifestPath = Join-Path $ginferResourceDir 'runtime-manifest.json'
+$ginferServerPath = Join-Path $ginferResourceDir 'bin\ginfer-serve.exe'
+if (-not (Test-Path -LiteralPath $ginferManifestPath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $ginferServerPath -PathType Leaf)) {
+    Write-Host '[FATAL] GInfer archive is missing runtime-manifest.json or bin\ginfer-serve.exe.' -ForegroundColor Red
+    exit 1
+}
+
+$ginferManifest = Get-Content -LiteralPath $ginferManifestPath -Raw | ConvertFrom-Json
+if ($ginferManifest.schema -ne 'ginfer-windows-runtime-v1' -or
+    $ginferManifest.platform -ne 'windows-x64' -or
+    $ginferManifest.cuda_architecture -ne 'sm_120a') {
+    Write-Host '[FATAL] GInfer archive is not the required windows-x64/sm_120a runtime.' -ForegroundColor Red
+    exit 1
+}
+
+foreach ($file in $ginferManifest.files) {
+    $relativePath = [string]$file.path
+    if ([System.IO.Path]::IsPathRooted($relativePath) -or $relativePath.Contains('..')) {
+        Write-Host "[FATAL] Unsafe path in GInfer runtime manifest: $relativePath" -ForegroundColor Red
+        exit 1
+    }
+    $runtimeFile = Join-Path $ginferResourceDir ($relativePath -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $runtimeFile -PathType Leaf)) {
+        Write-Host "[FATAL] GInfer runtime file is missing: $relativePath" -ForegroundColor Red
+        exit 1
+    }
+    $runtimeItem = Get-Item -LiteralPath $runtimeFile
+    if ($runtimeItem.Length -ne [int64]$file.bytes) {
+        Write-Host "[FATAL] GInfer runtime file size mismatch: $relativePath" -ForegroundColor Red
+        exit 1
+    }
+    $actualHash = (Get-FileHash -LiteralPath $runtimeFile -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne ([string]$file.sha256).ToLowerInvariant()) {
+        Write-Host "[FATAL] GInfer runtime hash mismatch: $relativePath" -ForegroundColor Red
+        exit 1
+    }
+}
+
+& $ginferServerPath --help 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '[FATAL] Bundled ginfer-serve.exe failed its --help smoke test.' -ForegroundColor Red
+    exit 1
+}
+Write-Host "  Source commit: $($ginferManifest.source_commit)"
+Write-Host "  CUDA toolkit: $($ginferManifest.cuda_toolkit)"
+Write-Host "  Verified files: $($ginferManifest.files.Count)"
+if ($ginferManifest.source_dirty) {
+    Write-Host '  Warning: the bundled GInfer runtime was built from an uncommitted worktree.' -ForegroundColor Yellow
+}
 
 # ── Build web app ─────────────────────────────────────────────
 Write-Step 'yarn build:web'
@@ -361,7 +439,9 @@ if (Test-Path $msiDir) {
 
 if ($NativeMirror -and $SourceRoot) {
     $sourceOutputRoot = Join-Path $SourceRoot 'out\windows'
+    $nativeOutputRoot = Join-Path $env:LOCALAPPDATA 'GChat\release-output'
     New-Item -ItemType Directory -Path $sourceOutputRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $nativeOutputRoot -Force | Out-Null
 
     $installers = @()
     if (Test-Path $nsisDir) {
@@ -372,11 +452,15 @@ if ($NativeMirror -and $SourceRoot) {
     }
     foreach ($installer in $installers) {
         Copy-Item -Path $installer.FullName -Destination $sourceOutputRoot -Force
+        Copy-Item -Path $installer.FullName -Destination $nativeOutputRoot -Force
     }
 
     Write-Host ''
     Write-Host '  Copied installer(s) back to:' -ForegroundColor Cyan
     Write-Host "    $sourceOutputRoot" -ForegroundColor White
+    Write-Host '  Windows Installer cannot launch MSI packages from a WSL UNC path.' -ForegroundColor Yellow
+    Write-Host '  Run the native copies from:' -ForegroundColor Cyan
+    Write-Host "    $nativeOutputRoot" -ForegroundColor White
 }
 
 Write-Host ''

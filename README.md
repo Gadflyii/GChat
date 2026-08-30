@@ -41,8 +41,9 @@ GInfer remains the single local inference backend.
 
 The first Sectile release is in development. The current tree already contains the managed GInfer
 runtime, chat and tool surfaces, the autonomous Rust agent, skills and workspace controls, model
-downloads, external coding-agent setup, and `gchat-cli`. The embedded Code workspace, visual loop
-builder, dispatcher, Windows GInfer integration, and matched installers are still being completed.
+downloads, external coding-agent setup, and `gchat-cli`. Windows builds now bundle a matched native
+GInfer runtime; signing, release qualification, and the first public distribution are still in
+progress.
 
 ## At a glance
 
@@ -55,7 +56,7 @@ builder, dispatcher, Windows GInfer integration, and matched installers are stil
 | **Coding** | External coding-agent configuration and `gchat-cli` today; embedded OpenCode terminal in development |
 | **Local API** | OpenAI-compatible facade at `http://127.0.0.1:1337/v1` |
 | **Models** | Curated version-3 `.ginfer` packages with install and local lifecycle management |
-| **Release targets** | Windows 10/11 x64 and Linux x86-64; first matched installers are in development |
+| **Release targets** | Windows 10/11 x64 and Linux x86-64; unsigned matched Windows installers build locally |
 | **Hardware** | NVIDIA CUDA, with GInfer packages admitted by model, storage profile, SM image, and topology |
 | **Data** | Conversations, settings, model state, and workspaces remain local by default |
 
@@ -249,10 +250,9 @@ The first Sectile distribution is being prepared as a matched set:
 | **GInfer packages** | Architecture-specific engine builds matched to the supported NVIDIA SM families |
 | **Model packages** | Version-3 `.ginfer` artifacts distributed separately from the application |
 
-Windows remains gated until the native GInfer port and its packaged lifecycle pass the release
-matrix. Linux is the current development host. Installer links will appear when the complete
-application, engine, and model contract is ready; the README does not present placeholder downloads
-as released assets.
+The native Windows GInfer runtime and its packaged lifecycle now build together locally. Public
+Windows release links remain gated on signing and the complete release matrix. Linux is the current
+development host; the README does not present local or unqualified packages as released assets.
 
 ## Data and security
 

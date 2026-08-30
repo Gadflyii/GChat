@@ -14,6 +14,7 @@ const TAURI_ROOT = join(REPO_ROOT, 'src-tauri')
 const PLUGINS_ROOT = join(TAURI_ROOT, 'plugins')
 
 const EXPECTED_DESKTOP_ONLY = new Set([
+  'adopt_root_ginfer_models',
   'check_for_app_updates',
   'get_local_http',
   'is_update_available',

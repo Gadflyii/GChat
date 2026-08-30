@@ -1,4 +1,6 @@
 use flate2::read::GzDecoder;
+#[cfg(any(target_os = "windows", test))]
+use std::path::Path;
 use std::{
     fs::{self, File},
     io::Read,
@@ -21,6 +23,122 @@ use crate::core::mcp::helpers::{add_server_config, ensure_mcp_config_exists};
 use super::{
     extensions::commands::get_jan_extensions_path, mcp::helpers::run_mcp_commands, state::AppState,
 };
+
+#[cfg(target_os = "windows")]
+const GINFER_RUNTIME_RESOURCE_DIR: &str = "resources/ginfer";
+#[cfg(any(target_os = "windows", test))]
+const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
+
+#[cfg(any(target_os = "windows", test))]
+fn remove_directory_if_present(path: &Path) -> std::io::Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn copy_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            copy_directory(&source_path, &destination_path)?;
+        } else if file_type.is_file() {
+            fs::copy(source_path, destination_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn install_bundled_ginfer_from(source: &Path, data_folder: &Path) -> std::io::Result<bool> {
+    let source_manifest_path = source.join(GINFER_RUNTIME_MANIFEST);
+    let source_manifest = fs::read(&source_manifest_path)?;
+    let source_server = source.join("bin").join("ginfer-serve.exe");
+    if !source_server.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "bundled GInfer server is missing: {}",
+                source_server.display()
+            ),
+        ));
+    }
+
+    let destination = data_folder.join("ginfer");
+    let destination_manifest_path = destination.join(GINFER_RUNTIME_MANIFEST);
+    let destination_server = destination.join("bin").join("ginfer-serve.exe");
+    if destination_server.is_file()
+        && fs::read(&destination_manifest_path).ok().as_deref() == Some(source_manifest.as_slice())
+    {
+        return Ok(false);
+    }
+
+    fs::create_dir_all(&destination)?;
+    let staging = destination.join(".runtime-installing");
+    let previous_bin = destination.join(".runtime-bin-previous");
+    remove_directory_if_present(&staging)?;
+    remove_directory_if_present(&previous_bin)?;
+    copy_directory(source, &staging)?;
+
+    let staged_bin = staging.join("bin");
+    if !staged_bin.join("ginfer-serve.exe").is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "staged GInfer runtime does not contain bin/ginfer-serve.exe",
+        ));
+    }
+
+    let destination_bin = destination.join("bin");
+    let had_previous_bin = destination_bin.exists();
+    if had_previous_bin {
+        fs::rename(&destination_bin, &previous_bin)?;
+    }
+    if let Err(error) = fs::rename(&staged_bin, &destination_bin) {
+        if had_previous_bin {
+            let _ = fs::rename(&previous_bin, &destination_bin);
+        }
+        return Err(error);
+    }
+
+    let staged_licenses = staging.join("licenses");
+    let destination_licenses = destination.join("licenses");
+    if staged_licenses.exists() {
+        remove_directory_if_present(&destination_licenses)?;
+        fs::rename(staged_licenses, destination_licenses)?;
+    }
+    for file_name in ["LICENSE", "README.md"] {
+        let staged_file = staging.join(file_name);
+        if staged_file.is_file() {
+            fs::copy(staged_file, destination.join(file_name))?;
+        }
+    }
+
+    let manifest_next = destination.join(".runtime-manifest.next");
+    fs::write(&manifest_next, source_manifest)?;
+    if destination_manifest_path.exists() {
+        fs::remove_file(&destination_manifest_path)?;
+    }
+    fs::rename(manifest_next, destination_manifest_path)?;
+
+    remove_directory_if_present(&staging)?;
+    remove_directory_if_present(&previous_bin)?;
+    Ok(true)
+}
+
+#[cfg(target_os = "windows")]
+pub fn install_bundled_ginfer<R: Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let source = app.path().resource_dir()?.join(GINFER_RUNTIME_RESOURCE_DIR);
+    let data_folder = get_jan_data_folder_path(app);
+    Ok(install_bundled_ginfer_from(&source, &data_folder)?)
+}
 
 pub fn install_extensions<R: Runtime>(app: tauri::AppHandle<R>, force: bool) -> Result<(), String> {
     // Skip extension installation on mobile platforms
@@ -694,4 +812,51 @@ fn setup_window_theme_listener<R: Runtime>(
         }
         _ => {}
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write_runtime(root: &Path, manifest: &str, server: &str) {
+        fs::create_dir_all(root.join("bin")).unwrap();
+        fs::create_dir_all(root.join("licenses")).unwrap();
+        fs::write(root.join("bin/ginfer-serve.exe"), server).unwrap();
+        fs::write(root.join("bin/runtime.dll"), "dll").unwrap();
+        fs::write(root.join("licenses/runtime.txt"), "license").unwrap();
+        fs::write(root.join("LICENSE"), "project license").unwrap();
+        fs::write(root.join("README.md"), "runtime readme").unwrap();
+        fs::write(root.join(GINFER_RUNTIME_MANIFEST), manifest).unwrap();
+    }
+
+    #[test]
+    fn installs_and_updates_bundled_ginfer_without_touching_models() {
+        let root = tempdir().unwrap();
+        let source = root.path().join("source");
+        let data = root.path().join("data");
+        let model = data.join("ginfer/models/qwen/model.ginfer");
+        fs::create_dir_all(model.parent().unwrap()).unwrap();
+        fs::write(&model, "model").unwrap();
+        fs::create_dir_all(data.join("ginfer/bin")).unwrap();
+        fs::write(data.join("ginfer/bin/ginfer-serve.exe"), "old").unwrap();
+
+        write_runtime(&source, "runtime-v1", "server-v1");
+        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
+        assert_eq!(
+            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
+            "server-v1"
+        );
+        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
+        assert!(!install_bundled_ginfer_from(&source, &data).unwrap());
+
+        fs::write(source.join("bin/ginfer-serve.exe"), "server-v2").unwrap();
+        fs::write(source.join(GINFER_RUNTIME_MANIFEST), "runtime-v2").unwrap();
+        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
+        assert_eq!(
+            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
+            "server-v2"
+        );
+        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
+    }
 }

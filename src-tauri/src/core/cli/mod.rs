@@ -52,7 +52,26 @@ pub type ModelEntry = (String, ModelYml);
 /// Embedding models are excluded: they cannot serve `/v1/chat/completions`, so
 /// offering them anywhere the CLI leads is a dead end.
 pub fn list_chat_models() -> Vec<ModelEntry> {
-    list_chat_models_in(&resolve_jan_data_folder())
+    let data_folder = resolve_jan_data_folder();
+    match crate::core::ginfer_models::adopt_root_ginfer_models_in(&data_folder) {
+        Ok(report) => {
+            for adopted in report.adopted {
+                log::info!(
+                    "Adopted root GInfer artifact as model '{}'",
+                    adopted.model_id
+                );
+            }
+            for rejected in report.rejected {
+                log::warn!(
+                    "Did not adopt root GInfer artifact '{}': {}",
+                    rejected.filename,
+                    rejected.reason
+                );
+            }
+        }
+        Err(error) => log::warn!("Could not scan root GInfer artifacts: {error}"),
+    }
+    list_chat_models_in(&data_folder)
 }
 
 /// Same as [`list_chat_models`], against an explicit data folder.
