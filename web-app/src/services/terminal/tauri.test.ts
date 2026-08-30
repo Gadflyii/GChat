@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   base64ToBytes,
   bytesToBase64,
+  provisionHermes,
   provisionOpenCode,
   terminalBinaryStringToBytes,
 } from './tauri'
@@ -183,5 +184,58 @@ describe('OpenCode provisioning', () => {
 
     resolveReadiness?.(readyReadiness)
     await expect(first).resolves.toEqual(readyReadiness)
+  })
+})
+
+describe('Hermes provisioning', () => {
+  it('installs, configures, and verifies the native Hermes integration', async () => {
+    const readiness = [
+      {
+        ...missingReadiness,
+        configPath: 'C:\\Users\\test\\AppData\\Local\\hermes\\config.yaml',
+      },
+      {
+        ...unconfiguredReadiness,
+        configPath: 'C:\\Users\\test\\AppData\\Local\\hermes\\config.yaml',
+      },
+      {
+        ...readyReadiness,
+        configPath: 'C:\\Users\\test\\AppData\\Local\\hermes\\config.yaml',
+      },
+    ]
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === 'hermes_readiness') {
+        return Promise.resolve(readiness.shift())
+      }
+      return Promise.resolve()
+    })
+    const phases: string[] = []
+
+    await expect(
+      provisionHermes(
+        {
+          apiUrl: 'http://127.0.0.1:1337/v1',
+          model: 'qwen',
+          apiKey: 'gchat',
+          contextLength: 65_536,
+        },
+        (phase) => phases.push(phase)
+      )
+    ).resolves.toMatchObject({ ready: true })
+
+    expect(phases).toEqual(['checking', 'installing', 'configuring'])
+    expect(mocks.invoke.mock.calls.map(([command]) => command)).toEqual([
+      'hermes_readiness',
+      'install_agent',
+      'hermes_readiness',
+      'configure_hermes_agent',
+      'hermes_readiness',
+    ])
+    expect(mocks.invoke).toHaveBeenCalledWith('configure_hermes_agent', {
+      apiUrl: 'http://127.0.0.1:1337/v1',
+      model: 'qwen',
+      apiKey: 'gchat',
+      contextLength: 65_536,
+    })
   })
 })

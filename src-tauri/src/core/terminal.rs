@@ -18,12 +18,38 @@ const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_COLS: u16 = 80;
 const GCHAT_OPENCODE_THEME: &str = include_str!("../../resources/opencode/gchat.json");
 const GCHAT_OPENCODE_TUI_CONFIG: &str = include_str!("../../resources/opencode/gchat-tui.json");
+const GCHAT_HERMES_DARK_SKIN: &str = include_str!("../../resources/hermes/gchat-dark.yaml");
+const GCHAT_HERMES_LIGHT_SKIN: &str = include_str!("../../resources/hermes/gchat-light.yaml");
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalId {
+    Code,
+    Hermes,
+}
+
+impl TerminalId {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Code => "Code",
+            Self::Hermes => "Hermes",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminalAppearance {
+    Dark,
+    Light,
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TerminalLaunch {
     Shell,
     OpenCode,
+    Hermes,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -50,6 +76,7 @@ pub struct TerminalStatus {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalSpawnRequest {
+    pub terminal_id: TerminalId,
     pub cwd: String,
     #[serde(default = "default_rows")]
     pub rows: u16,
@@ -57,11 +84,14 @@ pub struct TerminalSpawnRequest {
     pub cols: u16,
     pub launch: TerminalLaunch,
     pub executable: Option<String>,
+    #[serde(default)]
+    pub appearance: Option<TerminalAppearance>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalInput {
+    pub terminal_id: TerminalId,
     pub generation: u64,
     pub data: String,
 }
@@ -69,6 +99,7 @@ pub struct TerminalInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalResizeRequest {
+    pub terminal_id: TerminalId,
     pub generation: u64,
     pub rows: u16,
     pub cols: u16,
@@ -81,6 +112,7 @@ pub struct TerminalResizeRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalFlowRequest {
+    pub terminal_id: TerminalId,
     pub generation: u64,
     pub paused: bool,
 }
@@ -144,6 +176,8 @@ pub struct OpenCodeReadiness {
     pub config_path: String,
     pub reason: Option<OpenCodeReadinessReason>,
 }
+
+pub type HermesReadiness = OpenCodeReadiness;
 
 struct ReplayLog {
     events: VecDeque<TerminalEvent>,
@@ -250,7 +284,7 @@ impl Session {
     fn publish(&mut self, event: TerminalEvent) {
         if let Some(channel) = self.channel.as_ref() {
             if let Err(error) = channel.send(event) {
-                log::debug!("Code terminal channel disconnected: {error}");
+                log::debug!("Embedded terminal channel disconnected: {error}");
                 self.channel = None;
                 // A later frontend has no xterm parser state from this session,
                 // so a byte tail is not a valid reconstruction of the screen.
@@ -267,15 +301,17 @@ struct SharedTerminal {
     flow_changed: Condvar,
 }
 
-pub struct TerminalState {
+struct TerminalSlot {
+    id: TerminalId,
     shared: Arc<SharedTerminal>,
     spawn_gate: Mutex<()>,
     threads: Mutex<Vec<JoinHandle<()>>>,
 }
 
-impl Default for TerminalState {
-    fn default() -> Self {
+impl TerminalSlot {
+    fn new(id: TerminalId) -> Self {
         Self {
+            id,
             shared: Arc::new(SharedTerminal {
                 session: Mutex::new(Session::default()),
                 flow_changed: Condvar::new(),
@@ -284,14 +320,12 @@ impl Default for TerminalState {
             threads: Mutex::new(Vec::new()),
         }
     }
-}
 
-impl TerminalState {
     fn session(&self) -> Result<MutexGuard<'_, Session>, String> {
         self.shared
             .session
             .lock()
-            .map_err(|_| "Code terminal state is unavailable".to_string())
+            .map_err(|_| format!("{} terminal state is unavailable", self.id.label()))
     }
 
     fn reap_finished_threads(&self) {
@@ -312,12 +346,12 @@ impl TerminalState {
     fn push_thread(&self, handle: JoinHandle<()>) -> Result<(), String> {
         self.threads
             .lock()
-            .map_err(|_| "Code terminal thread state is unavailable".to_string())?
+            .map_err(|_| format!("{} terminal thread state is unavailable", self.id.label()))?
             .push(handle);
         Ok(())
     }
 
-    pub fn shutdown(&self) {
+    fn shutdown(&self) {
         let (mut killer, writer, master) = match self.session() {
             Ok(mut session) => {
                 if session.phase == TerminalPhase::Running {
@@ -340,7 +374,10 @@ impl TerminalState {
 
         if let Some(killer) = killer.as_mut() {
             if let Err(error) = killer.kill() {
-                log::debug!("Code terminal child was already stopped: {error}");
+                log::debug!(
+                    "{} terminal child was already stopped: {error}",
+                    self.id.label()
+                );
             }
         }
         drop(writer);
@@ -349,10 +386,41 @@ impl TerminalState {
         if let Ok(mut threads) = self.threads.lock() {
             for handle in threads.drain(..) {
                 if handle.join().is_err() {
-                    log::warn!("Code terminal worker panicked during shutdown");
+                    log::warn!(
+                        "{} terminal worker panicked during shutdown",
+                        self.id.label()
+                    );
                 }
             }
         }
+    }
+}
+
+pub struct TerminalState {
+    code: TerminalSlot,
+    hermes: TerminalSlot,
+}
+
+impl Default for TerminalState {
+    fn default() -> Self {
+        Self {
+            code: TerminalSlot::new(TerminalId::Code),
+            hermes: TerminalSlot::new(TerminalId::Hermes),
+        }
+    }
+}
+
+impl TerminalState {
+    fn slot(&self, id: TerminalId) -> &TerminalSlot {
+        match id {
+            TerminalId::Code => &self.code,
+            TerminalId::Hermes => &self.hermes,
+        }
+    }
+
+    pub fn shutdown(&self) {
+        self.code.shutdown();
+        self.hermes.shutdown();
     }
 }
 
@@ -378,25 +446,32 @@ fn validate_size(rows: u16, cols: u16) -> Result<(), String> {
 fn canonical_working_directory(cwd: &str) -> Result<PathBuf, String> {
     let trimmed = cwd.trim();
     if trimmed.is_empty() {
-        return Err("A Code workspace is required".to_string());
+        return Err("A terminal workspace is required".to_string());
     }
     let path = Path::new(trimmed);
     if !path.is_absolute() {
-        return Err("The Code workspace must be an absolute path".to_string());
+        return Err("The terminal workspace must be an absolute path".to_string());
     }
-    let canonical = path
-        .canonicalize()
-        .map_err(|error| format!("Could not open Code workspace {}: {error}", path.display()))?;
+    let canonical = path.canonicalize().map_err(|error| {
+        format!(
+            "Could not open terminal workspace {}: {error}",
+            path.display()
+        )
+    })?;
     if !canonical.is_dir() {
         return Err(format!(
-            "Code workspace is not a directory: {}",
+            "Terminal workspace is not a directory: {}",
             canonical.display()
         ));
     }
     Ok(canonical)
 }
 
-fn command_for_shell(cwd: &Path, opencode_tui_config: Option<&Path>) -> CommandBuilder {
+fn command_for_shell(
+    cwd: &Path,
+    opencode_tui_config: Option<&Path>,
+    hermes_appearance: Option<TerminalAppearance>,
+) -> CommandBuilder {
     #[cfg(windows)]
     let mut command = {
         let mut command = CommandBuilder::new("powershell.exe");
@@ -410,8 +485,20 @@ fn command_for_shell(cwd: &Path, opencode_tui_config: Option<&Path>) -> CommandB
     command.cwd(cwd.as_os_str());
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
+    if let Some(path) = super::system::commands::agent_runtime_path() {
+        command.env("PATH", path);
+    }
     if let Some(path) = opencode_tui_config {
         command.env("OPENCODE_TUI_CONFIG", path.as_os_str());
+    }
+    if let Some(appearance) = hermes_appearance {
+        command.env(
+            "HERMES_TUI_THEME",
+            match appearance {
+                TerminalAppearance::Dark => "dark",
+                TerminalAppearance::Light => "light",
+            },
+        );
     }
     command
 }
@@ -477,13 +564,44 @@ fn quote_open_code_command(executable: Option<&str>, cwd: &Path) -> Result<Vec<u
     Ok(command.into_bytes())
 }
 
+fn format_hermes_command(executable: Option<&str>, windows: bool) -> String {
+    let executable = match executable {
+        Some(path) if windows => format!("& {}", shell_literal(path, true)),
+        Some(path) => shell_literal(path, false),
+        None => "hermes".to_string(),
+    };
+    format!("{executable} --tui\r")
+}
+
+fn quote_hermes_command(executable: Option<&str>) -> Result<Vec<u8>, String> {
+    let executable = executable.map(str::trim).filter(|path| !path.is_empty());
+    if let Some(path) = executable {
+        let path = Path::new(path);
+        if !path.is_absolute() || !path.is_file() {
+            return Err("The custom Hermes executable must be an absolute file path".to_string());
+        }
+    }
+
+    #[cfg(windows)]
+    let command = format_hermes_command(executable, true);
+
+    #[cfg(not(windows))]
+    let command = format_hermes_command(executable, false);
+
+    Ok(command.into_bytes())
+}
+
 fn start_reader(
+    terminal_id: TerminalId,
     shared: Arc<SharedTerminal>,
     generation: u64,
     mut reader: Box<dyn Read + Send>,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
-        .name(format!("code-terminal-reader-{generation}"))
+        .name(format!(
+            "{}-terminal-reader-{generation}",
+            terminal_id.label().to_ascii_lowercase()
+        ))
         .spawn(move || {
             let mut buffer = [0_u8; 16 * 1024];
             loop {
@@ -543,16 +661,20 @@ fn start_reader(
                 }
             }
         })
-        .expect("failed to spawn Code terminal reader")
+        .expect("failed to spawn embedded terminal reader")
 }
 
 fn start_waiter(
+    terminal_id: TerminalId,
     shared: Arc<SharedTerminal>,
     generation: u64,
     mut child: Box<dyn portable_pty::Child + Send + Sync>,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
-        .name(format!("code-terminal-waiter-{generation}"))
+        .name(format!(
+            "{}-terminal-waiter-{generation}",
+            terminal_id.label().to_ascii_lowercase()
+        ))
         .spawn(move || {
             let waited = child.wait();
             let Ok(mut session) = shared.session.lock() else {
@@ -596,21 +718,26 @@ fn start_waiter(
                 }
             }
         })
-        .expect("failed to spawn Code terminal waiter")
+        .expect("failed to spawn embedded terminal waiter")
 }
 
 #[tauri::command]
 pub fn terminal_attach(
     state: State<'_, TerminalState>,
+    terminal_id: TerminalId,
     on_event: Channel<TerminalEvent>,
 ) -> Result<TerminalStatus, String> {
-    let mut session = state.session()?;
+    let slot = state.slot(terminal_id);
+    let mut session = slot.session()?;
     let replacing_live_view = session.channel.is_some() && session.generation != 0;
     if session.replay.complete && !replacing_live_view {
         for event in &session.replay.events {
-            on_event
-                .send(event.clone())
-                .map_err(|error| format!("Could not attach Code terminal channel: {error}"))?;
+            on_event.send(event.clone()).map_err(|error| {
+                format!(
+                    "Could not attach {} terminal channel: {error}",
+                    terminal_id.label()
+                )
+            })?;
         }
     } else {
         let generation = session.generation;
@@ -620,7 +747,12 @@ pub fn terminal_attach(
                 generation,
                 sequence,
             })
-            .map_err(|error| format!("Could not attach Code terminal channel: {error}"))?;
+            .map_err(|error| {
+                format!(
+                    "Could not attach {} terminal channel: {error}",
+                    terminal_id.label()
+                )
+            })?;
     }
     session.replay.reset();
     session.channel = Some(on_event);
@@ -628,8 +760,11 @@ pub fn terminal_attach(
 }
 
 #[tauri::command]
-pub fn terminal_status(state: State<'_, TerminalState>) -> Result<TerminalStatus, String> {
-    Ok(state.session()?.status())
+pub fn terminal_status(
+    state: State<'_, TerminalState>,
+    terminal_id: TerminalId,
+) -> Result<TerminalStatus, String> {
+    Ok(state.slot(terminal_id).session()?.status())
 }
 
 #[tauri::command]
@@ -637,11 +772,28 @@ pub fn terminal_spawn(
     state: State<'_, TerminalState>,
     request: TerminalSpawnRequest,
 ) -> Result<TerminalStatus, String> {
+    let terminal_id = request.terminal_id;
+    let slot = state.slot(terminal_id);
+    match (terminal_id, request.launch) {
+        (TerminalId::Code, TerminalLaunch::Hermes)
+        | (TerminalId::Hermes, TerminalLaunch::OpenCode) => {
+            return Err(format!(
+                "{} cannot launch in the {} terminal",
+                match request.launch {
+                    TerminalLaunch::OpenCode => "OpenCode",
+                    TerminalLaunch::Hermes => "Hermes",
+                    TerminalLaunch::Shell => "A shell",
+                },
+                terminal_id.label()
+            ));
+        }
+        _ => {}
+    }
     validate_size(request.rows, request.cols)?;
     let cwd = canonical_working_directory(&request.cwd)?;
     let cwd_text = cwd
         .to_str()
-        .ok_or_else(|| "The Code workspace path must be valid Unicode".to_string())?
+        .ok_or_else(|| "The terminal workspace path must be valid Unicode".to_string())?
         .to_string();
     let launch_command = match request.launch {
         TerminalLaunch::Shell => None,
@@ -649,22 +801,32 @@ pub fn terminal_spawn(
             request.executable.as_deref(),
             &cwd,
         )?),
+        TerminalLaunch::Hermes => Some(quote_hermes_command(request.executable.as_deref())?),
     };
     let opencode_tui_config = match request.launch {
-        TerminalLaunch::Shell => None,
+        TerminalLaunch::Shell | TerminalLaunch::Hermes => None,
         TerminalLaunch::OpenCode => {
             Some(install_gchat_opencode_theme(&opencode_config_directory()?)?)
         }
     };
+    let hermes_appearance = match request.launch {
+        TerminalLaunch::Hermes => Some(request.appearance.unwrap_or(TerminalAppearance::Dark)),
+        TerminalLaunch::Shell | TerminalLaunch::OpenCode => None,
+    };
+    if let Some(appearance) = hermes_appearance {
+        install_gchat_hermes_skin(&super::system::commands::resolve_hermes_dir()?, appearance)?;
+    }
 
-    let _spawn_guard = state
-        .spawn_gate
-        .lock()
-        .map_err(|_| "Code terminal spawn state is unavailable".to_string())?;
-    state.reap_finished_threads();
+    let _spawn_guard = slot.spawn_gate.lock().map_err(|_| {
+        format!(
+            "{} terminal spawn state is unavailable",
+            terminal_id.label()
+        )
+    })?;
+    slot.reap_finished_threads();
 
     {
-        let session = state.session()?;
+        let session = slot.session()?;
         if matches!(
             session.phase,
             TerminalPhase::Running | TerminalPhase::Stopping
@@ -675,10 +837,10 @@ pub fn terminal_spawn(
             {
                 return Ok(session.status());
             }
-            return Err(
-                "A Code terminal is already running; stop it before changing workspace or launch mode"
-                    .to_string(),
-            );
+            return Err(format!(
+                "The {} terminal is already running; stop it before changing workspace or launch mode",
+                terminal_id.label()
+            ));
         }
     }
 
@@ -690,20 +852,26 @@ pub fn terminal_spawn(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|error| format!("Could not create Code terminal: {error}"))?;
-    let reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|error| format!("Could not open Code terminal output: {error}"))?;
-    let mut writer = pair
-        .master
-        .take_writer()
-        .map_err(|error| format!("Could not open Code terminal input: {error}"))?;
-    let command = command_for_shell(&cwd, opencode_tui_config.as_deref());
-    let mut child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(|error| format!("Could not start Code terminal shell: {error}"))?;
+        .map_err(|error| format!("Could not create {} terminal: {error}", terminal_id.label()))?;
+    let reader = pair.master.try_clone_reader().map_err(|error| {
+        format!(
+            "Could not open {} terminal output: {error}",
+            terminal_id.label()
+        )
+    })?;
+    let mut writer = pair.master.take_writer().map_err(|error| {
+        format!(
+            "Could not open {} terminal input: {error}",
+            terminal_id.label()
+        )
+    })?;
+    let command = command_for_shell(&cwd, opencode_tui_config.as_deref(), hermes_appearance);
+    let mut child = pair.slave.spawn_command(command).map_err(|error| {
+        format!(
+            "Could not start {} terminal shell: {error}",
+            terminal_id.label()
+        )
+    })?;
     drop(pair.slave);
     let mut killer = child.clone_killer();
 
@@ -713,13 +881,20 @@ pub fn terminal_spawn(
             drop(writer);
             drop(pair.master);
             let _ = child.wait();
-            return Err(format!("Could not launch OpenCode: {error}"));
+            return Err(format!(
+                "Could not launch {}: {error}",
+                match request.launch {
+                    TerminalLaunch::OpenCode => "OpenCode",
+                    TerminalLaunch::Hermes => "Hermes",
+                    TerminalLaunch::Shell => "terminal shell",
+                }
+            ));
         }
     }
 
     let generation;
     {
-        let mut session = state.session()?;
+        let mut session = slot.session()?;
         generation = session.generation.saturating_add(1).max(1);
         session.phase = TerminalPhase::Running;
         session.generation = generation;
@@ -743,9 +918,19 @@ pub fn terminal_spawn(
         });
     }
 
-    state.push_thread(start_reader(state.shared.clone(), generation, reader))?;
-    state.push_thread(start_waiter(state.shared.clone(), generation, child))?;
-    Ok(state.session()?.status())
+    slot.push_thread(start_reader(
+        terminal_id,
+        slot.shared.clone(),
+        generation,
+        reader,
+    ))?;
+    slot.push_thread(start_waiter(
+        terminal_id,
+        slot.shared.clone(),
+        generation,
+        child,
+    ))?;
+    Ok(slot.session()?.status())
 }
 
 #[tauri::command]
@@ -759,18 +944,29 @@ pub fn terminal_write(state: State<'_, TerminalState>, input: TerminalInput) -> 
         ));
     }
 
-    let mut session = state.session()?;
+    let slot = state.slot(input.terminal_id);
+    let mut session = slot.session()?;
     if session.generation != input.generation || session.phase != TerminalPhase::Running {
-        return Err("The Code terminal generation is no longer running".to_string());
+        return Err(format!(
+            "The {} terminal generation is no longer running",
+            input.terminal_id.label()
+        ));
     }
-    let writer = session
-        .writer
-        .as_mut()
-        .ok_or_else(|| "Code terminal input is unavailable".to_string())?;
+    let writer = session.writer.as_mut().ok_or_else(|| {
+        format!(
+            "{} terminal input is unavailable",
+            input.terminal_id.label()
+        )
+    })?;
     writer
         .write_all(&bytes)
         .and_then(|_| writer.flush())
-        .map_err(|error| format!("Could not write to Code terminal: {error}"))
+        .map_err(|error| {
+            format!(
+                "Could not write to {} terminal: {error}",
+                input.terminal_id.label()
+            )
+        })
 }
 
 #[tauri::command]
@@ -779,21 +975,30 @@ pub fn terminal_resize(
     request: TerminalResizeRequest,
 ) -> Result<(), String> {
     validate_size(request.rows, request.cols)?;
-    let session = state.session()?;
+    let slot = state.slot(request.terminal_id);
+    let session = slot.session()?;
     if session.generation != request.generation || session.phase != TerminalPhase::Running {
-        return Err("The Code terminal generation is no longer running".to_string());
+        return Err(format!(
+            "The {} terminal generation is no longer running",
+            request.terminal_id.label()
+        ));
     }
     session
         .master
         .as_ref()
-        .ok_or_else(|| "Code terminal is unavailable".to_string())?
+        .ok_or_else(|| format!("{} terminal is unavailable", request.terminal_id.label()))?
         .resize(PtySize {
             rows: request.rows,
             cols: request.cols,
             pixel_width: request.pixel_width,
             pixel_height: request.pixel_height,
         })
-        .map_err(|error| format!("Could not resize Code terminal: {error}"))
+        .map_err(|error| {
+            format!(
+                "Could not resize {} terminal: {error}",
+                request.terminal_id.label()
+            )
+        })
 }
 
 #[tauri::command]
@@ -801,27 +1006,35 @@ pub fn terminal_set_flow(
     state: State<'_, TerminalState>,
     request: TerminalFlowRequest,
 ) -> Result<(), String> {
-    let mut session = state.session()?;
+    let slot = state.slot(request.terminal_id);
+    let mut session = slot.session()?;
     if session.generation != request.generation || session.phase != TerminalPhase::Running {
-        return Err("The Code terminal generation is no longer running".to_string());
+        return Err(format!(
+            "The {} terminal generation is no longer running",
+            request.terminal_id.label()
+        ));
     }
     session.flow_paused = request.paused;
     if !request.paused {
-        state.shared.flow_changed.notify_all();
+        slot.shared.flow_changed.notify_all();
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn terminal_stop(state: State<'_, TerminalState>) -> Result<TerminalStatus, String> {
+pub fn terminal_stop(
+    state: State<'_, TerminalState>,
+    terminal_id: TerminalId,
+) -> Result<TerminalStatus, String> {
+    let slot = state.slot(terminal_id);
     let (status, mut killer, writer, master) = {
-        let mut session = state.session()?;
+        let mut session = slot.session()?;
         if session.phase != TerminalPhase::Running {
             return Ok(session.status());
         }
         session.phase = TerminalPhase::Stopping;
         session.flow_paused = false;
-        state.shared.flow_changed.notify_all();
+        slot.shared.flow_changed.notify_all();
         let status = session.status();
         (
             status,
@@ -833,7 +1046,7 @@ pub fn terminal_stop(state: State<'_, TerminalState>) -> Result<TerminalStatus, 
     if let Some(killer) = killer.as_mut() {
         killer
             .kill()
-            .map_err(|error| format!("Could not stop Code terminal: {error}"))?;
+            .map_err(|error| format!("Could not stop {} terminal: {error}", terminal_id.label()))?;
     }
     drop(writer);
     drop(master);
@@ -846,7 +1059,7 @@ fn opencode_config_directory() -> Result<PathBuf, String> {
     ))
 }
 
-fn write_managed_opencode_asset(path: &Path, content: &str) -> Result<(), String> {
+fn write_managed_terminal_asset(path: &Path, content: &str) -> Result<(), String> {
     if std::fs::read(path)
         .ok()
         .is_some_and(|existing| existing == content.as_bytes())
@@ -869,10 +1082,90 @@ fn install_gchat_opencode_theme(config_directory: &Path) -> Result<PathBuf, Stri
         )
     })?;
 
-    write_managed_opencode_asset(&theme_directory.join("gchat.json"), GCHAT_OPENCODE_THEME)?;
+    write_managed_terminal_asset(&theme_directory.join("gchat.json"), GCHAT_OPENCODE_THEME)?;
     let tui_config = config_directory.join("gchat-tui.json");
-    write_managed_opencode_asset(&tui_config, GCHAT_OPENCODE_TUI_CONFIG)?;
+    write_managed_terminal_asset(&tui_config, GCHAT_OPENCODE_TUI_CONFIG)?;
     Ok(tui_config)
+}
+
+fn patch_hermes_display_skin(content: &str, skin: &str) -> String {
+    let mut lines: Vec<String> = content.lines().map(str::to_string).collect();
+    let display = lines.iter().position(|line| line.trim_end() == "display:");
+
+    match display {
+        Some(display_index) => {
+            let block_end = (display_index + 1..lines.len())
+                .find(|index| {
+                    let line = &lines[*index];
+                    !line.trim().is_empty()
+                        && !line.starts_with(' ')
+                        && !line.starts_with('\t')
+                        && !line.starts_with('#')
+                })
+                .unwrap_or(lines.len());
+            if let Some(skin_index) = (display_index + 1..block_end)
+                .find(|index| lines[*index].trim_start().starts_with("skin:"))
+            {
+                lines[skin_index] = format!("  skin: {skin}");
+            } else {
+                lines.insert(display_index + 1, format!("  skin: {skin}"));
+            }
+        }
+        None => {
+            while lines.last().is_some_and(|line| line.trim().is_empty()) {
+                lines.pop();
+            }
+            if !lines.is_empty() {
+                lines.push(String::new());
+            }
+            lines.push("display:".to_string());
+            lines.push(format!("  skin: {skin}"));
+        }
+    }
+
+    let mut patched = lines.join("\n");
+    if content.ends_with('\n') {
+        patched.push('\n');
+    }
+    patched
+}
+
+/// Install both managed skins and select the one matching GChat's current
+/// appearance. Hermes officially resolves custom skins from this directory
+/// and reads `display.skin` at TUI startup, so no upstream files are patched.
+fn install_gchat_hermes_skin(
+    hermes_directory: &Path,
+    appearance: TerminalAppearance,
+) -> Result<(), String> {
+    let skin_directory = hermes_directory.join("skins");
+    std::fs::create_dir_all(&skin_directory).map_err(|error| {
+        format!(
+            "Could not create Hermes skin directory {}: {error}",
+            skin_directory.display()
+        )
+    })?;
+    write_managed_terminal_asset(
+        &skin_directory.join("gchat-dark.yaml"),
+        GCHAT_HERMES_DARK_SKIN,
+    )?;
+    write_managed_terminal_asset(
+        &skin_directory.join("gchat-light.yaml"),
+        GCHAT_HERMES_LIGHT_SKIN,
+    )?;
+
+    let config_path = hermes_directory.join("config.yaml");
+    let content = std::fs::read_to_string(&config_path).map_err(|error| {
+        format!(
+            "Could not read Hermes configuration {}: {error}",
+            config_path.display()
+        )
+    })?;
+    let skin = match appearance {
+        TerminalAppearance::Dark => "gchat-dark",
+        TerminalAppearance::Light => "gchat-light",
+    };
+    let patched = patch_hermes_display_skin(&content, skin);
+    write_managed_terminal_asset(&config_path, &patched)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -974,6 +1267,100 @@ pub async fn opencode_readiness(custom_path: Option<String>) -> Result<OpenCodeR
     })
 }
 
+fn hermes_configuration_state(directory: &Path) -> Result<OpenCodeConfigurationState, String> {
+    let config_path = directory.join("config.yaml");
+    if !config_path.is_file() {
+        return Ok(OpenCodeConfigurationState::Missing);
+    }
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|error| format!("Could not read {}: {error}", config_path.display()))?;
+    let root: serde_yaml::Value = match serde_yaml::from_str(&content) {
+        Ok(value) => value,
+        Err(_) => return Ok(OpenCodeConfigurationState::Invalid),
+    };
+    let Some(model) = root.get("model") else {
+        return Ok(OpenCodeConfigurationState::Missing);
+    };
+    let model_id = model
+        .get("default")
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or_default();
+    let provider = model
+        .get("provider")
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or_default();
+    let base_url = model
+        .get("base_url")
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or_default();
+    let valid_url = url::Url::parse(base_url).is_ok_and(|url| {
+        matches!(url.scheme(), "http" | "https")
+            && matches!(
+                url.host_str(),
+                Some("localhost" | "127.0.0.1" | "::1" | "[::1]")
+            )
+    });
+    if provider != "custom" || model_id.is_empty() || !valid_url {
+        return Ok(OpenCodeConfigurationState::Invalid);
+    }
+
+    let provider_ready = root
+        .get("custom_providers")
+        .and_then(serde_yaml::Value::as_sequence)
+        .is_some_and(|providers| {
+            providers.iter().any(|candidate| {
+                candidate.get("name").and_then(serde_yaml::Value::as_str) == Some("gchat")
+                    && candidate.get("model").and_then(serde_yaml::Value::as_str) == Some(model_id)
+                    && candidate
+                        .get("models")
+                        .and_then(|models| models.get(model_id))
+                        .and_then(|model| model.get("context_length"))
+                        .and_then(serde_yaml::Value::as_u64)
+                        .is_some_and(|context| context >= 65_536)
+            })
+        });
+    Ok(if provider_ready {
+        OpenCodeConfigurationState::Ready
+    } else {
+        OpenCodeConfigurationState::Invalid
+    })
+}
+
+#[tauri::command]
+pub async fn hermes_readiness(custom_path: Option<String>) -> Result<HermesReadiness, String> {
+    let detection =
+        super::system::commands::detect_agent_installed("hermes".to_string(), custom_path).await;
+    let directory = super::system::commands::resolve_hermes_dir()?;
+    let config_path = directory.join("config.yaml");
+    let config_state = match hermes_configuration_state(&directory) {
+        Ok(state) => state,
+        Err(error) => {
+            log::debug!("Hermes readiness config error: {error}");
+            OpenCodeConfigurationState::Invalid
+        }
+    };
+    let configured = config_state == OpenCodeConfigurationState::Ready;
+    let reason = if !detection.installed {
+        Some(OpenCodeReadinessReason::NotInstalled)
+    } else if detection.via_wsl {
+        Some(OpenCodeReadinessReason::WslOnly)
+    } else if config_state == OpenCodeConfigurationState::Invalid {
+        Some(OpenCodeReadinessReason::InvalidConfiguration)
+    } else if config_state == OpenCodeConfigurationState::Missing {
+        Some(OpenCodeReadinessReason::MissingConfiguration)
+    } else {
+        None
+    };
+    Ok(HermesReadiness {
+        ready: reason.is_none(),
+        installed: detection.installed,
+        configured,
+        via_wsl: detection.via_wsl,
+        config_path: config_path.to_string_lossy().into_owned(),
+        reason,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -993,6 +1380,29 @@ mod tests {
         assert_eq!(
             format_open_code_command(None, Path::new("/home/ron/agent work"), false),
             "opencode '/home/ron/agent work'\r"
+        );
+    }
+
+    #[test]
+    fn hermes_uses_the_modern_tui_entry_point() {
+        assert_eq!(format_hermes_command(None, false), "hermes --tui\r");
+        assert_eq!(
+            format_hermes_command(Some(r"C:\Program Files\Hermes\hermes.exe"), true),
+            "& 'C:\\Program Files\\Hermes\\hermes.exe' --tui\r"
+        );
+    }
+
+    #[test]
+    fn code_and_hermes_sessions_are_independent() {
+        let state = TerminalState::default();
+        state.slot(TerminalId::Code).session().unwrap().phase = TerminalPhase::Running;
+        assert_eq!(
+            state.slot(TerminalId::Code).session().unwrap().phase,
+            TerminalPhase::Running
+        );
+        assert_eq!(
+            state.slot(TerminalId::Hermes).session().unwrap().phase,
+            TerminalPhase::Idle
         );
     }
 
@@ -1175,17 +1585,78 @@ mod tests {
         );
     }
 
+    #[test]
+    fn embedded_hermes_skins_are_valid_and_select_the_current_appearance() {
+        for skin in [GCHAT_HERMES_DARK_SKIN, GCHAT_HERMES_LIGHT_SKIN] {
+            let value: serde_yaml::Value = serde_yaml::from_str(skin).unwrap();
+            assert_eq!(
+                value
+                    .get("colors")
+                    .and_then(|colors| colors.get("ui_accent"))
+                    .and_then(serde_yaml::Value::as_str),
+                Some(if skin == GCHAT_HERMES_DARK_SKIN {
+                    "#3DD3C8"
+                } else {
+                    "#0B6B6B"
+                })
+            );
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("config.yaml"),
+            "model:\n  default: qwen\ndisplay:\n  skin: default\n",
+        )
+        .unwrap();
+        install_gchat_hermes_skin(temp.path(), TerminalAppearance::Dark).unwrap();
+        let configured = std::fs::read_to_string(temp.path().join("config.yaml")).unwrap();
+        assert!(configured.contains("  skin: gchat-dark"));
+        assert!(temp.path().join("skins/gchat-dark.yaml").is_file());
+        assert!(temp.path().join("skins/gchat-light.yaml").is_file());
+
+        install_gchat_hermes_skin(temp.path(), TerminalAppearance::Light).unwrap();
+        let configured = std::fs::read_to_string(temp.path().join("config.yaml")).unwrap();
+        assert!(configured.contains("  skin: gchat-light"));
+        assert_eq!(configured.matches("  skin:").count(), 1);
+    }
+
+    #[test]
+    fn hermes_readiness_requires_the_exact_local_provider_contract() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("config.yaml"),
+            "model:\n  default: qwen\n  provider: custom\n  base_url: http://127.0.0.1:1337/v1\ncustom_providers:\n- name: gchat\n  base_url: http://127.0.0.1:1337/v1\n  model: qwen\n  models:\n    qwen:\n      context_length: 65536\n",
+        )
+        .unwrap();
+        assert_eq!(
+            hermes_configuration_state(temp.path()),
+            Ok(OpenCodeConfigurationState::Ready)
+        );
+
+        std::fs::write(
+            temp.path().join("config.yaml"),
+            "model:\n  default: qwen\n  provider: custom\n  base_url: https://remote.example/v1\ncustom_providers: []\n",
+        )
+        .unwrap();
+        assert_eq!(
+            hermes_configuration_state(temp.path()),
+            Ok(OpenCodeConfigurationState::Invalid)
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn real_pty_runs_a_shell_and_captures_output() {
         let state = TerminalState::default();
         let temp = tempfile::tempdir().unwrap();
         let request = TerminalSpawnRequest {
+            terminal_id: TerminalId::Code,
             cwd: temp.path().to_string_lossy().into_owned(),
             rows: 24,
             cols: 80,
             launch: TerminalLaunch::Shell,
             executable: None,
+            appearance: None,
         };
 
         // Exercise the same portable-pty primitives as the command without a
@@ -1198,6 +1669,7 @@ mod tests {
         let mut command = command_for_shell(
             &canonical_working_directory(&request.cwd).unwrap(),
             Some(&tui_config),
+            None,
         );
         command.env("PS1", "");
         let mut child = pair.slave.spawn_command(command).unwrap();

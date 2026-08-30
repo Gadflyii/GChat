@@ -3,21 +3,30 @@ import type {
   OpenCodeReadiness,
   OpenCodeProvisionPhase,
   OpenCodeProvisionRequest,
+  HermesProvisionRequest,
+  HermesReadiness,
   TerminalEvent,
+  TerminalId,
   TerminalSpawnRequest,
   TerminalStatus,
 } from '@/types/terminal'
 
 export async function attachTerminal(
+  terminalId: TerminalId,
   onEvent: (event: TerminalEvent) => void
 ): Promise<TerminalStatus> {
   const channel = new Channel<TerminalEvent>()
   channel.onmessage = onEvent
-  return invoke<TerminalStatus>('terminal_attach', { onEvent: channel })
+  return invoke<TerminalStatus>('terminal_attach', {
+    terminalId,
+    onEvent: channel,
+  })
 }
 
-export function getTerminalStatus(): Promise<TerminalStatus> {
-  return invoke<TerminalStatus>('terminal_status')
+export function getTerminalStatus(
+  terminalId: TerminalId
+): Promise<TerminalStatus> {
+  return invoke<TerminalStatus>('terminal_status', { terminalId })
 }
 
 export function spawnTerminal(
@@ -27,15 +36,17 @@ export function spawnTerminal(
 }
 
 export function writeTerminal(
+  terminalId: TerminalId,
   generation: number,
   data: Uint8Array
 ): Promise<void> {
   return invoke<void>('terminal_write', {
-    input: { generation, data: bytesToBase64(data) },
+    input: { terminalId, generation, data: bytesToBase64(data) },
   })
 }
 
 export function resizeTerminal(
+  terminalId: TerminalId,
   generation: number,
   rows: number,
   cols: number,
@@ -43,21 +54,29 @@ export function resizeTerminal(
   pixelHeight: number
 ): Promise<void> {
   return invoke<void>('terminal_resize', {
-    request: { generation, rows, cols, pixelWidth, pixelHeight },
+    request: {
+      terminalId,
+      generation,
+      rows,
+      cols,
+      pixelWidth,
+      pixelHeight,
+    },
   })
 }
 
 export function setTerminalFlow(
+  terminalId: TerminalId,
   generation: number,
   paused: boolean
 ): Promise<void> {
   return invoke<void>('terminal_set_flow', {
-    request: { generation, paused },
+    request: { terminalId, generation, paused },
   })
 }
 
-export function stopTerminal(): Promise<TerminalStatus> {
-  return invoke<TerminalStatus>('terminal_stop')
+export function stopTerminal(terminalId: TerminalId): Promise<TerminalStatus> {
+  return invoke<TerminalStatus>('terminal_stop', { terminalId })
 }
 
 export function getOpenCodeReadiness(
@@ -147,6 +166,87 @@ export function provisionOpenCode(
     }
   })
   activeOpenCodeProvision = { key, promise }
+  return promise
+}
+
+export function getHermesReadiness(
+  customPath?: string
+): Promise<HermesReadiness> {
+  return invoke<HermesReadiness>('hermes_readiness', {
+    customPath: customPath || null,
+  })
+}
+
+let activeHermesProvision:
+  | { key: string; promise: Promise<HermesReadiness> }
+  | undefined
+
+/** Own the embedded Hermes terminal's install and configuration readiness. */
+export function provisionHermes(
+  request: HermesProvisionRequest,
+  onPhase?: (phase: OpenCodeProvisionPhase) => void
+): Promise<HermesReadiness> {
+  const key = JSON.stringify({
+    customPath: request.customPath,
+    apiUrl: request.apiUrl,
+    model: request.model,
+    contextLength: request.contextLength,
+  })
+  if (activeHermesProvision) {
+    if (activeHermesProvision.key === key) return activeHermesProvision.promise
+    return activeHermesProvision.promise
+      .catch(() => undefined)
+      .then(() => provisionHermes(request, onPhase))
+  }
+
+  const provision = async (): Promise<HermesReadiness> => {
+    onPhase?.('checking')
+    let readiness = await getHermesReadiness(request.customPath)
+
+    if (!readiness.installed || readiness.viaWsl) {
+      if (request.customPath) {
+        throw new Error(
+          `The configured Hermes executable does not exist: ${request.customPath}`
+        )
+      }
+      onPhase?.('installing')
+      await invoke<void>('install_agent', {
+        agentId: 'hermes',
+        proxy: request.proxy,
+      })
+      readiness = await getHermesReadiness()
+      if (!readiness.installed || readiness.viaWsl) {
+        throw new Error(
+          'Hermes installation completed without a native executable on PATH.'
+        )
+      }
+    }
+
+    const model = request.model?.trim()
+    if (!readiness.ready && model) {
+      onPhase?.('configuring')
+      await invoke<void>('configure_hermes_agent', {
+        apiUrl: request.apiUrl,
+        model,
+        apiKey: request.apiKey || null,
+        contextLength: Math.max(request.contextLength ?? 65_536, 65_536),
+      })
+      readiness = await getHermesReadiness(request.customPath)
+    }
+    if (model && !readiness.ready) {
+      throw new Error(
+        `Hermes did not accept the GChat provider configuration at ${readiness.configPath}.`
+      )
+    }
+    return readiness
+  }
+
+  const promise = provision().finally(() => {
+    if (activeHermesProvision?.promise === promise) {
+      activeHermesProvision = undefined
+    }
+  })
+  activeHermesProvision = { key, promise }
   return promise
 }
 

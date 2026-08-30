@@ -1,0 +1,33 @@
+name: gchat-dark
+description: GChat dark palette for the embedded Hermes terminal
+
+colors:
+  banner_border: "#3DD3C8"
+  banner_title: "#F3F5F7"
+  banner_accent: "#3DD3C8"
+  banner_dim: "#7D858F"
+  banner_text: "#C6CACF"
+  ui_accent: "#3DD3C8"
+  ui_label: "#83E1DA"
+  ui_ok: "#76C7A0"
+  ui_error: "#F2777A"
+  ui_warn: "#F2EC5D"
+  prompt: "#F3F5F7"
+  input_rule: "#3DD3C8"
+  response_border: "#3DD3C8"
+  session_label: "#83E1DA"
+  session_border: "#5A6068"
+  status_bar_bg: "#111418"
+  voice_status_bg: "#111418"
+  selection_bg: "#164E4A"
+  completion_menu_bg: "#111418"
+  completion_menu_current_bg: "#164E4A"
+  completion_menu_meta_bg: "#111418"
+  completion_menu_meta_current_bg: "#164E4A"
+
+branding:
+  agent_name: "Hermes Agent"
+  response_label: " Hermes "
+  prompt_symbol: "❯"
+
+tool_prefix: "▏"

@@ -3,20 +3,20 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   IconAlertTriangle,
   IconBolt,
-  IconFileText,
   IconGitBranch,
-  IconHistory,
   IconDotsVertical,
   IconPlayerPlay,
   IconPlus,
   IconRepeat,
   IconRefresh,
-  IconTemplate,
   IconTrash,
   IconUsers,
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
-import HeaderPage from '@/containers/HeaderPage'
+import {
+  AgentStudioHeader,
+  type AgentStudioSection,
+} from '@/containers/AgentStudioHeader'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -61,9 +61,17 @@ import { useAgentRun } from '@/hooks/useAgentRun'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.agents.index as any)({
   component: AgentStudioPage,
+  validateSearch: (search: Record<string, unknown>): AgentStudioSearch => ({
+    view: isStudioView(search.view) ? search.view : undefined,
+  }),
 })
 
-type StudioView = 'definitions' | 'templates' | 'runs'
+type StudioView = Exclude<AgentStudioSection, 'skills'>
+type AgentStudioSearch = { view?: StudioView }
+
+function isStudioView(value: unknown): value is StudioView {
+  return value === 'definitions' || value === 'templates' || value === 'runs'
+}
 
 const KIND_META: Record<
   AgentStrategyKind,
@@ -336,10 +344,11 @@ function slug(value: string): string {
 
 export function AgentStudioPage() {
   const navigate = useNavigate()
+  const search = Route.useSearch()
   const { definitions, loading, error, load, save, remove, createDraft } =
     useAgentDefinitions()
   const { skills } = useAgentSkills()
-  const [view, setView] = useState<StudioView>('definitions')
+  const [view, setView] = useState<StudioView>(search.view ?? 'definitions')
   const [draft, setDraft] = useState<AgentDefinition | null>(null)
   const [templates, setTemplates] = useState<AgentTemplate[]>([])
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
@@ -373,11 +382,20 @@ export function AgentStudioPage() {
 
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
 
+  const selectView = (next: StudioView) => {
+    setView(next)
+    void navigate({
+      to: route.agents.index,
+      search: { view: next },
+      replace: true,
+    })
+  }
+
   const createAgent = async () => {
     setCreating(true)
     try {
       setDraft(await createDraft())
-      setView('definitions')
+      selectView('definitions')
     } catch (reason) {
       toast.error(String(reason))
     } finally {
@@ -387,7 +405,7 @@ export function AgentStudioPage() {
 
   const edit = (definition: AgentDefinition) => {
     setDraft(cloneDefinition(definition))
-    setView('definitions')
+    selectView('definitions')
   }
 
   const startFrom = (definition: AgentDefinition) => {
@@ -396,7 +414,7 @@ export function AgentStudioPage() {
     copy.id = ''
     copy.name = `${copy.name} Copy`
     setDraft(copy)
-    setView('definitions')
+    selectView('definitions')
   }
 
   const saveDraft = async (showToast = true): Promise<AgentDefinition | null> => {
@@ -490,55 +508,26 @@ export function AgentStudioPage() {
 
   return (
     <div className="grid h-svh min-w-0 grid-rows-[auto_minmax(0,1fr)]">
-      <HeaderPage>
-        <div className="flex w-full items-center justify-between gap-3">
-          <div>
-            <div className="font-studio text-base font-semibold">
-              Agent Studio
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Build agents, evaluative loops, coordinated teams, workflows,
-              and reusable skills.
-            </div>
-          </div>
-          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
-            <StudioTab
-              active={view === 'definitions'}
-              onClick={() => setView('definitions')}
-              icon={IconBolt}
-              label="Agents & flows"
-            />
-            <StudioTab
-              active={view === 'templates'}
-              onClick={() => setView('templates')}
-              icon={IconTemplate}
-              label="Templates"
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void navigate({ to: route.skills.index })}
-            >
-              <IconFileText className="size-4" />
-              Skills
-            </Button>
-            <StudioTab
-              active={view === 'runs'}
-              onClick={() => {
-                setView('runs')
-                void listAgentRuns()
-                  .then((nextRuns) => {
-                    setRuns(nextRuns)
-                    setSelectedRunId((current) => current ?? nextRuns[0]?.id ?? null)
-                  })
-                  .catch((reason) => toast.error(`Could not refresh runs: ${String(reason)}`))
-              }}
-              icon={IconHistory}
-              label="Runs"
-            />
-          </div>
-        </div>
-      </HeaderPage>
+      <AgentStudioHeader
+        active={view}
+        onSelect={(section) => {
+          if (section === 'skills') {
+            void navigate({ to: route.skills.index })
+            return
+          }
+          selectView(section)
+          if (section === 'runs') {
+            void listAgentRuns()
+              .then((nextRuns) => {
+                setRuns(nextRuns)
+                setSelectedRunId((current) => current ?? nextRuns[0]?.id ?? null)
+              })
+              .catch((reason) =>
+                toast.error(`Could not refresh runs: ${String(reason)}`)
+              )
+          }
+        }}
+      />
 
       {view === 'definitions' && !draft && definitions.length === 0 ? (
         <div className="flex min-h-0 items-center justify-center">
@@ -702,25 +691,6 @@ export function AgentStudioPage() {
         />
       )}
     </div>
-  )
-}
-
-function StudioTab({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-}: {
-  active: boolean
-  onClick: () => void
-  icon: typeof IconBolt
-  label: string
-}) {
-  return (
-    <Button variant={active ? 'secondary' : 'ghost'} size="sm" onClick={onClick}>
-      <Icon className="size-4" />
-      {label}
-    </Button>
   )
 }
 

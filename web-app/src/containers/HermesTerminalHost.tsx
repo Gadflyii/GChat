@@ -1,51 +1,40 @@
 import {
   IconAlertTriangle,
-  IconCode,
-  IconLayoutSidebarRightCollapse,
   IconLoader2,
   IconRefresh,
+  IconSparkles,
   IconSquare,
 } from '@tabler/icons-react'
 import { getJanDataFolderPath } from '@gchat/core'
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 
+import { Button } from '@/components/ui/button'
 import { AgentWorkspaceSelect } from '@/containers/AgentWorkspaceSelect'
 import HeaderPage from '@/containers/HeaderPage'
-import { Button } from '@/components/ui/button'
+import { route } from '@/constants/routes'
 import { useAppState } from '@/hooks/useAppState'
-import { useHardware } from '@/hooks/useHardware'
+import { useEmbeddedTerminal } from '@/hooks/useEmbeddedTerminal'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 import { useProxyConfig } from '@/hooks/useProxyConfig'
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { useEmbeddedTerminal } from '@/hooks/useEmbeddedTerminal'
-import { useTranslation } from '@/i18n/react-i18next-compat'
-import { evaluateCodeHardware } from '@/lib/codeTerminal'
-import { cn } from '@/lib/utils'
+import { useTheme } from '@/hooks/useTheme'
 import { isAndroid, isIOS, isPlatformTauri } from '@/lib/platform/utils'
+import { cn } from '@/lib/utils'
 import {
   getTerminalStatus,
-  provisionOpenCode,
+  provisionHermes,
   spawnTerminal,
   stopTerminal,
-  writeTerminal,
 } from '@/services/terminal/tauri'
-import { useCodeTerminalStore } from '@/stores/code-terminal-store'
+import { useHermesAgentStore } from '@/stores/hermes-agent-store'
 import { useLaunchSettings } from '@/stores/launch-settings-store'
 import type {
+  HermesReadiness,
   OpenCodeProvisionPhase,
-  OpenCodeReadiness,
 } from '@/types/terminal'
 
 const DEFAULT_AGENT_WORKSPACE_DIR = 'agent-workspace'
-type CodeTerminalHostProps = {
-  visible: boolean
-}
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
@@ -63,11 +52,9 @@ function currentInstallerProxy() {
   }
 }
 
-export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
-  const { t } = useTranslation()
+export function HermesTerminalHost({ visible }: { visible: boolean }) {
   const serviceHub = useServiceHub()
-  const hardwareReady = useHardware((state) => state.hardwareReady)
-  const hardwareData = useHardware((state) => state.hardwareData)
+  const isDark = useTheme((state) => state.isDark)
   const activeModel = useAppState((state) => state.activeModels[0])
   const {
     serverHost,
@@ -76,20 +63,20 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     apiKey,
     defaultModelLocalApiServer,
   } = useLocalApiServer()
-  const configuredWorkspace = useCodeTerminalStore((state) => state.workspace)
-  const setConfiguredWorkspace = useCodeTerminalStore(
+  const enabled = useHermesAgentStore((state) => state.enabled)
+  const configuredModel = useHermesAgentStore((state) => state.model)
+  const configuredWorkspace = useHermesAgentStore((state) => state.workspace)
+  const setConfiguredWorkspace = useHermesAgentStore(
     (state) => state.setWorkspace
   )
-  const customOpenCodePath = useLaunchSettings(
-    (state) => state.customPaths.opencode
+  const customHermesPath = useLaunchSettings(
+    (state) => state.customPaths.hermes
   )
-
   const desktopTerminalAvailable =
     isPlatformTauri() && !isIOS() && !isAndroid()
   const {
     containerRef,
     terminalRef,
-    generationRef,
     statusRef,
     attached,
     status,
@@ -99,23 +86,20 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     replayUnavailable,
     setReplayUnavailable,
   } = useEmbeddedTerminal({
-    terminalId: 'code',
+    terminalId: 'hermes',
     visible,
     available: desktopTerminalAvailable,
   })
   const bootstrappedRef = useRef(false)
-
+  const sessionAppearanceRef = useRef<'dark' | 'light' | undefined>(undefined)
   const [defaultWorkspace, setDefaultWorkspace] = useState<string>()
-  const [readiness, setReadiness] = useState<OpenCodeReadiness>()
+  const [readiness, setReadiness] = useState<HermesReadiness>()
   const [provisionPhase, setProvisionPhase] = useState<OpenCodeProvisionPhase>()
   const [readinessRefresh, setReadinessRefresh] = useState(0)
   const [busy, setBusy] = useState(false)
 
   const workspace = configuredWorkspace || defaultWorkspace
-  const hardware = useMemo(
-    () => evaluateCodeHardware(hardwareData),
-    [hardwareData]
-  )
+  const model = configuredModel ?? activeModel ?? defaultModelLocalApiServer?.model
 
   useEffect(() => {
     let cancelled = false
@@ -136,25 +120,22 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   }, [serviceHub, setError])
 
   useEffect(() => {
-    if (!attached || !hardwareReady || !hardware.supported || !desktopTerminalAvailable) {
-      return
-    }
+    if (!visible || !enabled || !attached || !desktopTerminalAvailable) return
     let cancelled = false
     const connectHost = serverHost === '0.0.0.0' ? '127.0.0.1' : serverHost
-    const base = `http://${connectHost}:${serverPort}`
-    const apiUrl = `${base}${apiPrefix}`
-    const model = activeModel ?? defaultModelLocalApiServer?.model
+    const apiUrl = `http://${connectHost}:${serverPort}${apiPrefix}`
 
     setReadiness(undefined)
     setProvisionPhase('checking')
     setBusy(true)
     setError(undefined)
-    void provisionOpenCode(
+    void provisionHermes(
       {
-        customPath: customOpenCodePath || undefined,
+        customPath: customHermesPath || undefined,
         apiUrl,
         model,
         apiKey: apiKey || undefined,
+        contextLength: 65_536,
         proxy: currentInstallerProxy(),
       },
       (phase) => {
@@ -177,34 +158,36 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       cancelled = true
     }
   }, [
-    attached,
     activeModel,
     apiKey,
     apiPrefix,
-    customOpenCodePath,
+    attached,
+    configuredModel,
+    customHermesPath,
     defaultModelLocalApiServer?.model,
     desktopTerminalAvailable,
-    hardware.supported,
-    hardwareReady,
+    enabled,
+    model,
     readinessRefresh,
     serverHost,
     serverPort,
     setError,
+    visible,
   ])
 
   const startSession = useCallback(async () => {
-    if (!workspace) throw new Error(t('code:workspaceUnavailable'))
+    if (!workspace) throw new Error('The Hermes workspace is unavailable.')
     const terminal = terminalRef.current
-    const rows = Math.max(2, terminal?.rows ?? 24)
-    const cols = Math.max(2, terminal?.cols ?? 80)
     const next = await spawnTerminal({
-      terminalId: 'code',
+      terminalId: 'hermes',
       cwd: workspace,
-      rows,
-      cols,
-      launch: 'open_code',
-      executable: customOpenCodePath || undefined,
+      rows: Math.max(2, terminal?.rows ?? 24),
+      cols: Math.max(2, terminal?.cols ?? 80),
+      launch: 'hermes',
+      executable: customHermesPath || undefined,
+      appearance: isDark ? 'dark' : 'light',
     })
+    sessionAppearanceRef.current = isDark ? 'dark' : 'light'
     updateStatus(next)
     if (next.cwd && next.cwd !== workspace) {
       setConfiguredWorkspace(next.cwd)
@@ -212,10 +195,10 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     setReplayUnavailable(false)
     terminal?.focus()
   }, [
-    customOpenCodePath,
+    customHermesPath,
+    isDark,
     setConfiguredWorkspace,
     setReplayUnavailable,
-    t,
     terminalRef,
     updateStatus,
     workspace,
@@ -224,17 +207,19 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   useEffect(() => {
     if (
       bootstrappedRef.current ||
+      !visible ||
+      !enabled ||
       !attached ||
-      !hardwareReady ||
-      !hardware.supported ||
       !readiness?.ready ||
       !workspace
     ) {
       return
     }
-
     bootstrappedRef.current = true
-    if (statusRef.current.phase === 'running' || statusRef.current.phase === 'stopping') {
+    if (
+      statusRef.current.phase === 'running' ||
+      statusRef.current.phase === 'stopping'
+    ) {
       return
     }
     setBusy(true)
@@ -247,12 +232,12 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       .finally(() => setBusy(false))
   }, [
     attached,
-    hardware.supported,
-    hardwareReady,
+    enabled,
     readiness?.ready,
     setError,
     startSession,
     statusRef,
+    visible,
     workspace,
   ])
 
@@ -260,7 +245,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     setBusy(true)
     setError(undefined)
     try {
-      updateStatus(await stopTerminal('code'))
+      updateStatus(await stopTerminal('hermes'))
     } catch (reason) {
       setError(String(reason))
     } finally {
@@ -268,30 +253,18 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     }
   }, [setError, updateStatus])
 
-  const toggleTokenSidebar = useCallback(() => {
-    const generation = generationRef.current
-    if (generation === 0 || statusRef.current.phase !== 'running') return
-    // OpenCode's session.sidebar.toggle action is bound to <leader>b by
-    // default; the default leader is Ctrl+X. Send the key chord through the
-    // native PTY so the embedded TUI remains the sole owner of sidebar state.
-    void writeTerminal('code', generation, Uint8Array.of(0x18, 0x62)).catch((reason) =>
-      setError(String(reason))
-    )
-    terminalRef.current?.focus()
-  }, [generationRef, setError, statusRef, terminalRef])
-
   const restart = useCallback(async () => {
     setBusy(true)
     setError(undefined)
     try {
-      if (statusRef.current.phase === 'running') await stopTerminal('code')
+      if (statusRef.current.phase === 'running') {
+        await stopTerminal('hermes')
+      }
       for (let attempt = 0; attempt < 100; attempt += 1) {
-        const current = await getTerminalStatus('code')
+        const current = await getTerminalStatus('hermes')
         updateStatus(current)
         if (current.phase !== 'running' && current.phase !== 'stopping') break
-        if (attempt === 99) {
-          throw new Error(t('code:stopTimeout'))
-        }
+        if (attempt === 99) throw new Error('Hermes did not stop in time.')
         await delay(50)
       }
       bootstrappedRef.current = true
@@ -301,40 +274,39 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     } finally {
       setBusy(false)
     }
-  }, [setError, startSession, statusRef, t, updateStatus])
+  }, [setError, startSession, statusRef, updateStatus])
 
   const running = status.phase === 'running' || status.phase === 'stopping'
   const workspaceChanged =
     running && Boolean(workspace) && status.cwd !== workspace
-  const configuredModel = activeModel ?? defaultModelLocalApiServer?.model
+  const appearanceChanged =
+    running &&
+    sessionAppearanceRef.current !== undefined &&
+    sessionAppearanceRef.current !== (isDark ? 'dark' : 'light')
   const setupState = !desktopTerminalAvailable
     ? 'desktop'
-    : !hardwareReady
-      ? 'checking'
-      : !hardware.supported
-        ? 'hardware'
+    : !enabled
+      ? 'disabled'
+      : !model
+        ? 'model'
         : !readiness
           ? 'checking'
           : readiness.ready
             ? undefined
-            : !configuredModel
-              ? 'model_unavailable'
-              : readiness.reason
+            : readiness.reason
 
   return (
     <section
       aria-hidden={!visible}
       className={cn(
         'absolute inset-0 flex min-h-0 flex-col bg-background',
-        visible
-          ? 'visible pointer-events-auto'
-          : 'invisible pointer-events-none'
+        visible ? 'visible pointer-events-auto' : 'invisible pointer-events-none'
       )}
     >
       <HeaderPage>
         <div className="flex min-w-0 items-center gap-2 pr-3">
-          <IconCode className="size-4.5 shrink-0 text-primary" />
-          <span className="font-medium">{t('common:code')}</span>
+          <IconSparkles className="size-4.5 shrink-0 text-primary" />
+          <span className="font-medium">Hermes</span>
           <span
             className={cn(
               'size-1.5 shrink-0 rounded-full',
@@ -344,28 +316,29 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
                   ? 'bg-amber-500'
                   : 'bg-muted-foreground/40'
             )}
-            aria-label={t(`code:status.${status.phase}`)}
+            aria-label={`Hermes is ${status.phase}`}
           />
+          <span className="truncate text-xs text-muted-foreground">
+            {model ?? 'No model configured'}
+          </span>
           <div className="ml-auto flex min-w-0 items-center gap-1.5">
             <AgentWorkspaceSelect
               workingDir={workspace}
               onChange={setConfiguredWorkspace}
             />
-            {(workspaceChanged || status.phase === 'exited') && (
+            {(workspaceChanged || appearanceChanged || status.phase === 'exited') && (
               <Button
                 size="sm"
                 variant="outline"
                 disabled={busy || !readiness?.ready}
                 onClick={() => void restart()}
               >
-                {busy ? (
-                  <IconLoader2 className="animate-spin" />
-                ) : (
-                  <IconRefresh />
-                )}
+                {busy ? <IconLoader2 className="animate-spin" /> : <IconRefresh />}
                 {workspaceChanged
-                  ? t('code:restartWorkspace')
-                  : t('code:restart')}
+                  ? 'Apply workspace'
+                  : appearanceChanged
+                    ? 'Apply theme'
+                    : 'Restart'}
               </Button>
             )}
             {running && (
@@ -373,19 +346,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
                 size="icon-sm"
                 variant="ghost"
                 disabled={busy || status.phase === 'stopping'}
-                aria-label={t('code:toggleTokenSidebar')}
-                title={t('code:toggleTokenSidebar')}
-                onClick={toggleTokenSidebar}
-              >
-                <IconLayoutSidebarRightCollapse />
-              </Button>
-            )}
-            {running && (
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                disabled={busy || status.phase === 'stopping'}
-                aria-label={t('code:stop')}
+                aria-label="Stop Hermes"
                 onClick={() => void stop()}
               >
                 <IconSquare />
@@ -398,7 +359,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       <div className="relative min-h-0 flex-1 border-t bg-background">
         <div
           ref={containerRef}
-          data-testid="code-terminal"
+          data-testid="hermes-terminal"
           className={cn(
             'absolute inset-0 overflow-hidden px-3 py-2 transition-opacity',
             status.phase === 'idle' && !busy ? 'opacity-0' : 'opacity-100'
@@ -408,7 +369,10 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
         {replayUnavailable && (
           <div className="absolute inset-x-3 top-3 z-10 flex items-center gap-2 rounded-md border border-amber-500/30 bg-background/95 px-3 py-2 text-xs text-amber-700 shadow-sm backdrop-blur dark:text-amber-300">
             <IconAlertTriangle className="shrink-0" />
-            <span>{t('code:replayUnavailable')}</span>
+            <span>
+              The prior terminal screen could not be replayed. The Hermes process
+              is still running.
+            </span>
           </div>
         )}
 
@@ -418,65 +382,49 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
               {setupState === 'checking' || busy ? (
                 <IconLoader2 className="mx-auto mb-4 size-7 animate-spin text-primary" />
               ) : (
-                <IconCode className="mx-auto mb-4 size-7 text-primary" />
+                <IconSparkles className="mx-auto mb-4 size-7 text-primary" />
               )}
-              <h1 className="text-base font-semibold">{t('code:title')}</h1>
+              <h1 className="text-base font-semibold">Hermes Agent</h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 {setupState === 'desktop'
-                  ? t('code:desktopOnly')
-                  : setupState === 'checking' || busy
-                    ? provisionPhase === 'installing'
-                      ? t('code:installing')
-                      : provisionPhase === 'configuring'
-                        ? t('code:configuring')
-                        : t('code:checking')
-                    : setupState === 'hardware'
-                      ? hardware.supported
-                        ? t('code:unsupportedHardware')
-                        : hardware.reason
-                      : setupState === 'model_unavailable'
-                        ? t('code:modelUnavailable')
+                  ? 'The embedded Hermes terminal is available in the desktop app.'
+                  : setupState === 'disabled'
+                    ? 'Enable Hermes and choose its model in Settings.'
+                    : setupState === 'model'
+                      ? 'Choose a model before launching Hermes.'
+                      : setupState === 'not_installed'
+                        ? 'Hermes is not installed yet.'
                         : setupState === 'wsl_only'
-                          ? t('code:wslOnly')
-                          : setupState === 'invalid_configuration'
-                            ? t('code:invalidConfiguration')
-                            : setupState === 'missing_configuration'
-                              ? t('code:missingConfiguration')
-                              : t('code:notInstalled')}
+                          ? 'A native Hermes installation is required for the Windows terminal.'
+                          : setupState === 'invalid_configuration' ||
+                              setupState === 'missing_configuration'
+                            ? 'Hermes needs its managed GChat provider configuration.'
+                            : provisionPhase === 'installing'
+                              ? 'Installing Hermes…'
+                              : provisionPhase === 'configuring'
+                                ? 'Connecting Hermes to GChat…'
+                                : 'Preparing Hermes…'}
               </p>
-              {!busy &&
-                setupState !== 'checking' &&
-                setupState !== 'hardware' &&
-                setupState !== 'desktop' && (
-                  <div className="mt-5 flex justify-center">
-                    <Button
-                      variant="outline"
-                      onClick={() => setReadinessRefresh((value) => value + 1)}
-                    >
-                      <IconRefresh />
-                      {t('code:checkAgain')}
-                    </Button>
-                  </div>
-                )}
+              {(setupState === 'disabled' || setupState === 'model') && (
+                <Button asChild size="sm" className="mt-4">
+                  <Link to={route.settings.hermes_agent}>Open Hermes settings</Link>
+                </Button>
+              )}
+              {error && (
+                <p className="mt-3 break-words text-xs text-destructive">{error}</p>
+              )}
+              {error && enabled && model && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setReadinessRefresh((value) => value + 1)}
+                >
+                  <IconRefresh />
+                  Retry
+                </Button>
+              )}
             </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="absolute inset-x-3 bottom-3 z-10 flex items-center gap-2 rounded-md border border-destructive/30 bg-background/95 px-3 py-2 text-xs text-destructive shadow-sm backdrop-blur">
-            <IconAlertTriangle className="shrink-0" />
-            <span className="min-w-0 flex-1 truncate">{error}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setError(undefined)
-                bootstrappedRef.current = false
-                setReadinessRefresh((value) => value + 1)
-              }}
-            >
-              {t('code:retry')}
-            </Button>
           </div>
         )}
       </div>

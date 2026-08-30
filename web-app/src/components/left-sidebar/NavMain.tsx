@@ -31,6 +31,7 @@ import {
   useChatAttachments,
 } from '@/hooks/useChatAttachments'
 import { useAgentRun } from '@/hooks/useAgentRun'
+import { useHermesAgentStore } from '@/stores/hermes-agent-store'
 import {
   cancelAgentTurn,
   resetAgentSession,
@@ -57,6 +58,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
   const setProjectDialogOpen = useProjectDialog((state) => state.setOpen)
   const { open: searchOpen, setOpen: setSearchOpen } = useSearchDialog()
   const [creatingConversation, setCreatingConversation] = useState(false)
+  const hermesEnabled = useHermesAgentStore((state) => state.enabled)
 
   const handleNewChat = async () => {
     if (creatingConversation) return
@@ -156,6 +158,20 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
+        {hermesEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname.startsWith('/hermes')}
+              className="data-[active=true]:bg-sidebar-foreground/15"
+            >
+              <Link to={route.hermes.index}>
+                <IconSparkles className="size-4 text-primary" />
+                <span>Hermes</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton
             asChild

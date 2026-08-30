@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SystemMonitorRouteImport } from './routes/system-monitor'
 import { Route as LogsRouteImport } from './routes/logs'
+import { Route as HermesRouteImport } from './routes/hermes'
 import { Route as CodeRouteImport } from './routes/code'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SkillsIndexRouteImport } from './routes/skills/index'
@@ -45,6 +46,11 @@ const SystemMonitorRoute = SystemMonitorRouteImport.update({
 const LogsRoute = LogsRouteImport.update({
   id: '/logs',
   path: '/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HermesRoute = HermesRouteImport.update({
+  id: '/hermes',
+  path: '/hermes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CodeRoute = CodeRouteImport.update({
@@ -177,6 +183,7 @@ const SettingsProvidersProviderNameRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/code': typeof CodeRoute
+  '/hermes': typeof HermesRoute
   '/logs': typeof LogsRoute
   '/system-monitor': typeof SystemMonitorRoute
   '/hub/$modelId': typeof HubModelIdRoute
@@ -206,6 +213,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/code': typeof CodeRoute
+  '/hermes': typeof HermesRoute
   '/logs': typeof LogsRoute
   '/system-monitor': typeof SystemMonitorRoute
   '/hub/$modelId': typeof HubModelIdRoute
@@ -236,6 +244,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/code': typeof CodeRoute
+  '/hermes': typeof HermesRoute
   '/logs': typeof LogsRoute
   '/system-monitor': typeof SystemMonitorRoute
   '/hub/$modelId': typeof HubModelIdRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/code'
+    | '/hermes'
     | '/logs'
     | '/system-monitor'
     | '/hub/$modelId'
@@ -296,6 +306,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/code'
+    | '/hermes'
     | '/logs'
     | '/system-monitor'
     | '/hub/$modelId'
@@ -325,6 +336,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/code'
+    | '/hermes'
     | '/logs'
     | '/system-monitor'
     | '/hub/$modelId'
@@ -355,6 +367,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CodeRoute: typeof CodeRoute
+  HermesRoute: typeof HermesRoute
   LogsRoute: typeof LogsRoute
   SystemMonitorRoute: typeof SystemMonitorRoute
   HubModelIdRoute: typeof HubModelIdRoute
@@ -396,6 +409,13 @@ declare module '@tanstack/react-router' {
       path: '/logs'
       fullPath: '/logs'
       preLoaderRoute: typeof LogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hermes': {
+      id: '/hermes'
+      path: '/hermes'
+      fullPath: '/hermes'
+      preLoaderRoute: typeof HermesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/code': {
@@ -579,6 +599,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CodeRoute: CodeRoute,
+  HermesRoute: HermesRoute,
   LogsRoute: LogsRoute,
   SystemMonitorRoute: SystemMonitorRoute,
   HubModelIdRoute: HubModelIdRoute,

@@ -247,6 +247,7 @@ describe('CodeTerminalHost', () => {
     fireEvent.click(toggle)
 
     expect(mocks.writeTerminal).toHaveBeenCalledWith(
+      'code',
       1,
       Uint8Array.of(0x18, 0x62)
     )

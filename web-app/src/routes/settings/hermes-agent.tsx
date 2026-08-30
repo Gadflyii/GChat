@@ -25,6 +25,7 @@ import ProvidersAvatar from '@/containers/ProvidersAvatar'
 import Capabilities from '@/containers/Capabilities'
 import { getModelDisplayName, isLocalProvider } from '@/lib/utils'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
+import { stopTerminal } from '@/services/terminal/tauri'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.settings.hermes_agent as any)({
@@ -51,7 +52,7 @@ function HermesAgentIntegration() {
   const { providers, selectedModel, selectedProvider, getProviderByName } =
     useModelProvider()
 
-  const { config, setModel, clearModel } = useHermesAgentModel()
+  const { config, setModel, setEnabled, clearModel } = useHermesAgentModel()
 
   const [isModelLoading, setIsModelLoading] = useState(false)
   const [configuredValues, setConfiguredValues] = useState<{
@@ -80,7 +81,7 @@ function HermesAgentIntegration() {
     }
   }, [config.model, availableModels, setModel])
 
-  const MIN_HERMES_CTX = 20000
+  const MIN_HERMES_CTX = 65_536
 
   const getModelCtxLen = (modelId: string): number => {
     for (const p of providers) {
@@ -235,6 +236,7 @@ function HermesAgentIntegration() {
         apiUrl: fullApiUrl,
         contextLength: effectiveCtx,
       })
+      setEnabled(true)
 
       toast.success(
         `Hermes Agent configured (ctx: ${effectiveCtx}). Run \`hermes\` in terminal.`,
@@ -310,6 +312,7 @@ function HermesAgentIntegration() {
                   size="sm"
                   variant="outline"
                   onClick={async () => {
+                    await stopTerminal('hermes').catch(() => undefined)
                     clearModel()
                     setConfiguredValues(null)
                     try {

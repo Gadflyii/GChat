@@ -1394,7 +1394,7 @@ custom_providers: []
 /// (mirroring Hermes' own official desktop app, which hit and fixed this
 /// exact gap) avoids ever writing to a config file the `hermes` CLI won't
 /// read.
-fn resolve_hermes_dir() -> Result<std::path::PathBuf, String> {
+pub(crate) fn resolve_hermes_dir() -> Result<std::path::PathBuf, String> {
     if cfg!(windows) {
         if let Some(home) = read_windows_user_env("HERMES_HOME").filter(|s| !s.is_empty()) {
             return Ok(std::path::PathBuf::from(home));
@@ -2036,6 +2036,14 @@ fn apply_login_path(cmd: &mut std::process::Command) {
 #[cfg(windows)]
 fn apply_login_path(_cmd: &mut std::process::Command) {}
 
+/// PATH used by long-lived embedded terminal shells. Unlike `apply_*`, this
+/// can be passed to portable-pty's `CommandBuilder` and sees tools installed
+/// after the desktop process started.
+#[cfg(not(windows))]
+pub(crate) fn agent_runtime_path() -> Option<String> {
+    login_shell_path()
+}
+
 /// Re-read the persisted Windows PATH (User + Machine) from the registry and
 /// merge it with the live process PATH. The GUI snapshots PATH once at startup
 /// via `fix_path_env::fix()`, so a Node/npm installed after launch is invisible
@@ -2108,6 +2116,11 @@ fn refresh_windows_path() -> Option<String> {
     } else {
         Some(merged.join(";"))
     }
+}
+
+#[cfg(windows)]
+pub(crate) fn agent_runtime_path() -> Option<String> {
+    refresh_windows_path()
 }
 
 /// Apply the freshly-read registry PATH to a spawned command (Windows only).

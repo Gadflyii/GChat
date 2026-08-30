@@ -32,6 +32,9 @@ export const route = {
   code: {
     index: '/code/',
   },
+  hermes: {
+    index: '/hermes/',
+  },
   agents: {
     index: '/agents/',
   },

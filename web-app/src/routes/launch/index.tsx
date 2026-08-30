@@ -32,6 +32,7 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useLaunchStore } from '@/stores/launch-store'
 import { useLaunchSettings } from '@/stores/launch-settings-store'
+import { useHermesAgentStore } from '@/stores/hermes-agent-store'
 import { cn } from '@/lib/utils'
 import { createSafeUnlisten } from '@/lib/tauriEvent'
 
@@ -674,6 +675,8 @@ function LaunchPage() {
             // configure 64K (the minimum it accepts).
             contextLength: 65536,
           })
+          useHermesAgentStore.getState().setModel(model ?? null)
+          useHermesAgentStore.getState().setEnabled(true)
           break
         case 'pi':
           await invoke('configure_pi', { apiUrl, model, apiKey: key })

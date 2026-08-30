@@ -52,6 +52,8 @@ export const localStorageKey = {
   // Explicit working directory for the persistent Code-tab PTY. The running
   // session never changes directory silently; applying a new value restarts it.
   codeTerminal: 'code-terminal',
+  // Hermes' enabled state, selected model, and independent terminal workspace.
+  hermesAgent: 'hermes-agent-integration',
 }
 
 export const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24

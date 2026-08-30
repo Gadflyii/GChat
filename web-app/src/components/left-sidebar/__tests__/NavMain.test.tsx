@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocation } from '@tanstack/react-router'
 import { NavMain } from '../NavMain'
 
+const hermesState = vi.hoisted(() => ({ enabled: false }))
+
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
@@ -63,8 +65,14 @@ vi.mock('@/hooks/useThreadManagement', () => ({
   useThreadManagement: () => ({ addFolder: vi.fn() }),
 }))
 
+vi.mock('@/stores/hermes-agent-store', () => ({
+  useHermesAgentStore: (selector: (state: typeof hermesState) => unknown) =>
+    selector(hermesState),
+}))
+
 describe('NavMain', () => {
   beforeEach(() => {
+    hermesState.enabled = false
     vi.mocked(useLocation).mockReturnValue({ pathname: '/' } as never)
   })
 
@@ -129,6 +137,15 @@ describe('NavMain', () => {
     rerender(<NavMain mode="agent" />)
 
     expect(screen.getByText('Agent Studio')).toBeInTheDocument()
+  })
+
+  it('shows Hermes only after its integration is enabled', () => {
+    const { rerender } = render(<NavMain mode="chat" />)
+    expect(screen.queryByText('Hermes')).not.toBeInTheDocument()
+
+    hermesState.enabled = true
+    rerender(<NavMain mode="chat" />)
+    expect(screen.getByText('Hermes')).toBeInTheDocument()
   })
 
   it('labels the new conversation action for the active mode', () => {

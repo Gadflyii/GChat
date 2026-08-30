@@ -9,12 +9,14 @@ import {
   IconEdit,
   IconMessage,
   IconRefresh,
-  IconSparkles,
   IconTrash,
   IconUpload,
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
-import HeaderPage from '@/containers/HeaderPage'
+import {
+  AgentStudioHeader,
+  type AgentStudioSection,
+} from '@/containers/AgentStudioHeader'
 import { AgentSkillCreateDialog } from '@/containers/AgentSkillCreateDialog'
 import { AgentSkillEditDialog } from '@/containers/AgentSkillEditDialog'
 import { AgentSkillUploadDialog } from '@/containers/AgentSkillUploadDialog'
@@ -100,25 +102,22 @@ export function SkillsPage() {
     }
   }
 
+  const selectStudioSection = (section: AgentStudioSection) => {
+    if (section === 'skills') return
+    void navigate({
+      to: route.agents.index,
+      search: { view: section },
+    })
+  }
+
   return (
     <div className="grid h-svh w-full grid-cols-[minmax(260px,360px)_1fr] grid-rows-[auto_minmax(0,1fr)]">
       <div className="col-span-2 min-w-0">
-        <HeaderPage>
-          <div className="flex w-full items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void navigate({ to: route.agents.index })}
-              >
-                <IconSparkles /> Agent Studio
-              </Button>
-              <span className="text-muted-foreground">/</span>
-              <span className="font-studio text-base font-medium">
-                {t('common:skills')}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
+        <AgentStudioHeader
+          active="skills"
+          onSelect={selectStudioSection}
+          actions={
+            <>
               <Button
                 size="icon-sm"
                 variant="ghost"
@@ -146,9 +145,9 @@ export function SkillsPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
-          </div>
-        </HeaderPage>
+            </>
+          }
+        />
       </div>
 
       <div className="min-h-0 overflow-y-auto p-3">

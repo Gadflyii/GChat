@@ -162,6 +162,7 @@ pub fn run() {
         core::terminal::terminal_set_flow,
         core::terminal::terminal_stop,
         core::terminal::opencode_readiness,
+        core::terminal::hermes_readiness,
         // Server commands
         core::server::commands::start_server,
         core::server::commands::stop_server,

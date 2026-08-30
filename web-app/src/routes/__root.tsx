@@ -32,6 +32,7 @@ import { ServiceHubProvider } from '@/providers/ServiceHubProvider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LeftSidebar } from '@/components/left-sidebar'
 import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
+import { HermesTerminalHost } from '@/containers/HermesTerminalHost'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -47,6 +48,7 @@ export const Route = createRootRoute({
 const AppLayout = () => {
   const { pathname } = useLocation()
   const codeVisible = pathname.startsWith('/code')
+  const hermesVisible = pathname.startsWith('/hermes')
   const { showOnboardingModelReminder } = useOnboardingModelReminder()
   const isLeftPanelOpen = useLeftPanel((state) => state.open)
   const setLeftPanel = useLeftPanel((state) => state.setLeftPanel)
@@ -73,6 +75,7 @@ const AppLayout = () => {
           <div className="relative bg-neutral-50 dark:bg-background size-full">
             <Outlet />
             <CodeTerminalHost visible={codeVisible} />
+            <HermesTerminalHost visible={hermesVisible} />
           </div>
         </SidebarInset>
 

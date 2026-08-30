@@ -17,6 +17,7 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'adopt_root_ginfer_models',
   'check_for_app_updates',
   'get_local_http',
+  'hermes_readiness',
   'is_update_available',
   'opencode_readiness',
   'post_local_http',

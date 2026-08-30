@@ -1,4 +1,8 @@
-export type TerminalLaunch = 'shell' | 'open_code'
+export type TerminalId = 'code' | 'hermes'
+
+export type TerminalLaunch = 'shell' | 'open_code' | 'hermes'
+
+export type TerminalAppearance = 'dark' | 'light'
 
 export type TerminalPhase = 'idle' | 'running' | 'stopping' | 'exited'
 
@@ -75,10 +79,18 @@ export type OpenCodeProvisionRequest = {
   }
 }
 
+export type HermesReadiness = OpenCodeReadiness
+
+export type HermesProvisionRequest = OpenCodeProvisionRequest & {
+  contextLength?: number
+}
+
 export type TerminalSpawnRequest = {
+  terminalId: TerminalId
   cwd: string
   rows: number
   cols: number
   launch: TerminalLaunch
   executable?: string
+  appearance?: TerminalAppearance
 }

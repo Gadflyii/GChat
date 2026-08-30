@@ -166,6 +166,35 @@ describe('SkillsPage', () => {
     expect(screen.getAllByText('common:writeSkillInstructions')).toHaveLength(2)
   })
 
+  it('keeps skill actions immediately left of the shared Studio navigation', () => {
+    render(<SkillsPage />)
+
+    const navigation = screen.getByRole('navigation', {
+      name: 'Agent Studio sections',
+    })
+    expect(
+      within(navigation).getByRole('button', { name: 'Agents & flows' })
+    ).toBeInTheDocument()
+    expect(
+      within(navigation).getByRole('button', { name: 'Templates' })
+    ).toBeInTheDocument()
+    expect(
+      within(navigation).getByRole('button', { name: 'Skills' })
+    ).toBeInTheDocument()
+    expect(within(navigation).getByRole('button', { name: 'Runs' })).toBeInTheDocument()
+
+    const create = screen.getByRole('button', { name: 'common:createNewSkill' })
+    expect(
+      create.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Templates' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/agents/',
+      search: { view: 'templates' },
+    })
+  })
+
   it('shows modular skill details without badges and confirms uninstall', () => {
     render(<SkillsPage />)
 

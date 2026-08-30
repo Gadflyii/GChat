@@ -1,0 +1,33 @@
+name: gchat-light
+description: GChat light palette for the embedded Hermes terminal
+
+colors:
+  banner_border: "#0B6B6B"
+  banner_title: "#0A0C0F"
+  banner_accent: "#0B6B6B"
+  banner_dim: "#5A6068"
+  banner_text: "#252A30"
+  ui_accent: "#0B6B6B"
+  ui_label: "#075858"
+  ui_ok: "#147A55"
+  ui_error: "#B4232C"
+  ui_warn: "#716D00"
+  prompt: "#0A0C0F"
+  input_rule: "#0B6B6B"
+  response_border: "#0B6B6B"
+  session_label: "#075858"
+  session_border: "#727981"
+  status_bar_bg: "#E9F4F3"
+  voice_status_bg: "#E9F4F3"
+  selection_bg: "#B9E1DE"
+  completion_menu_bg: "#F1F6F6"
+  completion_menu_current_bg: "#CDE9E7"
+  completion_menu_meta_bg: "#F1F6F6"
+  completion_menu_meta_current_bg: "#CDE9E7"
+
+branding:
+  agent_name: "Hermes Agent"
+  response_label: " Hermes "
+  prompt_symbol: "❯"
+
+tool_prefix: "▏"

@@ -21,7 +21,10 @@ const definitionState = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: () => (config: object) => config,
+  createFileRoute: () => (config: object) => ({
+    ...config,
+    useSearch: () => ({}),
+  }),
   useNavigate: () => navigate,
 }))
 
