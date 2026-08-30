@@ -1,12 +1,11 @@
-//! Direct HTTP client to the local `ginfer-serve` backend.
+//! Direct OpenAI-compatible HTTP client to the local `ginfer-serve` backend.
 
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use futures_util::StreamExt;
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{Map, Value};
 use tauri_plugin_ginfer::state::GinferState;
 use thiserror::Error;
@@ -14,70 +13,54 @@ use tokio_util::sync::CancellationToken;
 
 use crate::core::server::context_expansion::is_context_limit_error;
 
-use super::model_profile::AgentModelProfile;
+use super::definitions::AgentReasoningEffort;
+use super::prompt::ITERATION_ONE_TOOLS;
 use super::token_budget::COMPLETION_MAX_TOKENS;
 use super::types::ToolCallPayload;
 
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 const ERROR_DETAIL_MAX_LEN: usize = 300;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LlamaBackend {
-    Ginfer,
-}
-
-impl LlamaBackend {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Ginfer => "ginfer",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LlamaSessionTarget {
+pub struct GinferSessionTarget {
     pub port: i32,
     pub api_key: String,
     pub model_id: String,
     pub has_vision: bool,
-    pub backend: LlamaBackend,
 }
 
 #[async_trait]
 pub trait ContextExpansionHook: Send + Sync {
     async fn expand(
         &self,
-        target: &LlamaSessionTarget,
+        target: &GinferSessionTarget,
         cancellation: &CancellationToken,
-    ) -> Result<LlamaSessionTarget, String>;
+    ) -> Result<GinferSessionTarget, String>;
 }
 
 #[derive(Debug, Clone)]
 pub struct CompletionRequest {
     pub prompt: String,
-    pub grammar: Option<String>,
-    pub slot_id: Option<i32>,
+    pub reasoning_effort: Option<AgentReasoningEffort>,
     pub max_tokens: u32,
     pub temperature: f32,
     pub top_p: f32,
     pub top_k: i32,
-    pub repeat_penalty: f32,
-    pub repeat_last_n: i32,
     pub stop: Vec<String>,
 }
 
 impl CompletionRequest {
-    pub fn tool_call(prompt: impl Into<String>, grammar: impl Into<String>, slot_id: i32) -> Self {
+    pub fn tool_call(
+        prompt: impl Into<String>,
+        reasoning_effort: Option<AgentReasoningEffort>,
+    ) -> Self {
         Self {
             prompt: prompt.into(),
-            grammar: Some(grammar.into()),
-            slot_id: Some(slot_id),
+            reasoning_effort,
             max_tokens: COMPLETION_MAX_TOKENS,
             temperature: 0.2,
             top_p: 0.95,
             top_k: 40,
-            repeat_penalty: 1.1,
-            repeat_last_n: 256,
             stop: Vec::new(),
         }
     }
@@ -99,15 +82,7 @@ pub struct CompletionResult {
     pub truncated: bool,
     pub timing: CompletionTiming,
     pub cache_hit_tokens: f64,
-    pub slot_id: i32,
     pub model_id: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StreamChunk {
-    pub delta: String,
-    pub reasoning_delta: String,
-    pub done: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,7 +92,7 @@ pub struct ParsedToolCalls {
 }
 
 #[derive(Debug, Error)]
-pub enum LlamaClientError {
+pub enum GinferClientError {
     #[error("no active ginfer session for model '{0}'")]
     SessionNotFound(String),
     #[error("ginfer-serve request was cancelled")]
@@ -132,69 +107,85 @@ pub enum LlamaClientError {
     InvalidResponse(String),
     #[error("invalid tool-call completion: {0}")]
     ToolCallParse(String),
-    #[error("stream consumer failed: {0}")]
-    StreamConsumer(String),
-}
-
-#[derive(Debug, Serialize)]
-struct CompletionPayload<'a> {
-    prompt: &'a str,
-    stream: bool,
-    cache_prompt: bool,
-    temperature: f32,
-    top_p: f32,
-    top_k: i32,
-    n_predict: u32,
-    repeat_penalty: f32,
-    repeat_last_n: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    grammar: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    stop: Option<&'a [String]>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    slot_id: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id_slot: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 struct CompletionEnvelope {
     #[serde(default)]
-    content: String,
+    choices: Vec<CompletionChoice>,
     #[serde(default)]
-    reasoning_content: String,
+    usage: CompletionUsage,
     #[serde(default)]
-    stop: bool,
-    #[serde(default)]
-    truncated: bool,
-    #[serde(default)]
-    timings: Value,
-    #[serde(default)]
-    tokens_evaluated: Value,
-    #[serde(default)]
-    tokens_predicted: Value,
-    #[serde(default)]
-    tokens_cached: Value,
-    #[serde(default)]
-    slot_id: Value,
-    #[serde(default)]
-    id_slot: Value,
+    x_ginfer: GinferMetrics,
     #[serde(default)]
     model: Option<String>,
 }
 
-pub struct LlamaServerClient {
+#[derive(Debug, Default, Deserialize)]
+struct CompletionChoice {
+    #[serde(default)]
+    message: CompletionMessage,
+    #[serde(default)]
+    finish_reason: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CompletionMessage {
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    reasoning_content: String,
+    #[serde(default)]
+    tool_calls: Vec<OpenAiToolCall>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiToolCall {
+    function: OpenAiFunctionCall,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiFunctionCall {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CompletionUsage {
+    #[serde(default)]
+    completion_tokens: f64,
+    #[serde(default)]
+    prompt_tokens_details: PromptTokenDetails,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PromptTokenDetails {
+    #[serde(default)]
+    cached_tokens: f64,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct GinferMetrics {
+    #[serde(default)]
+    computed_prefill_tokens: f64,
+    #[serde(default)]
+    prefill_seconds: f64,
+    #[serde(default)]
+    decode_seconds: f64,
+}
+
+pub struct GinferClient {
     client: reqwest::Client,
-    target: RwLock<LlamaSessionTarget>,
+    target: RwLock<GinferSessionTarget>,
     context_expansion: Option<Arc<dyn ContextExpansionHook>>,
 }
 
-impl LlamaServerClient {
-    pub fn new(target: &LlamaSessionTarget) -> Result<Self, LlamaClientError> {
+impl GinferClient {
+    pub fn new(target: &GinferSessionTarget) -> Result<Self, GinferClientError> {
         let client = reqwest::Client::builder()
             .timeout(DEFAULT_REQUEST_TIMEOUT)
             .build()
-            .map_err(|error| LlamaClientError::Transport(error.to_string()))?;
+            .map_err(|error| GinferClientError::Transport(error.to_string()))?;
         Ok(Self {
             client,
             target: RwLock::new(target.clone()),
@@ -207,70 +198,89 @@ impl LlamaServerClient {
         self
     }
 
-    pub fn retarget(&self, target: &LlamaSessionTarget) {
-        *self.target.write().expect("llama target lock poisoned") = target.clone();
+    pub fn retarget(&self, target: &GinferSessionTarget) {
+        *self.target.write().expect("ginfer target lock poisoned") = target.clone();
     }
 
-    pub fn target(&self) -> LlamaSessionTarget {
+    pub fn target(&self) -> GinferSessionTarget {
         self.target
             .read()
-            .expect("llama target lock poisoned")
+            .expect("ginfer target lock poisoned")
             .clone()
     }
 
     pub async fn fetch_context_window(
         &self,
         cancellation: &CancellationToken,
-    ) -> Result<Option<usize>, LlamaClientError> {
-        let props = self.fetch_props(cancellation).await?;
-        Ok(read_context_window(&props))
+    ) -> Result<Option<usize>, GinferClientError> {
+        let model = self.fetch_model(cancellation).await?;
+        Ok(read_context_window(&model))
     }
 
-    pub async fn fetch_props(
+    pub async fn fetch_model(
         &self,
         cancellation: &CancellationToken,
-    ) -> Result<Value, LlamaClientError> {
+    ) -> Result<Value, GinferClientError> {
         let target = self.target();
         let mut request = self
             .client
-            .get(format!("http://127.0.0.1:{}/props", target.port));
+            .get(format!("http://127.0.0.1:{}/v1/models", target.port));
         if !target.api_key.is_empty() {
             request = request.header(AUTHORIZATION, format!("Bearer {}", target.api_key));
         }
         let response = tokio::select! {
-            _ = cancellation.cancelled() => return Err(LlamaClientError::Cancelled),
+            _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
             result = request.send() => {
-                result.map_err(|error| LlamaClientError::Transport(error.to_string()))?
+                result.map_err(|error| GinferClientError::Transport(error.to_string()))?
             }
         };
         let status = response.status();
         let bytes = response
             .bytes()
             .await
-            .map_err(|error| LlamaClientError::Transport(error.to_string()))?;
+            .map_err(|error| GinferClientError::Transport(error.to_string()))?;
         if !status.is_success() {
-            return Err(LlamaClientError::Http {
+            return Err(GinferClientError::Http {
                 status: status.as_u16(),
                 detail: extract_error_detail(&String::from_utf8_lossy(&bytes)),
             });
         }
-        serde_json::from_slice(&bytes)
-            .map_err(|error| LlamaClientError::InvalidResponse(error.to_string()))
+        let payload: Value = serde_json::from_slice(&bytes)
+            .map_err(|error| GinferClientError::InvalidResponse(error.to_string()))?;
+        payload
+            .get("data")
+            .and_then(Value::as_array)
+            .and_then(|models| {
+                models.iter().find(|model| {
+                    model
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| model_ids_match(id, &target.model_id))
+                })
+            })
+            .cloned()
+            .ok_or_else(|| {
+                GinferClientError::InvalidResponse(format!(
+                    "GInfer /v1/models did not advertise `{}`",
+                    target.model_id
+                ))
+            })
     }
 
     pub async fn describe_images(
         &self,
         prompt: &str,
         images: &[(String, String)],
+        reasoning_effort: Option<AgentReasoningEffort>,
         cancellation: &CancellationToken,
-    ) -> Result<String, LlamaClientError> {
+    ) -> Result<CompletionResult, GinferClientError> {
         let target = self.target();
         if !target.has_vision {
-            return Err(LlamaClientError::InvalidResponse(
+            return Err(GinferClientError::InvalidResponse(
                 "active ginfer session is not vision-capable".into(),
             ));
         }
-        let payload = vision_request_payload(&target.model_id, prompt, images);
+        let payload = vision_request_payload(&target.model_id, prompt, images, reasoning_effort);
         let mut request = self
             .client
             .post(format!(
@@ -284,192 +294,84 @@ impl LlamaServerClient {
             request = request.header(AUTHORIZATION, format!("Bearer {}", target.api_key));
         }
         let response = tokio::select! {
-            _ = cancellation.cancelled() => return Err(LlamaClientError::Cancelled),
+            _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
             result = request.send() => {
-                result.map_err(|error| LlamaClientError::Transport(error.to_string()))?
+                result.map_err(|error| GinferClientError::Transport(error.to_string()))?
             }
         };
         let status = response.status();
         let bytes = tokio::select! {
-            _ = cancellation.cancelled() => return Err(LlamaClientError::Cancelled),
+            _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
             result = response.bytes() => {
-                result.map_err(|error| LlamaClientError::Transport(error.to_string()))?
+                result.map_err(|error| GinferClientError::Transport(error.to_string()))?
             }
         };
         if !status.is_success() {
-            return Err(LlamaClientError::Http {
+            return Err(GinferClientError::Http {
                 status: status.as_u16(),
                 detail: extract_error_detail(&String::from_utf8_lossy(&bytes)),
             });
         }
-        let value: Value = serde_json::from_slice(&bytes)
-            .map_err(|error| LlamaClientError::InvalidResponse(error.to_string()))?;
-        value
-            .pointer("/choices/0/message/content")
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .map(str::to_owned)
-            .ok_or_else(|| {
-                LlamaClientError::InvalidResponse(
-                    "vision response did not contain message content".into(),
-                )
-            })
+        let payload: CompletionEnvelope = serde_json::from_slice(&bytes)
+            .map_err(|error| GinferClientError::InvalidResponse(error.to_string()))?;
+        let completion = normalize_completion(payload)?;
+        if completion.content.trim().is_empty() {
+            return Err(GinferClientError::InvalidResponse(
+                "vision response did not contain message content".into(),
+            ));
+        }
+        Ok(completion)
     }
 
     pub async fn complete(
         &self,
         request: &CompletionRequest,
         cancellation: &CancellationToken,
-    ) -> Result<CompletionResult, LlamaClientError> {
-        let response = self.send(request, false, cancellation).await?;
+    ) -> Result<CompletionResult, GinferClientError> {
+        let response = self.send(request, cancellation).await?;
         let payload = tokio::select! {
-            _ = cancellation.cancelled() => return Err(LlamaClientError::Cancelled),
+            _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
             result = response.json::<CompletionEnvelope>() => {
-                result.map_err(|error| LlamaClientError::InvalidResponse(error.to_string()))?
+                result.map_err(|error| GinferClientError::InvalidResponse(error.to_string()))?
             }
         };
-        Ok(normalize_completion(payload))
-    }
-
-    pub async fn complete_stream<F>(
-        &self,
-        request: &CompletionRequest,
-        cancellation: &CancellationToken,
-        mut on_chunk: F,
-    ) -> Result<CompletionResult, LlamaClientError>
-    where
-        F: FnMut(StreamChunk) -> Result<(), String>,
-    {
-        let response = self.send(request, true, cancellation).await?;
-        let mut stream = response.bytes_stream();
-        let mut buffer = String::new();
-        let mut pending_utf8 = Vec::new();
-        let mut content = String::new();
-        let mut reasoning = String::new();
-        let mut final_result = CompletionResult {
-            slot_id: request.slot_id.unwrap_or(-1),
-            ..CompletionResult::default()
-        };
-
-        loop {
-            let next = tokio::select! {
-                _ = cancellation.cancelled() => return Err(LlamaClientError::Cancelled),
-                item = stream.next() => item,
-            };
-            let Some(bytes) = next else {
-                break;
-            };
-            let bytes = bytes.map_err(|error| LlamaClientError::Transport(error.to_string()))?;
-            pending_utf8.extend_from_slice(&bytes);
-            match std::str::from_utf8(&pending_utf8) {
-                Ok(text) => {
-                    buffer.push_str(text);
-                    pending_utf8.clear();
-                }
-                Err(error) if error.error_len().is_none() => continue,
-                Err(error) => {
-                    return Err(LlamaClientError::InvalidResponse(error.to_string()));
-                }
-            }
-
-            for event in drain_sse_events(&mut buffer) {
-                let Some(payload) = parse_sse_event(&event) else {
-                    continue;
-                };
-                let delta = payload
-                    .get("content")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned();
-                let reasoning_delta = payload
-                    .get("reasoning_content")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_owned();
-                if !delta.is_empty() || !reasoning_delta.is_empty() {
-                    content.push_str(&delta);
-                    reasoning.push_str(&reasoning_delta);
-                    on_chunk(StreamChunk {
-                        delta,
-                        reasoning_delta,
-                        done: false,
-                    })
-                    .map_err(LlamaClientError::StreamConsumer)?;
-                }
-                if payload.get("stop").and_then(Value::as_bool) == Some(true) {
-                    let envelope: CompletionEnvelope = serde_json::from_value(payload)
-                        .map_err(|error| LlamaClientError::InvalidResponse(error.to_string()))?;
-                    final_result = normalize_completion(envelope);
-                    if final_result.content.is_empty() {
-                        final_result.content.clone_from(&content);
-                    }
-                    if final_result.reasoning_content.is_empty() {
-                        final_result.reasoning_content.clone_from(&reasoning);
-                    }
-                    on_chunk(StreamChunk {
-                        delta: String::new(),
-                        reasoning_delta: String::new(),
-                        done: true,
-                    })
-                    .map_err(LlamaClientError::StreamConsumer)?;
-                }
-            }
-        }
-        if !pending_utf8.is_empty() {
-            return Err(LlamaClientError::InvalidResponse(
-                "stream ended inside a UTF-8 code point".into(),
-            ));
-        }
-
-        if final_result.content.is_empty() {
-            final_result.content = content;
-        }
-        if final_result.reasoning_content.is_empty() {
-            final_result.reasoning_content = reasoning;
-        }
-        Ok(final_result)
+        normalize_completion(payload)
     }
 
     async fn send(
         &self,
         request: &CompletionRequest,
-        stream: bool,
         cancellation: &CancellationToken,
-    ) -> Result<reqwest::Response, LlamaClientError> {
+    ) -> Result<reqwest::Response, GinferClientError> {
         let target = self.target();
-        match self
-            .send_to_target(&target, request, stream, cancellation)
-            .await
-        {
-            Err(LlamaClientError::Http { status, detail })
+        match self.send_to_target(&target, request, cancellation).await {
+            Err(GinferClientError::Http { status, detail })
                 if is_context_limit_error(status, &detail) && self.context_expansion.is_some() =>
             {
                 let hook = self.context_expansion.as_ref().unwrap();
                 let replacement = match hook.expand(&target, cancellation).await {
                     Ok(replacement) => replacement,
                     Err(_) if cancellation.is_cancelled() => {
-                        return Err(LlamaClientError::Cancelled);
+                        return Err(GinferClientError::Cancelled);
                     }
-                    Err(error) => return Err(LlamaClientError::Transport(error)),
+                    Err(error) => return Err(GinferClientError::Transport(error)),
                 };
-                if replacement.backend != target.backend
-                    || !model_ids_match(&replacement.model_id, &target.model_id)
-                {
-                    return Err(LlamaClientError::Transport(
-                        "Context expansion returned a different model or backend".into(),
+                if !model_ids_match(&replacement.model_id, &target.model_id) {
+                    return Err(GinferClientError::Transport(
+                        "Context expansion returned a different model".into(),
                     ));
                 }
                 self.retarget(&replacement);
                 match self.fetch_context_window(cancellation).await {
-                    Err(LlamaClientError::Cancelled) => {
-                        return Err(LlamaClientError::Cancelled);
+                    Err(GinferClientError::Cancelled) => {
+                        return Err(GinferClientError::Cancelled);
                     }
                     Err(error) => {
                         log::warn!("Agent context profile refresh failed after expansion: {error}");
                     }
                     Ok(_) => {}
                 }
-                self.send_to_target(&replacement, request, stream, cancellation)
+                self.send_to_target(&replacement, request, cancellation)
                     .await
             }
             result => result,
@@ -478,46 +380,27 @@ impl LlamaServerClient {
 
     async fn send_to_target(
         &self,
-        target: &LlamaSessionTarget,
+        target: &GinferSessionTarget,
         request: &CompletionRequest,
-        stream: bool,
         cancellation: &CancellationToken,
-    ) -> Result<reqwest::Response, LlamaClientError> {
-        let payload = CompletionPayload {
-            prompt: &request.prompt,
-            stream,
-            cache_prompt: true,
-            temperature: request.temperature,
-            top_p: request.top_p,
-            top_k: request.top_k,
-            n_predict: request.max_tokens,
-            repeat_penalty: request.repeat_penalty,
-            repeat_last_n: request.repeat_last_n,
-            grammar: request.grammar.as_deref(),
-            stop: (!request.stop.is_empty()).then_some(request.stop.as_slice()),
-            slot_id: request.slot_id,
-            id_slot: request.slot_id,
-        };
+    ) -> Result<reqwest::Response, GinferClientError> {
+        let payload = completion_request_payload(&target.model_id, request);
         let mut builder = self
             .client
-            .post(format!("http://127.0.0.1:{}/completion", target.port))
+            .post(format!(
+                "http://127.0.0.1:{}/v1/chat/completions",
+                target.port
+            ))
             .header(CONTENT_TYPE, "application/json")
-            .header(
-                ACCEPT,
-                if stream {
-                    "text/event-stream"
-                } else {
-                    "application/json"
-                },
-            )
+            .header(ACCEPT, "application/json")
             .json(&payload);
         if !target.api_key.is_empty() {
             builder = builder.header(AUTHORIZATION, format!("Bearer {}", target.api_key));
         }
         let response = tokio::select! {
-            _ = cancellation.cancelled() => return Err(LlamaClientError::Cancelled),
+            _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
             result = builder.send() => {
-                result.map_err(|error| LlamaClientError::Transport(error.to_string()))?
+                result.map_err(|error| GinferClientError::Transport(error.to_string()))?
             }
         };
         if response.status().is_success() {
@@ -525,14 +408,77 @@ impl LlamaServerClient {
         }
         let status = response.status().as_u16();
         let body = response.text().await.unwrap_or_default();
-        Err(LlamaClientError::Http {
+        Err(GinferClientError::Http {
             status,
             detail: extract_error_detail(&body),
         })
     }
 }
 
-fn vision_request_payload(model_id: &str, prompt: &str, images: &[(String, String)]) -> Value {
+fn completion_request_payload(model_id: &str, request: &CompletionRequest) -> Value {
+    let tools = ITERATION_ONE_TOOLS
+        .iter()
+        .map(|descriptor| {
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": wire_tool_name(descriptor.name),
+                    "description": format!("Agent tool `{}`: {}", descriptor.name, descriptor.summary),
+                    "parameters": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "strict": false
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut payload = serde_json::json!({
+        "model": model_id,
+        "messages": [{"role": "user", "content": request.prompt}],
+        "tools": tools,
+        "tool_choice": "required",
+        "stream": false,
+        "max_tokens": request.max_tokens,
+        "temperature": request.temperature,
+        "top_p": request.top_p,
+        "top_k": request.top_k
+    });
+    if !request.stop.is_empty() {
+        payload["stop"] = serde_json::json!(request.stop);
+    }
+    if let Some(effort) = request.reasoning_effort {
+        payload["reasoning_effort"] = Value::String(effort.as_str().into());
+    }
+    payload
+}
+
+fn wire_tool_name(agent_name: &str) -> String {
+    agent_name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '_' || character == '-' {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn agent_tool_name(wire_name: &str) -> Option<&'static str> {
+    ITERATION_ONE_TOOLS
+        .iter()
+        .find(|descriptor| wire_tool_name(descriptor.name) == wire_name)
+        .map(|descriptor| descriptor.name)
+}
+
+fn vision_request_payload(
+    model_id: &str,
+    prompt: &str,
+    images: &[(String, String)],
+    reasoning_effort: Option<AgentReasoningEffort>,
+) -> Value {
     let mut content = images
         .iter()
         .map(|(media_type, base64)| {
@@ -545,62 +491,39 @@ fn vision_request_payload(model_id: &str, prompt: &str, images: &[(String, Strin
         })
         .collect::<Vec<_>>();
     content.push(serde_json::json!({"type": "text", "text": prompt}));
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "model": model_id,
         "messages": [{"role": "user", "content": content}],
         "stream": false,
         "max_tokens": 1024,
-        "temperature": 0.2,
-        "chat_template_kwargs": {"enable_thinking": false},
-        "reasoning_format": "none"
-    })
+        "temperature": 0.2
+    });
+    if let Some(effort) = reasoning_effort {
+        payload["reasoning_effort"] = Value::String(effort.as_str().into());
+    }
+    payload
 }
 
 pub async fn find_session_by_model_id(
     model_id: &str,
     ginfer: &GinferState,
-) -> Result<LlamaSessionTarget, LlamaClientError> {
+) -> Result<GinferSessionTarget, GinferClientError> {
     let sessions = ginfer.ginfer_process.lock().await;
     sessions
         .values()
         .find(|session| model_ids_match(&session.info.model_id, model_id))
-        .map(|session| LlamaSessionTarget {
+        .map(|session| GinferSessionTarget {
             port: session.info.port as i32,
             api_key: session.info.api_key.clone(),
             model_id: session.info.model_id.clone(),
-            // ginfer's session info does not expose a vision flag; assume
-            // text-only until the backend reports otherwise.
-            has_vision: false,
-            backend: LlamaBackend::Ginfer,
+            has_vision: session.info.vision,
         })
-        .ok_or_else(|| LlamaClientError::SessionNotFound(model_id.to_owned()))
+        .ok_or_else(|| GinferClientError::SessionNotFound(model_id.to_owned()))
 }
 
-pub async fn find_session_by_model_and_backend(
-    model_id: &str,
-    backend: LlamaBackend,
-    ginfer: &GinferState,
-) -> Result<LlamaSessionTarget, LlamaClientError> {
-    let sessions = ginfer.ginfer_process.lock().await;
-    sessions
-        .values()
-        .find(|session| model_ids_match(&session.info.model_id, model_id))
-        .map(|session| LlamaSessionTarget {
-            port: session.info.port as i32,
-            api_key: session.info.api_key.clone(),
-            model_id: session.info.model_id.clone(),
-            // ginfer's session info does not expose a vision flag; assume
-            // text-only until the backend reports otherwise.
-            has_vision: false,
-            backend,
-        })
-        .ok_or_else(|| LlamaClientError::SessionNotFound(model_id.to_owned()))
-}
-
-fn read_context_window(props: &Value) -> Option<usize> {
-    props
-        .pointer("/default_generation_settings/n_ctx")
-        .or_else(|| props.get("n_ctx"))
+fn read_context_window(model: &Value) -> Option<usize> {
+    model
+        .get("max_model_len")
         .and_then(|value| {
             value
                 .as_u64()
@@ -610,26 +533,16 @@ fn read_context_window(props: &Value) -> Option<usize> {
         .filter(|value| *value > 0)
 }
 
-pub fn parse_tool_calls(raw: &str) -> Result<ParsedToolCalls, LlamaClientError> {
-    parse_tool_calls_for_profile(raw, AgentModelProfile::Plain)
-}
-
-pub fn parse_tool_calls_for_profile(
-    raw: &str,
-    profile: AgentModelProfile,
-) -> Result<ParsedToolCalls, LlamaClientError> {
-    let (reasoning, body) = match (profile.reasoning_open_tag(), profile.reasoning_close_tag()) {
-        (Some(open), Some(close)) => extract_tagged_reasoning(raw, open, close),
-        _ => extract_reasoning(raw),
-    };
+pub fn parse_tool_calls(raw: &str) -> Result<ParsedToolCalls, GinferClientError> {
+    let (reasoning, body) = extract_reasoning(raw);
     let json_text = extract_json_root(&body)?;
     let parsed: Value = serde_json::from_str(json_text)
-        .map_err(|error| LlamaClientError::ToolCallParse(error.to_string()))?;
+        .map_err(|error| GinferClientError::ToolCallParse(error.to_string()))?;
     let entries = parsed.as_array().ok_or_else(|| {
-        LlamaClientError::ToolCallParse("tool-call root must be a JSON array".into())
+        GinferClientError::ToolCallParse("tool-call root must be a JSON array".into())
     })?;
     if entries.is_empty() {
-        return Err(LlamaClientError::ToolCallParse(
+        return Err(GinferClientError::ToolCallParse(
             "tool-call array must contain at least one call".into(),
         ));
     }
@@ -644,23 +557,9 @@ pub fn parse_tool_calls_for_profile(
     })
 }
 
-fn extract_tagged_reasoning(raw: &str, open_tag: &str, close_tag: &str) -> (String, String) {
-    let trimmed = raw.trim_start();
-    let Some(after_open) = trimmed.strip_prefix(open_tag) else {
-        return (String::new(), raw.trim().to_owned());
-    };
-    let Some(close) = after_open.find(close_tag) else {
-        return (after_open.trim().to_owned(), String::new());
-    };
-    (
-        after_open[..close].trim().to_owned(),
-        after_open[close + close_tag.len()..].trim().to_owned(),
-    )
-}
-
-fn normalize_tool_call(value: &Value, index: usize) -> Result<ToolCallPayload, LlamaClientError> {
+fn normalize_tool_call(value: &Value, index: usize) -> Result<ToolCallPayload, GinferClientError> {
     let object = value.as_object().ok_or_else(|| {
-        LlamaClientError::ToolCallParse(format!(
+        GinferClientError::ToolCallParse(format!(
             "tool-call array entry {index} must be a JSON object"
         ))
     })?;
@@ -670,18 +569,18 @@ fn normalize_tool_call(value: &Value, index: usize) -> Result<ToolCallPayload, L
         .map(str::trim)
         .find(|name| !name.is_empty())
         .ok_or_else(|| {
-            LlamaClientError::ToolCallParse("tool-call must include a non-empty tool name".into())
+            GinferClientError::ToolCallParse("tool-call must include a non-empty tool name".into())
         })?
         .to_owned();
     let args = read_args(object)?;
     Ok(ToolCallPayload { tool, args })
 }
 
-fn read_args(object: &Map<String, Value>) -> Result<Value, LlamaClientError> {
+fn read_args(object: &Map<String, Value>) -> Result<Value, GinferClientError> {
     if let Some(nested) = object.get("args").or_else(|| object.get("arguments")) {
         let value = match nested {
             Value::String(raw) => serde_json::from_str(raw).map_err(|error| {
-                LlamaClientError::ToolCallParse(format!(
+                GinferClientError::ToolCallParse(format!(
                     "tool-call arguments must be valid JSON: {error}"
                 ))
             })?,
@@ -690,7 +589,7 @@ fn read_args(object: &Map<String, Value>) -> Result<Value, LlamaClientError> {
         if value.is_object() {
             return Ok(value);
         }
-        return Err(LlamaClientError::ToolCallParse(
+        return Err(GinferClientError::ToolCallParse(
             "tool-call args must be a JSON object".into(),
         ));
     }
@@ -700,7 +599,7 @@ fn read_args(object: &Map<String, Value>) -> Result<Value, LlamaClientError> {
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
     if flat.is_empty() {
-        return Err(LlamaClientError::ToolCallParse(
+        return Err(GinferClientError::ToolCallParse(
             "tool-call must include args".into(),
         ));
     }
@@ -740,10 +639,10 @@ fn extract_reasoning(raw: &str) -> (String, String) {
     (reasoning.join("\n\n"), body.trim().to_owned())
 }
 
-fn extract_json_root(raw: &str) -> Result<&str, LlamaClientError> {
+fn extract_json_root(raw: &str) -> Result<&str, GinferClientError> {
     let input = raw.trim();
     if input.is_empty() {
-        return Err(LlamaClientError::ToolCallParse(
+        return Err(GinferClientError::ToolCallParse(
             "tool-call body is empty".into(),
         ));
     }
@@ -796,86 +695,68 @@ fn extract_json_root(raw: &str) -> Result<&str, LlamaClientError> {
         }
     }
     if start.is_none() {
-        Err(LlamaClientError::ToolCallParse(
+        Err(GinferClientError::ToolCallParse(
             "tool-call JSON value not found".into(),
         ))
     } else {
-        Err(LlamaClientError::ToolCallParse(
+        Err(GinferClientError::ToolCallParse(
             "tool-call JSON value is incomplete".into(),
         ))
     }
 }
 
-fn drain_sse_events(buffer: &mut String) -> Vec<String> {
-    let normalized = buffer.replace("\r\n", "\n");
-    *buffer = normalized;
-    let mut events = Vec::new();
-    while let Some(end) = buffer.find("\n\n") {
-        events.push(buffer[..end].to_owned());
-        buffer.drain(..end + 2);
+fn normalize_completion(
+    payload: CompletionEnvelope,
+) -> Result<CompletionResult, GinferClientError> {
+    let choice = payload.choices.into_iter().next().ok_or_else(|| {
+        GinferClientError::InvalidResponse("chat completion contained no choices".into())
+    })?;
+    let mut content = choice.message.content.unwrap_or_default();
+    if !choice.message.tool_calls.is_empty() {
+        let calls = choice
+            .message
+            .tool_calls
+            .into_iter()
+            .map(|call| {
+                let name = agent_tool_name(&call.function.name).ok_or_else(|| {
+                    GinferClientError::ToolCallParse(format!(
+                        "GInfer returned unknown tool `{}`",
+                        call.function.name
+                    ))
+                })?;
+                let args: Value =
+                    serde_json::from_str(&call.function.arguments).map_err(|error| {
+                        GinferClientError::ToolCallParse(format!(
+                            "GInfer returned invalid arguments for `{name}`: {error}"
+                        ))
+                    })?;
+                if !args.is_object() {
+                    return Err(GinferClientError::ToolCallParse(format!(
+                        "GInfer returned non-object arguments for `{name}`"
+                    )));
+                }
+                Ok(serde_json::json!({"tool": name, "args": args}))
+            })
+            .collect::<Result<Vec<_>, GinferClientError>>()?;
+        content = serde_json::to_string(&calls).map_err(|error| {
+            GinferClientError::InvalidResponse(format!("failed to normalize tool calls: {error}"))
+        })?;
     }
-    events
-}
 
-fn parse_sse_event(raw: &str) -> Option<Value> {
-    let data = raw
-        .lines()
-        .filter_map(|line| line.strip_prefix("data:"))
-        .map(str::trim_start)
-        .collect::<Vec<_>>()
-        .join("\n");
-    if data.is_empty() || data == "[DONE]" {
-        return None;
-    }
-    serde_json::from_str(&data).ok()
-}
-
-fn normalize_completion(payload: CompletionEnvelope) -> CompletionResult {
-    let timings = payload.timings.as_object();
-    CompletionResult {
-        content: payload.content,
-        reasoning_content: payload.reasoning_content,
-        stop: payload.stop,
-        truncated: payload.truncated,
+    Ok(CompletionResult {
+        content,
+        reasoning_content: choice.message.reasoning_content,
+        stop: choice.finish_reason != "length",
+        truncated: choice.finish_reason == "length",
         timing: CompletionTiming {
-            prompt_ms: number(timings.and_then(|value| value.get("prompt_ms"))),
-            predicted_ms: number(timings.and_then(|value| value.get("predicted_ms"))),
-            prompt_tokens: number(Some(
-                timings
-                    .and_then(|value| value.get("prompt_n"))
-                    .unwrap_or(&payload.tokens_evaluated),
-            )),
-            predicted_tokens: number(Some(
-                timings
-                    .and_then(|value| value.get("predicted_n"))
-                    .unwrap_or(&payload.tokens_predicted),
-            )),
+            prompt_ms: payload.x_ginfer.prefill_seconds * 1_000.0,
+            predicted_ms: payload.x_ginfer.decode_seconds * 1_000.0,
+            prompt_tokens: payload.x_ginfer.computed_prefill_tokens,
+            predicted_tokens: payload.usage.completion_tokens,
         },
-        cache_hit_tokens: number(Some(&payload.tokens_cached)),
-        slot_id: number_or(
-            Some(if payload.slot_id.is_null() {
-                &payload.id_slot
-            } else {
-                &payload.slot_id
-            }),
-            -1.0,
-        ) as i32,
+        cache_hit_tokens: payload.usage.prompt_tokens_details.cached_tokens,
         model_id: payload.model,
-    }
-}
-
-fn number(value: Option<&Value>) -> f64 {
-    number_or(value, 0.0)
-}
-
-fn number_or(value: Option<&Value>, fallback: f64) -> f64 {
-    value
-        .and_then(|value| {
-            value
-                .as_f64()
-                .or_else(|| value.as_str()?.parse::<f64>().ok())
-        })
-        .unwrap_or(fallback)
+    })
 }
 
 fn extract_error_detail(raw: &str) -> String {
@@ -921,20 +802,20 @@ mod tests {
     use reqwest::StatusCode;
 
     use super::*;
-    use crate::core::agent::test_support::{ScriptedCompletionServer, ScriptedResponse};
+    use crate::core::agent::test_support::{ScriptedGinferServer, ScriptedResponse};
 
     struct StaticExpansion {
         calls: AtomicUsize,
-        result: Result<LlamaSessionTarget, String>,
+        result: Result<GinferSessionTarget, String>,
     }
 
     #[async_trait]
     impl ContextExpansionHook for StaticExpansion {
         async fn expand(
             &self,
-            _target: &LlamaSessionTarget,
+            _target: &GinferSessionTarget,
             _cancellation: &CancellationToken,
-        ) -> Result<LlamaSessionTarget, String> {
+        ) -> Result<GinferSessionTarget, String> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             self.result.clone()
         }
@@ -946,9 +827,9 @@ mod tests {
     impl ContextExpansionHook for CancellingExpansion {
         async fn expand(
             &self,
-            _target: &LlamaSessionTarget,
+            _target: &GinferSessionTarget,
             cancellation: &CancellationToken,
-        ) -> Result<LlamaSessionTarget, String> {
+        ) -> Result<GinferSessionTarget, String> {
             cancellation.cancel();
             Err("cancelled".into())
         }
@@ -956,59 +837,139 @@ mod tests {
 
     #[test]
     fn normal_completion_uses_atomic_agent_limit() {
-        let request = CompletionRequest::tool_call("prompt", "root ::= \"ok\"", 0);
+        let request = CompletionRequest::tool_call("prompt", Some(AgentReasoningEffort::High));
         assert_eq!(request.max_tokens, 8_192);
+        assert_eq!(request.reasoning_effort, Some(AgentReasoningEffort::High));
     }
 
     #[test]
-    fn reads_context_window_from_props_variants() {
+    fn reads_context_window_from_ginfer_model() {
         assert_eq!(
-            read_context_window(&serde_json::json!({
-                "default_generation_settings": {"n_ctx": 16_384},
-                "n_ctx": 8_192
-            })),
+            read_context_window(&serde_json::json!({"max_model_len": 16_384})),
             Some(16_384)
         );
         assert_eq!(
-            read_context_window(&serde_json::json!({"n_ctx": "32768"})),
+            read_context_window(&serde_json::json!({"max_model_len": "32768"})),
             Some(32_768)
         );
         assert_eq!(read_context_window(&serde_json::json!({})), None);
-        assert_eq!(read_context_window(&serde_json::json!({"n_ctx": 0})), None);
+        assert_eq!(
+            read_context_window(&serde_json::json!({"max_model_len": 0})),
+            None
+        );
+    }
+
+    #[test]
+    fn builds_native_ginfer_tool_request_with_reasoning_effort() {
+        let request = CompletionRequest::tool_call("inspect", Some(AgentReasoningEffort::Xhigh));
+        let payload = completion_request_payload("model-a", &request);
+        assert_eq!(payload["model"], "model-a");
+        assert_eq!(payload["messages"][0]["content"], "inspect");
+        assert_eq!(payload["tool_choice"], "required");
+        assert_eq!(payload["reasoning_effort"], "xhigh");
+        assert!(payload["tools"]
+            .as_array()
+            .is_some_and(|tools| !tools.is_empty()));
+        assert!(payload["tools"].as_array().unwrap().iter().all(|tool| {
+            tool["function"]["name"].as_str().is_some_and(|name| {
+                name.chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+            })
+        }));
+    }
+
+    #[test]
+    fn forwards_every_ginfer_reasoning_effort_without_translation() {
+        let efforts = [
+            (AgentReasoningEffort::None, "none"),
+            (AgentReasoningEffort::Minimal, "minimal"),
+            (AgentReasoningEffort::Low, "low"),
+            (AgentReasoningEffort::Medium, "medium"),
+            (AgentReasoningEffort::High, "high"),
+            (AgentReasoningEffort::Xhigh, "xhigh"),
+            (AgentReasoningEffort::Max, "max"),
+        ];
+
+        for (effort, expected) in efforts {
+            let request = CompletionRequest::tool_call("inspect", Some(effort));
+            let tool_payload = completion_request_payload("model-a", &request);
+            let vision_payload = vision_request_payload("model-a", "inspect", &[], Some(effort));
+            assert_eq!(tool_payload["reasoning_effort"], expected);
+            assert_eq!(vision_payload["reasoning_effort"], expected);
+        }
     }
 
     #[tokio::test]
-    async fn fetches_model_profile_props_without_consuming_completion_script() {
-        let props = serde_json::json!({
-            "model_alias": "gemma-4-12b-it",
-            "chat_template": "<|turn>system\n<|channel>thought\n<channel|><turn|>"
+    async fn fetches_ginfer_model_without_consuming_completion_script() {
+        let model = serde_json::json!({
+            "id": "scripted-test-model",
+            "object": "model",
+            "max_model_len": 65_536
         });
-        let server = ScriptedCompletionServer::start_with_props(
+        let server = ScriptedGinferServer::start_with_model(
             vec![ScriptedResponse::completion("ok")],
-            props.clone(),
+            model.clone(),
         )
         .await;
 
         assert_eq!(
             server
                 .client()
-                .fetch_props(&CancellationToken::new())
+                .fetch_model(&CancellationToken::new())
                 .await
-                .expect("fetch props"),
-            props
+                .expect("fetch model"),
+            model
         );
         assert!(server.requests().is_empty());
     }
 
+    #[test]
+    fn normalizes_native_tool_calls_and_exact_ginfer_metrics() {
+        let descriptor = ITERATION_ONE_TOOLS.first().expect("tool catalog");
+        let envelope: CompletionEnvelope = serde_json::from_value(serde_json::json!({
+            "model": "model-a",
+            "choices": [{
+                "message": {
+                    "reasoning_content": "inspect first",
+                    "tool_calls": [{"function": {
+                        "name": wire_tool_name(descriptor.name),
+                        "arguments": "{\"path\":\"README.md\"}"
+                    }}]
+                },
+                "finish_reason": "tool_calls"
+            }],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 8,
+                "prompt_tokens_details": {"cached_tokens": 40}
+            },
+            "x_ginfer": {
+                "computed_prefill_tokens": 80,
+                "prefill_seconds": 0.01,
+                "decode_seconds": 0.02
+            }
+        }))
+        .expect("completion envelope");
+        let result = normalize_completion(envelope).expect("normalize completion");
+        let parsed = parse_tool_calls(&result.content).expect("normalized calls");
+        assert_eq!(parsed.calls[0].tool, descriptor.name);
+        assert_eq!(result.reasoning_content, "inspect first");
+        assert_eq!(result.timing.prompt_tokens, 80.0);
+        assert_eq!(result.timing.predicted_tokens, 8.0);
+        assert_eq!(result.timing.prompt_ms, 10.0);
+        assert_eq!(result.timing.predicted_ms, 20.0);
+        assert_eq!(result.cache_hit_tokens, 40.0);
+    }
+
     #[tokio::test]
-    async fn retries_once_after_context_expansion_and_retargets_same_backend() {
-        let first = ScriptedCompletionServer::start(vec![ScriptedResponse::http_error(
+    async fn retries_once_after_context_expansion_and_retargets() {
+        let first = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
             StatusCode::BAD_REQUEST,
             "the request exceeds the available context size",
         )])
         .await;
         let replacement =
-            ScriptedCompletionServer::start(vec![ScriptedResponse::completion("ok")]).await;
+            ScriptedGinferServer::start(vec![ScriptedResponse::completion("ok")]).await;
         let replacement_target = replacement.client().target();
         let hook = Arc::new(StaticExpansion {
             calls: AtomicUsize::new(0),
@@ -1018,7 +979,7 @@ mod tests {
 
         let completion = client
             .complete(
-                &CompletionRequest::tool_call("prompt", "root ::= \"ok\"", 0),
+                &CompletionRequest::tool_call("prompt", None),
                 &CancellationToken::new(),
             )
             .await
@@ -1027,14 +988,13 @@ mod tests {
         assert_eq!(completion.content, "ok");
         assert_eq!(hook.calls.load(Ordering::SeqCst), 1);
         assert_eq!(client.target().port, replacement_target.port);
-        assert_eq!(client.target().backend, LlamaBackend::Ginfer);
         assert_eq!(first.requests().len(), 1);
         assert_eq!(replacement.requests().len(), 1);
     }
 
     #[tokio::test]
     async fn does_not_expand_for_non_context_http_errors() {
-        let server = ScriptedCompletionServer::start(vec![ScriptedResponse::http_error(
+        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
             StatusCode::INTERNAL_SERVER_ERROR,
             "backend crashed",
         )])
@@ -1047,19 +1007,19 @@ mod tests {
 
         let error = client
             .complete(
-                &CompletionRequest::tool_call("prompt", "root ::= \"ok\"", 0),
+                &CompletionRequest::tool_call("prompt", None),
                 &CancellationToken::new(),
             )
             .await
             .unwrap_err();
 
-        assert!(matches!(error, LlamaClientError::Http { status: 500, .. }));
+        assert!(matches!(error, GinferClientError::Http { status: 500, .. }));
         assert_eq!(hook.calls.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
     async fn reports_context_expansion_failure_without_second_completion() {
-        let server = ScriptedCompletionServer::start(vec![ScriptedResponse::http_error(
+        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
             StatusCode::PAYLOAD_TOO_LARGE,
             "context length exceeded",
         )])
@@ -1072,7 +1032,7 @@ mod tests {
 
         let error = client
             .complete(
-                &CompletionRequest::tool_call("prompt", "root ::= \"ok\"", 0),
+                &CompletionRequest::tool_call("prompt", None),
                 &CancellationToken::new(),
             )
             .await
@@ -1085,7 +1045,7 @@ mod tests {
 
     #[tokio::test]
     async fn cancellation_during_context_expansion_stops_without_retry() {
-        let server = ScriptedCompletionServer::start(vec![ScriptedResponse::http_error(
+        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
             StatusCode::BAD_REQUEST,
             "context size exceeded",
         )])
@@ -1096,20 +1056,17 @@ mod tests {
         let cancellation = CancellationToken::new();
 
         let error = client
-            .complete(
-                &CompletionRequest::tool_call("prompt", "root ::= \"ok\"", 0),
-                &cancellation,
-            )
+            .complete(&CompletionRequest::tool_call("prompt", None), &cancellation)
             .await
             .unwrap_err();
 
-        assert!(matches!(error, LlamaClientError::Cancelled));
+        assert!(matches!(error, GinferClientError::Cancelled));
         assert_eq!(server.requests().len(), 1);
     }
 
     #[tokio::test]
     async fn rejects_context_expansion_target_from_another_model() {
-        let server = ScriptedCompletionServer::start(vec![ScriptedResponse::http_error(
+        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
             StatusCode::BAD_REQUEST,
             "context size exceeded",
         )])
@@ -1124,14 +1081,13 @@ mod tests {
 
         let error = client
             .complete(
-                &CompletionRequest::tool_call("prompt", "root ::= \"ok\"", 0),
+                &CompletionRequest::tool_call("prompt", None),
                 &CancellationToken::new(),
             )
             .await
             .unwrap_err();
 
-        assert!(error.to_string().contains("different model or backend"));
-        assert_eq!(client.target().backend, LlamaBackend::Ginfer);
+        assert!(error.to_string().contains("different model"));
         assert_eq!(server.requests().len(), 1);
     }
 
@@ -1152,20 +1108,6 @@ mod tests {
         assert_eq!(parsed.calls[0].args["nested"][1]["x"], "}");
         assert_eq!(parsed.calls[1].tool, "os.git.status");
         assert_eq!(parsed.calls[1].args["path"], ".");
-    }
-
-    #[test]
-    fn parses_gemma4_model_emitted_channel_reasoning() {
-        let parsed = parse_tool_calls_for_profile(
-            "<|channel>thought\ninspect the workspace<channel|>\
-             [{\"tool\":\"reply\",\"args\":{\"text\":\"done\"}}]",
-            AgentModelProfile::Gemma4Think,
-        )
-        .expect("Gemma channel output should parse");
-
-        assert_eq!(parsed.reasoning.as_deref(), Some("inspect the workspace"));
-        assert_eq!(parsed.calls[0].tool, "reply");
-        assert_eq!(parsed.calls[0].args["text"], "done");
     }
 
     #[test]
@@ -1192,31 +1134,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_multiline_sse_and_done_marker() {
-        let event = "event: message\ndata: {\"content\":\"hel\",\ndata: \"stop\":false}";
-        let parsed = parse_sse_event(event).expect("SSE data should parse");
-        assert_eq!(parsed["content"], "hel");
-        assert_eq!(parsed["stop"], false);
-        assert!(parse_sse_event("data: [DONE]").is_none());
-        assert!(parse_sse_event("event: ping").is_none());
-    }
-
-    #[test]
-    fn drains_crlf_and_fragmented_sse_frames() {
-        let mut buffer =
-            "data: {\"content\":\"a\",\"stop\":false}\r\n\r\ndata: {\"content\":\"b".to_owned();
-        let first = drain_sse_events(&mut buffer);
-        assert_eq!(first.len(), 1);
-        buffer.push_str("\",\"stop\":true}\n\n");
-        let second = drain_sse_events(&mut buffer);
-        assert_eq!(second.len(), 1);
-        assert_eq!(
-            parse_sse_event(&second[0]).expect("second event")["content"],
-            "b"
-        );
-    }
-
-    #[test]
     fn extracts_and_caps_server_error_detail() {
         assert_eq!(
             extract_error_detail(r#"{"error":{"message":"context overflow"}}"#),
@@ -1235,6 +1152,7 @@ mod tests {
             "vision-model",
             "Read this image",
             &[("image/png".into(), "aGVsbG8=".into())],
+            Some(AgentReasoningEffort::High),
         );
         assert_eq!(payload["model"], "vision-model");
         assert_eq!(
@@ -1245,25 +1163,25 @@ mod tests {
             payload["messages"][0]["content"][1]["text"],
             "Read this image"
         );
-        assert_eq!(payload["chat_template_kwargs"]["enable_thinking"], false);
+        assert_eq!(payload["reasoning_effort"], "high");
         assert!(payload.get("slot_id").is_none());
         assert!(payload.get("grammar").is_none());
     }
 
     #[tokio::test]
     async fn rejects_runtime_vision_call_for_text_only_session() {
-        let client = LlamaServerClient::new(&LlamaSessionTarget {
+        let client = GinferClient::new(&GinferSessionTarget {
             port: 1,
             api_key: String::new(),
             model_id: "text-model".into(),
             has_vision: false,
-            backend: LlamaBackend::Ginfer,
         })
         .unwrap();
         let error = client
             .describe_images(
                 "Describe",
                 &[("image/png".into(), "aGVsbG8=".into())],
+                None,
                 &CancellationToken::new(),
             )
             .await

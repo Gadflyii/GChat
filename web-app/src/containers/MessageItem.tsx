@@ -42,6 +42,10 @@ import {
   linkAgentFileReferences,
 } from '@/lib/agent-file-links'
 import { useServiceHub } from '@/hooks/useServiceHub'
+import {
+  aggregateAgentMetrics,
+  formatTokensPerSecond,
+} from '@/lib/agent-metrics'
 
 const CHAT_STATUS = {
   STREAMING: 'streaming',
@@ -414,13 +418,28 @@ export const MessageItem = memo(
         isRequestActive &&
         (!agentStatus ||
           agentStatus === 'running' ||
-          agentStatus === 'awaiting_approval')
+          agentStatus === 'awaiting_approval' ||
+          agentStatus === 'awaiting_folder_access')
       const summaryToolCount =
         block.agentSummary?.tools.filter(
           ({ tool }) => tool !== 'reply' && tool !== 'finish'
         ).length ?? 0
       const toolCount = block.tools.length || summaryToolCount
       const stages = block.agentSummary?.stages ?? []
+      const instanceMetrics = aggregateAgentMetrics(
+        stages.map((stage) => ({
+          modelInstanceId: stage.model_instance_id,
+          modelId: stage.model_id,
+          inference: stage.inference
+            ? {
+                promptTokens: stage.inference.prompt_tokens,
+                generatedTokens: stage.inference.generated_tokens,
+                promptMs: stage.inference.prompt_ms,
+                generationMs: stage.inference.generation_ms,
+              }
+            : undefined,
+        }))
+      )
       const durationSeconds = Number(
         Math.max(0.1, (block.durationMs ?? 100) / 1000).toFixed(1)
       )
@@ -449,7 +468,7 @@ export const MessageItem = memo(
                       {stage.name}
                     </span>
                     <span className="block truncate font-mono text-[10px] text-muted-foreground">
-                      {stage.model_instance_id}
+                      {stage.model_instance_id} · {stage.status}
                     </span>
                   </span>
                   <span className="shrink-0 text-muted-foreground">
@@ -457,6 +476,40 @@ export const MessageItem = memo(
                     {stage.duration_ms !== undefined
                       ? ` · ${stage.duration_ms} ms`
                       : ''}
+                    {stage.inference
+                      ? ` · ${formatTokensPerSecond(stage.inference.generated_tokens, stage.inference.generation_ms)} gen t/s`
+                      : ''}
+                  </span>
+                </div>
+              ))}
+            </ActivityDetail>
+          )}
+          {instanceMetrics.length > 0 && (
+            <ActivityDetail label="Model-instance throughput">
+              {instanceMetrics.map((metrics) => (
+                <div
+                  key={`${block.key}-metrics-${metrics.modelInstanceId}`}
+                  className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-1 text-xs"
+                >
+                  <span
+                    className="truncate font-mono text-[10px] text-foreground/80"
+                    title={metrics.modelInstanceId}
+                  >
+                    {metrics.modelInstanceId}
+                  </span>
+                  <span>
+                    {formatTokensPerSecond(
+                      metrics.generatedTokens,
+                      metrics.generationMs
+                    )}{' '}
+                    gen t/s
+                  </span>
+                  <span>
+                    {formatTokensPerSecond(
+                      metrics.promptTokens,
+                      metrics.promptMs
+                    )}{' '}
+                    prompt t/s
                   </span>
                 </div>
               ))}

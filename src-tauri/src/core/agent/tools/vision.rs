@@ -43,12 +43,28 @@ pub async fn describe(args: &Value, context: &ToolContext<'_>) -> Result<ToolOut
     let client = context
         .client
         .ok_or_else(|| ToolOutcome::error("Vision client is unavailable"))?;
-    let description = client
-        .describe_images(&prompt, &images, context.cancellation)
+    let completion = client
+        .describe_images(
+            &prompt,
+            &images,
+            context.reasoning_effort,
+            context.cancellation,
+        )
         .await
         .map_err(|error| ToolOutcome::error(error.to_string()))?;
+    if let Some(metrics) = context.inference {
+        metrics
+            .lock()
+            .map_err(|_| ToolOutcome::error("Agent inference metrics lock is poisoned"))?
+            .record(
+                completion.timing.prompt_tokens,
+                completion.timing.predicted_tokens,
+                completion.timing.prompt_ms,
+                completion.timing.predicted_ms,
+            );
+    }
     Ok(ToolOutcome::ok(truncate(
-        description,
+        completion.content,
         MAX_TOOL_OUTPUT_CHARS,
     )))
 }

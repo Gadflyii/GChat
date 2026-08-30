@@ -15,7 +15,23 @@ function finishedRun(): AgentRunState {
     approvalResolving: false,
     folderAccessResolving: false,
     trace: {
-      stages: [],
+      stages: [
+        {
+          id: 'agent',
+          name: 'Agent',
+          role: 'agent',
+          status: 'finished',
+          modelInstanceId: 'qwen',
+          modelId: 'qwen',
+          reasoningEffort: 'medium',
+          inference: {
+            promptTokens: 200,
+            generatedTokens: 100,
+            promptMs: 20,
+            generationMs: 250,
+          },
+        },
+      ],
       handoffs: [],
       reasoning: { 1: 'second', 0: 'first' },
       assistantText: 'Done',

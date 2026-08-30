@@ -39,6 +39,22 @@ export type AgentStrategyKind =
   | 'coordinator'
   | 'workflow'
 
+export type AgentReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+
+export type AgentInferenceMetrics = {
+  promptTokens: number
+  generatedTokens: number
+  promptMs: number
+  generationMs: number
+}
+
 export type AgentModelInstance = {
   id: string
   modelId: string
@@ -52,6 +68,7 @@ export type AgentRole = {
   skills: string[]
   maxSteps: number
   modelInstanceId: string | null
+  reasoningEffort: AgentReasoningEffort | null
 }
 
 export type AgentWorkflowNode = AgentRole & {
@@ -64,7 +81,7 @@ export type AgentWorkflowEdge = {
 }
 
 type AgentDefinitionBase = {
-  schemaVersion: 2
+  schemaVersion: 3
   id: string
   name: string
   description: string
@@ -73,6 +90,7 @@ type AgentDefinitionBase = {
   maxSteps: number
   outputContract: string
   modelInstanceId: string | null
+  reasoningEffort: AgentReasoningEffort | null
   builtIn: boolean
 }
 
@@ -85,6 +103,7 @@ export type AgentDefinition = AgentDefinitionBase &
         successCriteria: string
         evaluatorInstructions: string
         evaluatorModelInstanceId: string | null
+        evaluatorReasoningEffort: AgentReasoningEffort | null
       }
     | {
         kind: 'coordinator'
@@ -92,6 +111,7 @@ export type AgentDefinition = AgentDefinitionBase &
         coordinatorInstructions: string
         synthesisInstructions: string
         synthesisModelInstanceId: string | null
+        synthesisReasoningEffort: AgentReasoningEffort | null
         workers: AgentRole[]
       }
     | {
@@ -109,7 +129,7 @@ export type AgentTemplate = {
 }
 
 export type AgentRunRecord = {
-  schemaVersion: 2
+  schemaVersion: 3
   id: string
   runId: string
   sessionId: string
@@ -131,6 +151,8 @@ export type AgentRunRecord = {
     durationMs: number
     modelInstanceId: string
     modelId: string
+    reasoningEffort: AgentReasoningEffort | null
+    inference: AgentInferenceMetrics
   }>
 }
 
@@ -224,6 +246,7 @@ export type AgentEvent =
       role: string
       cycle: number | null
       model_instance_id: string
+      reasoning_effort: AgentReasoningEffort | null
     }
   | {
       type: 'stage_finished'
@@ -235,6 +258,13 @@ export type AgentEvent =
       duration_ms: number
       model_instance_id: string
       model_id: string
+      reasoning_effort: AgentReasoningEffort | null
+      inference: {
+        prompt_tokens: number
+        generated_tokens: number
+        prompt_ms: number
+        generation_ms: number
+      }
     }
   | { type: 'handoff'; from: string; to: string; summary: string }
   | { type: 'step_started'; step_index: number }
@@ -337,12 +367,15 @@ export type AgentRunTrace = {
     id: string
     name: string
     role: string
-    status: 'running' | 'finished'
+    status: 'running' | 'finished' | 'failed' | 'cancelled'
     cycle?: number
     summary?: string
     stepCount?: number
     durationMs?: number
     modelInstanceId: string
+    modelId?: string
+    reasoningEffort?: AgentReasoningEffort
+    inference?: AgentInferenceMetrics
   }>
   handoffs: Array<{ from: string; to: string; summary: string }>
   reasoning: Record<number, string>
@@ -379,10 +412,18 @@ export type AgentRunSummary = {
     id: string
     name: string
     role: string
-    status: 'running' | 'finished'
+    status: 'running' | 'finished' | 'failed' | 'cancelled'
     step_count?: number
     duration_ms?: number
     model_instance_id: string
+    model_id?: string
+    reasoning_effort?: AgentReasoningEffort
+    inference?: {
+      prompt_tokens: number
+      generated_tokens: number
+      prompt_ms: number
+      generation_ms: number
+    }
   }>
   finish_reason?: AgentTurnFinishReason
   step_count?: number

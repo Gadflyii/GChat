@@ -53,6 +53,16 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
       step_count: stage.stepCount,
       duration_ms: stage.durationMs,
       model_instance_id: stage.modelInstanceId,
+      model_id: stage.modelId,
+      reasoning_effort: stage.reasoningEffort,
+      inference: stage.inference
+        ? {
+            prompt_tokens: stage.inference.promptTokens,
+            generated_tokens: stage.inference.generatedTokens,
+            prompt_ms: stage.inference.promptMs,
+            generation_ms: stage.inference.generationMs,
+          }
+        : undefined,
     })),
     finish_reason: state.trace.finishReason,
     step_count: state.trace.stepCount,

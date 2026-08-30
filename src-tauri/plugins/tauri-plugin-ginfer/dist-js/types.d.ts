@@ -4,6 +4,7 @@ export interface SessionInfo {
     model_id: string;
     model_path: string;
     is_embedding: boolean;
+    vision: boolean;
     api_key: string;
 }
 export interface UnloadResult {

@@ -17,11 +17,10 @@ use super::approval::ApprovalGate;
 use super::attachments::stage_attachments;
 use super::definitions::{get_definition, AgentDefinition, AgentStrategy};
 use super::folder_access::FolderAccessGate;
-use super::llm_client::{
-    find_session_by_model_and_backend, find_session_by_model_id, ContextExpansionHook,
-    LlamaClientError, LlamaServerClient, LlamaSessionTarget,
+use super::ginfer_client::{
+    find_session_by_model_id, ContextExpansionHook, GinferClient, GinferClientError,
+    GinferSessionTarget,
 };
-use super::model_profile::detect_model_profile;
 use super::orchestrator::{run_definition, AgentModelRoute, AgentModelRoutes, OrchestrationInput};
 use super::path_policy::{canonical_directory, expand_home, lexical_normalize, EditableRoots};
 use super::prompt::{CapabilitiesSummary, SkillDescriptor};
@@ -158,13 +157,13 @@ struct AgentContextExpansion<R: Runtime> {
 impl<R: Runtime> ContextExpansionHook for AgentContextExpansion<R> {
     async fn expand(
         &self,
-        target: &LlamaSessionTarget,
+        target: &GinferSessionTarget,
         cancellation: &CancellationToken,
-    ) -> Result<LlamaSessionTarget, String> {
+    ) -> Result<GinferSessionTarget, String> {
         let outcome = request_context_increase(
             &self.app_handle,
             &self.state,
-            target.backend.as_str(),
+            "ginfer",
             &target.model_id,
             "error",
             Some(cancellation),
@@ -177,7 +176,7 @@ impl<R: Runtime> ContextExpansionHook for AgentContextExpansion<R> {
             ));
         }
         let ginfer_state: State<GinferState> = self.app_handle.state();
-        find_session_by_model_and_backend(&target.model_id, target.backend, &ginfer_state)
+        find_session_by_model_id(&target.model_id, &ginfer_state)
             .await
             .map_err(|error| error.to_string())
     }
@@ -546,6 +545,34 @@ pub async fn agent_run_turn<R: Runtime>(
                     },
                 )
                 .await;
+                if let Err(error) = &run_result {
+                    if !recorded_events
+                        .iter()
+                        .any(|event| matches!(event, AgentEvent::TurnFinished { .. }))
+                    {
+                        for event in [
+                            AgentEvent::StepError {
+                                message: error.clone(),
+                                category: "orchestration".into(),
+                            },
+                            AgentEvent::TurnFinished {
+                                reason: "failed".into(),
+                                step_count: recorded_events
+                                    .iter()
+                                    .filter_map(|event| match event {
+                                        AgentEvent::StageFinished { step_count, .. } => {
+                                            Some(*step_count)
+                                        }
+                                        _ => None,
+                                    })
+                                    .sum(),
+                            },
+                        ] {
+                            recorded_events.push(event.clone());
+                            let _ = on_event.send(event);
+                        }
+                    }
+                }
                 let record = AgentRunRecord::completed(
                     &storage_id,
                     &request.run_id,
@@ -646,22 +673,23 @@ async fn resolve_agent_model_routes<R: Runtime>(
                     "Assigned Agent model instance `{instance_id}` is not loaded. Load it before starting this run."
                 )
             })?;
-        let client = LlamaServerClient::new(&target)
+        let client = GinferClient::new(&target)
             .map_err(|error| error.to_string())?
             .with_context_expansion(context_expansion.clone());
-        let props = client.fetch_props(cancellation).await.map_err(|error| match error {
-            LlamaClientError::Cancelled => {
-                "Agent model-instance validation was cancelled".to_owned()
-            }
-            other => {
-                format!("Assigned Agent model instance `{instance_id}` is not healthy: {other}")
-            }
-        })?;
-        let model_profile = detect_model_profile(&props);
+        client
+            .fetch_model(cancellation)
+            .await
+            .map_err(|error| match error {
+                GinferClientError::Cancelled => {
+                    "Agent model-instance validation was cancelled".to_owned()
+                }
+                other => {
+                    format!("Assigned Agent model instance `{instance_id}` is not healthy: {other}")
+                }
+            })?;
         routes.push(AgentModelRoute {
             instance_id,
             model_id: target.model_id.clone(),
-            model_profile,
             client,
         });
     }
@@ -943,6 +971,7 @@ mod tests {
             coordinator_instructions: "Plan".into(),
             synthesis_instructions: "Synthesize".into(),
             synthesis_model_instance_id: Some("synthesis-model".into()),
+            synthesis_reasoning_effort: None,
             workers: vec![
                 crate::core::agent::definitions::AgentRole {
                     id: "one".into(),
@@ -951,6 +980,7 @@ mod tests {
                     skills: Vec::new(),
                     max_steps: 4,
                     model_instance_id: Some("worker-model".into()),
+                    reasoning_effort: None,
                 },
                 crate::core::agent::definitions::AgentRole {
                     id: "two".into(),
@@ -959,6 +989,7 @@ mod tests {
                     skills: Vec::new(),
                     max_steps: 4,
                     model_instance_id: None,
+                    reasoning_effort: None,
                 },
             ],
         };

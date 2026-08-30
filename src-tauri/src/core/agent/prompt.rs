@@ -4,14 +4,14 @@
 //! (`stable-prefix.ts` + `build-prompt.ts`). The prompt is a **stable
 //! prefix** — persona + `### rules` + `### skills` + `### tools` + `### capabilities` +
 //! `### instructions` — that must stay byte-identical within a session so
-//! `ginfer-serve`'s `cache_prompt` + `slot_id` KV-cache reuse holds, followed
-//! by a **variable tail** (optional `### loaded-tools` and
+//! GInfer can reuse its stable prefix, followed by a **variable tail**
+//! (optional `### loaded-tools` and
 //! `### loaded-skills`, `### conversation`, optional `### notice`, and the
 //! `### respond` emit anchor).
 //!
 //! Iteration 1 hardcodes a fixed tool set (see [`ITERATION_ONE_TOOLS`]) — no
 //! `browser` / `memory` / `tasks` / `mcp` tools — so the
-//! grammar and descriptors are static.
+//! descriptors are static.
 
 use std::path::{Path, PathBuf};
 
@@ -122,7 +122,7 @@ const DEFAULT_SYSTEM_PERSONA_LINES: &[&str] = &[
     "You accomplish tasks by calling tools, observing results, and iterating until the task is done.",
     "",
     "Operating principles:",
-    "- Think, then act. Emit a small batch of tool calls, observe the results, then decide the next step. One inference = one JSON array of tool calls.",
+    "- Think, then act. Call a small batch of the provided functions, observe the results, then decide the next step.",
     "- Prefer the cheapest tool that answers the question. Read before you write. Never guess a file's contents — read it.",
     "- Batch only independent calls. Approval-gated tools and calls that depend on another call's result must use a length-1 array. A terminal verb may appear only once and only last.",
     "- Be decisive. Do not narrate what you are about to do in prose — call the tool. Do not ask for confirmation unless a tool is approval-gated.",
@@ -490,50 +490,20 @@ pub fn build_stable_prefix(
     max_parallel_tool_calls: usize,
     system_persona: Option<&str>,
 ) -> String {
-    build_stable_prefix_for_profile(
-        tool_descriptors,
-        skill_descriptors,
-        capabilities,
-        max_parallel_tool_calls,
-        system_persona,
-        crate::core::agent::model_profile::AgentModelProfile::Plain,
-    )
-}
-
-pub fn build_stable_prefix_for_profile(
-    tool_descriptors: &[ToolDescriptor],
-    skill_descriptors: &[SkillDescriptor],
-    capabilities: &CapabilitiesSummary,
-    max_parallel_tool_calls: usize,
-    system_persona: Option<&str>,
-    profile: crate::core::agent::model_profile::AgentModelProfile,
-) -> String {
     let persona = system_persona
         .map(str::to_string)
         .unwrap_or_else(default_system_persona);
 
     let mut sections: Vec<String> = Vec::new();
-
-    let system_head = match profile.turn_framing() {
-        Some(framing) => format!(
-            "{}{}### system",
-            framing.system_open,
-            profile.reasoning_system_token().unwrap_or_default()
-        ),
-        None => match profile.reasoning_system_token() {
-            Some(token) => format!("### system\n{}", token.trim_end()),
-            None => "### system".to_string(),
-        },
-    };
-    sections.push(format!("{system_head}\n{persona}"));
+    sections.push(format!("### system\n{persona}"));
 
     sections.push(
         [
             "### rules",
-            "- Every response is a JSON array of tool calls: [{\"tool\": ..., \"args\": {...}}, ...].",
-            "- A solo step is a length-1 array. Emit multiple calls only when they are independent.",
-            "- Batch only independent calls. Approval-gated tools and dependent calls must use a length-1 array. A terminal verb (reply/finish) may appear only once and only as the LAST element.",
-            "- Never emit prose outside the JSON array. Never invent tool names or arguments.",
+            "- Use only the provided function tools; never invent tool names or arguments.",
+            "- A solo step uses one function call. Call multiple functions only when they are independent.",
+            "- Approval-gated tools and dependent calls must run alone. A terminal verb (reply/finish) may appear only once and only after all other work is complete.",
+            "- Return user-facing text through `reply`, not as unstructured assistant content.",
             "- Call `reply` to answer the user; call `finish` only to end the whole session.",
         ]
         .join("\n"),
@@ -599,43 +569,23 @@ pub fn build_prompt(
     conversation: &str,
     notice: Option<&str>,
 ) -> String {
-    build_prompt_for_profile(
-        stable_prefix,
-        loaded_tool_names,
-        loaded_skills,
-        conversation,
-        notice,
-        crate::core::agent::model_profile::AgentModelProfile::Plain,
-    )
-}
-
-pub fn build_prompt_for_profile(
-    stable_prefix: &str,
-    loaded_tool_names: &[String],
-    loaded_skills: &[crate::core::agent::skills::loaded::LoadedSkillState],
-    conversation: &str,
-    notice: Option<&str>,
-    profile: crate::core::agent::model_profile::AgentModelProfile,
-) -> String {
-    build_prompt_with_workspace_for_profile(
+    build_prompt_with_workspace(
         stable_prefix,
         loaded_tool_names,
         loaded_skills,
         None,
         conversation,
         notice,
-        profile,
     )
 }
 
-pub fn build_prompt_with_workspace_for_profile(
+pub fn build_prompt_with_workspace(
     stable_prefix: &str,
     loaded_tool_names: &[String],
     loaded_skills: &[crate::core::agent::skills::loaded::LoadedSkillState],
     workspace: Option<&str>,
     conversation: &str,
     notice: Option<&str>,
-    profile: crate::core::agent::model_profile::AgentModelProfile,
 ) -> String {
     let mut tail: Vec<String> = Vec::new();
 
@@ -670,13 +620,7 @@ pub fn build_prompt_with_workspace_for_profile(
     }
 
     tail.push("### respond".to_string());
-    tail.push("Respond now.".to_string());
-    if let Some(framing) = profile.turn_framing() {
-        tail.push(String::new());
-        tail.push(framing.turn_close.trim_end().to_string());
-        tail.push(framing.assistant_open.trim_end().to_string());
-        tail.push(String::new());
-    }
+    tail.push("Call one or more provided functions now.".to_string());
 
     format!("{stable_prefix}\n{}", tail.join("\n"))
 }
@@ -850,21 +794,10 @@ mod tests {
 
         assert!(full.starts_with(&prefix));
         assert!(full.contains("### conversation\nUSER: hello"));
-        assert!(full.trim_end().ends_with("### respond\nRespond now."));
+        assert!(full
+            .trim_end()
+            .ends_with("### respond\nCall one or more provided functions now."));
         assert!(!full.contains("### notice"));
-    }
-
-    #[test]
-    fn gemma4_prompt_uses_native_turn_and_channel_framing() {
-        let caps = test_caps("linux");
-        let profile = crate::core::agent::model_profile::AgentModelProfile::Gemma4Think;
-        let prefix =
-            build_stable_prefix_for_profile(ITERATION_ONE_TOOLS, &[], &caps, 8, None, profile);
-        let full = build_prompt_for_profile(&prefix, &[], &[], "USER: hello", None, profile);
-
-        assert!(prefix.starts_with("<|turn>system\n<|think|>\n### system"));
-        assert!(full.ends_with("<turn|>\n<|turn>model\n"));
-        assert!(!full.ends_with("<|channel>thought\n"));
     }
 
     #[test]
@@ -894,14 +827,13 @@ mod tests {
             &[primary.clone(), external.clone(), external.clone()],
             std::slice::from_ref(&read_only),
         );
-        let full = build_prompt_with_workspace_for_profile(
+        let full = build_prompt_with_workspace(
             "stable",
             &[],
             &[],
             Some(&workspace),
             "USER: create a file on Desktop",
             None,
-            crate::core::agent::model_profile::AgentModelProfile::Plain,
         );
 
         assert!(full.contains("### workspace\nprimary: /tmp/project"));

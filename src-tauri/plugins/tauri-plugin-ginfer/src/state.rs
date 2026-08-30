@@ -11,6 +11,7 @@ pub struct SessionInfo {
     pub model_id: String,
     pub model_path: String, // path of the loaded model artifact
     pub is_embedding: bool,
+    pub vision: bool,
     pub api_key: String,
 }
 

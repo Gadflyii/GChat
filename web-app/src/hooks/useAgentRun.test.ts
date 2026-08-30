@@ -102,12 +102,34 @@ describe('useAgentRun', () => {
       role: 'worker',
       cycle: null,
       model_instance_id: 'research-model',
+      reasoning_effort: 'high',
     })
 
     expect(running.trace.definition?.modelInstanceId).toBe(
       'coordinator-model'
     )
     expect(running.trace.stages[0].modelInstanceId).toBe('research-model')
+    expect(running.trace.stages[0].reasoningEffort).toBe('high')
+
+    const finished = reduceAgentRunState(running, {
+      type: 'stage_finished',
+      stage_id: 'researcher',
+      name: 'Researcher',
+      status: 'reply',
+      summary: 'done',
+      step_count: 2,
+      duration_ms: 500,
+      model_instance_id: 'research-model',
+      model_id: 'qwen',
+      reasoning_effort: 'high',
+      inference: {
+        prompt_tokens: 200,
+        generated_tokens: 100,
+        prompt_ms: 20,
+        generation_ms: 250,
+      },
+    })
+    expect(finished.trace.stages[0].inference?.generatedTokens).toBe(100)
   })
 
   it('clears a pending approval on execution, error, and terminal events', () => {

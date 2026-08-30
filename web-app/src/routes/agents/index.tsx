@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   IconBolt,
-  IconCopy,
   IconFileText,
   IconGitBranch,
   IconHistory,
   IconPlayerPlay,
   IconPlus,
   IconRepeat,
+  IconRefresh,
   IconTemplate,
   IconTrash,
   IconUsers,
@@ -32,6 +32,7 @@ import {
 import type {
   AgentDefinition,
   AgentModelInstance,
+  AgentReasoningEffort,
   AgentRole,
   AgentRunRecord,
   AgentStrategyKind,
@@ -39,6 +40,10 @@ import type {
   AgentWorkflowNode,
 } from '@/types/agent'
 import { cn } from '@/lib/utils'
+import {
+  aggregateAgentMetrics,
+  formatTokensPerSecond,
+} from '@/lib/agent-metrics'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.agents.index as any)({
@@ -90,6 +95,7 @@ function withKind(
         evaluatorInstructions:
           'Evaluate the result against every success criterion. Return PASS only when all are met; otherwise return REVISE with concrete corrective feedback.',
         evaluatorModelInstanceId: null,
+        evaluatorReasoningEffort: null,
       }
     case 'coordinator':
       return {
@@ -101,6 +107,7 @@ function withKind(
         synthesisInstructions:
           'Reconcile the specialist reports and deliver one coherent result.',
         synthesisModelInstanceId: null,
+        synthesisReasoningEffort: null,
         workers: [newRole('researcher', 'Researcher')],
       }
     case 'workflow':
@@ -121,6 +128,7 @@ function newRole(id: string, name: string): AgentRole {
     skills: [],
     maxSteps: 12,
     modelInstanceId: null,
+    reasoningEffort: null,
   }
 }
 
@@ -166,19 +174,21 @@ export function AgentStudioPage() {
   }, [definitions, draft])
 
   useEffect(() => {
-    void Promise.all([
-      listAgentTemplates(),
-      listAgentRuns(),
-      listAgentModelInstances(),
-    ])
-      .then(([nextTemplates, nextRuns, nextModelInstances]) => {
+    void Promise.all([listAgentTemplates(), listAgentRuns()])
+      .then(([nextTemplates, nextRuns]) => {
         setTemplates(nextTemplates)
         setRuns(nextRuns)
-        setModelInstances(nextModelInstances)
         setSelectedRunId((current) => current ?? nextRuns[0]?.id ?? null)
       })
       .catch((reason) => toast.error(String(reason)))
   }, [])
+
+  useEffect(() => {
+    if (view !== 'definitions') return
+    void listAgentModelInstances()
+      .then(setModelInstances)
+      .catch((reason) => toast.error(`Could not refresh model instances: ${String(reason)}`))
+  }, [view])
 
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
 
@@ -208,8 +218,8 @@ export function AgentStudioPage() {
     setView('definitions')
   }
 
-  const saveDraft = async () => {
-    if (!draft) return
+  const saveDraft = async (showToast = true): Promise<AgentDefinition | null> => {
+    if (!draft) return null
     const candidate = {
       ...draft,
       id: draft.id || slug(draft.name),
@@ -217,15 +227,17 @@ export function AgentStudioPage() {
     }
     if (!candidate.id) {
       toast.error('Give the agent a name before saving.')
-      return
+      return null
     }
     setSaving(true)
     try {
       const saved = await save(candidate)
       setDraft(cloneDefinition(saved))
-      toast.success('Agent definition saved')
+      if (showToast) toast.success('Agent definition saved')
+      return saved
     } catch (reason) {
       toast.error(String(reason))
+      return null
     } finally {
       setSaving(false)
     }
@@ -246,12 +258,14 @@ export function AgentStudioPage() {
     }
   }
 
-  const tryInChat = (definition: AgentDefinition) => {
+  const tryInChat = async (definition: AgentDefinition) => {
+    const saved = definition === draft ? await saveDraft(false) : definition
+    if (!saved) return
     useAgentMode.getState().setSidebarMode('agent')
     useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, true)
     void navigate({
       to: route.home,
-      search: { agentDefinition: definition.id },
+      search: { agentDefinition: saved.id },
     })
   }
 
@@ -293,7 +307,12 @@ export function AgentStudioPage() {
               active={view === 'runs'}
               onClick={() => {
                 setView('runs')
-                void listAgentRuns().then(setRuns).catch(String)
+                void listAgentRuns()
+                  .then((nextRuns) => {
+                    setRuns(nextRuns)
+                    setSelectedRunId((current) => current ?? nextRuns[0]?.id ?? null)
+                  })
+                  .catch((reason) => toast.error(`Could not refresh runs: ${String(reason)}`))
               }}
               icon={IconHistory}
               label="Runs"
@@ -327,7 +346,7 @@ export function AgentStudioPage() {
           )}
         </div>
       ) : view === 'definitions' ? (
-        <div className="grid min-h-0 grid-cols-[280px_minmax(420px,1fr)_300px]">
+        <div className="grid min-h-0 grid-cols-[250px_minmax(360px,1fr)_280px] xl:grid-cols-[280px_minmax(420px,1fr)_300px]">
           <aside className="min-h-0 overflow-y-auto border-r p-3">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -399,8 +418,7 @@ export function AgentStudioPage() {
                 saving={saving}
                 onSave={() => void saveDraft()}
                 onDelete={() => void deleteDraft()}
-                onDuplicate={() => startFrom(draft)}
-                onTry={() => tryInChat(draft)}
+                onTry={() => void tryInChat(draft)}
                 saved={definitions.some(
                   (definition) => definition.id === draft.id
                 )}
@@ -448,6 +466,18 @@ export function AgentStudioPage() {
           runs={runs}
           selected={selectedRun}
           onSelect={setSelectedRunId}
+          onRefresh={() => {
+            void listAgentRuns()
+              .then((nextRuns) => {
+                setRuns(nextRuns)
+                setSelectedRunId((current) =>
+                  nextRuns.some((run) => run.id === current)
+                    ? current
+                    : nextRuns[0]?.id ?? null
+                )
+              })
+              .catch((reason) => toast.error(`Could not refresh runs: ${String(reason)}`))
+          }}
         />
       )}
     </div>
@@ -543,6 +573,7 @@ function DefinitionEditor({
                         maxSteps: draft.maxSteps,
                         outputContract: draft.outputContract,
                         modelInstanceId: draft.modelInstanceId,
+                        reasoningEffort: draft.reasoningEffort,
                         builtIn: draft.builtIn,
                       },
                       kind
@@ -562,13 +593,21 @@ function DefinitionEditor({
       </section>
 
       <section>
-        <ModelInstanceSelect
-          label="Default model instance"
-          value={draft.modelInstanceId}
-          instances={modelInstances}
-          inheritLabel="Active chat model at run start"
-          onChange={(modelInstanceId) => common({ modelInstanceId })}
-        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <ModelInstanceSelect
+            label="Default model instance"
+            value={draft.modelInstanceId}
+            instances={modelInstances}
+            inheritLabel="Active chat model at run start"
+            onChange={(modelInstanceId) => common({ modelInstanceId })}
+          />
+          <ReasoningEffortSelect
+            label="Default reasoning effort"
+            value={draft.reasoningEffort}
+            inheritLabel="Model default"
+            onChange={(reasoningEffort) => common({ reasoningEffort })}
+          />
+        </div>
         <p className="mt-2 text-xs text-muted-foreground">
           Every stage inherits this instance unless that role has an explicit
           override. Assigned instances must already be loaded when a run starts.
@@ -671,6 +710,14 @@ function GoalLoopEditor({
           onChange({ ...draft, evaluatorModelInstanceId })
         }
       />
+      <ReasoningEffortSelect
+        label="Evaluator reasoning effort"
+        value={draft.evaluatorReasoningEffort}
+        inheritLabel="Agent default"
+        onChange={(evaluatorReasoningEffort) =>
+          onChange({ ...draft, evaluatorReasoningEffort })
+        }
+      />
       <Field label="Success criteria">
         <Textarea
           rows={4}
@@ -738,7 +785,7 @@ function CoordinatorEditor({
           />
         </Field>
       </div>
-      <div className="max-w-md">
+      <div className="grid gap-4 md:grid-cols-2">
         <ModelInstanceSelect
           label="Synthesizer model instance"
           value={draft.synthesisModelInstanceId}
@@ -746,6 +793,14 @@ function CoordinatorEditor({
           inheritLabel="Agent default"
           onChange={(synthesisModelInstanceId) =>
             onChange({ ...draft, synthesisModelInstanceId })
+          }
+        />
+        <ReasoningEffortSelect
+          label="Synthesizer reasoning effort"
+          value={draft.synthesisReasoningEffort}
+          inheritLabel="Agent default"
+          onChange={(synthesisReasoningEffort) =>
+            onChange({ ...draft, synthesisReasoningEffort })
           }
         />
       </div>
@@ -979,6 +1034,12 @@ function RoleEditor({
         inheritLabel="Agent default"
         onChange={(modelInstanceId) => onChange({ ...role, modelInstanceId })}
       />
+      <ReasoningEffortSelect
+        label="Reasoning effort"
+        value={role.reasoningEffort}
+        inheritLabel="Agent default"
+        onChange={(reasoningEffort) => onChange({ ...role, reasoningEffort })}
+      />
       <SkillPicker
         available={skills}
         selected={role.skills}
@@ -1026,6 +1087,51 @@ function ModelInstanceSelect({
           No GInfer model instances are loaded.
         </p>
       )}
+    </Field>
+  )
+}
+
+const REASONING_OPTIONS: Array<{
+  value: AgentReasoningEffort
+  label: string
+}> = [
+  { value: 'none', label: 'Off' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
+  { value: 'max', label: 'Maximum' },
+]
+
+function ReasoningEffortSelect({
+  label,
+  value,
+  inheritLabel,
+  onChange,
+}: {
+  label: string
+  value: AgentReasoningEffort | null
+  inheritLabel: string
+  onChange: (value: AgentReasoningEffort | null) => void
+}) {
+  return (
+    <Field label={label} className="mt-3">
+      <select
+        aria-label={label}
+        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+        value={value ?? ''}
+        onChange={(event) =>
+          onChange((event.target.value as AgentReasoningEffort) || null)
+        }
+      >
+        <option value="">{inheritLabel}</option>
+        {REASONING_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </Field>
   )
 }
@@ -1082,7 +1188,6 @@ function DefinitionInspector({
   saving,
   onSave,
   onDelete,
-  onDuplicate,
   onTry,
   saved,
 }: {
@@ -1090,7 +1195,6 @@ function DefinitionInspector({
   saving: boolean
   onSave: () => void
   onDelete: () => void
-  onDuplicate: () => void
   onTry: () => void
   saved: boolean
 }) {
@@ -1146,19 +1250,12 @@ function DefinitionInspector({
         approval policy still cascade from the parent run.
       </div>
       <div className="grid gap-2">
-        <Button disabled={!draft.id} onClick={onTry}>
-          <IconPlayerPlay /> Try in a task
+        <Button disabled={!draft.name.trim()} onClick={onTry}>
+          <IconPlayerPlay /> Save &amp; run
         </Button>
         <Button variant="outline" disabled={saving} onClick={onSave}>
           {saving ? 'Saving…' : 'Save definition'}
         </Button>
-        {saved && (
-          <>
-            <Button variant="ghost" onClick={onDuplicate}>
-              <IconCopy /> Duplicate
-            </Button>
-          </>
-        )}
         <Button variant="ghost" className="text-destructive" onClick={onDelete}>
           <IconTrash /> {saved ? 'Delete' : 'Discard'}
         </Button>
@@ -1171,14 +1268,36 @@ function RunInspector({
   runs,
   selected,
   onSelect,
+  onRefresh,
 }: {
   runs: AgentRunRecord[]
   selected: AgentRunRecord | null
   onSelect: (id: string) => void
+  onRefresh: () => void
 }) {
+  const instanceMetrics = aggregateAgentMetrics(
+    selected?.stages.map((stage) => ({
+      modelInstanceId: stage.modelInstanceId,
+      modelId: stage.modelId,
+      inference: stage.inference,
+    })) ?? []
+  )
   return (
     <div className="grid min-h-0 grid-cols-[340px_1fr]">
       <aside className="min-h-0 overflow-y-auto border-r p-3">
+        <div className="mb-3 flex items-center justify-between px-1">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Run history
+          </span>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            title="Refresh runs"
+            onClick={onRefresh}
+          >
+            <IconRefresh />
+          </Button>
+        </div>
         {runs.length === 0 && (
           <p className="p-3 text-sm text-muted-foreground">
             Completed Agent Studio runs will appear here.
@@ -1229,6 +1348,49 @@ function RunInspector({
                 default: {selected.defaultModelInstanceId}
               </p>
             </div>
+            {instanceMetrics.length > 0 && (
+              <section>
+                <h3 className="mb-2 font-medium">Model-instance throughput</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {instanceMetrics.map((metrics) => (
+                    <article
+                      key={metrics.modelInstanceId}
+                      className="rounded-xl border bg-muted/10 p-4"
+                    >
+                      <p className="truncate font-mono text-xs" title={metrics.modelInstanceId}>
+                        {metrics.modelInstanceId}
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 gap-3">
+                        <Metric
+                          label="Generation t/s"
+                          value={formatTokensPerSecond(
+                            metrics.generatedTokens,
+                            metrics.generationMs
+                          )}
+                        />
+                        <Metric
+                          label="Prompt t/s"
+                          value={formatTokensPerSecond(
+                            metrics.promptTokens,
+                            metrics.promptMs
+                          )}
+                        />
+                      </div>
+                      <p className="mt-3 text-[11px] text-muted-foreground">
+                        {metrics.stageCount}{' '}
+                        {metrics.stageCount === 1 ? 'stage' : 'stages'} ·{' '}
+                        {metrics.generatedTokens.toFixed(0)} generated ·{' '}
+                        {metrics.promptTokens.toFixed(0)} prefilled
+                      </p>
+                    </article>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Rates use GInfer engine timing and are aggregated by registered
+                  model instance.
+                </p>
+              </section>
+            )}
             {selected.stages.length > 0 && (
               <section className="space-y-2">
                 <h3 className="font-medium">Stage trace</h3>
@@ -1236,6 +1398,9 @@ function RunInspector({
                   <article key={stage.stageId} className="rounded-xl border p-4">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{stage.name}</span>
+                      <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {stage.status}
+                      </span>
                       <span className="ml-auto text-xs text-muted-foreground">
                         {stage.stepCount} steps · {stage.durationMs} ms
                       </span>
@@ -1245,6 +1410,22 @@ function RunInspector({
                     </p>
                     <p className="mt-2 font-mono text-[11px] text-muted-foreground">
                       {stage.modelInstanceId}
+                      {stage.reasoningEffort
+                        ? ` · reasoning ${stage.reasoningEffort}`
+                        : ' · model-default reasoning'}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Generation{' '}
+                      {formatTokensPerSecond(
+                        stage.inference.generatedTokens,
+                        stage.inference.generationMs
+                      )}{' '}
+                      t/s · Prompt{' '}
+                      {formatTokensPerSecond(
+                        stage.inference.promptTokens,
+                        stage.inference.promptMs
+                      )}{' '}
+                      t/s
                     </p>
                   </article>
                 ))}
@@ -1299,6 +1480,19 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border bg-background p-3">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="mt-1 font-medium">{value}</dd>
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="font-studio text-xl font-semibold text-foreground">
+        {value}
+      </div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
     </div>
   )
 }

@@ -9,12 +9,12 @@ use tauri::{AppHandle, Runtime};
 
 use crate::core::app::commands::get_jan_data_folder_path;
 
-use super::definitions::AgentDefinition;
+use super::definitions::{AgentDefinition, AgentReasoningEffort};
 use super::runner::AgentTurnOutcome;
-use super::types::AgentEvent;
+use super::types::{AgentEvent, AgentInferenceMetrics};
 
 const RUN_HISTORY_FILE: &str = "agent-runs.json";
-const RUN_HISTORY_SCHEMA_VERSION: u32 = 2;
+const RUN_HISTORY_SCHEMA_VERSION: u32 = 3;
 const MAX_RUN_HISTORY: usize = 100;
 static RUN_HISTORY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -48,6 +48,10 @@ pub struct AgentRunStage {
     pub duration_ms: u64,
     pub model_instance_id: String,
     pub model_id: String,
+    #[serde(default)]
+    pub reasoning_effort: Option<AgentReasoningEffort>,
+    #[serde(default)]
+    pub inference: AgentInferenceMetrics,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +83,8 @@ impl AgentRunRecord {
                     duration_ms,
                     model_instance_id,
                     model_id,
+                    reasoning_effort,
+                    inference,
                 } => Some(AgentRunStage {
                     stage_id: stage_id.clone(),
                     name: name.clone(),
@@ -88,6 +94,8 @@ impl AgentRunRecord {
                     duration_ms: *duration_ms,
                     model_instance_id: model_instance_id.clone(),
                     model_id: model_id.clone(),
+                    reasoning_effort: *reasoning_effort,
+                    inference: *inference,
                 }),
                 _ => None,
             })
@@ -193,13 +201,17 @@ fn read_history(data_folder: &Path) -> Result<RunHistory, String> {
     }
     let bytes = std::fs::read(path)
         .map_err(|error| format!("Failed to read Agent run history: {error}"))?;
-    let history: RunHistory = serde_json::from_slice(&bytes)
+    let mut history: RunHistory = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Failed to parse Agent run history: {error}"))?;
-    if history.schema_version != RUN_HISTORY_SCHEMA_VERSION {
+    if !matches!(history.schema_version, 2 | RUN_HISTORY_SCHEMA_VERSION) {
         return Err(format!(
             "Unsupported Agent run-history schema version {}",
             history.schema_version
         ));
+    }
+    history.schema_version = RUN_HISTORY_SCHEMA_VERSION;
+    for run in &mut history.runs {
+        run.schema_version = RUN_HISTORY_SCHEMA_VERSION;
     }
     Ok(history)
 }
@@ -240,6 +252,7 @@ mod tests {
                 reply: Some(format!("reply-{index}")),
                 reason: "reply".into(),
                 step_count: 1,
+                inference: AgentInferenceMetrics::default(),
             });
             record_run(
                 root.path(),
@@ -267,6 +280,7 @@ mod tests {
             reply: Some("done".into()),
             reason: "reply".into(),
             step_count: 2,
+            inference: AgentInferenceMetrics::default(),
         });
         let events = vec![
             AgentEvent::OrchestrationStarted {
@@ -284,6 +298,13 @@ mod tests {
                 duration_ms: 50,
                 model_instance_id: "research-model".into(),
                 model_id: "research-model".into(),
+                reasoning_effort: Some(AgentReasoningEffort::High),
+                inference: AgentInferenceMetrics {
+                    prompt_tokens: 100.0,
+                    generated_tokens: 50.0,
+                    prompt_ms: 10.0,
+                    generation_ms: 100.0,
+                },
             },
         ];
 
@@ -299,5 +320,6 @@ mod tests {
 
         assert_eq!(record.default_model_instance_id, "coordinator-model");
         assert_eq!(record.stages[0].model_instance_id, "research-model");
+        assert_eq!(record.stages[0].inference.generated_tokens, 50.0);
     }
 }

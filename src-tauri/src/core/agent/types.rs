@@ -7,11 +7,45 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::definitions::AgentReasoningEffort;
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentInferenceMetrics {
+    pub prompt_tokens: f64,
+    pub generated_tokens: f64,
+    pub prompt_ms: f64,
+    pub generation_ms: f64,
+}
+
+impl AgentInferenceMetrics {
+    pub fn record(
+        &mut self,
+        prompt_tokens: f64,
+        generated_tokens: f64,
+        prompt_ms: f64,
+        generation_ms: f64,
+    ) {
+        self.prompt_tokens += prompt_tokens;
+        self.generated_tokens += generated_tokens;
+        self.prompt_ms += prompt_ms;
+        self.generation_ms += generation_ms;
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        self.record(
+            other.prompt_tokens,
+            other.generated_tokens,
+            other.prompt_ms,
+            other.generation_ms,
+        );
+    }
+}
+
 /// A single tool call the model asked for: `{ "tool": ..., "args": ... }`.
 ///
-/// Ported from `ToolCallPayload` in `tool-call-grammar.ts`. Under the
-/// production grammar the model always emits a JSON **array** of these
-/// (`[{tool, args}, ...]`), so a solo step is a length-1 batch.
+/// GInfer returns native OpenAI-compatible function calls; the direct client
+/// normalizes those calls into this executor-owned representation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolCallPayload {
     pub tool: String,
@@ -239,6 +273,7 @@ pub enum AgentEvent {
         role: String,
         cycle: Option<u32>,
         model_instance_id: String,
+        reasoning_effort: Option<AgentReasoningEffort>,
     },
     StageFinished {
         stage_id: String,
@@ -249,6 +284,8 @@ pub enum AgentEvent {
         duration_ms: u64,
         model_instance_id: String,
         model_id: String,
+        reasoning_effort: Option<AgentReasoningEffort>,
+        inference: AgentInferenceMetrics,
     },
     Handoff {
         from: String,

@@ -8,13 +8,13 @@ use futures::{stream, StreamExt};
 use tokio_util::sync::CancellationToken;
 
 use super::definitions::{
-    workflow_levels, AgentDefinition, AgentStrategy, StageWorkspace, WorkflowEdge, WorkflowNode,
+    workflow_levels, AgentDefinition, AgentReasoningEffort, AgentStrategy, StageWorkspace,
+    WorkflowEdge, WorkflowNode,
 };
-use super::llm_client::LlamaServerClient;
-use super::model_profile::AgentModelProfile;
+use super::ginfer_client::GinferClient;
 use super::path_policy::EditableRoots;
 use super::prompt::{
-    build_stable_prefix_for_profile, compose_agent_persona, CapabilitiesSummary, SkillDescriptor,
+    build_stable_prefix, compose_agent_persona, CapabilitiesSummary, SkillDescriptor,
     DEFAULT_MAX_PARALLEL_TOOL_CALLS, ITERATION_ONE_TOOLS,
 };
 use super::runner::{
@@ -23,7 +23,7 @@ use super::runner::{
 use super::session::AgentSessionState;
 use super::skills::SkillRegistry;
 use super::tools::{ApprovalHook, DesktopServices, FolderAccessHook};
-use super::types::AgentEvent;
+use super::types::{AgentEvent, AgentInferenceMetrics};
 
 const STAGE_HANDOFF_CHARS: usize = 8_000;
 
@@ -85,6 +85,7 @@ struct StageSpec {
     message: String,
     cycle: Option<u32>,
     model_instance_id: String,
+    reasoning_effort: Option<AgentReasoningEffort>,
 }
 
 struct StageResult {
@@ -94,13 +95,13 @@ struct StageResult {
     duration_ms: u64,
     model_instance_id: String,
     model_id: String,
+    reasoning_effort: Option<AgentReasoningEffort>,
 }
 
 pub struct AgentModelRoute {
     pub instance_id: String,
     pub model_id: String,
-    pub model_profile: AgentModelProfile,
-    pub client: LlamaServerClient,
+    pub client: GinferClient,
 }
 
 pub struct AgentModelRoutes {
@@ -135,12 +136,10 @@ pub async fn run_definition(
     mut emit: impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
     let kind = strategy_name(&input.definition.strategy);
-    if !matches!(input.definition.strategy, AgentStrategy::Standard) {
-        emit(AgentEvent::TurnStarted {
-            run_id: input.run_id.to_owned(),
-            session_id: input.session_id.to_owned(),
-        })?;
-    }
+    emit(AgentEvent::TurnStarted {
+        run_id: input.run_id.to_owned(),
+        session_id: input.session_id.to_owned(),
+    })?;
     emit(AgentEvent::OrchestrationStarted {
         definition_id: input.definition.id.clone(),
         definition_name: input.definition.name.clone(),
@@ -189,22 +188,39 @@ pub async fn run_definition(
                 &input.definition.instructions,
                 &input.definition.output_contract,
             );
-            let stable_prefix = build_stable_prefix_for_profile(
+            let stable_prefix = build_stable_prefix(
                 ITERATION_ONE_TOOLS,
                 input.skill_descriptors,
                 input.capabilities,
                 DEFAULT_MAX_PARALLEL_TOOL_CALLS,
                 Some(&persona),
-                route.model_profile,
             );
-            run_turn_with_options(
+            let stage = StageSpec {
+                id: "agent".into(),
+                name: input.definition.name.clone(),
+                role: "agent".into(),
+                instructions: input.definition.instructions.clone(),
+                output_contract: input.definition.output_contract.clone(),
+                skills: skills.clone(),
+                max_steps: input
+                    .max_steps_override
+                    .unwrap_or(input.definition.max_steps),
+                workspace: StageWorkspace::Shared,
+                message: input.user_message.into(),
+                cycle: None,
+                model_instance_id: default_model_instance_id.into(),
+                reasoning_effort: input.definition.reasoning_effort,
+            };
+            emit_stage_started(&stage, &mut emit)?;
+            let started = Instant::now();
+            let result = run_turn_with_options(
                 RunTurnInput {
                     run_id: input.run_id,
                     session_id: input.session_id,
                     user_message: input.user_message,
                     selected_skill: None,
                     stable_prefix: &stable_prefix,
-                    model_profile: route.model_profile,
+                    reasoning_effort: input.definition.reasoning_effort,
                     working_dir: input.working_dir,
                     editable_roots: input.editable_roots,
                     external_read_only_roots: input.external_read_only_roots,
@@ -222,18 +238,52 @@ pub async fn run_definition(
                     bundled_script_runtime: input.bundled_script_runtime,
                 },
                 RunTurnOptions {
-                    slot_id: 0,
                     additional_skills: &skills,
                 },
-                &mut emit,
+                |event| match event {
+                    AgentEvent::TurnStarted { .. } | AgentEvent::TurnFinished { .. } => Ok(()),
+                    event => emit(event),
+                },
             )
-            .await?
+            .await;
+            match result {
+                Ok(outcome) => {
+                    emit_stage_finished(
+                        &StageResult {
+                            id: stage.id,
+                            name: stage.name,
+                            outcome: outcome.clone(),
+                            duration_ms: elapsed_ms(started),
+                            model_instance_id: route.instance_id.clone(),
+                            model_id: route.model_id.clone(),
+                            reasoning_effort: stage.reasoning_effort,
+                        },
+                        &mut emit,
+                    )?;
+                    outcome
+                }
+                Err(error) => {
+                    emit_failed_stage(
+                        &stage,
+                        &route.model_id,
+                        elapsed_ms(started),
+                        &error,
+                        &mut emit,
+                    )?;
+                    emit(AgentEvent::TurnFinished {
+                        reason: "failed".into(),
+                        step_count: 0,
+                    })?;
+                    return Err(error);
+                }
+            }
         }
         AgentStrategy::GoalLoop {
             max_cycles,
             success_criteria,
             evaluator_instructions,
             evaluator_model_instance_id,
+            evaluator_reasoning_effort,
         } => {
             run_goal_loop(
                 &stage_context,
@@ -244,6 +294,7 @@ pub async fn run_definition(
                 success_criteria,
                 evaluator_instructions,
                 evaluator_model_instance_id.as_deref(),
+                *evaluator_reasoning_effort,
                 &mut emit,
             )
             .await?
@@ -253,6 +304,7 @@ pub async fn run_definition(
             coordinator_instructions,
             synthesis_instructions,
             synthesis_model_instance_id,
+            synthesis_reasoning_effort,
             workers,
         } => {
             run_coordinator(
@@ -264,6 +316,7 @@ pub async fn run_definition(
                 coordinator_instructions,
                 synthesis_instructions,
                 synthesis_model_instance_id.as_deref(),
+                *synthesis_reasoning_effort,
                 workers,
                 &mut emit,
             )
@@ -294,11 +347,11 @@ pub async fn run_definition(
             text: reply.clone(),
         })?;
         emit(AgentEvent::AssistantReply { text: reply })?;
-        emit(AgentEvent::TurnFinished {
-            reason: outcome.reason.clone(),
-            step_count: outcome.step_count,
-        })?;
     }
+    emit(AgentEvent::TurnFinished {
+        reason: outcome.reason.clone(),
+        step_count: outcome.step_count,
+    })?;
     Ok(outcome)
 }
 
@@ -312,11 +365,13 @@ async fn run_goal_loop(
     success_criteria: &str,
     evaluator_instructions: &str,
     evaluator_model_instance_id: Option<&str>,
+    evaluator_reasoning_effort: Option<AgentReasoningEffort>,
     emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
     let mut feedback = String::new();
     let mut last_executor = None;
     let mut total_steps = 0;
+    let mut inference = AgentInferenceMetrics::default();
     for cycle in 1..=max_cycles {
         let message = if feedback.is_empty() {
             format!("Goal:\n{goal}")
@@ -338,13 +393,15 @@ async fn run_goal_loop(
             message,
             cycle: Some(cycle),
             model_instance_id: context.default_model_instance_id.into(),
+            reasoning_effort: definition.reasoning_effort,
         };
-        emit_stage_started(&executor, emit)?;
-        let executor_result = execute_stage(context, executor, 0).await?;
+        let executor_result = execute_observed_stage(context, executor, 0, emit).await?;
         total_steps += executor_result.outcome.step_count;
-        emit_stage_finished(&executor_result, emit)?;
+        inference.merge(executor_result.outcome.inference);
         if executor_result.outcome.reason == "cancelled" {
-            return Ok(executor_result.outcome);
+            let mut outcome = executor_result.outcome;
+            outcome.inference = inference;
+            return Ok(outcome);
         }
         let executor_reply = executor_result.outcome.reply.clone().unwrap_or_default();
         last_executor = Some(executor_reply.clone());
@@ -368,13 +425,15 @@ async fn run_goal_loop(
                 context.default_model_instance_id,
             )
             .into(),
+            reasoning_effort: evaluator_reasoning_effort.or(definition.reasoning_effort),
         };
-        emit_stage_started(&evaluator, emit)?;
-        let evaluator_result = execute_stage(context, evaluator, 1).await?;
+        let evaluator_result = execute_observed_stage(context, evaluator, 1, emit).await?;
         total_steps += evaluator_result.outcome.step_count;
-        emit_stage_finished(&evaluator_result, emit)?;
+        inference.merge(evaluator_result.outcome.inference);
         if evaluator_result.outcome.reason == "cancelled" {
-            return Ok(evaluator_result.outcome);
+            let mut outcome = evaluator_result.outcome;
+            outcome.inference = inference;
+            return Ok(outcome);
         }
         feedback = evaluator_result.outcome.reply.unwrap_or_default();
         if evaluator_passed(&feedback) {
@@ -392,6 +451,7 @@ async fn run_goal_loop(
         reply: last_executor,
         reason: "reply".into(),
         step_count: total_steps,
+        inference,
     })
 }
 
@@ -405,6 +465,7 @@ async fn run_coordinator(
     coordinator_instructions: &str,
     synthesis_instructions: &str,
     synthesis_model_instance_id: Option<&str>,
+    synthesis_reasoning_effort: Option<AgentReasoningEffort>,
     workers: &[super::definitions::AgentRole],
     emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
@@ -427,13 +488,13 @@ async fn run_coordinator(
         ),
         cycle: None,
         model_instance_id: context.default_model_instance_id.into(),
+        reasoning_effort: definition.reasoning_effort,
     };
-    emit_stage_started(&plan, emit)?;
-    let plan_result = execute_stage(context, plan, 0).await?;
-    emit_stage_finished(&plan_result, emit)?;
+    let plan_result = execute_observed_stage(context, plan, 0, emit).await?;
     if plan_result.outcome.reason == "cancelled" {
         return Ok(plan_result.outcome);
     }
+    let mut inference = plan_result.outcome.inference;
     let plan_text = plan_result.outcome.reply.unwrap_or_default();
 
     let worker_specs = workers
@@ -457,6 +518,7 @@ async fn run_coordinator(
                 context.default_model_instance_id,
             )
             .into(),
+            reasoning_effort: worker.reasoning_effort.or(definition.reasoning_effort),
         })
         .collect::<Vec<_>>();
     for worker in &worker_specs {
@@ -464,28 +526,53 @@ async fn run_coordinator(
     }
     let mut worker_results = stream::iter(worker_specs.into_iter().enumerate().map(
         |(index, worker)| async move {
+            let failure_spec = worker.clone();
+            let started = Instant::now();
             let result = execute_stage(context, worker, index as i32).await;
-            (index, result)
+            (index, failure_spec, elapsed_ms(started), result)
         },
     ))
     .buffer_unordered(max_parallel)
     .collect::<Vec<_>>()
     .await;
-    worker_results.sort_by_key(|(index, _)| *index);
+    worker_results.sort_by_key(|(index, _, _, _)| *index);
     let mut reports = Vec::with_capacity(worker_results.len());
     let mut total_steps = plan_result.outcome.step_count;
-    for (_, result) in worker_results {
-        let result = result?;
+    let mut first_error = None;
+    let mut cancelled = false;
+    for (_, spec, duration_ms, result) in worker_results {
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                let model_id = context
+                    .model_routes
+                    .route(&spec.model_instance_id)
+                    .map(|route| route.model_id.as_str())
+                    .unwrap_or_default();
+                emit_failed_stage(&spec, model_id, duration_ms, &error, emit)?;
+                first_error.get_or_insert(error);
+                continue;
+            }
+        };
         total_steps += result.outcome.step_count;
+        inference.merge(result.outcome.inference);
         emit_stage_finished(&result, emit)?;
         if result.outcome.reason == "cancelled" {
-            return Ok(AgentTurnOutcome {
-                reply: None,
-                reason: "cancelled".into(),
-                step_count: total_steps,
-            });
+            cancelled = true;
+            continue;
         }
         reports.push((result.name, result.outcome.reply.unwrap_or_default()));
+    }
+    if let Some(error) = first_error {
+        return Err(error);
+    }
+    if cancelled {
+        return Ok(AgentTurnOutcome {
+            reply: None,
+            reason: "cancelled".into(),
+            step_count: total_steps,
+            inference,
+        });
     }
 
     let synthesis = StageSpec {
@@ -512,15 +599,16 @@ async fn run_coordinator(
             context.default_model_instance_id,
         )
         .into(),
+        reasoning_effort: synthesis_reasoning_effort.or(definition.reasoning_effort),
     };
-    emit_stage_started(&synthesis, emit)?;
-    let synthesis_result = execute_stage(context, synthesis, 0).await?;
+    let synthesis_result = execute_observed_stage(context, synthesis, 0, emit).await?;
     total_steps += synthesis_result.outcome.step_count;
-    emit_stage_finished(&synthesis_result, emit)?;
+    inference.merge(synthesis_result.outcome.inference);
     Ok(AgentTurnOutcome {
         reply: synthesis_result.outcome.reply,
         reason: synthesis_result.outcome.reason,
         step_count: total_steps,
+        inference,
     })
 }
 
@@ -541,6 +629,7 @@ async fn run_workflow(
         .collect::<HashMap<_, _>>();
     let mut results = HashMap::<String, String>::new();
     let mut total_steps = 0;
+    let mut inference = AgentInferenceMetrics::default();
     let mut last_outcome = None;
 
     for level in levels {
@@ -580,6 +669,7 @@ async fn run_workflow(
                         context.default_model_instance_id,
                     )
                     .into(),
+                    reasoning_effort: node.reasoning_effort.or(definition.reasoning_effort),
                 }
             })
             .collect::<Vec<_>>();
@@ -588,24 +678,38 @@ async fn run_workflow(
         }
         let mut level_results = stream::iter(specs.into_iter().enumerate().map(
             |(index, spec)| async move {
+                let failure_spec = spec.clone();
+                let started = Instant::now();
                 let result = execute_stage(context, spec, index as i32).await;
-                (index, result)
+                (index, failure_spec, elapsed_ms(started), result)
             },
         ))
         .buffer_unordered(level.len())
         .collect::<Vec<_>>()
         .await;
-        level_results.sort_by_key(|(index, _)| *index);
-        for (_, result) in level_results {
-            let result = result?;
+        level_results.sort_by_key(|(index, _, _, _)| *index);
+        let mut first_error = None;
+        let mut cancelled = false;
+        for (_, spec, duration_ms, result) in level_results {
+            let result = match result {
+                Ok(result) => result,
+                Err(error) => {
+                    let model_id = context
+                        .model_routes
+                        .route(&spec.model_instance_id)
+                        .map(|route| route.model_id.as_str())
+                        .unwrap_or_default();
+                    emit_failed_stage(&spec, model_id, duration_ms, &error, emit)?;
+                    first_error.get_or_insert(error);
+                    continue;
+                }
+            };
             total_steps += result.outcome.step_count;
+            inference.merge(result.outcome.inference);
             emit_stage_finished(&result, emit)?;
             if result.outcome.reason == "cancelled" {
-                return Ok(AgentTurnOutcome {
-                    reply: None,
-                    reason: "cancelled".into(),
-                    step_count: total_steps,
-                });
+                cancelled = true;
+                continue;
             }
             let reply = result.outcome.reply.clone().unwrap_or_default();
             for edge in edges.iter().filter(|edge| edge.from == result.id) {
@@ -618,16 +722,28 @@ async fn run_workflow(
             results.insert(result.id.clone(), reply);
             last_outcome = Some(result.outcome);
         }
+        if let Some(error) = first_error {
+            return Err(error);
+        }
+        if cancelled {
+            return Ok(AgentTurnOutcome {
+                reply: None,
+                reason: "cancelled".into(),
+                step_count: total_steps,
+                inference,
+            });
+        }
     }
     let mut outcome = last_outcome.ok_or_else(|| "Workflow produced no result".to_string())?;
     outcome.step_count = total_steps;
+    outcome.inference = inference;
     Ok(outcome)
 }
 
 async fn execute_stage(
     context: &StageContext<'_>,
     spec: StageSpec,
-    slot_id: i32,
+    _worker_index: i32,
 ) -> Result<StageResult, String> {
     if context.cancellation.is_cancelled() {
         return Err("Agent run was cancelled".into());
@@ -635,13 +751,12 @@ async fn execute_stage(
     let started = Instant::now();
     let route = context.model_routes.route(&spec.model_instance_id)?;
     let persona = compose_agent_persona(&spec.instructions, &spec.output_contract);
-    let stable_prefix = build_stable_prefix_for_profile(
+    let stable_prefix = build_stable_prefix(
         ITERATION_ONE_TOOLS,
         context.skill_descriptors,
         context.capabilities,
         DEFAULT_MAX_PARALLEL_TOOL_CALLS,
         Some(&persona),
-        route.model_profile,
     );
     let mut session = AgentSessionState::new(format!("{}:{}", context.run_id, spec.id));
 
@@ -650,7 +765,6 @@ async fn execute_stage(
             run_stage_with_workspace(
                 context,
                 &spec,
-                slot_id,
                 &stable_prefix,
                 context.working_dir,
                 context.editable_roots,
@@ -677,7 +791,6 @@ async fn execute_stage(
             run_stage_with_workspace(
                 context,
                 &spec,
-                slot_id,
                 &stable_prefix,
                 &scratch,
                 &editable_roots,
@@ -697,14 +810,40 @@ async fn execute_stage(
         duration_ms: started.elapsed().as_millis().min(u64::MAX as u128) as u64,
         model_instance_id: route.instance_id.clone(),
         model_id: route.model_id.clone(),
+        reasoning_effort: spec.reasoning_effort,
     })
+}
+
+async fn execute_observed_stage(
+    context: &StageContext<'_>,
+    spec: StageSpec,
+    worker_index: i32,
+    emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
+) -> Result<StageResult, String> {
+    emit_stage_started(&spec, emit)?;
+    let failure_spec = spec.clone();
+    let started = Instant::now();
+    match execute_stage(context, spec, worker_index).await {
+        Ok(result) => {
+            emit_stage_finished(&result, emit)?;
+            Ok(result)
+        }
+        Err(error) => {
+            let model_id = context
+                .model_routes
+                .route(&failure_spec.model_instance_id)
+                .map(|route| route.model_id.as_str())
+                .unwrap_or_default();
+            emit_failed_stage(&failure_spec, model_id, elapsed_ms(started), &error, emit)?;
+            Err(error)
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn run_stage_with_workspace(
     context: &StageContext<'_>,
     spec: &StageSpec,
-    slot_id: i32,
     stable_prefix: &str,
     working_dir: &Path,
     editable_roots: &EditableRoots,
@@ -720,7 +859,7 @@ async fn run_stage_with_workspace(
             user_message: &spec.message,
             selected_skill: None,
             stable_prefix,
-            model_profile: route.model_profile,
+            reasoning_effort: spec.reasoning_effort,
             working_dir,
             editable_roots,
             external_read_only_roots,
@@ -736,7 +875,6 @@ async fn run_stage_with_workspace(
             bundled_script_runtime: context.bundled_script_runtime,
         },
         RunTurnOptions {
-            slot_id,
             additional_skills: &spec.skills,
         },
         |_| Ok(()),
@@ -754,6 +892,7 @@ fn emit_stage_started(
         role: spec.role.clone(),
         cycle: spec.cycle,
         model_instance_id: spec.model_instance_id.clone(),
+        reasoning_effort: spec.reasoning_effort,
     })
 }
 
@@ -770,7 +909,34 @@ fn emit_stage_finished(
         duration_ms: result.duration_ms,
         model_instance_id: result.model_instance_id.clone(),
         model_id: result.model_id.clone(),
+        reasoning_effort: result.reasoning_effort,
+        inference: result.outcome.inference,
     })
+}
+
+fn emit_failed_stage(
+    spec: &StageSpec,
+    model_id: &str,
+    duration_ms: u64,
+    error: &str,
+    emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
+) -> Result<(), String> {
+    emit(AgentEvent::StageFinished {
+        stage_id: spec.id.clone(),
+        name: spec.name.clone(),
+        status: "failed".into(),
+        summary: clip(error),
+        step_count: 0,
+        duration_ms,
+        model_instance_id: spec.model_instance_id.clone(),
+        model_id: model_id.to_owned(),
+        reasoning_effort: spec.reasoning_effort,
+        inference: AgentInferenceMetrics::default(),
+    })
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    started.elapsed().as_millis().min(u64::MAX as u128) as u64
 }
 
 fn resolved_model_instance_id<'a>(binding: Option<&'a str>, inherited: &'a str) -> &'a str {
@@ -834,8 +1000,8 @@ mod tests {
     use super::*;
     use crate::core::agent::definitions::general_agent;
     use crate::core::agent::test_support::{
-        RecordingApproval, RecordingDesktop, RecordingFolderAccess,
-        ScriptedCompletionServer, ScriptedResponse, TestWorkspace,
+        RecordingApproval, RecordingDesktop, RecordingFolderAccess, ScriptedGinferServer,
+        ScriptedResponse, TestWorkspace,
     };
     use tokio_util::sync::CancellationToken;
 
@@ -862,11 +1028,11 @@ mod tests {
 
     #[tokio::test]
     async fn routes_goal_loop_stages_to_their_assigned_model_instances() {
-        let executor = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+        let executor = ScriptedGinferServer::start(vec![ScriptedResponse::completion(
             r#"[{"tool":"reply","args":{"text":"executor result"}}]"#,
         )])
         .await;
-        let evaluator = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+        let evaluator = ScriptedGinferServer::start(vec![ScriptedResponse::completion(
             r#"[{"tool":"reply","args":{"text":"PASS"}}]"#,
         )])
         .await;
@@ -874,13 +1040,11 @@ mod tests {
             AgentModelRoute {
                 instance_id: "executor-model".into(),
                 model_id: "executor-model".into(),
-                model_profile: AgentModelProfile::Plain,
                 client: executor.client(),
             },
             AgentModelRoute {
                 instance_id: "evaluator-model".into(),
                 model_id: "evaluator-model".into(),
-                model_profile: AgentModelProfile::Plain,
                 client: evaluator.client(),
             },
         ])
@@ -893,6 +1057,7 @@ mod tests {
             success_criteria: "Complete".into(),
             evaluator_instructions: "Evaluate".into(),
             evaluator_model_instance_id: Some("evaluator-model".into()),
+            evaluator_reasoning_effort: Some(AgentReasoningEffort::High),
         };
         let workspace = TestWorkspace::new();
         let editable_roots = EditableRoots::new(workspace.path(), &[]).await.unwrap();
@@ -955,8 +1120,7 @@ mod tests {
                 .iter()
                 .filter_map(|event| match event {
                     AgentEvent::StageStarted {
-                        model_instance_id,
-                        ..
+                        model_instance_id, ..
                     } => Some(model_instance_id.as_str()),
                     _ => None,
                 })

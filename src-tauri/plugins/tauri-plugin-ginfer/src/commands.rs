@@ -442,6 +442,7 @@ pub async fn load_ginfer_model_impl(
         model_id,
         model_path,
         is_embedding,
+        vision: config.vision,
         api_key,
     };
 

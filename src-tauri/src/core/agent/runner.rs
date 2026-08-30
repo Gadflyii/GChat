@@ -4,24 +4,24 @@
 
 use std::{
     path::{Path, PathBuf},
+    sync::Mutex,
     time::Duration,
 };
 
 use tokio_util::sync::CancellationToken;
 
 use super::batch_executor::{execute_batch, PlannedCall};
-use super::grammar::tool_call_grammar_for_profile;
-use super::llm_client::{
-    parse_tool_calls_for_profile, CompletionRequest, LlamaClientError, LlamaServerClient,
+use super::definitions::AgentReasoningEffort;
+use super::ginfer_client::{
+    parse_tool_calls, CompletionRequest, CompletionTiming, GinferClient, GinferClientError,
     ParsedToolCalls,
 };
 use super::loop_guard::{
     format_forced_loop_reply, format_repeat_notice, format_veto_instruction,
     format_wandering_redirect, LoopCheckLevel, ToolLoopTracker,
 };
-use super::model_profile::AgentModelProfile;
 use super::path_policy::EditableRoots;
-use super::prompt::{build_prompt_with_workspace_for_profile, format_workspace};
+use super::prompt::{build_prompt_with_workspace, format_workspace};
 use super::resource_class::{is_batchable, resource_class_for, ResourceClass};
 use super::session::AgentSessionState;
 use super::skills::{loaded::LoadedSkills, SkillRegistry};
@@ -31,12 +31,12 @@ use super::token_budget::{
 };
 use super::tools::{self, ApprovalHook, DesktopServices, FolderAccessHook, ToolContext};
 use super::types::{
-    AgentEvent, LoopLevel, ToolCallPayload, ToolExecution, ToolOutcome, ToolStatus,
+    AgentEvent, AgentInferenceMetrics, LoopLevel, ToolCallPayload, ToolExecution, ToolOutcome,
+    ToolStatus,
 };
 
 pub const MAX_STEPS: u32 = 25;
 pub const MAX_PARALLEL_TOOL_CALLS: usize = 8;
-const AGENT_SLOT_ID: i32 = 0;
 const REPAIR_MAX_TOKENS: u32 = 1024;
 #[cfg(not(test))]
 const TOOL_STEP_COMPLETION_DEADLINE: Duration = Duration::from_secs(600);
@@ -49,13 +49,13 @@ pub struct RunTurnInput<'a> {
     pub user_message: &'a str,
     pub selected_skill: Option<&'a str>,
     pub stable_prefix: &'a str,
-    pub model_profile: AgentModelProfile,
+    pub reasoning_effort: Option<AgentReasoningEffort>,
     pub working_dir: &'a Path,
     pub editable_roots: &'a EditableRoots,
     pub external_read_only_roots: &'a [PathBuf],
     pub trusted_read_roots: &'a [PathBuf],
     pub max_steps: u32,
-    pub client: &'a LlamaServerClient,
+    pub client: &'a GinferClient,
     pub approval: &'a dyn ApprovalHook,
     pub folder_access: &'a dyn FolderAccessHook,
     pub desktop: &'a dyn DesktopServices,
@@ -65,22 +65,21 @@ pub struct RunTurnInput<'a> {
     pub bundled_script_runtime: Option<&'a Path>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AgentTurnOutcome {
     pub reply: Option<String>,
     pub reason: String,
     pub step_count: u32,
+    pub inference: AgentInferenceMetrics,
 }
 
 pub struct RunTurnOptions<'a> {
-    pub slot_id: i32,
     pub additional_skills: &'a [String],
 }
 
 impl Default for RunTurnOptions<'_> {
     fn default() -> Self {
         Self {
-            slot_id: AGENT_SLOT_ID,
             additional_skills: &[],
         }
     }
@@ -107,6 +106,8 @@ pub async fn run_turn_with_options(
     let max_steps = input.max_steps.clamp(1, MAX_STEPS);
     let mut notice: Option<String> = None;
     let mut tracker = ToolLoopTracker::default();
+    let mut inference = AgentInferenceMetrics::default();
+    let tool_inference = Mutex::new(AgentInferenceMetrics::default());
     let loaded_tools = tools::tool_view::LoadedTools::restore(&input.session.loaded_tools);
     let loaded_skills = LoadedSkills::restore(&input.session.loaded_skills, input.skill_registry);
     if let Some(selected_skill) = input.selected_skill {
@@ -144,12 +145,14 @@ pub async fn run_turn_with_options(
         }
     }
     input.session.push_user(input.user_message);
-    let tool_grammar = tool_call_grammar_for_profile(input.skill_registry, input.model_profile);
-
     for step_index in 0..max_steps {
         if input.cancellation.is_cancelled() {
             finish_session(input.session, &loaded_tools, &loaded_skills, None).await;
-            return finish_cancelled(step_index, &mut emit);
+            return finish_cancelled(
+                step_index,
+                combined_inference(inference, &tool_inference),
+                &mut emit,
+            );
         }
         emit(AgentEvent::StepStarted { step_index })?;
         let loaded_tool_names = loaded_tools.snapshot().await;
@@ -164,23 +167,26 @@ pub async fn run_turn_with_options(
             &editable_roots,
             input.external_read_only_roots,
         );
-        let fixed_prompt = build_prompt_with_workspace_for_profile(
+        let fixed_prompt = build_prompt_with_workspace(
             input.stable_prefix,
             &loaded_tool_names,
             &loaded_skill_entries,
             Some(&workspace),
             "",
             notice.as_deref(),
-            input.model_profile,
         );
         let context_window = match input.client.fetch_context_window(input.cancellation).await {
             Ok(value) => value,
-            Err(LlamaClientError::Cancelled) => {
+            Err(GinferClientError::Cancelled) => {
                 finish_session(input.session, &loaded_tools, &loaded_skills, None).await;
-                return finish_cancelled(step_index, &mut emit);
+                return finish_cancelled(
+                    step_index,
+                    combined_inference(inference, &tool_inference),
+                    &mut emit,
+                );
             }
             Err(error) => {
-                log::warn!("Agent /props context probe failed; using configured cap: {error}");
+                log::warn!("Agent GInfer model probe failed; using configured cap: {error}");
                 None
             }
         };
@@ -191,21 +197,21 @@ pub async fn run_turn_with_options(
             COMPLETION_MAX_TOKENS,
         );
         let conversation = input.session.render_conversation(conversation_cap);
-        let prompt = build_prompt_with_workspace_for_profile(
+        let prompt = build_prompt_with_workspace(
             input.stable_prefix,
             &loaded_tool_names,
             &loaded_skill_entries,
             Some(&workspace),
             &conversation,
             notice.as_deref(),
-            input.model_profile,
         );
         notice = None;
-        let request = CompletionRequest::tool_call(prompt, tool_grammar.clone(), options.slot_id);
+        let request = CompletionRequest::tool_call(prompt, input.reasoning_effort);
         let completion = complete_with_deadline(input.client, &request, input.cancellation).await;
         let mut previous_output = String::new();
         let mut parsed = match completion {
             Ok(completion) => {
+                record_completion(&mut inference, &completion.timing);
                 previous_output.clone_from(&completion.content);
                 if !completion.reasoning_content.is_empty() {
                     emit(AgentEvent::ReasoningDelta {
@@ -213,7 +219,7 @@ pub async fn run_turn_with_options(
                         text: completion.reasoning_content.clone(),
                     })?;
                 }
-                match parse_tool_calls_for_profile(&completion.content, input.model_profile) {
+                match parse_tool_calls(&completion.content) {
                     Ok(parsed) => parsed,
                     Err(error) => {
                         emit(AgentEvent::ParseRetry {
@@ -226,15 +232,21 @@ pub async fn run_turn_with_options(
                             &completion.content,
                             &error.to_string(),
                             input.cancellation,
-                            input.model_profile,
                         )
                         .await
                         {
-                            Ok(parsed) => parsed,
-                            Err(LlamaClientError::Cancelled) => {
+                            Ok((parsed, timing)) => {
+                                record_completion(&mut inference, &timing);
+                                parsed
+                            }
+                            Err(GinferClientError::Cancelled) => {
                                 finish_session(input.session, &loaded_tools, &loaded_skills, None)
                                     .await;
-                                return finish_cancelled(step_index, &mut emit);
+                                return finish_cancelled(
+                                    step_index,
+                                    combined_inference(inference, &tool_inference),
+                                    &mut emit,
+                                );
                             }
                             Err(error) => {
                                 let message = error.to_string();
@@ -254,7 +266,7 @@ pub async fn run_turn_with_options(
                     }
                 }
             }
-            Err(LlamaClientError::TimedOut) => {
+            Err(GinferClientError::TimedOut) => {
                 emit(AgentEvent::ParseRetry {
                     step_index,
                     reason: "Tool-step completion exceeded the 600-second deadline".into(),
@@ -265,14 +277,20 @@ pub async fn run_turn_with_options(
                     "",
                     "Tool-step completion exceeded the 600-second deadline",
                     input.cancellation,
-                    input.model_profile,
                 )
                 .await
                 {
-                    Ok(parsed) => parsed,
-                    Err(LlamaClientError::Cancelled) => {
+                    Ok((parsed, timing)) => {
+                        record_completion(&mut inference, &timing);
+                        parsed
+                    }
+                    Err(GinferClientError::Cancelled) => {
                         finish_session(input.session, &loaded_tools, &loaded_skills, None).await;
-                        return finish_cancelled(step_index, &mut emit);
+                        return finish_cancelled(
+                            step_index,
+                            combined_inference(inference, &tool_inference),
+                            &mut emit,
+                        );
                     }
                     Err(error) => {
                         let message = error.to_string();
@@ -289,9 +307,13 @@ pub async fn run_turn_with_options(
                     }
                 }
             }
-            Err(LlamaClientError::Cancelled) => {
+            Err(GinferClientError::Cancelled) => {
                 finish_session(input.session, &loaded_tools, &loaded_skills, None).await;
-                return finish_cancelled(step_index, &mut emit);
+                return finish_cancelled(
+                    step_index,
+                    combined_inference(inference, &tool_inference),
+                    &mut emit,
+                );
             }
             Err(error) => {
                 emit(AgentEvent::StepError {
@@ -336,14 +358,20 @@ pub async fn run_turn_with_options(
                     &previous_output,
                     &error.to_string(),
                     input.cancellation,
-                    input.model_profile,
                 )
                 .await
                 {
-                    Ok(repaired) => parsed = repaired,
-                    Err(LlamaClientError::Cancelled) => {
+                    Ok((repaired, timing)) => {
+                        record_completion(&mut inference, &timing);
+                        parsed = repaired;
+                    }
+                    Err(GinferClientError::Cancelled) => {
                         finish_session(input.session, &loaded_tools, &loaded_skills, None).await;
-                        return finish_cancelled(step_index, &mut emit);
+                        return finish_cancelled(
+                            step_index,
+                            combined_inference(inference, &tool_inference),
+                            &mut emit,
+                        );
                     }
                     Err(error) => {
                         let message = error.to_string();
@@ -438,6 +466,7 @@ pub async fn run_turn_with_options(
                 reply: Some(reply),
                 reason: "reply".into(),
                 step_count: step_index + 1,
+                inference: combined_inference(inference, &tool_inference),
             });
         }
 
@@ -446,6 +475,8 @@ pub async fn run_turn_with_options(
             editable_roots: input.editable_roots,
             trusted_read_roots: input.trusted_read_roots,
             client: Some(input.client),
+            reasoning_effort: input.reasoning_effort,
+            inference: Some(&tool_inference),
             approval: input.approval,
             folder_access: input.folder_access,
             cancellation: input.cancellation,
@@ -506,6 +537,7 @@ pub async fn run_turn_with_options(
                 reply: Some(text),
                 reason: reason.into(),
                 step_count: step_index + 1,
+                inference: combined_inference(inference, &tool_inference),
             });
         }
     }
@@ -522,6 +554,7 @@ pub async fn run_turn_with_options(
         reply: Some(text),
         reason: "max_steps".into(),
         step_count: max_steps,
+        inference: combined_inference(inference, &tool_inference),
     })
 }
 
@@ -655,81 +688,78 @@ fn format_batch_trim_notice(kept_tool: &str, dropped_tools: &[String]) -> String
     )
 }
 
-fn parse_and_validate(
-    content: &str,
-    profile: AgentModelProfile,
-) -> Result<ParsedToolCalls, String> {
-    let parsed =
-        parse_tool_calls_for_profile(content, profile).map_err(|error| error.to_string())?;
+fn parse_and_validate(content: &str) -> Result<ParsedToolCalls, String> {
+    let parsed = parse_tool_calls(content).map_err(|error| error.to_string())?;
     validate_batch(&parsed.calls).map_err(|error| error.to_string())?;
     Ok(parsed)
 }
 
+fn record_completion(metrics: &mut AgentInferenceMetrics, timing: &CompletionTiming) {
+    metrics.record(
+        timing.prompt_tokens,
+        timing.predicted_tokens,
+        timing.prompt_ms,
+        timing.predicted_ms,
+    );
+}
+
+fn combined_inference(
+    mut completion: AgentInferenceMetrics,
+    tool_inference: &Mutex<AgentInferenceMetrics>,
+) -> AgentInferenceMetrics {
+    if let Ok(tool) = tool_inference.lock() {
+        completion.merge(*tool);
+    }
+    completion
+}
+
 async fn repair_tool_calls(
-    client: &LlamaServerClient,
+    client: &GinferClient,
     original_request: &CompletionRequest,
     invalid_output: &str,
     reason: &str,
     cancellation: &CancellationToken,
-    profile: AgentModelProfile,
-) -> Result<ParsedToolCalls, LlamaClientError> {
+) -> Result<(ParsedToolCalls, CompletionTiming), GinferClientError> {
     let invalid_output = invalid_output.chars().take(4_000).collect::<String>();
     let repair_instruction = format!(
         "### tool-call-repair\nThe previous tool-call output was invalid: {reason}\n\
-         Emit one corrected JSON array only. Approval-gated or dependent calls must be emitted \
-         as a length-1 array. A terminal call may appear only once and only last.\n\
+         Call the corrected function tools only. Approval-gated or dependent calls must run \
+         alone. A terminal call may appear only once and only after all other work.\n\
          Previous output:\n{invalid_output}"
     );
-    let repair_prompt = if let Some(framing) = profile.turn_framing() {
-        let suffix = format!(
-            "{}\n{}",
-            framing.turn_close.trim_end(),
-            framing.assistant_open.trim_end()
-        );
-        let base = original_request
-            .prompt
-            .trim_end()
-            .strip_suffix(&suffix)
-            .unwrap_or(original_request.prompt.trim_end())
-            .trim_end();
-        format!(
-            "{base}\n\n{repair_instruction}\n\n{}{}",
-            framing.turn_close, framing.assistant_open
-        )
-    } else {
-        format!("{}\n\n{repair_instruction}", original_request.prompt)
-    };
+    let repair_prompt = format!("{}\n\n{repair_instruction}", original_request.prompt);
     let mut request = original_request.clone();
     request.prompt = repair_prompt;
     request.max_tokens = REPAIR_MAX_TOKENS;
     let completion = complete_with_deadline(client, &request, cancellation).await?;
-    parse_and_validate(&completion.content, profile)
-        .map_err(|error| LlamaClientError::InvalidResponse(format!("Repair failed: {error}")))
+    let parsed = parse_and_validate(&completion.content)
+        .map_err(|error| GinferClientError::InvalidResponse(format!("Repair failed: {error}")))?;
+    Ok((parsed, completion.timing))
 }
 
 async fn complete_with_deadline(
-    client: &LlamaServerClient,
+    client: &GinferClient,
     request: &CompletionRequest,
     cancellation: &CancellationToken,
-) -> Result<super::llm_client::CompletionResult, LlamaClientError> {
+) -> Result<super::ginfer_client::CompletionResult, GinferClientError> {
     tokio::select! {
         biased;
-        _ = cancellation.cancelled() => Err(LlamaClientError::Cancelled),
+        _ = cancellation.cancelled() => Err(GinferClientError::Cancelled),
         result = tokio::time::timeout(
             TOOL_STEP_COMPLETION_DEADLINE,
             client.complete(request, cancellation),
         ) => match result {
             Ok(result) => result,
-            Err(_) => Err(LlamaClientError::TimedOut),
+            Err(_) => Err(GinferClientError::TimedOut),
         },
     }
 }
 
-fn repair_error_category(error: &LlamaClientError) -> &'static str {
+fn repair_error_category(error: &GinferClientError) -> &'static str {
     match error {
-        LlamaClientError::InvalidResponse(_) => "grammar",
-        LlamaClientError::Cancelled => "cancelled",
-        LlamaClientError::TimedOut => "timeout",
+        GinferClientError::InvalidResponse(_) | GinferClientError::ToolCallParse(_) => "tool_call",
+        GinferClientError::Cancelled => "cancelled",
+        GinferClientError::TimedOut => "timeout",
         _ => "llm",
     }
 }
@@ -750,6 +780,7 @@ async fn finish_session(
 
 fn finish_cancelled(
     step_count: u32,
+    inference: AgentInferenceMetrics,
     emit: &mut impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
     emit(AgentEvent::TurnFinished {
@@ -760,5 +791,6 @@ fn finish_cancelled(
         reply: None,
         reason: "cancelled".into(),
         step_count,
+        inference,
     })
 }

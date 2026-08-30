@@ -1,305 +1,151 @@
 # GChat Agent Architecture
 
-Living engineering reference for the autonomous Rust agent in this directory.
-Update this document when the agent loop, tool contract, safety policy, or
-iteration scope changes. Product-wide decisions still belong in the repository
-decision log in `AGENTS.md`.
+This is the living engineering reference for the Rust Agent runtime and Agent
+Studio. Update it when inference transport, orchestration, tools, safety, or
+run-observability contracts change. Product-wide decisions belong in
+`docs/decisions/`.
 
-## Status and scope
+## Product boundary
 
-The agent backend is isolated from regular GChat conversations and from
-the Vercel AI SDK path. It talks directly to the local model instance assigned
-to each stage over native `/completion`.
+Agent mode is isolated from ordinary Chat conversations and the Vercel AI SDK
+path. It composes one bounded Rust executor as a Standard Agent, evaluator-led
+Goal Loop, Coordinator Team, or acyclic Workflow. Definitions, runs, reusable
+skills, scoped workspaces, attachments, approvals, and monitoring are durable.
 
-The bounded executor, reusable skills, attachments, durable sessions, and
-Agent Studio orchestration are implemented. Agent Studio composes the same
-executor as a Standard Agent, evaluator-driven Goal Loop, Coordinator Team,
-or acyclic Workflow. Memory, tasks, browser automation, dynamic MCP tools,
-window control, and filesystem watchers are deferred.
+The hidden General Agent is only the runtime fallback and source for a new
+editable draft. It does not appear in the Agent Studio library or task picker.
 
-## Current architecture
+## GInfer transport
 
-### Entry points and transport
+- `agent_run_turn` resolves a saved definition and streams `AgentEvent` values
+  over a Tauri IPC channel. Cancellation and approval resolution use separate
+  commands keyed by run and approval IDs.
+- `agent_list_model_instances` exposes loaded, non-embedding GInfer sessions by
+  stable registered model ID without exposing ports or API keys.
+- Every distinct assigned instance owns a `GinferClient`. Before work begins,
+  it verifies the exact registered identity with `GET /v1/models`.
+- Text and tool steps use non-streaming `POST /v1/chat/completions` with native
+  OpenAI function tools and `tool_choice: "required"`. Vision uses the same
+  endpoint with image content after checking the session's advertised Vision
+  capability.
+- Dotted internal tool names are converted to GInfer-safe function names on the
+  wire and mapped back before local argument and policy validation.
+- The supported reasoning efforts are `none`, `minimal`, `low`, `medium`,
+  `high`, `xhigh`, and `max`. A role override wins over the definition default;
+  an omitted default leaves policy to the loaded artifact. The resolved value
+  is sent on main, repair, evaluator, synthesis, and Vision completions.
+- A context-capacity response may invoke the existing GInfer session-expansion
+  hook, after which the client revalidates the same model identity and retries
+  once against the replacement session.
+- Agent mode bypasses the port-1337 proxy. It has no llama.cpp `/props`,
+  `/completion`, GBNF, slot, or model-profile compatibility path.
 
-- `agent_run_turn` resolves a saved definition, starts its bounded execution,
-  and streams executor and orchestration `AgentEvent` values over a Tauri IPC
-  channel.
-- `agent_list_definitions`, `agent_save_definition`, and related commands own
-  the schema-versioned Agent Studio registry. The General Agent is a hidden
-  runtime fallback and draft authority; the registry exposes only saved user
-  definitions. Built-in templates remain immutable starting points.
-- `agent_list_model_instances` exposes loaded non-embedding GInfer sessions as
-  stable registered model IDs without exposing their API keys.
-- `agent_cancel_turn` cancels a run by its caller-provided `run_id`.
-- `agent_resolve_approval` resolves a pending approval by its generated
-  approval id.
-- Each distinct model instance assigned to a run owns one `LlamaServerClient`
-  and detected model profile. Stages call that instance's `/completion`
-  endpoint directly.
-- Image analysis uses a separate, non-streaming `/v1/chat/completions` request
-  to the current stage's assigned session. It never uses the
-  grammar-constrained agent slot.
-- Every completion uses the static tool grammar, `cache_prompt`, and a stable
-  slot id. Composite stages use distinct slot ids when they execute in
-  parallel. The local API server on port 1337 is not part of this path.
+## Agent Studio orchestration
 
-### Agent Studio orchestration
+Definitions use schema version 3.
 
 - Standard Agents use the owning thread's durable session and workspace.
-- A definition may inherit the active chat model or pin a loaded registered
-  model as its default. Evaluators, synthesizers, coordinator workers, and
-  workflow nodes may override that default independently. Every distinct
-  assignment is resolved before the first stage starts; an unloaded pinned
-  instance fails the run without partial execution.
-- Goal Loops alternate a shared-workspace executor with an isolated evaluator
-  for at most eight cycles. The evaluator must return a bare `PASS` first line
-  or actionable `REVISE` feedback.
-- Coordinator Teams plan once, run up to eight specialist roles with bounded
-  parallelism, and synthesize one final result. Specialists receive isolated
-  writable workspaces and read-only source access; synthesis owns main-workspace
-  writes.
-- Workflows are validated acyclic graphs with exactly one final node. Graph
-  levels may execute concurrently only with isolated workspaces; a shared
-  workspace stage must occupy its level alone.
-- Parent cancellation, approval policy, and failure semantics govern every
-  child stage. Stage session and model identity are explicit and isolated; the
-  final result alone is committed to the owning thread session.
-- Completed runs retain bounded stage summaries, timings, resolved model
-  assignments, and final output for the latest 100 runs. Composite scratch and
-  artifact workspaces live under `<data>/agent-runs/`.
+- A definition may inherit the active Chat model or pin a loaded registered
+  model as its default. Evaluators, synthesizers, workers, and workflow nodes
+  may independently override both model and reasoning effort.
+- Every distinct assignment is resolved before the first stage. An unavailable
+  pinned instance fails the run without partial execution.
+- Goal Loops alternate an executor with an isolated evaluator for at most eight
+  cycles. The evaluator returns a leading `PASS` or actionable `REVISE` result.
+- Coordinator Teams plan once, run up to eight specialists with bounded
+  parallelism, and synthesize one result. Specialists use isolated writable
+  workspaces and read-only source access; synthesis owns main-workspace writes.
+- Workflows are validated acyclic graphs with exactly one final node. A graph
+  level may run concurrently only with isolated workspaces; a shared-workspace
+  node occupies its level alone.
+- Parent cancellation, approval policy, and failure semantics govern all child
+  stages. Concurrent siblings always publish a terminal stage status, even
+  when another sibling fails or cancels.
+- Only the final result is committed to the owning thread session. The latest
+  100 runs retain bounded stage summaries, status, duration, resolved instance,
+  model identity, reasoning effort, inference metrics, and final output.
 
-### Prompt and grammar
+## Performance telemetry
 
-- The stable prompt prefix contains the persona, rules, tool catalog,
-  capabilities, and instructions.
-- Frequent tools expose their complete argument schema in the stable prefix.
-- Rare tools expose a one-line catalog entry until `tool.view` loads their
-  complete descriptor.
-- The variable tail contains loaded rare descriptors, the conversation, an
-  optional loop notice, and the response marker.
-- Tool output is constrained by an array-only GBNF root. One tool call is a
-  one-element array; a step may contain up to eight calls at runtime.
-- The prompt catalog and grammar tool-name set must remain identical.
+GInfer adds `x_ginfer` to non-streaming Chat Completions. The Agent runtime
+records computed prefill tokens, completion tokens, prefill engine time, and
+decode engine time for every completion, including repair and Vision work.
 
-### Loop and execution
+The live activity panel and saved-run inspector report prompt and generation
+tokens per second for each resolved model instance. Aggregation is
+request-weighted: tokens and engine milliseconds are summed before division.
+HTTP latency is not presented as inference throughput, and missing or zero
+engine timing is rendered as unavailable rather than an invented rate.
 
-The loop is:
+## Prompt and tool contract
 
-1. Build the prompt.
-2. Request one grammar-constrained completion.
-3. Parse and validate the tool-call array.
-4. Run the synchronous loop guard.
-5. Execute valid calls according to resource class.
-6. Append compressed observations.
-7. Continue until `reply`, `finish`, cancellation, breaker, failure, or the
-   step limit.
+- The stable prompt prefix contains persona, rules, skill and tool catalogs,
+  capabilities, and execution instructions. Its ordering remains stable for
+  prefix reuse.
+- Frequent tools include their argument contract in the stable prefix. Rare
+  tools remain one-line catalog entries until `tool.view` loads a bounded full
+  descriptor into the variable tail.
+- The variable tail contains loaded descriptors, loaded skills, conversation,
+  an optional loop notice, workspace facts, and the response marker.
+- GInfer owns native tool-call decoding. The client normalizes returned
+  function calls into the executor's internal batch representation, then the
+  executor performs its existing exact tool-name, argument, resource, and
+  safety validation.
 
-Pure reads may run concurrently. Mutating and stateful classes are serialized.
-Approval-gated tools cannot appear in a multi-call batch. A terminal tool is
-valid only as the final call and executes after all preceding calls finish.
+The execution loop is:
 
-### Safety controls already present
+1. Build the prompt and native tool request.
+2. Ask the assigned GInfer instance for one or more function calls.
+3. Normalize and validate the returned calls.
+4. Apply loop, resource-class, path, shell, and approval policy.
+5. Execute independent valid calls concurrently and stateful calls serially.
+6. Append bounded observations and continue until `reply`, `finish`,
+   cancellation, breaker, failure, or the step limit.
 
-- Array-only GBNF tool grammar.
-- Runtime batch-size and step limits.
-- Resource-class validation.
-- Repeat, no-progress, and wandering loop detection.
-- Per-run cancellation tokens.
-- HTTP SSRF validation and DNS/IP checks.
-- Archive traversal guards.
-- Process and command timeouts.
-- A unified authorization preflight for resource class, resolved paths, and
-  shell-guard verdicts.
-- A run-scoped `ApprovalGate`: `auto_approve=true` allows approval-required
-  actions; otherwise it emits a pending request and waits for decision,
-  timeout, or cancellation.
-- Canonical working-directory confinement with symlink-safe, call-scoped
-  approval-mediated escape.
-- Turn-scoped staged-attachment roots are trusted for reads only; writes and
-  deletion outside the workspace remain approval-gated.
-- Shell interpretation routing plus hard-block and approval-required command
-  guards.
+Approval-gated tools cannot share a batch. A terminal tool is valid only once,
+as the final call, after all preceding calls complete.
 
-### Current tools
+## Safety and tools
 
-- Shell: `os.shell.run`.
-- Filesystem: read, write, edit, trash, list, glob, grep, document read, hash,
-  diff, patch, archive list/read/extract.
-- Git: status, log, diff, show, blame, branch.
-- Processes: list and kill.
-- Network: HTTP request, web search, web fetch.
-- Clipboard: read and write.
-- Desktop notifications: `os.notify`.
-- Vision: `vision.describe` for up to four staged PNG, JPEG, GIF, or WebP
-  images when the active session is vision-capable.
-- Tool discovery: `tool.view`.
-- Terminals: `reply` and `finish`.
+The runtime applies bounded call/step counts, resource-class validation,
+repeat/no-progress/wandering detection, cancellation, request and process
+timeouts, HTTP SSRF and DNS/IP checks, archive traversal guards, canonical
+workspace confinement, symlink-safe path resolution, shell-command guards,
+and run-scoped approvals. Hard blocks take precedence over auto-approval.
+Attachments are trusted for reads only; writes outside the workspace remain
+approval-gated.
 
-### Attachment contract
+The registered catalog includes tool and skill discovery, bundled skill
+scripts, shell, filesystem and archives, Git, process inspection, HTTP/web,
+clipboard, notifications, Vision, and the `reply` and `finish` terminals.
 
-- IPC accepts at most eight attachments. Files provide a local path; images
-  provide a matching base64 data URL and image MIME type.
-- Before the loop starts, inputs are validated and copied into
-  `<thread>/agent-attachments/<turn>/` with generated filenames. Individual
-  files are capped at 50 MiB and the turn total at 100 MiB.
-- The durable user turn contains only a compact attachment manifest with
-  absolute staged paths. Original paths, data URLs, and base64 bytes are not
-  persisted in the Agent session transcript.
-- Documents remain on the existing `os.fs.read_document` parser path. Text and
-  source files use `os.fs.read`; archives use the archive tools.
-- Image turns are rejected before staging when any assigned stage session is
-  not vision-capable. `vision.describe` repeats the capability check at
-  execution time so a restarted or replaced text-only session produces a
-  structured tool error instead of guessed output.
+## Attachments
 
-## Test pyramid
+- IPC accepts at most eight attachments. Individual files are capped at 50 MiB
+  and a turn at 100 MiB.
+- Validated inputs are copied to
+  `<thread>/agent-attachments/<turn>/` under generated names before execution.
+- Durable transcripts store only a compact manifest with staged absolute paths;
+  they do not persist original paths, data URLs, or base64 bytes.
+- Documents, text, source, and archives stay on their dedicated tool routes.
+  `vision.describe` accepts up to four staged PNG, JPEG, GIF, or WebP images.
+- Image turns are rejected before staging if any assigned stage is not
+  Vision-capable, and the tool repeats that check at execution time.
 
-The default Rust suite is deterministic and requires neither a model nor
-network access:
+## Verification contract
 
-- Unit tests pin grammar, prompt, parser, resource-class, path-policy,
-  shell-guard, approval, and loop-guard behavior.
-- `runner_tests.rs` drives the real `run_turn` loop against a scripted local
-  `/completion` server. It verifies request fields (`grammar`, `cache_prompt`,
-  `slot_id`), prompt-tail transitions, event ordering, batching, approvals,
-  cancellation, failures, and terminal reasons.
-- `tools/contract_tests.rs` runs real filesystem, archive, Git, and safe shell
-  operations inside an isolated workspace. It also pins traversal, path
-  escape, hard-block, denial, cancellation, and output-boundary behavior.
+The deterministic Rust suite requires neither a real model nor network access.
+It uses a scripted local GInfer server to pin `/v1/models`, native
+`/v1/chat/completions`, function-tool fields, all reasoning levels, exact timing
+normalization, prompt transitions, event ordering, batching, approvals,
+cancellation, failures, and terminal reasons. Tool contract tests execute real
+filesystem, archive, Git, and safe-shell behavior in isolated workspaces.
 
-## Iteration 1b contract corrections
+Frontend tests pin definition migration/editing, run-event reduction, durable
+stage traces, and weighted per-instance throughput. Production web builds and
+the repository `make verify` target are the final source-change gates.
 
-1. `os.fs.archive.extract` documents canonical `destination`; the runtime
-   temporarily accepts legacy `dest` and normalizes it before dispatch.
-2. `os.shell.run` selects direct argv or a platform shell and always passes
-   through the command guard.
-3. Rare tools expose complete schemas through bounded run-scoped `tool.view`
-   state.
-4. Path-taking tools use the shared canonical resolver and approval-mediated
-   escape policy.
-5. Approval-required actions use the pending request/resolve protocol and fail
-   closed on timeout or cancellation.
-
-## Iteration 1b decisions
-
-Iteration 1b is limited to:
-
-- Correct existing tool contracts and add focused tool tests.
-- Add the backend approval protocol; the UI is deferred.
-- Add working-directory path confinement with approval-mediated escape.
-- Add shell interpretation detection and a command guard.
-- Add `tool.view` and `### loaded-tools` for complete rare-tool schemas.
-- Add `os.clipboard.write`.
-- Add `os.notify`.
-
-Everything else remains deferred.
-
-### Approval protocol
-
-The design follows the useful core of `atomic-agent` without porting its
-frontend-specific routers:
-
-- Dangerous tools submit a structured pending approval request.
-- A separate Tauri command resolves the request by approval id.
-- Requests have cancellation and timeout behavior.
-- Read-only tools continue without approval.
-- Each agent run constructs an `ApprovalGate` with a global `auto_approve`
-  flag. When `auto_approve` is true, every approval-required action is allowed
-  without creating a pending request.
-- `auto_approve` defaults to false and is supplied explicitly by the caller;
-  it is not inferred from tool arguments or previous decisions.
-- With no UI resolver connected, approval-required actions fail closed.
-- Iteration 1b does not add persistent per-tool or per-path “always allow”
-  rules.
-- Resource classes continue to govern batching; approval policy governs
-  whether an individual dangerous action may execute.
-
-An approval request must include, at minimum, run id, approval id, tool name,
-reason, argument preview, and affected resources. Secrets must not be included
-in previews.
-
-### Path confinement
-
-`working_dir` becomes the default trusted root:
-
-- Relative paths resolve beneath the canonical working directory.
-- Existing targets are canonicalized before containment checks.
-- Non-existent write targets validate their nearest existing ancestor and
-  normalized remaining components.
-- Symlink traversal must not bypass containment.
-- A path outside the trusted root produces an approval request rather than an
-  unconditional denial.
-- Approval authorizes only the specific operation and resolved path in that
-  request; it does not permanently enlarge the trusted root.
-
-All filesystem, archive, git, shell `cwd`, and other path-taking tools must use
-one shared resolver.
-
-### Shell guard
-
-`os.shell.run` keeps structured `cmd` plus `args`, but gains two execution
-paths:
-
-- Direct process execution when shell interpretation is unnecessary.
-- Platform shell execution when metacharacters, built-ins, environment
-  expansion, or a pre-joined command line require it.
-
-Before either path starts, a guard evaluates the effective command and returns
-one of:
-
-- `allow`
-- `approval_required`
-- `block`
-
-Hard-block rules take precedence over auto-approval. The guard must inspect a
-tokenized view of the complete command even when execution uses a shell.
-
-### Rare tools
-
-Rare tools remain compact one-line entries in the stable prefix.
-
-- `tool.view { name }` loads the full descriptor for a rare tool.
-- Loaded descriptors render under `### loaded-tools` in the variable tail.
-- Loaded tools are bounded by an LRU count and a token/character budget.
-- Loading a descriptor must not mutate the stable prefix.
-- Calling `tool.view` for a frequent, unknown, or already-loaded tool returns
-  a deterministic result.
-- Automatic expansion after an invalid-arguments error may be added only if it
-  remains bounded and testable.
-
-### Clipboard and notifications
-
-- `os.clipboard.write` writes explicit text supplied by the model.
-- `os.notify` emits a local desktop notification with bounded title and body.
-- Both tools must expose runtime capability flags and return a clear
-  unsupported result when unavailable.
-- They are serialized stateful actions. They are not approval-gated by default,
-  matching the `atomic-agent` contract; policy can tighten this later.
-
-## Deferred work
-
-- `os.fs.watch`
-- `vision.describe`
-- Skills and `skill.run_script`
-- Dynamic MCP tool registration
-- Browser tools
-- Window list/focus
-- Memory
-- Tasks and scheduling
-
-These features require separate architecture decisions because they introduce
-long-lived resources, additional inference paths, executable content, or a
-dynamic tool grammar.
-
-## Change checklist
-
-When adding or changing a tool:
-
-1. Update the prompt descriptor.
-2. Update the grammar name set and GBNF alternative.
-3. Assign a resource class.
-4. Add the dispatch implementation.
-5. Apply shared path, approval, guard, timeout, and cancellation policies.
-6. Add focused unit tests.
-7. Verify prompt and grammar catalogs remain in lockstep.
-8. Record any non-trivial decision in `AGENTS.md`.
+When adding or changing a tool, update its descriptor, wire-safe name mapping,
+dispatch and resource class, shared safety policies, and focused contract
+tests. Record a new ADR for a nontrivial inference, schema, orchestration, or
+safety decision.

@@ -2,15 +2,15 @@
 //!
 //! Fully isolated from the regular chat flow (the Vercel AI SDK loop is
 //! untouched). This module ports the core of the TypeScript `atomic-agent`
-//! runtime to Rust: the stable-prefix system prompt, a static GBNF grammar
-//! for grammar-constrained tool calls, a direct HTTP client to the local
+//! runtime to Rust: the stable-prefix system prompt, GInfer-native function
+//! tools, a direct HTTP client to the local
 //! `ginfer-serve` backend, the `prompt -> decide -> run -> observe` loop,
 //! the `ToolLoopTracker` guard, the resource-class taxonomy, and the OS core
 //! tools.
 //!
 //! Transport: the agent talks **directly** to the `ginfer-serve` backend on
-//! `127.0.0.1:{port}` (native `/completion` with `grammar` / `cache_prompt`
-//! / `slot_id`), bypassing the `:1337` proxy. Port and api key are read from
+//! `127.0.0.1:{port}` through `/v1/models` and `/v1/chat/completions`,
+//! bypassing the `:1337` proxy. Port and api key are read from
 //! the `tauri-plugin-ginfer` session map.
 
 pub mod approval;
@@ -21,10 +21,8 @@ pub mod commands;
 pub mod compressor;
 pub mod definitions;
 pub mod folder_access;
-pub mod grammar;
-pub mod llm_client;
+pub mod ginfer_client;
 pub mod loop_guard;
-pub mod model_profile;
 pub mod orchestrator;
 pub mod path_policy;
 pub mod prompt;

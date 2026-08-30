@@ -11,7 +11,7 @@ use crate::core::app::commands::get_jan_data_folder_path;
 
 use super::runner::MAX_STEPS;
 
-pub const AGENT_DEFINITION_SCHEMA_VERSION: u32 = 2;
+pub const AGENT_DEFINITION_SCHEMA_VERSION: u32 = 3;
 const AGENT_DEFINITIONS_FILE: &str = "agent-definitions.json";
 const MAX_DEFINITIONS: usize = 128;
 const MAX_COMPOSITE_NODES: usize = 8;
@@ -41,6 +41,9 @@ pub struct AgentDefinition {
     /// Stable registered model ID. `None` binds the run's active chat model.
     #[serde(default)]
     pub model_instance_id: Option<String>,
+    /// `None` uses the loaded artifact's default reasoning policy.
+    #[serde(default)]
+    pub reasoning_effort: Option<AgentReasoningEffort>,
     #[serde(flatten)]
     pub strategy: AgentStrategy,
     #[serde(default)]
@@ -61,6 +64,8 @@ pub enum AgentStrategy {
         evaluator_instructions: String,
         #[serde(default)]
         evaluator_model_instance_id: Option<String>,
+        #[serde(default)]
+        evaluator_reasoning_effort: Option<AgentReasoningEffort>,
     },
     Coordinator {
         max_parallel: usize,
@@ -68,6 +73,8 @@ pub enum AgentStrategy {
         synthesis_instructions: String,
         #[serde(default)]
         synthesis_model_instance_id: Option<String>,
+        #[serde(default)]
+        synthesis_reasoning_effort: Option<AgentReasoningEffort>,
         workers: Vec<AgentRole>,
     },
     Workflow {
@@ -90,6 +97,9 @@ pub struct AgentRole {
     /// `None` inherits the owning definition's resolved model instance.
     #[serde(default)]
     pub model_instance_id: Option<String>,
+    /// `None` inherits the owning definition's reasoning effort.
+    #[serde(default)]
+    pub reasoning_effort: Option<AgentReasoningEffort>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +118,35 @@ pub struct WorkflowNode {
     /// `None` inherits the owning definition's resolved model instance.
     #[serde(default)]
     pub model_instance_id: Option<String>,
+    /// `None` inherits the owning definition's reasoning effort.
+    #[serde(default)]
+    pub reasoning_effort: Option<AgentReasoningEffort>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentReasoningEffort {
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+    Max,
+}
+
+impl AgentReasoningEffort {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Minimal => "minimal",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -159,6 +198,7 @@ pub fn general_agent() -> AgentDefinition {
         max_steps: MAX_STEPS,
         output_contract: String::new(),
         model_instance_id: None,
+        reasoning_effort: None,
         strategy: AgentStrategy::Standard,
         built_in: true,
     }
@@ -194,6 +234,7 @@ pub fn built_in_templates() -> Vec<AgentTemplate> {
                     "Evaluate the executor result against the success criteria. Return PASS only when every criterion is met; otherwise return REVISE followed by concrete corrective feedback."
                         .into(),
                 evaluator_model_instance_id: None,
+                evaluator_reasoning_effort: None,
             },
         ),
         template(
@@ -209,6 +250,7 @@ pub fn built_in_templates() -> Vec<AgentTemplate> {
                     "Reconcile the specialist reports, resolve conflicts, and return one evidence-based final result."
                         .into(),
                 synthesis_model_instance_id: None,
+                synthesis_reasoning_effort: None,
                 workers: vec![
                     role("researcher", "Researcher", "Gather the primary facts and evidence."),
                     role("critic", "Critic", "Challenge assumptions and identify gaps or risks."),
@@ -252,6 +294,7 @@ fn template(id: &str, name: &str, description: &str, strategy: AgentStrategy) ->
             max_steps: MAX_STEPS,
             output_contract: String::new(),
             model_instance_id: None,
+            reasoning_effort: None,
             strategy,
             built_in: false,
         },
@@ -266,6 +309,7 @@ fn role(id: &str, name: &str, instructions: &str) -> AgentRole {
         skills: Vec::new(),
         max_steps: 12,
         model_instance_id: None,
+        reasoning_effort: None,
     }
 }
 
@@ -278,6 +322,7 @@ fn node(id: &str, name: &str, instructions: &str) -> WorkflowNode {
         max_steps: 12,
         workspace: StageWorkspace::Isolated,
         model_instance_id: None,
+        reasoning_effort: None,
     }
 }
 
@@ -392,6 +437,7 @@ pub fn validate_definition(definition: &AgentDefinition) -> Result<(), String> {
             success_criteria,
             evaluator_instructions,
             evaluator_model_instance_id,
+            ..
         } => {
             if !(1..=8).contains(max_cycles) {
                 return Err("Goal loops require between 1 and 8 cycles".into());
@@ -406,6 +452,7 @@ pub fn validate_definition(definition: &AgentDefinition) -> Result<(), String> {
             synthesis_instructions,
             synthesis_model_instance_id,
             workers,
+            ..
         } => {
             if workers.is_empty() || workers.len() > MAX_COMPOSITE_NODES {
                 return Err("Coordinator teams require between 1 and 8 workers".into());
@@ -670,9 +717,14 @@ fn read_store(data_folder: &Path) -> Result<DefinitionStore, String> {
     }
     let bytes = std::fs::read(&path)
         .map_err(|error| format!("Failed to read Agent definitions: {error}"))?;
-    let store: DefinitionStore = serde_json::from_slice(&bytes)
+    let mut store: DefinitionStore = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Failed to parse Agent definitions: {error}"))?;
-    if store.schema_version != AGENT_DEFINITION_SCHEMA_VERSION {
+    if store.schema_version == 2 {
+        store.schema_version = AGENT_DEFINITION_SCHEMA_VERSION;
+        for definition in &mut store.definitions {
+            definition.schema_version = AGENT_DEFINITION_SCHEMA_VERSION;
+        }
+    } else if store.schema_version != AGENT_DEFINITION_SCHEMA_VERSION {
         return Err(format!(
             "Unsupported Agent definition store schema version {}",
             store.schema_version
@@ -754,6 +806,7 @@ mod tests {
             max_steps: 10,
             output_contract: String::new(),
             model_instance_id: None,
+            reasoning_effort: None,
             strategy: AgentStrategy::Standard,
             built_in: false,
         }
@@ -788,8 +841,9 @@ mod tests {
         assert!(!draft.built_in);
         assert_eq!(draft.strategy, AgentStrategy::Standard);
         assert_eq!(draft.max_steps, MAX_STEPS);
-        assert_eq!(draft.schema_version, 2);
+        assert_eq!(draft.schema_version, 3);
         assert_eq!(draft.model_instance_id, None);
+        assert_eq!(draft.reasoning_effort, None);
     }
 
     #[test]

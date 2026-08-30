@@ -51,7 +51,7 @@ vi.mock('@/services/agent/definitions', () => ({
 }))
 
 const editableDraft: AgentDefinition = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   id: '',
   name: 'Untitled Agent',
   description: '',
@@ -60,6 +60,7 @@ const editableDraft: AgentDefinition = {
   maxSteps: 25,
   outputContract: '',
   modelInstanceId: null,
+  reasoningEffort: null,
   kind: 'standard',
   builtIn: false,
 }
@@ -84,8 +85,14 @@ describe('AgentStudioPage', () => {
     }
   })
 
-  it('opens on a single create action when no user definitions exist', () => {
+  it('opens on a single create action when no user definitions exist', async () => {
     render(<AgentStudioPage />)
+
+    await waitFor(() => {
+      expect(listAgentTemplates).toHaveBeenCalledOnce()
+      expect(listAgentRuns).toHaveBeenCalledOnce()
+      expect(listAgentModelInstances).toHaveBeenCalledOnce()
+    })
 
     expect(
       screen.getByRole('button', { name: 'Create agent' })
@@ -119,6 +126,26 @@ describe('AgentStudioPage', () => {
     expect(screen.getByLabelText('Default model instance')).toHaveValue('muse')
   })
 
+  it('offers every GInfer reasoning effort', async () => {
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+
+    const selector = await screen.findByLabelText('Default reasoning effort')
+    const values = Array.from(selector.querySelectorAll('option')).map(
+      (option) => option.value
+    )
+    expect(values).toEqual([
+      '',
+      'none',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ])
+  })
+
   it('routes a swarm worker and synthesizer independently', async () => {
     definitionState.value.createDraft.mockResolvedValue({
       ...editableDraft,
@@ -127,6 +154,7 @@ describe('AgentStudioPage', () => {
       coordinatorInstructions: 'Plan',
       synthesisInstructions: 'Combine',
       synthesisModelInstanceId: null,
+      synthesisReasoningEffort: null,
       workers: [
         {
           id: 'researcher',
@@ -135,6 +163,7 @@ describe('AgentStudioPage', () => {
           skills: [],
           maxSteps: 12,
           modelInstanceId: null,
+          reasoningEffort: null,
         },
       ],
     })

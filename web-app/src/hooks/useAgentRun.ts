@@ -95,6 +95,9 @@ export function reduceAgentRunState(
               role: event.role,
               status: 'running',
               modelInstanceId: event.model_instance_id,
+              ...(event.reasoning_effort === null
+                ? {}
+                : { reasoningEffort: event.reasoning_effort }),
               ...(event.cycle === null ? {} : { cycle: event.cycle }),
             },
           ],
@@ -109,10 +112,26 @@ export function reduceAgentRunState(
             stage.id === event.stage_id
               ? {
                   ...stage,
-                  status: 'finished',
+                  status:
+                    event.status === 'cancelled'
+                      ? 'cancelled'
+                      : event.status === 'failed'
+                        ? 'failed'
+                        : 'finished',
                   summary: event.summary,
                   stepCount: event.step_count,
                   durationMs: event.duration_ms,
+                  modelInstanceId: event.model_instance_id,
+                  modelId: event.model_id,
+                  ...(event.reasoning_effort === null
+                    ? {}
+                    : { reasoningEffort: event.reasoning_effort }),
+                  inference: {
+                    promptTokens: event.inference.prompt_tokens,
+                    generatedTokens: event.inference.generated_tokens,
+                    promptMs: event.inference.prompt_ms,
+                    generationMs: event.inference.generation_ms,
+                  },
                 }
               : stage
           ),

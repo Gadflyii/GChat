@@ -8,7 +8,7 @@ use super::runner::{run_turn, RunTurnInput};
 use super::session::AgentSessionState;
 use super::test_support::{
     collect_event, RecordingApproval, RecordingDesktop, RecordingFolderAccess,
-    ScriptedCompletionServer, ScriptedResponse, TestWorkspace,
+    ScriptedGinferServer, ScriptedResponse, TestWorkspace,
 };
 use super::types::{AgentEvent, LoopLevel, ToolStatus};
 
@@ -19,6 +19,13 @@ struct TestRun {
     session: AgentSessionState,
 }
 
+fn request_prompt(request: &serde_json::Value) -> &str {
+    request
+        .pointer("/messages/0/content")
+        .and_then(serde_json::Value::as_str)
+        .expect("GInfer chat-completions prompt")
+}
+
 async fn run_script(
     workspace: &TestWorkspace,
     responses: Vec<ScriptedResponse>,
@@ -26,7 +33,7 @@ async fn run_script(
     cancellation: &CancellationToken,
     max_steps: u32,
 ) -> TestRun {
-    let server = ScriptedCompletionServer::start(responses).await;
+    let server = ScriptedGinferServer::start(responses).await;
     let client = server.client();
     let desktop = RecordingDesktop::default();
     let mut events = Vec::new();
@@ -41,7 +48,7 @@ async fn run_script(
             user_message: "perform the fixture task",
             selected_skill: None,
             stable_prefix: "TEST_STABLE_PREFIX",
-            model_profile: super::model_profile::AgentModelProfile::Plain,
+            reasoning_effort: None,
             working_dir: workspace.path(),
             editable_roots: &editable_roots,
             external_read_only_roots: &[],
@@ -141,23 +148,23 @@ async fn immediate_reply_preserves_event_order_and_completion_contract() {
     assert_eq!(finished_reason(&run.events), Some(("reply", 1)));
     assert_eq!(run.requests.len(), 1);
     let request = &run.requests[0];
-    assert_eq!(request["cache_prompt"], true);
-    assert_eq!(request["slot_id"], 0);
-    assert_eq!(request["id_slot"], 0);
-    assert!(request["grammar"]
-        .as_str()
-        .is_some_and(|value| !value.is_empty()));
-    assert!(request["prompt"]
-        .as_str()
-        .is_some_and(|value| value.contains("### conversation\nUSER: perform the fixture task")));
+    assert_eq!(request["model"], "scripted-test-model");
+    assert_eq!(request["tool_choice"], "required");
+    assert!(request["tools"]
+        .as_array()
+        .is_some_and(|tools| !tools.is_empty()));
+    assert!(request.get("cache_prompt").is_none());
+    assert!(request.get("slot_id").is_none());
+    assert!(request.get("grammar").is_none());
+    assert!(request_prompt(request).contains("### conversation\nUSER: perform the fixture task"));
 }
 
 #[tokio::test]
-async fn gemma4_turn_uses_native_framing_and_parses_channel_reasoning() {
+async fn reasoning_effort_and_native_reasoning_use_ginfer_contract() {
     let workspace = TestWorkspace::new();
-    let server = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
-        "<|channel>thought\ninspect first<channel|>\
-         [{\"tool\":\"reply\",\"args\":{\"text\":\"done\"}}]",
+    let server = ScriptedGinferServer::start(vec![ScriptedResponse::reasoning_completion(
+        r#"[{"tool":"reply","args":{"text":"done"}}]"#,
+        "inspect first",
     )])
     .await;
     let client = server.client();
@@ -176,8 +183,8 @@ async fn gemma4_turn_uses_native_framing_and_parses_channel_reasoning() {
             session_id: "gemma-session",
             user_message: "perform the fixture task",
             selected_skill: None,
-            stable_prefix: "<|turn>system\n<|think|>\n### system\nTEST_STABLE_PREFIX",
-            model_profile: super::model_profile::AgentModelProfile::Gemma4Think,
+            stable_prefix: "TEST_STABLE_PREFIX",
+            reasoning_effort: Some(super::definitions::AgentReasoningEffort::High),
             working_dir: workspace.path(),
             editable_roots: &editable_roots,
             external_read_only_roots: &[],
@@ -198,12 +205,8 @@ async fn gemma4_turn_uses_native_framing_and_parses_channel_reasoning() {
 
     assert!(result.is_ok());
     let request = &server.requests()[0];
-    assert!(request["prompt"]
-        .as_str()
-        .is_some_and(|prompt| prompt.ends_with("<turn|>\n<|turn>model\n")));
-    assert!(request["grammar"]
-        .as_str()
-        .is_some_and(|grammar| grammar.starts_with("root ::= channel-prelude tool-call-array\n")));
+    assert_eq!(request["reasoning_effort"], "high");
+    assert!(request.get("grammar").is_none());
     assert!(events.iter().any(|event| matches!(
         event,
         AgentEvent::ReasoningDelta { text, .. } if text == "inspect first"
@@ -234,9 +237,7 @@ async fn read_observation_is_visible_to_the_next_completion() {
         executed(&run.events),
         [("os.fs.read", ToolStatus::Ok), ("reply", ToolStatus::Ok)]
     );
-    assert!(run.requests[1]["prompt"]
-        .as_str()
-        .is_some_and(|prompt| prompt.contains("SENTINEL_READ_73")));
+    assert!(request_prompt(&run.requests[1]).contains("SENTINEL_READ_73"));
 }
 
 #[tokio::test]
@@ -273,7 +274,7 @@ async fn verbose_observation_is_compact_for_the_model_but_detailed_in_the_event(
         })
         .expect("read execution event");
     assert_eq!(event_summary, detailed);
-    let next_prompt = run.requests[1]["prompt"].as_str().expect("next prompt");
+    let next_prompt = request_prompt(&run.requests[1]);
     assert!(next_prompt.contains("… [omitted 18 lines]"));
     assert!(next_prompt.contains("EVENT_DETAIL_LINE_29"));
     assert!(!next_prompt.contains("EVENT_DETAIL_LINE_00"));
@@ -283,7 +284,7 @@ async fn verbose_observation_is_compact_for_the_model_but_detailed_in_the_event(
 async fn sequential_runs_share_the_session_transcript() {
     let workspace = TestWorkspace::new();
     workspace.write("fixture.txt", "DURABLE_OBSERVATION");
-    let server = ScriptedCompletionServer::start(vec![
+    let server = ScriptedGinferServer::start(vec![
         ScriptedResponse::completion(r#"[{"tool":"os.fs.read","args":{"path":"fixture.txt"}}]"#),
         ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"first reply"}}]"#),
         ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"second reply"}}]"#),
@@ -306,7 +307,7 @@ async fn sequential_runs_share_the_session_transcript() {
                 user_message,
                 selected_skill: None,
                 stable_prefix: "TEST_STABLE_PREFIX",
-                model_profile: super::model_profile::AgentModelProfile::Plain,
+                reasoning_effort: None,
                 working_dir: workspace.path(),
                 editable_roots: &editable_roots,
                 external_read_only_roots: &[],
@@ -329,12 +330,13 @@ async fn sequential_runs_share_the_session_transcript() {
 
     assert_eq!(session.turn_count, 2);
     let requests = server.requests();
-    assert!(requests[2]["prompt"].as_str().is_some_and(|prompt| {
+    assert!({
+        let prompt = request_prompt(&requests[2]);
         prompt.contains("USER: first user")
             && prompt.contains("DURABLE_OBSERVATION")
             && prompt.contains("ASSISTANT: first reply")
             && prompt.contains("USER: second user")
-    }));
+    });
 }
 
 #[tokio::test]
@@ -450,11 +452,9 @@ async fn malformed_completion_is_repaired_once() {
         1
     );
     assert_eq!(run.requests.len(), 2);
-    assert_eq!(run.requests[0]["n_predict"], 8192);
-    assert_eq!(run.requests[1]["n_predict"], 1024);
-    assert!(run.requests[1]["prompt"]
-        .as_str()
-        .is_some_and(|prompt| prompt.contains("### tool-call-repair")));
+    assert_eq!(run.requests[0]["max_tokens"], 8192);
+    assert_eq!(run.requests[1]["max_tokens"], 1024);
+    assert!(request_prompt(&run.requests[1]).contains("### tool-call-repair"));
 }
 
 #[tokio::test]
@@ -480,8 +480,8 @@ async fn timed_out_completion_is_repaired_once() {
             if reason.contains("600-second deadline")
     )));
     assert_eq!(run.requests.len(), 2);
-    assert_eq!(run.requests[1]["n_predict"], 1024);
-    assert_eq!(run.requests[0]["grammar"], run.requests[1]["grammar"]);
+    assert_eq!(run.requests[1]["max_tokens"], 1024);
+    assert_eq!(run.requests[0]["tools"], run.requests[1]["tools"]);
 }
 
 #[tokio::test]
@@ -510,7 +510,7 @@ async fn timed_out_completion_and_repair_finish_as_timeout_failure() {
 }
 
 #[tokio::test]
-async fn repeated_repair_failure_finishes_as_grammar_failure() {
+async fn repeated_repair_failure_finishes_as_tool_call_failure() {
     let workspace = TestWorkspace::new();
     let run = run_script(
         &workspace,
@@ -527,7 +527,7 @@ async fn repeated_repair_failure_finishes_as_grammar_failure() {
     assert!(run.result.is_err());
     assert!(run.events.iter().any(|event| matches!(
         event,
-        AgentEvent::StepError { category, .. } if category == "grammar"
+        AgentEvent::StepError { category, .. } if category == "tool_call"
     )));
     assert_eq!(finished_reason(&run.events), Some(("failed", 1)));
     assert_eq!(run.requests.len(), 2);
@@ -647,7 +647,7 @@ async fn misplaced_terminal_and_empty_reply_are_repaired() {
 }
 
 #[tokio::test]
-async fn llama_http_error_is_reported_as_llm_failure() {
+async fn ginfer_http_error_is_reported_as_model_failure() {
     let workspace = TestWorkspace::new();
     let run = run_script(
         &workspace,
@@ -673,7 +673,7 @@ async fn llama_http_error_is_reported_as_llm_failure() {
 #[tokio::test]
 async fn cancellation_interrupts_an_in_flight_completion() {
     let workspace = TestWorkspace::new();
-    let server = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+    let server = ScriptedGinferServer::start(vec![ScriptedResponse::completion(
         r#"[{"tool":"reply","args":{"text":"late"}}]"#,
     )
     .delayed(Duration::from_secs(5))])
@@ -695,7 +695,7 @@ async fn cancellation_interrupts_an_in_flight_completion() {
             user_message: "wait",
             selected_skill: None,
             stable_prefix: "TEST_STABLE_PREFIX",
-            model_profile: super::model_profile::AgentModelProfile::Plain,
+            reasoning_effort: None,
             working_dir: workspace.path(),
             editable_roots: &editable_roots,
             external_read_only_roots: &[],
@@ -823,7 +823,7 @@ async fn repeated_identical_batches_emit_advisory_notice_and_still_reply() {
             ..
         } if message.contains("`<batch>`")
     )));
-    let final_prompt = run.requests[4]["prompt"].as_str().expect("final prompt");
+    let final_prompt = request_prompt(&run.requests[4]);
     assert!(final_prompt.contains("### notice"));
     assert!(final_prompt.contains("`<batch>`"));
     assert_eq!(
@@ -895,12 +895,9 @@ async fn tool_view_exposes_the_rare_schema_on_the_following_step() {
     .await;
 
     assert!(run.result.is_ok());
-    assert!(!run.requests[0]["prompt"]
-        .as_str()
-        .expect("first prompt")
-        .contains("### loaded-tools"));
+    assert!(!request_prompt(&run.requests[0]).contains("### loaded-tools"));
     for request in &run.requests[1..] {
-        let prompt = request["prompt"].as_str().expect("later prompt");
+        let prompt = request_prompt(request);
         assert!(prompt.contains("### loaded-tools"));
         assert!(prompt.contains("- os.fs.hash { path: string, algorithm?:"));
     }
@@ -926,14 +923,12 @@ async fn skill_view_loads_the_body_and_restores_it_on_the_next_turn() {
     .await;
     assert!(first.result.is_ok());
     assert_eq!(first.session.loaded_skills[0].name, "pdf");
-    let loaded_prompt = first.requests[1]["prompt"]
-        .as_str()
-        .expect("prompt after skill.view");
+    let loaded_prompt = request_prompt(&first.requests[1]);
     assert!(loaded_prompt.contains("### loaded-skills\n# skill: pdf (v1.0.0)"));
     assert!(loaded_prompt.contains("This skill declares no bundled scripts"));
     assert!(loaded_prompt.contains("# Durable PDF instructions"));
 
-    let server = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+    let server = ScriptedGinferServer::start(vec![ScriptedResponse::completion(
         r#"[{"tool":"reply","args":{"text":"restored"}}]"#,
     )])
     .await;
@@ -954,7 +949,7 @@ async fn skill_view_loads_the_body_and_restores_it_on_the_next_turn() {
             user_message: "use the loaded skill",
             selected_skill: None,
             stable_prefix: "TEST_STABLE_PREFIX",
-            model_profile: super::model_profile::AgentModelProfile::Plain,
+            reasoning_effort: None,
             working_dir: workspace.path(),
             editable_roots: &editable_roots,
             external_read_only_roots: &[],
@@ -975,9 +970,7 @@ async fn skill_view_loads_the_body_and_restores_it_on_the_next_turn() {
     .expect("restored turn");
 
     let restored_requests = server.requests();
-    let restored_prompt = restored_requests[0]["prompt"]
-        .as_str()
-        .expect("restored prompt");
+    let restored_prompt = request_prompt(&restored_requests[0]);
     assert!(restored_prompt.contains("### loaded-skills\n# skill: pdf (v1.0.0)"));
     assert!(restored_prompt.contains("This skill declares no bundled scripts"));
     assert!(restored_prompt.contains("# Durable PDF instructions"));
@@ -990,7 +983,7 @@ async fn selected_skill_is_loaded_into_the_first_prompt_without_skill_view() {
         ".agent-skills/pdf/SKILL.md",
         "---\nname: pdf\ndescription: PDF workflow\nversion: 1.0.0\n---\n# Deterministic PDF instructions",
     );
-    let server = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+    let server = ScriptedGinferServer::start(vec![ScriptedResponse::completion(
         r#"[{"tool":"reply","args":{"text":"loaded"}}]"#,
     )])
     .await;
@@ -1011,7 +1004,7 @@ async fn selected_skill_is_loaded_into_the_first_prompt_without_skill_view() {
             user_message: "use the selected workflow",
             selected_skill: Some("pdf"),
             stable_prefix: "TEST_STABLE_PREFIX",
-            model_profile: super::model_profile::AgentModelProfile::Plain,
+            reasoning_effort: None,
             working_dir: workspace.path(),
             editable_roots: &editable_roots,
             external_read_only_roots: &[],
@@ -1033,7 +1026,7 @@ async fn selected_skill_is_loaded_into_the_first_prompt_without_skill_view() {
 
     let requests = server.requests();
     assert_eq!(requests.len(), 1);
-    let first_prompt = requests[0]["prompt"].as_str().expect("first prompt");
+    let first_prompt = request_prompt(&requests[0]);
     assert!(first_prompt.contains("### loaded-skills\n# skill: pdf (v1.0.0)"));
     assert!(first_prompt.contains("# Deterministic PDF instructions"));
     assert!(!events.iter().any(|event| {
@@ -1048,7 +1041,7 @@ async fn selected_skill_is_loaded_into_the_first_prompt_without_skill_view() {
 #[tokio::test]
 async fn unknown_selected_skill_fails_before_completion() {
     let workspace = TestWorkspace::new();
-    let server = ScriptedCompletionServer::start(vec![ScriptedResponse::completion(
+    let server = ScriptedGinferServer::start(vec![ScriptedResponse::completion(
         r#"[{"tool":"reply","args":{"text":"must not run"}}]"#,
     )])
     .await;
@@ -1069,7 +1062,7 @@ async fn unknown_selected_skill_fails_before_completion() {
             user_message: "must not be persisted",
             selected_skill: Some("missing"),
             stable_prefix: "TEST_STABLE_PREFIX",
-            model_profile: super::model_profile::AgentModelProfile::Plain,
+            reasoning_effort: None,
             working_dir: workspace.path(),
             editable_roots: &editable_roots,
             external_read_only_roots: &[],

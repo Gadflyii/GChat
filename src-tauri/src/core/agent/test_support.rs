@@ -12,7 +12,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use serde_json::Value;
 use tokio::sync::oneshot;
 
-use super::llm_client::{LlamaServerClient, LlamaSessionTarget};
+use super::ginfer_client::{GinferClient, GinferSessionTarget};
 use super::skills::SkillRegistry;
 use super::tools::{ApprovalHook, DesktopServices, FolderAccessHook};
 use super::types::{AgentEvent, ApprovalDecision, ApprovalRequest, FolderAccessRequest};
@@ -24,7 +24,8 @@ pub(crate) struct TestWorkspace {
 impl TestWorkspace {
     pub(crate) fn new() -> Self {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("target").join("agent-test-workspaces")
+            .join("target")
+            .join("agent-test-workspaces")
             .join(uuid::Uuid::new_v4().to_string());
         std::fs::create_dir_all(&path).expect("create agent test workspace");
         Self { path }
@@ -201,14 +202,38 @@ impl ScriptedResponse {
         Self {
             status: StatusCode::OK,
             body: serde_json::json!({
-                "content": content.into(),
-                "stop": true,
-                "slot_id": 0,
-                "tokens_evaluated": 1,
-                "tokens_predicted": 1
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "model": "scripted-test-model",
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": content.into()},
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "total_tokens": 2,
+                    "prompt_tokens_details": {"cached_tokens": 0}
+                },
+                "x_ginfer": {
+                    "computed_prefill_tokens": 1,
+                    "prefill_seconds": 0.002,
+                    "decode_seconds": 0.004
+                }
             }),
             delay: Duration::ZERO,
         }
+    }
+
+    pub(crate) fn reasoning_completion(
+        content: impl Into<String>,
+        reasoning: impl Into<String>,
+    ) -> Self {
+        let mut response = Self::completion(content);
+        response.body["choices"][0]["message"]["reasoning_content"] =
+            Value::String(reasoning.into());
+        response
     }
 
     pub(crate) fn http_error(status: StatusCode, message: impl Into<String>) -> Self {
@@ -225,19 +250,27 @@ impl ScriptedResponse {
     }
 }
 
-pub(crate) struct ScriptedCompletionServer {
+pub(crate) struct ScriptedGinferServer {
     address: SocketAddr,
     requests: Arc<Mutex<Vec<Value>>>,
     shutdown: Option<oneshot::Sender<()>>,
     task: tokio::task::JoinHandle<()>,
 }
 
-impl ScriptedCompletionServer {
+impl ScriptedGinferServer {
     pub(crate) async fn start(responses: Vec<ScriptedResponse>) -> Self {
-        Self::start_with_props(responses, serde_json::json!({})).await
+        Self::start_with_model(
+            responses,
+            serde_json::json!({
+                "id": "scripted-test-model",
+                "object": "model",
+                "max_model_len": 32768
+            }),
+        )
+        .await
     }
 
-    pub(crate) async fn start_with_props(responses: Vec<ScriptedResponse>, props: Value) -> Self {
+    pub(crate) async fn start_with_model(responses: Vec<ScriptedResponse>, model: Value) -> Self {
         let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))
             .expect("bind scripted completion server");
         listener
@@ -252,14 +285,14 @@ impl ScriptedCompletionServer {
         let make_service = make_service_fn(move |_| {
             let responses = Arc::clone(&service_responses);
             let requests = Arc::clone(&service_requests);
-            let props = props.clone();
+            let model = model.clone();
             async move {
                 Ok::<_, Infallible>(service_fn(move |request| {
-                    serve_completion(
+                    serve_ginfer(
                         request,
                         Arc::clone(&responses),
                         Arc::clone(&requests),
-                        props.clone(),
+                        model.clone(),
                     )
                 }))
             }
@@ -282,13 +315,12 @@ impl ScriptedCompletionServer {
         }
     }
 
-    pub(crate) fn client(&self) -> LlamaServerClient {
-        LlamaServerClient::new(&LlamaSessionTarget {
+    pub(crate) fn client(&self) -> GinferClient {
+        GinferClient::new(&GinferSessionTarget {
             port: i32::from(self.address.port()),
             api_key: String::new(),
             model_id: "scripted-test-model".into(),
             has_vision: false,
-            backend: super::llm_client::LlamaBackend::Ginfer,
         })
         .expect("create scripted backend client")
     }
@@ -298,7 +330,7 @@ impl ScriptedCompletionServer {
     }
 }
 
-impl Drop for ScriptedCompletionServer {
+impl Drop for ScriptedGinferServer {
     fn drop(&mut self) {
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
@@ -307,16 +339,19 @@ impl Drop for ScriptedCompletionServer {
     }
 }
 
-async fn serve_completion(
+async fn serve_ginfer(
     request: Request<Body>,
     responses: Arc<tokio::sync::Mutex<VecDeque<ScriptedResponse>>>,
     requests: Arc<Mutex<Vec<Value>>>,
-    props: Value,
+    model: Value,
 ) -> Result<Response<Body>, Infallible> {
-    if request.method() == Method::GET && request.uri().path() == "/props" {
-        return Ok(json_response(StatusCode::OK, props));
+    if request.method() == Method::GET && request.uri().path() == "/v1/models" {
+        return Ok(json_response(
+            StatusCode::OK,
+            serde_json::json!({"object": "list", "data": [model]}),
+        ));
     }
-    if request.method() != Method::POST || request.uri().path() != "/completion" {
+    if request.method() != Method::POST || request.uri().path() != "/v1/chat/completions" {
         return Ok(json_response(
             StatusCode::NOT_FOUND,
             serde_json::json!({"error": {"message": "not found"}}),

@@ -21,20 +21,22 @@ mod web_search;
 mod contract_tests;
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use super::approval_allowlist::fingerprint_prepared_action;
-use super::llm_client::LlamaServerClient;
+use super::definitions::AgentReasoningEffort;
+use super::ginfer_client::GinferClient;
 use super::path_policy::{prepare_call_paths, EditableRoots};
 use super::resource_class::{resource_class_for, ResourceClass};
 use super::shell_guard::{evaluate_shell_command, join_command_stream, ShellGuardVerdict};
 use super::skills::{loaded::LoadedSkills, SkillRegistry};
 use super::types::{
-    ApprovalDecision, ApprovalRequest, ApprovalResource, FolderAccessRequest, ToolCallPayload,
-    ToolOutcome,
+    AgentInferenceMetrics, ApprovalDecision, ApprovalRequest, ApprovalResource,
+    FolderAccessRequest, ToolCallPayload, ToolOutcome,
 };
 
 pub const MAX_TOOL_OUTPUT_CHARS: usize = 16_000;
@@ -60,7 +62,9 @@ pub struct ToolContext<'a> {
     pub working_dir: &'a Path,
     pub editable_roots: &'a EditableRoots,
     pub trusted_read_roots: &'a [PathBuf],
-    pub client: Option<&'a LlamaServerClient>,
+    pub client: Option<&'a GinferClient>,
+    pub reasoning_effort: Option<AgentReasoningEffort>,
+    pub inference: Option<&'a Mutex<AgentInferenceMetrics>>,
     pub approval: &'a dyn ApprovalHook,
     pub folder_access: &'a dyn FolderAccessHook,
     pub cancellation: &'a CancellationToken,
@@ -677,6 +681,8 @@ mod tests {
                 editable_roots: &editable_roots,
                 trusted_read_roots: &[],
                 client: None,
+                reasoning_effort: None,
+                inference: None,
                 approval: &approval,
                 folder_access: &folder_access,
                 cancellation: &cancellation,
@@ -735,6 +741,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
@@ -789,6 +797,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
@@ -833,6 +843,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
@@ -890,6 +902,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
@@ -944,6 +958,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
@@ -996,6 +1012,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
@@ -1046,6 +1064,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
@@ -1093,6 +1113,8 @@ mod tests {
             editable_roots: &editable_roots,
             trusted_read_roots: &[],
             client: None,
+            reasoning_effort: None,
+            inference: None,
             approval: &approval,
             folder_access: &folder_access,
             cancellation: &cancellation,
