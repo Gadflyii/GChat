@@ -12,6 +12,7 @@ import {
   type TextStreamPart,
 } from 'ai'
 import { repairToolCallArguments } from './repairToolCall'
+import { chatMemoryContext } from './memory'
 import { prepareToolResultImagesForModel } from './toolResultImages'
 import {
   buildToolsRecord,
@@ -658,18 +659,20 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       selectedModel?.capabilities?.includes('tools') ?? this.modelSupportsTools
     const shouldEnableTools = hasTools && modelSupportsTools
 
+    const memory = isLocalProvider ? await chatMemoryContext(options.messages) : ''
+    const systemMessage = [this.systemMessage, memory].filter(Boolean).join('\n\n') || undefined
     const dropSystemForTools =
-      isLocalProvider && shouldEnableTools && !!this.systemMessage
+      isLocalProvider && shouldEnableTools && !!systemMessage
     const effectiveSystemMessage = dropSystemForTools
       ? undefined
-      : this.systemMessage
+      : systemMessage
 
     // When we drop the `system` field for the gemma+tools CoT workaround, fold
     // the instructions into the first user message so they still reach the
     // model instead of being silently lost.
     const finalModelMessages =
-      dropSystemForTools && this.systemMessage
-        ? foldSystemIntoFirstUserMessage(modelMessages, this.systemMessage)
+      dropSystemForTools && systemMessage
+        ? foldSystemIntoFirstUserMessage(modelMessages, systemMessage)
         : modelMessages
 
     // Track stream timing and token count for token speed calculation.

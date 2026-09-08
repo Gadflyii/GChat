@@ -1,6 +1,5 @@
 //! Tauri commands for starting and cancelling an isolated agent turn.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
@@ -15,13 +14,10 @@ use uuid::Uuid;
 
 use super::approval::ApprovalGate;
 use super::attachments::stage_attachments;
-use super::definitions::{get_definition, AgentDefinition, AgentStrategy};
+use super::definitions::{get_definition, AgentStrategy};
 use super::folder_access::FolderAccessGate;
-use super::ginfer_client::{
-    find_session_by_model_id, ContextExpansionHook, GinferClient, GinferClientError,
-    GinferSessionTarget,
-};
-use super::orchestrator::{run_definition, AgentModelRoute, AgentModelRoutes, OrchestrationInput};
+use super::ginfer_client::{find_session_by_model_id, GinferClient};
+use super::orchestrator::{run_definition, AgentModelRoutes, OrchestrationInput};
 use super::path_policy::{canonical_directory, expand_home, lexical_normalize, EditableRoots};
 use super::prompt::{CapabilitiesSummary, SkillDescriptor};
 use super::runs::{now_ms, record_run, AgentRunRecord};
@@ -34,7 +30,6 @@ use super::types::{
 };
 use super::workspace::default_agent_workspace;
 use crate::core::app::commands::get_jan_data_folder_path;
-use crate::core::server::context_expansion::request_context_increase;
 use crate::core::state::{AgentSessionLocks, AppState};
 
 const DEFAULT_WORKSPACE_TEXT_BYTES: usize = 512 * 1024;
@@ -98,15 +93,17 @@ pub struct AgentWorkspaceText {
     pub truncated: bool,
 }
 
-/// A currently loaded, non-embedding GInfer instance that Agent Studio may bind.
-/// GChat currently owns at most one live instance for each registered model ID,
-/// so the stable instance ID is that exact registered ID rather than a PID/port.
+/// A ready local or paired instance, identified independently of its model name.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentModelInstance {
     pub id: String,
     pub model_id: String,
     pub port: Option<u16>,
+    pub host_name: String,
+    pub vision: bool,
+    pub concurrency: u32,
+    pub max_context: u32,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -129,6 +126,10 @@ pub async fn agent_list_model_instances(
             id: session.info.model_id.clone(),
             model_id: session.info.model_id.clone(),
             port: Some(session.info.port),
+            host_name: "This computer".into(),
+            vision: session.info.vision,
+            concurrency: session.info.max_concurrency,
+            max_context: session.info.max_context,
         })
         .collect::<Vec<_>>();
     drop(sessions);
@@ -215,44 +216,40 @@ pub async fn agent_workspace_root<R: Runtime>(
 
 struct AgentDesktopServices<R: Runtime> {
     app_handle: AppHandle<R>,
-}
-
-struct AgentContextExpansion<R: Runtime> {
-    app_handle: AppHandle<R>,
-    state: Arc<crate::core::state::AutoIncreaseState>,
-}
-
-#[async_trait]
-impl<R: Runtime> ContextExpansionHook for AgentContextExpansion<R> {
-    async fn expand(
-        &self,
-        target: &GinferSessionTarget,
-        cancellation: &CancellationToken,
-    ) -> Result<GinferSessionTarget, String> {
-        let outcome = request_context_increase(
-            &self.app_handle,
-            &self.state,
-            "ginfer",
-            &target.model_id,
-            "error",
-            Some(cancellation),
-        )
-        .await;
-        if !outcome.ok {
-            return Err(format!(
-                "Context expansion failed: {}",
-                outcome.reason.as_deref().unwrap_or("unknown")
-            ));
-        }
-        let ginfer_state: State<GinferState> = self.app_handle.state();
-        find_session_by_model_id(&target.model_id, &ginfer_state)
-            .await
-            .map_err(|error| error.to_string())
-    }
+    memory_workspace: PathBuf,
+    memory_source: String,
 }
 
 #[async_trait]
 impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
+    async fn memory(
+        &self,
+        action: &str,
+        args: serde_json::Value,
+        _workspace: &Path,
+    ) -> Result<serde_json::Value, String> {
+        super::memory::operation(
+            get_jan_data_folder_path(self.app_handle.clone()),
+            action.into(),
+            args,
+            Some(self.memory_workspace.clone()),
+            self.memory_source.clone(),
+        )
+        .await
+    }
+    async fn memory_context(&self, query: &str, workspace: &Path) -> Result<String, String> {
+        let result = self
+            .memory("context", serde_json::json!({"query":query}), workspace)
+            .await?;
+        Ok(result["prompt"].as_str().unwrap_or("").into())
+    }
+    async fn studio(
+        &self,
+        action: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        super::studio::operation(self.app_handle.clone(), action, args).await
+    }
     async fn write_clipboard(&self, text: String) -> Result<(), String> {
         #[cfg(desktop)]
         {
@@ -460,10 +457,19 @@ pub async fn agent_run_turn<R: Runtime>(
 ) -> Result<(), String> {
     validate_request(&request)?;
     let data_folder = get_jan_data_folder_path(app_handle.clone());
-    let definition = get_definition(
-        &data_folder,
-        request.definition_id.as_deref().unwrap_or("general"),
-    )?;
+    let definition_data = data_folder.clone();
+    let definition_id = request
+        .definition_id
+        .clone()
+        .unwrap_or_else(|| "general".into());
+    let mut definition =
+        tokio::task::spawn_blocking(move || get_definition(&definition_data, &definition_id))
+            .await
+            .map_err(|e| e.to_string())??;
+    super::definitions::validate_role_assignments(&definition, &request.role_assignments)?;
+    definition
+        .role_assignments
+        .extend(request.role_assignments.clone());
     state
         .agent_approval_allowlist
         .lock()
@@ -481,28 +487,33 @@ pub async fn agent_run_turn<R: Runtime>(
         }
     }
     let editable_roots = EditableRoots::new(&working_dir, &editable_external_roots).await?;
-    let ginfer_state: State<GinferState> = app_handle.state();
     let has_images = request
         .attachments
         .iter()
         .any(|attachment| attachment.kind == super::types::AgentAttachmentKind::Image);
-    let cancellation = CancellationToken::new();
-    let context_expansion = Arc::new(AgentContextExpansion {
-        app_handle: app_handle.clone(),
-        state: state.auto_increase_ctx.clone(),
-    });
-    let model_routes = resolve_agent_model_routes(
-        &definition,
-        &request.model_id,
-        &ginfer_state,
-        context_expansion,
-        &cancellation,
-    )
-    .await?;
-    for instance_id in required_model_instance_ids(&definition, &request.model_id) {
-        let route = model_routes.route(&instance_id)?;
-        ensure_vision_requirement(has_images, route.client.target().has_vision)?;
+    if has_images
+        && matches!(
+            definition.strategy,
+            AgentStrategy::Coordinator { .. } | AgentStrategy::Workflow { .. }
+        )
+        && !definition.role_assignments.values().any(|a| a.vision)
+    {
+        return Err("This task includes images. Assign Vision to the role that will inspect them in Run setup.".into());
     }
+    let cancellation = CancellationToken::new();
+    let mut model_routes = AgentModelRoutes::new(Vec::new())?;
+    model_routes.dispatcher = Some(Arc::new(
+        super::worker_dispatch::Dispatcher::new(
+            app_handle.clone(),
+            definition.role_assignments.clone(),
+            &data_folder,
+            request.model_id.clone(),
+            has_images,
+        )
+        .await?,
+    ));
+    // Worker placement is cancellable and happens after run registration, not
+    // before the cancellation channel exists. No model is loaded here.
     let staged = stage_attachments(&data_folder, &request.session_id, &request.attachments).await?;
     let user_message = staged.append_manifest(&request.user_message);
     let mut trusted_read_roots = read_only_external_roots;
@@ -573,6 +584,8 @@ pub async fn agent_run_turn<R: Runtime>(
     );
     let desktop = AgentDesktopServices {
         app_handle: app_handle.clone(),
+        memory_workspace: working_dir.clone(),
+        memory_source: format!("agent:{}", request.run_id),
     };
     let session_lock = get_session_lock(&state.agent_session_locks, &request.session_id).await;
     let result = {
@@ -609,7 +622,17 @@ pub async fn agent_run_turn<R: Runtime>(
                         data_folder: &data_folder,
                     },
                     |event| {
-                        recorded_events.push(event.clone());
+                        super::studio::observe(&request.run_id, &event);
+                        if matches!(
+                            event,
+                            AgentEvent::OrchestrationStarted { .. }
+                                | AgentEvent::StageFinished { .. }
+                                | AgentEvent::AssistantReply { .. }
+                                | AgentEvent::StepError { .. }
+                                | AgentEvent::TurnFinished { .. }
+                        ) {
+                            recorded_events.push(event.clone());
+                        }
                         on_event.send(event).map_err(|error| error.to_string())
                     },
                 )
@@ -638,6 +661,7 @@ pub async fn agent_run_turn<R: Runtime>(
                             },
                         ] {
                             recorded_events.push(event.clone());
+                            super::studio::observe(&request.run_id, &event);
                             let _ = on_event.send(event);
                         }
                     }
@@ -652,7 +676,13 @@ pub async fn agent_run_turn<R: Runtime>(
                     &recorded_events,
                     &run_result,
                 );
-                if let Err(error) = record_run(&data_folder, record) {
+                let record_data = data_folder.clone();
+                if let Err(error) =
+                    tokio::task::spawn_blocking(move || record_run(&record_data, record))
+                        .await
+                        .map_err(|e| e.to_string())
+                        .and_then(|result| result)
+                {
                     log::warn!("Failed to record Agent Studio run: {error}");
                 }
                 match save_session(&data_folder, &session).await {
@@ -681,114 +711,6 @@ fn resolve_bundled_script_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Opti
         .ok()
         .map(|root| root.join("resources/bin").join(executable))
         .filter(|path| path.is_file())
-}
-
-fn required_model_instance_ids(
-    definition: &AgentDefinition,
-    active_model_instance_id: &str,
-) -> Vec<String> {
-    let default = definition
-        .model_instance_id
-        .as_deref()
-        .unwrap_or(active_model_instance_id);
-    let mut ids = BTreeSet::from([default.to_owned()]);
-    match &definition.strategy {
-        AgentStrategy::Standard => {}
-        AgentStrategy::GoalLoop {
-            evaluator_model_instance_id,
-            ..
-        } => {
-            if let Some(id) = evaluator_model_instance_id {
-                ids.insert(id.clone());
-            }
-        }
-        AgentStrategy::Coordinator {
-            synthesis_model_instance_id,
-            workers,
-            ..
-        } => {
-            if let Some(id) = synthesis_model_instance_id {
-                ids.insert(id.clone());
-            }
-            ids.extend(
-                workers
-                    .iter()
-                    .filter_map(|worker| worker.model_instance_id.clone()),
-            );
-        }
-        AgentStrategy::Workflow { nodes, .. } => {
-            ids.extend(
-                nodes
-                    .iter()
-                    .filter_map(|node| node.model_instance_id.clone()),
-            );
-        }
-    }
-    ids.into_iter().collect()
-}
-
-async fn resolve_agent_model_routes<R: Runtime>(
-    definition: &AgentDefinition,
-    active_model_instance_id: &str,
-    ginfer_state: &GinferState,
-    context_expansion: Arc<AgentContextExpansion<R>>,
-    cancellation: &CancellationToken,
-) -> Result<AgentModelRoutes, String> {
-    let mut routes = Vec::new();
-    for instance_id in required_model_instance_ids(definition, active_model_instance_id) {
-        let target = find_session_by_model_id(&instance_id, ginfer_state)
-            .await
-            .map_err(|_| {
-                format!(
-                    "Assigned Agent model instance `{instance_id}` is not loaded. Load it before starting this run."
-                )
-            })?;
-        let client = GinferClient::new(&target)
-            .map_err(|error| error.to_string())?
-            .with_context_expansion(context_expansion.clone());
-        client
-            .fetch_model(cancellation)
-            .await
-            .map_err(|error| match error {
-                GinferClientError::Cancelled => {
-                    "Agent model-instance validation was cancelled".to_owned()
-                }
-                other => {
-                    format!("Assigned Agent model instance `{instance_id}` is not healthy: {other}")
-                }
-            })?;
-        routes.push(AgentModelRoute {
-            instance_id,
-            model_id: target.model_id.clone(),
-            client,
-        });
-    }
-    AgentModelRoutes::new(routes)
-}
-
-fn ensure_vision_requirement(has_images: bool, has_vision: bool) -> Result<(), String> {
-    if has_images && !has_vision {
-        Err(
-            "AGENT_VISION_MODEL_REQUIRED: Select a vision-capable model before sending images"
-                .into(),
-        )
-    } else {
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod attachment_tests {
-    use super::ensure_vision_requirement;
-
-    #[test]
-    fn rejects_image_turns_for_text_only_sessions() {
-        assert!(ensure_vision_requirement(true, false)
-            .unwrap_err()
-            .starts_with("AGENT_VISION_MODEL_REQUIRED"));
-        assert!(ensure_vision_requirement(true, true).is_ok());
-        assert!(ensure_vision_requirement(false, false).is_ok());
-    }
 }
 
 #[tauri::command]
@@ -1031,44 +953,6 @@ mod tests {
 
     use super::*;
     use crate::core::agent::test_support::TestWorkspace;
-
-    #[test]
-    fn resolves_every_explicit_stage_model_before_a_run() {
-        let mut definition = crate::core::agent::definitions::general_agent();
-        definition.model_instance_id = Some("coordinator-model".into());
-        definition.strategy = AgentStrategy::Coordinator {
-            max_parallel: 2,
-            coordinator_instructions: "Plan".into(),
-            synthesis_instructions: "Synthesize".into(),
-            synthesis_model_instance_id: Some("synthesis-model".into()),
-            synthesis_reasoning_effort: None,
-            workers: vec![
-                crate::core::agent::definitions::AgentRole {
-                    id: "one".into(),
-                    name: "One".into(),
-                    instructions: "Work".into(),
-                    skills: Vec::new(),
-                    max_steps: 4,
-                    model_instance_id: Some("worker-model".into()),
-                    reasoning_effort: None,
-                },
-                crate::core::agent::definitions::AgentRole {
-                    id: "two".into(),
-                    name: "Two".into(),
-                    instructions: "Work".into(),
-                    skills: Vec::new(),
-                    max_steps: 4,
-                    model_instance_id: None,
-                    reasoning_effort: None,
-                },
-            ],
-        };
-
-        assert_eq!(
-            required_model_instance_ids(&definition, "active-model"),
-            vec!["coordinator-model", "synthesis-model", "worker-model"]
-        );
-    }
 
     #[cfg(windows)]
     fn create_junction(link: &Path, target: &Path) {

@@ -26,6 +26,7 @@ export type AgentTurnRequest = {
   model_id: string
   user_message: string
   definition_id?: string
+  role_assignments?: Record<string, AgentRoleAssignment>
   selected_skill?: string
   attachments?: AgentAttachment[]
   working_dir?: string
@@ -60,6 +61,22 @@ export type AgentModelInstance = {
   id: string
   modelId: string
   port: number | null
+  hostName?: string
+  vision?: boolean
+  concurrency?: number
+  maxContext?: number
+}
+
+export type AgentRoleAssignment = {
+  target: { kind: 'current' } | { kind: 'instance' | 'pool'; id: string }
+  vision: boolean
+  minimumContext: number
+}
+
+export type AgentWorkerPool = {
+  id: string
+  name: string
+  members: Array<{ instanceId: string; workerLimit: number }>
 }
 
 export type AgentRole = {
@@ -82,6 +99,7 @@ export type AgentWorkflowEdge = {
 }
 
 type AgentDefinitionBase = {
+  roleAssignments?: Record<string, AgentRoleAssignment>
   schemaVersion: 3
   id: string
   name: string
@@ -130,6 +148,7 @@ export type AgentTemplate = {
 }
 
 export type AgentRunRecord = {
+  roleAssignments?: Record<string, AgentRoleAssignment>
   schemaVersion: 3
   id: string
   runId: string
@@ -236,6 +255,9 @@ export type AgentToolExecution = {
 }
 
 export type AgentEvent =
+  | { type: 'inference_measured'; inference: AgentInferenceMetrics }
+  | { type: 'stage_queued'; stage_id: string; name: string; reason: string }
+  | { type: 'stage_activity'; stage_id: string; event: AgentEvent }
   | { type: 'turn_started'; run_id: string; session_id: string }
   | {
       type: 'orchestration_started'
@@ -373,7 +395,15 @@ export type AgentRunTrace = {
     id: string
     name: string
     role: string
-    status: 'running' | 'finished' | 'incomplete' | 'failed' | 'cancelled'
+    status:
+      | 'queued'
+      | 'running'
+      | 'finished'
+      | 'incomplete'
+      | 'failed'
+      | 'cancelled'
+    activity?: string
+    events?: AgentEvent[]
     cycle?: number
     summary?: string
     stepCount?: number
@@ -418,7 +448,13 @@ export type AgentRunSummary = {
     id: string
     name: string
     role: string
-    status: 'running' | 'finished' | 'incomplete' | 'failed' | 'cancelled'
+    status:
+      | 'queued'
+      | 'running'
+      | 'finished'
+      | 'incomplete'
+      | 'failed'
+      | 'cancelled'
     step_count?: number
     duration_ms?: number
     model_instance_id: string

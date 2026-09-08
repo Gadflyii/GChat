@@ -54,6 +54,24 @@ pub trait FolderAccessHook: Send + Sync {
 
 #[async_trait]
 pub trait DesktopServices: Send + Sync {
+    async fn memory(
+        &self,
+        _action: &str,
+        _args: Value,
+        _workspace: &Path,
+    ) -> Result<Value, String> {
+        Err("Memory is unavailable in this environment".into())
+    }
+    async fn memory_context(&self, _query: &str, _workspace: &Path) -> Result<String, String> {
+        Ok(String::new())
+    }
+    async fn studio(
+        &self,
+        _action: &str,
+        _args: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        Err("Agent Studio is unavailable in this environment".into())
+    }
     async fn write_clipboard(&self, text: String) -> Result<(), String>;
     async fn notify(&self, title: String, body: String) -> Result<(), String>;
 }
@@ -93,6 +111,68 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
         Err(outcome) => return outcome,
     };
     let result = match call.tool.as_str() {
+        "memory.recall" | "memory.save" | "memory.delete" => {
+            let action = call.tool.strip_prefix("memory.").unwrap();
+            context
+                .desktop
+                .memory(action, call.args.clone(), context.working_dir)
+                .await
+                .map(|value| {
+                    let summary = if action == "recall" {
+                        value["prompt"].as_str().filter(|s| !s.is_empty()).unwrap_or("No relevant enabled memories found").to_owned()
+                    } else {
+                        serde_json::json!({"action":action,"id":value["id"],"revision":value["revision"],"deleted":value["deleted"]}).to_string()
+                    };
+                    let mut outcome = ToolOutcome::ok(summary);
+                    outcome.details = Some(value);
+                    outcome
+                })
+                .map_err(ToolOutcome::error)
+        }
+        "studio.inspect" | "studio.manage" => {
+            let action = call
+                .args
+                .get("action")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let allowed = if call.tool == "studio.inspect" {
+                matches!(
+                    action,
+                    "catalog"
+                        | "capacity"
+                        | "pools"
+                        | "get_definition"
+                        | "validate_definition"
+                        | "runs"
+                        | "monitor"
+                )
+            } else {
+                matches!(
+                    action,
+                    "save_definition" | "save_pool" | "delete_pool" | "stop_run"
+                )
+            };
+            if !allowed {
+                Err(ToolOutcome::error("Unsupported Studio tool operation"))
+            } else {
+                context
+                    .desktop
+                    .studio(
+                        action,
+                        call.args
+                            .get("args")
+                            .cloned()
+                            .unwrap_or(serde_json::json!({})),
+                    )
+                    .await
+                    .map(|value| {
+                        let mut result = ToolOutcome::ok("Agent Studio operation completed");
+                        result.details = Some(value);
+                        result
+                    })
+                    .map_err(ToolOutcome::error)
+            }
+        }
         "os.fs.read"
         | "os.fs.read_document"
         | "os.fs.list"
@@ -258,6 +338,12 @@ async fn authorize_call(
 }
 
 fn safe_preview(call: &ToolCallPayload) -> Value {
+    if matches!(
+        call.tool.as_str(),
+        "studio.manage" | "memory.save" | "memory.delete"
+    ) {
+        return call.args.clone();
+    }
     let mut preview = serde_json::Map::new();
     let allowed = [
         "path",

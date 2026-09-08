@@ -9,12 +9,16 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-243 records, 2026-05-19 → 2026-09-07.
+246 records, 2026-05-19 → 2026-09-08.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-09-08** — [Own scoped, inspectable memory in GChat](2026-09-08-own-scoped-inspectable-memory.md)
+
+- **2026-09-08** — [Dispatch Agent Studio workers through explicit instance pools](2026-09-08-dispatch-agent-workers-through-explicit-pools.md)
+- **2026-09-08** — [Guide desktop credential storage setup before LAN pairing](2026-09-08-guide-desktop-credential-storage-setup.md)
 - **2026-09-07** — [Register discoverable GInfer hosts and address model instances explicitly](2026-09-07-register-discoverable-ginfer-hosts.md)
 - **2026-09-01** — [Enable and provision embedded agents by default](2026-09-01-enable-and-provision-embedded-agents-by-default.md)
 - **2026-08-30** — [Embed Hermes as an independent managed terminal](2026-08-30-embed-hermes-as-an-independent-managed-terminal.md)

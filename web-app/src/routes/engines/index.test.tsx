@@ -26,7 +26,7 @@ const Page = Route.options.component as ComponentType
 
 beforeEach(() => {
   mocks.error = ''
-  mocks.command.mockReset().mockResolvedValue({})
+  mocks.command.mockReset().mockImplementation(async (action: string) => action === 'credential_status' ? { ready: true, platform: 'linux', can_install: false } : {})
   mocks.refresh.mockReset().mockResolvedValue(undefined)
 })
 afterEach(cleanup)
@@ -40,6 +40,7 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.getByRole('button', { name: 'Pair host' })).toBeDisabled()
     fireEvent.change(screen.getByLabelText('Certificate SHA256'), { target: { value: 'a'.repeat(64) } })
     fireEvent.change(screen.getByLabelText('Pairing code'), { target: { value: '12345678' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair host' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Pair host' }))
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', {
       base_url: 'https://host:7443', fingerprint: 'a'.repeat(64), code: '12345678',
@@ -73,6 +74,17 @@ describe('Engines host intake and launch controls', () => {
     fireEvent.click(screen.getByLabelText(/RTX 5090 \(GPU-one\)/))
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('last known')
-    expect(mocks.command).not.toHaveBeenCalled()
+    expect(mocks.command).not.toHaveBeenCalledWith('launch', expect.anything())
+  })
+  it('blocks pairing when storage is unavailable even after skipping setup', async () => {
+    mocks.command.mockResolvedValue({ ready: false, platform: 'linux', can_install: false })
+    render(<Page />)
+    fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })
+    fireEvent.change(screen.getByLabelText('Certificate SHA256'), { target: { value: 'a'.repeat(64) } })
+    fireEvent.change(screen.getByLabelText('Pairing code'), { target: { value: '12345678' } })
+    await screen.findByText('Secure storage is unavailable. Set it up or unlock it before pairing.')
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+    expect(screen.getByRole('button', { name: 'Pair host' })).toBeDisabled()
+    expect(mocks.command).not.toHaveBeenCalledWith('pair', expect.anything())
   })
 })

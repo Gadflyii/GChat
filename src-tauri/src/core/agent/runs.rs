@@ -42,6 +42,8 @@ pub struct AgentRunRecord {
     pub max_cycles: Option<u32>,
     pub final_reply: String,
     pub default_model_instance_id: String,
+    #[serde(default)]
+    pub role_assignments: super::worker_pools::RoleAssignments,
     pub stages: Vec<AgentRunStage>,
 }
 
@@ -169,6 +171,7 @@ impl AgentRunRecord {
             },
             final_reply,
             default_model_instance_id,
+            role_assignments: definition.role_assignments.clone(),
             stages,
         }
     }
@@ -278,7 +281,10 @@ pub fn now_ms() -> u64 {
 pub async fn agent_list_runs<R: Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<Vec<AgentRunRecord>, String> {
-    list_runs(&get_jan_data_folder_path(app_handle))
+    let data = get_jan_data_folder_path(app_handle);
+    tokio::task::spawn_blocking(move || list_runs(&data))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -286,7 +292,10 @@ pub async fn agent_delete_run<R: Runtime>(
     app_handle: AppHandle<R>,
     id: String,
 ) -> Result<(), String> {
-    delete_run(&get_jan_data_folder_path(app_handle), &id)
+    let data = get_jan_data_folder_path(app_handle);
+    tokio::task::spawn_blocking(move || delete_run(&data, &id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

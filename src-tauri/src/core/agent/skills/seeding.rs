@@ -166,6 +166,7 @@ mod tests {
 
         let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/agent-skills");
         let expected = BTreeMap::from([
+            ("agent-builder", vec![Linux, Win32]),
             ("apple-calendar", vec![Darwin]),
             ("apple-notes", vec![Darwin]),
             ("apple-reminders", vec![Darwin]),

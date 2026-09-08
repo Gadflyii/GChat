@@ -76,6 +76,9 @@ async fn run_script(
 
 fn event_kind(event: &AgentEvent) -> &'static str {
     match event {
+        AgentEvent::StageQueued { .. } => "stage_queued",
+        AgentEvent::StageActivity { .. } => "stage_activity",
+        AgentEvent::InferenceMeasured { .. } => "inference_measured",
         AgentEvent::TurnStarted { .. } => "turn_started",
         AgentEvent::OrchestrationStarted { .. } => "orchestration_started",
         AgentEvent::StageStarted { .. } => "stage_started",
@@ -138,6 +141,7 @@ async fn immediate_reply_preserves_event_order_and_completion_contract() {
         [
             "turn_started",
             "step_started",
+            "inference_measured",
             "tool_call_parsed",
             "tool_call_executed",
             "assistant_delta",

@@ -15,6 +15,7 @@ import { Route as HermesRouteImport } from './routes/hermes'
 import { Route as CodeRouteImport } from './routes/code'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SkillsIndexRouteImport } from './routes/skills/index'
+import { Route as MemoryIndexRouteImport } from './routes/memory/index'
 import { Route as LaunchIndexRouteImport } from './routes/launch/index'
 import { Route as HubIndexRouteImport } from './routes/hub/index'
 import { Route as EnginesIndexRouteImport } from './routes/engines/index'
@@ -68,6 +69,11 @@ const IndexRoute = IndexRouteImport.update({
 const SkillsIndexRoute = SkillsIndexRouteImport.update({
   id: '/skills/',
   path: '/skills/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MemoryIndexRoute = MemoryIndexRouteImport.update({
+  id: '/memory/',
+  path: '/memory/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LaunchIndexRoute = LaunchIndexRouteImport.update({
@@ -220,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/engines/': typeof EnginesIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
+  '/memory/': typeof MemoryIndexRoute
   '/skills/': typeof SkillsIndexRoute
   '/settings/providers/$providerName': typeof SettingsProvidersProviderNameRoute
   '/settings/providers/': typeof SettingsProvidersIndexRoute
@@ -252,6 +259,7 @@ export interface FileRoutesByTo {
   '/engines': typeof EnginesIndexRoute
   '/hub': typeof HubIndexRoute
   '/launch': typeof LaunchIndexRoute
+  '/memory': typeof MemoryIndexRoute
   '/skills': typeof SkillsIndexRoute
   '/settings/providers/$providerName': typeof SettingsProvidersProviderNameRoute
   '/settings/providers': typeof SettingsProvidersIndexRoute
@@ -285,6 +293,7 @@ export interface FileRoutesById {
   '/engines/': typeof EnginesIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
+  '/memory/': typeof MemoryIndexRoute
   '/skills/': typeof SkillsIndexRoute
   '/settings/providers/$providerName': typeof SettingsProvidersProviderNameRoute
   '/settings/providers/': typeof SettingsProvidersIndexRoute
@@ -319,6 +328,7 @@ export interface FileRouteTypes {
     | '/engines/'
     | '/hub/'
     | '/launch/'
+    | '/memory/'
     | '/skills/'
     | '/settings/providers/$providerName'
     | '/settings/providers/'
@@ -351,6 +361,7 @@ export interface FileRouteTypes {
     | '/engines'
     | '/hub'
     | '/launch'
+    | '/memory'
     | '/skills'
     | '/settings/providers/$providerName'
     | '/settings/providers'
@@ -383,6 +394,7 @@ export interface FileRouteTypes {
     | '/engines/'
     | '/hub/'
     | '/launch/'
+    | '/memory/'
     | '/skills/'
     | '/settings/providers/$providerName'
     | '/settings/providers/'
@@ -416,6 +428,7 @@ export interface RootRouteChildren {
   EnginesIndexRoute: typeof EnginesIndexRoute
   HubIndexRoute: typeof HubIndexRoute
   LaunchIndexRoute: typeof LaunchIndexRoute
+  MemoryIndexRoute: typeof MemoryIndexRoute
   SkillsIndexRoute: typeof SkillsIndexRoute
   SettingsProvidersProviderNameRoute: typeof SettingsProvidersProviderNameRoute
   SettingsProvidersIndexRoute: typeof SettingsProvidersIndexRoute
@@ -463,6 +476,13 @@ declare module '@tanstack/react-router' {
       path: '/skills'
       fullPath: '/skills/'
       preLoaderRoute: typeof SkillsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/memory/': {
+      id: '/memory/'
+      path: '/memory'
+      fullPath: '/memory/'
+      preLoaderRoute: typeof MemoryIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/launch/': {
@@ -664,6 +684,7 @@ const rootRouteChildren: RootRouteChildren = {
   EnginesIndexRoute: EnginesIndexRoute,
   HubIndexRoute: HubIndexRoute,
   LaunchIndexRoute: LaunchIndexRoute,
+  MemoryIndexRoute: MemoryIndexRoute,
   SkillsIndexRoute: SkillsIndexRoute,
   SettingsProvidersProviderNameRoute: SettingsProvidersProviderNameRoute,
   SettingsProvidersIndexRoute: SettingsProvidersIndexRoute,

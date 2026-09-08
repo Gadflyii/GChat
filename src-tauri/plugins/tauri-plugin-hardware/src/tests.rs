@@ -4,13 +4,13 @@ use tauri::test::mock_app;
 
 #[test]
 fn test_system_info() {
-    let info = get_system_info();
+    let info = tauri::async_runtime::block_on(get_system_info()).unwrap();
     println!("System Static Info: {:?}", info);
 }
 
 #[test]
 fn test_system_usage() {
-    let usage = get_system_usage();
+    let usage = tauri::async_runtime::block_on(get_system_usage()).unwrap();
     println!("System Usage Info: {:?}", usage);
 }
 

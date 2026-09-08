@@ -1,17 +1,6 @@
-//! Autonomous agent mode (backend core, iteration 1).
-//!
-//! Fully isolated from the regular chat flow (the Vercel AI SDK loop is
-//! untouched). This module ports the core of the TypeScript `atomic-agent`
-//! runtime to Rust: the stable-prefix system prompt, GInfer-native function
-//! tools, a direct HTTP client to the local
-//! `ginfer-serve` backend, the `prompt -> decide -> run -> observe` loop,
-//! the `ToolLoopTracker` guard, the resource-class taxonomy, and the OS core
-//! tools.
-//!
-//! Transport: the agent talks **directly** to the `ginfer-serve` backend on
-//! `127.0.0.1:{port}` through `/v1/models` and `/v1/chat/completions`,
-//! bypassing the `:1337` proxy. Port and api key are read from
-//! the `tauri-plugin-ginfer` session map.
+//! Agent Studio definitions, worker placement, durable sessions, and scoped tools.
+//! Inference targets local GInfer or explicitly paired host instances; tools and
+//! approvals remain owned by this desktop application.
 
 pub mod approval;
 pub mod approval_allowlist;
@@ -34,6 +23,7 @@ pub mod session;
 pub mod shell_guard;
 pub mod skills;
 mod storage;
+pub mod memory;
 pub mod token_budget;
 pub mod tools;
 pub mod types;
@@ -49,3 +39,6 @@ pub use types::{
     AgentTurnRequest, ApprovalDecision, ApprovalRequest, ApprovalResource, ToolCallPayload,
     ToolExecution, ToolOutcome, ToolStatus,
 };
+pub mod worker_pools;
+mod worker_dispatch;
+pub mod studio;

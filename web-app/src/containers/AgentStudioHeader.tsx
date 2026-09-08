@@ -13,6 +13,7 @@ export type AgentStudioSection =
   | 'templates'
   | 'skills'
   | 'runs'
+  | 'pools'
 
 type AgentStudioHeaderProps = {
   active: AgentStudioSection
@@ -24,6 +25,7 @@ const sections = [
   { id: 'definitions', label: 'Agents & flows', icon: IconBolt },
   { id: 'templates', label: 'Templates', icon: IconTemplate },
   { id: 'skills', label: 'Skills', icon: IconFileText },
+  { id: 'pools', label: 'Worker Pools', icon: IconBolt },
   { id: 'runs', label: 'Runs', icon: IconHistory },
 ] as const
 

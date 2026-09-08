@@ -88,7 +88,9 @@ export function reduceAgentRunState(
         trace: {
           ...state.trace,
           stages: [
-            ...state.trace.stages,
+            ...state.trace.stages.filter(
+              (stage) => stage.id !== event.stage_id
+            ),
             {
               id: event.stage_id,
               name: event.name,
@@ -103,6 +105,47 @@ export function reduceAgentRunState(
           ],
         },
       }
+    case 'stage_queued':
+      return {
+        ...state,
+        trace: {
+          ...state.trace,
+          stages: [
+            ...state.trace.stages.filter(
+              (stage) => stage.id !== event.stage_id
+            ),
+            {
+              id: event.stage_id,
+              name: event.name,
+              role: 'worker',
+              status: 'queued',
+              modelInstanceId: '',
+              summary: event.reason,
+            },
+          ],
+        },
+      }
+    case 'stage_activity':
+      return {
+        ...state,
+        trace: {
+          ...state.trace,
+          stages: state.trace.stages.map((stage) =>
+            stage.id === event.stage_id
+              ? {
+                  ...stage,
+                  activity: event.event.type,
+                  ...(event.event.type === 'inference_measured'
+                    ? { inference: event.event.inference }
+                    : {}),
+                  events: [...(stage.events ?? []), event.event].slice(-100),
+                }
+              : stage
+          ),
+        },
+      }
+    case 'inference_measured':
+      return state
     case 'stage_finished':
       return {
         ...state,
@@ -120,7 +163,7 @@ export function reduceAgentRunState(
                         : event.status === 'max_steps' ||
                             event.status === 'max_cycles'
                           ? 'incomplete'
-                        : 'finished',
+                          : 'finished',
                   summary: event.summary,
                   stepCount: event.step_count,
                   durationMs: event.duration_ms,
@@ -268,7 +311,7 @@ export function reduceAgentRunState(
             ? 'failed'
             : event.reason === 'max_steps' || event.reason === 'max_cycles'
               ? 'incomplete'
-            : 'finished'
+              : 'finished'
       return {
         ...state,
         finishedAtMs: nowMs,
@@ -280,6 +323,14 @@ export function reduceAgentRunState(
         trace: {
           ...state.trace,
           finishReason: event.reason,
+          stages: state.trace.stages.map((stage) =>
+            stage.status === 'running' || stage.status === 'queued'
+              ? {
+                  ...stage,
+                  status: status === 'finished' ? 'incomplete' : status,
+                }
+              : stage
+          ),
           stepCount: event.step_count,
         },
       }

@@ -49,15 +49,19 @@ fn compute_system_info() -> SystemInfo {
 }
 
 #[tauri::command]
-pub fn get_system_info() -> SystemInfo {
-    // Fast path: use cache if present
+pub async fn get_system_info() -> Result<SystemInfo, String> {
+    tauri::async_runtime::spawn_blocking(cached_system_info)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn cached_system_info() -> SystemInfo {
     {
         let guard = SYSTEM_INFO.read().expect("RwLock poisoned");
         if let Some(ref info) = *guard {
             return info.clone();
         }
     }
-    // Cache miss or invalidated: compute and store
     let info = compute_system_info();
     {
         let mut guard = SYSTEM_INFO.write().expect("RwLock poisoned");
@@ -66,9 +70,7 @@ pub fn get_system_info() -> SystemInfo {
     info
 }
 
-/// Invalidates cached hardware info so the next get_system_info() re-detects GPUs.
-/// Call this after system resume on Linux to fix "No GPU detected" (driver state is
-/// reset after sleep and the previous cache may be stale or empty).
+/// Re-detect GPUs after resume or a driver change.
 #[tauri::command]
 pub fn refresh_system_info() {
     #[cfg(target_os = "linux")]
@@ -78,11 +80,17 @@ pub fn refresh_system_info() {
 }
 
 #[tauri::command]
-pub fn get_system_usage() -> SystemUsage {
+pub async fn get_system_usage() -> Result<SystemUsage, String> {
+    tauri::async_runtime::spawn_blocking(sample_system_usage)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn sample_system_usage() -> SystemUsage {
     let mut system = System::new();
     system.refresh_memory();
 
-    // need to refresh 2 times to get CPU usage
+    // CPU utilization needs two samples; this wait runs on the blocking pool.
     system.refresh_cpu_all();
     std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
     system.refresh_cpu_all();
@@ -95,7 +103,7 @@ pub fn get_system_usage() -> SystemUsage {
         cpu: cpu_usage,
         used_memory: system.used_memory() / 1024 / 1024, // bytes to MiB,
         total_memory: system.total_memory() / 1024 / 1024, // bytes to MiB,
-        gpus: get_system_info()
+        gpus: cached_system_info()
             .gpus
             .iter()
             .map(|gpu| gpu.get_usage())

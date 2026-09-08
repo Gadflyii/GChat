@@ -19,6 +19,8 @@ pub enum ResourceClass {
 pub fn resource_class_for(tool_name: &str) -> ResourceClass {
     match tool_name {
         "tool.view"
+        | "studio.inspect"
+        | "memory.recall"
         | "skill.view"
         | "os.fs.read"
         | "os.fs.read_document"
@@ -43,6 +45,9 @@ pub fn resource_class_for(tool_name: &str) -> ResourceClass {
         "os.clipboard.write" | "os.notify" => ResourceClass::MemoryWrite,
         "os.fs.write" | "os.fs.mkdir" | "os.fs.edit" => ResourceClass::FsWrite,
         "os.fs.trash"
+        | "studio.manage"
+        | "memory.save"
+        | "memory.delete"
         | "os.fs.patch"
         | "os.fs.archive.extract"
         | "os.shell.run"

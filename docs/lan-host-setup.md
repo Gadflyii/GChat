@@ -191,8 +191,23 @@ The host's `host.json` contains its private certificate and local pairing-admin
 credential. Keep the dedicated state directory private (0700 on Linux); do not
 copy it into model storage, logs, datasets, or a public repository.
 
+**Linux GChat client prerequisite:** install and enable a Secret Service provider
+(for example, GNOME Keyring) using your distribution's package manager, and unlock
+its keyring in the desktop session before pairing. It must expose
+`org.freedesktop.secrets` on the session D-Bus.
+
+First-run network intake and Engines check this before pairing. **Set up secure
+storage** offers GNOME Keyring installation on supported Ubuntu/Debian, Fedora,
+Arch/Manjaro, and openSUSE systems with `pkexec`. Clicking it requests OS
+administrator approval; GChat does not receive that password or install at launch.
+Existing GNOME Keyring installations receive unlock guidance instead. Other
+systems receive software-manager instructions. After installation GChat verifies
+actual write/read/delete access; installation alone does not enable pairing.
+You may need to unlock the keyring or sign out and back in. **Check again** retries;
+**Skip for now** preserves local use without enabling pairing.
+
 GChat stores paired credentials in the native OS vault: Windows Credential Manager
-or an unlocked Linux Secret Service provider. Headless WSL without
+or that unlocked Linux Secret Service provider. Headless WSL without
 `org.freedesktop.secrets` cannot currently complete GChat-side credential storage.
 The headless `ginfer-host` service itself does not require that desktop vault.
 Do not work around an unavailable client vault by saving paired tokens as plaintext.

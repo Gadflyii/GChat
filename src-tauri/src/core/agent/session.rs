@@ -17,6 +17,13 @@ const MAX_TURNS: usize = 512;
 const MAX_USER_TEXT_CHARS: usize = 8_000;
 const MAX_REPLY_TEXT_CHARS: usize = 12_000;
 const MAX_TOOL_SUMMARY_CHARS: usize = 1_200;
+fn tool_summary_limit(tool: &str) -> usize {
+    if tool == "memory.recall" {
+        6500
+    } else {
+        MAX_TOOL_SUMMARY_CHARS
+    }
+}
 const CHECKPOINT_TOKEN_RESERVE: usize = 3_072;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -92,7 +99,7 @@ impl AgentSessionState {
             self.push_turn(AgentSessionTurn::ToolResult {
                 tool: call.tool.clone(),
                 status: outcome.status,
-                summary: truncate_chars(&prompt_summary, MAX_TOOL_SUMMARY_CHARS),
+                summary: truncate_chars(&prompt_summary, tool_summary_limit(&call.tool)),
             });
         }
     }
@@ -249,8 +256,8 @@ impl AgentSessionState {
                 {
                     return Err("Agent session contains an oversized assistant reply".into());
                 }
-                AgentSessionTurn::ToolResult { summary, .. }
-                    if summary.chars().count() > MAX_TOOL_SUMMARY_CHARS =>
+                AgentSessionTurn::ToolResult { tool, summary, .. }
+                    if summary.chars().count() > tool_summary_limit(tool) =>
                 {
                     return Err("Agent session contains an oversized tool result".into());
                 }

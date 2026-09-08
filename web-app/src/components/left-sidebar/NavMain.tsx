@@ -21,7 +21,7 @@ import { useProjectDialog } from '@/hooks/useProjectDialog'
 import { useSearchDialog } from '@/hooks/useSearchDialog'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
 import type { SidebarMode } from '@/hooks/useAgentMode'
-import { IconChartHistogram, IconSparkles, IconTerminal2, IconServer } from '@tabler/icons-react'
+import { IconChartHistogram, IconSparkles, IconTerminal2, IconServer, IconBrain } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { useMessages } from '@/hooks/useMessages'
 import { usePrompt } from '@/hooks/usePrompt'
@@ -191,6 +191,15 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
               <IconChartHistogram className="size-4 text-foreground/70" />
               <span>Benchmark</span>
             </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            isActive={pathname.startsWith('/memory')}
+            className="data-[active=true]:bg-sidebar-foreground/15"
+          >
+            <Link to="/memory"><IconBrain className="size-4 text-foreground/70" /><span>Memory</span></Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>

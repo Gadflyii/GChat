@@ -33,6 +33,28 @@ import { DownloadButton } from '@/components/DownloadButton'
 # Linux Installation
 Instructions for installing Jan on Linux.
 
+## GChat prerequisite: secure storage for LAN pairing
+
+If you use GChat on Linux to connect to other GInfer hosts, install and enable
+a Secret Service provider, such as GNOME Keyring, through your distribution's
+package manager. The keyring must be unlocked in your desktop session and expose
+`org.freedesktop.secrets` on the session D-Bus.
+
+GChat checks secure storage during first-run network setup. **Set up secure
+storage** offers automatic GNOME Keyring installation on supported distributions
+with OS administrator approval. **Check again** verifies the keyring after
+installation or unlocking; **Skip for now** lets you continue with local models.
+No package is installed silently, and pairing stays disabled until the check passes.
+
+GChat uses this service to store host pairing credentials securely. Pairing
+cannot complete when the service is unavailable; there is no plaintext fallback.
+Headless WSL sessions may not have a provider configured.
+
+This requirement applies only to the **Linux GChat client using LAN pairing**.
+Local-only inference and headless Linux/WSL hosts running `ginfer-host` do not
+require a desktop keyring. Windows GChat uses Windows Credential Manager instead,
+including when connecting to Linux hosts.
+
 ## Install Jan
 
 <Steps>

@@ -1,6 +1,4 @@
 //! Agent run loop: `prompt -> decide -> run -> observe -> repeat`.
-//!
-//! (`loop` is a reserved keyword, so the loop lives here.)
 
 use std::{
     path::{Path, PathBuf},
@@ -345,6 +343,9 @@ pub async fn run_turn_with_options(
                 return Err(error.to_string());
             }
         };
+        emit(AgentEvent::InferenceMeasured {
+            inference: combined_inference(inference, &tool_inference),
+        })?;
         if let Some(reasoning) = parsed.reasoning.filter(|value| !value.is_empty()) {
             emit(AgentEvent::ReasoningDelta {
                 step_index,

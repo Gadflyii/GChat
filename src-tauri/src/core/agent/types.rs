@@ -1,9 +1,4 @@
-//! Shared types for the agent backend core.
-//!
-//! `AgentEvent` is a serde-tagged enum streamed to the frontend over a
-//! `tauri::ipc::Channel`. It is a pragmatic subset of the TS
-//! `AgentLoopEvent` / `StepEvent` union — enough for a future UI to render a
-//! full run, but iteration 1 only emits.
+//! Agent requests, inference accounting, and events streamed to desktop monitors.
 
 use serde::{Deserialize, Serialize};
 
@@ -149,6 +144,8 @@ pub struct AgentTurnRequest {
     /// General Agent.
     #[serde(default)]
     pub definition_id: Option<String>,
+    #[serde(default)]
+    pub role_assignments: super::worker_pools::RoleAssignments,
     /// Optional enabled skill that must be loaded before the first inference.
     #[serde(default)]
     pub selected_skill: Option<String>,
@@ -274,6 +271,18 @@ pub enum AgentEvent {
         cycle: Option<u32>,
         model_instance_id: String,
         reasoning_effort: Option<AgentReasoningEffort>,
+    },
+    StageQueued {
+        stage_id: String,
+        name: String,
+        reason: String,
+    },
+    StageActivity {
+        stage_id: String,
+        event: Box<AgentEvent>,
+    },
+    InferenceMeasured {
+        inference: AgentInferenceMetrics,
     },
     StageFinished {
         stage_id: String,

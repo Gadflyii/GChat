@@ -41,6 +41,9 @@ pub struct AgentDefinition {
     /// Stable registered model ID. `None` binds the run's active chat model.
     #[serde(default)]
     pub model_instance_id: Option<String>,
+    /// Explicit role placement defaults; per-run overrides do not mutate these.
+    #[serde(default)]
+    pub role_assignments: super::worker_pools::RoleAssignments,
     /// `None` uses the loaded artifact's default reasoning policy.
     #[serde(default)]
     pub reasoning_effort: Option<AgentReasoningEffort>,
@@ -198,6 +201,7 @@ pub fn general_agent() -> AgentDefinition {
         max_steps: MAX_STEPS,
         output_contract: String::new(),
         model_instance_id: None,
+        role_assignments: Default::default(),
         reasoning_effort: Some(AgentReasoningEffort::High),
         strategy: AgentStrategy::Standard,
         built_in: true,
@@ -294,6 +298,7 @@ fn template(id: &str, name: &str, description: &str, strategy: AgentStrategy) ->
             max_steps: MAX_STEPS,
             output_contract: String::new(),
             model_instance_id: None,
+            role_assignments: Default::default(),
             reasoning_effort: Some(AgentReasoningEffort::High),
             strategy,
             built_in: false,
@@ -411,6 +416,7 @@ pub fn delete_definition(data_folder: &Path, id: &str) -> Result<(), String> {
 }
 
 pub fn validate_definition(definition: &AgentDefinition) -> Result<(), String> {
+    validate_role_assignments(definition, &definition.role_assignments)?;
     if definition.schema_version != AGENT_DEFINITION_SCHEMA_VERSION {
         return Err(format!(
             "Unsupported Agent definition schema version {}",
@@ -469,6 +475,57 @@ pub fn validate_definition(definition: &AgentDefinition) -> Result<(), String> {
         }
         AgentStrategy::Workflow { nodes, edges } => {
             validate_workflow(nodes, edges)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn placement_roles(definition: &AgentDefinition) -> Vec<(String, String)> {
+    match &definition.strategy {
+        AgentStrategy::Standard => vec![("agent".into(), definition.name.clone())],
+        AgentStrategy::GoalLoop { .. } => vec![
+            ("executor".into(), "Executor".into()),
+            ("evaluator".into(), "Evaluator".into()),
+        ],
+        AgentStrategy::Coordinator { workers, .. } => {
+            let mut roles = vec![
+                ("coordinator".into(), "Coordinator".into()),
+                ("synthesizer".into(), "Synthesizer".into()),
+            ];
+            roles.extend(
+                workers
+                    .iter()
+                    .map(|r| (format!("worker:{}", r.id), r.name.clone())),
+            );
+            roles
+        }
+        AgentStrategy::Workflow { nodes, .. } => nodes
+            .iter()
+            .map(|n| (format!("workflow:{}", n.id), n.name.clone()))
+            .collect(),
+    }
+}
+
+pub fn validate_role_assignments(
+    definition: &AgentDefinition,
+    assignments: &super::worker_pools::RoleAssignments,
+) -> Result<(), String> {
+    let roles = placement_roles(definition);
+    for (role, assignment) in assignments {
+        if !roles.iter().any(|(id, _)| id == role) {
+            return Err(format!("Unknown placement role `{role}`"));
+        }
+        if assignment.minimum_context > 16_777_216 {
+            return Err("Minimum context is out of range".into());
+        }
+        match &assignment.target {
+            super::worker_pools::WorkerTarget::Current => (),
+            super::worker_pools::WorkerTarget::Instance { id }
+            | super::worker_pools::WorkerTarget::Pool { id } => {
+                if id.trim().is_empty() || id.len() > 256 {
+                    return Err("Placement target ID is invalid".into());
+                }
+            }
         }
     }
     Ok(())
@@ -754,7 +811,10 @@ fn write_store(data_folder: &Path, store: &DefinitionStore) -> Result<(), String
 pub async fn agent_list_definitions<R: Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<Vec<AgentDefinition>, String> {
-    list_definitions(&get_jan_data_folder_path(app_handle))
+    let data = get_jan_data_folder_path(app_handle);
+    tokio::task::spawn_blocking(move || list_definitions(&data))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -767,7 +827,10 @@ pub async fn agent_get_definition<R: Runtime>(
     app_handle: AppHandle<R>,
     id: String,
 ) -> Result<AgentDefinition, String> {
-    get_definition(&get_jan_data_folder_path(app_handle), &id)
+    let data = get_jan_data_folder_path(app_handle);
+    tokio::task::spawn_blocking(move || get_definition(&data, &id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -775,7 +838,10 @@ pub async fn agent_save_definition<R: Runtime>(
     app_handle: AppHandle<R>,
     definition: AgentDefinition,
 ) -> Result<AgentDefinition, String> {
-    save_definition(&get_jan_data_folder_path(app_handle), definition)
+    let data = get_jan_data_folder_path(app_handle);
+    tokio::task::spawn_blocking(move || save_definition(&data, definition))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -783,7 +849,10 @@ pub async fn agent_delete_definition<R: Runtime>(
     app_handle: AppHandle<R>,
     id: String,
 ) -> Result<(), String> {
-    delete_definition(&get_jan_data_folder_path(app_handle), &id)
+    let data = get_jan_data_folder_path(app_handle);
+    tokio::task::spawn_blocking(move || delete_definition(&data, &id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -800,6 +869,7 @@ mod tests {
             schema_version: AGENT_DEFINITION_SCHEMA_VERSION,
             id: id.into(),
             name: "Custom".into(),
+            role_assignments: Default::default(),
             description: String::new(),
             instructions: "Do the work.".into(),
             skills: vec!["code".into()],

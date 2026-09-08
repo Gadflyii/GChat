@@ -1,4 +1,5 @@
 //! GChat's native paired-host registry. Credentials remain in the OS vault.
+mod credential_setup;
 use ginfer_host::{
     discovery::Discovery,
     engine_registry::{EngineRegistry, RegisteredHost},
@@ -99,8 +100,11 @@ fn publish_registration(state: &mut Hosts, host: SavedHost) -> Result<Option<Sav
     let id = host.host_id;
     let previous = state.saved.insert(id, host.clone());
     if let Err(error) = persist(state) {
-        if let Some(previous) = previous { state.saved.insert(id,previous); }
-        else { state.saved.remove(&id); }
+        if let Some(previous) = previous {
+            state.saved.insert(id, previous);
+        } else {
+            state.saved.remove(&id);
+        }
         return Err(error);
     }
     state.registry.register_paired(registration(&host));
@@ -110,17 +114,21 @@ fn publish_registration(state: &mut Hosts, host: SavedHost) -> Result<Option<Sav
 
 async fn delete_secret(id: Uuid) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        match keyring::Entry::new("app.gchat.ginfer-host", &id.to_string()).and_then(|e| e.delete_credential()) {
+        match keyring::Entry::new("app.gchat.ginfer-host", &id.to_string())
+            .and_then(|e| e.delete_credential())
+        {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(e.to_string()),
         }
-    }).await.map_err(|e|e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn remove_registration(state: &mut Hosts, id: Uuid) -> Result<SavedHost, String> {
     let previous = state.saved.remove(&id).ok_or("host is not registered")?;
     if let Err(error) = persist(state) {
-        state.saved.insert(id,previous);
+        state.saved.insert(id, previous);
         return Err(error);
     }
     state.registry.forget(id);
@@ -130,13 +138,24 @@ fn remove_registration(state: &mut Hosts, id: Uuid) -> Result<SavedHost, String>
 
 async fn rollback_pairing(client: &reqwest::Client, origin: &str, id: Uuid, token: &str) -> String {
     let mut warnings = Vec::new();
-    if let Err(e) = delete_secret(id).await { warnings.push(format!("new vault credential cleanup failed: {e}")); }
-    match client.delete(format!("{origin}/host/v1/clients/{id}")).bearer_auth(token)
-        .timeout(std::time::Duration::from_secs(5)).send().await {
-        Ok(response) if response.status().is_success() => {},
+    if let Err(e) = delete_secret(id).await {
+        warnings.push(format!("new vault credential cleanup failed: {e}"));
+    }
+    match client
+        .delete(format!("{origin}/host/v1/clients/{id}"))
+        .bearer_auth(token)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => {}
         _ => warnings.push("new host grant could not be revoked; remove it on the host".into()),
     }
-    if warnings.is_empty() { String::new() } else { format!("; {}",warnings.join("; ")) }
+    if warnings.is_empty() {
+        String::new()
+    } else {
+        format!("; {}", warnings.join("; "))
+    }
 }
 
 pub async fn request(
@@ -180,6 +199,16 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     action: String,
     args: Value,
 ) -> Result<Value, String> {
+    // The prerequisite check must work before registry initialization or pairing.
+    if action == "credential_status" {
+        return Ok(credential_setup::status().await);
+    }
+    if action == "credential_install" {
+        return credential_setup::install(
+            args.get("confirmed").and_then(Value::as_bool) == Some(true),
+        )
+        .await;
+    }
     initialize(&app).await?;
     match action.as_str() {
         "benchmark_sessions" => {
@@ -295,6 +324,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             Ok(json!({"enabled":enabled}))
         }
         "pair" => {
+            credential_setup::require_ready().await?;
             let base_url = endpoint(
                 args.get("base_url")
                     .and_then(Value::as_str)
@@ -356,9 +386,13 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                     .map_err(|e| format!("could not save paired credential in OS vault: {e}"))
             })
             .await
-            .map_err(|e| e.to_string()).and_then(|r|r);
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
             if let Err(error) = stored {
-                return Err(format!("{error}{}",rollback_pairing(&client,&base_url,client_id,&token).await));
+                return Err(format!(
+                    "{error}{}",
+                    rollback_pairing(&client, &base_url, client_id, &token).await
+                ));
             }
             let host = SavedHost {
                 host_id,
@@ -372,49 +406,99 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 client_id,
             };
             let mut state = state().lock().await;
-            let published = publish_registration(&mut state,host.clone());
+            let published = publish_registration(&mut state, host.clone());
             drop(state);
             let previous = match published {
                 Ok(previous) => previous,
-                Err(error) => return Err(format!("{error}{}",rollback_pairing(&client,&host.base_url,client_id,&token).await)),
+                Err(error) => {
+                    return Err(format!(
+                        "{error}{}",
+                        rollback_pairing(&client, &host.base_url, client_id, &token).await
+                    ))
+                }
             };
             let mut cleanup_warnings = Vec::new();
             if let Some(previous) = previous {
-                match client.delete(format!("{}/host/v1/clients/{}",host.base_url,previous.client_id))
-                    .bearer_auth(&token).timeout(std::time::Duration::from_secs(5)).send().await {
-                    Ok(response) if response.status().is_success() => {},
+                match client
+                    .delete(format!(
+                        "{}/host/v1/clients/{}",
+                        host.base_url, previous.client_id
+                    ))
+                    .bearer_auth(&token)
+                    .timeout(std::time::Duration::from_secs(5))
+                    .send()
+                    .await
+                {
+                    Ok(response) if response.status().is_success() => {}
                     _ => cleanup_warnings.push("old host grant could not be revoked".to_string()),
                 }
                 if let Err(error) = delete_secret(previous.client_id).await {
-                    cleanup_warnings.push(format!("old OS-vault credential could not be removed: {error}"));
+                    cleanup_warnings.push(format!(
+                        "old OS-vault credential could not be removed: {error}"
+                    ));
                 }
             }
             let mut result = json!(host);
-            if !cleanup_warnings.is_empty() { result["credential_cleanup_warning"] = cleanup_warnings.join("; ").into(); }
+            if !cleanup_warnings.is_empty() {
+                result["credential_cleanup_warning"] = cleanup_warnings.join("; ").into();
+            }
             Ok(result)
         }
         "snapshot" => {
             let id = argument_id(&args, "host_id")?;
             let (connection, host, alternatives) = {
                 let mut state = state().lock().await;
-                let host = state.saved.get(&id).cloned().ok_or("host is not registered")?;
-                let alternatives = state.discovery.as_ref().map(|d| d.hosts()).unwrap_or_default()
-                    .into_iter().filter(|h| h.host_id == id.to_string()).flat_map(|h|h.urls)
-                    .filter(|url| url != &host.base_url).collect::<std::collections::BTreeSet<_>>();
+                let host = state
+                    .saved
+                    .get(&id)
+                    .cloned()
+                    .ok_or("host is not registered")?;
+                let alternatives = state
+                    .discovery
+                    .as_ref()
+                    .map(|d| d.hosts())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|h| h.host_id == id.to_string())
+                    .flat_map(|h| h.urls)
+                    .filter(|url| url != &host.base_url)
+                    .collect::<std::collections::BTreeSet<_>>();
                 (state.registry.poll_connection(id)?, host, alternatives)
             };
             let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
                 use futures_util::StreamExt;
                 let token = secret(host.client_id).await?;
-                let current = ginfer_host::transport::host_snapshot_at(&host.base_url, &host.certificate_sha256, &token, id).await;
+                let current = ginfer_host::transport::host_snapshot_at(
+                    &host.base_url,
+                    &host.certificate_sha256,
+                    &token,
+                    id,
+                )
+                .await;
                 match current {
-                    Ok(snapshot) => Ok((host.base_url.clone(),snapshot)),
+                    Ok(snapshot) => Ok((host.base_url.clone(), snapshot)),
                     Err(error) => {
-                        let mut probes = futures_util::stream::iter(alternatives.into_iter().map(|url| {
-                            let fingerprint = &host.certificate_sha256; let token = &token;
-                            async move { ginfer_host::transport::host_snapshot_at(&url,fingerprint,token,id).await.map(|s|(url,s)) }
-                        })).buffer_unordered(4);
-                        while let Some(result) = probes.next().await { if let Ok(found) = result { return Ok(found); } }
+                        let mut probes =
+                            futures_util::stream::iter(alternatives.into_iter().map(|url| {
+                                let fingerprint = &host.certificate_sha256;
+                                let token = &token;
+                                async move {
+                                    ginfer_host::transport::host_snapshot_at(
+                                        &url,
+                                        fingerprint,
+                                        token,
+                                        id,
+                                    )
+                                    .await
+                                    .map(|s| (url, s))
+                                }
+                            }))
+                            .buffer_unordered(4);
+                        while let Some(result) = probes.next().await {
+                            if let Ok(found) = result {
+                                return Ok(found);
+                            }
+                        }
                         Err(error)
                     }
                 }
@@ -425,15 +509,17 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             match result {
                 Ok((origin, snapshot)) => {
                     let mut state = state().lock().await;
-                    let validated = serde_json::from_value(snapshot.clone()).map_err(|e|e.to_string())
-                        .and_then(|parsed|state.registry.reconcile(connection,parsed));
+                    let validated = serde_json::from_value(snapshot.clone())
+                        .map_err(|e| e.to_string())
+                        .and_then(|parsed| state.registry.reconcile(connection, parsed));
                     if let Err(error) = validated {
                         state.registry.disconnect(connection);
                         return Err(error);
                     }
                     if origin != host.base_url {
                         let saved = state.saved.get_mut(&id).ok_or("host was forgotten")?;
-                        let previous = saved.base_url.clone(); saved.base_url = origin;
+                        let previous = saved.base_url.clone();
+                        saved.base_url = origin;
                         if let Err(error) = persist(&state) {
                             state.saved.get_mut(&id).unwrap().base_url = previous;
                             state.registry.disconnect(connection);
@@ -475,7 +561,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             let id = argument_id(&args, "host_id")?;
             // Forget is local and works while a server is offline. Revoke is a separate host action.
             let mut state = state().lock().await;
-            let previous = remove_registration(&mut state,id)?;
+            let previous = remove_registration(&mut state, id)?;
             drop(state);
             let warning = delete_secret(previous.client_id).await.err();
             Ok(json!({"forgotten":id,"credential_cleanup_warning":warning}))
@@ -502,18 +588,30 @@ pub fn parse_alias(alias: &str) -> Result<ginfer_host::engine_registry::Instance
     })
 }
 
-pub fn model_detail_alias(path: &str) -> Result<Option<String>,String> {
-    let Some(segment) = path.strip_prefix("/models/") else { return Ok(None); };
-    let mut decoded=Vec::new(); let bytes=segment.as_bytes(); let mut index=0;
-    while index<bytes.len() {
-        if bytes[index]==b'%' {
-            let pair=bytes.get(index+1..index+3).ok_or("invalid model URL escape")?;
-            let text=std::str::from_utf8(pair).map_err(|_|"invalid model URL escape")?;
-            decoded.push(u8::from_str_radix(text,16).map_err(|_|"invalid model URL escape")?);index+=3;
-        } else { decoded.push(bytes[index]);index+=1; }
+pub fn model_detail_alias(path: &str) -> Result<Option<String>, String> {
+    let Some(segment) = path.strip_prefix("/models/") else {
+        return Ok(None);
+    };
+    let mut decoded = Vec::new();
+    let bytes = segment.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let pair = bytes
+                .get(index + 1..index + 3)
+                .ok_or("invalid model URL escape")?;
+            let text = std::str::from_utf8(pair).map_err(|_| "invalid model URL escape")?;
+            decoded.push(u8::from_str_radix(text, 16).map_err(|_| "invalid model URL escape")?);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
     }
-    let alias=String::from_utf8(decoded).map_err(|_|"invalid model URL encoding")?;
-    if !alias.starts_with("ginfer/") { return Ok(None); }
+    let alias = String::from_utf8(decoded).map_err(|_| "invalid model URL encoding")?;
+    if !alias.starts_with("ginfer/") {
+        return Ok(None);
+    }
     parse_alias(&alias)?;
     Ok(Some(alias))
 }
@@ -667,22 +765,55 @@ pub async fn request_instance(
 }
 
 pub async fn agent_instances() -> Vec<crate::core::agent::commands::AgentModelInstance> {
-    available_models()
-        .await
-        .into_iter()
-        .filter_map(|model| {
-            let id = model.get("id")?.as_str()?.to_string();
-            Some(crate::core::agent::commands::AgentModelInstance {
-                id: id.clone(),
-                model_id: model
+    let state = state().lock().await;
+    let mut models = Vec::new();
+    for (host_id, snapshot) in &state.snapshots {
+        for instance in snapshot
+            .get("instances")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let Some(instance_id) = instance
+                .get("instance_id")
+                .and_then(Value::as_str)
+                .and_then(|s| s.parse().ok())
+            else {
+                continue;
+            };
+            let reference = ginfer_host::engine_registry::InstanceRef {
+                host_id: *host_id,
+                instance_id,
+            };
+            let Ok(resolved) = state.registry.resolve(&reference) else {
+                continue;
+            };
+            let number = |path| {
+                instance
+                    .pointer(path)
+                    .and_then(Value::as_u64)
+                    .and_then(|v| u32::try_from(v).ok())
+                    .unwrap_or(0)
+            };
+            models.push(crate::core::agent::commands::AgentModelInstance {
+                id: reference.model_alias(),
+                model_id: resolved.upstream_model_id.clone(),
+                port: None,
+                host_name: snapshot
                     .get("display_name")
                     .and_then(Value::as_str)
-                    .unwrap_or(&id)
+                    .unwrap_or("LAN host")
                     .into(),
-                port: None,
-            })
-        })
-        .collect()
+                vision: instance
+                    .pointer("/configuration/vision")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                concurrency: number("/configuration/concurrency"),
+                max_context: number("/model_metadata/max_model_len"),
+            });
+        }
+    }
+    models
 }
 pub async fn available_models() -> Vec<Value> {
     let state = state().lock().await;
@@ -716,6 +847,18 @@ pub async fn available_models() -> Vec<Value> {
             metadata["id"] = reference.model_alias().into();
             metadata["object"] = "model".into();
             metadata["owned_by"] = "ginfer".into();
+            metadata["host_name"] = snapshot
+                .get("display_name")
+                .cloned()
+                .unwrap_or(json!("LAN host"));
+            metadata["vision"] = instance
+                .pointer("/configuration/vision")
+                .cloned()
+                .unwrap_or(json!(false));
+            metadata["concurrency"] = instance
+                .pointer("/configuration/concurrency")
+                .cloned()
+                .unwrap_or(json!(0));
             metadata["display_name"] = format!(
                 "{} — {}",
                 instance
@@ -739,18 +882,46 @@ pub async fn forward_alias(
     body: &Value,
 ) -> Result<hyper::Response<hyper::Body>, String> {
     let reference = parse_alias(alias)?;
-    let session = state().lock().await.registry.resolve(&reference)?.session_id.ok_or("instance has no active session")?;
-    let scope = ginfer_host::response_route::ResponseScope {instance:reference.clone(),session};
+    let session = state()
+        .lock()
+        .await
+        .registry
+        .resolve(&reference)?
+        .session_id
+        .ok_or("instance has no active session")?;
+    let scope = ginfer_host::response_route::ResponseScope {
+        instance: reference.clone(),
+        session,
+    };
     let mut body = body.clone();
-    if path.starts_with("/responses") { scope.decode_previous(&mut body)?; }
-    let response = request_instance(&reference,session,reqwest::Method::POST,&format!("/v1{path}"),Some(&body)).await?;
-    ginfer_host::facade::alias_response(response,alias,Some(scope)).await
+    if path.starts_with("/responses") {
+        scope.decode_previous(&mut body)?;
+    }
+    let response = request_instance(
+        &reference,
+        session,
+        reqwest::Method::POST,
+        &format!("/v1{path}"),
+        Some(&body),
+    )
+    .await?;
+    ginfer_host::facade::alias_response(response, alias, Some(scope)).await
 }
 
-pub async fn forward_response_handle(method: reqwest::Method, path: &str, query: Option<&str>) -> Result<hyper::Response<hyper::Body>,String> {
-    let (scope,target) = ginfer_host::response_route::request_target(method.as_str(),path,query)?;
-    let response = request_instance(&scope.instance,scope.session,method,&target,None).await?;
-    ginfer_host::facade::alias_response(response,&scope.instance.model_alias(),Some(scope.clone())).await
+pub async fn forward_response_handle(
+    method: reqwest::Method,
+    path: &str,
+    query: Option<&str>,
+) -> Result<hyper::Response<hyper::Body>, String> {
+    let (scope, target) =
+        ginfer_host::response_route::request_target(method.as_str(), path, query)?;
+    let response = request_instance(&scope.instance, scope.session, method, &target, None).await?;
+    ginfer_host::facade::alias_response(
+        response,
+        &scope.instance.model_alias(),
+        Some(scope.clone()),
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -760,31 +931,41 @@ mod live_tests;
 #[cfg(test)]
 mod registration_tests {
     use super::*;
-    use ginfer_host::engine_registry::{HostSnapshot, InstanceRef, InstanceSnapshot, InstanceStatus};
+    use ginfer_host::engine_registry::{
+        HostSnapshot, InstanceRef, InstanceSnapshot, InstanceStatus,
+    };
 
     #[tokio::test]
     #[ignore = "requires an unlocked native OS credential vault"]
     async fn native_vault_round_trip_uses_production_credential_lookup_and_cleanup() {
-        let id=Uuid::new_v4();
-        let write=tokio::task::spawn_blocking(move || {
-            keyring::Entry::new("app.gchat.ginfer-host",&id.to_string())
-                .and_then(|entry|entry.set_password("gchat-vault-qualification-fixture"))
-                .map_err(|e|e.to_string())
-        }).await.unwrap();
-        let read=secret(id).await;
-        let cleanup=delete_secret(id).await;
+        let id = Uuid::new_v4();
+        let write = tokio::task::spawn_blocking(move || {
+            keyring::Entry::new("app.gchat.ginfer-host", &id.to_string())
+                .and_then(|entry| entry.set_password("gchat-vault-qualification-fixture"))
+                .map_err(|e| e.to_string())
+        })
+        .await
+        .unwrap();
+        let read = secret(id).await;
+        let cleanup = delete_secret(id).await;
         write.expect("native credential vault must accept the test credential");
-        assert_eq!(read.unwrap(),"gchat-vault-qualification-fixture");
+        assert_eq!(read.unwrap(), "gchat-vault-qualification-fixture");
         cleanup.expect("test credential must be removed");
         assert!(secret(id).await.is_err());
     }
 
     #[test]
     fn model_detail_accepts_literal_and_encoded_instance_aliases() {
-        let alias=format!("ginfer/{}/{}",Uuid::new_v4(),Uuid::new_v4());
-        assert_eq!(model_detail_alias(&format!("/models/{alias}")).unwrap(),Some(alias.clone()));
-        assert_eq!(model_detail_alias(&format!("/models/{}",alias.replace('/',"%2F"))).unwrap(),Some(alias));
-        assert_eq!(model_detail_alias("/models/other").unwrap(),None);
+        let alias = format!("ginfer/{}/{}", Uuid::new_v4(), Uuid::new_v4());
+        assert_eq!(
+            model_detail_alias(&format!("/models/{alias}")).unwrap(),
+            Some(alias.clone())
+        );
+        assert_eq!(
+            model_detail_alias(&format!("/models/{}", alias.replace('/', "%2F"))).unwrap(),
+            Some(alias)
+        );
+        assert_eq!(model_detail_alias("/models/other").unwrap(), None);
         assert!(model_detail_alias("/models/ginfer%2Fbad%2Fbad").is_err());
         assert!(model_detail_alias("/models/ginfer%2").is_err());
     }
@@ -793,32 +974,66 @@ mod registration_tests {
     fn failed_repair_or_forget_preserves_live_registration_and_success_persists_new_reference() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("hosts.json");
-        let mut state = Hosts { path:Some(file.clone()), ..Hosts::default() };
-        let host = SavedHost { host_id:Uuid::new_v4(),name:"Lab".into(),base_url:"https://127.0.0.1:7443".into(),
-            certificate_sha256:"a".repeat(64),client_id:Uuid::new_v4() };
-        publish_registration(&mut state,host.clone()).unwrap();
-        let reference = InstanceRef { host_id:host.host_id,instance_id:Uuid::new_v4() };
+        let mut state = Hosts {
+            path: Some(file.clone()),
+            ..Hosts::default()
+        };
+        let host = SavedHost {
+            host_id: Uuid::new_v4(),
+            name: "Lab".into(),
+            base_url: "https://127.0.0.1:7443".into(),
+            certificate_sha256: "a".repeat(64),
+            client_id: Uuid::new_v4(),
+        };
+        publish_registration(&mut state, host.clone()).unwrap();
+        let reference = InstanceRef {
+            host_id: host.host_id,
+            instance_id: Uuid::new_v4(),
+        };
         let connection = state.registry.connect(host.host_id).unwrap();
-        state.registry.reconcile(connection,HostSnapshot { protocol_version:1,host_id:host.host_id,boot_id:Uuid::new_v4(),revision:1,
-            display_name:"Lab".into(),instances:vec![InstanceSnapshot { instance_id:reference.instance_id,session_id:Some(Uuid::new_v4()),
-                display_name:"Muse".into(),upstream_model_id:"Muse".into(),status:InstanceStatus::Ready }] }).unwrap();
-        let replacement = SavedHost { client_id:Uuid::new_v4(),..host.clone() };
+        state
+            .registry
+            .reconcile(
+                connection,
+                HostSnapshot {
+                    protocol_version: 1,
+                    host_id: host.host_id,
+                    boot_id: Uuid::new_v4(),
+                    revision: 1,
+                    display_name: "Lab".into(),
+                    instances: vec![InstanceSnapshot {
+                        instance_id: reference.instance_id,
+                        session_id: Some(Uuid::new_v4()),
+                        display_name: "Muse".into(),
+                        upstream_model_id: "Muse".into(),
+                        status: InstanceStatus::Ready,
+                    }],
+                },
+            )
+            .unwrap();
+        let replacement = SavedHost {
+            client_id: Uuid::new_v4(),
+            ..host.clone()
+        };
         // A directory cannot be replaced with a registry file on either supported OS.
-        let invalid = dir.path().join("not-a-file"); std::fs::create_dir(&invalid).unwrap();
+        let invalid = dir.path().join("not-a-file");
+        std::fs::create_dir(&invalid).unwrap();
         state.path = Some(invalid);
-        assert!(publish_registration(&mut state,replacement.clone()).is_err());
-        assert!(remove_registration(&mut state,host.host_id).is_err());
-        assert_eq!(state.saved[&host.host_id].client_id,host.client_id);
+        assert!(publish_registration(&mut state, replacement.clone()).is_err());
+        assert!(remove_registration(&mut state, host.host_id).is_err());
+        assert_eq!(state.saved[&host.host_id].client_id, host.client_id);
         assert!(state.registry.resolve(&reference).is_ok());
-        let stored:Vec<SavedHost> = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
-        assert_eq!(stored[0].client_id,host.client_id);
+        let stored: Vec<SavedHost> =
+            serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+        assert_eq!(stored[0].client_id, host.client_id);
         state.path = Some(file.clone());
-        publish_registration(&mut state,replacement.clone()).unwrap();
+        publish_registration(&mut state, replacement.clone()).unwrap();
         assert!(state.registry.resolve(&reference).is_err());
-        let stored:Vec<SavedHost> = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
-        assert_eq!(stored[0].client_id,replacement.client_id);
-        remove_registration(&mut state,host.host_id).unwrap();
+        let stored: Vec<SavedHost> =
+            serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+        assert_eq!(stored[0].client_id, replacement.client_id);
+        remove_registration(&mut state, host.host_id).unwrap();
         assert!(state.saved.is_empty());
-        assert_eq!(std::fs::read_to_string(file).unwrap(),"[]");
+        assert_eq!(std::fs::read_to_string(file).unwrap(), "[]");
     }
 }

@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { AgentRunSetup } from '@/containers/AgentRunSetup'
+import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
+import { AgentLiveRuns } from '@/containers/AgentLiveRuns'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   IconAlertTriangle,
@@ -27,10 +30,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { route } from '@/constants/routes'
 import { useAgentDefinitions } from '@/hooks/useAgentDefinitions'
-import { useAgentMode } from '@/hooks/useAgentMode'
 import { useAgentSkills } from '@/hooks/useAgentSkills'
 import {
   deleteAgentRun,
@@ -53,10 +54,7 @@ import {
   aggregateAgentMetrics,
   formatTokensPerSecond,
 } from '@/lib/agent-metrics'
-import { resetAgentSession } from '@/services/agent/tauri'
-import { useInitialMessage } from '@/hooks/useInitialMessage'
-import { useMessages } from '@/hooks/useMessages'
-import { useAgentRun } from '@/hooks/useAgentRun'
+import { getAgentDefinition } from '@/services/agent/definitions'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.agents.index as any)({
@@ -70,7 +68,7 @@ type StudioView = Exclude<AgentStudioSection, 'skills'>
 type AgentStudioSearch = { view?: StudioView }
 
 function isStudioView(value: unknown): value is StudioView {
-  return value === 'definitions' || value === 'templates' || value === 'runs'
+  return value === 'definitions' || value === 'templates' || value === 'runs' || value === 'pools'
 }
 
 const KIND_META: Record<
@@ -343,6 +341,8 @@ function slug(value: string): string {
 }
 
 export function AgentStudioPage() {
+  const [runSetup, setRunSetup] = useState<AgentDefinition | null>(null)
+  const [runTask, setRunTask] = useState('')
   const navigate = useNavigate()
   const search = Route.useSearch()
   const { definitions, loading, error, load, save, remove, createDraft } =
@@ -460,12 +460,7 @@ export function AgentStudioPage() {
   const tryInChat = async (definition: AgentDefinition) => {
     const saved = definition === draft ? await saveDraft(false) : definition
     if (!saved) return
-    useAgentMode.getState().setSidebarMode('agent')
-    useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, true)
-    void navigate({
-      to: route.home,
-      search: { agentDefinition: saved.id },
-    })
+    setRunTask(''); setRunSetup(saved)
   }
 
   const rerun = async (run: AgentRunRecord) => {
@@ -474,19 +469,9 @@ export function AgentStudioPage() {
       return
     }
     try {
-      await resetAgentSession(TEMPORARY_CHAT_ID)
-      useMessages.getState().setMessages(TEMPORARY_CHAT_ID, [])
-      useAgentRun.getState().clearRun(TEMPORARY_CHAT_ID)
-      useAgentMode.getState().setSidebarMode('agent')
-      useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, true)
-      useInitialMessage.getState().set(TEMPORARY_CHAT_ID, {
-        text: run.userMessage,
-        agentDefinitionId: run.definitionId,
-      })
-      await navigate({
-        to: route.threadsDetail,
-        params: { threadId: TEMPORARY_CHAT_ID },
-      })
+      const definition = await getAgentDefinition(run.definitionId)
+      setRunTask(run.userMessage)
+      setRunSetup({ ...definition, roleAssignments: run.roleAssignments ?? definition.roleAssignments })
     } catch (reason) {
       toast.error(`Could not re-run task: ${String(reason)}`)
     }
@@ -669,7 +654,10 @@ export function AgentStudioPage() {
         </div>
       )}
 
+      {runSetup && <AgentRunSetup definition={runSetup} initialTask={runTask} onClose={() => setRunSetup(null)} onRun={() => { setRunSetup(null); selectView('runs') }} />}
+      {view === 'pools' && <AgentWorkerPools />}
       {view === 'runs' && (
+        <div className="overflow-auto"><AgentLiveRuns />
         <RunInspector
           runs={runs}
           selected={selectedRun}
@@ -689,6 +677,7 @@ export function AgentStudioPage() {
               .catch((reason) => toast.error(`Could not refresh runs: ${String(reason)}`))
           }}
         />
+        </div>
       )}
     </div>
   )

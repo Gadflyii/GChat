@@ -208,6 +208,23 @@ Standalone `gchat-cli serve` defaults to port `6767`; the desktop facade default
 
 ## Quick start
 
+### Linux desktop prerequisite for LAN pairing
+
+When running **GChat on Linux**, install and enable a Secret Service provider
+(for example, GNOME Keyring). Its keyring must be unlocked in the desktop session
+so GChat can securely store paired GInfer host credentials through
+`org.freedesktop.secrets`. Without it, host pairing cannot complete; GChat does
+not fall back to plaintext credential storage.
+
+First-run setup checks this prerequisite. **Set up secure storage** offers a
+guided install on supported Linux systems with OS administrator approval;
+**Check again** verifies readiness and **Skip for now** preserves local use.
+
+This is a **client-side** requirement for LAN pairing, not a requirement for
+local-only inference or headless Linux/WSL machines running `ginfer-host`.
+Windows GChat uses Windows Credential Manager and can pair with Linux hosts
+without a desktop keyring on those hosts. See [LAN host setup](docs/lan-host-setup.md).
+
 ### Development prerequisites
 
 - Node.js 20 or newer;
@@ -274,6 +291,8 @@ Quantization, calibration, conversion, TP partitioning, and model-package produc
 the desktop application.
 
 ## Documentation
+
+- [Memory library and workspace instructions](docs/memory.md) — personal/workspace facts, bounded recall, and optional `AGENTS.md` instructions.
 
 - [Development workflow](DEVELOP.md)
 - [Contributing](CONTRIBUTING.md)

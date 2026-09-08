@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 use futures::{stream, StreamExt};
@@ -54,6 +55,7 @@ pub struct OrchestrationInput<'a> {
 }
 
 struct StageContext<'a> {
+    events: tokio::sync::mpsc::UnboundedSender<AgentEvent>,
     run_id: &'a str,
     capabilities: &'a CapabilitiesSummary,
     skill_descriptors: &'a [SkillDescriptor],
@@ -75,6 +77,7 @@ struct StageContext<'a> {
 #[derive(Clone)]
 struct StageSpec {
     id: String,
+    placement_role: String,
     name: String,
     role: String,
     instructions: String,
@@ -106,6 +109,25 @@ pub struct AgentModelRoute {
 
 pub struct AgentModelRoutes {
     routes: HashMap<String, AgentModelRoute>,
+    pub dispatcher: Option<Arc<dyn WorkerDispatcher>>,
+}
+
+pub struct SelectedWorker {
+    pub route: Arc<AgentModelRoute>,
+    pub _lease: Option<super::worker_pools::WorkerLease>,
+}
+
+#[async_trait::async_trait]
+pub trait WorkerDispatcher: Send + Sync {
+    fn queue_reason(&self, _role: &str) -> String {
+        "Waiting for a suitable instance and worker capacity".into()
+    }
+    async fn select(
+        &self,
+        role: &str,
+        default_instance: &str,
+        cancellation: &CancellationToken,
+    ) -> Result<SelectedWorker, String>;
 }
 
 impl AgentModelRoutes {
@@ -121,6 +143,7 @@ impl AgentModelRoutes {
         }
         Ok(Self {
             routes: by_instance,
+            dispatcher: None,
         })
     }
 
@@ -133,6 +156,56 @@ impl AgentModelRoutes {
 
 pub async fn run_definition(
     input: OrchestrationInput<'_>,
+    mut emit: impl FnMut(AgentEvent) -> Result<(), String>,
+) -> Result<AgentTurnOutcome, String> {
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    let cancellation = input.cancellation.clone();
+    let forward = sender.clone();
+    let execution = run_definition_inner(input, sender, move |event| {
+        forward.send(event).map_err(|e| e.to_string())
+    });
+    tokio::pin!(execution);
+    let mut completed_steps = 0u32;
+    let mut completed_inference = AgentInferenceMetrics::default();
+    let mut forward_event = |event: AgentEvent| {
+        if let AgentEvent::StageFinished {
+            step_count,
+            inference,
+            ..
+        } = &event
+        {
+            completed_steps = completed_steps.saturating_add(*step_count);
+            completed_inference.merge(*inference);
+        }
+        emit(event)
+    };
+    let result = loop {
+        tokio::select! {
+            event = receiver.recv() => if let Some(event) = event { forward_event(event)?; },
+            result = &mut execution => break result,
+        }
+    };
+    while let Ok(event) = receiver.try_recv() {
+        forward_event(event)?;
+    }
+    if result.is_err() && cancellation.is_cancelled() {
+        emit(AgentEvent::TurnFinished {
+            reason: "cancelled".into(),
+            step_count: completed_steps,
+        })?;
+        return Ok(AgentTurnOutcome {
+            reply: None,
+            reason: "cancelled".into(),
+            step_count: completed_steps,
+            inference: completed_inference,
+        });
+    }
+    result
+}
+
+async fn run_definition_inner(
+    input: OrchestrationInput<'_>,
+    events: tokio::sync::mpsc::UnboundedSender<AgentEvent>,
     mut emit: impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
     let kind = strategy_name(&input.definition.strategy);
@@ -162,6 +235,7 @@ pub async fn run_definition(
         input.active_model_instance_id,
     );
     let stage_context = StageContext {
+        events,
         run_id: input.run_id,
         capabilities: input.capabilities,
         skill_descriptors: input.skill_descriptors,
@@ -183,20 +257,44 @@ pub async fn run_definition(
 
     let outcome = match &input.definition.strategy {
         AgentStrategy::Standard => {
-            let route = input.model_routes.route(default_model_instance_id)?;
+            let selected = if let Some(dispatcher) = &input.model_routes.dispatcher {
+                emit(AgentEvent::StageQueued {
+                    stage_id: "agent".into(),
+                    name: input.definition.name.clone(),
+                    reason: dispatcher.queue_reason("agent"),
+                })?;
+                Some(
+                    dispatcher
+                        .select("agent", default_model_instance_id, input.cancellation)
+                        .await?,
+                )
+            } else {
+                None
+            };
+            let route = match &selected {
+                Some(selected) => selected.route.as_ref(),
+                None => input.model_routes.route(default_model_instance_id)?,
+            };
             let persona = compose_agent_persona(
                 &input.definition.instructions,
                 &input.definition.output_contract,
             );
-            let stable_prefix = build_stable_prefix(
+            let mut stable_prefix = build_stable_prefix(
                 ITERATION_ONE_TOOLS,
                 input.skill_descriptors,
                 input.capabilities,
                 DEFAULT_MAX_PARALLEL_TOOL_CALLS,
                 Some(&persona),
             );
+            stable_prefix.push_str(
+                &input
+                    .desktop
+                    .memory_context(input.user_message, input.working_dir)
+                    .await?,
+            );
             let stage = StageSpec {
                 id: "agent".into(),
+                placement_role: "agent".into(),
                 name: input.definition.name.clone(),
                 role: "agent".into(),
                 instructions: input.definition.instructions.clone(),
@@ -208,7 +306,7 @@ pub async fn run_definition(
                 workspace: StageWorkspace::Shared,
                 message: input.user_message.into(),
                 cycle: None,
-                model_instance_id: default_model_instance_id.into(),
+                model_instance_id: route.instance_id.clone(),
                 reasoning_effort: input.definition.reasoning_effort,
             };
             emit_stage_started(&stage, &mut emit)?;
@@ -242,7 +340,13 @@ pub async fn run_definition(
                 },
                 |event| match event {
                     AgentEvent::TurnStarted { .. } | AgentEvent::TurnFinished { .. } => Ok(()),
-                    event => emit(event),
+                    event => {
+                        emit(AgentEvent::StageActivity {
+                            stage_id: "agent".into(),
+                            event: Box::new(event.clone()),
+                        })?;
+                        emit(event)
+                    }
                 },
             )
             .await;
@@ -383,6 +487,7 @@ async fn run_goal_loop(
         };
         let executor = StageSpec {
             id: format!("execute-{cycle}"),
+            placement_role: "executor".into(),
             name: format!("Execute cycle {cycle}"),
             role: "executor".into(),
             instructions: definition.instructions.clone(),
@@ -411,6 +516,7 @@ async fn run_goal_loop(
 
         let evaluator = StageSpec {
             id: format!("evaluate-{cycle}"),
+            placement_role: "evaluator".into(),
             name: format!("Evaluate cycle {cycle}"),
             role: "evaluator".into(),
             instructions: evaluator_instructions.into(),
@@ -490,6 +596,7 @@ async fn run_coordinator(
 ) -> Result<AgentTurnOutcome, String> {
     let plan = StageSpec {
         id: "coordinate".into(),
+        placement_role: "coordinator".into(),
         name: "Coordinate".into(),
         role: "coordinator".into(),
         instructions: coordinator_instructions.into(),
@@ -519,7 +626,8 @@ async fn run_coordinator(
     let worker_specs = workers
         .iter()
         .map(|worker| StageSpec {
-            id: worker.id.clone(),
+            id: format!("worker-{}", worker.id),
+            placement_role: format!("worker:{}", worker.id),
             name: worker.name.clone(),
             role: "worker".into(),
             instructions: worker.instructions.clone(),
@@ -540,9 +648,6 @@ async fn run_coordinator(
             reasoning_effort: worker.reasoning_effort.or(definition.reasoning_effort),
         })
         .collect::<Vec<_>>();
-    for worker in &worker_specs {
-        emit_stage_started(worker, emit)?;
-    }
     let mut worker_results = stream::iter(worker_specs.into_iter().enumerate().map(
         |(index, worker)| async move {
             let failure_spec = worker.clone();
@@ -575,7 +680,6 @@ async fn run_coordinator(
         };
         total_steps += result.outcome.step_count;
         inference.merge(result.outcome.inference);
-        emit_stage_finished(&result, emit)?;
         if result.outcome.reason == "cancelled" {
             cancelled = true;
             continue;
@@ -596,6 +700,7 @@ async fn run_coordinator(
 
     let synthesis = StageSpec {
         id: "synthesize".into(),
+        placement_role: "synthesizer".into(),
         name: "Synthesize".into(),
         role: "coordinator".into(),
         instructions: format!("{}\n\n{}", definition.instructions, synthesis_instructions),
@@ -667,6 +772,7 @@ async fn run_workflow(
                     .collect::<Vec<_>>();
                 StageSpec {
                     id: node.id.clone(),
+                    placement_role: format!("workflow:{}", node.id),
                     name: node.name.clone(),
                     role: "workflow".into(),
                     instructions: format!("{}\n\n{}", definition.instructions, node.instructions),
@@ -692,9 +798,6 @@ async fn run_workflow(
                 }
             })
             .collect::<Vec<_>>();
-        for spec in &specs {
-            emit_stage_started(spec, emit)?;
-        }
         let mut level_results = stream::iter(specs.into_iter().enumerate().map(
             |(index, spec)| async move {
                 let failure_spec = spec.clone();
@@ -725,7 +828,6 @@ async fn run_workflow(
             };
             total_steps += result.outcome.step_count;
             inference.merge(result.outcome.inference);
-            emit_stage_finished(&result, emit)?;
             if result.outcome.reason == "cancelled" {
                 cancelled = true;
                 continue;
@@ -761,21 +863,52 @@ async fn run_workflow(
 
 async fn execute_stage(
     context: &StageContext<'_>,
-    spec: StageSpec,
+    mut spec: StageSpec,
     _worker_index: i32,
 ) -> Result<StageResult, String> {
     if context.cancellation.is_cancelled() {
         return Err("Agent run was cancelled".into());
     }
     let started = Instant::now();
-    let route = context.model_routes.route(&spec.model_instance_id)?;
+    let selected = if let Some(dispatcher) = &context.model_routes.dispatcher {
+        let role = &spec.placement_role;
+        context
+            .events
+            .send(AgentEvent::StageQueued {
+                stage_id: spec.id.clone(),
+                name: spec.name.clone(),
+                reason: dispatcher.queue_reason(&role),
+            })
+            .map_err(|e| e.to_string())?;
+        Some(
+            dispatcher
+                .select(&role, &spec.model_instance_id, context.cancellation)
+                .await?,
+        )
+    } else {
+        None
+    };
+    let route = match &selected {
+        Some(selected) => selected.route.as_ref(),
+        None => context.model_routes.route(&spec.model_instance_id)?,
+    };
+    spec.model_instance_id = route.instance_id.clone();
+    emit_stage_started(&spec, &mut |event| {
+        context.events.send(event).map_err(|e| e.to_string())
+    })?;
     let persona = compose_agent_persona(&spec.instructions, &spec.output_contract);
-    let stable_prefix = build_stable_prefix(
+    let mut stable_prefix = build_stable_prefix(
         ITERATION_ONE_TOOLS,
         context.skill_descriptors,
         context.capabilities,
         DEFAULT_MAX_PARALLEL_TOOL_CALLS,
         Some(&persona),
+    );
+    stable_prefix.push_str(
+        &context
+            .desktop
+            .memory_context(&spec.message, context.working_dir)
+            .await?,
     );
     let mut session = AgentSessionState::new(format!("{}:{}", context.run_id, spec.id));
 
@@ -822,7 +955,7 @@ async fn execute_stage(
         }
     };
 
-    Ok(StageResult {
+    let result = StageResult {
         id: spec.id,
         name: spec.name,
         outcome,
@@ -830,7 +963,11 @@ async fn execute_stage(
         model_instance_id: route.instance_id.clone(),
         model_id: route.model_id.clone(),
         reasoning_effort: spec.reasoning_effort,
-    })
+    };
+    emit_stage_finished(&result, &mut |event| {
+        context.events.send(event).map_err(|e| e.to_string())
+    })?;
+    Ok(result)
 }
 
 async fn execute_observed_stage(
@@ -842,14 +979,10 @@ async fn execute_observed_stage(
     if spec.reasoning_effort.is_none() {
         spec.reasoning_effort = Some(AgentReasoningEffort::High);
     }
-    emit_stage_started(&spec, emit)?;
     let failure_spec = spec.clone();
     let started = Instant::now();
     match execute_stage(context, spec, worker_index).await {
-        Ok(result) => {
-            emit_stage_finished(&result, emit)?;
-            Ok(result)
-        }
+        Ok(result) => Ok(result),
         Err(error) => {
             let model_id = context
                 .model_routes
@@ -899,7 +1032,15 @@ async fn run_stage_with_workspace(
         RunTurnOptions {
             additional_skills: &spec.skills,
         },
-        |_| Ok(()),
+        |event| {
+            context
+                .events
+                .send(AgentEvent::StageActivity {
+                    stage_id: spec.id.clone(),
+                    event: Box::new(event),
+                })
+                .map_err(|e| e.to_string())
+        },
     )
     .await
 }

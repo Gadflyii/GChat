@@ -87,6 +87,106 @@ impl ToolFixture {
 }
 
 #[tokio::test]
+async fn memory_mutations_require_approval_with_the_complete_preview() {
+    let fixture = ToolFixture::denied();
+    let args =
+        serde_json::json!({"title":"Build command","content":"Use pnpm test","scope":"workspace"});
+    let result = fixture.call("memory.save", args.clone()).await;
+    assert_eq!(result.status, ToolStatus::Denied);
+    let requests = fixture.approval.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].preview, args);
+}
+
+#[tokio::test]
+async fn approved_memories_reach_the_agent_prompt_and_survive_session_persistence() {
+    struct MemoryDesktop(std::path::PathBuf);
+    #[async_trait::async_trait]
+    impl super::DesktopServices for MemoryDesktop {
+        async fn memory(
+            &self,
+            action: &str,
+            args: serde_json::Value,
+            workspace: &std::path::Path,
+        ) -> Result<serde_json::Value, String> {
+            crate::core::agent::memory::operation(
+                self.0.clone(),
+                action.into(),
+                args,
+                Some(workspace.into()),
+                "agent:test".into(),
+            )
+            .await
+        }
+        async fn write_clipboard(&self, _: String) -> Result<(), String> {
+            unreachable!()
+        }
+        async fn notify(&self, _: String, _: String) -> Result<(), String> {
+            unreachable!()
+        }
+    }
+    let fixture = ToolFixture::allowed();
+    let desktop = MemoryDesktop(fixture.workspace.path().to_owned());
+    let context = ToolContext {
+        working_dir: fixture.workspace.path(),
+        editable_roots: &fixture.editable_roots,
+        trusted_read_roots: &[],
+        client: None,
+        reasoning_effort: None,
+        inference: None,
+        approval: &fixture.approval,
+        folder_access: &fixture.folder_access,
+        cancellation: &fixture.cancellation,
+        loaded_tools: &fixture.loaded_tools,
+        loaded_skills: &fixture.loaded_skills,
+        skill_registry: &fixture.skill_registry,
+        bundled_script_runtime: None,
+        desktop: &desktop,
+    };
+    let text = format!(
+        "{}Important final detail: run pnpm test.",
+        "Project facts. ".repeat(100)
+    );
+    let save = execute(
+        &ToolCallPayload {
+            tool: "memory.save".into(),
+            args: serde_json::json!({"title":"Project build","content":text,"scope":"workspace"}),
+        },
+        &context,
+    )
+    .await;
+    assert_eq!(save.status, ToolStatus::Ok);
+    let call = ToolCallPayload {
+        tool: "memory.recall".into(),
+        args: serde_json::json!({"query":"project"}),
+    };
+    let recalled = execute(&call, &context).await;
+    assert_eq!(recalled.status, ToolStatus::Ok);
+    assert!(recalled
+        .summary
+        .contains("Important final detail: run pnpm test."));
+    let mut session = crate::core::agent::session::AgentSessionState::new("memory-session");
+    session.push_user("Recall the project build instructions");
+    session.push_tool_observations(&[call], &[recalled]);
+    crate::core::threads::utils::ensure_thread_dir_exists(
+        fixture.workspace.path(),
+        "memory-session",
+    )
+    .unwrap();
+    crate::core::agent::session::save_session(fixture.workspace.path(), &session)
+        .await
+        .unwrap();
+    let loaded =
+        crate::core::agent::session::load_session(fixture.workspace.path(), "memory-session")
+            .await
+            .unwrap();
+    assert!(loaded
+        .render_conversation(8192)
+        .contains("Important final detail: run pnpm test."));
+    assert_eq!(fixture.approval.requests().len(), 1);
+}
+
+#[tokio::test]
 async fn filesystem_tools_apply_real_operations_in_an_isolated_workspace() {
     let fixture = ToolFixture::allowed();
     fixture

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
+import { CredentialSetup } from '@/containers/CredentialSetup'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { route } from '@/constants/routes'
@@ -108,6 +109,7 @@ function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: Engi
 }
 
 function EnginesPage() {
+  const [credentialReady, setCredentialReady] = useState(false)
   const { hosts, nearby, snapshots, errors, refreshing, discoveryError, refresh } = useEngineHosts()
   const { enabled, ignored, setEnabled, ignore, restore } = useEngineDiscovery()
   const [address, setAddress] = useState('')
@@ -119,6 +121,7 @@ function EnginesPage() {
     update(); const interval = setInterval(update, 5000); return () => clearInterval(interval)
   }, [refresh])
   const pair = async () => {
+    if (!credentialReady) return
     setBusy(true)
     try {
       const result = await engineCommand<{ credential_cleanup_warning?: string }>('pair', { base_url: address.trim(), fingerprint: fingerprint.trim(), code: code.trim() })
@@ -144,7 +147,8 @@ function EnginesPage() {
         <label className="block text-sm">Host address<Input placeholder="https://192.168.1.10:7443" value={address} onChange={(e) => setAddress(e.target.value)} /></label>
         <label className="block text-sm">Certificate SHA256<Input placeholder="64 hexadecimal characters from the host" value={fingerprint} onChange={(e) => setFingerprint(e.target.value)} /></label>
         <label className="block text-sm">Pairing code<Input autoComplete="off" placeholder="Eight-digit code" value={code} onChange={(e) => setCode(e.target.value)} /></label>
-        <Button disabled={busy || !address.trim() || !/^[a-fA-F0-9]{64}$/.test(fingerprint.trim()) || !/^\d{8}$/.test(code.trim())} onClick={() => void pair()}>{busy ? 'Pairing…' : 'Pair host'}</Button>
+        <CredentialSetup onReady={setCredentialReady} />
+        <Button disabled={!credentialReady || busy || !address.trim() || !/^[a-fA-F0-9]{64}$/.test(fingerprint.trim()) || !/^\d{8}$/.test(code.trim())} onClick={() => void pair()}>{busy ? 'Pairing…' : 'Pair host'}</Button>
       </section>
       {hosts.map((host) => <HostCard key={host.host_id} host={host} snapshot={snapshots[host.host_id]} error={errors[host.host_id]} />)}
     </main>
