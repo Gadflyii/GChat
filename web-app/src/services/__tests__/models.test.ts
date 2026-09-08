@@ -234,10 +234,17 @@ describe('DefaultModelsService', () => {
   describe('deleteModel', () => {
     it('should delete model successfully', async () => {
       const id = 'model1'
+      mockEngine.getLoadedModels.mockResolvedValue([])
 
       await modelsService.deleteModel(id)
 
       expect(mockEngine.delete).toHaveBeenCalledWith(id)
+    })
+
+    it('refuses to delete a loaded model without interrupting inference', async () => {
+      mockEngine.getLoadedModels.mockResolvedValue(['model1'])
+      await expect(modelsService.deleteModel('model1')).rejects.toThrow('Stop this model')
+      expect(mockEngine.delete).not.toHaveBeenCalled()
     })
 
     it('rejects instead of reporting success when the provider has no engine', async () => {

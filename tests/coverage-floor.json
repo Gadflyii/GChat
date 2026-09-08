@@ -29,12 +29,6 @@
     "functions": 100,
     "lines": 93.47
   },
-  "web-app/src/lib/hub-filters.ts": {
-    "statements": 100,
-    "branches": 91.8,
-    "functions": 100,
-    "lines": 100
-  },
   "extensions/ginfer-extension/src/index.ts": {
     "statements": 0,
     "branches": 0,

@@ -35,6 +35,7 @@ import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
 import { HermesTerminalHost } from '@/containers/HermesTerminalHost'
 import { EmbeddedIntegrationProvisioner } from '@/containers/EmbeddedIntegrationProvisioner'
 import { EngineDiscovery } from '@/containers/EngineDiscovery'
+import { StudioActivity } from '@/containers/StudioActivity'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -61,7 +62,7 @@ const AppLayout = () => {
   useTrayStatusSync()
 
   return (
-    <div className="bg-neutral-50 dark:bg-background size-full relative">
+    <div className="bg-background size-full relative">
       <SidebarProvider
         open={isLeftPanelOpen}
         onOpenChange={setLeftPanel}
@@ -74,9 +75,10 @@ const AppLayout = () => {
         <WhatsNewDialog />
         <EmbeddedIntegrationProvisioner />
         <EngineDiscovery />
+        <StudioActivity />
         <LeftSidebar />
         <SidebarInset>
-          <div className="relative bg-neutral-50 dark:bg-background size-full">
+          <div className="relative bg-background size-full">
             <Outlet />
             <CodeTerminalHost visible={codeVisible} />
             <HermesTerminalHost visible={hermesVisible} />

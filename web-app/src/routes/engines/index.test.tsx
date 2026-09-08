@@ -50,7 +50,7 @@ describe('Engines host intake and launch controls', () => {
   it('blocks fractional launch values and the displayed Qwen vision conflict', async () => {
     render(<Page />)
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'model' } })
-    fireEvent.click(screen.getByLabelText(/RTX 5090 \(GPU-one\)/))
+    expect(screen.getByLabelText(/RTX 5090 \(GPU-one\)/)).toBeChecked()
     const load = screen.getByRole('button', { name: 'Load model' })
     expect(load).toBeEnabled()
     fireEvent.change(screen.getByLabelText('Concurrent requests'), { target: { value: '1.5' } })

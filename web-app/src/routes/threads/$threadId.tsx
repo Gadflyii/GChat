@@ -7,6 +7,7 @@ import { useThreads } from '@/hooks/useThreads'
 import ChatInput from '@/containers/ChatInput'
 import { useShallow } from 'zustand/react/shallow'
 import { MessageItem } from '@/containers/MessageItem'
+import { MemoryContext } from '@/containers/MemoryContext'
 
 import { useMessages } from '@/hooks/useMessages'
 import { useServiceHub } from '@/hooks/useServiceHub'
@@ -1835,6 +1836,7 @@ function ThreadDetail() {
         <HeaderPage>
           <div className="flex items-center justify-between w-full pr-2">
             <DropdownModelProvider showSampler={!agentModeActive} />
+            <MemoryContext threadId={threadId} />
           </div>
         </HeaderPage>
         <div className="flex flex-1 overflow-hidden">

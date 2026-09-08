@@ -14,7 +14,7 @@
  */
 
 import { create } from 'zustand'
-import { type CatalogIndexPayload, type RegistrySource } from '@/services/model-catalog-registry'
+import { getCatalogOrFallback, type CatalogIndexPayload, type RegistrySource } from '@/services/model-catalog-registry'
 import { BASELINE_MODEL_CATALOG } from '@/constants/models'
 import { mergeShardedQuants } from '@/lib/models'
 import type { CatalogModel } from '@/services/models/types'
@@ -59,6 +59,15 @@ export const useModelCatalogStore = create<ModelCatalogState>()((set) => ({
   indexFetchedAt: null,
   hasInitialized: false,
   refresh: async () => {
+    const releaseUrl = import.meta.env.VITE_MODEL_CATALOG_URL as string | undefined
+    if (releaseUrl) {
+      set({ status: 'loading' })
+      const result = await getCatalogOrFallback({ url: releaseUrl, force: true })
+      set({ catalog: adopt(result.manifest.models.filter(m => m.library_name === 'ginfer')),
+        source: result.source, status: result.error ? 'error' : 'success', error: result.error ?? null,
+        manifestUpdatedAt: result.manifest.updated_at, fetchedAt: result.fetchedAt, hasInitialized: true })
+      return
+    }
     // GChat runs a single local backend (ginfer) with a closed model set, so
     // the catalog is the bundled baseline. The remote registry and the
     // bundled seed carry model formats this app cannot load and are never

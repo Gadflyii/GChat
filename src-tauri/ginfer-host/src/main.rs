@@ -23,7 +23,7 @@ struct Args {
     nvidia_smi: PathBuf,
     #[arg(long, required_unless_present = "request_pairing")]
     engine: Option<PathBuf>,
-    #[arg(long, required_unless_present_any = ["request_pairing", "artifact_set"])]
+    #[arg(long)]
     models: Vec<PathBuf>,
     /// Explicit deployment descriptors; only declared exact degrees enter inventory.
     #[arg(long)]
@@ -111,7 +111,7 @@ async fn run(
     }
     let output = tokio::process::Command::new(&args.nvidia_smi)
         .args([
-            "--query-gpu=uuid,name,memory.total",
+            "--query-gpu=uuid,name,memory.total,compute_cap",
             "--format=csv,noheader,nounits",
         ])
         .output()
@@ -123,13 +123,14 @@ async fn run(
     let mut gpus = Vec::new();
     for line in String::from_utf8_lossy(&output.stdout).lines() {
         let values: Vec<_> = line.split(',').map(str::trim).collect();
-        if values.len() != 3 {
+        if values.len() != 4 {
             return Err("unrecognized NVIDIA inventory row".into());
         }
         gpus.push(Gpu {
             uuid: values[0].into(),
             name: values[1].into(),
             memory_mib: values[2].parse::<u64>().map_err(|e| e.to_string())?,
+            compute_capability: values[3].parse::<f32>().ok().map(|_| values[3].to_string()),
         });
     }
     let host = Host::open(

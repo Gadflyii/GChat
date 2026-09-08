@@ -1,5 +1,15 @@
 # Remote Registries — Agent Notes
 
+## Current GInfer model-management authority
+
+The host-aware Models page supersedes the generic Hub/onboarding flows described
+below. `model-catalog-store` uses the closed bundled GInfer catalog unless
+`VITE_MODEL_CATALOG_URL` explicitly names the release catalog. It does not fetch
+the upstream multi-backend registry or search index. Optional `releases` on each
+GInfer entry carry the exact contract in `docs/model-management.md`; incomplete
+entries are unavailable, never inferred download targets. Provider registry
+behavior is unchanged. Do not revive GGUF/MLX discovery through the Models page.
+
 This file documents two parallel remote-configuration features:
 
 1. **Provider registry** — cloud-provider catalog (OpenAI, Anthropic, …).

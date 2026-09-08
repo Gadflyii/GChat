@@ -12,6 +12,16 @@ spec.loader.exec_module(installer)
 
 
 class HostInstallation(unittest.TestCase):
+    def test_empty_host_preview_can_use_managed_download_storage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = subprocess.run(['python3', str(SCRIPT), '--binary', '/usr/bin/true',
+                '--engine', '/usr/bin/true', '--prefix', str(root / 'install'),
+                '--data-dir', str(root / 'state')], capture_output=True, text=True, check=True)
+            self.assertIn('Preview only', result.stdout)
+            self.assertNotIn('--models', result.stdout)
+            self.assertFalse((root / 'state').exists())
+
     def test_preview_does_not_install_or_start(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

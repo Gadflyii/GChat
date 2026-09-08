@@ -47,6 +47,7 @@ vi.mock('@/services/agent/studio', async (original) => ({
 vi.mock('@/services/agent/definitions', () => ({
   saveAgentDefinition: mocks.save,
 }))
+vi.mock('@/services/agent/tauri', () => ({ resolveAgentWorkspaceRoot: async () => ({ path: '/workspace', name: 'Workspace' }) }))
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: (select: (s: unknown) => unknown) =>
     select({ selectedModel: mocks.current ? { id: mocks.current } : null }),
@@ -98,9 +99,9 @@ describe('Agent Studio run setup', () => {
     fireEvent.change(screen.getByLabelText('Evaluator assignment'), {
       target: { value: 'instance:local' },
     })
-    expect(
+    await waitFor(() => expect(
       screen.getByRole('button', { name: 'Run', exact: true })
-    ).toBeEnabled()
+    ).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
     await waitFor(() => expect(onRun).toHaveBeenCalledOnce())
     expect(mocks.start.mock.calls[0][1].role_assignments).toMatchObject({

@@ -4,8 +4,10 @@ Development status: real two-machine discovery, pairing, GPU lifecycle, and
 Windows desktop-to-LAN routing checks pass, as do Windows SCM and Linux systemd
 installation/lifecycle checks. Packages are local, unsigned, and unpublished;
 the GChat installer has not been rebuilt with this integration.
-Use an explicitly selected `ginfer-serve` build; this workflow never updates the engine
-or downloads/repackages models.
+Use an explicitly selected `ginfer-serve` build; host installation never updates
+the engine or downloads/repackages models. After pairing, the Models page can
+explicitly download verified published packages into dedicated managed storage;
+see [model management](model-management.md). Existing model roots remain read-only.
 
 ## Prebuilt host packages
 
@@ -36,6 +38,10 @@ Output defaults to `src-tauri/ginfer-host/target/distribution/`. Source-reposito
 tests referenced below are maintainer checks, not included in the binary archive.
 
 ## Linux host
+
+Model roots are optional. A new host can start with empty managed storage and
+receive published packages from GChat after pairing. Existing `--models` roots
+and explicit artifact-set descriptors remain available as read-only inventory.
 
 Build the standalone host (no desktop session or Tauri runtime required):
 

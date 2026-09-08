@@ -23,6 +23,11 @@ The library is ordinary local application data, not an encrypted secret vault.
 Deleting or disabling an entry prevents future recall; it does not erase copies
 already sent to a model, present in an active run, or retained in a conversation.
 The library lives in `memories.json` under GChat's configured data directory.
+Chat supports both local and paired GInfer instances. Its header exposes the most
+recent memory lookup snapshot. Remember this opens a review dialog from a message;
+the saved entry retains a source-message identifier. Entries created by agents retain
+their originating run identifier. This provenance is a reference, not a guarantee
+that the source statement was correct. The library renders entries in batches of 50.
 
 ## Workspace initialization
 

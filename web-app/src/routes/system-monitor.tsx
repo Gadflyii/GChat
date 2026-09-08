@@ -45,7 +45,7 @@ function SystemMonitorContent() {
     <div className="flex flex-col h-full bg-background overflow-y-auto p-6">
       <div className="flex items-center mb-4 gap-2">
         <IconDeviceDesktopAnalytics className="text-muted-foreground/80 size-6" />
-        <h1 className="text-xl font-bold text-muted-foreground">
+        <h1 className="text-xl font-medium text-foreground">
           {t('system-monitor:title')}
         </h1>
       </div>
@@ -82,7 +82,7 @@ function SystemMonitorContent() {
                 <span className="text-muted-foreground">
                   {t('system-monitor:currentUsage')}
                 </span>
-                <span className="text-foreground font-bold">
+                <span className="text-foreground font-mono tabular-nums font-medium">
                   {systemUsage.cpu.toFixed(2)}%
                 </span>
               </div>
@@ -128,7 +128,7 @@ function SystemMonitorContent() {
                 <span className="text-muted-foreground">
                   {t('system-monitor:currentUsage')}
                 </span>
-                <span className="text-foreground font-bold">
+                <span className="text-foreground font-mono tabular-nums font-medium">
                   {ramUsagePercentage.toFixed(2)}%
                 </span>
               </div>

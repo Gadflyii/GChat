@@ -543,6 +543,11 @@ export class DefaultModelsService implements ModelsService {
         `No engine registered for provider "${provider ?? defaultProvider}"`
       )
     }
+    const loadedModels = await engine.getLoadedModels()
+    if (!Array.isArray(loadedModels)) throw new Error('Cannot confirm which models are loaded; files were not removed.')
+    if (loadedModels.includes(id)) {
+      throw new Error('Stop this model before deleting its files. Active chats and agent runs are not interrupted automatically.')
+    }
     return engine.delete(id)
   }
 

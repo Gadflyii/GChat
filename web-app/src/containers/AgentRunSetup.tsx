@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useStudioCatalog } from '@/hooks/useStudioCatalog'
+import { roleReadiness } from '@/lib/agent-preflight'
+import { StatusLabel } from './StatusLabel'
 import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
+import { WorkspacePicker } from '@/containers/WorkspacePicker'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,12 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useStudioRuns } from '@/stores/studio-run-store'
-import {
-  defaultAssignments,
-  placementRoles,
-  studioCommand,
-  type StudioCatalog,
-} from '@/services/agent/studio'
+import { defaultAssignments, placementRoles } from '@/services/agent/studio'
 import { saveAgentDefinition } from '@/services/agent/definitions'
 import type { AgentDefinition, AgentRoleAssignment } from '@/types/agent'
 
@@ -28,50 +27,36 @@ export function AgentRunSetup({
   onClose,
   onRun,
   initialTask = '',
+  initialWorkspace = '',
 }: {
   definition: AgentDefinition
   onClose: () => void
   onRun: () => void
   initialTask?: string
+  initialWorkspace?: string
 }) {
   const [showPools, setShowPools] = useState(false)
-  const [catalog, setCatalog] = useState<StudioCatalog>({
-    pools: [],
-    instances: [],
-    usage: {},
-  })
+  const { catalog, error: catalogError, refresh } = useStudioCatalog()
   const [task, setTask] = useState(initialTask)
-  const [workspace, setWorkspace] = useState('')
+  const [workspace, setWorkspace] = useState(initialWorkspace)
+  const [workspaceValid, setWorkspaceValid] = useState(false)
   const [assignments, setAssignments] = useState(defaultAssignments(definition))
   const [saveDefaults, setSaveDefaults] = useState(false)
   const [busy, setBusy] = useState(false)
   const current = useModelProvider((s) => s.selectedModel?.id ?? '')
   const roles = placementRoles(definition)
-  useEffect(() => {
-    const refresh = () =>
-      studioCommand<StudioCatalog>('capacity')
-        .then(setCatalog)
-        .catch((e) => toast.error(String(e)))
-    void refresh()
-    const timer = setInterval(() => void refresh(), 5000)
-    return () => clearInterval(timer)
-  }, [])
   const change = (id: string, patch: Partial<AgentRoleAssignment>) =>
     setAssignments((s) => ({ ...s, [id]: { ...s[id], ...patch } }))
-  const missing = roles.some(({ id }) => {
-    const a = assignments[id]
-    const target = a.target
-    return (
-      !Number.isSafeInteger(a.minimumContext) ||
-      a.minimumContext < 0 ||
-      a.minimumContext > 16777216 ||
-      (target.kind === 'current'
-        ? !catalog.instances.some((i) => i.id === current)
-        : target.kind === 'pool'
-          ? !catalog.pools.some((p) => p.id === target.id)
-          : !catalog.instances.some((i) => i.id === target.id))
-    )
-  })
+  const readiness = Object.fromEntries(
+    roles.map(({ id }) => [
+      id,
+      roleReadiness(assignments[id], current, catalog),
+    ])
+  )
+  const missing =
+    !workspaceValid ||
+    !!catalogError ||
+    roles.some(({ id }) => !readiness[id].canStart)
   const start = async () => {
     if (missing || !task.trim()) return
     setBusy(true)
@@ -82,18 +67,16 @@ export function AgentRunSetup({
           roleAssignments: assignments,
         })
       const id = crypto.randomUUID()
-      useStudioRuns
-        .getState()
-        .start(definition.name, {
-          run_id: id,
-          session_id: id,
-          model_id: current || 'explicit-role-assignment',
-          user_message: task,
-          definition_id: definition.id,
-          role_assignments: assignments,
-          working_dir: workspace.trim() || undefined,
-          auto_approve: false,
-        })
+      useStudioRuns.getState().start(definition.name, {
+        run_id: id,
+        session_id: id,
+        model_id: current || 'explicit-role-assignment',
+        user_message: task,
+        definition_id: definition.id,
+        role_assignments: assignments,
+        working_dir: workspace.trim() || undefined,
+        auto_approve: false,
+      })
       onRun()
     } catch (e) {
       toast.error(String(e))
@@ -116,6 +99,14 @@ export function AgentRunSetup({
             operations run on this GChat computer.
           </DialogDescription>
         </DialogHeader>
+        {catalogError && (
+          <p role="alert" className="text-sm text-destructive">
+            Cannot refresh engine capacity. Last-known data is shown.{' '}
+            <Button variant="outline" onClick={() => void refresh()}>
+              Retry
+            </Button>
+          </p>
+        )}
         <label className="space-y-1 text-sm">
           Task or goal
           <textarea
@@ -125,14 +116,11 @@ export function AgentRunSetup({
             placeholder="What should this run accomplish? Include what a complete result should contain."
           />
         </label>
-        <label className="space-y-1 text-sm">
-          Workspace
-          <Input
-            value={workspace}
-            onChange={(e) => setWorkspace(e.target.value)}
-            placeholder="Default GChat agent workspace"
-          />
-        </label>
+        <WorkspacePicker
+          value={workspace}
+          onChange={setWorkspace}
+          onValidity={setWorkspaceValid}
+        />
         <div className="space-y-3">
           {roles.map((role) => {
             const assignment = assignments[role.id]
@@ -231,14 +219,18 @@ export function AgentRunSetup({
                     />
                   </label>
                 </div>
+                <p className="text-sm text-muted-foreground" role="status">
+                  <StatusLabel status={readiness[role.id].status} /> ·{' '}
+                  {readiness[role.id].message}
+                </p>
               </section>
             )
           })}
         </div>
         <p className="text-sm text-muted-foreground">
-          Full or temporarily unsuitable pools queue until capacity is
-          available. Assignments stay pinned once work begins.{' '}
-          {definition.maxSteps} tool steps per main stage
+          Compatible busy assignments queue until capacity is available.
+          Assignments stay pinned once work begins. {definition.maxSteps} tool
+          steps per main stage
           {definition.kind === 'goal_loop'
             ? `; up to ${definition.maxCycles} cycles`
             : definition.kind === 'coordinator'

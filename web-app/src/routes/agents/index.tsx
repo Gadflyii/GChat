@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { continuationTask } from '@/lib/agent-continuation'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
 import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
 import { AgentLiveRuns } from '@/containers/AgentLiveRuns'
@@ -343,6 +345,7 @@ function slug(value: string): string {
 export function AgentStudioPage() {
   const [runSetup, setRunSetup] = useState<AgentDefinition | null>(null)
   const [runTask, setRunTask] = useState('')
+  const [runWorkspace, setRunWorkspace] = useState('')
   const navigate = useNavigate()
   const search = Route.useSearch()
   const { definitions, loading, error, load, save, remove, createDraft } =
@@ -460,17 +463,18 @@ export function AgentStudioPage() {
   const tryInChat = async (definition: AgentDefinition) => {
     const saved = definition === draft ? await saveDraft(false) : definition
     if (!saved) return
-    setRunTask(''); setRunSetup(saved)
+    setRunTask(''); setRunWorkspace(''); setRunSetup(saved)
   }
 
-  const rerun = async (run: AgentRunRecord) => {
+  const rerun = async (run: AgentRunRecord, continueWork = false) => {
     if (!run.userMessage.trim()) {
       toast.error('This older run does not contain a reusable task prompt.')
       return
     }
     try {
       const definition = await getAgentDefinition(run.definitionId)
-      setRunTask(run.userMessage)
+      setRunTask(continueWork ? continuationTask(run) : run.userMessage)
+      setRunWorkspace(run.workspace ?? '')
       setRunSetup({ ...definition, roleAssignments: run.roleAssignments ?? definition.roleAssignments })
     } catch (reason) {
       toast.error(`Could not re-run task: ${String(reason)}`)
@@ -654,7 +658,7 @@ export function AgentStudioPage() {
         </div>
       )}
 
-      {runSetup && <AgentRunSetup definition={runSetup} initialTask={runTask} onClose={() => setRunSetup(null)} onRun={() => { setRunSetup(null); selectView('runs') }} />}
+      {runSetup && <AgentRunSetup definition={runSetup} initialTask={runTask} initialWorkspace={runWorkspace} onClose={() => setRunSetup(null)} onRun={() => { setRunSetup(null); selectView('runs') }} />}
       {view === 'pools' && <AgentWorkerPools />}
       {view === 'runs' && (
         <div className="overflow-auto"><AgentLiveRuns />
@@ -663,6 +667,7 @@ export function AgentStudioPage() {
           selected={selectedRun}
           onSelect={setSelectedRunId}
           onRerun={(run) => void rerun(run)}
+          onContinue={(run) => void rerun(run, true)}
           onDelete={(run) => void deleteRun(run)}
           onRefresh={() => {
             void listAgentRuns()
@@ -1738,6 +1743,7 @@ function RunInspector({
   onSelect,
   onRefresh,
   onRerun,
+  onContinue,
   onDelete,
 }: {
   runs: AgentRunRecord[]
@@ -1745,6 +1751,7 @@ function RunInspector({
   onSelect: (id: string) => void
   onRefresh: () => void
   onRerun: (run: AgentRunRecord) => void
+  onContinue: (run: AgentRunRecord) => void
   onDelete: (run: AgentRunRecord) => void
 }) {
   const instanceMetrics = aggregateAgentMetrics(
@@ -1830,6 +1837,7 @@ function RunInspector({
                   >
                     <IconRepeat /> Re-run
                   </DropdownMenuItem>
+                  {run.status !== 'finished' && <DropdownMenuItem disabled={!run.userMessage.trim()} onSelect={() => onContinue(run)}>Continue as new run…</DropdownMenuItem>}
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     onSelect={() => onDelete(run)}
@@ -1845,6 +1853,16 @@ function RunInspector({
       <main className="min-h-0 overflow-y-auto p-6">
         {selected ? (
           <div className="mx-auto max-w-4xl space-y-5">
+            <section className="space-y-3 rounded-lg border bg-card p-4">
+              <h2 className="font-medium">Result overview</h2>
+              <p className="whitespace-pre-wrap text-sm">{selected.finalReply ? selected.finalReply.slice(0, 600) + (selected.finalReply.length > 600 ? '…' : '') : 'No final answer was returned. Inspect the stage findings below.'}</p>
+              <div className="flex flex-wrap gap-2">
+                {selected.status !== 'finished' && <Button variant="outline" onClick={() => onContinue(selected)}>Continue as new run…</Button>}
+                {selected.workspace && <Button variant="outline" onClick={() => void invoke('open_file_explorer', { path: selected.workspace }).catch((e) => toast.error(String(e)))}>Open workspace</Button>}
+                {selected.outputWorkspace && <Button variant="outline" onClick={() => void invoke('open_file_explorer', { path: selected.outputWorkspace }).catch((e) => toast.error(String(e)))}>Open run files</Button>}
+              </div>
+              <p className="text-xs text-muted-foreground">Continuation opens a new run setup with prior findings for review. It does not resume execution or replay tool calls.</p>
+            </section>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
                 {KIND_META[selected.kind].label}

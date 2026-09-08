@@ -47,7 +47,11 @@ export const useEngineHosts = create<State>((set, get) => ({
           }))),
       }
       const providers = useModelProvider.getState()
-      if (providers.getProviderByName(provider.provider)) providers.updateProvider(provider.provider, provider)
+      const existing = providers.getProviderByName(provider.provider)
+      if (existing) {
+        const projection = { provider: existing.provider, active: existing.active, settings: existing.settings, base_url: existing.base_url, api_key: existing.api_key, models: existing.models }
+        if (JSON.stringify(projection) !== JSON.stringify(provider)) providers.updateProvider(provider.provider, provider)
+      }
       else if (provider.models.length) providers.addProvider(provider)
       set({ hosts: listed.registered, nearby: listed.discovered, snapshots, errors })
     } finally { set({ refreshing: false }) }

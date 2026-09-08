@@ -29,6 +29,10 @@ pub struct AgentRunRecord {
     pub definition_name: String,
     #[serde(default)]
     pub user_message: String,
+    #[serde(default)]
+    pub workspace: Option<String>,
+    #[serde(default)]
+    pub output_workspace: Option<String>,
     pub kind: String,
     pub status: String,
     #[serde(default)]
@@ -152,6 +156,8 @@ impl AgentRunRecord {
             .unwrap_or_default();
         Self {
             schema_version: RUN_HISTORY_SCHEMA_VERSION,
+            workspace: None,
+            output_workspace: None,
             id: id.into(),
             run_id: run_id.into(),
             session_id: session_id.into(),

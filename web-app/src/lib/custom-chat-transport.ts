@@ -12,7 +12,7 @@ import {
   type TextStreamPart,
 } from 'ai'
 import { repairToolCallArguments } from './repairToolCall'
-import { chatMemoryContext } from './memory'
+import { chatMemoryContext, supportsGChatMemory } from './memory'
 import { prepareToolResultImagesForModel } from './toolResultImages'
 import {
   buildToolsRecord,
@@ -659,7 +659,9 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       selectedModel?.capabilities?.includes('tools') ?? this.modelSupportsTools
     const shouldEnableTools = hasTools && modelSupportsTools
 
-    const memory = isLocalProvider ? await chatMemoryContext(options.messages) : ''
+    const memory = supportsGChatMemory(effectiveProviderName)
+      ? await chatMemoryContext(options.messages, this.threadId)
+      : ''
     const systemMessage = [this.systemMessage, memory].filter(Boolean).join('\n\n') || undefined
     const dropSystemForTools =
       isLocalProvider && shouldEnableTools && !!systemMessage

@@ -27,6 +27,8 @@ pub struct Memory {
     pub created_at: u64,
     pub updated_at: u64,
     pub source: String,
+    #[serde(default)]
+    pub origin: Option<String>,
 }
 
 fn canonical_workspace(workspace: Option<&str>) -> Result<Option<String>, String> {
@@ -240,6 +242,15 @@ pub fn operate(
                 created_at: old.as_ref().map(|m| m.created_at).unwrap_or(now),
                 updated_at: now,
                 source: source.into(),
+                origin: old.as_ref().and_then(|m| m.origin.clone()).or_else(|| {
+                    if agent {
+                        Some(source.into())
+                    } else {
+                        args.get("origin")
+                            .and_then(Value::as_str)
+                            .map(|s| s.chars().take(256).collect())
+                    }
+                }),
             };
             entries.retain(|m| m.id != memory.id);
             entries.push(memory.clone());
@@ -385,6 +396,7 @@ mod tests {
                 created_at: 1,
                 updated_at: i,
                 source: "user".into(),
+                origin: None,
             })
             .collect::<Vec<_>>();
         let selected = recall(&entries, None, "fact");

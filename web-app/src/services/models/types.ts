@@ -31,6 +31,7 @@ export interface SafetensorsFile {
 }
 
 export interface CatalogModel {
+  releases?: import('@/lib/model-release').ModelRelease[]
   model_name: string
   /**
    * Curated display name for the entry. `model_name` carries the HuggingFace

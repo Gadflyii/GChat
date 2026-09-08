@@ -199,6 +199,41 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     action: String,
     args: Value,
 ) -> Result<Value, String> {
+    if action.starts_with("local_model_") {
+        static DOWNLOADS: OnceLock<Mutex<Option<std::sync::Arc<ginfer_host::model_downloads::ModelDownloads>>>> = OnceLock::new();
+        let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
+        let mut slot = DOWNLOADS.get_or_init(|| Mutex::new(None)).lock().await;
+        let manager = if let Some(manager) = slot.as_ref() { manager.clone() } else {
+            let manager = ginfer_host::model_downloads::ModelDownloads::open_local(
+                root.join("ginfer/models"), root.join("ginfer/model-downloads.json"))?;
+            *slot = Some(manager.clone()); manager
+        };
+        drop(slot);
+        return match action.as_str() {
+            "local_model_downloads" => serde_json::to_value(manager.list().await).map_err(|e| e.to_string()),
+            "local_model_download" => {
+                let release: ginfer_host::model_downloads::Release = serde_json::from_value(args.get("body").cloned().ok_or("release required")?).map_err(|e| e.to_string())?;
+                release.validate()?;
+                let hardware = tauri_plugin_hardware::get_system_info().await?;
+                let gpus: Vec<_> = hardware.gpus.into_iter().map(|gpu| ginfer_host::service::Gpu {
+                    uuid: gpu.uuid, name: gpu.name, memory_mib: gpu.total_memory,
+                    compute_capability: gpu.nvidia_info.map(|info| info.compute_capability),
+                }).collect();
+                if release.compatible_group(&gpus).is_none() { return Err("release does not match this computer's actual SM and per-GPU memory".into()); }
+                serde_json::to_value(manager.enqueue(release).await?).map_err(|e| e.to_string())
+            }
+            "local_model_download_action" => {
+                manager.action(argument_id(&args, "id")?, args["operation"].as_str().ok_or("operation required")?).await?;
+                Ok(json!({"ok":true}))
+            }
+            "local_model_adopt" => {
+                let scan_root = root.clone();
+                let report = tokio::task::spawn_blocking(move || crate::core::ginfer_models::adopt_root_ginfer_models_in(&scan_root)).await.map_err(|e| e.to_string())??;
+                serde_json::to_value(report).map_err(|e| e.to_string())
+            }
+            _ => Err("unknown local model operation".into()),
+        };
+    }
     // The prerequisite check must work before registry initialization or pairing.
     if action == "credential_status" {
         return Ok(credential_setup::status().await);
@@ -535,11 +570,14 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 }
             }
         }
-        "launch" | "stop" | "reload" | "scan" => {
+        "remove_model" | "download" | "download_action" | "launch" | "stop" | "reload" | "scan" => {
             let id = argument_id(&args, "host_id")?;
             let path = match action.as_str() {
                 "launch" => "/host/v1/instances".into(),
                 "scan" => "/host/v1/scan".into(),
+                "download" => "/host/v1/downloads".into(),
+                "download_action" => "/host/v1/download-actions".into(),
+                "remove_model" => "/host/v1/remove-model".into(),
                 _ => format!(
                     "/host/v1/instances/{}/{}",
                     argument_id(&args, "instance_id")?,

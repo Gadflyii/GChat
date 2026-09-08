@@ -61,7 +61,6 @@ $Binary = Existing-Path $Binary $false
 $Engine = Existing-Path $Engine $false
 $Models = @($Models | ForEach-Object { Existing-Path $_ $true })
 $ArtifactSet = @($ArtifactSet | ForEach-Object { Existing-Path $_ $false })
-if ($Models.Count -eq 0 -and $ArtifactSet.Count -eq 0) { throw 'Supply model directories or explicit artifact-set descriptors' }
 $Prefix = New-LocalPath $Prefix
 $DataDir = New-LocalPath $DataDir
 if ($Prefix.Equals($DataDir, [StringComparison]::OrdinalIgnoreCase) -or

@@ -16,6 +16,7 @@ import {
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Tool } from '@/components/ai-elements/tools/tool'
 import { CopyButton } from './CopyButton'
+import { RememberMemory } from './RememberMemory'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { IconPencil, IconRefresh } from '@tabler/icons-react'
@@ -230,7 +231,7 @@ export const MessageItem = memo(
     }, [message.parts, message.role])
 
     // Get full text content for copy button
-    const getFullTextContent = useCallback(() => {
+    const fullTextContent = useMemo(() => {
       return message.parts
         .filter(
           (part): part is { type: 'text'; text: string } =>
@@ -239,6 +240,8 @@ export const MessageItem = memo(
         .map((part) => part.text)
         .join('\n')
     }, [message.parts])
+
+    const getFullTextContent = useCallback(() => fullTextContent, [fullTextContent])
 
     const renderEditor = (key: string) => {
       const editor = (
@@ -617,6 +620,7 @@ export const MessageItem = memo(
         {message.role === 'user' && !hideActions && !isEditing && (
           <div className="flex items-center justify-end gap-1 text-muted-foreground text-xs mt-4">
             <CopyButton text={getFullTextContent()} />
+            <RememberMemory text={getFullTextContent()} messageId={message.id} />
 
             {onEdit && status !== CHAT_STATUS.STREAMING && (
               <Button
@@ -663,6 +667,7 @@ export const MessageItem = memo(
               )}
             >
               <CopyButton text={getFullTextContent()} />
+              <RememberMemory text={getFullTextContent()} messageId={message.id} />
 
               {onEdit && !isStreaming && (
                 <Button

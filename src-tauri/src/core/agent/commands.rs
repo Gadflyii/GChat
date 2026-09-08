@@ -666,7 +666,7 @@ pub async fn agent_run_turn<R: Runtime>(
                         }
                     }
                 }
-                let record = AgentRunRecord::completed(
+                let mut record = AgentRunRecord::completed(
                     &storage_id,
                     &request.run_id,
                     &request.session_id,
@@ -677,6 +677,11 @@ pub async fn agent_run_turn<R: Runtime>(
                     &run_result,
                 );
                 let record_data = data_folder.clone();
+                record.workspace = Some(working_dir.to_string_lossy().into_owned());
+                let output_workspace = data_folder.join("agent-runs").join(&storage_id);
+                if output_workspace.is_dir() {
+                    record.output_workspace = Some(output_workspace.to_string_lossy().into_owned());
+                }
                 if let Err(error) =
                     tokio::task::spawn_blocking(move || record_run(&record_data, record))
                         .await

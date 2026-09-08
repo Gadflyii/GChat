@@ -148,6 +148,8 @@ export type AgentTemplate = {
 }
 
 export type AgentRunRecord = {
+  workspace?: string | null
+  outputWorkspace?: string | null
   roleAssignments?: Record<string, AgentRoleAssignment>
   schemaVersion: 3
   id: string

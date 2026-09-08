@@ -52,6 +52,8 @@ const logger = {
 }
 
 export interface GinferModelConfig {
+  identity?: { model_id: string; weights_id: string }
+  capabilities?: string[]
   model_path: string
   name: string // user-friendly
   size_bytes: number
@@ -189,7 +191,7 @@ export default class ginfer_extension extends AIEngine {
       modelConfig.model_path,
     ])
 
-    const profile = ginferModelProfile(modelId, modelConfig.name)
+    const profile = ginferModelProfile(modelConfig.identity?.model_id ?? modelId, modelConfig.name)
     return {
       id: modelId,
       name: modelConfig.name ?? modelId,
@@ -244,14 +246,14 @@ export default class ginfer_extension extends AIEngine {
         gchatDataFolderPath,
         modelConfig.model_path,
       ])
-      const profile = ginferModelProfile(modelId, modelConfig.name)
+      const profile = ginferModelProfile(modelConfig.identity?.model_id ?? modelId, modelConfig.name)
       modelInfos.push({
         id: modelId,
         name: modelConfig.name ?? modelId,
         providerId: this.provider,
         port: 0,
         sizeBytes: modelConfig.size_bytes ?? 0,
-        capabilities: modelCapabilities(modelId, modelConfig.name),
+        capabilities: modelConfig.capabilities ?? modelCapabilities(modelId, modelConfig.name),
         embedding: !!modelConfig.embedding,
         source: modelConfig.source,
         path: resolvedPath,
@@ -390,7 +392,7 @@ export default class ginfer_extension extends AIEngine {
 
   async getMaxCtxTrain(modelId: string): Promise<number | undefined> {
     const model = await this.get(modelId)
-    return ginferModelProfile(modelId, model?.name)?.nativeContextTokens
+    return model?.nativeContextTokens ?? ginferModelProfile(modelId, model?.name)?.nativeContextTokens
   }
 
   async getLoadedContext(modelId: string): Promise<number | undefined> {

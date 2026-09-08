@@ -36,27 +36,26 @@ export function AgentStudioHeader({
 }: AgentStudioHeaderProps) {
   return (
     <HeaderPage>
-      <div className="flex w-full items-center justify-between gap-3">
+      <div className="flex w-full flex-wrap items-center justify-between gap-3 pr-3">
         <div>
-          <div className="font-studio text-base font-semibold">
-            Agent Studio
-          </div>
+          <div className="font-studio text-base font-medium">Agent Studio</div>
           <div className="text-xs text-muted-foreground">
             Build agents, evaluative loops, coordinated teams, workflows, and
             reusable skills.
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-3">
           {actions && <div className="flex items-center gap-2">{actions}</div>}
           <nav
             aria-label="Agent Studio sections"
-            className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1"
+            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border bg-muted/30 p-1"
           >
             {sections.map(({ id, label, icon: Icon }) => (
               <Button
                 key={id}
                 variant={active === id ? 'secondary' : 'ghost'}
                 size="sm"
+                className="shrink-0"
                 onClick={() => onSelect(id)}
               >
                 <Icon className="size-4" />

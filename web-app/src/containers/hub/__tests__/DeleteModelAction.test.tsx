@@ -106,18 +106,18 @@ describe('DeleteModelAction', () => {
     expect(toastSuccess).toHaveBeenCalled()
   })
 
-  it('unloads a running model before removing its files', async () => {
+  it('preserves a running model when the backend refuses removal', async () => {
     useAppState.setState({ activeModels: ['Qwen3-4B-Q4_K_M'] })
+    deleteModel.mockRejectedValue(new Error('Stop this model before deleting its files.'))
     render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
 
     const { user, confirm } = await openConfirm()
     await user.click(confirm)
 
-    await waitFor(() =>
-      expect(stopModel).toHaveBeenCalledWith('Qwen3-4B-Q4_K_M', 'llamacpp')
-    )
-    expect(deleteModel).toHaveBeenCalled()
-    await waitFor(() => expect(useAppState.getState().activeModels).toEqual([]))
+    await waitFor(() => expect(toastError).toHaveBeenCalled())
+    expect(stopModel).not.toHaveBeenCalled()
+    expect(useAppState.getState().activeModels).toEqual(['Qwen3-4B-Q4_K_M'])
+    expect(useModelProvider.getState().providers[0].models.map(m => m.id)).toEqual(['Qwen3-4B-Q4_K_M'])
   })
 
   it('keeps the model listed and reports the failure when the engine refuses', async () => {

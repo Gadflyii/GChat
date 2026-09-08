@@ -31,6 +31,12 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-status-running: var(--status-running);
+  --color-status-done: var(--status-done);
+  --color-status-failed: var(--status-failed);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-queued: var(--status-queued);
+  --color-status-paused: var(--status-paused);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -48,6 +54,9 @@
   --font-studio: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
 
   /* Font scale based on --font-size-base */
   --text-xs: calc(var(--font-size-base) * 0.75); /* ~12px */
@@ -68,6 +77,12 @@
 
 :root {
   --app-primary: #0b6b6b;
+  --status-running: #0b6b6b;
+  --status-done: #176c4b;
+  --status-failed: #a8392a;
+  --status-blocked: #716d00;
+  --status-queued: #686529;
+  --status-paused: #855315;
   --brand-ink: #0a0c0f;
   --brand-body: #23272e;
   --brand-muted: #5a6068;
@@ -114,6 +129,12 @@
 
 .dark {
   --app-primary: #3dd3c8;
+  --status-running: #3dd3c8;
+  --status-done: #4fb98f;
+  --status-failed: #e0685c;
+  --status-blocked: #e5e042;
+  --status-queued: #c8c76b;
+  --status-paused: #d99b4e;
   --background: #08090b;
   --foreground: #f3f5f7;
   --card: #111316;

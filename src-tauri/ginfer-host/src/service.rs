@@ -25,6 +25,8 @@ pub struct Gpu {
     pub uuid: String,
     pub name: String,
     pub memory_mib: u64,
+    #[serde(default)]
+    pub compute_capability: Option<String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ModelEntry {
@@ -65,6 +67,7 @@ pub struct Pairing {
     attempts: u32,
 }
 pub struct Host {
+    pub downloads: Arc<crate::model_downloads::ModelDownloads>,
     pub data: Mutex<Persistent>,
     pub processes: Mutex<HostProcesses>,
     pub inventory: RwLock<Vec<ModelEntry>>,
@@ -168,7 +171,12 @@ impl Host {
             gpus.iter().map(|g| g.uuid.clone()).collect(),
             Duration::from_secs(600),
         )?;
+        let downloads = crate::model_downloads::ModelDownloads::open(
+            directory.join("managed-models"),
+            directory.join("model-downloads.json"),
+        )?;
         let host = Arc::new(Self {
+            downloads,
             data: Mutex::new(data),
             processes: Mutex::new(processes),
             inventory: RwLock::new(vec![]),
@@ -203,7 +211,8 @@ impl Host {
         code
     }
     pub async fn scan(&self) -> Result<(), String> {
-        let roots = self.model_dirs.clone();
+        let mut roots = self.model_dirs.clone();
+        roots.push(self.downloads.root().to_path_buf());
         let sets = self.artifact_sets.clone();
         let (entries, errors) = tokio::task::spawn_blocking(move || {
             let mut pending: Vec<_> = roots.into_iter().map(|p| (p, false)).chain(sets.into_iter().map(|p|(p,true))).collect();
@@ -305,7 +314,9 @@ impl Host {
         serde_json::json!({"protocol_version":1,"host_id":data.host_id,"boot_id":self.boot_id,
             "display_name":data.name,"revision":self.revision.load(Ordering::SeqCst),
             "instances":instances,"gpus":self.gpus,"models":*self.inventory.read().await,
-            "inventory_errors":*self.inventory_errors.read().await})
+            "inventory_errors":*self.inventory_errors.read().await,
+            "model_management":{"version":1,"downloads":self.downloads.list().await,
+                "managed_root":self.downloads.root(),"engine_presets_available":false}})
     }
     pub async fn authenticated(&self, request: &Request<Body>) -> bool {
         let Some(token) = request
@@ -706,6 +717,71 @@ impl Host {
             }
         }
         match (req.method().as_str(), path.as_str()) {
+            ("POST", "/host/v1/remove-model") => {
+                let body = body_json(req).await?;
+                let id = body["model_id"]
+                    .as_str()
+                    .ok_or("model id required")?
+                    .parse::<Uuid>()
+                    .map_err(|e| e.to_string())?;
+                let _lifecycle = self.lifecycle.lock().await;
+                let model = self
+                    .inventory
+                    .read()
+                    .await
+                    .iter()
+                    .find(|m| m.id == id)
+                    .cloned()
+                    .ok_or("unknown model")?;
+                let processes = self.processes.lock().await;
+                if processes.instances().any(|i| {
+                    i.launch.artifact == model.path
+                        && !matches!(
+                            i.status,
+                            crate::engine_registry::InstanceStatus::Stopped
+                                | crate::engine_registry::InstanceStatus::Failed
+                        )
+                }) {
+                    return Err("stop every instance using this package before removing it".into());
+                }
+                drop(processes);
+                self.downloads.remove_installed(&model.path).await?;
+                self.data
+                    .lock()
+                    .await
+                    .profiles
+                    .retain(|_, p| p.model_id != id);
+                self.scan().await?;
+                Ok(json(StatusCode::OK, self.snapshot().await))
+            }
+            ("POST", "/host/v1/downloads") => {
+                let release: crate::model_downloads::Release =
+                    serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+                release.validate()?;
+                if release.compatible_group(&self.gpus).is_none() {
+                    return Err("release has no qualified homogeneous GPU group on this host; compute capability and per-GPU memory must match".into());
+                }
+                Ok(json(
+                    StatusCode::OK,
+                    serde_json::to_value(self.downloads.enqueue(release).await?)
+                        .map_err(|e| e.to_string())?,
+                ))
+            }
+            ("POST", "/host/v1/download-actions") => {
+                let body = body_json(req).await?;
+                let id = body["id"]
+                    .as_str()
+                    .ok_or("download id required")?
+                    .parse::<Uuid>()
+                    .map_err(|e| e.to_string())?;
+                self.downloads
+                    .action(
+                        id,
+                        body["action"].as_str().ok_or("download action required")?,
+                    )
+                    .await?;
+                Ok(json(StatusCode::OK, serde_json::json!({"ok":true})))
+            }
             ("GET", "/host/v1/snapshot") => Ok(json(StatusCode::OK, self.snapshot().await)),
             ("POST", "/host/v1/scan") => {
                 self.scan().await?;
@@ -793,6 +869,7 @@ mod lifecycle_tests {
             uuid: "GPU-test".into(),
             name: "Test".into(),
             memory_mib: 32768,
+            compute_capability: Some("12.0".into()),
         }];
         let host = Host::open(
             dir.path().join("state"),

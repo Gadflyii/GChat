@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { memoryCommand, type SavedMemory } from '@/lib/memory'
+import { WorkspacePicker } from './WorkspacePicker'
 
 type Draft = Pick<
   SavedMemory,
@@ -21,6 +22,7 @@ export function MemoryLibrary() {
   const [entries, setEntries] = useState<SavedMemory[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
   const [query, setQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(50)
   const [scope, setScope] = useState('all')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -55,7 +57,7 @@ export function MemoryLibrary() {
     <div className="mx-auto w-full max-w-5xl space-y-5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Memory</h1>
+          <h1 className="text-xl font-medium">Memory</h1>
           <p className="text-sm text-muted-foreground">
             Facts and decisions you choose to keep across conversations.
           </p>
@@ -95,7 +97,10 @@ export function MemoryLibrary() {
           aria-label="Search memories"
           placeholder="Search memories…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setVisibleCount(50)
+          }}
         />
         <select
           aria-label="Memory scope"
@@ -143,16 +148,11 @@ export function MemoryLibrary() {
               onChange={(e) => setDraft({ ...draft, content: e.target.value })}
             />
           </label>
-          <label className="block text-sm">
-            Workspace path (blank for personal)
-            <Input
-              value={draft.workspace ?? ''}
-              placeholder="Exact local workspace directory"
-              onChange={(e) =>
-                setDraft({ ...draft, workspace: e.target.value || null })
-              }
-            />
-          </label>
+          <WorkspacePicker
+            personalWhenEmpty
+            value={draft.workspace ?? ''}
+            onChange={(path) => setDraft({ ...draft, workspace: path || null })}
+          />
           <div className="flex gap-5 text-sm">
             <label>
               <input
@@ -202,7 +202,7 @@ export function MemoryLibrary() {
         </p>
       )}
       <div className="space-y-3">
-        {filtered.map((m) => (
+        {filtered.slice(0, visibleCount).map((m) => (
           <article key={m.id} className="rounded-lg border bg-card p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -234,8 +234,8 @@ export function MemoryLibrary() {
               {m.content}
             </p>
             <p className="mt-3 text-xs text-muted-foreground">
-              {m.source} · Updated {new Date(m.updatedAt).toLocaleString()} ·
-              Revision {m.revision}
+              {m.origin ?? m.source} · Updated{' '}
+              {new Date(m.updatedAt).toLocaleString()} · Revision {m.revision}
             </p>
             {deleting === m.id && (
               <div className="mt-3 flex items-center gap-3 text-sm">
@@ -265,6 +265,14 @@ export function MemoryLibrary() {
           </article>
         ))}
       </div>
+      {filtered.length > visibleCount && (
+        <Button
+          variant="outline"
+          onClick={() => setVisibleCount((n) => n + 50)}
+        >
+          Show more memories ({filtered.length - visibleCount} remaining)
+        </Button>
+      )}
       <details className="rounded-lg border p-4">
         <summary className="cursor-pointer font-medium">
           Workspace instructions · AGENTS.md

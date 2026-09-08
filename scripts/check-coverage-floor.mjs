@@ -30,7 +30,6 @@ const targetPaths = [
   'web-app/src/utils/getModelToStart.ts',
   'web-app/src/hooks/useModelProvider.ts',
   'web-app/src/services/staff-picks-registry.ts',
-  'web-app/src/lib/hub-filters.ts',
   'extensions/ginfer-extension/src/index.ts',
 ]
 const metricNames = ['statements', 'branches', 'functions', 'lines']

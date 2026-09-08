@@ -65,8 +65,6 @@ def main():
         parser.error('host and engine must be executable files')
     models = [p.resolve(strict=True) for p in args.models]
     artifact_sets = [p.resolve(strict=True) for p in args.artifact_set]
-    if not models and not artifact_sets:
-        parser.error('supply model directories or explicit artifact-set descriptors')
     if not all(p.is_file() for p in artifact_sets):
         parser.error('artifact sets must be existing files')
     if not all(p.is_dir() for p in models):

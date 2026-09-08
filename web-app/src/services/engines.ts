@@ -25,9 +25,10 @@ export type EngineLaunchProfile = EngineLaunchOptions & {
 }
 export type EngineSnapshot = {
   host_id: string; display_name: string; revision: number;
-  gpus: { uuid: string; name: string; memory_mib: number }[];
+  gpus: import('@/lib/model-release').ModelGpu[];
   models: EngineModel[]; instances: EngineInstance[]
   inventory_errors?: { path: string; error: string }[]
+  model_management?: { version: number; managed_root: string; engine_presets_available: boolean; downloads: import('@/lib/model-release').ModelDownload[] }
 }
 export const engineCommand = <T>(action: string, args: Record<string, unknown> = {}) =>
   invoke<T>('engine_hosts_command', { action, args })

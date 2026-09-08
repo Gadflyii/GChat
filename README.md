@@ -55,7 +55,7 @@ progress.
 | **Agents** | Bounded autonomous loop, skills, local workspace, approvals, attachments, tools, cancellation |
 | **Coding** | External coding-agent configuration and `gchat-cli` today; embedded OpenCode terminal in development |
 | **Local API** | OpenAI-compatible facade at `http://127.0.0.1:1337/v1` |
-| **Models** | Curated version-3 `.ginfer` packages with install and local lifecycle management |
+| **Models** | Hardware-aware `.ginfer` recommendations, local/LAN inventory, destination-owned verified downloads and model lifecycle controls |
 | **Release targets** | Windows 10/11 x64 and Linux x86-64; unsigned matched Windows installers build locally |
 | **Hardware** | NVIDIA CUDA, with GInfer packages admitted by model, storage profile, SM image, and topology |
 | **Data** | Conversations, settings, model state, and workspaces remain local by default |

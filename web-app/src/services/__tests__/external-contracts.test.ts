@@ -166,24 +166,6 @@ describe('pinned external registry contracts', () => {
       ])
     }
 
-    const setupScreen = readFileSync(
-      resolve(repositoryRoot, 'web-app', 'src', 'containers', 'SetupScreen.tsx'),
-      'utf8'
-    )
-    expect(setupScreen).toContain('useResolvedRecommendedModels')
-    expect(setupScreen).not.toMatch(/staff-?picks/i)
-
-    const recommendedLoader = readFileSync(
-      resolve(
-        repositoryRoot,
-        'web-app',
-        'src',
-        'services',
-        'recommended-models-registry.ts'
-      ),
-      'utf8'
-    )
-    expect(recommendedLoader).not.toMatch(/staff-?picks/i)
   })
 
   it('pins every fixture source to an immutable revision', () => {

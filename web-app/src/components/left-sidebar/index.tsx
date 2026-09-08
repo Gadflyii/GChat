@@ -97,22 +97,17 @@ export function LeftSidebar() {
           </div>
           <div
             className={cn(
-              'mt-1 flex h-16 w-full items-center justify-start overflow-hidden pl-2',
+              'mt-1 flex min-h-16 w-full items-center justify-start gap-3 px-2 py-2',
               IS_MACOS && 'mt-3'
             )}
           >
             <img
-              src="/images/gchat-lockup.png"
-              alt="GChat by Sectile Research Laboratories"
-              className="h-15 max-w-none shrink-0 object-contain dark:hidden"
+              src="/images/logo-app.png"
+              alt=""
+              className="size-10 shrink-0"
               draggable={false}
             />
-            <img
-              src="/images/gchat-lockup-reversed.png"
-              alt="GChat by Sectile Research Laboratories"
-              className="hidden h-15 max-w-none shrink-0 object-contain dark:block"
-              draggable={false}
-            />
+            <div className="min-w-0"><div className="text-xl font-medium tracking-tight">GChat</div><div className="text-xs leading-snug text-muted-foreground">by Sectile Research Laboratories</div></div>
           </div>
           <div className="mt-[6px] px-1">
             <ChatAgentModeSwitch

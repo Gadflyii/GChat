@@ -8,7 +8,6 @@
  * "the model won't delete" with nothing to explain why.
  */
 
-import { useAppState } from '@/hooks/useAppState'
 import { useFavoriteModel } from '@/hooks/useFavoriteModel'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import type { ServiceHub } from '@/services'
@@ -23,20 +22,6 @@ export async function deleteLocalModel(
   modelId: string,
   provider: string
 ): Promise<void> {
-  // A loaded model holds its weights open and keeps showing up as active in
-  // the model picker, so unload it before the files go away. A failure here is
-  // not fatal to the delete itself.
-  const { activeModels, setActiveModels } = useAppState.getState()
-  if (activeModels.includes(modelId)) {
-    await serviceHub
-      .models()
-      .stopModel(modelId, provider)
-      .catch((error) => {
-        console.error('[deleteLocalModel] stopModel failed:', error)
-      })
-    setActiveModels(activeModels.filter((id) => id !== modelId))
-  }
-
   await serviceHub.models().deleteModel(modelId, provider)
 
   useFavoriteModel.getState().removeFavorite(modelId)

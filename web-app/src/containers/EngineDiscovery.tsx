@@ -3,6 +3,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import { toast } from 'sonner'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useEngineDiscovery } from '@/stores/engine-discovery-store'
+import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
 
 /** Passive intake; discovery never pairs a host or starts inference. */
 export function EngineDiscovery() {
@@ -16,7 +17,7 @@ export function EngineDiscovery() {
     const update = async () => {
       if (stopped) return
       try {
-        await useEngineHosts.getState().refresh()
+        await Promise.all([useEngineHosts.getState().refresh(), useLocalModelDownloads.getState().refresh().catch(() => undefined)])
         const { hosts, nearby } = useEngineHosts.getState()
         const preferences = useEngineDiscovery.getState()
         if (stopped || !preferences.enabled) return

@@ -1,27 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { studioCommand, type StudioCatalog } from '@/services/agent/studio'
+import { studioCommand } from '@/services/agent/studio'
 import type { AgentWorkerPool } from '@/types/agent'
 
 export function AgentWorkerPools() {
-  const [catalog, setCatalog] = useState<StudioCatalog>({
-    pools: [],
-    instances: [],
-    usage: {},
-  })
+  const { catalog, error, refresh } = useStudioCatalog()
   const [draft, setDraft] = useState<AgentWorkerPool | null>(null)
   const [busy, setBusy] = useState(false)
-  const refresh = () =>
-    studioCommand<StudioCatalog>('capacity')
-      .then(setCatalog)
-      .catch((e) => toast.error(String(e)))
-  useEffect(() => {
-    void refresh()
-    const timer = setInterval(() => void refresh(), 5000)
-    return () => clearInterval(timer)
-  }, [])
   const save = async () => {
     if (!draft) return
     setBusy(true)
@@ -43,6 +31,14 @@ export function AgentWorkerPools() {
   ]
   return (
     <div className="overflow-auto p-6 space-y-6">
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          Capacity refresh failed; showing last-known data.{' '}
+          <Button variant="outline" onClick={() => void refresh()}>
+            Retry
+          </Button>
+        </p>
+      )}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="font-studio text-lg font-semibold">Worker Pools</h2>

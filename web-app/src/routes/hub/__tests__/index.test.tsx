@@ -1,345 +1,75 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CatalogModel } from '@/services/models/types'
-import type { ResolvedStaffPick } from '@/hooks/useStaffPicks'
-
+import { ModelManagement } from '@/containers/ModelManagement'
+import type { ModelRelease } from '@/lib/model-release'
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  search: {} as Record<string, unknown>,
-  staffPicks: [] as ResolvedStaffPick[],
-  sources: [] as CatalogModel[],
-  search_: vi.fn(() => [] as CatalogModel[]),
-  fetchHuggingFaceRepo: vi.fn(async () => null),
-  searchHuggingFaceCandidates: vi.fn(async () => [] as CatalogModel[]),
+  command: vi.fn(async () => []), refresh: vi.fn(async () => {}),
+  switchModel: vi.fn(async () => {}),
+  providers: [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally' }] }],
+  catalog: [] as unknown[], errors: {} as Record<string, string>,
 }))
-
-vi.mock('@tanstack/react-router', () => ({
-  createFileRoute:
-    () =>
-    (options: Record<string, unknown>) => ({
-      ...options,
-      useSearch: () => mocks.search,
-    }),
-  useNavigate: () => mocks.navigate,
-}))
-
-// jsdom reports every element as 0x0, so the real virtualizer would render an
-// empty window. Render the whole list instead and let the assertions be about
-// Hub behaviour rather than layout measurement.
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getTotalSize: () => count * 72,
-    getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({
-        key: index,
-        index,
-        start: index * 72,
-        size: 72,
-      })),
-    measureElement: () => undefined,
-  }),
-}))
-
-vi.mock('@/i18n/react-i18next-compat', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}))
-
-vi.mock('@/containers/HeaderPage', () => ({
-  default: ({ children }: { children?: React.ReactNode }) => (
-    <header>{children}</header>
-  ),
-}))
-
-vi.mock('@/containers/hub/ModelDetailPanel', () => ({
-  ModelDetailPanel: ({ model }: { model: CatalogModel | null }) => (
-    <aside data-testid="detail-panel">
-      {model ? model.model_name : 'hub:selectModel'}
-    </aside>
-  ),
-}))
-
-vi.mock('@/containers/hub/HubFilters', () => ({
-  HubFilters: () => <div data-testid="hub-filters" />,
-}))
-
-vi.mock('@/hooks/useStaffPicks', () => ({
-  useStaffPicks: (_sources: CatalogModel[]) => mocks.staffPicks,
-}))
-
-vi.mock('@/hooks/useModelSources', () => ({
-  useModelSources: (
-    selector: (state: {
-      sources: CatalogModel[]
-      fetchSources: () => void
-      loading: boolean
-    }) => unknown
-  ) =>
-    selector({
-      sources: mocks.sources,
-      fetchSources: vi.fn(),
-      loading: false,
-    }),
-}))
-
+vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: React.ReactNode }) => <header>{children}</header> }))
+vi.mock('@/containers/EngineHostModels', () => ({ HostCard: ({ host }: { host: { name: string } }) => <section>Installed on {host.name}</section> }))
+vi.mock('@/containers/hub/DeleteModelAction', () => ({ DeleteModelAction: () => null }))
+vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
+vi.mock('@/services/engines', () => ({ engineCommand: mocks.command }))
+vi.mock('@/hooks/useServiceHub', () => ({ useServiceHub: () => ({ models: () => ({ getActiveModels: async () => ['another-model'] }) }) }))
 vi.mock('@/hooks/useModelProvider', () => {
-  const state = { providers: [], setProviders: vi.fn() }
-  const useModelProvider = (selector: (s: typeof state) => unknown) =>
-    selector(state)
-  useModelProvider.getState = () => state
-  return { useModelProvider }
+  const state = { providers: mocks.providers, selectModelProvider: vi.fn() }
+  const hook = (selector: (s: typeof state) => unknown) => selector(state)
+  hook.getState = () => state
+  return { useModelProvider: hook }
 })
-
-vi.mock('@/hooks/useGeneralSetting', () => {
-  const state = { huggingfaceToken: '', scanLocalModels: false }
-  const useGeneralSetting = (selector: (s: typeof state) => unknown) =>
-    selector(state)
-  useGeneralSetting.getState = () => state
-  return { useGeneralSetting }
-})
-
-vi.mock('@/hooks/useHardware', () => ({
-  useHardware: (
-    selector: (s: {
-      hardwareData: { total_memory: number; gpus: unknown[] }
-    }) => unknown
-  ) => selector({ hardwareData: { total_memory: 64 * 1024, gpus: [] } }),
-}))
-
-vi.mock('@/hooks/useServiceHub', () => ({
-  useServiceHub: () => ({
-    models: () => ({
-      fetchHuggingFaceRepo: mocks.fetchHuggingFaceRepo,
-      searchHuggingFaceCandidates: mocks.searchHuggingFaceCandidates,
-      convertHfRepoToCatalogModel: (repo: CatalogModel) => repo,
-    }),
-    providers: () => ({ getProviders: async () => [] }),
-  }),
-}))
-
-vi.mock('@/services/model-search', () => ({
-  getModelSearchService: () => ({
-    setCatalog: vi.fn(),
-    loadSnapshot: () => true,
-    rebuild: vi.fn(),
-    search: mocks.search_,
-  }),
-}))
-
-vi.mock('@/stores/model-catalog-store', () => ({
-  useModelCatalogStore: (selector: (s: unknown) => unknown) =>
-    selector({ catalog: [], index: null }),
-}))
-
-import { Route } from '../index'
-import { setHubSearchQuery } from '../hub-session'
-
-const model = (name: string, extra: Partial<CatalogModel> = {}): CatalogModel =>
-  ({
-    model_name: name,
-    developer: name.split('/')[0],
-    downloads: 100,
-    num_quants: 1,
-    quants: [
-      { model_id: `${name}-Q4_K_M`, path: 'q4.gguf', file_size: '2.00 GB' },
-    ],
-    ...extra,
-  }) as CatalogModel
-
-// The closed ginfer model set (mirrors BASELINE_MODEL_CATALOG): with an empty
-// query the Hub lists exactly these entries.
-const ginferCatalog: CatalogModel[] = [
-  model('GadflyII/Qwen3.8-27B-NInfer', {
-    library_name: 'ginfer',
-    name: 'Qwen3.8 27B (int autoround)',
-  }),
-  model('GadflyII/Qwen3.8-27B-nvfp4-NInfer', {
-    library_name: 'ginfer',
-    name: 'Qwen3.8 27B (NVFP4)',
-  }),
-  model('GadflyII/Muse-Glimmer-30B-NInfer', {
-    library_name: 'ginfer',
-    name: 'Muse Glimmer 30B (int autoround)',
-  }),
-  model('GadflyII/Muse-Glimmer-30B-nvfp4-NInfer', {
-    library_name: 'ginfer',
-    name: 'Muse Glimmer 30B (NVFP4)',
-  }),
-]
-
-const HubPage = () => {
-  const Component = (Route as unknown as { component: React.ComponentType })
-    .component
-  return <Component />
-}
-
-describe('/hub route', () => {
+vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => unknown) => selector({
+  hardwareReady: true, hardwareData: { gpus: [{ uuid: 'local-gpu', name: 'Local GPU', total_memory: 16384, nvidia_info: { compute_capability: '8.6' } }] },
+}) }))
+vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog }) }))
+vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: unknown) => unknown) => selector({
+  hosts: [{ host_id: 'remote', name: 'Lab server' }], errors: mocks.errors, refresh: mocks.refresh,
+  snapshots: { remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: [] } } },
+}) }))
+const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: 'muse', weights_id: 'nvfp4' },
+  url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64), bytes: 4096,
+  tp: 1, qualified_sm: ['12.0'], min_vram_mib_per_gpu: 32768, capabilities: ['tools'] }
+describe('host-scoped Models', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    localStorage.clear()
-    setHubSearchQuery('')
-    mocks.search = {}
-    mocks.sources = ginferCatalog
-    mocks.staffPicks = [
-      {
-        pick: { model_name: 'Qwen/Qwen3.5-4B-GGUF', title: 'Qwen3.5 4B' },
-        model: model('Qwen/Qwen3.5-4B-GGUF'),
-      },
-      {
-        pick: { model_name: 'google/gemma-4-12b-GGUF', title: 'Gemma 4 12B' },
-        model: model('google/gemma-4-12b-GGUF'),
-      },
-    ]
-    mocks.search_.mockReturnValue([])
+    vi.clearAllMocks(); mocks.errors = {}
+    mocks.command.mockResolvedValue([])
+    mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [release] }]
   })
-
-  it('opens on the ginfer catalog with an empty query', () => {
-    render(<HubPage />)
-
-    // Staff picks no longer populate the default view; the closed ginfer
-    // set does.
-    expect(screen.queryByText('Qwen3.5 4B')).not.toBeInTheDocument()
-    expect(screen.getByText('Qwen3.8 27B (int autoround)')).toBeInTheDocument()
-    expect(screen.getByText('Qwen3.8 27B (NVFP4)')).toBeInTheDocument()
-    expect(screen.getByText('Muse Glimmer 30B (int autoround)')).toBeInTheDocument()
-    expect(screen.getByText('Muse Glimmer 30B (NVFP4)')).toBeInTheDocument()
+  it('uses local inventory and never offers the remote GPU package locally', async () => {
+    render(<ModelManagement />)
+    expect(screen.getByText('Installed locally')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByText('No published recommendation for this hardware yet')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Download to/ })).not.toBeInTheDocument()
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
   })
-
-  it('switches to search results once the user types', async () => {
-    const user = userEvent.setup()
-    mocks.sources = [model('unsloth/Llama-4-8B-GGUF')]
-    mocks.search_.mockReturnValue([model('unsloth/Llama-4-8B-GGUF')])
-    render(<HubPage />)
-
-    await user.type(
-      screen.getByRole('textbox', { name: 'hub:searchPlaceholder' }),
-      'llama'
-    )
-
-    await waitFor(() =>
-      expect(screen.getByText('Llama-4-8B-GGUF')).toBeInTheDocument()
-    )
-    expect(screen.queryByText('hub:searchResults')).not.toBeInTheDocument()
-    expect(mocks.search_).toHaveBeenCalledWith('llama', { limit: 500 })
-    expect(screen.queryByText('Qwen3.5 4B')).not.toBeInTheDocument()
+  it('downloads to the selected host without invoking a local transfer', async () => {
+    render(<ModelManagement />)
+    fireEvent.change(screen.getByLabelText('Model destination'), { target: { value: 'remote' } })
+    expect(screen.getByText('Installed on Lab server')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download to Lab server' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('download', { host_id: 'remote', body: release }))
+    expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download')).toBe(false)
+    expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveAttribute('aria-selected', 'true')
   })
-
-  it('keeps the device fit filter active while searching', async () => {
-    const user = userEvent.setup()
-    const small = model('test/small-GGUF')
-    const huge = model('test/huge-GGUF', {
-      quants: [
-        {
-          model_id: 'huge-Q4_K_M.gguf',
-          path: 'huge-Q4_K_M.gguf',
-          file_size: '80.00 GB',
-        },
-      ],
-    })
-    mocks.sources = [small, huge]
-    mocks.search_.mockReturnValue([small, huge])
-    render(<HubPage />)
-
-    await user.type(
-      screen.getByRole('textbox', { name: 'hub:searchPlaceholder' }),
-      'test'
-    )
-
-    await waitFor(() =>
-      expect(screen.getByText('small-GGUF')).toBeInTheDocument()
-    )
-    expect(screen.queryByText('huge-GGUF')).not.toBeInTheDocument()
+  it('disables mutations against an offline host even with saved inventory', () => {
+    mocks.errors = { remote: 'Connection lost' }
+    render(<ModelManagement />)
+    fireEvent.change(screen.getByLabelText('Model destination'), { target: { value: 'remote' } })
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Connection lost')
   })
-
-  it('returns to the ginfer catalog when the query is cleared', async () => {
-    const user = userEvent.setup()
-    render(<HubPage />)
-    const input = screen.getByRole('textbox', { name: 'hub:searchPlaceholder' })
-
-    await user.type(input, 'llama')
-    await waitFor(() =>
-      expect(
-        screen.queryByText('Qwen3.8 27B (int autoround)')
-      ).not.toBeInTheDocument()
-    )
-
-    await user.clear(input)
-
-    await waitFor(() =>
-      expect(
-        screen.getByText('Qwen3.8 27B (int autoround)')
-      ).toBeInTheDocument()
-    )
-  })
-
-  it('writes the picked repo into the URL', async () => {
-    const user = userEvent.setup()
-    render(<HubPage />)
-
-    await user.click(screen.getByText('Qwen3.8 27B (int autoround)'))
-
-    expect(mocks.navigate).toHaveBeenCalledWith(
-      expect.objectContaining({ to: '/hub/', replace: false })
-    )
-    const call = mocks.navigate.mock.calls.at(-1)?.[0] as {
-      search: (prev: Record<string, unknown>) => Record<string, unknown>
-    }
-    expect(call.search({})).toEqual({ model: 'GadflyII/Qwen3.8-27B-NInfer' })
-  })
-
-  it('opens the detail panel straight away for a deep link', () => {
-    mocks.search = { model: 'GadflyII/Muse-Glimmer-30B-nvfp4-NInfer' }
-    render(<HubPage />)
-
-    expect(screen.getByTestId('detail-panel')).toHaveTextContent(
-      'GadflyII/Muse-Glimmer-30B-nvfp4-NInfer'
-    )
-    // A deep link must survive the auto-selection below.
-    expect(mocks.navigate).not.toHaveBeenCalledWith(
-      expect.objectContaining({ replace: true })
-    )
-  })
-
-  it('selects the first row on arrival so the panel is never blank', async () => {
-    render(<HubPage />)
-
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalled())
-    const call = mocks.navigate.mock.calls[0][0] as {
-      replace: boolean
-      search: (prev: Record<string, unknown>) => Record<string, unknown>
-    }
-    // Replaces rather than pushes: arriving at the Hub should not leave a
-    // history entry the Back button has to chew through.
-    expect(call.replace).toBe(true)
-    expect(call.search({})).toEqual({ model: 'GadflyII/Qwen3.8-27B-NInfer' })
-  })
-
-  it('does not auto-select while the list is still empty', () => {
-    // With an empty catalog the list is empty, so nothing is auto-selected.
-    mocks.sources = []
-    render(<HubPage />)
-
-    expect(screen.getByTestId('detail-panel')).toHaveTextContent(
-      'hub:selectModel'
-    )
-    expect(mocks.navigate).not.toHaveBeenCalled()
-  })
-
-  it('resolves a deep link the catalog does not carry from Hugging Face', async () => {
-    mocks.search = { model: 'tiny-lab/experimental-3b' }
-    mocks.fetchHuggingFaceRepo.mockResolvedValue(
-      model('tiny-lab/experimental-3b') as never
-    )
-    render(<HubPage />)
-
-    await waitFor(() =>
-      expect(screen.getByTestId('detail-panel')).toHaveTextContent(
-        'tiny-lab/experimental-3b'
-      )
-    )
-    expect(mocks.fetchHuggingFaceRepo).toHaveBeenCalledWith(
-      'tiny-lab/experimental-3b',
-      ''
-    )
+  it('does not switch away from another local model without confirmation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled())
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
+    vi.restoreAllMocks()
   })
 })

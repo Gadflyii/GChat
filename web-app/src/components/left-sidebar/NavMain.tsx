@@ -33,6 +33,8 @@ import {
 import { useAgentRun } from '@/hooks/useAgentRun'
 import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useHermesAgentStore } from '@/stores/hermes-agent-store'
+import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
+import { useEngineHosts } from '@/stores/engine-hosts-store'
 import {
   cancelAgentTurn,
   resetAgentSession,
@@ -61,6 +63,8 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
   const [creatingConversation, setCreatingConversation] = useState(false)
   const openCodeEnabled = useCodeTerminalStore((state) => state.enabled)
   const hermesEnabled = useHermesAgentStore((state) => state.enabled)
+  const localTransfers = useLocalModelDownloads(s => s.jobs.filter(j => j.status !== 'installed').length)
+  const remoteTransfers = useEngineHosts(s => Object.values(s.snapshots).reduce((n, host) => n + (host.model_management?.downloads.filter(j => j.status !== 'installed').length ?? 0), 0))
 
   const handleNewChat = async () => {
     if (creatingConversation) return
@@ -110,11 +114,9 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
   return (
     <>
       <SidebarMenu className="mt-3 px-2">
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild isActive={pathname.startsWith('/engines')}>
-            <Link to={route.engines.index}><IconServer size={16} /><span>Engines</span></Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        <li role="presentation" className="px-2 pt-3 pb-1 font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Work</li>
+
+
         <SidebarMenuItem>
           <SidebarMenuButton
             className="font-medium"
@@ -181,16 +183,11 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         )}
+
+        <li role="presentation" className="px-2 pt-3 pb-1 font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Resources</li>
         <SidebarMenuItem>
-          <SidebarMenuButton
-            asChild
-            isActive={pathname.startsWith('/benchmark')}
-            className="data-[active=true]:bg-sidebar-foreground/15"
-          >
-            <Link to={route.benchmark.index}>
-              <IconChartHistogram className="size-4 text-foreground/70" />
-              <span>Benchmark</span>
-            </Link>
+          <SidebarMenuButton asChild isActive={pathname.startsWith('/engines')}>
+            <Link to={route.engines.index}><IconServer size={16} /><span>Engines</span></Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>
@@ -217,6 +214,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
                 size={16}
               />
               <span>{t('common:models')}</span>
+              {localTransfers + remoteTransfers > 0 && <span className="ml-auto rounded bg-primary/10 px-1.5 font-mono text-[10px] text-primary" title="Active or incomplete model transfers">{localTransfers + remoteTransfers} transfers</span>}
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -265,6 +263,19 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             </SidebarMenuItem>
           </>
         )}
+        <li role="presentation" className="px-2 pt-3 pb-1 font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Diagnostics</li>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            isActive={pathname.startsWith('/benchmark')}
+            className="data-[active=true]:bg-sidebar-foreground/15"
+          >
+            <Link to={route.benchmark.index}>
+              <IconChartHistogram className="size-4 text-foreground/70" />
+              <span>Benchmark</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
       </SidebarMenu>
       <AddProjectDialog
         open={projectDialogOpen}

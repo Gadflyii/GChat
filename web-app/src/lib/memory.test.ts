@@ -1,12 +1,18 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { invoke, isTauri } from '@tauri-apps/api/core'
-import { chatMemoryContext } from './memory'
+import { chatMemoryContext, supportsGChatMemory } from './memory'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
   isTauri: vi.fn(() => true),
 }))
 beforeEach(() => vi.clearAllMocks())
+
+it('shares memory with local and paired GInfer, not unrelated providers', () => {
+  expect(supportsGChatMemory('ginfer')).toBe(true)
+  expect(supportsGChatMemory('ginfer-lan')).toBe(true)
+  expect(supportsGChatMemory('openai')).toBe(false)
+})
 
 it('recalls personal facts from the latest user turn without assigning a workspace', async () => {
   vi.mocked(invoke).mockResolvedValue({ prompt: 'Saved personal facts' })
