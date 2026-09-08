@@ -12,4 +12,6 @@ permissions = [
     "allow-find-session-by-model",
     "allow-get-loaded-models",
     "allow-get-all-sessions",
+    "allow-run-ginfer-benchmark",
+    "allow-cancel-ginfer-benchmark",
 ]

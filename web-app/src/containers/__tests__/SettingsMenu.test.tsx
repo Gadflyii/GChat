@@ -5,6 +5,12 @@ import SettingsMenu from '../SettingsMenu'
 import { useNavigate, useMatches } from '@tanstack/react-router'
 import { useModelProvider } from '@/hooks/useModelProvider'
 
+const integrationMocks = vi.hoisted(() => ({
+  setOpenCodeEnabled: vi.fn(),
+  setHermesEnabled: vi.fn(),
+  stopTerminal: vi.fn(() => Promise.resolve()),
+}))
+
 // Mock global platform constants - simulate desktop (Tauri) environment
 Object.defineProperty(global, 'IS_IOS', { value: false, writable: true })
 Object.defineProperty(global, 'IS_ANDROID', { value: false, writable: true })
@@ -47,6 +53,20 @@ vi.mock('@/hooks/useModelProvider', () => ({
     ],
     addProvider: vi.fn(),
   })),
+}))
+
+vi.mock('@/stores/code-terminal-store', () => ({
+  useCodeTerminalStore: (selector: (state: unknown) => unknown) =>
+    selector({ enabled: true, setEnabled: integrationMocks.setOpenCodeEnabled }),
+}))
+
+vi.mock('@/stores/hermes-agent-store', () => ({
+  useHermesAgentStore: (selector: (state: unknown) => unknown) =>
+    selector({ enabled: true, setEnabled: integrationMocks.setHermesEnabled }),
+}))
+
+vi.mock('@/services/terminal/tauri', () => ({
+  stopTerminal: integrationMocks.stopTerminal,
 }))
 
 vi.mock('@/containers/dialogs', () => ({
@@ -111,6 +131,29 @@ describe('SettingsMenu', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('common:https_proxy')).toBeInTheDocument()
     expect(screen.getByText('common:mcp-servers')).toBeInTheDocument()
+  })
+
+  it('shows OpenCode and Hermes enabled by default', () => {
+    render(<SettingsMenu />)
+
+    expect(
+      screen.getByRole('switch', { name: 'OpenCode integration' })
+    ).toBeChecked()
+    expect(
+      screen.getByRole('switch', { name: 'Hermes integration' })
+    ).toBeChecked()
+  })
+
+  it('persists a disabled integration and stops its managed terminal', async () => {
+    const user = userEvent.setup()
+    render(<SettingsMenu />)
+
+    await user.click(
+      screen.getByRole('switch', { name: 'Hermes integration' })
+    )
+
+    expect(integrationMocks.setHermesEnabled).toHaveBeenCalledWith(false)
+    expect(integrationMocks.stopTerminal).toHaveBeenCalledWith('hermes')
   })
 
   it('shows provider expansion chevron when providers are active', () => {

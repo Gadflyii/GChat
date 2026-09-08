@@ -189,7 +189,7 @@ const ChatInput = memo(function ChatInput({
   const providers = useModelProvider((state) => state.providers)
   const canSelectAgentMode = canSelectChatAgentMode(initialMessage, projectId)
   const isAgentProviderSelected =
-    isLlamacppProvider(selectedProvider) ||
+    selectedProvider === 'ginfer-lan' || isLlamacppProvider(selectedProvider) ||
     providers.some((p) => isLlamacppProvider(p.provider))
   const agentModeKey = canSelectAgentMode
     ? TEMPORARY_CHAT_ID

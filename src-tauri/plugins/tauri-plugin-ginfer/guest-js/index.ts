@@ -1,5 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
-import { SessionInfo, UnloadResult, GinferConfig } from './types'
+import {
+  SessionInfo,
+  UnloadResult,
+  GinferConfig,
+  GinferBenchmarkRequest,
+  GinferBenchmarkResult,
+} from './types'
 
 // Helpers
 function asNumber(v: any, defaultValue = 0): number {
@@ -82,6 +88,16 @@ export async function getLoadedModels(): Promise<string[]> {
 
 export async function getAllSessions(): Promise<SessionInfo[]> {
   return await invoke('plugin:ginfer|get_all_sessions')
+}
+
+export async function runGinferBenchmark(
+  request: GinferBenchmarkRequest
+): Promise<GinferBenchmarkResult> {
+  return await invoke('plugin:ginfer|run_ginfer_benchmark', { request })
+}
+
+export async function cancelGinferBenchmark(runId: string): Promise<boolean> {
+  return await invoke('plugin:ginfer|cancel_ginfer_benchmark', { runId })
 }
 
 // Cleanup commands

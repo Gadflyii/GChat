@@ -17,6 +17,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SkillsIndexRouteImport } from './routes/skills/index'
 import { Route as LaunchIndexRouteImport } from './routes/launch/index'
 import { Route as HubIndexRouteImport } from './routes/hub/index'
+import { Route as EnginesIndexRouteImport } from './routes/engines/index'
+import { Route as BenchmarkIndexRouteImport } from './routes/benchmark/index'
 import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as ThreadsThreadIdRouteImport } from './routes/threads/$threadId'
 import { Route as SettingsShortcutsRouteImport } from './routes/settings/shortcuts'
@@ -76,6 +78,16 @@ const LaunchIndexRoute = LaunchIndexRouteImport.update({
 const HubIndexRoute = HubIndexRouteImport.update({
   id: '/hub/',
   path: '/hub/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EnginesIndexRoute = EnginesIndexRouteImport.update({
+  id: '/engines/',
+  path: '/engines/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BenchmarkIndexRoute = BenchmarkIndexRouteImport.update({
+  id: '/benchmark/',
+  path: '/benchmark/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentsIndexRoute = AgentsIndexRouteImport.update({
@@ -204,6 +216,8 @@ export interface FileRoutesByFullPath {
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/agents/': typeof AgentsIndexRoute
+  '/benchmark/': typeof BenchmarkIndexRoute
+  '/engines/': typeof EnginesIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
   '/skills/': typeof SkillsIndexRoute
@@ -234,6 +248,8 @@ export interface FileRoutesByTo {
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/agents': typeof AgentsIndexRoute
+  '/benchmark': typeof BenchmarkIndexRoute
+  '/engines': typeof EnginesIndexRoute
   '/hub': typeof HubIndexRoute
   '/launch': typeof LaunchIndexRoute
   '/skills': typeof SkillsIndexRoute
@@ -265,6 +281,8 @@ export interface FileRoutesById {
   '/settings/shortcuts': typeof SettingsShortcutsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/agents/': typeof AgentsIndexRoute
+  '/benchmark/': typeof BenchmarkIndexRoute
+  '/engines/': typeof EnginesIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
   '/skills/': typeof SkillsIndexRoute
@@ -297,6 +315,8 @@ export interface FileRouteTypes {
     | '/settings/shortcuts'
     | '/threads/$threadId'
     | '/agents/'
+    | '/benchmark/'
+    | '/engines/'
     | '/hub/'
     | '/launch/'
     | '/skills/'
@@ -327,6 +347,8 @@ export interface FileRouteTypes {
     | '/settings/shortcuts'
     | '/threads/$threadId'
     | '/agents'
+    | '/benchmark'
+    | '/engines'
     | '/hub'
     | '/launch'
     | '/skills'
@@ -357,6 +379,8 @@ export interface FileRouteTypes {
     | '/settings/shortcuts'
     | '/threads/$threadId'
     | '/agents/'
+    | '/benchmark/'
+    | '/engines/'
     | '/hub/'
     | '/launch/'
     | '/skills/'
@@ -388,6 +412,8 @@ export interface RootRouteChildren {
   SettingsShortcutsRoute: typeof SettingsShortcutsRoute
   ThreadsThreadIdRoute: typeof ThreadsThreadIdRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
+  BenchmarkIndexRoute: typeof BenchmarkIndexRoute
+  EnginesIndexRoute: typeof EnginesIndexRoute
   HubIndexRoute: typeof HubIndexRoute
   LaunchIndexRoute: typeof LaunchIndexRoute
   SkillsIndexRoute: typeof SkillsIndexRoute
@@ -451,6 +477,20 @@ declare module '@tanstack/react-router' {
       path: '/hub'
       fullPath: '/hub/'
       preLoaderRoute: typeof HubIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/engines/': {
+      id: '/engines/'
+      path: '/engines'
+      fullPath: '/engines/'
+      preLoaderRoute: typeof EnginesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/benchmark/': {
+      id: '/benchmark/'
+      path: '/benchmark'
+      fullPath: '/benchmark/'
+      preLoaderRoute: typeof BenchmarkIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agents/': {
@@ -620,6 +660,8 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsShortcutsRoute: SettingsShortcutsRoute,
   ThreadsThreadIdRoute: ThreadsThreadIdRoute,
   AgentsIndexRoute: AgentsIndexRoute,
+  BenchmarkIndexRoute: BenchmarkIndexRoute,
+  EnginesIndexRoute: EnginesIndexRoute,
   HubIndexRoute: HubIndexRoute,
   LaunchIndexRoute: LaunchIndexRoute,
   SkillsIndexRoute: SkillsIndexRoute,

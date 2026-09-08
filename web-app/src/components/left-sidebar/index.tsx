@@ -41,6 +41,7 @@ export function LeftSidebar() {
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
   const providers = useModelProvider((state) => state.providers)
   const isAgentProviderSelected =
+    selectedProvider === 'ginfer-lan' ||
     isLlamacppProvider(selectedProvider) ||
     providers.some((p) => isLlamacppProvider(p.provider))
   const settingsIconRef = useRef<SettingsIconHandle>(null)

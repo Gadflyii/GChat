@@ -33,6 +33,8 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LeftSidebar } from '@/components/left-sidebar'
 import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
 import { HermesTerminalHost } from '@/containers/HermesTerminalHost'
+import { EmbeddedIntegrationProvisioner } from '@/containers/EmbeddedIntegrationProvisioner'
+import { EngineDiscovery } from '@/containers/EngineDiscovery'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -70,6 +72,8 @@ const AppLayout = () => {
         <KeyboardShortcutsProvider />
         <DialogAppUpdater />
         <WhatsNewDialog />
+        <EmbeddedIntegrationProvisioner />
+        <EngineDiscovery />
         <LeftSidebar />
         <SidebarInset>
           <div className="relative bg-neutral-50 dark:bg-background size-full">

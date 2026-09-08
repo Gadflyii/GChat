@@ -238,4 +238,24 @@ describe('Hermes provisioning', () => {
       contextLength: 65_536,
     })
   })
+
+  it('refreshes the managed route on an existing ready installation', async () => {
+    mocks.invoke.mockImplementation((command: string) =>
+      Promise.resolve(command === 'hermes_readiness' ? readyReadiness : undefined)
+    )
+
+    await expect(
+      provisionHermes({
+        apiUrl: 'http://127.0.0.1:1337/v1',
+        model: 'qwen',
+        contextLength: 65_536,
+      })
+    ).resolves.toEqual(readyReadiness)
+
+    expect(mocks.invoke.mock.calls.map(([command]) => command)).toEqual([
+      'hermes_readiness',
+      'configure_hermes_agent',
+      'hermes_readiness',
+    ])
+  })
 })

@@ -64,9 +64,15 @@ async function getLoadedModels() {
 async function getAllSessions() {
     return await invoke('plugin:ginfer|get_all_sessions');
 }
+async function runGinferBenchmark(request) {
+    return await invoke('plugin:ginfer|run_ginfer_benchmark', { request });
+}
+async function cancelGinferBenchmark(runId) {
+    return await invoke('plugin:ginfer|cancel_ginfer_benchmark', { runId });
+}
 // Cleanup commands
 async function cleanupGinferProcesses() {
     return await invoke('plugin:ginfer|cleanup_ginfer_processes');
 }
 
-export { cleanupGinferProcesses, findSessionByModel, getAllSessions, getLoadedModels, getRandomPort, isProcessRunning, loadGinferModel, normalizeGinferConfig, unloadGinferModel };
+export { cancelGinferBenchmark, cleanupGinferProcesses, findSessionByModel, getAllSessions, getLoadedModels, getRandomPort, isProcessRunning, loadGinferModel, normalizeGinferConfig, runGinferBenchmark, unloadGinferModel };

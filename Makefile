@@ -295,6 +295,10 @@ test-rust: export TAURI_CONFIG := {"bundle":{"icon":["icons/icon.png"]}}
 test-rust: stub-resources
 	cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features test-tauri -- --test-threads=1
 	cargo test --manifest-path src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml
+	cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml
+ifeq ($(OS),Windows_NT)
+	powershell -NoProfile -ExecutionPolicy Bypass -File tests/test_ginfer_host_install_windows.ps1 -HostBinary "$(CURDIR)/src-tauri/ginfer-host/target/debug/ginfer-host.exe"
+endif
 	cargo test --manifest-path src-tauri/plugins/tauri-plugin-hardware/Cargo.toml
 	cargo test --manifest-path src-tauri/utils/Cargo.toml
 

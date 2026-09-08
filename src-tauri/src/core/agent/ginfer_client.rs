@@ -4,7 +4,6 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use tauri_plugin_ginfer::state::GinferState;
@@ -22,9 +21,20 @@ const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 const ERROR_DETAIL_MAX_LEN: usize = 300;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GinferConnection {
+    Local {
+        port: i32,
+        api_key: String,
+    },
+    Paired {
+        reference: ginfer_host::engine_registry::InstanceRef,
+        session_id: uuid::Uuid,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GinferSessionTarget {
-    pub port: i32,
-    pub api_key: String,
+    pub connection: GinferConnection,
     pub model_id: String,
     pub has_vision: bool,
 }
@@ -225,8 +235,48 @@ impl GinferClient {
     }
 
     pub fn with_context_expansion(mut self, hook: Arc<dyn ContextExpansionHook>) -> Self {
-        self.context_expansion = Some(hook);
+        if matches!(self.target().connection, GinferConnection::Local { .. }) {
+            self.context_expansion = Some(hook);
+        }
         self
+    }
+
+    async fn request_target(
+        &self,
+        target: &GinferSessionTarget,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<reqwest::Response, GinferClientError> {
+        match &target.connection {
+            GinferConnection::Local { port, api_key } => {
+                let mut request = self
+                    .client
+                    .request(method, format!("http://127.0.0.1:{port}{path}"));
+                if !api_key.is_empty() {
+                    request = request.bearer_auth(api_key);
+                }
+                if let Some(body) = body {
+                    request = request.json(body);
+                }
+                request
+                    .send()
+                    .await
+                    .map_err(|e| GinferClientError::Transport(e.to_string()))
+            }
+            GinferConnection::Paired {
+                reference,
+                session_id,
+            } => crate::core::engine_hosts::request_instance(
+                reference,
+                *session_id,
+                method,
+                path,
+                body,
+            )
+            .await
+            .map_err(GinferClientError::Transport),
+        }
     }
 
     pub fn retarget(&self, target: &GinferSessionTarget) {
@@ -253,23 +303,15 @@ impl GinferClient {
         cancellation: &CancellationToken,
     ) -> Result<Value, GinferClientError> {
         let target = self.target();
-        let mut request = self
-            .client
-            .get(format!("http://127.0.0.1:{}/v1/models", target.port));
-        if !target.api_key.is_empty() {
-            request = request.header(AUTHORIZATION, format!("Bearer {}", target.api_key));
-        }
         let response = tokio::select! {
             _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
-            result = request.send() => {
-                result.map_err(|error| GinferClientError::Transport(error.to_string()))?
-            }
+            result = self.request_target(&target,reqwest::Method::GET,"/v1/models",None) => result?
         };
         let status = response.status();
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|error| GinferClientError::Transport(error.to_string()))?;
+        let bytes = tokio::select! {
+            _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
+            result = response.bytes() => result.map_err(|error| GinferClientError::Transport(error.to_string()))?,
+        };
         if !status.is_success() {
             return Err(GinferClientError::Http {
                 status: status.as_u16(),
@@ -283,10 +325,12 @@ impl GinferClient {
             .and_then(Value::as_array)
             .and_then(|models| {
                 models.iter().find(|model| {
-                    model
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .is_some_and(|id| model_ids_match(id, &target.model_id))
+                    model.get("id").and_then(Value::as_str).is_some_and(|id| {
+                        match &target.connection {
+                            GinferConnection::Paired { .. } => id == target.model_id,
+                            GinferConnection::Local { .. } => model_ids_match(id, &target.model_id),
+                        }
+                    })
                 })
             })
             .cloned()
@@ -312,23 +356,9 @@ impl GinferClient {
             ));
         }
         let payload = vision_request_payload(&target.model_id, prompt, images, reasoning_effort);
-        let mut request = self
-            .client
-            .post(format!(
-                "http://127.0.0.1:{}/v1/chat/completions",
-                target.port
-            ))
-            .header(ACCEPT, "application/json")
-            .header(CONTENT_TYPE, "application/json")
-            .json(&payload);
-        if !target.api_key.is_empty() {
-            request = request.header(AUTHORIZATION, format!("Bearer {}", target.api_key));
-        }
         let response = tokio::select! {
             _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
-            result = request.send() => {
-                result.map_err(|error| GinferClientError::Transport(error.to_string()))?
-            }
+            result = self.request_target(&target,reqwest::Method::POST,"/v1/chat/completions",Some(&payload)) => result?
         };
         let status = response.status();
         let bytes = tokio::select! {
@@ -448,23 +478,9 @@ impl GinferClient {
         cancellation: &CancellationToken,
     ) -> Result<reqwest::Response, GinferClientError> {
         let payload = completion_request_payload(&target.model_id, request);
-        let mut builder = self
-            .client
-            .post(format!(
-                "http://127.0.0.1:{}/v1/chat/completions",
-                target.port
-            ))
-            .header(CONTENT_TYPE, "application/json")
-            .header(ACCEPT, "application/json")
-            .json(&payload);
-        if !target.api_key.is_empty() {
-            builder = builder.header(AUTHORIZATION, format!("Bearer {}", target.api_key));
-        }
         let response = tokio::select! {
             _ = cancellation.cancelled() => return Err(GinferClientError::Cancelled),
-            result = builder.send() => {
-                result.map_err(|error| GinferClientError::Transport(error.to_string()))?
-            }
+            result = self.request_target(target,reqwest::Method::POST,"/v1/chat/completions",Some(&payload)) => result?
         };
         if response.status().is_success() {
             return Ok(response);
@@ -578,13 +594,20 @@ pub async fn find_session_by_model_id(
     model_id: &str,
     ginfer: &GinferState,
 ) -> Result<GinferSessionTarget, GinferClientError> {
+    if model_id.starts_with("ginfer/") {
+        return crate::core::engine_hosts::agent_target(model_id)
+            .await
+            .map_err(GinferClientError::Transport);
+    }
     let sessions = ginfer.ginfer_process.lock().await;
     sessions
         .values()
         .find(|session| model_ids_match(&session.info.model_id, model_id))
         .map(|session| GinferSessionTarget {
-            port: session.info.port as i32,
-            api_key: session.info.api_key.clone(),
+            connection: GinferConnection::Local {
+                port: session.info.port as i32,
+                api_key: session.info.api_key.clone(),
+            },
             model_id: session.info.model_id.clone(),
             has_vision: session.info.vision,
         })
@@ -1286,7 +1309,7 @@ mod tests {
 
         assert_eq!(completion.content, "ok");
         assert_eq!(hook.calls.load(Ordering::SeqCst), 1);
-        assert_eq!(client.target().port, replacement_target.port);
+        assert_eq!(client.target().connection, replacement_target.connection);
         assert_eq!(first.requests().len(), 1);
         assert_eq!(replacement.requests().len(), 1);
     }
@@ -1518,8 +1541,10 @@ mod tests {
     #[tokio::test]
     async fn rejects_runtime_vision_call_for_text_only_session() {
         let client = GinferClient::new(&GinferSessionTarget {
-            port: 1,
-            api_key: String::new(),
+            connection: GinferConnection::Local {
+                port: 1,
+                api_key: String::new(),
+            },
             model_id: "text-model".into(),
             has_vision: false,
         })

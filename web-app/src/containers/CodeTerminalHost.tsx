@@ -77,6 +77,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     defaultModelLocalApiServer,
   } = useLocalApiServer()
   const configuredWorkspace = useCodeTerminalStore((state) => state.workspace)
+  const enabled = useCodeTerminalStore((state) => state.enabled)
   const setConfiguredWorkspace = useCodeTerminalStore(
     (state) => state.setWorkspace
   )
@@ -136,7 +137,13 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   }, [serviceHub, setError])
 
   useEffect(() => {
-    if (!attached || !hardwareReady || !hardware.supported || !desktopTerminalAvailable) {
+    if (
+      !enabled ||
+      !attached ||
+      !hardwareReady ||
+      !hardware.supported ||
+      !desktopTerminalAvailable
+    ) {
       return
     }
     let cancelled = false
@@ -184,6 +191,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     customOpenCodePath,
     defaultModelLocalApiServer?.model,
     desktopTerminalAvailable,
+    enabled,
     hardware.supported,
     hardwareReady,
     readinessRefresh,
@@ -224,6 +232,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   useEffect(() => {
     if (
       bootstrappedRef.current ||
+      !enabled ||
       !attached ||
       !hardwareReady ||
       !hardware.supported ||
@@ -247,6 +256,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       .finally(() => setBusy(false))
   }, [
     attached,
+    enabled,
     hardware.supported,
     hardwareReady,
     readiness?.ready,
@@ -309,6 +319,8 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
   const configuredModel = activeModel ?? defaultModelLocalApiServer?.model
   const setupState = !desktopTerminalAvailable
     ? 'desktop'
+    : !enabled
+      ? 'disabled'
     : !hardwareReady
       ? 'checking'
       : !hardware.supported
@@ -424,6 +436,8 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
               <p className="mt-2 text-sm text-muted-foreground">
                 {setupState === 'desktop'
                   ? t('code:desktopOnly')
+                  : setupState === 'disabled'
+                    ? 'Enable OpenCode integration in Settings.'
                   : setupState === 'checking' || busy
                     ? provisionPhase === 'installing'
                       ? t('code:installing')

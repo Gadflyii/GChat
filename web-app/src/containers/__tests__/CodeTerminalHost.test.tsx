@@ -158,7 +158,7 @@ vi.mock('@/hooks/useTheme', () => {
 })
 vi.mock('@/stores/code-terminal-store', () => ({
   useCodeTerminalStore: (selector: (state: unknown) => unknown) =>
-    selector({ workspace: undefined, setWorkspace: vi.fn() }),
+    selector({ enabled: true, workspace: undefined, setWorkspace: vi.fn() }),
 }))
 vi.mock('@/stores/launch-settings-store', () => ({
   useLaunchSettings: (selector: (state: unknown) => unknown) =>

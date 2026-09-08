@@ -54,6 +54,8 @@ export const localStorageKey = {
   codeTerminal: 'code-terminal',
   // Hermes' enabled state, selected model, and independent terminal workspace.
   hermesAgent: 'hermes-agent-integration',
+  benchmarkRuns: 'ginfer-benchmark-runs',
+  engineDiscovery: 'ginfer-engine-discovery',
 }
 
 export const CACHE_EXPIRY_MS = 1000 * 60 * 60 * 24

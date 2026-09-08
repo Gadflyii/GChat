@@ -43,6 +43,7 @@ target/
 Cargo.lock
 # Keep the desktop shell lockfile committed for reproducible CI builds
 !src-tauri/Cargo.lock
+!src-tauri/ginfer-host/Cargo.lock
 src-tauri/resources/
 !src-tauri/resources/
 src-tauri/resources/*

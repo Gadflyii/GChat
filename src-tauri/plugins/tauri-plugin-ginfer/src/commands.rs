@@ -447,6 +447,14 @@ pub async fn load_ginfer_model_impl(
         is_embedding,
         vision: config.vision,
         max_context: config.max_context,
+        spec: config.spec,
+        draft_tokens: config.draft_tokens,
+        draft_tp: config.draft_tp,
+        kv_dtype: config.kv_dtype,
+        kv_arena_bytes: config.kv_arena_bytes,
+        prefill_chunk: config.prefill_chunk,
+        max_concurrency: config.max_concurrency,
+        no_cuda_graph: config.no_cuda_graph,
         api_key,
     };
 

@@ -35,6 +35,10 @@ export const route = {
   hermes: {
     index: '/hermes/',
   },
+  benchmark: {
+    index: '/benchmark/',
+  },
+  engines: { index: '/engines/' },
   agents: {
     index: '/agents/',
   },

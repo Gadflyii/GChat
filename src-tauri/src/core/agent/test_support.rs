@@ -318,8 +318,10 @@ impl ScriptedGinferServer {
 
     pub(crate) fn client(&self) -> GinferClient {
         GinferClient::new(&GinferSessionTarget {
-            port: i32::from(self.address.port()),
-            api_key: String::new(),
+            connection: super::ginfer_client::GinferConnection::Local {
+                port: i32::from(self.address.port()),
+                api_key: String::new(),
+            },
             model_id: "scripted-test-model".into(),
             has_vision: false,
         })

@@ -223,7 +223,10 @@ export function provisionHermes(
     }
 
     const model = request.model?.trim()
-    if (!readiness.ready && model) {
+    if (model) {
+      // The GChat route is managed integration state. Refresh it even when
+      // Hermes is already structurally ready so an existing installation
+      // follows the currently selected local model and endpoint.
       onPhase?.('configuring')
       await invoke<void>('configure_hermes_agent', {
         apiUrl: request.apiUrl,

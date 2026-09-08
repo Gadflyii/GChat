@@ -4,6 +4,8 @@ pub mod artifact;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod downloads;
+pub use ginfer_host::{engine_registry, engine_host, engine_inventory};
+pub mod engine_hosts;
 pub mod extensions;
 pub mod filesystem;
 pub mod http;

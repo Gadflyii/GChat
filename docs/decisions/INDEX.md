@@ -9,12 +9,14 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-240 records, 2026-05-19 → 2026-08-30.
+243 records, 2026-05-19 → 2026-09-07.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-09-07** — [Register discoverable GInfer hosts and address model instances explicitly](2026-09-07-register-discoverable-ginfer-hosts.md)
+- **2026-09-01** — [Enable and provision embedded agents by default](2026-09-01-enable-and-provision-embedded-agents-by-default.md)
 - **2026-08-30** — [Embed Hermes as an independent managed terminal](2026-08-30-embed-hermes-as-an-independent-managed-terminal.md)
 - **2026-08-30** — [Own context compaction in GChat](2026-08-30-own-context-compaction-in-gchat.md)
 - **2026-08-30** — [Default GInfer reasoning to high](2026-08-30-default-ginfer-reasoning-to-high.md)
@@ -49,8 +51,9 @@ decision is reversed, add a new one that says which record it supersedes.
 
 ---
 
-## Launch page & external coding agents (17)
+## Launch page & external coding agents (18)
 
+- **2026-09-01** — [Enable and provision embedded agents by default](2026-09-01-enable-and-provision-embedded-agents-by-default.md)
 - **2026-08-30** — [Embed Hermes as an independent managed terminal](2026-08-30-embed-hermes-as-an-independent-managed-terminal.md)
 - **2026-08-20** — [Narrow `atomic-chat-cli` to models / serve / launch / server status](2026-08-20-narrow-atomic-chat-cli-to-models-serve-launch-and-server-status.md)
 - **2026-08-18** — [Add DeepSeek Harness (`dsh`) as a one-click Launch-page coding agent, configured by merging a hand-declared `llm-pi-ai` route into `$DSH_HOME/settings.yaml`](2026-08-18-add-deepseek-harness-as-a-launch-page-coding-agent.md)
@@ -250,8 +253,9 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-06-10** — [Throttle crashloop `model_load` failure spam client-side; confirm `model_load.status` / api 404-noise are already-fixed-pending-rollout, not code bugs (ATO-130: ATO-133 + ATO-131 + ATO-132)](2026-06-10-throttle-crashloop-model-load-failure-spam-client-side-confirm.md)
 - **2026-06-09** — [Add zero-PII Sentry crash/error tracking to both the React frontend and the Rust/Tauri desktop, gated behind `productAnalytic` (ATO-113)](2026-06-09-add-zero-pii-sentry-crash-error-tracking-to-both-the-react.md)
 
-## Packaging, installers, autostart & platform policy (16)
+## Packaging, installers, autostart & platform policy (17)
 
+- **2026-09-01** — [Enable and provision embedded agents by default](2026-09-01-enable-and-provision-embedded-agents-by-default.md)
 - **2026-08-30** — [Refresh bundled extensions by content](2026-08-30-refresh-bundled-extensions-by-content.md)
 - **2026-08-30** — [Bundle the producer-final GInfer runtime in Windows installers](2026-08-30-bundle-the-producer-final-ginfer-runtime-in-windows-installers.md)
 - **2026-08-28** — [Stage WSL Windows release builds on the native filesystem](2026-08-28-stage-wsl-windows-release-builds-on-the-native-filesystem.md)
@@ -269,8 +273,11 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-05-22** — [Pin static WiX `upgradeCode` to legacy Jan UUID for in-place MSI upgrades](2026-05-22-pin-static-wix-upgradecode-to-legacy-jan-uuid-for-in-place-msi.md)
 - **2026-05-19** — [Product identity is "Atomic Chat"; new code stops carrying Jan branding](2026-05-19-product-identity-is-atomic-chat-new-code-stops-carrying-jan.md)
 
-## UI / UX (24)
+## UI / UX (26)
 
+- **2026-09-01** — [Benchmark the resident GInfer server](2026-09-01-benchmark-the-resident-ginfer-server.md)
+
+- **2026-09-01** — [Enable and provision embedded agents by default](2026-09-01-enable-and-provision-embedded-agents-by-default.md)
 - **2026-08-30** — [Keep embedded OpenCode stock behind a managed adapter](2026-08-30-keep-embedded-opencode-stock-behind-a-managed-adapter.md)
 - **2026-08-21** — [Never list TurboQuant next to upstream llama.cpp](2026-08-21-never-list-turboquant-next-to-upstream-llama-cpp.md)
 - **2026-08-21** — [Keep attachments when a message is edited in a chat thread](2026-08-21-keep-attachments-when-a-message-is-edited-in-a-chat-thread.md)

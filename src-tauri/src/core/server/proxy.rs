@@ -1487,6 +1487,51 @@ async fn inner_proxy_request<R: Runtime>(
         return Ok(error_response.body(Body::from("Not Found")).unwrap());
     }
 
+    // Registered LAN instances retain exact host/instance identity through the facade.
+    // Authenticate the facade request above before consulting any paired host.
+    if method == hyper::Method::GET {
+        if let Ok(Some(alias)) = crate::core::engine_hosts::model_detail_alias(&path) {
+            let model = crate::core::engine_hosts::available_models().await.into_iter().find(|m|m.get("id").and_then(serde_json::Value::as_str)==Some(alias.as_str()));
+            let (status,payload) = match model {
+                Some(model) => (StatusCode::OK,model),
+                None => (StatusCode::NOT_FOUND,serde_json::json!({"error":{"message":"model instance is not available","type":"invalid_request_error","code":"model_not_found"}})),
+            };
+            state.backend="ginfer";state.model_id=Some(alias);
+            return Ok(add_cors_headers_with_host_and_origin(Response::builder().status(status).header("content-type","application/json"),&host_header,&origin_header,&config.trusted_hosts).body(Body::from(payload.to_string())).unwrap());
+        }
+    }
+    if path.starts_with("/responses/resp_ginfer_") {
+        state.backend = "ginfer";
+        let result = crate::core::engine_hosts::forward_response_handle(method.clone(),&path,parts.uri.query()).await;
+        let response = match result {
+            Ok(response) => response,
+            Err(error) => ginfer_host::service::json(StatusCode::BAD_GATEWAY,serde_json::json!({"error":{"message":error,"type":"engine_host_unavailable"}})),
+        };
+        let (parts,body) = response.into_parts();
+        let mut builder = Response::builder().status(parts.status);
+        for (name,value) in &parts.headers { builder=builder.header(name,value); }
+        return Ok(add_cors_headers_with_host_and_origin(builder,&host_header,&origin_header,&config.trusted_hosts).body(body).unwrap());
+    }
+    let body = if method == hyper::Method::POST {
+        let bytes = hyper::body::to_bytes(body).await?;
+        if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            if let Some(alias) = value.get("model").and_then(|m|m.as_str()).filter(|m|m.starts_with("ginfer/")) {
+                state.backend = "ginfer";
+                state.model_id = Some(alias.into());
+                let result = crate::core::engine_hosts::forward_alias(alias,&path,&value).await;
+                let response = match result {
+                    Ok(response) => response,
+                    Err(error) => ginfer_host::service::json(StatusCode::BAD_GATEWAY,serde_json::json!({"error":{"message":error,"type":"engine_host_unavailable"}})),
+                };
+                let (parts,body) = response.into_parts();
+                let mut builder = Response::builder().status(parts.status);
+                for (name,value) in &parts.headers { builder=builder.header(name,value); }
+                return Ok(add_cors_headers_with_host_and_origin(builder,&host_header,&origin_header,&config.trusted_hosts).body(body).unwrap());
+            }
+        }
+        Body::from(bytes)
+    } else { body };
+
     // Codex CLI (and other Responses-only clients) hit `/responses`, which
     // ginfer does not implement. Handle it in a self-contained branch:
     // passthrough for remote providers that serve it natively, translate to
@@ -1861,6 +1906,7 @@ async fn inner_proxy_request<R: Runtime>(
             let pc = provider_configs.lock().await;
             let remote_models: Vec<_> = pc
                 .values()
+                .filter(|provider_cfg| provider_cfg.provider != "ginfer-lan")
                 .flat_map(|provider_cfg| provider_cfg.models.clone())
                 .map(|model_id| {
                     serde_json::json!({
@@ -1880,6 +1926,7 @@ async fn inner_proxy_request<R: Runtime>(
             let mut all_models = Vec::with_capacity(local_count + remote_count);
             all_models.extend(local_models);
             all_models.extend(remote_models);
+            all_models.extend(crate::core::engine_hosts::available_models().await);
 
             let response_json = serde_json::json!({
                 "object": "list",

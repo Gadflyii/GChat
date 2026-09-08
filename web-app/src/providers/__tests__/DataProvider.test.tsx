@@ -1,8 +1,10 @@
-import { render, waitFor } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataProvider } from '../DataProvider'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
+import { useEngineHosts } from '@/stores/engine-hosts-store'
+import type { EngineSnapshot } from '@/services/engines'
 
 const mocks = vi.hoisted(() => ({
   switchToModel: vi.fn(),
@@ -16,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   setServers: vi.fn(),
   setSettings: vi.fn(),
   setThreads: vi.fn(),
+  autoStart: true,
+  startServer: vi.fn().mockResolvedValue(1444),
+  setServerPort: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -92,8 +97,9 @@ vi.mock('@/hooks/useAppState', () => {
 
 vi.mock('@/hooks/useLocalApiServer', () => ({
   useLocalApiServer: {
+    subscribe: vi.fn(() => vi.fn()),
     getState: () => ({
-      enableOnStartup: true,
+      enableOnStartup: mocks.autoStart,
       serverHost: '127.0.0.1',
       serverPort: 1337,
       apiPrefix: '/v1',
@@ -102,7 +108,7 @@ vi.mock('@/hooks/useLocalApiServer', () => ({
       corsEnabled: false,
       verboseLogs: false,
       proxyTimeout: 120,
-      setServerPort: vi.fn(),
+      setServerPort: mocks.setServerPort,
     }),
   },
 }))
@@ -175,6 +181,9 @@ describe('DataProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.autoStart = true
+    useEngineHosts.setState({ snapshots: {}, errors: {} })
+    Object.assign(window.core.api, { startServer: mocks.startServer })
     localStorage.clear()
     getProviders.mockResolvedValue(providers)
     getMCPConfig.mockResolvedValue(mcpConfig)
@@ -230,6 +239,33 @@ describe('DataProvider', () => {
       expect(getActiveModels).toHaveBeenCalledOnce()
     })
     unmount()
+  })
+
+  it('starts the facade when a LAN-only instance becomes ready and retains the assigned port', async () => {
+    const view = render(<DataProvider />)
+    await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
+    expect(mocks.startServer).not.toHaveBeenCalled()
+    const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
+    act(() => useEngineHosts.setState({ snapshots: { lan: snapshot } }))
+    await waitFor(() => expect(mocks.setServerStatus).toHaveBeenCalledWith('running'))
+    expect(mocks.startServer).toHaveBeenCalledOnce()
+    expect(mocks.setServerPort).toHaveBeenCalledWith(1444)
+    act(() => useEngineHosts.setState({ snapshots: { lan: { ...snapshot } } }))
+    expect(mocks.startServer).toHaveBeenCalledOnce()
+    view.unmount()
+  })
+
+  it('does not auto-start for an offline LAN instance or when auto-start is disabled', async () => {
+    const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
+    useEngineHosts.setState({ snapshots: { lan: snapshot }, errors: { lan: 'offline' } })
+    const view = render(<DataProvider />)
+    await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
+    expect(mocks.startServer).not.toHaveBeenCalled()
+    mocks.autoStart = false
+    act(() => useEngineHosts.setState({ errors: {} }))
+    await act(async () => { await Promise.resolve() })
+    expect(mocks.startServer).not.toHaveBeenCalled()
+    view.unmount()
   })
 
   it('preserves saved settings when migrating the built-in assistant', async () => {

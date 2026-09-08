@@ -32,6 +32,7 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useLaunchStore } from '@/stores/launch-store'
 import { useLaunchSettings } from '@/stores/launch-settings-store'
+import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useHermesAgentStore } from '@/stores/hermes-agent-store'
 import { cn } from '@/lib/utils'
 import { createSafeUnlisten } from '@/lib/tauriEvent'
@@ -647,6 +648,7 @@ function LaunchPage() {
           break
         case 'opencode':
           await invoke('configure_opencode', { apiUrl, model, apiKey: key })
+          useCodeTerminalStore.getState().setEnabled(true)
           break
         case 'openclaude':
           await invoke('configure_openclaude', { apiUrl, model, apiKey: key })

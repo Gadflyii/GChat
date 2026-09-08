@@ -1553,7 +1553,7 @@ function ModelInstanceSelect({
         )}
         {instances.map((instance) => (
           <option key={instance.id} value={instance.id}>
-            {instance.modelId} · port {instance.port}
+            {instance.modelId}{instance.port == null ? ' · LAN host' : ` · port ${instance.port}`}
           </option>
         ))}
       </select>

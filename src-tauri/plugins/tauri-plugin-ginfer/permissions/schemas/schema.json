@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the cancel_ginfer_benchmark command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-cancel-ginfer-benchmark",
+          "markdownDescription": "Enables the cancel_ginfer_benchmark command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the cancel_ginfer_benchmark command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-cancel-ginfer-benchmark",
+          "markdownDescription": "Denies the cancel_ginfer_benchmark command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cleanup_ginfer_processes command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cleanup-ginfer-processes",
@@ -379,6 +391,18 @@
           "markdownDescription": "Denies the load_ginfer_model command without any pre-configured scope."
         },
         {
+          "description": "Enables the run_ginfer_benchmark command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-run-ginfer-benchmark",
+          "markdownDescription": "Enables the run_ginfer_benchmark command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the run_ginfer_benchmark command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-run-ginfer-benchmark",
+          "markdownDescription": "Denies the run_ginfer_benchmark command without any pre-configured scope."
+        },
+        {
           "description": "Enables the unload_ginfer_model command without any pre-configured scope.",
           "type": "string",
           "const": "allow-unload-ginfer-model",
@@ -391,10 +415,10 @@
           "markdownDescription": "Denies the unload_ginfer_model command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-get-random-port`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`",
+          "description": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-get-random-port`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`\n- `allow-run-ginfer-benchmark`\n- `allow-cancel-ginfer-benchmark`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-get-random-port`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`"
+          "markdownDescription": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-get-random-port`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`\n- `allow-run-ginfer-benchmark`\n- `allow-cancel-ginfer-benchmark`"
         }
       ]
     }

@@ -426,6 +426,33 @@ describe('SetupScreen', () => {
       return rendered
     }
 
+    it('completes setup through LAN intake without starting a model or a later timeout', async () => {
+      const { unmount } = await renderSetup()
+      fireEvent.click(screen.getByRole('button', { name: 'Connect a network host' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Connect a network host' }))
+      expect(localStorage.getItem(localStorageKey.setupCompleted)).toBe('true')
+      expect(mocks.reminder.pending).toBe(false)
+      expect(mocks.leftPanel.open).toBe(true)
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: '/engines/', replace: true })
+      expect(mocks.switchToModel).not.toHaveBeenCalled()
+      await act(async () => { vi.advanceTimersByTime(30_000) })
+      expect(mocks.navigate).toHaveBeenCalledTimes(1)
+      expect(mocks.reminder.pending).toBe(false)
+      unmount()
+    })
+
+    it('allows LAN intake while local hardware detection is pending', async () => {
+      mocks.hardwareTier.ready = false
+      const { unmount } = await renderSetup()
+      expect(screen.getByText('common:loading')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Connect a network host' }))
+      expect(localStorage.getItem(localStorageKey.setupCompleted)).toBe('true')
+      expect(mocks.navigate).toHaveBeenCalledWith({ to: '/engines/', replace: true })
+      expect(mocks.switchToModel).not.toHaveBeenCalled()
+      unmount()
+      mocks.hardwareTier.ready = true
+    })
+
     it('enters the chat and arms the reminder after 15 seconds', async () => {
       const { unmount } = await renderSetup()
 

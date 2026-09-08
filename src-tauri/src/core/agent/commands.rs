@@ -106,7 +106,7 @@ pub struct AgentWorkspaceText {
 pub struct AgentModelInstance {
     pub id: String,
     pub model_id: String,
-    pub port: u16,
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -128,9 +128,11 @@ pub async fn agent_list_model_instances(
         .map(|session| AgentModelInstance {
             id: session.info.model_id.clone(),
             model_id: session.info.model_id.clone(),
-            port: session.info.port,
+            port: Some(session.info.port),
         })
         .collect::<Vec<_>>();
+    drop(sessions);
+    instances.extend(crate::core::engine_hosts::agent_instances().await);
     instances.sort_by(|left, right| left.model_id.cmp(&right.model_id));
     Ok(instances)
 }

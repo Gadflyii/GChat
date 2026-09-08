@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocation } from '@tanstack/react-router'
 import { NavMain } from '../NavMain'
 
-const hermesState = vi.hoisted(() => ({ enabled: false }))
+const codeState = vi.hoisted(() => ({ enabled: true }))
+const hermesState = vi.hoisted(() => ({ enabled: true }))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
@@ -70,9 +71,15 @@ vi.mock('@/stores/hermes-agent-store', () => ({
     selector(hermesState),
 }))
 
+vi.mock('@/stores/code-terminal-store', () => ({
+  useCodeTerminalStore: (selector: (state: typeof codeState) => unknown) =>
+    selector(codeState),
+}))
+
 describe('NavMain', () => {
   beforeEach(() => {
-    hermesState.enabled = false
+    codeState.enabled = true
+    hermesState.enabled = true
     vi.mocked(useLocation).mockReturnValue({ pathname: '/' } as never)
   })
 
@@ -106,6 +113,19 @@ describe('NavMain', () => {
     expect(screen.getByText('common:models')).toBeInTheDocument()
   })
 
+  it('shows Benchmark in both modes and highlights its route', () => {
+    vi.mocked(useLocation).mockReturnValue({ pathname: '/benchmark/' } as never)
+    const { rerender } = render(<NavMain mode="chat" />)
+
+    expect(screen.getByText('Benchmark')).toBeInTheDocument()
+    expect(
+      screen.getByText('Benchmark').closest('[data-active]')
+    ).toHaveAttribute('data-active', 'true')
+
+    rerender(<NavMain mode="agent" />)
+    expect(screen.getByText('Benchmark')).toBeInTheDocument()
+  })
+
   it('shows Code in both modes', () => {
     const { rerender } = render(<NavMain mode="chat" />)
 
@@ -114,6 +134,13 @@ describe('NavMain', () => {
     rerender(<NavMain mode="agent" />)
 
     expect(screen.getByText('common:code')).toBeInTheDocument()
+  })
+
+  it('hides Code when its integration is disabled', () => {
+    codeState.enabled = false
+    render(<NavMain mode="chat" />)
+
+    expect(screen.queryByText('common:code')).not.toBeInTheDocument()
   })
 
   it('highlights Code on the code route', () => {
@@ -139,13 +166,13 @@ describe('NavMain', () => {
     expect(screen.getByText('Agent Studio')).toBeInTheDocument()
   })
 
-  it('shows Hermes only after its integration is enabled', () => {
+  it('hides Hermes only after its integration is disabled', () => {
     const { rerender } = render(<NavMain mode="chat" />)
-    expect(screen.queryByText('Hermes')).not.toBeInTheDocument()
-
-    hermesState.enabled = true
-    rerender(<NavMain mode="chat" />)
     expect(screen.getByText('Hermes')).toBeInTheDocument()
+
+    hermesState.enabled = false
+    rerender(<NavMain mode="chat" />)
+    expect(screen.queryByText('Hermes')).not.toBeInTheDocument()
   })
 
   it('labels the new conversation action for the active mode', () => {

@@ -35,6 +35,7 @@ import { useModelLoad } from '@/hooks/useModelLoad'
 import { useOnboardingModelReminderStore } from '@/hooks/useOnboardingModelReminder'
 import { switchToModel } from '@/utils/switchModel'
 import HeaderPage from './HeaderPage'
+import { EngineIntake } from './EngineIntake'
 import { useModelSources } from '@/hooks/useModelSources'
 import { useShallow } from 'zustand/shallow'
 import { HuggingFaceAuthorAvatar } from '@/components/HuggingFaceAuthorAvatar'
@@ -576,12 +577,23 @@ function SetupScreen({ onSkipped }: SetupScreenProps) {
   // Brief loading state while the hardware tier resolves.
   const statusMessage = pickerInputsPending ? t('common:loading') : null
 
+  const connectNetworkHost = () => {
+    if (hasNavigatedRef.current) return
+    hasNavigatedRef.current = true
+    localStorage.setItem(localStorageKey.setupCompleted, 'true')
+    window.dispatchEvent(new Event('app:setup-completed'))
+    useOnboardingModelReminderStore.getState().setPending(false)
+    useLeftPanel.getState().setLeftPanel(true)
+    void navigate({ to: route.engines.index, replace: true })
+  }
+
   if (statusMessage) {
     return (
       <div className="relative flex h-full w-full flex-col overflow-hidden">
         <HeaderPage />
-        <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
           <div className="text-muted-foreground text-sm">{statusMessage}</div>
+          <div className="w-full max-w-[520px]"><EngineIntake onConnect={connectNetworkHost} /></div>
         </div>
       </div>
     )
@@ -620,6 +632,7 @@ function SetupScreen({ onSkipped }: SetupScreenProps) {
             </div>
 
             <div className="relative z-50 flex flex-col gap-4">
+              <EngineIntake onConnect={connectNetworkHost} />
               {installedRecommended.length > 0 && (
                 <div className="flex flex-col gap-2">
                   <span className="shrink-0 text-left text-xs font-medium text-muted-foreground">

@@ -12,6 +12,8 @@ Default permissions for the ginfer plugin
 - `allow-find-session-by-model`
 - `allow-get-loaded-models`
 - `allow-get-all-sessions`
+- `allow-run-ginfer-benchmark`
+- `allow-cancel-ginfer-benchmark`
 
 ## Permission Table
 
@@ -21,6 +23,32 @@ Default permissions for the ginfer plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`ginfer:allow-cancel-ginfer-benchmark`
+
+</td>
+<td>
+
+Enables the cancel_ginfer_benchmark command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ginfer:deny-cancel-ginfer-benchmark`
+
+</td>
+<td>
+
+Denies the cancel_ginfer_benchmark command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -200,6 +228,32 @@ Enables the load_ginfer_model command without any pre-configured scope.
 <td>
 
 Denies the load_ginfer_model command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ginfer:allow-run-ginfer-benchmark`
+
+</td>
+<td>
+
+Enables the run_ginfer_benchmark command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`ginfer:deny-run-ginfer-benchmark`
+
+</td>
+<td>
+
+Denies the run_ginfer_benchmark command without any pre-configured scope.
 
 </td>
 </tr>

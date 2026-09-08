@@ -59,7 +59,7 @@ export type AgentInferenceMetrics = {
 export type AgentModelInstance = {
   id: string
   modelId: string
-  port: number
+  port: number | null
 }
 
 export type AgentRole = {

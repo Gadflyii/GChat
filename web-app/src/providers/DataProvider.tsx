@@ -16,6 +16,7 @@ import { route } from '@/constants/routes'
 import { useThreads } from '@/hooks/useThreads'
 import { ensureProjectsLoaded } from '@/hooks/useThreadManagement'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
+import { useEngineHosts, hasReadyLanInstance } from '@/stores/engine-hosts-store'
 import { useAppState } from '@/hooks/useAppState'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { switchToModel } from '@/utils/switchModel'
@@ -657,10 +658,8 @@ export function DataProvider() {
     }
   }, [])
 
-  // Auto-start Local API Server on app startup, but only re-attach to an
-  // already-running server or raise the proxy for a model that is already
-  // running in a local engine. We never proactively load/select a model here:
-  // if nothing is running, the server stays down until the user starts a model.
+  // Raise the facade for an already-running local or paired LAN instance.
+  // Discovery itself never loads or selects a model.
   useEffect(() => {
     const autoStartServer = async () => {
       try {
@@ -684,12 +683,8 @@ export function DataProvider() {
           return
         }
 
-        // Product decision: do NOT proactively load or pick a model on startup.
-        // The Local API Server is only raised for a model that is already
-        // running in the local engine (GInfer). If nothing is running, the
-        // server stays down until the user starts a model manually.
         const runningModels = await serviceHub.models().getActiveModels()
-        if (!runningModels || runningModels.length === 0) {
+        if (!runningModels?.length && !hasReadyLanInstance(useEngineHosts.getState())) {
           console.log(
             '[LocalAPI:startup] No model currently running; leaving server stopped'
           )
@@ -737,7 +732,21 @@ export function DataProvider() {
       }
     }
 
-    autoStartServer()
+    // Serialize startup and LAN readiness transitions so discovery cannot race
+    // the initial native start. Do not restart a manually stopped facade on
+    // every registry poll: only a newly ready LAN instance triggers intake.
+    let disposed = false
+    let pending = Promise.resolve()
+    const schedule = () => {
+      pending = pending.then(async () => {
+        if (!disposed) await autoStartServer()
+      })
+    }
+    const unsubscribe = useEngineHosts.subscribe((state, previous) => {
+      if (hasReadyLanInstance(state) && !hasReadyLanInstance(previous)) schedule()
+    })
+    schedule()
+    return () => { disposed = true; unsubscribe() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceHub])
 

@@ -3,6 +3,7 @@ use tauri::{
     Manager, Runtime,
 };
 
+pub mod benchmark;
 mod commands;
 pub mod process;
 pub mod state;
@@ -25,6 +26,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::find_session_by_model,
             commands::get_loaded_models,
             commands::get_all_sessions,
+            benchmark::run_ginfer_benchmark,
+            benchmark::cancel_ginfer_benchmark,
         ])
         .setup(|app, _api| {
             // Initialize and manage the plugin state

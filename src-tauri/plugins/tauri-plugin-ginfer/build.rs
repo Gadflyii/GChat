@@ -9,6 +9,8 @@ const COMMANDS: &[&str] = &[
     "find_session_by_model",
     "get_loaded_models",
     "get_all_sessions",
+    "run_ginfer_benchmark",
+    "cancel_ginfer_benchmark",
 ];
 
 fn main() {

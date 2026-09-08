@@ -21,7 +21,7 @@ import { useProjectDialog } from '@/hooks/useProjectDialog'
 import { useSearchDialog } from '@/hooks/useSearchDialog'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
 import type { SidebarMode } from '@/hooks/useAgentMode'
-import { IconSparkles, IconTerminal2 } from '@tabler/icons-react'
+import { IconChartHistogram, IconSparkles, IconTerminal2, IconServer } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { useMessages } from '@/hooks/useMessages'
 import { usePrompt } from '@/hooks/usePrompt'
@@ -31,6 +31,7 @@ import {
   useChatAttachments,
 } from '@/hooks/useChatAttachments'
 import { useAgentRun } from '@/hooks/useAgentRun'
+import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useHermesAgentStore } from '@/stores/hermes-agent-store'
 import {
   cancelAgentTurn,
@@ -58,6 +59,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
   const setProjectDialogOpen = useProjectDialog((state) => state.setOpen)
   const { open: searchOpen, setOpen: setSearchOpen } = useSearchDialog()
   const [creatingConversation, setCreatingConversation] = useState(false)
+  const openCodeEnabled = useCodeTerminalStore((state) => state.enabled)
   const hermesEnabled = useHermesAgentStore((state) => state.enabled)
 
   const handleNewChat = async () => {
@@ -109,6 +111,11 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
     <>
       <SidebarMenu className="mt-3 px-2">
         <SidebarMenuItem>
+          <SidebarMenuButton asChild isActive={pathname.startsWith('/engines')}>
+            <Link to={route.engines.index}><IconServer size={16} /><span>Engines</span></Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
           <SidebarMenuButton
             className="font-medium"
             disabled={creatingConversation}
@@ -134,18 +141,20 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            asChild
-            isActive={pathname.startsWith('/code')}
-            className="data-[active=true]:bg-sidebar-foreground/15"
-          >
-            <Link to={route.code.index}>
-              <IconTerminal2 className="size-4 text-foreground/70" />
-              <span>{t('common:code')}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        {openCodeEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname.startsWith('/code')}
+              className="data-[active=true]:bg-sidebar-foreground/15"
+            >
+              <Link to={route.code.index}>
+                <IconTerminal2 className="size-4 text-foreground/70" />
+                <span>{t('common:code')}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton
             asChild
@@ -172,6 +181,18 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         )}
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            asChild
+            isActive={pathname.startsWith('/benchmark')}
+            className="data-[active=true]:bg-sidebar-foreground/15"
+          >
+            <Link to={route.benchmark.index}>
+              <IconChartHistogram className="size-4 text-foreground/70" />
+              <span>Benchmark</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
             asChild
