@@ -598,9 +598,9 @@ mod tests {
             "artifact_sha256":release.sha256, "artifact_bytes":release.bytes,
             "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU", "compute_capability":"12.0",
             "vram_tier_gib":32, "min_memory_mib_per_gpu":32768, "max_context":4096,
-            "concurrency":1, "options":{"spec":"none"},
+            "concurrency":1, "options":{"spec":"none", "kv_arena_bytes":4096},
             "qualification":{"evidence":"synthetic test only", "engine_revision":"fixture",
-                "free_bytes_per_gpu":1_u64 << 30, "full_context_requests":1}
+                "tier":"full-context-tested", "free_bytes_per_gpu":1_u64 << 30, "full_context_requests":1}
         })).unwrap());
         (release, bytes)
     }

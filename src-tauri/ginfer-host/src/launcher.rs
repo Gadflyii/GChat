@@ -190,6 +190,8 @@ impl LocalControl {
 struct Choice {
     label: String,
     body: Value,
+    vision: bool,
+    concurrency: u64,
 }
 
 fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
@@ -228,12 +230,25 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
             }
             let profile = &entry["profile"];
             result.push(Choice {
+                vision: profile["options"]["vision"].as_bool() == Some(true),
+                concurrency: profile["concurrency"].as_u64().unwrap_or(8),
                 label: format!(
-                    "{} · TP{} · C{} · {} context · {}",
+                    "{} · {} · TP{} · C{} · {} context · {} · {}",
                     profile["name"].as_str().unwrap_or("Profile"),
+                    if profile["options"]["vision"].as_bool() == Some(true) {
+                        "Vision + text (default)"
+                    } else {
+                        "Text only"
+                    },
                     profile["tp"],
                     profile["concurrency"],
                     profile["max_context"],
+                    match profile["qualification"]["tier"].as_str() {
+                        Some("full-context-tested") => "Full-context tested",
+                        Some("calculated-startup-smoke") => "Calculated + startup/smoke checked (not full-context tested)",
+                        Some("calculated-pending-validation") => "Calculated — pending validation (startup/memory/inference unverified; may require engine update)",
+                        _ => "Unknown evidence tier",
+                    },
                     group
                         .iter()
                         .filter_map(Value::as_str)
@@ -248,6 +263,7 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
             });
         }
     }
+    result.sort_by_key(|choice| (!choice.vision, choice.concurrency));
     result
 }
 
@@ -335,8 +351,14 @@ async fn menu_control(control: LocalControl) -> Result<(), String> {
             );
         }
         println!("\n[number] Start profile   [m] Manage instance   [r] Refresh   [p] Pair GChat   [q] Quit");
+        if available.first().is_some_and(|choice| choice.vision) {
+            println!("[Enter] Start the first Vision profile");
+        }
         let input = prompt("Select: ")?;
         let result = match input.as_str() {
+            "" if available.first().is_some_and(|choice| choice.vision) => {
+                start(&control, &available[0]).await
+            }
             "q" => {
                 println!("Serving continues on the host. Stop instances from this menu or GChat.");
                 return Ok(());
@@ -451,7 +473,7 @@ mod tests {
     #[test]
     fn menu_uses_host_profiles_and_excludes_other_instances_gpu_groups() {
         let snapshot = json!({"instances":[{"instance_id":"running","status":"ready","configuration":{"gpu_uuids":["gpu0"]}}],
-            "launch_profiles":[{"model_id":"model","profile":{"id":"fixture","name":"Test C4","tp":1,"concurrency":4,"max_context":32768},
+            "launch_profiles":[{"model_id":"model","profile":{"id":"fixture","name":"Test C4","tp":1,"concurrency":4,"max_context":32768,"qualification":{"tier":"calculated-startup-smoke"}},
                 "compatible_gpu_groups":[["gpu0"],["gpu1"]]}]});
         let available = choices(&snapshot, None);
         assert_eq!(available.len(), 1);
@@ -460,5 +482,19 @@ mod tests {
         assert_eq!(replacing.len(), 2);
         assert_eq!(replacing[0].body["instance_id"], "running");
         assert!(replacing[0].label.contains("32768 context"));
+        assert!(replacing[0].label.contains("not full-context tested"));
+    }
+
+    #[test]
+    fn menu_prioritizes_vision_without_removing_text_choices() {
+        let snapshot = json!({"instances": [], "launch_profiles": [
+            {"model_id":"model", "profile":{"id":"text","name":"Text","concurrency":1,"options":{"vision":false}},"compatible_gpu_groups":[["gpu0"]]},
+            {"model_id":"model", "profile":{"id":"vision","name":"Vision","concurrency":4,"options":{"vision":true}},"compatible_gpu_groups":[["gpu0"]]}
+        ]});
+        let available = choices(&snapshot, None);
+        assert_eq!(available.len(), 2);
+        assert_eq!(available[0].body["profile_id"], "vision");
+        assert!(available[0].label.contains("Vision + text (default)"));
+        assert!(available[1].label.contains("Text only"));
     }
 }

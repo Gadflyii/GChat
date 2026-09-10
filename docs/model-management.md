@@ -146,15 +146,54 @@ Each profile requires:
 | `tp`, `draft_tp` | Producer-final target and draft degrees |
 | `gpu_name`, `compute_capability` | Exact physically qualified GPU SKU and SM |
 | `vram_tier_gib`, `min_memory_mib_per_gpu` | Display tier and measured usable-memory requirement per rank |
-| `max_context`, `concurrency` | Qualified per-request context and full-context request count |
+| `max_context`, `concurrency` | Configured per-request context and concurrent request capacity; evidence tier states what was tested |
 | `options` | Host launch options, including `kv_arena_headroom_bytes` (default 1 GiB) |
-| `qualification` | `evidence`, `engine_revision`, minimum `free_bytes_per_gpu`, and `full_context_requests` |
+| `qualification` | Required `tier`, `evidence`, `engine_revision`, measured minimum `free_bytes_per_gpu`, and tier-specific workload facts below |
 
-Qualification must record at least 1 GiB free on every GPU at the full-context
-concurrency point. The recorded request count must equal the profile concurrency;
-the engine headroom setting must also reserve at least 1 GiB. A smaller context
+Maximum-capacity profiles target 300 MiB headroom, increased to 500 MiB when
+execution validation shows problems. Qualification must record at least the
+profile's selected headroom free on every GPU during the declared test;
+settings below 300 MiB are rejected. Manual/auto launch defaults remain 1 GiB. A smaller context
 than the model maximum is ordinary profile behavior, not a warning. These metadata
 checks do not create qualification: producers must retain the actual physical evidence.
+Prebuilt entries must supply a positive, explicit `options.kv_arena_bytes` value
+from that qualification. Automatic arenas remain available for custom launches,
+not as a substitute for the catalog's validated settings.
+
+Qualification tiers are mandatory and shown in the launcher and GChat:
+
+Matching Vision-enabled profiles appear first. For a new instance, GChat selects
+the first available Vision profile without starting it; the text menu offers
+Enter to start that first Vision choice. Lower concurrency sorts first within
+each capability group. Text-only choices remain explicitly labeled and selectable.
+Existing instances require an explicit profile choice before replacement. Defaults
+never manufacture Vision support or alter a profile's DFlash setting.
+
+- `full-context-tested`: `full_context_requests` equals profile concurrency.
+  Full-length execution was physically tested. Omit `calculation` and `smoke_requests`.
+- `calculated-startup-smoke`: `full_context_requests` is zero and `smoke_requests`
+  equals profile concurrency. Actual short requests were submitted concurrently
+  using the saved full-context settings; this does not assert an exact scheduler
+  cohort. `calculation.required_kv_bytes_per_rank` includes the complete cohort's
+  layout padding and growth reservations; it must be positive and no larger than
+  the explicit arena. `calculation.available_kv_bytes_per_rank` is the safe arena
+  budget resolved by actual startup at the same context, concurrency and execution
+  options; it must cover the saved arena. Measure `free_bytes_per_gpu` during the
+  smoke wave, not by subtracting calculated allocations. Full-context execution
+  is explicitly untested at this tier.
+- `calculated-pending-validation`: capacity is calculated but startup, memory
+  margin and inference have not been validated. Set `full_context_requests` to
+  zero, omit `free_bytes_per_gpu` and `smoke_requests`, and include only positive
+  `calculation.required_kv_bytes_per_rank` no larger than the explicit arena.
+  Omit `calculation.available_kv_bytes_per_rank`: no measured startup budget exists.
+  These profiles are selectable with a warning and may fail on the installed
+  runtime until required engine support is implemented. Evidence must name the
+  calculation assumptions and missing validation; retain requested Vision/DFlash
+  settings rather than silently replacing them with ordinary decoding.
+
+Calculation-only entries use the pending tier, never a tested tier.
+Existing full-context evidence retains its stronger
+tier; no compatibility default infers a tier for an old catalog.
 
 Snapshots expose `launch_profiles` with matching installed `model_id`, free
 `gpu_groups`, and hardware-compatible `compatible_gpu_groups` for changing an

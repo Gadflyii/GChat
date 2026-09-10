@@ -9,12 +9,16 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-249 records, 2026-05-19 → 2026-09-09.
+253 records, 2026-05-19 → 2026-09-10.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-09-10** — [Deliver calculated profiles with pending validation](2026-09-10-deliver-calculated-pending-profiles.md)
+- **2026-09-10** — [Prefer available Vision launch profiles](2026-09-10-prefer-available-vision-launch-profiles.md)
+- **2026-09-10** — [Distinguish launch-profile evidence tiers](2026-09-10-distinguish-launch-profile-evidence-tiers.md)
+- **2026-09-09** — [Qualify capacity profiles with explicit headroom](2026-09-09-qualify-capacity-profiles-with-explicit-headroom.md)
 - **2026-09-09** — [Share profile launch and instance control](2026-09-09-share-profile-launch-and-instance-control.md)
 
 - **2026-09-08** — [Manage models on the selected host](2026-09-08-manage-models-on-the-selected-host.md)

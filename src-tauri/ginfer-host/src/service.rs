@@ -510,9 +510,6 @@ impl Host {
             return Err("artifact has no DFlash body".into());
         }
         let qwen = metadata.identity.model_id == "qwen3.8-27b";
-        if qwen && request.options.vision && request.options.spec != "none" {
-            return Err("Qwen Vision requires speculative decoding set to none".into());
-        }
         if qwen && request.options.draft_tokens > 7 {
             return Err("Qwen supports at most 7 draft tokens".into());
         }
@@ -1290,11 +1287,17 @@ mod lifecycle_tests {
             min_memory_mib_per_gpu: 32000,
             max_context: 8192,
             concurrency: 4,
-            options: LaunchOptions::default(),
+            options: LaunchOptions {
+                kv_arena_bytes: Some(4096),
+                ..LaunchOptions::default()
+            },
             qualification: crate::launch_profiles::Qualification {
+                tier: crate::launch_profiles::QualificationTier::FullContextTested,
+                calculation: None,
+                smoke_requests: None,
                 evidence: "synthetic fixture only".into(),
                 engine_revision: "fixture".into(),
-                free_bytes_per_gpu: crate::launch_profiles::HEADROOM_BYTES,
+                free_bytes_per_gpu: Some(crate::launch_profiles::HEADROOM_BYTES),
                 full_context_requests: 4,
             },
         };

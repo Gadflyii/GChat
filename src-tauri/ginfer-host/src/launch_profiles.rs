@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, path::Path};
 
 pub const HEADROOM_BYTES: u64 = 1 << 30;
+pub const MIN_PROFILE_HEADROOM_BYTES: u64 = 300 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -33,11 +34,33 @@ pub struct LaunchProfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Qualification {
+    pub tier: QualificationTier,
     pub evidence: String,
     pub engine_revision: String,
-    /// Minimum across ranks at the measured full-context/concurrency workload.
-    pub free_bytes_per_gpu: u64,
+    /// Minimum across ranks during the workload identified by the evidence tier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub free_bytes_per_gpu: Option<u64>,
     pub full_context_requests: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calculation: Option<CapacityCalculation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smoke_requests: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum QualificationTier {
+    FullContextTested,
+    CalculatedStartupSmoke,
+    CalculatedPendingValidation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapacityCalculation {
+    pub required_kv_bytes_per_rank: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available_kv_bytes_per_rank: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -105,10 +128,41 @@ impl LaunchProfile {
             || self.identity.weights_id.is_empty()
             || self.qualification.evidence.trim().is_empty()
             || self.qualification.engine_revision.trim().is_empty()
-            || self.qualification.free_bytes_per_gpu < HEADROOM_BYTES
-            || self.qualification.full_context_requests != self.concurrency
-            || self.options.kv_arena_headroom_bytes < HEADROOM_BYTES
+            || self.options.kv_arena_headroom_bytes < MIN_PROFILE_HEADROOM_BYTES
+            || self.options.kv_arena_bytes.is_none()
         {
+            return Err(fail());
+        }
+        let evidence_valid = match self.qualification.tier {
+            QualificationTier::FullContextTested => {
+                self.qualification.full_context_requests == self.concurrency
+                    && self.qualification.calculation.is_none()
+                    && self.qualification.smoke_requests.is_none()
+            }
+            QualificationTier::CalculatedStartupSmoke => {
+                self.qualification.full_context_requests == 0
+                    && self.qualification.smoke_requests == Some(self.concurrency)
+                    && self.qualification.calculation.as_ref().is_some_and(|calculation| {
+                        let arena = self.options.kv_arena_bytes.unwrap_or(0);
+                        calculation.required_kv_bytes_per_rank > 0
+                            && calculation.required_kv_bytes_per_rank <= arena
+                            && calculation.available_kv_bytes_per_rank.is_some_and(|available| arena <= available)
+                    })
+            }
+            QualificationTier::CalculatedPendingValidation => {
+                self.qualification.full_context_requests == 0
+                    && self.qualification.free_bytes_per_gpu.is_none()
+                    && self.qualification.smoke_requests.is_none()
+                    && self.qualification.calculation.as_ref().is_some_and(|calculation| {
+                        calculation.required_kv_bytes_per_rank > 0
+                            && calculation.required_kv_bytes_per_rank <= self.options.kv_arena_bytes.unwrap_or(0)
+                            && calculation.available_kv_bytes_per_rank.is_none()
+                    })
+            }
+        };
+        let measured_guard_valid = self.qualification.tier == QualificationTier::CalculatedPendingValidation
+            || self.qualification.free_bytes_per_gpu.is_some_and(|free| free >= self.options.kv_arena_headroom_bytes);
+        if !evidence_valid || !measured_guard_valid {
             return Err(fail());
         }
         let maximum = match self.identity.model_id.as_str() {
@@ -126,9 +180,7 @@ impl LaunchProfile {
             return Err(fail());
         }
         if (self.options.spec == "dflash" && self.draft_tp == 0)
-            || (self.identity.model_id == "qwen3.8-27b"
-                && ((self.options.vision && self.options.spec != "none")
-                    || self.options.draft_tokens > 7))
+            || (self.identity.model_id == "qwen3.8-27b" && self.options.draft_tokens > 7)
         {
             return Err(fail());
         }
@@ -224,15 +276,87 @@ mod tests {
             min_memory_mib_per_gpu: 32000,
             max_context: 65536,
             concurrency: 4,
-            options: LaunchOptions::default(),
+            options: LaunchOptions {
+                kv_arena_bytes: Some(4096),
+                ..LaunchOptions::default()
+            },
             qualification: Qualification {
+                tier: QualificationTier::FullContextTested,
+                calculation: None,
+                smoke_requests: None,
                 evidence: "synthetic test only".into(),
                 engine_revision: "fixture".into(),
-                free_bytes_per_gpu: HEADROOM_BYTES,
+                free_bytes_per_gpu: Some(HEADROOM_BYTES),
                 full_context_requests: 4,
             },
         }
     }
+    #[test]
+    fn vision_dflash_capability_is_independent_of_evidence_tier() {
+        let mut p = profile();
+        p.identity.model_id = "qwen3.8-27b".into();
+        p.identity.weights_id = "groupwise-int-dflash2-q4".into();
+        p.draft_tp = 1;
+        p.options.draft_tp = 1;
+        p.options.vision = true;
+        p.options.spec = "dflash".into();
+        p.validate().unwrap();
+        p.options.draft_tokens = 8;
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn pending_profiles_do_not_invent_measured_memory_or_smoke() {
+        let mut p = profile();
+        p.qualification.tier = QualificationTier::CalculatedPendingValidation;
+        p.qualification.full_context_requests = 0;
+        p.qualification.free_bytes_per_gpu = None;
+        p.qualification.calculation = Some(CapacityCalculation {
+            required_kv_bytes_per_rank: 4096,
+            available_kv_bytes_per_rank: None,
+        });
+        p.identity.model_id = "qwen3.8-27b".into();
+        p.identity.weights_id = "groupwise-int-dflash2-q4".into();
+        p.draft_tp = 1;
+        p.options.draft_tp = 1;
+        p.options.vision = true;
+        p.options.spec = "dflash".into();
+        p.validate().unwrap();
+        p.qualification.free_bytes_per_gpu = Some(HEADROOM_BYTES);
+        assert!(p.validate().is_err());
+        p.qualification.free_bytes_per_gpu = None;
+        p.qualification.smoke_requests = Some(4);
+        assert!(p.validate().is_err());
+        p.qualification.smoke_requests = None;
+        p.qualification.calculation.as_mut().unwrap().available_kv_bytes_per_rank = Some(4096);
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn calculated_profiles_require_capacity_and_concurrent_smoke_evidence() {
+        let mut p = profile();
+        p.qualification.tier = QualificationTier::CalculatedStartupSmoke;
+        assert!(p.validate().is_err());
+        p.qualification.full_context_requests = 0;
+        p.qualification.smoke_requests = Some(p.concurrency);
+        p.qualification.calculation = Some(CapacityCalculation {
+            required_kv_bytes_per_rank: 4096,
+            available_kv_bytes_per_rank: Some(4096),
+        });
+        p.validate().unwrap();
+        p.qualification.smoke_requests = Some(1);
+        assert!(p.validate().is_err());
+        p.qualification.smoke_requests = Some(p.concurrency);
+        p.qualification.calculation.as_mut().unwrap().required_kv_bytes_per_rank = 4097;
+        assert!(p.validate().is_err());
+        p.qualification.calculation.as_mut().unwrap().required_kv_bytes_per_rank = 4096;
+        p.qualification.calculation.as_mut().unwrap().available_kv_bytes_per_rank = Some(4095);
+        assert!(p.validate().is_err());
+        p.qualification.calculation.as_mut().unwrap().available_kv_bytes_per_rank = Some(4096);
+        p.qualification.free_bytes_per_gpu = Some(p.options.kv_arena_headroom_bytes - 1);
+        assert!(p.validate().is_err());
+    }
+
     #[test]
     fn profiles_require_full_context_headroom_and_exact_per_gpu_groups() {
         let mut p = profile();
@@ -255,11 +379,36 @@ mod tests {
         assert!(p
             .gpu_groups(&gpus, &BTreeSet::from(["GPU-0".into()]))
             .is_empty());
-        p.qualification.free_bytes_per_gpu -= 1;
+        p.qualification.free_bytes_per_gpu = Some(HEADROOM_BYTES - 1);
         assert!(p.validate().is_err());
-        p.qualification.free_bytes_per_gpu = HEADROOM_BYTES;
+        p.qualification.free_bytes_per_gpu = Some(HEADROOM_BYTES);
         p.qualification.full_context_requests = 1;
         assert!(p.validate().is_err());
+    }
+    #[test]
+    fn profile_evidence_must_meet_its_selected_headroom() {
+        let mut p = profile();
+        for margin in [MIN_PROFILE_HEADROOM_BYTES, 500 * 1024 * 1024, HEADROOM_BYTES] {
+            p.options.kv_arena_headroom_bytes = margin;
+            p.qualification.free_bytes_per_gpu = Some(margin);
+            p.validate().unwrap();
+            p.qualification.free_bytes_per_gpu = Some(margin - 1);
+            assert!(p.validate().is_err());
+        }
+        p.options.kv_arena_headroom_bytes = MIN_PROFILE_HEADROOM_BYTES - 1;
+        p.qualification.free_bytes_per_gpu = Some(HEADROOM_BYTES);
+        assert!(p.validate().is_err());
+    }
+    #[test]
+    fn prebuilt_profiles_require_an_explicit_arena() {
+        let mut p = profile();
+        p.options.kv_arena_bytes = None;
+        assert!(p.validate().is_err());
+        p.options.kv_arena_bytes = Some(0);
+        assert!(p.validate().is_err());
+        p.options.kv_arena_bytes = Some(4096);
+        p.validate().unwrap();
+        LaunchOptions::default().validate(1).unwrap();
     }
     #[test]
     fn other_platform_profiles_are_not_launch_choices() {
