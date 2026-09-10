@@ -147,7 +147,7 @@ gchat/
 
 **Option 1: The Easy Way (Make)**
 ```bash
-git clone https://github.com/Gadflyii/gchat
+git clone https://github.com/SectileLabs/gchat
 cd gchat
 make dev
 ```
@@ -156,8 +156,8 @@ make dev
 
 ### Reporting Bugs
 
-- **Ensure the bug was not already reported** by searching on GitHub under [Issues](https://github.com/Gadflyii/gchat/issues)
-- If you're unable to find an open issue addressing the problem, [open a new one](https://github.com/Gadflyii/gchat/issues/new)
+- **Ensure the bug was not already reported** by searching on GitHub under [Issues](https://github.com/SectileLabs/gchat/issues)
+- If you're unable to find an open issue addressing the problem, [open a new one](https://github.com/SectileLabs/gchat/issues/new)
 - Include your system specs and error logs - it helps a ton
 
 ### Suggesting Enhancements
@@ -269,7 +269,7 @@ docs: update installation instructions
 
 If things go sideways:
 
-1. **Check [GitHub Issues](https://github.com/Gadflyii/gchat/issues) for known problems**
+1. **Check [GitHub Issues](https://github.com/SectileLabs/gchat/issues) for known problems**
 2. **Clear everything and start fresh:** `make clean` then `make dev`
 3. **Copy your error logs and system specs**
 4. **Open an issue with the logs attached**
@@ -281,9 +281,9 @@ Common issues:
 
 ## Getting Help
 
-- [Documentation](https://github.com/Gadflyii/gchat#readme) - Project overview and setup
-- [GitHub Issues](https://github.com/Gadflyii/gchat/issues) - Report bugs here
-- [GitHub Discussions](https://github.com/Gadflyii/gchat/discussions) - Ask questions
+- [Documentation](https://github.com/SectileLabs/gchat#readme) - Project overview and setup
+- [GitHub Issues](https://github.com/SectileLabs/gchat/issues) - Report bugs here
+- [GitHub Discussions](https://github.com/SectileLabs/gchat/discussions) - Ask questions
 
 ## License
 

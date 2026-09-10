@@ -210,7 +210,7 @@ fn transform_anthropic_to_openai(body: &serde_json::Value) -> Option<serde_json:
 
     let openai_messages = convert_messages(messages, body.get("system"))?;
 
-    // Strict chat templates (e.g. GadflyII/ornith-9b, Qwen3-family models)
+    // Strict chat templates (e.g. SectileLabs/ornith-9b, Qwen3-family models)
     // `raise` "System message must be at the beginning" whenever a request
     // carries more than one system message or a non-leading one. Claude Code
     // triggers this by combining its system prompt with developer/system items,

@@ -18,7 +18,7 @@ export const JAN_CODE_HF_REPO = 'janhq/Jan-Code-4b-Gguf'
  * reminder repeats the same recommendation the setup screen showed.
  */
 export const ONBOARDING_REMINDER_MODEL_HF_REPO =
-  'GadflyII/Qwen3.8-27B-NInfer'
+  'SectileLabs/Qwen3.8-27B-NInfer'
 
 /** What the bottom-right reminder offers, keyed by hardware tier. */
 export type OnboardingReminderModel = {
@@ -70,11 +70,11 @@ export const SETUP_SCREEN_QUANTIZATIONS = ['q4_k_m']
  */
 export const BASELINE_RECOMMENDED_MODELS: ReadonlyArray<Recommendation> = [
   {
-    model_name: 'GadflyII/Qwen3.8-27B-NInfer',
+    model_name: 'SectileLabs/Qwen3.8-27B-NInfer',
     description_key: 'hub:recEverydayUse',
   },
   {
-    model_name: 'GadflyII/Qwen3.8-27B-nvfp4-NInfer',
+    model_name: 'SectileLabs/Qwen3.8-27B-nvfp4-NInfer',
     description_key: 'hub:recMathReasoning',
   },
 ]
@@ -90,10 +90,8 @@ export const BASELINE_LOW_SPEC_RECOMMENDED_MODELS: ReadonlyArray<Recommendation>
   []
 
 /**
- * One `.ginfer` weights file per repo. File sizes and hashes are unknown
- * until the repos are published, so the download resolves them from the live
- * HuggingFace repo at download time — an unpublished repo degrades to a clean
- * download error, never a crash.
+ * Unpublished SectileLabs catalog placeholders. Managed downloads stay unavailable
+ * until the release feed supplies immutable URLs, hashes, sizes, and qualification.
  */
 const ginferEntry = ({
   id,
@@ -108,7 +106,7 @@ const ginferEntry = ({
 }): CatalogModel => ({
   model_name: repo,
   name,
-  developer: 'GadflyII',
+  developer: 'SectileLabs',
   library_name: 'ginfer',
   description: `**Tags**: ${tags}`,
   downloads: 0,
@@ -140,25 +138,25 @@ export const BASELINE_MODEL_CATALOG: ReadonlyArray<CatalogModel> = [
   ginferEntry({
     id: 'qwen3.8-27b-int-autoround',
     name: 'Qwen3.8 27B (int autoround)',
-    repo: 'GadflyII/Qwen3.8-27B-NInfer',
+    repo: 'SectileLabs/Qwen3.8-27B-NInfer',
     tags: 'ginfer, qwen3, nvidia, cuda, conversational',
   }),
   ginferEntry({
     id: 'qwen3.8-27b-nvfp4',
     name: 'Qwen3.8 27B (NVFP4)',
-    repo: 'GadflyII/Qwen3.8-27B-nvfp4-NInfer',
+    repo: 'SectileLabs/Qwen3.8-27B-nvfp4-NInfer',
     tags: 'ginfer, qwen3, nvidia, cuda, conversational',
   }),
   ginferEntry({
     id: 'muse-glimmer-30b-int-autoround',
     name: 'Muse Glimmer 30B (int autoround)',
-    repo: 'GadflyII/Muse-Glimmer-30B-NInfer',
+    repo: 'SectileLabs/Muse-Glimmer-30B-NInfer',
     tags: 'ginfer, nvidia, cuda, conversational',
   }),
   ginferEntry({
     id: 'muse-glimmer-30b-nvfp4',
     name: 'Muse Glimmer 30B (NVFP4)',
-    repo: 'GadflyII/Muse-Glimmer-30B-nvfp4-NInfer',
+    repo: 'SectileLabs/Muse-Glimmer-30B-nvfp4-NInfer',
     tags: 'ginfer, nvidia, cuda, conversational',
   }),
 ]

@@ -8,6 +8,8 @@ export type ModelRelease = {
   qualified_sm: string[]
   min_vram_mib_per_gpu: number
   capabilities: string[]
+  // Producer profile payloads are validated by the destination host before transfer.
+  launch_profiles?: Record<string, unknown>[]
 }
 export type ModelDownload = {
   id: string; release: ModelRelease; status: string; received: number
@@ -30,7 +32,9 @@ export function validRelease(value: unknown): value is ModelRelease {
     /^[a-f0-9]{64}$/.test(r.sha256) && Number.isSafeInteger(r.bytes) && r.bytes >= 16 &&
     [1, 2, 4].includes(r.tp) && Number.isSafeInteger(r.min_vram_mib_per_gpu) && r.min_vram_mib_per_gpu > 0 &&
     Array.isArray(r.qualified_sm) && r.qualified_sm.length > 0 && r.qualified_sm.every(s => /^\d+\.\d+$/.test(s)) &&
-    Array.isArray(r.capabilities) && r.capabilities.every(c => typeof c === 'string')
+    Array.isArray(r.capabilities) && r.capabilities.every(c => typeof c === 'string') &&
+    (r.launch_profiles === undefined || (Array.isArray(r.launch_profiles) &&
+      r.launch_profiles.every(p => p !== null && typeof p === 'object' && !Array.isArray(p))))
 }
 
 export function releaseReadiness(release: unknown, gpus: ModelGpu[]) {

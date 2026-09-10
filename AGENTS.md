@@ -20,7 +20,7 @@ inference engine and exposes an OpenAI-compatible API at
 `http://localhost:1337/v1`. One inference backend sits behind that one
 facade: `ginfer`.
 
-[ginfer]: https://github.com/Gadflyii/ginfer
+[ginfer]: https://github.com/SectileLabs/ginfer
 
 Targets: Linux x86_64 (AppImage) with an NVIDIA GPU (CUDA 13.1, SM 86/89/120a).
 Windows is gated until the ginfer port ships; other platforms are unsupported.
@@ -43,17 +43,17 @@ there is no legacy user base and no migration shim.
 | `extensions/`                             | Pluggable backend extensions (TS, rolldown-bundled). Each has `src/`, `package.json`, `settings.json`. |
 | `extensions/ginfer-extension/`            | Driver for the ginfer engine. Provider id `ginfer` (the only local provider). |
 | `src-tauri/`                              | Rust/Tauri shell: `src/lib.rs`, `src/main.rs`, plugins, capabilities, bundle configs.  |
-| `src-tauri/plugins/tauri-plugin-ginfer/`  | Owns `ginfer-serve` process lifecycle (spawn/stop/readiness) for the ginfer extension. |
+| `src-tauri/plugins/tauri-plugin-ginfer/`  | Desktop/CLI adapters for host-owned serving; CLI HTTP endpoint forwarding. |
 | `src-tauri/plugins/tauri-plugin-hardware/`| GPU/CPU/RAM probing that feeds the NVIDIA/CUDA hardware gate.                        |
 | `pre-install/`                            | Pre-built extension tarballs bundled into the installer, named `gchat-<ext>-<ver>.tgz`. |
 | `scripts/`                                | Build, packaging, signing, download helpers.                                          |
 | `docs/`                                   | Public docs site (Next.js/MDX) + `docs/decisions/` (ADR log).                          |
 | `autoqa/`, `tests/`                       | Automated QA harness, top-level Vitest + quality fixtures.                            |
 
-The engine itself lives in [`Gadflyii/ginfer`](https://github.com/Gadflyii/ginfer)
-(`ginfer-serve` contract in its `docs/serving.md`); models are published in the
-[`GadflyII/ginfer-models`](https://huggingface.co/collections/GadflyII/ginfer-models)
-Hugging Face collection.
+The engine itself lives in [`SectileLabs/ginfer`](https://github.com/SectileLabs/ginfer)
+(`ginfer-serve` contract in its `docs/serving.md`); model publication targets the
+[`SectileLabs`](https://huggingface.co/SectileLabs)
+Hugging Face organization.
 
 ---
 
@@ -64,11 +64,11 @@ Hugging Face collection.
 - Provider id is `ginfer`; the engine is the `ginfer-serve` HTTP server driven
   by `src-tauri/plugins/tauri-plugin-ginfer/`, surfaced by
   `extensions/ginfer-extension/` (extends `AIEngine`).
-- Models are `.ginfer` containers from the `GadflyII/ginfer-models` HF
-  collection (int-autoround + NVFP4). The HF download pipeline is narrowed to
+- Models are `.ginfer` containers from the `SectileLabs` HF
+  organization (int-autoround + NVFP4). The HF download pipeline is narrowed to
   `.ginfer`; the local model cache is `<data>/ginfer/models/`.
 - Model identity comes from the `.ginfer` artifact itself (closed registered
-  set); anything outside the collection fails at server start, so catalog
+  set); unsupported identities fail at server start. Downloadable catalog
   entries must track published artifacts 1:1.
 - Hardware gate: **Linux x86_64 + NVIDIA, CUDA 13.1 driver, SM 86/89/120a.**
   The gate must surface a clear "unsupported" state everywhere the UI assumes
@@ -136,7 +136,7 @@ defaults on conflict.
 1. **Do only what was asked.** No opportunistic refactors, no "while I'm here"
    cleanups. Tempting improvement → propose it, don't ship it.
 2. **Don't fabricate backend behaviour.** Unsure about a `ginfer-serve` flag or
-   the `.ginfer` format? Read the `Gadflyii/ginfer` repo's `README.md` and
+   the `.ginfer` format? Read the `SectileLabs/ginfer` repo's `README.md` and
    `docs/serving.md`.
 3. **OpenAI-compat is a contract.** `http://localhost:1337/v1` must stay
    OpenAI-compatible — OpenCode, Codex, Hermes and others depend on it. Adding

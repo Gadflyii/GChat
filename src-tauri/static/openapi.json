@@ -56,7 +56,7 @@
                 "$ref": "#/components/schemas/CreateChatCompletionDto"
               },
               "example": {
-                "model": "GadflyII/Qwen3.5-9B",
+                "model": "SectileLabs/Qwen3.5-9B",
                 "messages": [
                   {"role": "user", "content": "Hello!"}
                 ]
@@ -92,7 +92,7 @@
                 "$ref": "#/components/schemas/CreateMessageDto"
               },
               "example": {
-                "model": "GadflyII/Qwen3.5-9B",
+                "model": "SectileLabs/Qwen3.5-9B",
                 "messages": [
                   {"role": "user", "content": "Hello!"}
                 ]

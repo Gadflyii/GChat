@@ -14,17 +14,26 @@ mod windows_service;
 struct Args {
     /// Run under the Windows Service Control Manager (installer-owned mode).
     #[cfg(windows)]
-    #[arg(long, conflicts_with_all = ["pair", "request_pairing"])]
+    #[arg(long, conflicts_with_all = ["pair", "request_pairing", "menu", "ensure_running"])]
     windows_service: bool,
-    #[arg(long)]
-    data_dir: PathBuf,
+    #[arg(long, required_unless_present = "menu")]
+    data_dir: Option<PathBuf>,
+    /// Open the installed host menu; desktop installations bootstrap their local owner.
+    #[arg(long, conflicts_with_all = ["pair", "request_pairing"])]
+    menu: bool,
+    /// Reconnect or start an independent loopback host, then print its snapshot.
+    #[arg(long, conflicts_with_all = ["pair", "request_pairing", "menu", "discoverable"])]
+    ensure_running: bool,
     /// NVIDIA inventory executable; installers resolve service-specific PATHs.
     #[arg(long, default_value = "nvidia-smi")]
     nvidia_smi: PathBuf,
-    #[arg(long, required_unless_present = "request_pairing")]
+    #[arg(long, required_unless_present_any = ["request_pairing", "menu"])]
     engine: Option<PathBuf>,
     #[arg(long)]
     models: Vec<PathBuf>,
+    /// Own the desktop provider's model cache and existing transfer journal.
+    #[arg(long)]
+    desktop_provider: Option<PathBuf>,
     /// Explicit deployment descriptors; only declared exact degrees enter inventory.
     #[arg(long)]
     artifact_set: Vec<PathBuf>,
@@ -41,12 +50,8 @@ struct Args {
     /// Activate pairing on an already-running service using its local private state.
     #[arg(long, conflicts_with = "pair")]
     request_pairing: bool,
-    /// Management origin for --request-pairing (certificate is pinned from local state).
-    #[arg(
-        long,
-        default_value = "https://127.0.0.1:7443",
-        requires = "request_pairing"
-    )]
+    /// Management origin for explicit menu/pairing commands; pinned from local state.
+    #[arg(long, default_value = "https://127.0.0.1:7443")]
     host_url: String,
 }
 
@@ -69,9 +74,34 @@ async fn run(
     ready: impl FnOnce() -> Result<(), String>,
     shutdown: impl std::future::Future<Output = ()>,
 ) -> Result<(), String> {
+    if args.menu {
+        return match args.data_dir {
+            Some(directory) => ginfer_host::launcher::menu(&directory, &args.host_url).await,
+            None => ginfer_host::launcher::installed_menu().await,
+        };
+    }
+    let data_dir = args
+        .data_dir
+        .ok_or("--data-dir is required for host service operations")?;
+    if args.ensure_running {
+        let local = ginfer_host::local_host::LocalHost {
+            binary: std::env::current_exe().map_err(|e| e.to_string())?,
+            engine: args.engine.ok_or("engine is required")?,
+            directory: data_dir,
+            desktop_provider: args.desktop_provider,
+            models: args.models,
+            artifact_sets: args.artifact_set,
+            name: args.name,
+            nvidia_smi: args.nvidia_smi,
+            listen: args.listen,
+        };
+        let control = local.ensure_running().await?;
+        println!("{}", control.snapshot().await?);
+        return Ok(());
+    }
     if args.request_pairing {
         let data: Persistent = serde_json::from_slice(
-            &std::fs::read(args.data_dir.join("host.json")).map_err(|e| e.to_string())?,
+            &std::fs::read(data_dir.join("host.json")).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
         let mut url = reqwest::Url::parse(&args.host_url).map_err(|e| e.to_string())?;
@@ -109,6 +139,7 @@ async fn run(
     if args.discoverable && args.listen.ip().is_loopback() {
         return Err("LAN discovery requires a LAN or wildcard --listen address".into());
     }
+    let _owner = ginfer_host::service_owner::ServiceOwner::acquire(&data_dir)?;
     let output = tokio::process::Command::new(&args.nvidia_smi)
         .args([
             "--query-gpu=uuid,name,memory.total,compute_cap",
@@ -133,18 +164,27 @@ async fn run(
             compute_capability: values[3].parse::<f32>().ok().map(|_| values[3].to_string()),
         });
     }
-    let host = Host::open(
-        args.data_dir,
+    let host = Host::open_with_model_storage(
+        data_dir,
         args.name,
         args.engine.ok_or("engine is required")?,
         args.models,
         args.artifact_set,
         gpus,
+        args.desktop_provider,
     )
     .await?;
     let listener = tokio::net::TcpListener::bind(args.listen)
         .await
         .map_err(|e| e.to_string())?;
+    let mut local_address = listener.local_addr().map_err(|e| e.to_string())?;
+    if local_address.ip().is_unspecified() {
+        local_address.set_ip(if local_address.is_ipv4() {
+            std::net::Ipv4Addr::LOCALHOST.into()
+        } else { std::net::Ipv6Addr::LOCALHOST.into() });
+    }
+    host.data.lock().await.management_origin = Some(format!("https://{local_address}"));
+    host.save().await?;
     let data = host.data.lock().await;
     let acceptor = data.certificate.acceptor()?;
     println!(

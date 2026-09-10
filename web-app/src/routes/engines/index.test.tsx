@@ -1,8 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentType, ReactNode } from 'react'
+import type { EngineInstance, EngineLaunchProfile } from '@/services/engines'
 
-const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), error: '' }))
+const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), error: '', local: false, instances: [] as EngineInstance[] }))
 vi.mock('@tanstack/react-router', () => ({ createFileRoute: () => (options: unknown) => ({ options }) }))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock('@/services/engines', () => ({ engineCommand: mocks.command }))
@@ -10,10 +11,10 @@ vi.mock('@/stores/engine-discovery-store', () => ({ useEngineDiscovery: () => ({
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector?: (state: { refresh: typeof mocks.refresh }) => unknown) => {
   if (selector) return selector({ refresh: mocks.refresh })
   return {
-    hosts: [{ host_id: 'host', name: 'Lab host', base_url: 'https://host:7443' }],
+    hosts: [{ host_id: 'host', name: 'Lab host', base_url: 'https://host:7443', local: mocks.local }],
     nearby: [], errors: mocks.error ? { host: mocks.error } : {}, refresh: mocks.refresh,
     refreshing: false, discoveryError: null,
-    snapshots: { host: { host_id: 'host', display_name: 'Lab host', revision: 1, instances: [],
+    snapshots: { host: { host_id: 'host', display_name: 'Lab host', revision: 1, instances: mocks.instances,
       gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768 }],
       models: [{ id: 'model', artifact_set: false, path: '/models/qwen.ginfer', metadata: {
         identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' }, tp_size: 1, draft_tp: 0, size_bytes: 1024,
@@ -26,12 +27,48 @@ const Page = Route.options.component as ComponentType
 
 beforeEach(() => {
   mocks.error = ''
+  mocks.local = false
+  mocks.instances = []
   mocks.command.mockReset().mockImplementation(async (action: string) => action === 'credential_status' ? { ready: true, platform: 'linux', can_install: false } : {})
   mocks.refresh.mockReset().mockResolvedValue(undefined)
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('Engines host intake and launch controls', () => {
+  it('shows the automatic local host without a forget action', () => {
+    mocks.local = true
+    render(<Page />)
+    expect(screen.getByText('Local host')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Forget' })).not.toBeInTheDocument()
+  })
+  it('starts saved instances and confirms a running-instance restart', async () => {
+    const profile: EngineLaunchProfile = {
+      model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,
+      vision: false, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
+      kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
+    }
+    mocks.instances = [{ instance_id: 'instance', session_id: null, display_name: 'Saved model',
+      upstream_model_id: 'model', status: 'stopped', configuration: profile, profile }]
+    const view = render(<Page />)
+    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('start', {
+      host_id: 'host', instance_id: 'instance', body: {},
+    }))
+    mocks.instances[0].status = 'ready'
+    view.rerender(<Page />)
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    expect(mocks.command).not.toHaveBeenCalledWith('restart', expect.anything())
+    confirmation.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('restart', {
+      host_id: 'host', instance_id: 'instance', body: { force: false, expected_session_id: null },
+    }))
+    expect(screen.getByText('Saved model · ready', { selector: 'p' })).toBeInTheDocument()
+  })
+
   it('requires a hexadecimal fingerprint and numeric pairing code before submitting', async () => {
     render(<Page />)
     fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })

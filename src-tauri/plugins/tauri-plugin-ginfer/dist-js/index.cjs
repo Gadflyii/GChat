@@ -35,15 +35,14 @@ function normalizeGinferConfig(config) {
     };
 }
 // GInfer server commands
-async function loadGinferModel(binaryPath, modelId, modelPath, port, cfg, apiKey, isEmbedding = false, timeout = 600) {
+async function loadGinferModel(binaryPath, hostDirectory, modelId, modelPath, cfg, isEmbedding = false, timeout = 600) {
     const config = normalizeGinferConfig(cfg);
     return await core.invoke('plugin:ginfer|load_ginfer_model', {
         binaryPath,
+        hostDirectory,
         modelId,
         modelPath,
-        port,
         config,
-        apiKey,
         isEmbedding,
         timeout,
     });
@@ -53,9 +52,6 @@ async function unloadGinferModel(pid) {
 }
 async function isProcessRunning(pid) {
     return await core.invoke('plugin:ginfer|is_process_running', { pid });
-}
-async function getRandomPort() {
-    return await core.invoke('plugin:ginfer|get_random_port');
 }
 async function findSessionByModel(modelId) {
     return await core.invoke('plugin:ginfer|find_session_by_model', { modelId });
@@ -82,7 +78,6 @@ exports.cleanupGinferProcesses = cleanupGinferProcesses;
 exports.findSessionByModel = findSessionByModel;
 exports.getAllSessions = getAllSessions;
 exports.getLoadedModels = getLoadedModels;
-exports.getRandomPort = getRandomPort;
 exports.isProcessRunning = isProcessRunning;
 exports.loadGinferModel = loadGinferModel;
 exports.normalizeGinferConfig = normalizeGinferConfig;

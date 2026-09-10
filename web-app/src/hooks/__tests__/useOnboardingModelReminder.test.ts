@@ -59,8 +59,8 @@ describe('useOnboardingModelReminder', () => {
   })
 
   it.each([
-    'GadflyII/Qwen3.8-27B-NInfer-Q4_K_M',
-    'GadflyII/Qwen3.8-27B-NInfer-IQ4_XS',
+    'SectileLabs/Qwen3.8-27B-NInfer-Q4_K_M',
+    'SectileLabs/Qwen3.8-27B-NInfer-IQ4_XS',
     'Qwen3.8-27B-NInfer',
   ])('stays hidden once %s is in the library', (id) => {
     localStorage.setItem(localStorageKey.setupCompleted, 'true')
@@ -101,7 +101,7 @@ describe('useOnboardingModelReminder', () => {
   it('stays hidden while the recommended model is downloading', () => {
     localStorage.setItem(localStorageKey.setupCompleted, 'true')
     useOnboardingModelReminderStore.setState({ pending: true })
-    state.localDownloadingModels = new Set(['GadflyII/Qwen3.8-27B-NInfer-Q4_K_M'])
+    state.localDownloadingModels = new Set(['SectileLabs/Qwen3.8-27B-NInfer-Q4_K_M'])
 
     const { result } = setup()
     expect(result.current.isDownloading).toBe(true)

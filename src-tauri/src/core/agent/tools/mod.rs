@@ -1259,7 +1259,7 @@ mod tests {
                 "script": "inspect.ts",
                 "args": [
                     "--repo",
-                    "GadflyII/GChat",
+                    "SectileLabs/GChat",
                     "Authorization: Bearer secret",
                     "https://user:password@example.com/path?token=secret"
                 ],
@@ -1268,7 +1268,7 @@ mod tests {
         });
 
         assert_eq!(preview["args"][0], "--repo");
-        assert_eq!(preview["args"][1], "GadflyII/GChat");
+        assert_eq!(preview["args"][1], "SectileLabs/GChat");
         assert_eq!(preview["args"][2], "<redacted>");
         assert_eq!(preview["args"][3], "https://example.com/path");
         assert_eq!(preview["argument_count"], 4);

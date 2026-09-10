@@ -37,7 +37,75 @@ file list. It never compiles the engine and refuses to replace an existing archi
 Output defaults to `src-tauri/ginfer-host/target/distribution/`. Source-repository
 tests referenced below are maintainer checks, not included in the binary archive.
 
+Add `--profile-catalog /explicit/qualified-catalog.json` for each selected model's
+measured catalog from GInfer's `config/launch-profiles/`. Packaging combines these
+without changing profile values, rejects duplicate IDs and other-platform catalogs,
+and includes `bin/launch-profiles.json`. Both standalone setup and OS-service
+installers preserve this file beside `ginfer-host`. The host validates it before
+offering profiles. A state-directory `launch-profiles.json`, when present, replaces
+the bundled catalog; an invalid override reports an error rather than silently
+using defaults. Refresh reloads edits. Downloaded model-release profiles also
+participate through the existing installed-release contract. A package without a
+selected catalog has no bundled qualified presets.
+
+For GChat desktop releases, set `GINFER_PROFILE_CATALOGS` to the selected source
+catalog paths using the platform's path-list separator (`:` on Linux, `;` on
+Windows). The Windows release script exposes the same choice as
+`-GinferProfileCatalogs`. The application bundle and its installed CLI host receive
+the combined catalog. Both default to an explicit empty catalog when no sources
+are selected; release builders must select the measured profiles intentionally.
+
+For a combined Windows distribution, add
+`--runtime-directory /explicit/staged/windows/runtime`. This emits
+`ginfer-bundle-<version>-windows-x86_64.zip` containing the host and the complete
+manifest-selected engine runtime under `runtime/`. The packager verifies every
+listed size and SHA256 and requires both `ginfer.exe` and `ginfer-serve.exe`.
+Unlisted files, models and private host state are excluded. Packaging does not
+install or start anything. Extract the combined archive to a local directory and
+run `setup.cmd`: setup displays editable binary and model/state locations, accepts
+Enter for the defaults, then asks for confirmation. It installs for the current
+user without elevation and adds the binary directory to the user PATH. Open a
+new terminal and type `ginfer`. Existing registered hosts retain their engine and
+storage; setup never replaces a running host or loads a model.
+
+For explicit setup, run `scripts/setup-ginfer-windows.ps1 -InstallDirectory PATH
+-ProviderDirectory PATH -Install`; omit `-Install` to preview, and add `-NoPath`
+to avoid editing the user PATH. Existing installation directories are rejected,
+not overwritten. Runtime manifest verification happens before installation.
+For Linux, pass a staged `ginfer-linux-runtime-v1` directory to the same packager
+with `--target linux-x86_64`. Extract the resulting combined archive, then run
+`python3.11 setup.py`. Interactive setup offers binary, model/state and launcher
+directories; Enter accepts the defaults. Explicit `--install-directory`,
+`--provider-directory`, `--link-directory` and `--install` support unattended use;
+without `--install`, explicit arguments only preview changes. The launcher symlink
+defaults to `~/.local/bin/ginfer`; setup reports if that directory is not on PATH
+and does not rewrite shell startup files. Existing paths are not overwritten.
+
+Linux runtime staging belongs to GInfer's `tools/stage_linux_runtime.py`. It
+copies explicitly selected executables, FFmpeg and CUDA runtime libraries and
+sets relative library paths on the copies with a build-time `patchelf`. It leaves
+build products and installed dependencies untouched. The manifest records remaining
+system-library dependencies and the build's glibc version. The NVIDIA driver is
+never bundled. Successful local relocation does not establish support for an older
+distribution ABI; release builds still need the supported distribution baseline.
+
 ## Linux host
+
+### Shared local owner
+
+GChat and the no-argument GInfer menu now reuse one per-user host registration:
+`%APPDATA%\GInfer\local-host.json` on Windows, or
+`$XDG_CONFIG_HOME/ginfer/local-host.json` on Linux (default
+`~/.config/ginfer/local-host.json`). The first desktop bootstrap or installed
+menu registers its owner. Later installations reuse that owner's engine and
+storage without moving models, copying credentials or replacing running services.
+A menu can reconnect using this record even without a sibling launcher config.
+An explicitly selected `--data-dir` bypasses this registration. Service-mode
+records only connect: start a stopped OS service through its service manager.
+If a registered installation is unavailable, fix that installation or deliberately
+update its locator; a different installation will not silently take ownership.
+
+### Installation
 
 Model roots are optional. A new host can start with empty managed storage and
 receive published packages from GChat after pairing. Existing `--models` roots
@@ -63,8 +131,9 @@ python3 scripts/install-ginfer-host-linux.py \
   --models /absolute/models --name 'Lab host' --share-lan
 ```
 
-Repeat with `--install` after reviewing the preview. This installs and enables
-`ginfer-host.service`, but does **not** start it or any inference process. Existing
+Repeat with `--install` after reviewing the preview. This installs, enables and
+starts `ginfer-host.service`, but does not load a model or start inference. Add
+`--no-start` to stage the service without starting it. Existing
 installations are not overwritten. The engine remains at its supplied path; keep
 its runtime libraries there. Model roots may be repeated with `--models`.
 

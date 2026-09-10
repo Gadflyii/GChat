@@ -5,7 +5,6 @@ const COMMANDS: &[&str] = &[
     "load_ginfer_model",
     "unload_ginfer_model",
     "is_process_running",
-    "get_random_port",
     "find_session_by_model",
     "get_loaded_models",
     "get_all_sessions",

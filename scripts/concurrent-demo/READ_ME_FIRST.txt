@@ -11,7 +11,7 @@ STEP 1 · Install & run GChat
 --------------------------------------------------------------------------------
 
   1. Download and install GChat:
-       https://github.com/Gadflyii/gchat/releases   (or the release URL we shared)
+       https://github.com/SectileLabs/gchat/releases   (or the release URL we shared)
 
   2. Open the app. Sign in / skip onboarding.
 

@@ -35,7 +35,7 @@
 ---
 
 GChat is the desktop client we are building at Sectile Research Laboratories around
-[GInfer](https://github.com/Gadflyii/ginfer). It owns model acquisition, engine lifecycle,
+[GInfer](https://github.com/SectileLabs/ginfer). It owns model acquisition, engine lifecycle,
 conversations, tool calling, agent workflows, coding-agent integration, and the local API surface.
 GInfer remains the single local inference backend.
 
@@ -238,7 +238,7 @@ The deterministic frontend and Rust checks do not require a model.
 ### Build and run
 
 ```bash
-git clone https://github.com/sectilelabs/gchat.git
+git clone https://github.com/SectileLabs/gchat.git
 cd gchat
 
 make dev
@@ -298,7 +298,7 @@ the desktop application.
 - [Contributing](CONTRIBUTING.md)
 - [Engineering decisions](docs/decisions/INDEX.md)
 - [Agent architecture](src-tauri/src/core/agent/ARCHITECTURE.md)
-- [GInfer serving contract](https://github.com/Gadflyii/ginfer/blob/main/docs/serving.md)
+- [GInfer serving contract](https://github.com/SectileLabs/ginfer/blob/main/docs/serving.md)
 
 ## About Sectile Research Laboratories
 
@@ -310,6 +310,8 @@ Sectile is not an AI service provider. Commercial engagement is through architec
 joint development, and professional services.
 
 - Web: [sectilelabs.ai](https://sectilelabs.ai)
+- GitHub: [SectileLabs](https://github.com/SectileLabs)
+- Models: [SectileLabs on Hugging Face](https://huggingface.co/SectileLabs)
 - Partnerships: [partners@sectilelabs.ai](mailto:partners@sectilelabs.ai)
 
 ## License

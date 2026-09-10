@@ -7,7 +7,7 @@
  * 3. Remaining endpoints are FALLBACK - no signing needed
  *
  * Convention: The first endpoint in the list should be the signed endpoint
- * (e.g., https://github.com/Gadflyii/gchat/releases/latest/download/latest.json)
+ * (e.g., https://github.com/SectileLabs/gchat/releases/latest/download/latest.json)
  */
 use super::hmac_client::SignedRequestHeaders;
 use reqwest::Client;

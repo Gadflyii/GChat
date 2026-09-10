@@ -33,12 +33,18 @@ mod tests {
         let GinferConnection::Local { port, .. } = server.client().target().connection else {
             unreachable!()
         };
-        let child = tokio::process::Command::new("sleep")
-            .arg("30")
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
-        let pid = child.id().unwrap() as i32;
+        let pid = 1;
+        let host_state = tempfile::tempdir().unwrap();
+        let host = ginfer_host::service::Host::open(host_state.path().into(), "Fixture".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let owner = tauri_plugin_ginfer::state::SessionOwner {
+            control: Arc::new(ginfer_host::launcher::LocalControl::open(host_state.path(), "https://127.0.0.1:1").unwrap()),
+            connection: ginfer_host::launcher::LocalConnection {
+                instance_id: uuid::Uuid::new_v4(), session_id: uuid::Uuid::new_v4(),
+                model_id:"scripted-test-model".into(), port:port.try_into().unwrap(), api_key:String::new(),
+            },
+        };
+        drop(host);
         let info: SessionInfo = serde_json::from_value(serde_json::json!({
             "pid":pid,"port":port,"model_id":"scripted-test-model","model_path":"test.ginfer",
             "is_embedding":false,"vision":true,"api_key":"","max_concurrency":1,"max_context":32768
@@ -49,7 +55,7 @@ mod tests {
             .ginfer_process
             .lock()
             .await
-            .insert(pid, GinferSession { child, info });
+            .insert(pid, GinferSession { owner, info, endpoint: None });
         let app = tauri::test::mock_builder()
             .manage(state)
             .build(tauri::test::mock_context(tauri::test::noop_assets()))

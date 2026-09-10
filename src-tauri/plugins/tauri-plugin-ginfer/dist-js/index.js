@@ -33,15 +33,14 @@ function normalizeGinferConfig(config) {
     };
 }
 // GInfer server commands
-async function loadGinferModel(binaryPath, modelId, modelPath, port, cfg, apiKey, isEmbedding = false, timeout = 600) {
+async function loadGinferModel(binaryPath, hostDirectory, modelId, modelPath, cfg, isEmbedding = false, timeout = 600) {
     const config = normalizeGinferConfig(cfg);
     return await invoke('plugin:ginfer|load_ginfer_model', {
         binaryPath,
+        hostDirectory,
         modelId,
         modelPath,
-        port,
         config,
-        apiKey,
         isEmbedding,
         timeout,
     });
@@ -51,9 +50,6 @@ async function unloadGinferModel(pid) {
 }
 async function isProcessRunning(pid) {
     return await invoke('plugin:ginfer|is_process_running', { pid });
-}
-async function getRandomPort() {
-    return await invoke('plugin:ginfer|get_random_port');
 }
 async function findSessionByModel(modelId) {
     return await invoke('plugin:ginfer|find_session_by_model', { modelId });
@@ -75,4 +71,4 @@ async function cleanupGinferProcesses() {
     return await invoke('plugin:ginfer|cleanup_ginfer_processes');
 }
 
-export { cancelGinferBenchmark, cleanupGinferProcesses, findSessionByModel, getAllSessions, getLoadedModels, getRandomPort, isProcessRunning, loadGinferModel, normalizeGinferConfig, runGinferBenchmark, unloadGinferModel };
+export { cancelGinferBenchmark, cleanupGinferProcesses, findSessionByModel, getAllSessions, getLoadedModels, isProcessRunning, loadGinferModel, normalizeGinferConfig, runGinferBenchmark, unloadGinferModel };

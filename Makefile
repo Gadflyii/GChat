@@ -265,6 +265,7 @@ ifeq ($(OS),Windows_NT)
 			'src-tauri/resources/LICENSE', \
 			'src-tauri/resources/pre-install/test-placeholder', \
 			'src-tauri/resources/bin/gchat-cli.exe', \
+			'src-tauri/resources/bin/ginfer-host.exe', \
 			'src-tauri/resources/bin/bun-x86_64-pc-windows-msvc.exe', \
 			'src-tauri/resources/bin/uv-x86_64-pc-windows-msvc.exe' \
 		); \
@@ -288,6 +289,7 @@ else
 	@[ -e src-tauri/resources/pre-install/test-placeholder ] || touch src-tauri/resources/pre-install/test-placeholder
 	@[ -e src-tauri/resources/bin/gchat-cli ] || touch src-tauri/resources/bin/gchat-cli
 	@[ -e src-tauri/resources/bin/sqlite-vec.so ] || touch src-tauri/resources/bin/sqlite-vec.so
+	@[ -e src-tauri/resources/bin/ginfer-host ] || touch src-tauri/resources/bin/ginfer-host
 	@[ -e src-tauri/resources/bin/uv-x86_64-unknown-linux-gnu ] || touch src-tauri/resources/bin/uv-x86_64-unknown-linux-gnu
 endif
 
@@ -434,9 +436,13 @@ ifeq ($(shell uname -s),Darwin)
 else ifeq ($(OS),Windows_NT)
 	cd src-tauri && cargo build --release --features cli --bin gchat-cli
 	powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path 'src-tauri/resources/bin' | Out-Null; Copy-Item 'src-tauri/target/release/gchat-cli.exe' 'src-tauri/resources/bin/gchat-cli.exe' -Force"
+	cargo build --release --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
+	powershell -NoProfile -Command "Copy-Item 'src-tauri/ginfer-host/target/release/ginfer-host.exe' 'src-tauri/resources/bin/ginfer-host.exe' -Force"
 else
 	cd src-tauri && cargo build --release --features cli --bin gchat-cli
 	cp src-tauri/target/release/gchat-cli src-tauri/resources/bin/gchat-cli
+	cargo build --release --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
+	install -m755 src-tauri/ginfer-host/target/release/ginfer-host src-tauri/resources/bin/ginfer-host
 endif
 
 # Debug build for local dev (faster, native arch only)
@@ -444,10 +450,14 @@ build-cli-dev:
 ifeq ($(OS),Windows_NT)
 	cd src-tauri && cargo build --features cli --bin gchat-cli
 	powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path 'src-tauri/resources/bin' | Out-Null; Copy-Item 'src-tauri/target/debug/gchat-cli.exe' 'src-tauri/resources/bin/gchat-cli.exe' -Force"
+	cargo build --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
+	powershell -NoProfile -Command "Copy-Item 'src-tauri/ginfer-host/target/debug/ginfer-host.exe' 'src-tauri/resources/bin/ginfer-host.exe' -Force"
 else
 	mkdir -p src-tauri/resources/bin
 	cd src-tauri && cargo build --features cli --bin gchat-cli
 	install -m755 src-tauri/target/debug/gchat-cli src-tauri/resources/bin/gchat-cli
+	cargo build --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
+	install -m755 src-tauri/ginfer-host/target/debug/ginfer-host src-tauri/resources/bin/ginfer-host
 endif
 
 # Build

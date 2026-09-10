@@ -355,18 +355,6 @@
           "markdownDescription": "Denies the get_loaded_models command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_random_port command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-random-port",
-          "markdownDescription": "Enables the get_random_port command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_random_port command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-random-port",
-          "markdownDescription": "Denies the get_random_port command without any pre-configured scope."
-        },
-        {
           "description": "Enables the is_process_running command without any pre-configured scope.",
           "type": "string",
           "const": "allow-is-process-running",
@@ -415,10 +403,10 @@
           "markdownDescription": "Denies the unload_ginfer_model command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-get-random-port`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`\n- `allow-run-ginfer-benchmark`\n- `allow-cancel-ginfer-benchmark`",
+          "description": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`\n- `allow-run-ginfer-benchmark`\n- `allow-cancel-ginfer-benchmark`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-get-random-port`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`\n- `allow-run-ginfer-benchmark`\n- `allow-cancel-ginfer-benchmark`"
+          "markdownDescription": "Default permissions for the ginfer plugin\n#### This default permission set includes:\n\n- `allow-cleanup-ginfer-processes`\n- `allow-load-ginfer-model`\n- `allow-unload-ginfer-model`\n- `allow-is-process-running`\n- `allow-find-session-by-model`\n- `allow-get-loaded-models`\n- `allow-get-all-sessions`\n- `allow-run-ginfer-benchmark`\n- `allow-cancel-ginfer-benchmark`"
         }
       ]
     }

@@ -43,22 +43,20 @@ export function normalizeGinferConfig(config: any): GinferConfig {
 // GInfer server commands
 export async function loadGinferModel(
   binaryPath: string,
+  hostDirectory: string,
   modelId: string,
   modelPath: string,
-  port: number,
   cfg: GinferConfig,
-  apiKey: string,
   isEmbedding: boolean = false,
   timeout: number = 600
 ): Promise<SessionInfo> {
   const config = normalizeGinferConfig(cfg)
   return await invoke('plugin:ginfer|load_ginfer_model', {
     binaryPath,
+    hostDirectory,
     modelId,
     modelPath,
-    port,
     config,
-    apiKey,
     isEmbedding,
     timeout,
   })
@@ -70,10 +68,6 @@ export async function unloadGinferModel(pid: number): Promise<UnloadResult> {
 
 export async function isProcessRunning(pid: number): Promise<boolean> {
   return await invoke('plugin:ginfer|is_process_running', { pid })
-}
-
-export async function getRandomPort(): Promise<number> {
-  return await invoke('plugin:ginfer|get_random_port')
 }
 
 export async function findSessionByModel(

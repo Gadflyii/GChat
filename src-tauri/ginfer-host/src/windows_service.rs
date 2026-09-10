@@ -102,7 +102,11 @@ fn service_main(_arguments: Vec<OsString>) {
     // Do not call Parser::parse here: its process exit would skip Stopped status.
     let result = (|| -> Result<(), String> {
         let args = super::Args::try_parse().map_err(|e| e.to_string())?;
-        let diagnostics = args.data_dir.join("service-status.txt");
+        let diagnostics = args
+            .data_dir
+            .as_ref()
+            .ok_or("--data-dir is required for the service")?
+            .join("service-status.txt");
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()

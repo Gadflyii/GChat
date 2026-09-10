@@ -38,6 +38,8 @@ pub struct ModelEntry {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LaunchRequest {
     pub instance_id: Option<Uuid>,
+    #[serde(default)]
+    pub qualified_profile_id: Option<String>,
     pub model_id: Uuid,
     pub gpu_uuids: Vec<String>,
     pub max_context: u32,
@@ -52,14 +54,18 @@ pub struct ClientGrant {
 }
 #[derive(Serialize, Deserialize)]
 pub struct Persistent {
+    #[serde(default)]
+    pub management_origin: Option<String>,
     pub host_id: Uuid,
     pub name: String,
     pub certificate: HostCertificate,
-    /// Local-administrator credential; never issued to paired desktop clients.
+    /// Local pairing/control credential; never issued to paired desktop clients.
     pub pairing_admin_token: String,
     pub clients: BTreeMap<Uuid, ClientGrant>,
     pub models: BTreeMap<String, Uuid>,
     pub profiles: BTreeMap<Uuid, LaunchRequest>,
+    #[serde(default)]
+    pub local_artifacts: Vec<PathBuf>,
 }
 pub struct Pairing {
     code: String,
@@ -67,6 +73,10 @@ pub struct Pairing {
     attempts: u32,
 }
 pub struct Host {
+    inference_client: reqwest::Client,
+    local_inference: Mutex<BTreeMap<Uuid, crate::local_inference::LocalInference>>,
+    pub launch_profiles: RwLock<Vec<crate::launch_profiles::LaunchProfile>>,
+    pub profile_error: RwLock<Option<String>>,
     pub downloads: Arc<crate::model_downloads::ModelDownloads>,
     pub data: Mutex<Persistent>,
     pub processes: Mutex<HostProcesses>,
@@ -144,10 +154,21 @@ impl Host {
         artifact_sets: Vec<PathBuf>,
         gpus: Vec<Gpu>,
     ) -> Result<Arc<Self>, String> {
+        Self::open_with_model_storage(directory, name, engine, model_dirs, artifact_sets, gpus, None).await
+    }
+
+    pub async fn open_with_model_storage(
+        directory: PathBuf, name: String, engine: PathBuf, model_dirs: Vec<PathBuf>,
+        artifact_sets: Vec<PathBuf>, gpus: Vec<Gpu>, desktop_provider: Option<PathBuf>,
+    ) -> Result<Arc<Self>, String> {
+        if desktop_provider.as_ref().is_some_and(|provider| !provider.is_absolute() || directory != provider.join("host")) {
+            return Err("desktop provider storage must use its dedicated provider/host state directory".into());
+        }
         let path = directory.join("host.json");
         let data = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice::<Persistent>(&bytes).map_err(|e| e.to_string())?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Persistent {
+                management_origin: None,
                 host_id: Uuid::new_v4(),
                 name,
                 certificate: HostCertificate::generate()?,
@@ -159,6 +180,7 @@ impl Host {
                 clients: BTreeMap::new(),
                 models: BTreeMap::new(),
                 profiles: BTreeMap::new(),
+                local_artifacts: vec![],
             },
             Err(e) => return Err(e.to_string()),
         };
@@ -171,11 +193,21 @@ impl Host {
             gpus.iter().map(|g| g.uuid.clone()).collect(),
             Duration::from_secs(600),
         )?;
-        let downloads = crate::model_downloads::ModelDownloads::open(
-            directory.join("managed-models"),
-            directory.join("model-downloads.json"),
-        )?;
+        let downloads = match desktop_provider {
+            Some(provider) => crate::model_downloads::ModelDownloads::open_local(
+                provider.join("models"), provider.join("model-downloads.json"))?,
+            None => crate::model_downloads::ModelDownloads::open(
+                directory.join("managed-models"), directory.join("model-downloads.json"))?,
+        };
         let host = Arc::new(Self {
+            inference_client: reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|e| e.to_string())?,
+            local_inference: Mutex::new(BTreeMap::new()),
+            launch_profiles: RwLock::new(vec![]),
+            profile_error: RwLock::new(None),
             downloads,
             data: Mutex::new(data),
             processes: Mutex::new(processes),
@@ -211,7 +243,42 @@ impl Host {
         code
     }
     pub async fn scan(&self) -> Result<(), String> {
+        let path = self.directory.join("launch-profiles.json");
+        let catalog = tokio::task::spawn_blocking(move || {
+            let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+            let bundled = executable.parent().ok_or("host executable has no parent")?.join("launch-profiles.json");
+            crate::launch_profiles::ProfileCatalog::read_installed(&path, &bundled)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let catalog = match (catalog, self.downloads.installed_profiles().await) {
+            (Ok(mut profiles), Ok(installed)) => {
+                let mut conflict = None;
+                for profile in installed {
+                    if let Some(existing) = profiles.iter().find(|existing| existing.id == profile.id) {
+                        if serde_json::to_value(existing).map_err(|e| e.to_string())?
+                            != serde_json::to_value(&profile).map_err(|e| e.to_string())? {
+                            conflict = Some(format!("conflicting installed launch profile: {}", profile.id));
+                            break;
+                        }
+                    } else { profiles.push(profile); }
+                }
+                conflict.map_or(Ok(profiles), Err)
+            }
+            (Err(error), _) | (_, Err(error)) => Err(error),
+        };
+        match catalog {
+            Ok(profiles) => {
+                *self.launch_profiles.write().await = profiles;
+                *self.profile_error.write().await = None;
+            }
+            Err(error) => {
+                self.launch_profiles.write().await.clear();
+                *self.profile_error.write().await = Some(error);
+            }
+        }
         let mut roots = self.model_dirs.clone();
+        roots.extend(self.data.lock().await.local_artifacts.iter().cloned());
         roots.push(self.downloads.root().to_path_buf());
         let sets = self.artifact_sets.clone();
         let (entries, errors) = tokio::task::spawn_blocking(move || {
@@ -296,6 +363,21 @@ impl Host {
     pub async fn snapshot(&self) -> serde_json::Value {
         let data = self.data.lock().await;
         let processes = self.processes.lock().await;
+        let reserved = processes.reserved_gpus(None);
+        let mut available_profiles = vec![];
+        for profile in self.launch_profiles.read().await.iter() {
+            for model in self
+                .inventory
+                .read()
+                .await
+                .iter()
+                .filter(|m| profile.matches_model(m))
+            {
+                available_profiles.push(serde_json::json!({"profile":profile,"model_id":model.id,
+                    "gpu_groups":profile.gpu_groups(&self.gpus, &reserved),
+                    "compatible_gpu_groups":profile.gpu_groups(&self.gpus, &Default::default())}));
+            }
+        }
         let mut instances: Vec<_> = processes.instances().map(|i| serde_json::json!({
             "instance_id": i.instance_id, "session_id": i.session_id, "display_name": i.launch.model_id,
             "upstream_model_id": i.launch.model_id, "status": i.status, "last_error": i.last_error,
@@ -315,8 +397,9 @@ impl Host {
             "display_name":data.name,"revision":self.revision.load(Ordering::SeqCst),
             "instances":instances,"gpus":self.gpus,"models":*self.inventory.read().await,
             "inventory_errors":*self.inventory_errors.read().await,
+            "launch_profiles":available_profiles,"profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
-                "managed_root":self.downloads.root(),"engine_presets_available":false}})
+                "managed_root":self.downloads.root(),"engine_presets_available":!available_profiles.is_empty()}})
     }
     pub async fn authenticated(&self, request: &Request<Body>) -> bool {
         let Some(token) = request
@@ -327,19 +410,37 @@ impl Host {
         else {
             return false;
         };
+        let data = self.data.lock().await;
+        let admin = verifier(&data.pairing_admin_token).finalize().into_bytes();
+        if verifier(token).verify_slice(&admin).is_ok() {
+            return true;
+        }
         let Some((id, _)) = token.split_once('.') else {
             return false;
         };
         let Ok(id) = Uuid::parse_str(id) else {
             return false;
         };
-        let data = self.data.lock().await;
         let Some(grant) = data.clients.get(&id) else {
             return false;
         };
         hex::decode(&grant.token_verifier)
             .ok()
             .is_some_and(|digest| verifier(token).verify_slice(&digest).is_ok())
+    }
+
+    async fn local_administrator(&self, request: &Request<Body>) -> bool {
+        let Some(token) = request
+            .headers()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+        else {
+            return false;
+        };
+        let data = self.data.lock().await;
+        let expected = verifier(&data.pairing_admin_token).finalize().into_bytes();
+        verifier(token).verify_slice(&expected).is_ok()
     }
     async fn prepare_launch(&self, request: &LaunchRequest) -> Result<EngineLaunch, String> {
         let model = self
@@ -363,6 +464,44 @@ impl Host {
             return Err(
                 "artifact changed since inventory scan; refresh inventory before loading".into(),
             );
+        }
+        if let Some(profile_id) = &request.qualified_profile_id {
+            let profile = self
+                .launch_profiles
+                .read()
+                .await
+                .iter()
+                .find(|p| &p.id == profile_id)
+                .cloned()
+                .ok_or("qualified profile is no longer available; rescan profiles")?;
+            if !profile.matches_model(&model)
+                || profile.max_context != request.max_context
+                || profile.concurrency != request.concurrency
+                || serde_json::to_value(&profile.options).map_err(|e| e.to_string())?
+                    != serde_json::to_value(&request.options).map_err(|e| e.to_string())?
+            {
+                return Err("settings no longer match the qualified profile; select it again or use custom settings".into());
+            }
+            let selected: std::collections::BTreeSet<_> =
+                request.gpu_uuids.iter().cloned().collect();
+            if selected.len() != request.gpu_uuids.len()
+                || !profile
+                    .gpu_groups(&self.gpus, &Default::default())
+                    .iter()
+                    .any(|g| {
+                        g.iter().cloned().collect::<std::collections::BTreeSet<_>>() == selected
+                    })
+            {
+                return Err("GPU group is not qualified for this profile".into());
+            }
+            let path = if model.artifact_set {
+                crate::engine_inventory::artifact_set_payload(&model.path, metadata.tp_size)?
+            } else {
+                model.path.clone()
+            };
+            tokio::task::spawn_blocking(move || profile.verify_payload(&path))
+                .await
+                .map_err(|e| e.to_string())??;
         }
         if request.options.draft_tp != 0 && request.options.draft_tp != metadata.draft_tp {
             return Err("draft TP must match the producer-final artifact".into());
@@ -459,7 +598,7 @@ impl Host {
         self.revision.fetch_add(1, Ordering::SeqCst);
         result
     }
-    async fn inference(
+    pub(crate) async fn inference(
         &self,
         id: Uuid,
         suffix: &str,
@@ -509,17 +648,12 @@ impl Host {
                 return Err("assigned engine session has changed".into());
             }
         }
-        let client = reqwest::Client::builder()
-            .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|e| e.to_string())?;
         let query = req
             .uri()
             .query()
             .map(|q| format!("?{q}"))
             .unwrap_or_default();
-        let mut upstream = client
+        let mut upstream = self.inference_client
             .request(
                 req.method().clone(),
                 format!("http://127.0.0.1:{port}/{suffix}{query}"),
@@ -575,7 +709,7 @@ impl Host {
         Ok(result
             .unwrap_or_else(|e| json(StatusCode::BAD_REQUEST, serde_json::json!({"error": e}))))
     }
-    async fn handle(&self, req: &mut Request<Body>) -> Result<Response<Body>, String> {
+    async fn handle(self: &Arc<Self>, req: &mut Request<Body>) -> Result<Response<Body>, String> {
         let path = req.uri().path().to_string();
         if req.method() == hyper::Method::GET && path == "/.well-known/ginfer" {
             let data = self.data.lock().await;
@@ -662,14 +796,57 @@ impl Host {
         if let Some(tail) = path.strip_prefix("/host/v1/instances/") {
             if let Some((id, operation)) = tail.split_once('/') {
                 let id = Uuid::parse_str(id).map_err(|e| e.to_string())?;
+                if req.method() == hyper::Method::POST && operation == "local-connection" {
+                    if !self.local_administrator(req).await {
+                        return Ok(json(
+                            StatusCode::FORBIDDEN,
+                            serde_json::json!({"error":"local administrator credential required"}),
+                        ));
+                    }
+                    let (_, _, model_id, session_id) = self.processes.lock().await.endpoint(id)?;
+                    let mut routes = self.local_inference.lock().await;
+                    if !routes
+                        .get(&id)
+                        .is_some_and(|route| route.session_id == session_id)
+                    {
+                        routes.insert(
+                            id,
+                            crate::local_inference::LocalInference::bind(self, id, session_id)?,
+                        );
+                    }
+                    let route = &routes[&id];
+                    return Ok(json(
+                        StatusCode::OK,
+                        serde_json::json!({"instance_id":id,"session_id":session_id,
+                        "model_id":model_id,"port":route.port,"api_key":route.api_key}),
+                    ));
+                }
                 if let Some(suffix) = operation.strip_prefix("inference/") {
                     return self.inference(id, suffix, req).await;
                 }
-                if req.method() == hyper::Method::POST && matches!(operation, "stop" | "reload") {
+                if req.method() == hyper::Method::POST
+                    && matches!(operation, "start" | "stop" | "restart" | "reload")
+                {
                     let body = body_json(req).await?;
                     let _lifecycle = self.lifecycle.lock().await;
+                    if let Some(expected) = body.get("expected_session_id") {
+                        let expected: Option<Uuid> = serde_json::from_value(expected.clone())
+                            .map_err(|e| format!("invalid expected session: {e}"))?;
+                        let current = self.processes.lock().await.instances()
+                            .find(|instance| instance.instance_id == id)
+                            .map(|instance| instance.session_id);
+                        if current != expected {
+                            return Ok(json(StatusCode::CONFLICT,
+                                serde_json::json!({"error":"assigned engine session has changed"})));
+                        }
+                    }
                     let force = body.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
-                    let reload = if operation == "reload" {
+                    if matches!(operation, "start" | "restart")
+                        && body.get("configuration").is_some()
+                    {
+                        return Err("start and restart use saved settings; use reload to change configuration".into());
+                    }
+                    let reload = if operation != "stop" {
                         let mut profile: LaunchRequest =
                             if let Some(config) = body.get("configuration") {
                                 serde_json::from_value(config.clone()).map_err(|e| e.to_string())?
@@ -684,7 +861,10 @@ impl Host {
                             };
                         profile.instance_id = Some(id);
                         let launch = self.prepare_launch(&profile).await?;
-                        self.processes.lock().await.validate_launch(&launch, true)?;
+                        self.processes
+                            .lock()
+                            .await
+                            .validate_launch(&launch, operation != "start")?;
                         Some((profile, launch))
                     } else {
                         None
@@ -695,7 +875,7 @@ impl Host {
                         .await
                         .instances()
                         .any(|i| i.instance_id == id);
-                    if has_process {
+                    if has_process && operation != "start" {
                         self.stop_instance(id, force).await?;
                     } else if reload.is_none() && !self.data.lock().await.profiles.contains_key(&id)
                     {
@@ -717,6 +897,142 @@ impl Host {
             }
         }
         match (req.method().as_str(), path.as_str()) {
+            ("POST", "/host/v1/local-engine") => {
+                if !self.local_administrator(req).await {
+                    return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"local administrator credential required"})));
+                }
+                let body = body_json(req).await?;
+                let executable: PathBuf = serde_json::from_value(body["path"].clone()).map_err(|e| e.to_string())?;
+                let _lifecycle = self.lifecycle.lock().await;
+                self.processes.lock().await.configure_executable(executable)?;
+                Ok(json(StatusCode::OK, serde_json::json!({"ok":true})))
+            }
+            ("POST", "/host/v1/local-artifacts") => {
+                if !self.local_administrator(req).await {
+                    return Ok(json(
+                        StatusCode::FORBIDDEN,
+                        serde_json::json!({"error":"local administrator credential required"}),
+                    ));
+                }
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct LocalArtifact {
+                    path: PathBuf,
+                }
+                let request: LocalArtifact =
+                    serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+                if !request.path.is_absolute() {
+                    return Err("local artifact path must be absolute".into());
+                }
+                let path = request.path.canonicalize().map_err(|e| e.to_string())?;
+                if path.extension().and_then(|s| s.to_str()) != Some("ginfer") {
+                    return Err("local registration requires a .ginfer container".into());
+                }
+                let inspect_path = path.clone();
+                tokio::task::spawn_blocking(move || inspect_artifact(&inspect_path))
+                    .await
+                    .map_err(|e| e.to_string())??;
+                let _lifecycle = self.lifecycle.lock().await;
+                let added = {
+                    let mut data = self.data.lock().await;
+                    if data.local_artifacts.contains(&path) {
+                        false
+                    } else {
+                        data.local_artifacts.push(path.clone());
+                        true
+                    }
+                };
+                if let Err(error) = self.save().await {
+                    if added {
+                        self.data
+                            .lock()
+                            .await
+                            .local_artifacts
+                            .retain(|p| p != &path);
+                    }
+                    return Err(error);
+                }
+                self.scan().await?;
+                let entry = self
+                    .inventory
+                    .read()
+                    .await
+                    .iter()
+                    .find(|m| m.path == path)
+                    .cloned()
+                    .ok_or("artifact could not be inventoried; inspect host inventory errors")?;
+                Ok(json(
+                    StatusCode::OK,
+                    serde_json::to_value(entry).map_err(|e| e.to_string())?,
+                ))
+            }
+            ("POST", "/host/v1/profile-launch") => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Selection {
+                    profile_id: String,
+                    model_id: Uuid,
+                    gpu_uuids: Vec<String>,
+                    instance_id: Option<Uuid>,
+                    #[serde(default)]
+                    force: bool,
+                    #[serde(default)]
+                    expected_session_id: Option<Uuid>,
+                }
+                let body = body_json(req).await?;
+                let selection: Selection =
+                    serde_json::from_value(body.clone()).map_err(|e| e.to_string())?;
+                let _lifecycle = self.lifecycle.lock().await;
+                if let Some(id) = selection.instance_id {
+                    if body.get("expected_session_id").is_some() {
+                        let current = self.processes.lock().await.instances()
+                            .find(|instance| instance.instance_id == id)
+                            .map(|instance| instance.session_id);
+                        if current != selection.expected_session_id {
+                            return Ok(json(StatusCode::CONFLICT,
+                                serde_json::json!({"error":"assigned engine session has changed"})));
+                        }
+                    }
+                    if !self.data.lock().await.profiles.contains_key(&id) {
+                        return Err("unknown instance".into());
+                    }
+                }
+                let profile = self
+                    .launch_profiles
+                    .read()
+                    .await
+                    .iter()
+                    .find(|p| p.id == selection.profile_id)
+                    .cloned()
+                    .ok_or("unknown qualified profile")?;
+                let request = LaunchRequest {
+                    instance_id: selection.instance_id,
+                    qualified_profile_id: Some(profile.id),
+                    model_id: selection.model_id,
+                    gpu_uuids: selection.gpu_uuids,
+                    max_context: profile.max_context,
+                    concurrency: profile.concurrency,
+                    options: profile.options,
+                };
+                let launch = self.prepare_launch(&request).await?;
+                self.processes
+                    .lock()
+                    .await
+                    .validate_launch(&launch, selection.instance_id.is_some())?;
+                if let Some(id) = selection.instance_id {
+                    if self
+                        .processes
+                        .lock()
+                        .await
+                        .instances()
+                        .any(|i| i.instance_id == id)
+                    {
+                        self.stop_instance(id, selection.force).await?;
+                    }
+                }
+                let id = self.start_prepared(request, launch).await?;
+                Ok(json(StatusCode::OK, serde_json::json!({"instance_id":id})))
+            }
             ("POST", "/host/v1/remove-model") => {
                 let body = body_json(req).await?;
                 let id = body["model_id"]
@@ -754,6 +1070,7 @@ impl Host {
                 self.scan().await?;
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
+            ("GET", "/host/v1/downloads") => Ok(json(StatusCode::OK, serde_json::to_value(self.downloads.list().await).map_err(|e| e.to_string())?)),
             ("POST", "/host/v1/downloads") => {
                 let release: crate::model_downloads::Release =
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
@@ -883,6 +1200,7 @@ mod lifecycle_tests {
         .unwrap();
         let profile = LaunchRequest {
             instance_id: None,
+            qualified_profile_id: None,
             model_id: host.inventory.read().await[0].id,
             gpu_uuids: vec!["GPU-test".into()],
             max_context: 8192,
@@ -916,7 +1234,199 @@ mod lifecycle_tests {
             after["instances"][0]["session_id"]
         );
         assert_eq!(after["instances"][0]["status"], "starting");
+        let mut session = after["instances"][0]["session_id"].clone();
+        for (operation, expected_success, expected_status) in [
+            ("start", false, "starting"),
+            ("restart", true, "starting"),
+            ("stop", true, "stopped"),
+            ("start", true, "starting"),
+        ] {
+            let req = Request::post(format!("/host/v1/instances/{id}/{operation}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from("{}"))
+                .unwrap();
+            let response = host.clone().route(req).await.unwrap();
+            assert_eq!(response.status().is_success(), expected_success);
+            let snapshot = host.snapshot().await;
+            assert_eq!(snapshot["instances"][0]["status"], expected_status);
+            let next = snapshot["instances"][0]["session_id"].clone();
+            if expected_success && operation != "stop" {
+                assert_ne!(next, session);
+            } else {
+                assert_eq!(next, session);
+            }
+            assert_eq!(snapshot["instances"][0]["profile"]["max_context"], 8192);
+            session = next;
+        }
+        for operation in ["stop", "restart", "reload"] {
+            let request = Request::post(format!("/host/v1/instances/{id}/{operation}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(serde_json::json!({
+                    "expected_session_id":before["instances"][0]["session_id"]
+                }).to_string())).unwrap();
+            let response = host.clone().route(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            let unchanged = host.snapshot().await;
+            assert_eq!(unchanged["instances"][0]["session_id"], session);
+            assert_eq!(unchanged["instances"][0]["status"], "starting");
+        }
+        let mut qualified = crate::launch_profiles::LaunchProfile {
+            id: "fixture-c4".into(),
+            name: "Synthetic lifecycle fixture".into(),
+            platform: std::env::consts::OS.into(),
+            identity: host.inventory.read().await[0].metadata.identity.clone(),
+            artifact_sha256: {
+                use sha2::Digest;
+                hex::encode(Sha256::digest(
+                    std::fs::read(models.join("model.ginfer")).unwrap(),
+                ))
+            },
+            artifact_bytes: 4096,
+            tp: 1,
+            draft_tp: 0,
+            gpu_name: "Test".into(),
+            compute_capability: "12.0".into(),
+            vram_tier_gib: 32,
+            min_memory_mib_per_gpu: 32000,
+            max_context: 8192,
+            concurrency: 4,
+            options: LaunchOptions::default(),
+            qualification: crate::launch_profiles::Qualification {
+                evidence: "synthetic fixture only".into(),
+                engine_revision: "fixture".into(),
+                free_bytes_per_gpu: crate::launch_profiles::HEADROOM_BYTES,
+                full_context_requests: 4,
+            },
+        };
+        qualified.validate().unwrap();
+        host.launch_profiles.write().await.push(qualified.clone());
+        let selection = serde_json::json!({"profile_id":qualified.id,"model_id":host.inventory.read().await[0].id,
+            "gpu_uuids":["GPU-test"],"instance_id":id});
+        let mut stale_selection = selection.clone();
+        stale_selection["expected_session_id"] = before["instances"][0]["session_id"].clone();
+        let stale = Request::post("/host/v1/profile-launch")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(stale_selection.to_string())).unwrap();
+        assert_eq!(host.clone().route(stale).await.unwrap().status(), StatusCode::CONFLICT);
+        assert_eq!(host.snapshot().await["instances"][0]["session_id"], session);
+        let switch = || {
+            Request::post("/host/v1/profile-launch")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(selection.to_string()))
+                .unwrap()
+        };
+        assert!(host
+            .clone()
+            .route(switch())
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["profile"]["concurrency"], 4);
+        assert_eq!(
+            snapshot["instances"][0]["profile"]["qualified_profile_id"],
+            "fixture-c4"
+        );
+        assert_ne!(snapshot["instances"][0]["session_id"], session);
+        session = snapshot["instances"][0]["session_id"].clone();
+        qualified.artifact_sha256 = "0".repeat(64);
+        *host.launch_profiles.write().await = vec![qualified];
+        assert!(!host
+            .clone()
+            .route(switch())
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        assert_eq!(host.snapshot().await["instances"][0]["session_id"], session);
+        let current = host.snapshot().await;
+        let engine_port = current["instances"][0]["configuration"]["port"]
+            .as_u64()
+            .unwrap() as u16;
+        let public_model = current["instances"][0]["upstream_model_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let upstream = hyper::Server::bind(&([127, 0, 0, 1], engine_port).into()).serve(
+            hyper::service::make_service_fn(move |_| {
+                let model = public_model.clone();
+                async move {
+                    Ok::<_, std::convert::Infallible>(hyper::service::service_fn(
+                        move |request: Request<Body>| {
+                            let model = model.clone();
+                            async move {
+                                Ok::<_, std::convert::Infallible>(json(
+                                    StatusCode::OK,
+                                    if request.uri().path() == "/v1/models" {
+                                        serde_json::json!({"data":[{"id":model}]})
+                                    } else {
+                                        serde_json::json!({"fixture":"forwarded"})
+                                    },
+                                ))
+                            }
+                        },
+                    ))
+                }
+            }),
+        );
+        let upstream = tokio::spawn(upstream);
+        host.processes.lock().await.refresh().await.unwrap();
+        let denied = Request::post(format!("/host/v1/instances/{id}/local-connection"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            host.clone().route(denied).await.unwrap().status(),
+            StatusCode::FORBIDDEN
+        );
+        let administrator = host.data.lock().await.pairing_admin_token.clone();
+        let request = Request::post(format!("/host/v1/instances/{id}/local-connection"))
+            .header("authorization", format!("Bearer {administrator}"))
+            .body(Body::empty())
+            .unwrap();
+        let response = host.clone().route(request).await.unwrap();
+        assert!(response.status().is_success());
+        let connection: serde_json::Value =
+            serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                .unwrap();
+        let api_key = connection["api_key"].as_str().unwrap();
+        assert_ne!(api_key, administrator);
+        assert!(!host.snapshot().await.to_string().contains(api_key));
+        let base = format!("http://127.0.0.1:{}", connection["port"]);
+        let client = reqwest::Client::new();
+        assert_eq!(
+            client
+                .get(format!("{base}/v1/models"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        let result = client
+            .post(format!("{base}/v1/chat/completions"))
+            .bearer_auth(api_key)
+            .json(&serde_json::json!({"model":"client-alias","messages":[]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(result.status(), 200);
+        assert_eq!(
+            result.json::<serde_json::Value>().await.unwrap()["fixture"],
+            "forwarded"
+        );
         host.processes.lock().await.shutdown().await.unwrap();
+        assert_eq!(
+            client
+                .get(format!("{base}/health"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            503
+        );
+        upstream.abort();
         let restored = Host::open(
             dir.path().join("state"),
             "Test".into(),

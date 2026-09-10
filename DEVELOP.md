@@ -92,6 +92,27 @@ Unlike the upstream layout there is no legacy-folder baggage: the fork is clean-
 
 ### Custom data folder
 
+GInfer and GChat share a per-user host locator: `%APPDATA%\GInfer\local-host.json`
+on Windows, or `$XDG_CONFIG_HOME/ginfer/local-host.json` on Linux (default
+`~/.config/ginfer/local-host.json`). It points to the first registered host's
+existing state, engine and model storage; it contains no credentials and moves
+no data. A neighboring `local-host.lock` serializes first registration. Changing
+installations does not overwrite this owner or switch its engine automatically.
+Explicit host commands with `--data-dir` do not change the shared registration.
+
+Fresh standalone setup defaults to `%LOCALAPPDATA%\GInfer` for Windows binaries
+and `%APPDATA%\GInfer\data` for provider storage. Linux defaults are
+`~/.local/lib/ginfer` and `$XDG_DATA_HOME/ginfer` (default `~/.local/share/ginfer`).
+Setup offers replacement directories; existing registered hosts retain their paths.
+
+Desktop builds select qualified profile catalogs through `GINFER_PROFILE_CATALOGS`
+(colon-separated absolute paths on Linux, semicolon-separated on Windows).
+The Windows release script also accepts `-GinferProfileCatalogs`. The Rust build
+stages their combined `resources/bin/launch-profiles.json` for both desktop and
+installed CLI hosts. Duplicate IDs or another platform's profiles stop the build.
+Unset selection produces an explicit empty catalog, not inferred presets or stale
+build resources. Changing the selected files triggers regeneration.
+
 If a user has relocated the data folder via `Settings → Advanced → Change data folder location` (`change_app_data_folder`), the uninstaller and `make clean-windows-all` **do not** delete that custom path — only the default `%APPDATA%\GChat\` is cleaned. Removing a custom data folder is the user's responsibility.
 
 ## Release signing (updater)
@@ -109,4 +130,4 @@ make build   # AppImage bundle is signed; latest.json is emitted next to it
 If the key is lost the update chain is unrecoverable — regenerate with
 `yarn tauri signer generate -w ~/.tauri/gchat.key --ci` and replace the
 pubkey in `src-tauri/tauri.conf.json`. The update endpoint is
-`https://github.com/Gadflyii/gchat/releases/latest/download/latest.json`.
+`https://github.com/SectileLabs/gchat/releases/latest/download/latest.json`.

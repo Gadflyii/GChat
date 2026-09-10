@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/install-ginfer-host-linux.py'
 spec = importlib.util.spec_from_file_location('host_installer', SCRIPT)
@@ -12,6 +13,29 @@ spec.loader.exec_module(installer)
 
 
 class HostInstallation(unittest.TestCase):
+    def test_install_starts_by_default_and_supports_staging(self):
+        for no_start in (False, True):
+            with self.subTest(no_start=no_start), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                arguments = [str(SCRIPT), '--binary', '/usr/bin/true',
+                    '--engine', '/usr/bin/true', '--prefix', str(root / 'install'),
+                    '--data-dir', str(root / 'state'), '--install']
+                if no_start:
+                    arguments.append('--no-start')
+                with mock.patch('sys.argv', arguments), \
+                     mock.patch.dict('os.environ', {'XDG_CONFIG_HOME': str(root / 'config')}), \
+                     mock.patch.object(installer.shutil, 'which', return_value='/usr/bin/true'), \
+                     mock.patch.object(installer.subprocess, 'run') as run:
+                    installer.main()
+                commands = [call.args[0] for call in run.call_args_list]
+                expected = ['systemctl', '--user', 'enable']
+                if not no_start:
+                    expected.append('--now')
+                self.assertIn([*expected, 'ginfer-host.service'], commands)
+                active = ['systemctl', '--user', 'is-active', '--quiet', 'ginfer-host.service']
+                self.assertEqual(active in commands, not no_start)
+                self.assertTrue((root / 'install/ginfer-launch.json').is_file())
+
     def test_empty_host_preview_can_use_managed_download_storage(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -20,6 +44,8 @@ class HostInstallation(unittest.TestCase):
                 '--data-dir', str(root / 'state')], capture_output=True, text=True, check=True)
             self.assertIn('Preview only', result.stdout)
             self.assertNotIn('--models', result.stdout)
+            self.assertIn('ginfer-launch.json', result.stdout)
+            self.assertIn('"host_url": "https://127.0.0.1:7443"', result.stdout)
             self.assertFalse((root / 'state').exists())
 
     def test_preview_does_not_install_or_start(self):

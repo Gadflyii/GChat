@@ -65,6 +65,24 @@ fn required_nullable_digest<'de, D: serde::Deserializer<'de>>(
     Option::<String>::deserialize(deserializer)
 }
 
+/// Resolve a declared payload after inventory validation; never guess sibling names.
+pub fn artifact_set_payload(path: &Path, tp: u32) -> Result<PathBuf, String> {
+    inspect_artifact_set(path)?;
+    let set: ArtifactSet =
+        serde_json::from_reader(BufReader::new(File::open(path).map_err(|e| e.to_string())?))
+            .map_err(|e| e.to_string())?;
+    let entry = set
+        .artifacts
+        .into_iter()
+        .find(|e| e.tp == tp)
+        .ok_or("degree is not declared")?;
+    path.parent()
+        .ok_or("artifact set has no parent")?
+        .join(entry.path)
+        .canonicalize()
+        .map_err(|e| e.to_string())
+}
+
 /// Validate the deployment declaration and every member header. The Engine,
 /// not inventory, hashes the selected payload before materialization.
 pub fn inspect_artifact_set(path: &Path) -> Result<Vec<ArtifactMetadata>, String> {

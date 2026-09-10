@@ -30,6 +30,8 @@ pub struct Release {
     pub qualified_sm: Vec<String>,
     pub min_vram_mib_per_gpu: u64,
     pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub launch_profiles: Vec<crate::launch_profiles::LaunchProfile>,
 }
 impl Release {
     pub fn compatible_group(&self, gpus: &[crate::service::Gpu]) -> Option<Vec<String>> {
@@ -56,6 +58,16 @@ impl Release {
             })
     }
     pub fn validate(&self) -> Result<(), String> {
+        let mut profile_ids = std::collections::BTreeSet::new();
+        for profile in &self.launch_profiles {
+            profile.validate()?;
+            if profile.identity != self.identity || profile.artifact_sha256 != self.sha256
+                || profile.artifact_bytes != self.bytes || profile.tp != self.tp
+                || !self.qualified_sm.contains(&profile.compute_capability)
+                || !profile_ids.insert(&profile.id) {
+                return Err("launch profiles must uniquely identify this exact qualified release".into());
+            }
+        }
         let url = reqwest::Url::parse(&self.url).map_err(|e| e.to_string())?;
         let segments: Vec<_> = url.path().split('/').filter(|p| !p.is_empty()).collect();
         if url.scheme() != "https"
@@ -122,6 +134,15 @@ pub struct ModelDownloads {
     local_layout: bool,
 }
 impl ModelDownloads {
+    pub async fn installed_profiles(&self) -> Result<Vec<crate::launch_profiles::LaunchProfile>, String> {
+        let jobs = self.jobs.lock().await;
+        let mut profiles = Vec::new();
+        for job in jobs.values().filter(|job| job.status == "installed") {
+            job.release.validate()?;
+            profiles.extend(job.release.launch_profiles.iter().cloned());
+        }
+        Ok(profiles)
+    }
     pub fn open(root: PathBuf, state_path: PathBuf) -> Result<Arc<Self>, String> {
         Self::open_layout(root, state_path, false)
     }
@@ -258,18 +279,24 @@ impl ModelDownloads {
         Ok(())
     }
     pub async fn remove_installed(&self, path: &std::path::Path) -> Result<(), String> {
+        let path = tokio::fs::canonicalize(path).await.map_err(|e| e.to_string())?;
         let mut jobs = self.jobs.lock().await;
         let id = jobs
             .values()
             .find(|job| {
                 job.status == "installed"
-                    && self.root.join(format!("{}.ginfer", job.release.sha256)) == path
+                    && (if self.local_layout { self.root.join(&job.release.sha256).join("model.ginfer") }
+                        else { self.root.join(format!("{}.ginfer", job.release.sha256)) }) == path
             })
             .map(|j| j.id)
             .ok_or("only packages installed into managed storage can be removed")?;
-        tokio::fs::remove_file(path)
-            .await
-            .map_err(|e| e.to_string())?;
+        let job = jobs.get(&id).ok_or("installed download disappeared")?;
+        job.release.validate()?;
+        if self.local_layout {
+            tokio::fs::remove_dir_all(self.root.join(&job.release.sha256)).await.map_err(|e| e.to_string())?;
+        } else {
+            tokio::fs::remove_file(&path).await.map_err(|e| e.to_string())?;
+        }
         jobs.remove(&id);
         self.save(&jobs)
     }
@@ -503,6 +530,9 @@ async fn verify_package(path: PathBuf, release: &Release) -> Result<(), String> 
     if metadata.identity != release.identity || metadata.tp_size != release.tp {
         return Err("package identity or TP differs from its release declaration".into());
     }
+    if release.launch_profiles.iter().any(|profile| profile.draft_tp != metadata.draft_tp) {
+        return Err("package draft TP differs from its qualified launch profiles".into());
+    }
     Ok(())
 }
 
@@ -547,7 +577,7 @@ mod tests {
         bytes.extend_from_slice(&(directory.len() as u64).to_le_bytes());
         bytes.extend(directory);
         bytes.resize(4096, 0);
-        let release = Release {
+        let mut release = Release {
             name: "Muse".into(),
             identity,
             url: format!(
@@ -560,9 +590,31 @@ mod tests {
             qualified_sm: vec!["12.0".into()],
             min_vram_mib_per_gpu: 32768,
             capabilities: vec!["tools".into()],
+            launch_profiles: vec![],
         };
+        release.launch_profiles.push(serde_json::from_value(serde_json::json!({
+            "id":"fixture-c1", "name":"Fixture C1", "identity":release.identity,
+            "platform":std::env::consts::OS,
+            "artifact_sha256":release.sha256, "artifact_bytes":release.bytes,
+            "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU", "compute_capability":"12.0",
+            "vram_tier_gib":32, "min_memory_mib_per_gpu":32768, "max_context":4096,
+            "concurrency":1, "options":{"spec":"none"},
+            "qualification":{"evidence":"synthetic test only", "engine_revision":"fixture",
+                "free_bytes_per_gpu":1_u64 << 30, "full_context_requests":1}
+        })).unwrap());
         (release, bytes)
     }
+    #[test]
+    fn release_profiles_reject_other_artifacts_and_duplicate_ids() {
+        let (mut release, _) = fixture();
+        release.validate().unwrap();
+        release.launch_profiles[0].artifact_sha256 = "0".repeat(64);
+        assert!(release.validate().is_err());
+        release.launch_profiles[0].artifact_sha256 = release.sha256.clone();
+        release.launch_profiles.push(release.launch_profiles[0].clone());
+        assert!(release.validate().is_err());
+    }
+
     async fn insert(manager: &ModelDownloads, release: Release) -> Uuid {
         let id = Uuid::new_v4();
         let mut jobs = manager.jobs.lock().await;
@@ -651,6 +703,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn host_takes_over_desktop_journal_and_finishes_preserved_bytes_without_an_engine() {
+        let directory = tempfile::tempdir().unwrap();
+        let provider = directory.path().join("ginfer");
+        let cache = provider.join("models");
+        let journal = provider.join("model-downloads.json");
+        let desktop = ModelDownloads::open_local(cache.clone(), journal).unwrap();
+        let (release, bytes) = fixture();
+        let id = insert(&desktop, release.clone()).await;
+        std::fs::write(cache.join(format!("{id}.part")), &bytes).unwrap();
+        drop(desktop);
+        let host = crate::service::Host::open_with_model_storage(provider.join("host"), "Desktop".into(),
+            provider.join("bin/missing-engine"), vec![], vec![], vec![], Some(provider.clone())).await.unwrap();
+        let jobs = host.downloads.list().await;
+        assert!(host.downloads.installed_profiles().await.unwrap().is_empty());
+        assert_eq!(jobs[0].id, id);
+        assert_eq!(jobs[0].status, "paused");
+        assert_eq!(std::fs::read(cache.join(format!("{id}.part"))).unwrap(), bytes);
+        host.downloads.action(id, "resume").await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if host.downloads.list().await[0].status == "installed" { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        let package = cache.join(&release.sha256);
+        assert_eq!(std::fs::read(package.join("model.ginfer")).unwrap(), bytes);
+        assert!(package.join("model.yml").is_file());
+        assert_eq!(host.downloads.root(), cache.canonicalize().unwrap());
+        host.scan().await.unwrap();
+        assert_eq!(host.inventory.read().await.len(), 1);
+        assert_eq!(host.launch_profiles.read().await[0].id, "fixture-c1");
+        drop(host);
+        let host = crate::service::Host::open_with_model_storage(provider.join("host"), "Desktop".into(),
+            provider.join("bin/missing-engine"), vec![], vec![], vec![], Some(provider.clone())).await.unwrap();
+        assert_eq!(host.launch_profiles.read().await[0].id, "fixture-c1");
+        host.downloads.remove_installed(&package.join("model.ginfer")).await.unwrap();
+        host.scan().await.unwrap();
+        assert!(host.launch_profiles.read().await.is_empty());
+    }
+
+    #[tokio::test]
     async fn local_install_publishes_manifest_and_identity_and_recovers_after_publication() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("ginfer/models");
@@ -673,6 +766,9 @@ mod tests {
         manager.jobs.lock().await.get_mut(&id).unwrap().status = "queued".into();
         manager.transfer(id).await.unwrap();
         assert_eq!(manager.list().await[0].status, "installed");
+        manager.remove_installed(&destination.join("model.ginfer")).await.unwrap();
+        assert!(!destination.exists());
+        assert!(manager.list().await.is_empty());
     }
     #[tokio::test]
     async fn resumes_with_exact_range_and_verifies_whole_result() {

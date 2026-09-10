@@ -27,8 +27,9 @@ pub const MODELS_ROOT: &str = "ginfer";
 
 // ── State constructors ─────────────────────────────────────────────────────
 
-pub fn init_ginfer_state() -> GinferState {
-    GinferState::default()
+pub fn init_ginfer_state() -> std::sync::Arc<GinferState> {
+    static STATE: std::sync::OnceLock<std::sync::Arc<GinferState>> = std::sync::OnceLock::new();
+    STATE.get_or_init(|| std::sync::Arc::new(GinferState::default())).clone()
 }
 
 // ── Model discovery ───────────────────────────────────────────────────────
@@ -411,8 +412,8 @@ mod tests {
 
         write_model(
             &data,
-            "GadflyII/Qwen3.5-9B",
-            "model_path: ginfer/models/GadflyII/Qwen3.5-9B/model.ginfer\n\
+            "SectileLabs/Qwen3.5-9B",
+            "model_path: ginfer/models/SectileLabs/Qwen3.5-9B/model.ginfer\n\
              name: Qwen3.5-9B\nsize_bytes: 123\nembedding: false\n",
         );
         // Embedding models cannot serve /v1/chat/completions.
@@ -428,7 +429,7 @@ mod tests {
         let models = list_chat_models_in(&data);
         let ids: Vec<&str> = models.iter().map(|(id, _)| id.as_str()).collect();
 
-        assert_eq!(ids, vec!["GadflyII/Qwen3.5-9B"]);
+        assert_eq!(ids, vec!["SectileLabs/Qwen3.5-9B"]);
         assert_eq!(models[0].1.name.as_deref(), Some("Qwen3.5-9B"));
 
         let _ = std::fs::remove_dir_all(&data);
@@ -495,7 +496,7 @@ mod tests {
 
     #[test]
     fn recognises_huggingface_repo_ids() {
-        assert!(looks_like_hf_repo("GadflyII/Qwen3.5-9B"));
+        assert!(looks_like_hf_repo("SectileLabs/Qwen3.5-9B"));
         assert!(!looks_like_hf_repo("./local/path"));
         assert!(!looks_like_hf_repo("/abs/path"));
         assert!(!looks_like_hf_repo("~/home"));

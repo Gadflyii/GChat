@@ -70,6 +70,8 @@ if ($Prefix.Equals($DataDir, [StringComparison]::OrdinalIgnoreCase) -or
 }
 if (Get-Service -Name GInferHost -ErrorAction SilentlyContinue) { throw 'GInferHost already exists; stop and review it before replacing the installation' }
 $destination = Join-Path $Prefix 'ginfer-host.exe'
+$launcherPath = Join-Path $Prefix 'ginfer-launch.json'
+$launcherJson = @{ data_dir = $DataDir; host_url = 'https://127.0.0.1:7443' } | ConvertTo-Json
 $arguments = @($destination, '--windows-service', '--data-dir', $DataDir, '--engine', $Engine, '--name', $Name)
 foreach ($model in $Models) { $arguments += @('--models', $model) }
 foreach ($descriptor in $ArtifactSet) { $arguments += @('--artifact-set', $descriptor) }
@@ -78,6 +80,7 @@ $commandLine = ($arguments | ForEach-Object { Quote-Argument $_ }) -join ' '
 Write-Output "Service: GInferHost (NT SERVICE\GInferHost; manual start)"
 Write-Output "Command: $commandLine"
 Write-Output "Private state: $DataDir"
+Write-Output "Launcher configuration: $launcherPath"
 Write-Output 'Engine/model files and their existing access controls will not be changed.'
 Write-Output 'The service account needs read/execute access to the engine runtime and read access to model roots/descriptors and their declared members.'
 if (-not $Install) {
@@ -89,6 +92,11 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 Private-Directory $Prefix
 Private-Directory $DataDir
 Copy-Item -LiteralPath $Binary -Destination $destination
+$profiles = Join-Path (Split-Path -Parent $Binary) 'launch-profiles.json'
+if (Test-Path -LiteralPath $profiles -PathType Leaf) {
+    Copy-Item -LiteralPath $profiles -Destination (Join-Path $Prefix 'launch-profiles.json')
+}
+[IO.File]::WriteAllText($launcherPath, $launcherJson, (New-Object Text.UTF8Encoding($false)))
 # Virtual account isolates host secrets from other low-privilege Windows services.
 # Explicit manual start prevents a partially installed service from auto-starting.
 $created = Invoke-CimMethod -ClassName Win32_Service -MethodName Create -Arguments @{
@@ -100,6 +108,7 @@ if ($created.ReturnValue -ne 0) { throw "SCM creation failed ($($created.ReturnV
 Grant-Service $Prefix 'ReadAndExecute' $true
 Grant-Service $DataDir 'Modify' $true
 Write-Output 'Installed, not started. Review runtime/model access, then: Start-Service GInferHost'
+Write-Output ('Open the local-admin launch menu: & ' + (Quote-Argument $destination) + ' --menu')
 Write-Output 'To start on boot after qualification: Set-Service GInferHost -StartupType Automatic'
 Write-Output ('Pair from an elevated terminal: & ' + (Quote-Argument $destination) + ' --data-dir ' + (Quote-Argument $DataDir) + ' --request-pairing')
 if ($ShareLan) { Write-Output 'Allow TCP 7443 and UDP 5353 on the trusted LAN only. No firewall rules were changed.' }

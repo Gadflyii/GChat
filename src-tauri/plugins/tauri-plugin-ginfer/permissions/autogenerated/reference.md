@@ -8,7 +8,6 @@ Default permissions for the ginfer plugin
 - `allow-load-ginfer-model`
 - `allow-unload-ginfer-model`
 - `allow-is-process-running`
-- `allow-get-random-port`
 - `allow-find-session-by-model`
 - `allow-get-loaded-models`
 - `allow-get-all-sessions`
@@ -150,32 +149,6 @@ Enables the get_loaded_models command without any pre-configured scope.
 <td>
 
 Denies the get_loaded_models command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`ginfer:allow-get-random-port`
-
-</td>
-<td>
-
-Enables the get_random_port command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`ginfer:deny-get-random-port`
-
-</td>
-<td>
-
-Denies the get_random_port command without any pre-configured scope.
 
 </td>
 </tr>

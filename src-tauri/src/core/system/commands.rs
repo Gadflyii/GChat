@@ -724,6 +724,35 @@ pub async fn check_jan_cli_installed() -> CliInstallStatus {
     }
 }
 
+fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::path::Path) -> Result<(), String> {
+    use std::io::Write;
+    let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
+    let configuration = serde_json::json!({
+        "data_dir": provider.join("host"),
+        "host_url": "https://127.0.0.1:7443",
+        "desktop": { "provider": provider, "engine": provider.join("bin").join(executable) },
+    });
+    let temporary = directory.join(format!(".ginfer-launch-{}", uuid::Uuid::new_v4()));
+    let result = (|| -> Result<(), String> {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temporary).map_err(|e| e.to_string())?;
+        file.write_all(&serde_json::to_vec_pretty(&configuration).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        drop(file);
+        std::fs::rename(&temporary, directory.join("ginfer-launch.json")).map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(&temporary); }
+    result
+}
+
 /// Core install logic — synchronous, no Tauri command overhead.
 pub fn install_jan_cli_sync<R: Runtime>(
     app_handle: &AppHandle<R>,
@@ -752,24 +781,17 @@ pub fn install_jan_cli_sync<R: Runtime>(
 
     #[cfg(windows)]
     {
-        // The bundled binary is already named for PATH; only rename when the
-        // bundled name differs from the install name.
-        if bundled.exists() && bundled != dest {
-            if let Err(e) = std::fs::rename(&bundled, &dest) {
-                log::warn!(
-                    "Could not rename {} to {}: {}",
-                    bundled.display(),
-                    dest.display(),
-                    e
-                );
-            }
+        let install_dir = jan_cli_bin_dir_windows()?;
+        std::fs::create_dir_all(&install_dir).map_err(|e| e.to_string())?;
+        for name in ["gchat-cli.exe", "ginfer-host.exe", "launch-profiles.json"] {
+            std::fs::copy(resource_bin_dir.join(name), install_dir.join(name))
+                .map_err(|e| format!("Cannot install {name}; close the installed CLI/host before updating it: {e}"))?;
         }
-        // Older builds put `jan.exe` on PATH here; drop it so it stops shadowing Jan.ai.
-        remove_legacy_cli_binary(&resource_bin_dir);
-        add_to_path_windows(&resource_bin_dir)?;
+        install_desktop_launcher_config(&install_dir, &get_jan_data_folder_path(app_handle.clone()).join("ginfer"))?;
+        add_to_path_windows(&install_dir)?;
         return Ok(CliInstallStatus {
             installed: true,
-            path: Some(dest.to_string_lossy().into_owned()),
+            path: Some(install_dir.join(dest_bin_name).to_string_lossy().into_owned()),
         });
     }
 
@@ -791,6 +813,24 @@ pub fn install_jan_cli_sync<R: Runtime>(
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))
             .map_err(|e| e.to_string())?;
+
+        let host_source = resource_bin_dir.join("ginfer-host");
+        let host_temporary = install_dir.join(format!(".ginfer-host-{}", uuid::Uuid::new_v4()));
+        let host_result = (|| -> Result<(), String> {
+            std::fs::copy(&host_source, &host_temporary).map_err(|e| format!("Cannot install bundled ginfer-host: {e}"))?;
+            std::fs::set_permissions(&host_temporary, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+            std::fs::rename(&host_temporary, install_dir.join("ginfer-host")).map_err(|e| e.to_string())?;
+            Ok(())
+        })();
+        if host_result.is_err() { let _ = std::fs::remove_file(&host_temporary); }
+        host_result?;
+        ginfer_host::service::write_private(
+            &install_dir.join("launch-profiles.json"),
+            &std::fs::read(resource_bin_dir.join("launch-profiles.json"))
+                .map_err(|error| format!("Cannot read bundled launch profiles: {error}"))?,
+        )?;
+
+        install_desktop_launcher_config(&install_dir, &get_jan_data_folder_path(app_handle.clone()).join("ginfer"))?;
 
         // Older builds installed this binary as plain `jan` in the same directory.
         remove_legacy_cli_binary(&install_dir);
@@ -963,15 +1003,13 @@ fn jan_cli_install_dir() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join(".local").join("bin"))
 }
 
-/// Return the directory containing the bundled CLI binary on Windows.
+/// Per-user CLI installation, writable independently of the desktop installation.
 #[cfg(windows)]
 fn jan_cli_bin_dir_windows() -> Result<PathBuf, String> {
     let local_app_data =
         std::env::var("LOCALAPPDATA").map_err(|_| "Cannot determine LOCALAPPDATA".to_string())?;
     Ok(PathBuf::from(local_app_data)
-        .join("Programs")
         .join("GChat")
-        .join("resources")
         .join("bin"))
 }
 
@@ -4729,6 +4767,23 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_desktop_launcher_targets_provider_host_and_can_be_updated() {
+        let root = tempfile::tempdir().unwrap();
+        let provider = root.path().join("provider");
+        install_desktop_launcher_config(root.path(), &provider).unwrap();
+        let replacement = root.path().join("selected-provider");
+        install_desktop_launcher_config(root.path(), &replacement).unwrap();
+        let config: ginfer_host::launcher::InstalledConfiguration = serde_json::from_slice(
+            &std::fs::read(root.path().join("ginfer-launch.json")).unwrap()).unwrap();
+        assert_eq!(config.data_dir, replacement.join("host"));
+        assert_eq!(config.host_url, "https://127.0.0.1:7443");
+        let desktop = config.desktop.unwrap();
+        assert_eq!(desktop.provider, replacement);
+        let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
+        assert_eq!(desktop.engine, replacement.join("bin").join(executable));
+    }
 
     /// A file in a throwaway directory that is removed when the guard drops,
     /// so repeated test runs don't pile up directories under `target/`.

@@ -2,13 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use tokio::process::Child;
 use tokio::sync::{Mutex, Notify};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub pid: i32,  // opaque handle for unload/chat
-    pub port: u16, // ginfer-serve output port
+    pub port: u16, // Session-scoped local inference endpoint.
     pub model_id: String,
     pub model_path: String, // path of the loaded model artifact
     pub is_embedding: bool,
@@ -53,8 +52,14 @@ impl Default for BenchmarkControl {
 }
 
 pub struct GinferSession {
-    pub child: Child,
+    pub owner: SessionOwner,
     pub info: SessionInfo,
+    pub endpoint: Option<crate::cli_endpoint::CliEndpoint>,
+}
+
+pub struct SessionOwner {
+    pub control: Arc<ginfer_host::launcher::LocalControl>,
+    pub connection: ginfer_host::launcher::LocalConnection,
 }
 
 /// GInfer plugin state

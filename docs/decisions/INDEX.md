@@ -9,11 +9,13 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-248 records, 2026-05-19 → 2026-09-08.
+249 records, 2026-05-19 → 2026-09-09.
 
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
+
+- **2026-09-09** — [Share profile launch and instance control](2026-09-09-share-profile-launch-and-instance-control.md)
 
 - **2026-09-08** — [Manage models on the selected host](2026-09-08-manage-models-on-the-selected-host.md)
 

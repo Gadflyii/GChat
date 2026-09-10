@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Preview or install a per-user GInfer host service. Never modifies the engine."""
 import argparse
+import json
 import os
 from pathlib import Path
 import shutil
@@ -56,7 +57,8 @@ def main():
     parser.add_argument('--artifact-set', type=Path, action='append', default=[])
     parser.add_argument('--name', default='GInfer host')
     parser.add_argument('--share-lan', action='store_true', help='bind IPv4 LAN and advertise DNS-SD; opt-in')
-    parser.add_argument('--install', action='store_true', help='install and enable, but do not start; default prints preview')
+    parser.add_argument('--install', action='store_true', help='install, enable and start; default prints preview')
+    parser.add_argument('--no-start', action='store_true', help='stage the installed service without starting it')
     args = parser.parse_args()
     nvidia_smi = shutil.which('nvidia-smi')
     binary = args.binary.resolve(strict=True)
@@ -71,17 +73,20 @@ def main():
         parser.error('model roots must be existing directories')
     prefix, data = args.prefix.resolve(), args.data_dir.resolve()
     target = prefix / 'ginfer-host'
+    launcher = prefix / 'ginfer-launch.json'
+    launcher_contents = json.dumps({'data_dir': str(data), 'host_url': 'https://127.0.0.1:7443'}, indent=2)
     unit = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'systemd/user/ginfer-host.service'
     contents = unit_text(target, engine, data, models, args.name, args.share_lan, artifact_sets, nvidia_smi or 'nvidia-smi')
     print(f'Unit: {unit}\nHost executable: {target}\nPrivate state: {data}\n\n{contents}')
+    print(f'Launcher configuration: {launcher}\n{launcher_contents}')
     if not args.install:
-        print('Preview only. Repeat with --install to install without starting.')
+        print('Preview only. Repeat with --install to install and start the host service.')
         return
     if shutil.which('systemctl') is None:
         parser.error('systemctl is required')
     if nvidia_smi is None:
         parser.error('nvidia-smi must be available to resolve the service inventory executable')
-    if unit.exists() or target.exists():
+    if unit.exists() or target.exists() or launcher.exists() or (prefix / 'launch-profiles.json').exists():
         parser.error('installation already exists; stop and explicitly review it before replacing files')
     if data.exists() and (not data.is_dir() or data.stat().st_uid != os.getuid() or data.stat().st_mode & 0o077):
         parser.error('existing host data directory must belong to this user and have mode 0700')
@@ -90,10 +95,23 @@ def main():
     data.mkdir(parents=True, exist_ok=True, mode=0o700)
     unit.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(target, binary.read_bytes(), 0o700)
+    profiles = binary.parent / 'launch-profiles.json'
+    if profiles.is_file():
+        atomic_write(target.parent / 'launch-profiles.json', profiles.read_bytes(), 0o600)
+    atomic_write(launcher, launcher_contents.encode(), 0o600)
     atomic_write(unit, contents.encode(), 0o600)
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
-    subprocess.run(['systemctl', '--user', 'enable', 'ginfer-host.service'], check=True)
-    print('Installed, not started. Start with: systemctl --user start ginfer-host.service')
+    enable = ['systemctl', '--user', 'enable']
+    if not args.no_start:
+        enable.append('--now')
+    subprocess.run([*enable, 'ginfer-host.service'], check=True)
+    if args.no_start:
+        print('Installed, not started. Start with: systemctl --user start ginfer-host.service')
+    else:
+        subprocess.run(['systemctl', '--user', 'is-active', '--quiet', 'ginfer-host.service'], check=True)
+        print('Installed and started. The host is initializing inventory and its management endpoint.')
+    print('Open the launch menu: ' + shlex.join([str(target), '--menu']))
+    print('Put the installed host directory on PATH (or alongside ginfer) to launch it by typing ginfer.')
     print('Pair after startup: ' + shlex.join([str(target), '--data-dir', str(data), '--request-pairing']))
     if args.share_lan:
         print('Allow TCP 7443 and UDP 5353 only on the trusted LAN. No firewall rules were changed.')

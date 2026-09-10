@@ -35,6 +35,8 @@
       "resources/LICENSE",
       "resources/agent-skills/**/*",
       "resources/bin/gchat-cli",
+      "resources/bin/ginfer-host",
+      "resources/bin/launch-profiles.json",
       "resources/bin/sqlite-vec.so"
     ],
     "externalBin": ["resources/bin/uv"],

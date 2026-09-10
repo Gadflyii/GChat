@@ -8,7 +8,6 @@
 //! Build with: cargo build --features cli --bin gchat-cli
 
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use console::Style;
@@ -40,7 +39,7 @@ automatically; both read the same folder.",
   \x20 # Show the chat models you have installed\n\
   \x20 gchat-cli models list\n\n\
   \x20 # Expose one at localhost:6767/v1 (--detach runs it in the background)\n\
-  \x20 gchat-cli serve GadflyII/Qwen3.5-9B\n\n\
+  \x20 gchat-cli serve SectileLabs/Qwen3.5-9B\n\n\
   \x20 # Start a model and drop into a coding agent wired to it\n\
   \x20 gchat-cli launch claude\n\n\
   \x20 # Is the desktop app's Local API Server up?\n\
@@ -937,16 +936,18 @@ async fn handle_serve(args: ServeArgs) {
 
     let pb = start_progress(args.verbose, format!("Loading {model_id}…"));
 
-    let ginfer_state = Arc::new(init_ginfer_state());
+    let ginfer_state = init_ginfer_state();
     let config = GinferConfig {
         vision: args.vision,
         max_context: args.ctx_size.max(0) as u32,
+        max_concurrency: 1,
         ..GinferConfig::default()
     };
 
     match load_ginfer_model_impl(
         ginfer_state.ginfer_process.clone(),
         &bin_path.to_string_lossy(),
+        cli_get_data_folder().join("ginfer/host"),
         model_id.clone(),
         model_path.to_string_lossy().into_owned(),
         port,
@@ -985,12 +986,7 @@ async fn handle_serve(args: ServeArgs) {
     }
 }
 
-/// Block until we are asked to stop, then terminate the model server.
-///
-/// SIGTERM is honoured alongside Ctrl+C because `serve --detach` prints this
-/// process's PID: a plain `kill <pid>` has to take ginfer-serve down with it,
-/// or the PID we handed the user is worse than useless — it leaves an orphaned
-/// server holding the port and the GPU.
+/// An explicit Ctrl+C/SIGTERM stop requests a session-checked host shutdown.
 async fn wait_for_shutdown(pid: i32) {
     #[cfg(unix)]
     {
@@ -1013,23 +1009,13 @@ async fn wait_for_shutdown(pid: i32) {
         tokio::signal::ctrl_c().await.ok();
     }
 
-    eprintln!("\nShutting down (pid {pid})...");
-    kill_process(pid);
+    eprintln!("\nStopping host session {pid}...");
+    stop_model_session(pid).await;
 }
 
-/// Send a termination signal to a child process by PID.
-fn kill_process(pid: i32) {
-    #[cfg(unix)]
-    {
-        use nix::sys::signal::{kill, Signal};
-        use nix::unistd::Pid;
-        let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
-    }
-    #[cfg(windows)]
-    {
-        let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F"])
-            .status();
+async fn stop_model_session(handle: i32) {
+    if let Err(error) = tauri_plugin_ginfer::stop_session(init_ginfer_state().ginfer_process.clone(), handle).await {
+        eprintln!("Could not stop host session: {error}");
     }
 }
 
@@ -1100,7 +1086,7 @@ async fn handle_launch(args: LaunchArgs) {
     let api_url = integrations::api_url_for(agent, &base_url, "/v1");
 
     if let Err(e) = integrations::configure(agent, &api_url, &model_id, &args.api_key).await {
-        kill_process(pid);
+        init_ginfer_state().ginfer_process.lock().await.remove(&pid);
         fail(format!("could not configure {}: {e}", agent.name));
     }
 
@@ -1125,7 +1111,7 @@ async fn handle_launch(args: LaunchArgs) {
             .stderr(std::process::Stdio::null());
         apply_agent_env(&mut cmd, agent, &api_url, &model_id, &args.api_key);
         if let Err(e) = cmd.spawn() {
-            kill_process(pid);
+            init_ginfer_state().ginfer_process.lock().await.remove(&pid);
             fail(format!("could not launch {}: {e}", agent.name));
         }
         eprintln!(
@@ -1145,8 +1131,8 @@ async fn handle_launch(args: LaunchArgs) {
     apply_agent_env(&mut cmd, agent, &api_url, &model_id, &args.api_key);
     let status = cmd.status();
 
-    // Kill the model server when the agent exits.
-    kill_process(pid);
+    init_ginfer_state().ginfer_process.lock().await.remove(&pid);
+    eprintln!("The CLI endpoint is closed; the managed model remains on ginfer-host.");
 
     match status {
         Ok(s) => std::process::exit(s.code().unwrap_or(0)),
@@ -1211,15 +1197,17 @@ async fn start_model_server(
 
     let pb = start_progress(verbose, format!("Loading {model_id}…"));
 
-    let ginfer_state = Arc::new(init_ginfer_state());
+    let ginfer_state = init_ginfer_state();
     let config = GinferConfig {
         max_context: ctx_size.max(0) as u32,
+        max_concurrency: 1,
         ..GinferConfig::default()
     };
 
     let info = match load_ginfer_model_impl(
         ginfer_state.ginfer_process.clone(),
         &bin_path.to_string_lossy(),
+        cli_get_data_folder().join("ginfer/host"),
         model_id.to_string(),
         model_path.to_string_lossy().into_owned(),
         port,

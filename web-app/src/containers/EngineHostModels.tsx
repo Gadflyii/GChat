@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { engineCommand, type EngineHost, type EngineSnapshot, type EngineLaunchOptions } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineInstanceSettings } from '@/containers/EngineInstanceSettings'
+import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
@@ -14,6 +15,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [concurrency, setConcurrency] = useState(1)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
+  const [editingSession, setEditingSession] = useState<string | null>(null)
   const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false })
   const selected = snapshot?.models.find((m) => m.id === modelId)
   const invalidNumbers = !Number.isSafeInteger(context) || context < 1 ||
@@ -36,13 +38,14 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex items-center justify-between gap-3">
       <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Unavailable' : snapshot ? 'Connected' : 'Connecting'}</p></div>
-      <Button variant="outline" disabled={busy} onClick={() => {
+      {host.local ? <span className="text-sm text-muted-foreground">Local host</span> : <Button variant="outline" disabled={busy} onClick={() => {
         if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
-      }}>Forget</Button>
+      }}>Forget</Button>}
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}. Saved models below are last known; reconnect before using them.</p>}
     {snapshot && <>
       <div className="flex flex-wrap gap-2">{snapshot.gpus.map((gpu) => <span className="rounded border px-3 py-1 text-sm" key={gpu.uuid}>{gpu.name} · {(gpu.memory_mib / 1024).toFixed(0)} GB</span>)}</div>
+      <EngineProfilePicker snapshot={snapshot} disabled={busy || !!error} launch={body => act('profile_launch', { body })} />
       <h3 className="font-medium">Configured instances</h3>
       {!snapshot.instances.length && <p className="text-sm text-muted-foreground">No models are loaded. Choose an installed model below to start one.</p>}
       {snapshot.instances.map((instance) => <div key={instance.instance_id} className="rounded-lg bg-muted/40 p-3 space-y-2">
@@ -53,15 +56,21 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           {instance.profile && <Button variant="outline" disabled={busy || !!error} onClick={() => {
             const profile = instance.profile!
             setEditing(instance.instance_id); setModelId(profile.model_id); setGpus(profile.gpu_uuids)
+            setEditingSession(instance.session_id)
             setContext(profile.max_context); setConcurrency(profile.concurrency)
             setOptions({ vision: profile.vision, spec: profile.spec, draft_tokens: profile.draft_tokens, draft_tp: profile.draft_tp,
               kv_dtype: profile.kv_dtype, kv_arena_bytes: profile.kv_arena_bytes, host_kv_cache_bytes: profile.host_kv_cache_bytes,
+              kv_arena_headroom_bytes: profile.kv_arena_headroom_bytes,
               prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph })
           }}>Edit settings</Button>}
-          <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={() => void act('stop', { instance_id: instance.instance_id, body: { force: false } })}>Stop</Button>
-          <Button variant="outline" disabled={busy || !!error} onClick={() => void act('reload', { instance_id: instance.instance_id, body: {} })}>Reload</Button>
+          <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={() => void act('stop', { instance_id: instance.instance_id, body: { force: false, expected_session_id: instance.session_id } })}>Stop</Button>
+          {['stopped', 'failed'].includes(instance.status)
+            ? <Button variant="outline" disabled={busy || !!error || !instance.profile} onClick={() => void act('start', { instance_id: instance.instance_id, body: {} })}>Start</Button>
+            : <Button variant="outline" disabled={busy || !!error || instance.status !== 'ready'} onClick={() => {
+              if (window.confirm('Restart this serving instance with its saved settings? It will stop accepting requests while current requests drain.')) void act('restart', { instance_id: instance.instance_id, body: { force: false, expected_session_id: instance.session_id } })
+            }}>Restart</Button>}
           <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={() => {
-            if (window.confirm('Force-stop this instance and cancel its active requests?')) void act('stop', { instance_id: instance.instance_id, body: { force: true } })
+            if (window.confirm('Force-stop this instance and cancel its active requests?')) void act('stop', { instance_id: instance.instance_id, body: { force: true, expected_session_id: instance.session_id } })
           }}>Force stop</Button>
         </div>
       </div>)}
@@ -83,7 +92,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         <label className="text-sm">Context tokens<Input type="number" min={1} value={context} onChange={(e) => setContext(Number(e.target.value))} /></label>
         <label className="text-sm">Concurrent requests<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
       </div>
-      {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">This engine does not expose its hardware preset catalog yet. These are explicit launch settings, not a recommended VRAM profile. Reload drains this instance’s tracked requests before applying changes.</p>}
+      {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">No qualified profiles are installed for these models. The controls below use custom launch settings. Reload drains this instance’s tracked requests before applying changes.</p>}
       <div className="flex flex-wrap gap-4">
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Vision</label>
         <label className="text-sm">Speculative decoding<select className="ml-2 rounded border bg-background p-2" value={options.spec} onChange={(e) => setOptions({ ...options, spec: e.target.value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })}><option value="none">Disabled</option><option value="auto">Automatic</option><option value="dflash">DFlash</option></select></label>
@@ -99,7 +108,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       </details>
       <div className="flex gap-2"><Button disabled={busy || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
         const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
-        void act(editing ? 'reload' : 'launch', editing ? { instance_id: editing, body: { configuration } } : { body: configuration })
+        if (editing && !window.confirm('Apply these model and launch settings? This restarts the selected instance after its current requests drain.')) return
+        void act(editing ? 'reload' : 'launch', editing ? { instance_id: editing, body: { configuration, expected_session_id: editingSession } } : { body: configuration })
       }}>{editing ? 'Apply settings and reload' : 'Load model'}</Button>
         {editing && <Button variant="outline" onClick={() => setEditing(null)}>Cancel editing</Button>}
       </div>

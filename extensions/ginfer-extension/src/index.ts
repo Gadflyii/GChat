@@ -25,11 +25,10 @@ import {
   findSessionByModel,
   getLoadedModels,
   getAllSessions,
-  getRandomPort,
   isProcessRunning,
   type GinferConfig,
 } from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
-import { resolveBinaryPath, randomApiKey } from './util'
+import { resolveBinaryPath } from './util'
 import { checkGinferHardware } from './hardware'
 import { ginferModelProfile } from './model-profile'
 
@@ -72,7 +71,7 @@ interface GinferAdoptionReport {
  * published family (Qwen, Muse Glimmer) is multimodal — media routes
  * require the serve-side `--vision` flag. `tools` is not listed here; it
  * is reported via `isToolSupported`. Restrict per family if a text-only
- * artifact ever lands in the GadflyII/ginfer-models collection.
+ * artifact ever lands in the SectileLabs model catalog.
  */
 const modelCapabilities = (_modelId: string, _name?: string): string[] => [
   'vision',
@@ -341,19 +340,16 @@ export default class ginfer_extension extends AIEngine {
         await getJanDataFolderPath(),
         this.config?.binary_path
       )
-      const port = await getRandomPort()
-      const apiKey = randomApiKey()
       const cfg = this.buildGinferConfig(settings)
 
       let session: SessionInfo
       try {
         session = await loadGinferModel(
           binaryPath,
+          await joinPath([await this.getProviderPath(), 'host']),
           modelId,
           weightsPath,
-          port,
           cfg,
-          apiKey,
           !!isEmbedding,
           this.timeout
         )

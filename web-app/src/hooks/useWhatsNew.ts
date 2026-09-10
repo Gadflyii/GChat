@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLastSeenVersion } from './useLastSeenVersion'
 
-const GITHUB_REPO = 'Gadflyii/gchat'
+const GITHUB_REPO = 'SectileLabs/gchat'
 
 type GithubRelease = {
   tag_name: string

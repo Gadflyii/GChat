@@ -18,7 +18,7 @@ export interface SessionInfo {
 }
 export type GinferBenchmarkRequest = {
     run_id: string;
-    session_pid: number;
+    session_pid: number | null;
     prompt_tokens: number;
     max_output_tokens: number;
     concurrencies: number[];
@@ -26,7 +26,10 @@ export type GinferBenchmarkRequest = {
     measured_rounds: number;
 };
 export type GinferBenchmarkSession = {
-    pid: number;
+    display_name: string;
+    pid: number | null;
+    target_id: string;
+    session_id: string | null;
     model_id: string;
     model_path: string;
     max_context: number;

@@ -11,7 +11,7 @@ use std::{collections::BTreeMap, path::PathBuf, sync::OnceLock};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SavedHost {
     pub host_id: Uuid,
     pub name: String,
@@ -21,6 +21,7 @@ pub struct SavedHost {
 }
 #[derive(Default)]
 struct Hosts {
+    local_credentials: BTreeMap<Uuid, String>,
     path: Option<PathBuf>,
     saved: BTreeMap<Uuid, SavedHost>,
     registry: EngineRegistry,
@@ -48,6 +49,7 @@ fn endpoint(value: &str) -> Result<String, String> {
     Ok(url.as_str().trim_end_matches('/').into())
 }
 async fn secret(id: Uuid) -> Result<String, String> {
+    if let Some(token) = state().lock().await.local_credentials.get(&id).cloned() { return Ok(token); }
     tokio::task::spawn_blocking(move || {
         keyring::Entry::new("app.gchat.ginfer-host", &id.to_string())
             .and_then(|e| e.get_password())
@@ -92,6 +94,43 @@ fn persist(state: &Hosts) -> Result<(), String> {
         &serde_json::to_vec(&state.saved.values().collect::<Vec<_>>())
             .map_err(|e| e.to_string())?,
     )
+}
+
+async fn register_local_owner() -> Result<(), String> {
+    let registry_path = state().lock().await.path.clone().ok_or("host registry not initialized")?;
+    let owner = tokio::task::spawn_blocking(move || -> Result<Option<ginfer_host::service::Persistent>, String> {
+        local_owner_from_registry(&registry_path)
+    }).await.map_err(|e| e.to_string())??;
+    let Some(owner) = owner else { return Ok(()); };
+    publish_local_owner(&mut *state().lock().await, owner)
+}
+
+fn local_owner_from_registry(path: &std::path::Path) -> Result<Option<ginfer_host::service::Persistent>, String> {
+    let directory = path.parent().ok_or("host registry has no parent")?.join("host");
+    match std::fs::read(directory.join("host.json")) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|e| format!("Cannot read local host identity: {e}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn publish_local_owner(state: &mut Hosts, owner: ginfer_host::service::Persistent) -> Result<(), String> {
+    let Some(origin) = owner.management_origin else { return Ok(()); };
+    let origin = endpoint(&origin)?;
+    let client_id = state.saved.get(&owner.host_id).map(|host| host.client_id).unwrap_or(owner.host_id);
+    let host = SavedHost { host_id:owner.host_id, name:owner.name, base_url:origin,
+        certificate_sha256:owner.certificate.fingerprint(), client_id };
+    if state.saved.get(&host.host_id) != Some(&host) { publish_registration(state, host)?; }
+    state.local_credentials.insert(client_id, owner.pairing_admin_token);
+    Ok(())
+}
+
+fn visible_hosts(state: &Hosts) -> Vec<Value> {
+    state.saved.values().map(|host| {
+        let mut value = json!(host);
+        value["local"] = state.local_credentials.contains_key(&host.client_id).into();
+        value
+    }).collect()
 }
 
 // Persist first while holding the registry lock. Readers never observe an
@@ -200,37 +239,29 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     args: Value,
 ) -> Result<Value, String> {
     if action.starts_with("local_model_") {
-        static DOWNLOADS: OnceLock<Mutex<Option<std::sync::Arc<ginfer_host::model_downloads::ModelDownloads>>>> = OnceLock::new();
+        use tauri::Manager;
         let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
-        let mut slot = DOWNLOADS.get_or_init(|| Mutex::new(None)).lock().await;
-        let manager = if let Some(manager) = slot.as_ref() { manager.clone() } else {
-            let manager = ginfer_host::model_downloads::ModelDownloads::open_local(
-                root.join("ginfer/models"), root.join("ginfer/model-downloads.json"))?;
-            *slot = Some(manager.clone()); manager
-        };
-        drop(slot);
+        if action == "local_model_adopt" {
+            let report = tokio::task::spawn_blocking(move || crate::core::ginfer_models::adopt_root_ginfer_models_in(&root))
+                .await.map_err(|e| e.to_string())??;
+            return serde_json::to_value(report).map_err(|e| e.to_string());
+        }
+        let provider = root.join("ginfer");
+        let control = ginfer_host::local_host::LocalHost {
+            binary: app.path().resource_dir().map_err(|e| e.to_string())?.join("resources/bin")
+                .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" }),
+            engine: provider.join("bin").join(if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" }),
+            directory: provider.join("host"), desktop_provider: Some(provider),
+            models: vec![], artifact_sets: vec![], name:"This computer".into(),
+            nvidia_smi:"nvidia-smi".into(), listen:"127.0.0.1:7443".parse().unwrap(),
+        }.ensure_shared_running().await?;
         return match action.as_str() {
-            "local_model_downloads" => serde_json::to_value(manager.list().await).map_err(|e| e.to_string()),
-            "local_model_download" => {
-                let release: ginfer_host::model_downloads::Release = serde_json::from_value(args.get("body").cloned().ok_or("release required")?).map_err(|e| e.to_string())?;
-                release.validate()?;
-                let hardware = tauri_plugin_hardware::get_system_info().await?;
-                let gpus: Vec<_> = hardware.gpus.into_iter().map(|gpu| ginfer_host::service::Gpu {
-                    uuid: gpu.uuid, name: gpu.name, memory_mib: gpu.total_memory,
-                    compute_capability: gpu.nvidia_info.map(|info| info.compute_capability),
-                }).collect();
-                if release.compatible_group(&gpus).is_none() { return Err("release does not match this computer's actual SM and per-GPU memory".into()); }
-                serde_json::to_value(manager.enqueue(release).await?).map_err(|e| e.to_string())
-            }
-            "local_model_download_action" => {
-                manager.action(argument_id(&args, "id")?, args["operation"].as_str().ok_or("operation required")?).await?;
-                Ok(json!({"ok":true}))
-            }
-            "local_model_adopt" => {
-                let scan_root = root.clone();
-                let report = tokio::task::spawn_blocking(move || crate::core::ginfer_models::adopt_root_ginfer_models_in(&scan_root)).await.map_err(|e| e.to_string())??;
-                serde_json::to_value(report).map_err(|e| e.to_string())
-            }
+            "local_model_downloads" => control.request("/host/v1/downloads", None).await,
+            "local_model_download" => control.request("/host/v1/downloads",
+                Some(args.get("body").cloned().ok_or("release required")?)).await,
+            "local_model_download_action" => control.request("/host/v1/download-actions",
+                Some(json!({"id":argument_id(&args, "id")?,
+                    "action":args["operation"].as_str().ok_or("operation required")?}))).await,
             _ => Err("unknown local model operation".into()),
         };
     }
@@ -339,9 +370,10 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             serde_json::to_value(result).map_err(|e| e.to_string())
         }
         "list" => {
+            register_local_owner().await?;
             let state = state().lock().await;
             Ok(
-                json!({"registered":state.saved.values().collect::<Vec<_>>(),"discovered":state.discovery.as_ref().map(|d|d.hosts()).unwrap_or_default()}),
+                json!({"registered":visible_hosts(&state),"discovered":state.discovery.as_ref().map(|d|d.hosts()).unwrap_or_default()}),
             )
         }
         "discovery" => {
@@ -570,10 +602,11 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 }
             }
         }
-        "remove_model" | "download" | "download_action" | "launch" | "stop" | "reload" | "scan" => {
+        "remove_model" | "download" | "download_action" | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
             let id = argument_id(&args, "host_id")?;
             let path = match action.as_str() {
                 "launch" => "/host/v1/instances".into(),
+                "profile_launch" => "/host/v1/profile-launch".into(),
                 "scan" => "/host/v1/scan".into(),
                 "download" => "/host/v1/downloads".into(),
                 "download_action" => "/host/v1/download-actions".into(),
@@ -599,6 +632,9 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             let id = argument_id(&args, "host_id")?;
             // Forget is local and works while a server is offline. Revoke is a separate host action.
             let mut state = state().lock().await;
+            if state.saved.get(&id).is_some_and(|host| state.local_credentials.contains_key(&host.client_id)) {
+                return Err("The local host is managed automatically; stop its instances instead of forgetting this computer".into());
+            }
             let previous = remove_registration(&mut state, id)?;
             drop(state);
             let warning = delete_secret(previous.client_id).await.err();
@@ -972,6 +1008,29 @@ mod registration_tests {
     use ginfer_host::engine_registry::{
         HostSnapshot, InstanceRef, InstanceSnapshot, InstanceStatus,
     };
+
+    #[tokio::test]
+    async fn local_owner_registration_uses_published_address_without_persisting_credentials() {
+        let directory = tempfile::tempdir().unwrap();
+        let owner = ginfer_host::service::Host::open(directory.path().join("host"), "This computer".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        owner.data.lock().await.management_origin = Some("https://127.0.0.1:17443".into());
+        owner.save().await.unwrap();
+        let bytes = std::fs::read(directory.path().join("host/host.json")).unwrap();
+        let private = local_owner_from_registry(&directory.path().join("hosts.json")).unwrap().unwrap();
+        let id = private.host_id;
+        let token = private.pairing_admin_token.clone();
+        let mut registry = Hosts { path:Some(directory.path().join("hosts.json")), ..Hosts::default() };
+        publish_local_owner(&mut registry, private).unwrap();
+        assert_eq!(registry.local_credentials[&id], token);
+        assert_eq!(registry.saved[&id].base_url, "https://127.0.0.1:17443");
+        let visible = visible_hosts(&registry);
+        assert_eq!(visible[0]["local"], true);
+        assert!(!serde_json::to_string(&visible).unwrap().contains(&token));
+        assert!(!std::fs::read_to_string(directory.path().join("hosts.json")).unwrap().contains(&token));
+        publish_local_owner(&mut registry, serde_json::from_slice(&bytes).unwrap()).unwrap();
+        assert_eq!(registry.saved.len(), 1);
+    }
 
     #[tokio::test]
     #[ignore = "requires an unlocked native OS credential vault"]

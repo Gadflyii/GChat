@@ -25,9 +25,3 @@ export async function resolveBinaryPath(
     `ginfer-serve binary not found at ${fallback}. Set Settings → GInfer → ginfer-serve Binary, or download the binary into ${fallback}.`
   )
 }
-
-export function randomApiKey(): string {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-}

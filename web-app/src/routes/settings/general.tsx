@@ -353,13 +353,13 @@ function General() {
                 description="Report a problem or request a feature."
                 actions={
                   <a
-                    href="https://github.com/Gadflyii/gchat/issues"
+                    href="https://github.com/SectileLabs/gchat/issues"
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(event) => {
                       event.preventDefault()
                       void handleOpenContactLink(
-                        'https://github.com/Gadflyii/gchat/issues'
+                        'https://github.com/SectileLabs/gchat/issues'
                       )
                     }}
                     className="text-foreground font-medium hover:underline"
@@ -373,16 +373,16 @@ function General() {
                 description="View the GChat repository on GitHub."
                 actions={
                   <a
-                    href="https://github.com/Gadflyii/gchat"
+                    href="https://github.com/SectileLabs/gchat"
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(event) => {
                       event.preventDefault()
-                      void handleOpenContactLink('https://github.com/Gadflyii/gchat')
+                      void handleOpenContactLink('https://github.com/SectileLabs/gchat')
                     }}
                     className="text-foreground font-medium hover:underline"
                   >
-                    Gadflyii/gchat
+                    SectileLabs/gchat
                   </a>
                 }
               />
@@ -768,7 +768,7 @@ function General() {
                   description={t('settings:general.releaseNotesDesc')}
                   actions={
                     <a
-                      href="https://github.com/Gadflyii/gchat/releases"
+                      href="https://github.com/SectileLabs/gchat/releases"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -790,7 +790,7 @@ function General() {
                   description={t('settings:general.githubDesc')}
                   actions={
                     <a
-                      href="https://github.com/Gadflyii/gchat"
+                      href="https://github.com/SectileLabs/gchat"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -828,7 +828,7 @@ function General() {
                   description={t('settings:general.reportAnIssueDesc')}
                   actions={
                     <a
-                      href="https://github.com/Gadflyii/gchat/issues/new"
+                      href="https://github.com/SectileLabs/gchat/issues/new"
                       target="_blank"
                     >
                       <div className="flex items-center gap-1">

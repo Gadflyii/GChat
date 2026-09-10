@@ -14,12 +14,15 @@ param(
     [switch]$NativeMirror,
     [string]$SourceRoot,
     # Producer-final archive emitted by ginfer's packaging/windows/build.ps1.
-    [string]$GinferRuntimeArchive
+    [string]$GinferRuntimeArchive,
+    # Explicit qualified catalog paths, separated by semicolons on Windows.
+    [string]$GinferProfileCatalogs = $env:GINFER_PROFILE_CATALOGS
 )
 
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = $PSScriptRoot | Split-Path
+$env:GINFER_PROFILE_CATALOGS = $GinferProfileCatalogs
 
 if (-not $GinferRuntimeArchive) {
     $workspaceRoot = Split-Path -Parent $projectRoot
@@ -404,6 +407,14 @@ Pop-Location
 
 Copy-Item -Path 'src-tauri/target/release/gchat-cli.exe' -Destination 'src-tauri/resources/bin/gchat-cli.exe' -Force
 Write-Host '  CLI built: src-tauri/resources/bin/gchat-cli.exe'
+
+Write-Step 'Build persistent ginfer-host (release)'
+cargo build --release --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
+if ($LASTEXITCODE -ne 0) {
+    Write-Host 'cargo build ginfer-host failed' -ForegroundColor Red
+    exit 1
+}
+Copy-Item -Path 'src-tauri/ginfer-host/target/release/ginfer-host.exe' -Destination 'src-tauri/resources/bin/ginfer-host.exe' -Force
 
 # ── Build Tauri app (NSIS + MSI, no code signing) ─────────────
 Write-Step 'Building Tauri app (release, unsigned)'

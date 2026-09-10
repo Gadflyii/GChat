@@ -495,7 +495,7 @@ describe('General Settings Route', () => {
     })
 
     expect(mockOpenerOpen).toHaveBeenCalledWith(
-      'https://github.com/Gadflyii/gchat/issues'
+      'https://github.com/SectileLabs/gchat/issues'
     )
   })
 

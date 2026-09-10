@@ -8,7 +8,6 @@ permissions = [
     "allow-load-ginfer-model",
     "allow-unload-ginfer-model",
     "allow-is-process-running",
-    "allow-get-random-port",
     "allow-find-session-by-model",
     "allow-get-loaded-models",
     "allow-get-all-sessions",

@@ -536,6 +536,8 @@ jobs:
           mkdir -p src-tauri/resources/bin
           cd src-tauri && cargo build --release --features cli --bin gchat-cli
           cp target/release/gchat-cli.exe resources/bin/gchat-cli.exe
+          cargo build --release --manifest-path ginfer-host/Cargo.toml --bin ginfer-host
+          cp ginfer-host/target/release/ginfer-host.exe resources/bin/ginfer-host.exe
 
       # Runs after Build CLI: the tauri build script requires
       # resources/bin/gchat-cli.exe to exist, and `shell: bash` (-e -o pipefail)
@@ -842,6 +844,8 @@ jobs:
           cd src-tauri && cargo build --release --features cli --bin gchat-cli
           cp target/release/gchat-cli resources/bin/gchat-cli
           chmod +x resources/bin/gchat-cli
+          cargo build --release --manifest-path ginfer-host/Cargo.toml --bin ginfer-host
+          install -m755 ginfer-host/target/release/ginfer-host resources/bin/ginfer-host
 
       - name: Build app (AppImage)
         env:
@@ -980,9 +984,9 @@ jobs:
           LINUX_RESULT: ${{ needs.build-linux-x64.result }}
         run: |
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-          DARWIN_URL="https://github.com/Gadflyii/gchat/releases/download/v${VERSION}/${TAR_NAME// /.}"
-          WIN_URL="https://github.com/Gadflyii/gchat/releases/download/v${VERSION}/${EXE_NAME// /.}"
-          LINUX_URL="https://github.com/Gadflyii/gchat/releases/download/v${VERSION}/${APPIMAGE_NAME// /.}"
+          DARWIN_URL="https://github.com/SectileLabs/gchat/releases/download/v${VERSION}/${TAR_NAME// /.}"
+          WIN_URL="https://github.com/SectileLabs/gchat/releases/download/v${VERSION}/${EXE_NAME// /.}"
+          LINUX_URL="https://github.com/SectileLabs/gchat/releases/download/v${VERSION}/${APPIMAGE_NAME// /.}"
 
           # Fill in the platform blocks only for jobs that actually
           # succeeded; delete the others so Tauri's updater doesn't see a

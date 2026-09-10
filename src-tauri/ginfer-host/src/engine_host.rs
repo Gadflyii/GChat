@@ -19,6 +19,7 @@ pub struct LaunchOptions {
     pub draft_tp: u32,
     pub kv_dtype: String,
     pub kv_arena_bytes: Option<u64>,
+    pub kv_arena_headroom_bytes: u64,
     pub host_kv_cache_bytes: u64,
     pub prefill_chunk: u32,
     pub no_cuda_graph: bool,
@@ -32,6 +33,7 @@ impl Default for LaunchOptions {
             draft_tp: 0,
             kv_dtype: "auto".into(),
             kv_arena_bytes: None,
+            kv_arena_headroom_bytes: crate::launch_profiles::HEADROOM_BYTES,
             host_kv_cache_bytes: 0,
             prefill_chunk: 0,
             no_cuda_graph: false,
@@ -67,7 +69,12 @@ impl LaunchOptions {
         Ok(())
     }
     fn args(&self) -> Vec<String> {
-        let mut args = vec!["--spec".into(), self.spec.clone()];
+        let mut args = vec![
+            "--spec".into(),
+            self.spec.clone(),
+            "--kv-arena-headroom-bytes".into(),
+            self.kv_arena_headroom_bytes.to_string(),
+        ];
         if self.vision {
             args.push("--vision".into());
         }
@@ -137,8 +144,8 @@ impl HostProcesses {
         gpu_uuids: BTreeSet<String>,
         startup_timeout: Duration,
     ) -> Result<Self, String> {
-        if !executable.is_absolute() || !executable.is_file() {
-            return Err("engine executable must be an existing absolute file path".into());
+        if !executable.is_absolute() {
+            return Err("engine executable must be an absolute file path".into());
         }
         let client = reqwest::Client::builder()
             .no_proxy()
@@ -155,6 +162,16 @@ impl HostProcesses {
         })
     }
 
+    /// Local clients may select an installed engine without replacing live instances.
+    pub fn configure_executable(&mut self, path: PathBuf) -> Result<(), String> {
+        if !path.is_absolute() || !path.is_file() { return Err("engine executable must be an existing absolute file path".into()); }
+        if self.executable != path && self.instances.values().any(|instance| instance.child.is_some()) {
+            return Err("Stop the host's active instances before changing its engine executable".into());
+        }
+        self.executable = path;
+        Ok(())
+    }
+
     /// Invoked only with an inventory-resolved artifact and validated host settings.
     /// Engine startup performs artifact binding and physical TP qualification.
     pub fn launch(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
@@ -163,6 +180,7 @@ impl HostProcesses {
     }
 
     pub fn validate_launch(&self, launch: &EngineLaunch, replacing: bool) -> Result<(), String> {
+        if !self.executable.is_file() { return Err("Install the configured engine executable before loading a model".into()); }
         launch.options.validate(launch.tp)?;
         if self
             .instances
@@ -209,6 +227,12 @@ impl HostProcesses {
     fn spawn(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
         let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         let mut command = Command::new(&self.executable);
+        if let Some(directory) = self.executable.parent() {
+            let variable = if cfg!(windows) { "PATH" } else { "LD_LIBRARY_PATH" };
+            let mut paths = vec![directory.to_path_buf()];
+            if let Some(existing) = std::env::var_os(variable) { paths.extend(std::env::split_paths(&existing)); }
+            command.env(variable, std::env::join_paths(paths).map_err(|e| e.to_string())?);
+        }
         if launch.artifact_set {
             command
                 .arg("--tp-artifact-set")
@@ -219,6 +243,7 @@ impl HostProcesses {
         }
         let child = command
             .args([
+                "--exit-on-stdin-close",
                 "--host",
                 "127.0.0.1",
                 "--port",
@@ -236,7 +261,7 @@ impl HostProcesses {
             ])
             .env("CUDA_VISIBLE_DEVICES", launch.gpu_uuids.join(","))
             .args(launch.options.args())
-            .stdin(std::process::Stdio::null())
+            .stdin(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| format!("could not start engine: {e}"))?;
@@ -260,6 +285,14 @@ impl HostProcesses {
 
     pub fn instances(&self) -> impl Iterator<Item = &ManagedInstance> {
         self.instances.values()
+    }
+
+    pub fn reserved_gpus(&self, except: Option<Uuid>) -> BTreeSet<String> {
+        self.instances
+            .values()
+            .filter(|i| i.child.is_some() && Some(i.instance_id) != except)
+            .flat_map(|i| i.launch.gpu_uuids.iter().cloned())
+            .collect()
     }
 
     pub fn endpoint(&self, id: Uuid) -> Result<(u16, String, String, Uuid), String> {
@@ -387,7 +420,7 @@ mod tests {
         let artifact = dir.path().join("model.ginfer");
         std::fs::write(&artifact, b"test fixture").unwrap();
         let mut host = HostProcesses::new(
-            executable,
+            executable.clone(),
             BTreeSet::from(["GPU-test".into()]),
             Duration::from_secs(10),
         )
@@ -406,8 +439,15 @@ mod tests {
             options: LaunchOptions::default(),
         };
         let first = host.launch(launch(id)).unwrap();
+        host.configure_executable(executable.clone()).unwrap();
+        let replacement = dir.path().join("replacement-engine");
+        std::fs::copy(&executable, &replacement).unwrap();
+        assert!(host.configure_executable(replacement.clone()).is_err());
+        assert_eq!(host.instances().next().unwrap().session_id, first);
         assert!(host.launch(launch(Uuid::new_v4())).is_err());
         host.stop(id).await.unwrap();
+        assert!(host.configure_executable(dir.path().join("missing-engine")).is_err());
+        host.configure_executable(replacement).unwrap();
         assert_eq!(
             host.instances().next().unwrap().status,
             InstanceStatus::Stopped
