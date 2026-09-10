@@ -473,6 +473,24 @@ at the original 1 GiB guard, with 60 C peak core / 65 C peak HBM and verified
 
 ### Packaging and verification
 
+- Current profile integration candidates are assembled without rebuilding the
+  engine or installing into the user's profile. Linux outputs are under
+  `/ai/ginfer/out/profile-integration-20260910/linux/`: the host-only archive
+  contains all 172 Linux profiles; the SM120a runtime bundle contains its 72
+  RTX5090 profiles, including preserved alternate draft formats. Extracted
+  catalog values exactly match source. The three executable help routes and
+  three packaging contract tests passed.
+  The Windows candidate is
+  `C:\ai\kernel-agent\run_workdir\Ron-9950X3D2\windows-profile-candidate-20260910\distribution\ginfer-bundle-0.1.0-windows-x86_64.zip`.
+  It contains the 64 core RTX5090 text/Vision profiles, a host rebuilt from
+  `d12420d2e`, and the previously tested `922e5a8` runtime. ZIP integrity,
+  manifest, profile inventory, ten native host tests and executable help routes
+  passed. These are integration candidates, not newly qualified engine releases;
+  Qwen Vision+DFlash still requires the independent engine fix. No models,
+  user installation, chat history or application settings were changed.
+  The catalog source is already committed and pushed on both main branches.
+  Remaining hands-on integration is the installer/LAN/WebView walkthrough below,
+  not another calculation or full-context campaign.
 - Standalone Windows and Linux setup offer editable approved per-user paths,
   preserve an existing owner, verify runtime integrity and refuse overwrites.
   Fixture tests cover installation, preview and second-install adoption without
