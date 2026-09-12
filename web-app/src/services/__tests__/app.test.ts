@@ -123,7 +123,7 @@ describe('TauriAppService', () => {
     })
   })
 
-  it('performs factory reset through real invoke and preserves backend keys', async () => {
+  it('resets settings and removes obsolete backend preferences', async () => {
     window.localStorage.setItem('llama_cpp_backend_type', 'cpu')
     window.localStorage.setItem('discard-me', 'value')
     ipcHandler.mockReturnValue(undefined)
@@ -131,7 +131,7 @@ describe('TauriAppService', () => {
     await appService.factoryReset()
 
     expect(engineMocks.unload).toHaveBeenCalledTimes(2)
-    expect(window.localStorage.getItem('llama_cpp_backend_type')).toBe('cpu')
+    expect(window.localStorage.getItem('llama_cpp_backend_type')).toBeNull()
     expect(window.localStorage.getItem('discard-me')).toBeNull()
     expect(ipcHandler).toHaveBeenCalledWith('factory_reset', {})
   })

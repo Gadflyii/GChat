@@ -4,13 +4,13 @@
  * local provider (`ginfer`) rather than a hard-coded engine id.
  *
  * Background: `DefaultModelsService` routes every engine call through
- * `LOCAL_LLAMACPP_PROVIDER` (the single local backend). If that id were ever
+ * `LOCAL_GINFER_PROVIDER` (the single local backend). If that id were ever
  * hard-coded to a removed engine, these methods would silently no-op —
  * visible to users as "Download stuck at 0%" and misleading success toasts.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 
 const { mockEvents, mockDownloadEvent } = vi.hoisted(() => ({
   mockEvents: {
@@ -48,7 +48,7 @@ describe('DefaultModelsService — local engine routing', () => {
   }
 
   const engineManagerGet = vi.fn((provider: string) =>
-    provider === LOCAL_LLAMACPP_PROVIDER ? ginferEngine : undefined
+    provider === LOCAL_GINFER_PROVIDER ? ginferEngine : undefined
   )
 
   beforeEach(() => {
@@ -62,7 +62,7 @@ describe('DefaultModelsService — local engine routing', () => {
   it('pullModel resolves the local engine', async () => {
     await modelsService.pullModel('m1', '/abs/m1.gguf')
 
-    expect(engineManagerGet).toHaveBeenCalledWith(LOCAL_LLAMACPP_PROVIDER)
+    expect(engineManagerGet).toHaveBeenCalledWith(LOCAL_GINFER_PROVIDER)
     expect(ginferEngine.import).toHaveBeenCalledWith(
       'm1',
       expect.objectContaining({ modelPath: '/abs/m1.gguf' })
@@ -89,7 +89,7 @@ describe('DefaultModelsService — local engine routing', () => {
   it('abortDownload tries the local engine', async () => {
     await modelsService.abortDownload('m1')
 
-    expect(engineManagerGet).toHaveBeenCalledWith(LOCAL_LLAMACPP_PROVIDER)
+    expect(engineManagerGet).toHaveBeenCalledWith(LOCAL_GINFER_PROVIDER)
     expect(ginferEngine.abortImport).toHaveBeenCalledWith('m1')
   })
 })

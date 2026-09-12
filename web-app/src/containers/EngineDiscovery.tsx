@@ -24,7 +24,7 @@ export function EngineDiscovery() {
         for (const host of nearby) {
           if (preferences.ignored[host.host_id] || preferences.notified.includes(host.host_id) || hosts.some((h) => h.host_id === host.host_id)) continue
           preferences.markNotified(host.host_id)
-          toast.info(`GInfer host found: ${host.name}`, { description: 'Open Engines to pair and view its models.' })
+          toast.info(`GInfer host found: ${host.name}`, { description: 'Open GInfer Hosts to pair and view its models.' })
         }
       } catch (error) { console.warn('Engine registry refresh:', String(error)) }
     }

@@ -24,7 +24,7 @@ import { useModelLoad } from '@/hooks/useModelLoad'
 import { consumeSilentImport } from '@/utils/backgroundImports'
 import {
   isDev,
-  LOCAL_LLAMACPP_PROVIDER,
+  LOCAL_GINFER_PROVIDER,
   SERVER_START_WATCHDOG_MS,
   withTimeout,
 } from '@/lib/utils'
@@ -107,16 +107,10 @@ export function DataProvider() {
 
   useEffect(() => {
     if (localStorage.getItem(localStorageKey.factoryResetPending) === 'true') {
-      const backendType = localStorage.getItem('llama_cpp_backend_type')
-
       localStorage.clear()
 
-      if (backendType) {
-        localStorage.setItem('llama_cpp_backend_type', backendType)
-      }
-
       console.log(
-        'Factory reset detected — localStorage force-cleared on startup (backend preserved)'
+        'Reset to defaults requested — localStorage cleared on startup'
       )
     }
   }, [])
@@ -361,15 +355,15 @@ export function DataProvider() {
       }
       if (!provider) {
         provider = storeProviders.find(
-          (p) => p?.provider === LOCAL_LLAMACPP_PROVIDER
+          (p) => p?.provider === LOCAL_GINFER_PROVIDER
         )
         console.warn(
           '[LocalAPI] Could not find provider for model',
           modelId,
-          `— falling back to ${LOCAL_LLAMACPP_PROVIDER}`
+          `— falling back to ${LOCAL_GINFER_PROVIDER}`
         )
       }
-      const providerName = provider?.provider ?? LOCAL_LLAMACPP_PROVIDER
+      const providerName = provider?.provider ?? LOCAL_GINFER_PROVIDER
       console.log('[LocalAPI] Provider for model:', providerName)
 
       // The first usable model owns the default until the user chooses a

@@ -14,6 +14,9 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [context, setContext] = useState(8192)
   const [concurrency, setConcurrency] = useState(1)
   const [busy, setBusy] = useState(false)
+  const [expanded, setExpanded] = useState(true)
+  const [activeId, setActiveId] = useState('')
+  const active = snapshot?.instances.find(i => i.instance_id === activeId) ?? snapshot?.instances[0]
   const [editing, setEditing] = useState<string | null>(null)
   const [editingSession, setEditingSession] = useState<string | null>(null)
   const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false })
@@ -24,8 +27,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       .some((value) => !Number.isSafeInteger(value) || value < 0) ||
     (options.kv_arena_bytes !== null && (!Number.isSafeInteger(options.kv_arena_bytes) || options.kv_arena_bytes < 1))
   const launchError = invalidNumbers ? 'Use whole numbers: positive context, 1–8 concurrent requests, and nonnegative advanced settings. GPU KV budget must be positive or blank.'
-    : selected?.metadata.identity.model_id === 'qwen3.8-27b' && options.vision && options.spec !== 'none'
-      ? 'Qwen Vision requires speculative decoding disabled.' : null
+    : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
+      ? 'This artifact lacks NVFP4 KV calibration. Install a calibrated artifact or select INT8/BF16 KV.' : null
   const act = async (action: string, args: Record<string, unknown> = {}) => {
     setBusy(true)
     try {
@@ -36,14 +39,30 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     catch (e) { toast.error(String(e)) } finally { setBusy(false) }
   }
   return <section className="rounded-xl border p-5 space-y-4">
-    <div className="flex items-center justify-between gap-3">
-      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Unavailable' : snapshot ? 'Connected' : 'Connecting'}</p></div>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><button className="font-semibold" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? '▾' : '▸'} {host.name}</button><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Unavailable' : snapshot ? 'Connected' : 'Connecting'}</p></div>
+      {active && <div className="flex flex-wrap items-center gap-2">
+        <select aria-label={`${host.name} serving instance`} className="max-w-60 rounded border bg-background p-2 text-sm" value={active.instance_id} onChange={e => setActiveId(e.target.value)}>
+          {snapshot?.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{i.display_name} · {i.status}</option>)}
+        </select>
+        <Button variant="outline" disabled={busy || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start</Button>
+        <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(active.status)} onClick={() => void act('stop', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })}>Stop</Button>
+        <Button variant="outline" disabled={busy || !!error || active.status !== 'ready'} onClick={() => {
+          if (window.confirm('Reload this instance with its saved settings after current requests drain?')) void act('restart', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })
+        }}>Reload</Button>
+        {active.profile && <select aria-label={`${host.name} model`} className="max-w-60 rounded border bg-background p-2 text-sm" value={active.profile.model_id} disabled={busy || !!error || active.status === 'stopping' || active.status === 'starting'} onChange={e => {
+          if (!active.profile || !window.confirm('Change the model for this instance? Current requests drain before serving restarts. Existing context and concurrency settings are retained; select a hardware profile to change them.')) return
+          void act('reload', { instance_id: active.instance_id, body: { configuration: { ...active.profile, qualified_profile_id: null, model_id: e.target.value }, expected_session_id: active.session_id } })
+        }}>
+          {snapshot?.models.filter(m => m.metadata.tp_size === active.profile!.gpu_uuids.length).map(m => <option key={m.id} value={m.id}>{m.metadata.identity.model_id} / {m.metadata.identity.weights_id}</option>)}
+        </select>}
+      </div>}
       {host.local ? <span className="text-sm text-muted-foreground">Local host</span> : <Button variant="outline" disabled={busy} onClick={() => {
         if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
       }}>Forget</Button>}
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}. Saved models below are last known; reconnect before using them.</p>}
-    {snapshot && <>
+    {snapshot && expanded && <>
       <div className="flex flex-wrap gap-2">{snapshot.gpus.map((gpu) => <span className="rounded border px-3 py-1 text-sm" key={gpu.uuid}>{gpu.name} · {(gpu.memory_mib / 1024).toFixed(0)} GB</span>)}</div>
       <EngineProfilePicker snapshot={snapshot} disabled={busy || !!error} launch={body => act('profile_launch', { body })} />
       <h3 className="font-medium">Configured instances</h3>
@@ -63,12 +82,6 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
               kv_arena_headroom_bytes: profile.kv_arena_headroom_bytes,
               prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph })
           }}>Edit settings</Button>}
-          <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={() => void act('stop', { instance_id: instance.instance_id, body: { force: false, expected_session_id: instance.session_id } })}>Stop</Button>
-          {['stopped', 'failed'].includes(instance.status)
-            ? <Button variant="outline" disabled={busy || !!error || !instance.profile} onClick={() => void act('start', { instance_id: instance.instance_id, body: {} })}>Start</Button>
-            : <Button variant="outline" disabled={busy || !!error || instance.status !== 'ready'} onClick={() => {
-              if (window.confirm('Restart this serving instance with its saved settings? It will stop accepting requests while current requests drain.')) void act('restart', { instance_id: instance.instance_id, body: { force: false, expected_session_id: instance.session_id } })
-            }}>Restart</Button>}
           <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={() => {
             if (window.confirm('Force-stop this instance and cancel its active requests?')) void act('stop', { instance_id: instance.instance_id, body: { force: true, expected_session_id: instance.session_id } })
           }}>Force stop</Button>

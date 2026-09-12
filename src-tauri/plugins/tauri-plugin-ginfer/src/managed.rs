@@ -350,7 +350,7 @@ mod tests {
         let artifact = root.path().join("model.ginfer");
         let metadata =
             serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},
-            "tp_size":1,"draft_tp":0,"objects":[{}]})
+            "tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]})
             .to_string();
         let mut bytes = b"NINFER\0\x03".to_vec();
         bytes.extend((metadata.len() as u64).to_le_bytes());

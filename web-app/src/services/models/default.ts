@@ -2,12 +2,7 @@
  * Default Models Service - Web implementation
  */
 
-import { sanitizeModelId, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
-import {
-  ggufShardGroupKey,
-  groupGgufShards,
-  isMtpCompanionFile,
-} from '@/lib/models'
+import { sanitizeModelId, LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 import {
   AIEngine,
   EngineManager,
@@ -30,81 +25,12 @@ import type {
 } from './types'
 import { getCatalogOrFallback } from '@/services/model-catalog-registry'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
-import posthog from 'posthog-js'
-import {
-  isHfUrl,
-  markDownloadStart,
-  quantFromModelId,
-  sizeBucket,
-  urlHost,
-} from '@/lib/telemetry'
 
 // The only local inference provider id. Resolving this through
-// LOCAL_LLAMACPP_PROVIDER keeps `getEngine()` calls provider-agnostic.
-const defaultProvider = LOCAL_LLAMACPP_PROVIDER
-const HUGGING_FACE_SEARCH_LIMIT = 10
+// LOCAL_GINFER_PROVIDER keeps `getEngine()` calls provider-agnostic.
+const defaultProvider = LOCAL_GINFER_PROVIDER
 const localProviders = ['ginfer'] as const
 type LocalProviderName = (typeof localProviders)[number]
-
-type HuggingFaceRepoSearchResult = Pick<
-  HuggingFaceRepo,
-  'downloads' | 'likes' | 'tags'
-> & {
-  id?: string
-  modelId?: string
-}
-
-const normalizeHuggingFaceSearchValue = (value: string) =>
-  value.toLowerCase().replace(/[^a-z0-9]+/g, '')
-
-const hasGgufFiles = (
-  repo: Pick<HuggingFaceRepo, 'siblings'> | null | undefined
-) =>
-  repo?.siblings?.some((file) =>
-    file.rfilename.toLowerCase().endsWith('.gguf')
-  ) ?? false
-
-const isLikelyGgufRepo = (repo: HuggingFaceRepoSearchResult) => {
-  const repoId = getHuggingFaceRepoId(repo).toLowerCase()
-  return (
-    repoId.includes('gguf') ||
-    repo.tags?.some((tag) => tag.toLowerCase().includes('gguf')) === true
-  )
-}
-
-const getHuggingFaceRepoId = (
-  repo: Pick<HuggingFaceRepoSearchResult, 'id' | 'modelId'>
-) => repo.modelId ?? repo.id ?? ''
-
-const scoreHuggingFaceRepoMatch = (
-  query: string,
-  repo: HuggingFaceRepoSearchResult
-) => {
-  const repoId = getHuggingFaceRepoId(repo)
-  const repoTail = repoId.split('/').pop() ?? repoId
-  const normalizedQuery = normalizeHuggingFaceSearchValue(query)
-  const normalizedRepoId = normalizeHuggingFaceSearchValue(repoId)
-  const normalizedRepoTail = normalizeHuggingFaceSearchValue(repoTail)
-
-  let score = 0
-
-  if (!normalizedQuery || !normalizedRepoId) {
-    return score
-  }
-
-  if (normalizedRepoId === normalizedQuery) score += 300
-  if (normalizedRepoTail === normalizedQuery) score += 240
-  if (normalizedRepoTail.startsWith(normalizedQuery)) score += 120
-  if (normalizedRepoId.includes(normalizedQuery)) score += 80
-
-  if (repo.tags?.some((tag) => tag.toLowerCase() === 'gguf')) score += 30
-  if (normalizedRepoId.includes('gguf')) score += 20
-
-  score += Math.min(repo.downloads ?? 0, 100_000) / 1000
-  score += Math.min(repo.likes ?? 0, 10_000) / 1000
-
-  return score
-}
 
 export class DefaultModelsService implements ModelsService {
   private getEngine(provider: string = defaultProvider) {
@@ -158,45 +84,6 @@ export class DefaultModelsService implements ModelsService {
     return response.json()
   }
 
-  private async searchHuggingFaceRepo(
-    query: string,
-    hfToken?: string
-  ): Promise<HuggingFaceRepo | null> {
-    const ggufQuery = /\bgguf\b/i.test(query) ? query : `${query} GGUF`
-    const response = await fetch(
-      `https://huggingface.co/api/models?search=${encodeURIComponent(ggufQuery)}&limit=${HUGGING_FACE_SEARCH_LIMIT}`,
-      {
-        headers: this.getHuggingFaceHeaders(hfToken),
-      }
-    )
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to search HuggingFace repositories: ${response.status} ${response.statusText}`
-      )
-    }
-
-    const results = ((await response.json()) as HuggingFaceRepoSearchResult[])
-      .filter((repo) => getHuggingFaceRepoId(repo))
-      .filter(isLikelyGgufRepo)
-      .sort(
-        (a, b) =>
-          scoreHuggingFaceRepoMatch(query, b) -
-          scoreHuggingFaceRepoMatch(query, a)
-      )
-
-    for (const repo of results) {
-      const repoId = getHuggingFaceRepoId(repo)
-      const repoDetails = await this.fetchExactHuggingFaceRepo(repoId, hfToken)
-
-      if (hasGgufFiles(repoDetails)) {
-        return repoDetails
-      }
-    }
-
-    return null
-  }
-
   async getModel(modelId: string): Promise<modelInfo | undefined> {
     return this.getEngine()?.get(modelId)
   }
@@ -224,57 +111,6 @@ export class DefaultModelsService implements ModelsService {
     }
   }
 
-  async searchHuggingFaceCandidates(
-    query: string,
-    hfToken?: string,
-    limit = HUGGING_FACE_SEARCH_LIMIT
-  ): Promise<CatalogModel[]> {
-    const trimmed = query.trim()
-    if (trimmed.length < 3) return []
-    try {
-      const ggufQuery = /\bgguf\b/i.test(trimmed) ? trimmed : `${trimmed} GGUF`
-      const response = await fetch(
-        `https://huggingface.co/api/models?search=${encodeURIComponent(ggufQuery)}&limit=${limit}`,
-        { headers: this.getHuggingFaceHeaders(hfToken) }
-      )
-      if (!response.ok) return []
-      const raw = (await response.json()) as HuggingFaceRepoSearchResult[]
-      const ranked = raw
-        .filter((repo) => getHuggingFaceRepoId(repo))
-        .filter(isLikelyGgufRepo)
-        .sort(
-          (a, b) =>
-            scoreHuggingFaceRepoMatch(trimmed, b) -
-            scoreHuggingFaceRepoMatch(trimmed, a)
-        )
-      return ranked.slice(0, limit).map((repo) => {
-        const repoId = getHuggingFaceRepoId(repo)
-        const developer = repoId.includes('/')
-          ? repoId.split('/', 1)[0]
-          : undefined
-        return {
-          model_name: repoId,
-          developer,
-          downloads: repo.downloads ?? 0,
-          description: `**Tags**: ${(repo.tags ?? []).join(', ')}`,
-          // No quants / mmproj here — the detail fetch happens later when
-          // the user clicks through to the dedicated model page.
-          num_quants: 0,
-          quants: [],
-          num_mmproj: 0,
-          mmproj_models: [],
-          num_safetensors: 0,
-          safetensors_files: [],
-          is_mlx: (repo.tags ?? []).some((t) => t.toLowerCase() === 'mlx'),
-          readme: `https://huggingface.co/${repoId}/resolve/main/README.md`,
-        } satisfies CatalogModel
-      })
-    } catch (error) {
-      console.warn('searchHuggingFaceCandidates failed:', error)
-      return []
-    }
-  }
-
   async fetchHuggingFaceRepo(
     repoId: string,
     hfToken?: string
@@ -295,102 +131,25 @@ export class DefaultModelsService implements ModelsService {
         return await this.fetchExactHuggingFaceRepo(cleanRepoId, hfToken)
       }
 
-      return await this.searchHuggingFaceRepo(cleanRepoId, hfToken)
+      return null
     } catch (error) {
       console.error('Error fetching HuggingFace repository:', error)
       return null
     }
   }
-
   convertHfRepoToCatalogModel(repo: HuggingFaceRepo): CatalogModel {
-    // Format file size helper
-    const formatFileSize = (size?: number) => {
-      if (!size) return 'Unknown size'
-      if (size < 1024 ** 3) return `${(size / 1024 ** 2).toFixed(1)} MB`
-      return `${(size / 1024 ** 3).toFixed(1)} GB`
-    }
-
-    // Extract GGUF files from the repository siblings
-    const ggufFiles =
-      repo.siblings?.filter((file) =>
-        file.rfilename.toLowerCase().endsWith('.gguf')
-      ) || []
-
-    // Separate regular GGUF files from mmproj and MTP companion files
-    const regularGgufFiles = ggufFiles.filter(
-      (file) =>
-        !file.rfilename.toLowerCase().includes('mmproj') &&
-        !isMtpCompanionFile(file.rfilename)
-    )
-
-    const mmprojFiles = ggufFiles.filter((file) =>
-      file.rfilename.toLowerCase().includes('mmproj')
-    )
-
-    // Convert regular GGUF files to quants format. A quant split across shards
-    // is one downloadable variant, quoted at the size of the whole set.
-    const quants = groupGgufShards(regularGgufFiles).map((shards) => {
-      const first = shards[0]
-      // Generate model_id from filename (remove .gguf extension, case-insensitive)
-      const modelId = ggufShardGroupKey(first.rfilename).replace(/\.gguf$/i, '')
-      const totalSize = shards.reduce((sum, file) => sum + (file.size ?? 0), 0)
-
-      return {
-        model_id: `${repo.author}/${sanitizeModelId(modelId)}`,
-        path: `https://huggingface.co/${repo.modelId}/resolve/main/${first.rfilename}`,
-        file_size: formatFileSize(totalSize),
-      }
-    })
-
-    // Convert mmproj files to mmproj_models format
-    const mmprojModels = mmprojFiles.map((file) => {
-      const modelId = file.rfilename.replace(/\.gguf$/i, '')
-
-      return {
-        model_id: sanitizeModelId(modelId),
-        path: `https://huggingface.co/${repo.modelId}/resolve/main/${file.rfilename}`,
-        file_size: formatFileSize(file.size),
-      }
-    })
-
-    // Extract safetensors files (MLX models)
-    const safetensorsFiles =
-      repo.siblings?.filter((file) =>
-        file.rfilename.toLowerCase().endsWith('.safetensors')
-      ) || []
-
-    // Check if this repository has MLX model files (safetensors + associated files)
-    const hasMlxFiles =
-      repo.library_name === 'mlx' || repo.tags?.includes('mlx')
-
-    const safetensorsModels = safetensorsFiles.map((file) => {
-      // Generate model_id from filename (remove .safetensors extension, case-insensitive)
-      const modelId = file.rfilename.replace(/\.safetensors$/i, '')
-
-      return {
-        model_id: sanitizeModelId(modelId),
-        path: `https://huggingface.co/${repo.modelId}/resolve/main/${file.rfilename}`,
-        file_size: formatFileSize(file.size),
-        sha256: file.lfs?.sha256,
-      }
-    })
-
+    const quants = (repo.siblings ?? []).filter(file => file.rfilename.toLowerCase().endsWith('.ginfer')).map(file => ({
+      model_id: sanitizeModelId(file.rfilename.replace(/\.ginfer$/i, '')),
+      path: 'https://huggingface.co/' + repo.modelId + '/resolve/main/' + file.rfilename,
+      file_size: file.size ? (file.size / 1024 ** 3).toFixed(1) + ' GB' : 'Unknown size',
+      sha256: file.lfs?.sha256,
+    }));
     return {
-      model_name: repo.modelId,
-      developer: repo.author,
-      downloads: repo.downloads || 0,
-      likes: repo.likes || 0,
-      created_at: repo.createdAt,
-      last_modified: repo.last_modified,
-      num_quants: quants.length,
-      quants: quants,
-      num_mmproj: mmprojModels.length,
-      mmproj_models: mmprojModels,
-      safetensors_files: safetensorsModels,
-      num_safetensors: safetensorsModels.length,
-      is_mlx: hasMlxFiles,
-      readme: `https://huggingface.co/${repo.modelId}/resolve/main/README.md`,
-      description: `**Tags**: ${repo.tags?.join(', ')}`,
+      model_name: repo.modelId, developer: repo.author, downloads: repo.downloads ?? 0,
+      likes: repo.likes ?? 0, created_at: repo.createdAt, last_modified: repo.last_modified,
+      num_quants: quants.length, quants, num_mmproj: 0, mmproj_models: [],
+      readme: 'https://huggingface.co/' + repo.modelId + '/resolve/main/README.md',
+      description: '**Tags**: ' + (repo.tags ?? []).join(', '),
     }
   }
 
@@ -475,27 +234,6 @@ export class DefaultModelsService implements ModelsService {
       provider,
     })
 
-    // ATO-109: model_download funnel entry. Terminal events are emitted from
-    // DownloadManagement listeners; this records the start (+ duration anchor).
-    try {
-      markDownloadStart(id)
-      posthog.capture('model_download', {
-        // NOT `status` — globally typed numeric in PostHog by
-        // `api_server_request.status`, which silently nulls string values.
-        // Must stay in sync with the terminal event in DownloadManagement.
-        download_status: 'started',
-        download_kind: 'model',
-        model_id: id,
-        quant: quantFromModelId(id),
-        size_bucket: sizeBucket(modelSize),
-        is_hf_url: isHfUrl(modelPath),
-        resolved_asset_url_host: urlHost(modelPath),
-        hf_token_present: !!hfToken,
-      })
-    } catch (telemetryError) {
-      console.debug('model_download started telemetry failed:', telemetryError)
-    }
-
     // Call the original pullModel with the fetched metadata
     try {
       return await this.pullModel(id, modelPath, modelSha256, modelSize, resume, provider)
@@ -537,7 +275,7 @@ export class DefaultModelsService implements ModelsService {
     // `getEngine()?.delete()` used to resolve to `undefined` when the provider
     // had no engine registered, so the caller reported a successful delete and
     // the weights stayed on disk. Fail loudly instead — same reasoning as the
-    // `LOCAL_LLAMACPP_PROVIDER` note above.
+    // `LOCAL_GINFER_PROVIDER` note above.
     if (!engine) {
       throw new Error(
         `No engine registered for provider "${provider ?? defaultProvider}"`
@@ -644,7 +382,6 @@ export class DefaultModelsService implements ModelsService {
     const loadedModels = await engine.getLoadedModels()
     if (loadedModels.includes(model)) return undefined
 
-    // Find the model configuration to get settings
     const modelConfig = provider.models.find((m) => m.id === model)
 
     // GInfer owns a startup-fixed logical context limit and has no partial
@@ -731,7 +468,7 @@ export class DefaultModelsService implements ModelsService {
 
   async checkMmprojExists(modelId: string): Promise<boolean> {
     try {
-      const engine = this.getEngine(LOCAL_LLAMACPP_PROVIDER) as AIEngine & {
+      const engine = this.getEngine(LOCAL_GINFER_PROVIDER) as AIEngine & {
         checkMmprojExists?: (id: string) => Promise<boolean>
       }
       if (engine && typeof engine.checkMmprojExists === 'function') {
@@ -768,7 +505,7 @@ export class DefaultModelsService implements ModelsService {
     }
 
     try {
-      const engine = this.getEngine(LOCAL_LLAMACPP_PROVIDER) as AIEngine & {
+      const engine = this.getEngine(LOCAL_GINFER_PROVIDER) as AIEngine & {
         isModelSupported?: (
           path: string,
           ctx_size?: number
@@ -793,7 +530,7 @@ export class DefaultModelsService implements ModelsService {
 
   async validateGgufFile(filePath: string): Promise<ModelValidationResult> {
     try {
-      const engine = this.getEngine(LOCAL_LLAMACPP_PROVIDER) as AIEngine & {
+      const engine = this.getEngine(LOCAL_GINFER_PROVIDER) as AIEngine & {
         validateGgufFile?: (path: string) => Promise<ModelValidationResult>
       }
 
@@ -827,7 +564,7 @@ export class DefaultModelsService implements ModelsService {
       const ownerProvider = activeByProvider.find((p) =>
         p.models.includes(modelId)
       )
-      const engineId = ownerProvider?.provider ?? LOCAL_LLAMACPP_PROVIDER
+      const engineId = ownerProvider?.provider ?? LOCAL_GINFER_PROVIDER
       const engine = this.getEngine(engineId)
       const typedEngine = engine as AIEngine & {
         getTokensCount?: (opts: {

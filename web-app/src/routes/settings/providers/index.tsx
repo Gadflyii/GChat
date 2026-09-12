@@ -12,7 +12,7 @@ import {
   IconRefresh,
   IconSettings,
 } from '@tabler/icons-react'
-import { cn, getProviderTitle, isLlamacppProvider } from '@/lib/utils'
+import { cn, getProviderTitle, isGinferProvider } from '@/lib/utils'
 import { sortProvidersForSettings } from '@/lib/providerOrder'
 import ProvidersAvatar from '@/containers/ProvidersAvatar'
 import { AddProviderDialog } from '@/containers/dialogs'
@@ -239,7 +239,7 @@ function ModelProviders() {
                       <Switch
                         checked={provider.active}
                         onCheckedChange={async (e) => {
-                           if (!e && isLlamacppProvider(provider.provider)) {
+                           if (!e && isGinferProvider(provider.provider)) {
                              await serviceHub.models().stopAllModels()
                            }
                           updateProvider(provider.provider, {

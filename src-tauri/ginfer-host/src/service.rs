@@ -509,6 +509,9 @@ impl Host {
         if request.options.spec == "dflash" && metadata.draft_tp == 0 {
             return Err("artifact has no DFlash body".into());
         }
+        if request.options.kv_dtype == "nvfp4" && !metadata.nvfp4_kv_available {
+            return Err("This artifact lacks complete NVFP4 KV calibration metadata. Install its calibrated NVFP4 KV artifact or explicitly select INT8/BF16 KV. NVFP4 model weights alone do not provide KV calibration.".into());
+        }
         let qwen = metadata.identity.model_id == "qwen3.8-27b";
         if qwen && request.options.draft_tokens > 7 {
             return Err("Qwen supports at most 7 draft tokens".into());
@@ -1173,7 +1176,7 @@ mod lifecycle_tests {
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
-        let metadata = serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{}]}).to_string();
+        let metadata = serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
         let mut artifact = b"NINFER\0\x03".to_vec();
         artifact.extend((metadata.len() as u64).to_le_bytes());
         artifact.extend(metadata.as_bytes());

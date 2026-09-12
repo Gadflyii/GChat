@@ -38,8 +38,6 @@ export enum PlatformFeature {
   // Projects management
   PROJECTS = 'projects',
 
-  // Analytics and telemetry
-  ANALYTICS = 'analytics',
 
   // Web-specific automatic model selection from jan provider
   WEB_AUTO_MODEL_SELECTION = 'webAutoModelSelection',

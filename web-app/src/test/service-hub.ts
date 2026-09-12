@@ -21,8 +21,6 @@ export function createMockServiceHub(
     hardware:
       overrides.hardware ?? (emptyService as ServiceInstances['hardware']),
     app: overrides.app ?? (emptyService as ServiceInstances['app']),
-    analytic:
-      overrides.analytic ?? (emptyService as ServiceInstances['analytic']),
     messages:
       overrides.messages ?? (emptyService as ServiceInstances['messages']),
     mcp: overrides.mcp ?? (emptyService as ServiceInstances['mcp']),
@@ -51,7 +49,6 @@ export function createMockServiceHub(
     events: () => services.events,
     hardware: () => services.hardware,
     app: () => services.app,
-    analytic: () => services.analytic,
     messages: () => services.messages,
     mcp: () => services.mcp,
     threads: () => services.threads,

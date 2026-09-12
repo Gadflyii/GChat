@@ -121,18 +121,18 @@ export function getProviderLogo(provider: string) {
  * The only local inference provider id. Use this whenever the UI needs to
  * address "the local engine that runs models" without hardcoding call sites.
  */
-export const LOCAL_LLAMACPP_PROVIDER = 'ginfer'
+export const LOCAL_GINFER_PROVIDER = 'ginfer'
 
 /**
  * Extension name (`@gchat/...`) that drives the local inference provider.
- * Mirrors `LOCAL_LLAMACPP_PROVIDER`.
+ * Mirrors `LOCAL_GINFER_PROVIDER`.
  */
 export const LOCAL_LLAMACPP_EXTENSION_NAME = '@gchat/ginfer-extension'
 
 /**
  * Returns true for the local inference provider id.
  */
-export const isLlamacppProvider = (provider: string) => provider === 'ginfer'
+export const isGinferProvider = (provider: string) => provider === 'ginfer'
 
 export const getProviderTitle = (provider: string) => {
   switch (provider) {

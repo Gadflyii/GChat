@@ -1,10 +1,10 @@
+import { NativeIntegrationControls } from '@/containers/NativeIntegrationControls'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { type as osType } from '@tauri-apps/plugin-os'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import posthog from 'posthog-js'
 import { toast } from 'sonner'
 import {
   IconChevronDown,
@@ -728,12 +728,6 @@ function LaunchPage() {
         return
       }
 
-      posthog.capture('agent_run', {
-        agent_id: agent.id,
-        agent_name: agent.name,
-        agent_kind: agent.kind,
-      })
-
       setBusy((prev) => ({ ...prev, [agent.id]: true }))
       const spinTimer = setTimeout(
         () => setSpinning((prev) => ({ ...prev, [agent.id]: true })),
@@ -890,11 +884,6 @@ function LaunchPage() {
     async (agent: IntegrationAgent) => {
       const launchId = agent.editor?.launchId
       if (!launchId) return
-
-      posthog.capture('editor_launch', {
-        editor_id: agent.id,
-        editor_name: agent.name,
-      })
 
       setEditorBusy((prev) => ({ ...prev, [agent.id]: true }))
       try {
@@ -1170,6 +1159,7 @@ function LaunchPage() {
               </p>
             </div>
             <LocalApiServerPanel />
+            <div className="rounded-xl border p-4"><NativeIntegrationControls /></div>
           </section>
 
           {assistants.length > 0 && (

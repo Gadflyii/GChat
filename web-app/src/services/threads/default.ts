@@ -6,7 +6,7 @@ import { ExtensionManager } from '@/lib/extension'
 import { ConversationalExtension, ExtensionTypeEnum } from '@gchat/core'
 import type { ThreadsService } from './types'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
-import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 
 export class DefaultThreadsService implements ThreadsService {
   async fetchThreads(): Promise<Thread[]> {
@@ -76,7 +76,7 @@ export class DefaultThreadsService implements ThreadsService {
             ...thread.assistants![0],
             model: {
               id: thread.model?.id ?? '*',
-              engine: thread.model?.provider ?? LOCAL_LLAMACPP_PROVIDER,
+              engine: thread.model?.provider ?? LOCAL_GINFER_PROVIDER,
             },
           },
         ]
@@ -87,7 +87,7 @@ export class DefaultThreadsService implements ThreadsService {
             name: 'Model',
             model: {
               id: thread.model?.id ?? '*',
-              engine: thread.model?.provider ?? LOCAL_LLAMACPP_PROVIDER,
+              engine: thread.model?.provider ?? LOCAL_GINFER_PROVIDER,
             },
           },
         ]
@@ -140,7 +140,7 @@ export class DefaultThreadsService implements ThreadsService {
           return {
             model: {
               id: thread.model?.id ?? '*',
-              engine: thread.model?.provider ?? LOCAL_LLAMACPP_PROVIDER,
+              engine: thread.model?.provider ?? LOCAL_GINFER_PROVIDER,
             },
             id: e.id,
             name: e.name,
@@ -150,7 +150,7 @@ export class DefaultThreadsService implements ThreadsService {
           {
             model: {
               id: thread.model?.id ?? '*',
-              engine: thread.model?.provider ?? LOCAL_LLAMACPP_PROVIDER,
+              engine: thread.model?.provider ?? LOCAL_GINFER_PROVIDER,
             },
             id: 'gchat',
             name: 'GChat',

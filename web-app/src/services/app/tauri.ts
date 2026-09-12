@@ -9,10 +9,6 @@ import type { LogEntry } from './types'
 import { DefaultAppService } from './default'
 
 export class TauriAppService extends DefaultAppService {
-  private static readonly BACKEND_PRESERVE_KEYS = [
-    'llama_cpp_backend_type',
-  ]
-
   async factoryReset(): Promise<void> {
     const { EngineManager } = await import('@gchat/core')
     for (const [, engine] of EngineManager.instance().engines) {
@@ -22,17 +18,7 @@ export class TauriAppService extends DefaultAppService {
       }
     }
 
-    const savedBackend: Record<string, string> = {}
-    for (const key of TauriAppService.BACKEND_PRESERVE_KEYS) {
-      const val = window.localStorage.getItem(key)
-      if (val) savedBackend[key] = val
-    }
-
     window.localStorage.clear()
-
-    for (const [key, val] of Object.entries(savedBackend)) {
-      window.localStorage.setItem(key, val)
-    }
 
     window.localStorage.setItem(localStorageKey.factoryResetPending, 'true')
     await invoke('factory_reset')

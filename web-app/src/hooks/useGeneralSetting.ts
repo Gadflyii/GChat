@@ -7,6 +7,7 @@ export type ReasoningBudgetLevel =
   | 'low'
   | 'medium'
   | 'high'
+  | 'xhigh'
   | 'unlimited'
 
 /**

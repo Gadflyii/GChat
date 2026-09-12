@@ -89,25 +89,8 @@ vi.mock('@/utils/activeModelsSync', () => ({
   syncActiveModelsFromEngines: vi.fn(),
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  isRecoverableModelLoadCode: vi.fn(() => true),
-  loadBackendFromProvider: vi.fn(() => 'ginfer'),
-  mmprojProjectorType: vi.fn(() => null),
-  modelLoadSource: vi.fn(() => 'local'),
-  oomSubtype: vi.fn(() => null),
-  quantFromModelId: vi.fn(() => null),
-  sanitizeStderrTail: vi.fn(() => ''),
-  shouldCaptureModelLoadSentry: vi.fn(() => false),
-  shouldEmitModelLoadFailure: vi.fn(() => false),
-}))
 
-vi.mock('@/lib/sentry', () => ({
-  captureHandledError: vi.fn(),
-}))
 
-vi.mock('posthog-js', () => ({
-  default: { capture: vi.fn() },
-}))
 
 vi.mock('@/i18n/setup', () => ({
   default: { t: (key: string) => key },

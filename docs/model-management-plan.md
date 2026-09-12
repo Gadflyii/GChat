@@ -1,5 +1,67 @@
 # Host-aware model management
 
+## Installed UI punch list — GChat 2.0.27
+
+The Windows installer completed cleanly. Follow-up implementation and automated
+checks are complete; replacement 2.0.28 EXE/MSI packaging is complete. Installed
+WebView testing remains the next acceptance step.
+
+- External analytics and crash-upload SDKs, switches, endpoints, events, build
+  secrets and public tracking notices removed. Local logs and performance meters
+  retained. Telemetry-only verification passed before the remaining UI edits.
+- GInfer Hosts rename, collapsible cards and persistent selected-instance controls
+  implemented. Quick model changes require restart confirmation. Empty profile
+  lists now explain missing models/catalogs versus reserved GPU groups.
+- Native Integrations controls shared between Settings and Integrations; new Hermes
+  installations default off, OpenCode on. Saved choices remain unchanged.
+- Settings links now include both SectileLabs repositories and the public collection
+  `https://huggingface.co/collections/SectileLabs/ginfer-models-6aa0682395e628be98a798ef`.
+- Reset wording changed to defaults. Chat owns the reasoning-effort selector;
+  misleading fixed token budgets removed. Retired local-provider identifiers and
+  preserved llama.cpp backend preference removed. Unsupported quick-start coding
+  recommendations, fuzzy GGUF discovery, and GGUF/MLX catalog conversion removed.
+- Agent Studio monitor/navigation changes are deferred until this punch list is done.
+
+1. **Hermes provisioning reports success without a launchable installation.**
+   Opening Hermes reports “Hermes installation completed without a native
+   executable on PATH.” Native inspection found its source checkout and uv
+   binaries under `%LOCALAPPDATA%\hermes`, but no Hermes launcher in `bin` or
+   `hermes-agent\venv\Scripts`. User PATH already contains the Hermes bin/node
+   directories. GChat logs installation success twice; the underlying installer
+   failure is not yet established. The upstream installer catches failures without
+   a nonzero exit outside its JSON mode; GChat now requests JSON mode, drains both
+   pipes concurrently and checks executable readiness. Preserve/report details and
+   require a launchable native CLI before reporting success; verify recovery from
+   this partial installation without repeatedly claiming successful installs.
+2. **Engine failure details and artifact-specific KV compatibility.**
+   Configured Muse `nvfp4`, TP1/C4/131072, Vision+DFlash/NVFP4 KV/graphs exits
+   with code 1. The installed host log gives the concrete cause:
+   “Muse NVFP4 KV was requested but calibration metadata is absent.” This
+   failure is not evidence of GPU contention. The UI currently hides that cause
+   behind the exit code. A bounded per-instance diagnostic tail and artifact/rank
+   calibration availability gate are now implemented. Surface the diagnostic and prevent selecting
+   unsupported KV formats for an artifact; NVFP4 weights alone do not establish
+   NVFP4 KV calibration. Do not silently change the user's selected KV format.
+   The candidate calibrated native-NVFP4 Muse artifact was copied to the Windows
+   GChat model root without replacing the old model. Its SHA256 matches the source
+   (`6d6cc348c75a75c60ca011d267eb389dcbb8530f6c51a680dad911d25365b61f`), and header
+   inspection confirms TP1/DTP1 and all three Muse calibration objects. The resident
+   host has discovered the new file. No GPU workload was stopped or started.
+
+Follow-up verification: `make verify`, focused header/default-switch tests,
+NVFP4 metadata inventory test, `cargo check`, and `cargo clippy` passed. The final
+frontend suite passed 1,985 tests with six intentional skips. Existing warnings
+remain; unused telemetry routing assignments introduced by the removal were cleaned.
+The official Hermes repair completed, including its optional CUA driver (approved
+by the user). Native `hermes.exe --version` succeeds: 0.21.1, Python 3.11.16.
+The installer preserved local Hermes checkout changes while updating upstream.
+The Hermes TUI also builds successfully (`npm.cmd run build --workspace ui-tui`).
+Both 2.0.28 installers are available in `%LOCALAPPDATA%\GChat\release-output`;
+the MSI database opens successfully and reports ProductVersion 2.0.28. They retain
+the previously selected GInfer runtime; this work does not rebuild the CUDA engine.
+Interactive Hermes use against a model and the installed WebView walkthrough are
+not yet verified. No model inference was launched for this UI cleanup.
+
 Status: host-aware management foundation implemented and verified. On 2026-09-09
 the user expanded this same goal to build the missing profile system and interactive
 launcher, with shared multi-instance lifecycle and complete GChat remote controls.

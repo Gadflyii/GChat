@@ -89,7 +89,7 @@ export function AgentWorkerPools() {
             </p>
             {!ids.length && (
               <p>
-                No ready instances yet. Pair a host and load a model in Engines
+                No ready instances yet. Pair a host and load a model in GInfer Hosts
                 first.
               </p>
             )}

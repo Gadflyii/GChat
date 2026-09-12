@@ -8,9 +8,6 @@ import type { HardwareTier } from '@/lib/hardware-tier'
 
 export const EMBEDDING_MODEL_ID = 'sentence-transformer-mini'
 
-/** HF repo for the bundled quick-start coding model (Settings → Claude Code). */
-export const JAN_CODE_HF_REPO = 'janhq/Jan-Code-4b-Gguf'
-
 /**
  * Model offered by the bottom-right reminder that appears when onboarding is
  * left without picking anything. Must stay in sync with the first entry of the

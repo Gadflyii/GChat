@@ -13,19 +13,6 @@ import {
   registerRemoteProvider,
 } from '@/utils/registerRemoteProvider'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
-import posthog from 'posthog-js'
-import {
-  isRecoverableModelLoadCode,
-  loadBackendFromProvider,
-  mmprojProjectorType,
-  modelLoadSource,
-  oomSubtype,
-  quantFromModelId,
-  sanitizeStderrTail,
-  shouldCaptureModelLoadSentry,
-  shouldEmitModelLoadFailure,
-} from '@/lib/telemetry'
-import { captureHandledError } from '@/lib/sentry'
 import {
   getProviderTitle,
   MODEL_LOAD_WATCHDOG_MS,
@@ -33,89 +20,6 @@ import {
   SERVER_START_WATCHDOG_MS,
   withTimeout,
 } from '@/lib/utils'
-
-type ModelSettingEntry = { controller_props?: { value?: unknown } }
-type LoadableModel = {
-  id: string
-  capabilities?: string[]
-  settings?: Record<string, ModelSettingEntry>
-}
-
-function settingNum(
-  settings: Record<string, ModelSettingEntry> | undefined,
-  key: string
-): number | null {
-  const value = settings?.[key]?.controller_props?.value
-  if (typeof value === 'number') return value
-  if (typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value)))
-    return Number(value)
-  return null
-}
-
-function settingStr(
-  settings: Record<string, ModelSettingEntry> | undefined,
-  key: string
-): string | null {
-  const value = settings?.[key]?.controller_props?.value
-  return typeof value === 'string' && value ? value : null
-}
-
-/**
- * ATO-109: emit the `model_load` telemetry event. Local engines only (cloud
- * providers do not load weights). PII contract: only ids/enums/numbers; the
- * stderr tail is byte-capped and PII-scrubbed by `sanitizeStderrTail`.
- */
-function emitModelLoad(
-  status: 'success' | 'failed',
-  args: {
-    modelId: string
-    providerName: string
-    durationMs: number
-    model?: LoadableModel
-    error?: unknown
-  }
-): void {
-  try {
-    const settings = args.model?.settings
-    const props: Record<string, unknown> = {
-      // NOT `status`. PostHog types a property globally by its observed values,
-      // and `api_server_request.status` (an HTTP code) already claimed that
-      // name as numeric — so these strings silently read back as null. That is
-      // why the "model_load.status is currently empty" note has been sitting on
-      // the Models & Errors dashboard: ~42k events of success/failed were
-      // unreadable. Keep this name event-specific.
-      load_status: status,
-      model_id: args.modelId,
-      backend: loadBackendFromProvider(args.providerName),
-      model_source: modelLoadSource(args.modelId),
-      load_duration_ms: args.durationMs,
-      backend_version: settingStr(settings, 'version_backend'),
-      ctx: settingNum(settings, 'ctx_len') ?? settingNum(settings, 'ctx_size'),
-      n_gpu_layers:
-        settingNum(settings, 'ngl') ?? settingNum(settings, 'n_gpu_layers'),
-      is_multimodal:
-        (args.model?.capabilities || []).includes('vision') ||
-        settingStr(settings, 'mmproj_path') != null,
-      device_used: settingStr(settings, 'device'),
-    }
-    if (status === 'failed') {
-      const err = toErrorObject(args.error)
-      const haystack = err.details ?? err.message
-      const errorCode = err.code ?? null
-      // ATO-133: a model stuck in a load crashloop emits the same failure over
-      // and over; drop duplicates within the throttle window so event-weighted
-      // metrics aren't dominated by a handful of stuck devices.
-      if (!shouldEmitModelLoadFailure(args.modelId, errorCode)) return
-      props.error_code = errorCode
-      props.oom_subtype = oomSubtype(haystack)
-      props.mmproj_projector_type = mmprojProjectorType(haystack)
-      props.stderr_tail = sanitizeStderrTail(haystack)
-    }
-    posthog.capture('model_load', props)
-  } catch (telemetryError) {
-    console.debug('model_load telemetry failed:', telemetryError)
-  }
-}
 
 // Local providers whose models are served by on-device engines.
 const LOCAL_PROVIDERS = ['ginfer'] as const
@@ -133,7 +37,7 @@ function isLocalEngineProvider(providerName: string): boolean {
 // / `SERVER_START_WATCHDOG_MS` (see `@/lib/utils`) are a last-resort safety
 // net, not a replacement for fixing the underlying stall: on expiry the
 // `catch` block below runs exactly as it would for any other failure
-// (status reset, toast, telemetry) instead of leaving the app stuck.
+// (status reset, toast) instead of leaving the app stuck.
 const LOCAL_API_SERVER_START_TIMEOUT_CODE = 'LOCAL_API_SERVER_START_TIMEOUT'
 
 /** Re-tags a `withTimeout` expiry with the ATO-270-specific error code used
@@ -182,10 +86,10 @@ let activeSwitchPromise: Promise<void> | null = null
 // replaced — no more wasted engine spawn + teardown).
 let switchSeq = 0
 
-// WS2 (Sentry desktop top-10): the ChatInput auto-start effect re-fires whenever
+// The ChatInput auto-start effect re-fires whenever
 // `serverStatus` / `loadingModel` change, and a failed load flips both — so a
 // model that cannot load (e.g. its file was deleted) spins in a tight loop,
-// restarting on a fresh port every ~1s and flooding telemetry. We record the
+// restarting on a fresh port every ~1s repeatedly. We record the
 // last auto-start outcome per (provider, model): terminal failures (missing
 // model / binary) are never auto-retried, and any other failure is backed off.
 // Explicit user switches (dropdown / send) bypass this gate entirely.
@@ -485,8 +389,6 @@ async function doSwitchToModel(params: {
   const wasServerRunning = useAppState.getState().serverStatus === 'running'
 
   const isLocal = isLocalEngineProvider(providerName)
-  let loadStartTs = 0
-  let modelConfig: LoadableModel | undefined
 
   // The :1337 proxy is only (re)started for cloud models, when the user opted
   // into auto-start, or when it was already running manually. When it will stay
@@ -561,24 +463,13 @@ async function doSwitchToModel(params: {
     if (!provider) {
       throw new Error(`Provider '${providerName}' not found`)
     }
-    modelConfig = provider.models?.find((m) => m.id === modelId) as
-      | LoadableModel
-      | undefined
 
     if (isLocal) {
-      // 4a. Local branch — load the model into its engine.
-      loadStartTs = Date.now()
       await taggedWithTimeout(
         serviceHub.models().startModel(provider, modelId, true),
         MODEL_LOAD_WATCHDOG_MS,
         `Timed out waiting for model "${modelId}" to finish loading.`
       )
-      emitModelLoad('success', {
-        modelId,
-        providerName,
-        durationMs: Date.now() - loadStartTs,
-        model: modelConfig,
-      })
       console.log('[switchToModel] Local model started:', modelId)
       await settleAfterLocalStart(serviceHub, providerName, modelId)
     } else {
@@ -667,49 +558,7 @@ async function doSwitchToModel(params: {
     // off. Explicit user switches bypass `shouldAttemptAutoStart`, so a manual
     // retry is always possible.
     recordAutoStartFailure(providerName, modelId, toErrorObject(error).code ?? null)
-    if (isLocal) {
-      emitModelLoad('failed', {
-        modelId,
-        providerName,
-        durationMs: loadStartTs ? Date.now() - loadStartTs : 0,
-        model: modelConfig,
-        error,
-      })
-    }
-    // ATO-113 / WS1.5: explicit Sentry capture at the model-load choke point with
-    // the typed error_code + zero-PII tags (stderr tail is scrubbed by beforeSend).
-    // Recoverable user/config conditions (missing file, unsupported projector) are
-    // NOT crashes and are skipped, and repeats are throttled (model+code, 5-min
-    // window) so a load crashloop cannot flood the crash channel.
-    {
-      const err = toErrorObject(error)
-      const haystack = err.details ?? err.message
-      const settings = modelConfig?.settings
-      const errorCode = err.code ?? null
-      if (
-        !isRecoverableModelLoadCode(errorCode) &&
-        shouldCaptureModelLoadSentry(modelId, errorCode)
-      ) {
-        captureHandledError(
-          error,
-          isOutOfMemoryError(err) ? 'fatal' : 'error',
-          {
-            feature: 'model_load',
-            error_code: err.code ?? 'unknown',
-            oom_subtype: oomSubtype(haystack),
-            backend: isLocal
-              ? loadBackendFromProvider(providerName)
-              : providerName,
-            model_id: modelId,
-            quant: quantFromModelId(modelId),
-            context_length:
-              settingNum(settings, 'ctx_len') ??
-              settingNum(settings, 'ctx_size'),
-          },
-          { stderr_tail: sanitizeStderrTail(haystack) }
-        )
-      }
-    }
+
     reportModelLoadError(error, providerName, isAutoStart, modelId)
     throw error
   } finally {

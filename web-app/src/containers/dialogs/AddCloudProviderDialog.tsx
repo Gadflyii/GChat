@@ -120,7 +120,6 @@ export function AddCloudProviderDialog({
       saveProviderApiKey({
         provider: step.provider,
         apiKey: key,
-        duringOnboarding: true,
         updateProvider,
         serviceHub,
       })

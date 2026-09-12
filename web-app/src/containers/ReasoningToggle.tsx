@@ -26,17 +26,20 @@ const ReasoningToggle = memo(function ReasoningToggle({
     (state) => state.setDisableReasoning
   )
 
-  const enabled = !disableReasoning
+  const budget = useGeneralSetting(state => state.reasoningBudget)
+  const setBudget = useGeneralSetting(state => state.setReasoningBudget)
+  const enabled = !disableReasoning && budget !== 'off'
   const label = enabled
     ? t('common:reasoningToggleEnabled')
     : t('common:reasoningToggleDisabled')
 
   const handleClick = () => {
-    setDisableReasoning(!disableReasoning)
+    if (!enabled && budget === 'off') setBudget('high')
+    setDisableReasoning(enabled)
   }
 
   return (
-    <TooltipProvider>
+    <div className="flex items-center gap-1"><TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -62,6 +65,18 @@ const ReasoningToggle = memo(function ReasoningToggle({
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+    <select aria-label="Reasoning effort" title="Requested reasoning effort; the model uses its nearest supported level. This is not a token budget." className="max-w-24 rounded border border-input bg-background px-1 py-0.5 text-xs" value={enabled ? budget : 'off'} onChange={event => {
+      const value = event.target.value as typeof budget
+      setDisableReasoning(value === 'off')
+      setBudget(value)
+    }}>
+      <option value="off">Off</option>
+      <option value="low">Low</option>
+      <option value="medium">Medium</option>
+      <option value="high">High</option>
+      <option value="xhigh">Extra high</option>
+      <option value="unlimited">Model default</option>
+    </select></div>
   )
 })
 

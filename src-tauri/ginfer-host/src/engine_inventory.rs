@@ -21,7 +21,31 @@ struct Directory {
     identity: ArtifactIdentity,
     tp_size: u32,
     draft_tp: u32,
-    objects: Vec<serde::de::IgnoredAny>,
+    objects: Vec<InventoryObject>,
+}
+
+#[derive(Deserialize)]
+struct InventoryObject {
+    name: String,
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    rank: serde_json::Value,
+}
+
+impl Directory {
+    fn nvfp4_kv_available(&self) -> bool {
+        let suffixes: &[&str] = match self.identity.model_id.as_str() {
+            "qwen3.8-27b" => &["profile_v1", "inverse_global_scales"],
+            "muse-glimmer-30b" => &["profile_v2", "full_inverse_global_scales", "sliding_inverse_global_scales"],
+            _ => return false,
+        };
+        (0..self.tp_size).all(|rank| suffixes.iter().all(|suffix| {
+            let name = format!("text/kv_cache/nvfp4_g16/{suffix}");
+            self.objects.iter().any(|object| object.kind == "tensor" && object.name == name
+                && (object.rank == rank || object.rank == "all"))
+        }))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,6 +55,7 @@ pub struct ArtifactMetadata {
     pub draft_tp: u32,
     pub size_bytes: u64,
     pub object_count: usize,
+    pub nvfp4_kv_available: bool,
 }
 
 #[derive(Deserialize)]
@@ -191,12 +216,14 @@ pub fn inspect_artifact(path: &Path) -> Result<ArtifactMetadata, String> {
     if directory.objects.is_empty() {
         return Err("container object directory is empty".into());
     }
+    let nvfp4_kv_available = directory.nvfp4_kv_available();
     Ok(ArtifactMetadata {
         identity: directory.identity,
         tp_size: directory.tp_size,
         draft_tp: directory.draft_tp,
         size_bytes,
         object_count: directory.objects.len(),
+        nvfp4_kv_available,
     })
 }
 
@@ -218,6 +245,21 @@ mod tests {
     fn directory() -> serde_json::Value {
         serde_json::json!({"identity": {"model_id": "muse-glimmer-30b", "weights_id": "nvfp4"},
             "tp_size": 2, "draft_tp": 0, "objects": [{"name": "fixture"}]})
+    }
+
+    #[test]
+    fn nvfp4_weights_do_not_imply_calibrated_kv() {
+        let mut value = directory();
+        let parsed: Directory = serde_json::from_value(value.clone()).unwrap();
+        assert!(!parsed.nvfp4_kv_available());
+        value["objects"] = serde_json::json!([
+            {"kind":"tensor", "rank":"all", "name":"text/kv_cache/nvfp4_g16/profile_v2"},
+            {"kind":"tensor", "rank":"all", "name":"text/kv_cache/nvfp4_g16/full_inverse_global_scales"},
+            {"kind":"tensor", "rank":"all", "name":"text/kv_cache/nvfp4_g16/sliding_inverse_global_scales"}
+        ]);
+        assert!(serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
+        value["objects"][2]["rank"] = 0.into();
+        assert!(!serde_json::from_value::<Directory>(value).unwrap().nvfp4_kv_available());
     }
 
     #[test]

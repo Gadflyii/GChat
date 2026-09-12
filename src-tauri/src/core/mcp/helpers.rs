@@ -130,11 +130,7 @@ pub async fn run_mcp_commands<R: Runtime>(
             )
             .await;
 
-            // If initial startup failed, we still want to continue with other
-            // servers. Reported at `warn`: the failure is already logged with
-            // its captured stderr where it happened, and the Sentry log bridge
-            // turns every `error!` into an event — re-reporting the same string
-            // at three levels filed one failure as four separate issues.
+            // Retain the startup failure locally and continue starting other servers.
             if let Err(e) = &result {
                 log::warn!("Initial startup failed for MCP server {name_clone}: {e}");
             }

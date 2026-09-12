@@ -7,7 +7,7 @@ export type EngineHost = {
 export type NearbyHost = { host_id: string; name: string; urls: string[] }
 export type EngineModel = {
   id: string; path: string; artifact_set: boolean;
-  metadata: { identity: { model_id: string; weights_id: string }; tp_size: number; draft_tp: number; size_bytes: number }
+  metadata: { identity: { model_id: string; weights_id: string }; tp_size: number; draft_tp: number; size_bytes: number; nvfp4_kv_available?: boolean }
 }
 export type EngineInstance = {
   instance_id: string; session_id: string | null; display_name: string; upstream_model_id: string;

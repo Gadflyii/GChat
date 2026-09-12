@@ -10,11 +10,8 @@ import { DataProvider } from '@/providers/DataProvider'
 import { route } from '@/constants/routes'
 import { ExtensionProvider } from '@/providers/ExtensionProvider'
 import { ToasterProvider } from '@/providers/ToasterProvider'
-// import { useAnalytic } from '@/hooks/useAnalytic'
-// import { PromptAnalytic } from '@/containers/analytics/PromptAnalytic'
 import { useOnboardingModelReminder } from '@/hooks/useOnboardingModelReminder'
 import { PromptOnboardingModel } from '@/containers/PromptOnboardingModel'
-import { AnalyticProvider } from '@/providers/AnalyticProvider'
 import { useLeftPanel } from '@/hooks/useLeftPanel'
 import { useTrayStatusSync } from '@/hooks/useTrayStatusSync'
 import ToolApproval from '@/containers/dialogs/ToolApproval'
@@ -26,7 +23,6 @@ import AttachmentIngestionDialog from '@/containers/dialogs/AttachmentIngestionD
 import WhatsNewDialog from '@/containers/dialogs/WhatsNewDialog'
 import { useEffect } from 'react'
 import GlobalError from '@/containers/GlobalError'
-import * as Sentry from '@sentry/react'
 import { GlobalEventHandler } from '@/providers/GlobalEventHandler'
 import { ServiceHubProvider } from '@/providers/ServiceHubProvider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
@@ -40,10 +36,6 @@ import { StudioActivity } from '@/containers/StudioActivity'
 export const Route = createRootRoute({
   component: RootLayout,
   errorComponent: ({ error }) => {
-    // ATO-113: router-level errors also reach Sentry (the ErrorBoundary in
-    // main.tsx wraps RouterProvider, but TanStack renders this component
-    // itself, so capture explicitly here too).
-    Sentry.captureException(error)
     return <GlobalError error={error} />
   },
 })
@@ -69,7 +61,6 @@ const AppLayout = () => {
         defaultWidth={sidebarWidth}
         onWidthChange={setLeftPanelWidth}
       >
-        <AnalyticProvider />
         <KeyboardShortcutsProvider />
         <DialogAppUpdater />
         <WhatsNewDialog />
@@ -85,8 +76,6 @@ const AppLayout = () => {
           </div>
         </SidebarInset>
 
-        {/* Попап согласия на аналитику отключён; настройки → Privacy по-прежнему доступны */}
-        {/* {productAnalyticPrompt && <PromptAnalytic />} */}
         {showOnboardingModelReminder && <PromptOnboardingModel />}
       </SidebarProvider>
     </div>

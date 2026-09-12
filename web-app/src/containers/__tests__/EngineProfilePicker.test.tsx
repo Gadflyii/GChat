@@ -37,7 +37,7 @@ it('keeps offline snapshots read-only and does not invent missing profiles', () 
   const data = snapshot()
   data.launch_profiles = []
   render(<EngineProfilePicker snapshot={data} disabled launch={vi.fn()} />)
-  expect(screen.getByText(/No qualified profiles/)).toBeInTheDocument()
+  expect(screen.getByText(/No installed models were found/)).toBeInTheDocument()
   expect(screen.getByLabelText('Serving instance')).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Start profile' })).toBeDisabled()
 })

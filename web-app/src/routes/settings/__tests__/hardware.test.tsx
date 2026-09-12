@@ -118,7 +118,7 @@ vi.mock('@/services/models', () => ({ stopAllModels: vi.fn() }))
 vi.mock('@/lib/utils', () => ({
   formatMegaBytes: (mb: number) => `${mb} MB`,
   cn: (...classes: any[]) => classes.filter(Boolean).join(' '),
-  LOCAL_LLAMACPP_PROVIDER: 'llamacpp-upstream',
+  LOCAL_GINFER_PROVIDER: 'llamacpp-upstream',
 }))
 vi.mock('@/utils/number', () => ({ toNumber: (n: number) => n }))
 vi.mock('@tauri-apps/api/webviewWindow', () => ({ WebviewWindow: vi.fn() }))

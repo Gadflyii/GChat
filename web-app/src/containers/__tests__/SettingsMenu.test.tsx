@@ -78,7 +78,7 @@ vi.mock('@/containers/dialogs', () => ({
 vi.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
   getProviderTitle: (provider: string) => provider,
-  LOCAL_LLAMACPP_PROVIDER: 'ginfer',
+  LOCAL_GINFER_PROVIDER: 'ginfer',
 }))
 
 vi.mock('@/containers/ProvidersAvatar', () => ({
@@ -133,7 +133,7 @@ describe('SettingsMenu', () => {
     expect(screen.getByText('common:mcp-servers')).toBeInTheDocument()
   })
 
-  it('shows OpenCode and Hermes enabled by default', () => {
+  it('shows the saved integration choices', () => {
     render(<SettingsMenu />)
 
     expect(

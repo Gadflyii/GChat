@@ -26,9 +26,6 @@ const nextConfig = {
   reactStrictMode: true,
   output: 'export',
   env: {
-    GTM_ID: process.env.GTM_ID,
-    POSTHOG_KEY: process.env.POSTHOG_KEY,
-    POSTHOG_HOST: process.env.POSTHOG_HOST,
   },
   transpilePackages: ['@scalar', 'react-tweet'],
   images: {

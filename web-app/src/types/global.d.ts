@@ -17,15 +17,9 @@ declare global {
   declare const IS_ANDROID: boolean
   declare const PLATFORM: string
   declare const VERSION: string
-  declare const POSTHOG_KEY: string
-  declare const POSTHOG_HOST: string
-  declare const SENTRY_DSN: string
-  declare const SENTRY_ENVIRONMENT: string
-  declare const SENTRY_RELEASE: string
   declare const MODEL_CATALOG_URL: string
   declare const AUTO_UPDATER_DISABLED: boolean
   declare const UPDATE_CHECK_INTERVAL_MS: number
-  declare const GA_MEASUREMENT_ID: string
   declare const IS_DEV: boolean
   declare const FORCE_ONBOARDING: boolean
   /** Dev-only (`make dev-fresh`): launch with a wiped localStorage profile. */

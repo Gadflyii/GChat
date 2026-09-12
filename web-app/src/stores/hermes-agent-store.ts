@@ -29,7 +29,7 @@ export const useHermesAgentStore = create<HermesAgentState>()(
   persist(
     (set) => ({
       model: legacyModel(),
-      enabled: true,
+      enabled: false,
       workspace: undefined,
       setModel: (model) => set({ model }),
       setEnabled: (enabled) => set({ enabled }),
@@ -40,12 +40,9 @@ export const useHermesAgentStore = create<HermesAgentState>()(
       name: localStorageKey.hermesAgent,
       storage: createJSONStorage(() => localStorage),
       version: 1,
-      migrate: (persistedState, version) => {
+      migrate: (persistedState) => {
         const state = persistedState as Partial<HermesAgentState>
-        // Version 0 shipped before Hermes was a default integration, so its
-        // persisted `false` represented the old product default rather than a
-        // choice made through the new Settings switch.
-        return version === 0 ? { ...state, enabled: true } : state
+        return { ...state, enabled: state.enabled ?? false }
       },
       partialize: ({ model, enabled, workspace }) => ({
         model,

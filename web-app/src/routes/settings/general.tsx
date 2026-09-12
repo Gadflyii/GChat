@@ -32,8 +32,6 @@ import { Input } from '@/components/ui/input'
 import { useHardware } from '@/hooks/useHardware'
 import LanguageSwitcher from '@/containers/LanguageSwitcher'
 import { isRootDir } from '@/utils/path'
-import { useAnalytic } from '@/hooks/useAnalytic'
-import posthog from 'posthog-js'
 import { setLaunchAtStartup } from '@/lib/launchAtStartup'
 const TOKEN_VALIDATION_TIMEOUT_MS = 10_000
 const GCHAT_CLI_COMMAND = 'gchat-cli'
@@ -52,8 +50,6 @@ function General() {
     setHuggingfaceToken,
     preloadModelOnStartup,
     setPreloadModelOnStartup,
-    reasoningBudget,
-    setReasoningBudget,
   } = useGeneralSetting()
   const allowAllMCPPermissions = useToolApproval(
     (state) => state.allowAllMCPPermissions
@@ -68,7 +64,6 @@ function General() {
     (state) => state.setGloballyEnabled
   )
   const serviceHub = useServiceHub()
-  const { setProductAnalytic, productAnalytic } = useAnalytic()
 
   const openFileTitle = (): string => {
     if (IS_MACOS) {
@@ -370,20 +365,13 @@ function General() {
               />
               <CardItem
                 title="GitHub"
-                description="View the GChat repository on GitHub."
+                description="Source code and model collections from SectileLabs."
                 actions={
-                  <a
-                    href="https://github.com/SectileLabs/gchat"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      void handleOpenContactLink('https://github.com/SectileLabs/gchat')
-                    }}
-                    className="text-foreground font-medium hover:underline"
-                  >
-                    SectileLabs/gchat
-                  </a>
+                  <div className="flex flex-wrap gap-3">{[
+                    ['GChat', 'https://github.com/SectileLabs/gchat'],
+                    ['GInfer', 'https://github.com/SectileLabs/ginfer'],
+                    ['GInfer Models', 'https://huggingface.co/collections/SectileLabs/ginfer-models-6aa0682395e628be98a798ef'],
+                  ].map(([label, url]) => <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="text-foreground font-medium hover:underline" onClick={event => { event.preventDefault(); void handleOpenContactLink(url) }}>{label}</a>)}</div>
                 }
               />
             </Card>
@@ -411,36 +399,6 @@ function General() {
                     onCheckedChange={setNotificationsGloballyEnabled}
                   />
                 }
-              />
-            </Card>
-
-            {/* Privacy / Analytics */}
-            <Card
-              header={
-                <div className="flex items-center justify-between mb-4">
-                  <h1 className="font-medium text-foreground text-base">
-                    {t('settings:privacy.analytics')}
-                  </h1>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={productAnalytic}
-                      onCheckedChange={(state) => {
-                        if (state) {
-                          posthog.opt_in_capturing()
-                        } else {
-                          posthog.opt_out_capturing()
-                        }
-                        setProductAnalytic(state)
-                      }}
-                    />
-                  </div>
-                </div>
-              }
-            >
-              <CardItem
-                title={t('settings:privacy.helpUsImprove')}
-                description={<p>{t('settings:privacy.helpUsImproveDesc')}</p>}
-                align="start"
               />
             </Card>
 
@@ -640,27 +598,6 @@ function General() {
                     checked={spellCheckChatInput}
                     onCheckedChange={(e) => setSpellCheckChatInput(e)}
                   />
-                }
-              />
-              <CardItem
-                title="Reasoning budget (local models)"
-                description="Limits thinking tokens for llama.cpp / MLX. Off disables reasoning entirely."
-                actions={
-                  <select
-                    className="border-input bg-background rounded-md border px-2 py-1 text-sm"
-                    value={reasoningBudget}
-                    onChange={(e) =>
-                      setReasoningBudget(
-                        e.target.value as typeof reasoningBudget
-                      )
-                    }
-                  >
-                    <option value="off">Off</option>
-                    <option value="low">Low (256)</option>
-                    <option value="medium">Medium (1024)</option>
-                    <option value="high">High (4096)</option>
-                    <option value="unlimited">Unlimited</option>
-                  </select>
                 }
               />
               <CardItem

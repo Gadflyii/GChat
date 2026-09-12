@@ -14,8 +14,6 @@ use tokio::sync::{oneshot, Mutex, Notify};
 /// Handles owned by one Local API Server run.
 pub struct ServerHandle {
     pub server_task: tokio::task::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>,
-    pub analytics_task: tokio::task::JoinHandle<()>,
-    pub analytics_shutdown: oneshot::Sender<()>,
 }
 
 /// Provider configuration for remote model providers

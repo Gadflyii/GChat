@@ -14,7 +14,7 @@ export function EngineIntake({ onConnect }: { onConnect: () => void }) {
     <p className="text-sm text-muted-foreground">Already running GInfer elsewhere? Connect to its models without downloading weights or needing a GPU on this computer.</p>
     <CredentialSetup />
     {!!visible.length && <p className="text-sm">Nearby: {visible.map((host) => host.name).join(', ')}</p>}
-    {!!hosts.length && <p className="text-sm">{hosts.length} paired {hosts.length === 1 ? 'host' : 'hosts'} available in Engines.</p>}
+    {!!hosts.length && <p className="text-sm">{hosts.length} paired {hosts.length === 1 ? 'host' : 'hosts'} available in GInfer Hosts.</p>}
     <Button variant="outline" onClick={onConnect}>Connect a network host</Button>
     <p className="text-xs text-muted-foreground">Pair a discovered host or enter its address manually.</p>
   </section>

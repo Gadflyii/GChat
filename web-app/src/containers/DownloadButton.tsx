@@ -6,7 +6,7 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTranslation } from '@/i18n'
 import { markDownloadCancellationRequested } from '@/lib/downloadCancellation'
 import { extractModelName } from '@/lib/models'
-import { LOCAL_LLAMACPP_PROVIDER, cn, sanitizeModelId } from '@/lib/utils'
+import { LOCAL_GINFER_PROVIDER, cn, sanitizeModelId } from '@/lib/utils'
 import { CatalogModel, ModelQuant } from '@/services/models/types'
 import { IconX } from '@tabler/icons-react'
 import { DownloadEvent, DownloadState, events } from '@gchat/core'
@@ -57,7 +57,7 @@ export function DownloadButtonPlaceholder({
   const localModels = useMemo(
     () =>
       providers
-        .filter((p) => p.provider === LOCAL_LLAMACPP_PROVIDER)
+        .filter((p) => p.provider === LOCAL_GINFER_PROVIDER)
         .flatMap((p) => p.models),
     [providers]
   )

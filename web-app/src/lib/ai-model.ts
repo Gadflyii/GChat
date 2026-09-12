@@ -1,6 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
-import { isLlamacppProvider, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { isGinferProvider, LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 
 /**
  * Llama.cpp timings structure from the response
@@ -80,10 +80,10 @@ export function createLanguageModel(
 
   // For the local provider, create a placeholder configuration
   // The actual URL and authentication will be updated later when the model is loaded
-  if (isLlamacppProvider(provider.provider) && providerObject) {
+  if (isGinferProvider(provider.provider) && providerObject) {
     // Create provider with placeholder connection info
     const openAICompatible = createOpenAICompatible({
-      name: LOCAL_LLAMACPP_PROVIDER,
+      name: LOCAL_GINFER_PROVIDER,
       baseURL: 'http://localhost:1337/v1', // Placeholder - will be updated when model loads
       headers: {
         Authorization: 'Bearer placeholder', // Placeholder - will be updated when model loads

@@ -11,7 +11,7 @@ import { useMatches, useNavigate } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 
 import { useModelProvider } from '@/hooks/useModelProvider'
-import { getProviderTitle, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { getProviderTitle, LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 import { sortProvidersForSettings } from '@/lib/providerOrder'
 import ProvidersAvatar from '@/containers/ProvidersAvatar'
 import { AddProviderDialog } from '@/containers/dialogs'
@@ -19,10 +19,8 @@ import { openAIProviderSettings } from '@/constants/providers'
 import cloneDeep from 'lodash/cloneDeep'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
-import { stopTerminal } from '@/services/terminal/tauri'
-import { useCodeTerminalStore } from '@/stores/code-terminal-store'
-import { useHermesAgentStore } from '@/stores/hermes-agent-store'
+
+import { NativeIntegrationControls } from '@/containers/NativeIntegrationControls'
 
 const SettingsMenu = () => {
   const { t } = useTranslation()
@@ -32,10 +30,6 @@ const SettingsMenu = () => {
   const navigate = useNavigate()
 
   const { providers, addProvider, selectedProvider } = useModelProvider()
-  const openCodeEnabled = useCodeTerminalStore((state) => state.enabled)
-  const setOpenCodeEnabled = useCodeTerminalStore((state) => state.setEnabled)
-  const hermesEnabled = useHermesAgentStore((state) => state.enabled)
-  const setHermesEnabled = useHermesAgentStore((state) => state.setEnabled)
 
   const createProvider = useCallback(
     (name: string) => {
@@ -216,7 +210,7 @@ const SettingsMenu = () => {
                               isActive && 'bg-foreground/20',
                                // hidden for the local provider during setup
                                // remote provider
-                               provider.provider === LOCAL_LLAMACPP_PROVIDER &&
+                               provider.provider === LOCAL_GINFER_PROVIDER &&
                                  stepSetupRemoteProvider &&
                                  'hidden'
                             )}
@@ -248,44 +242,7 @@ const SettingsMenu = () => {
             )
           })}
 
-          <div className="mt-4">
-            <div className="px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Embedded integrations
-            </div>
-            <div className="mt-1 flex flex-col gap-0.5">
-              <div className="flex items-center justify-between rounded-sm px-2 py-1">
-                <span className="text-sm">OpenCode integration</span>
-                <Switch
-                  aria-label="OpenCode integration"
-                  checked={openCodeEnabled}
-                  onCheckedChange={(enabled) => {
-                    setOpenCodeEnabled(enabled)
-                    if (!enabled) {
-                      void stopTerminal('code').catch(() => undefined)
-                    }
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-between rounded-sm px-2 py-1">
-                <Link
-                  to={route.settings.hermes_agent}
-                  className="text-sm hover:underline"
-                >
-                  Hermes integration
-                </Link>
-                <Switch
-                  aria-label="Hermes integration"
-                  checked={hermesEnabled}
-                  onCheckedChange={(enabled) => {
-                    setHermesEnabled(enabled)
-                    if (!enabled) {
-                      void stopTerminal('hermes').catch(() => undefined)
-                    }
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+          <div className="mt-4 px-2"><NativeIntegrationControls /></div>
 
           {/* Model Providers section */}
           <div className="mt-4">
@@ -313,7 +270,7 @@ const SettingsMenu = () => {
                     className={cn(
                       'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground',
                        isRouteActive && 'bg-foreground/20',
-                       provider.provider === LOCAL_LLAMACPP_PROVIDER &&
+                       provider.provider === LOCAL_GINFER_PROVIDER &&
                          stepSetupRemoteProvider &&
                          'hidden'
                     )}

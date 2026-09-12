@@ -1,4 +1,3 @@
-pub mod api_request_analytics;
 pub mod commands;
 pub(crate) mod context_expansion;
 pub mod proxy;

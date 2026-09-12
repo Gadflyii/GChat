@@ -21,10 +21,10 @@ import { Slider } from '@/components/ui/slider'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTokensCount } from '@/hooks/useTokensCount'
-import { cn, LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { cn, LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 import { restartLocalModel } from '@/utils/restartLocalModel'
 
-const LOCAL_CONTEXT_PROVIDERS = new Set([LOCAL_LLAMACPP_PROVIDER])
+const LOCAL_CONTEXT_PROVIDERS = new Set([LOCAL_GINFER_PROVIDER])
 const FALLBACK_MAX_CONTEXT = 8 * 1024
 
 interface ContextSizeControlProps {

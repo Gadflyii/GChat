@@ -2,9 +2,9 @@ import { localStorageKey } from '@/constants/localStorage'
 import { EMBEDDING_MODEL_ID } from '@/constants/models'
 import type { ModelInfo } from '@gchat/core'
 
-import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 
-const localProviderNames = [LOCAL_LLAMACPP_PROVIDER] as const
+const localProviderNames = [LOCAL_GINFER_PROVIDER] as const
 
 export const getLastUsedModel = (): {
   provider: string

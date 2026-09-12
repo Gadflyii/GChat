@@ -43,7 +43,11 @@ export function EngineProfilePicker({ snapshot, disabled, launch }: {
       : selected.entry.profile.qualification.tier === 'calculated-startup-smoke'
         ? 'Capacity calculated for the full context; startup and concurrent short requests checked. Full-length requests have not been tested.'
         : 'Pending validation: capacity is calculated only. Startup, memory margin and inference are unverified; this profile may fail to load until the required engine support is available.'}</p>}
-    {!choices.length && <p className="text-sm text-muted-foreground">No qualified profiles match this host's platform, installed models, and available GPU groups.</p>}
+    {!choices.length && <p className="text-sm text-muted-foreground">{
+      !snapshot.models.length ? 'No installed models were found. Add a .ginfer model to this host’s model folder, then rescan.'
+        : (snapshot.launch_profiles ?? []).length ? 'Matching profiles exist, but their GPUs are reserved. Select the existing serving instance above to switch its profile, or stop the instance occupying those GPUs.'
+          : 'No installed profile matches this host and its exact model artifacts. Check the model identity, quantization, draft format and TP degree—not just the filename. Install the matching model and profile catalog, then refresh. Custom launch settings remain available below.'
+    }</p>}
     <Button disabled={disabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={() => {
       if (!selected) return
       if (instanceId && !window.confirm('Switch this instance to the selected model and profile? Serving restarts after its current requests drain.')) return

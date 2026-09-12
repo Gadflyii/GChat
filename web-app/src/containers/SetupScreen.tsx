@@ -34,7 +34,7 @@ export default function SetupScreen({ onSkipped }: { onSkipped?: () => void }) {
           <Button onClick={() => finish(route.hub.index)}>Choose a model</Button>
         </section>
         <EngineIntake onConnect={() => finish(route.engines.index)} />
-        <p className="text-sm text-muted-foreground">Other configured providers remain available in Settings. You can return to Models or Engines at any time.</p>
+        <p className="text-sm text-muted-foreground">Other configured providers remain available in Settings. You can return to Models or GInfer Hosts at any time.</p>
         <Button variant="ghost" onClick={() => finish()}>Continue without loading a model</Button>
       </div>
     </main>

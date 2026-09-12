@@ -15,6 +15,8 @@ decision is reversed, add a new one that says which record it supersedes.
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-09-10** — [Native integrations and host startup controls](2026-09-10-native-integrations-and-host-controls.md)
+- **2026-09-10** — [Remove external telemetry](2026-09-10-remove-external-telemetry.md)
 - **2026-09-10** — [Deliver calculated profiles with pending validation](2026-09-10-deliver-calculated-pending-profiles.md)
 - **2026-09-10** — [Prefer available Vision launch profiles](2026-09-10-prefer-available-vision-launch-profiles.md)
 - **2026-09-10** — [Distinguish launch-profile evidence tiers](2026-09-10-distinguish-launch-profile-evidence-tiers.md)

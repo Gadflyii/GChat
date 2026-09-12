@@ -6,7 +6,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useModelProvider } from '@/hooks/useModelProvider'
-import { cn, getProviderTitle, getModelDisplayName, isLlamacppProvider } from '@/lib/utils'
+import { cn, getProviderTitle, getModelDisplayName, isGinferProvider } from '@/lib/utils'
 import { highlightFzfMatch } from '@/utils/highlight'
 import Capabilities from './Capabilities'
 import {
@@ -126,7 +126,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
       } else {
         const localProvider = providers.find(
           (p) =>
-            isLlamacppProvider(p.provider) &&
+            isGinferProvider(p.provider) &&
             p.active &&
             p.models.length > 0
         )
@@ -205,7 +205,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
         const isPredefined = isKnownProvider(provider.provider)
         if (
           provider &&
-          !isLlamacppProvider(provider.provider) &&
+          !isGinferProvider(provider.provider) &&
           !provider.api_key?.length &&
           (isPredefined || provider.models.length === 0)
         )
@@ -289,8 +289,8 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
         .filter((p) => p.active)
         .sort((a, b) => {
           // Local providers first, regardless of whether they have models
-          const aIsLocal = isLlamacppProvider(a.provider)
-          const bIsLocal = isLlamacppProvider(b.provider)
+          const aIsLocal = isGinferProvider(a.provider)
+          const bIsLocal = isGinferProvider(b.provider)
           if (aIsLocal !== bIsLocal) return aIsLocal ? -1 : 1
 
           // Within the same group, non-empty providers first

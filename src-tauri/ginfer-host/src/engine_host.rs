@@ -9,6 +9,25 @@ use std::{
 };
 use tokio::process::{Child, Command};
 use uuid::Uuid;
+use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncRead, AsyncReadExt};
+
+type Diagnostics = Arc<Mutex<Vec<u8>>>;
+
+fn capture_output(reader: impl AsyncRead + Unpin + Send + 'static, diagnostics: Diagnostics) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut reader = reader;
+        let mut chunk = [0u8; 4096];
+        while let Ok(count) = reader.read(&mut chunk).await {
+            if count == 0 { break; }
+            eprint!("{}", String::from_utf8_lossy(&chunk[..count]));
+            let mut tail = diagnostics.lock().unwrap_or_else(|e| e.into_inner());
+            tail.extend_from_slice(&chunk[..count]);
+            let excess = tail.len().saturating_sub(16_384);
+            tail.drain(..excess);
+        }
+    })
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -128,6 +147,8 @@ pub struct ManagedInstance {
     child: Option<Child>,
     api_key: String,
     started: tokio::time::Instant,
+    diagnostics: Diagnostics,
+    output_readers: Vec<tokio::task::JoinHandle<()>>,
 }
 
 pub struct HostProcesses {
@@ -241,7 +262,7 @@ impl HostProcesses {
         } else {
             command.arg(&launch.artifact);
         }
-        let child = command
+        let mut child = command
             .args([
                 "--exit-on-stdin-close",
                 "--host",
@@ -262,9 +283,16 @@ impl HostProcesses {
             .env("CUDA_VISIBLE_DEVICES", launch.gpu_uuids.join(","))
             .args(launch.options.args())
             .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| format!("could not start engine: {e}"))?;
+        let diagnostics = Arc::new(Mutex::new(Vec::new()));
+        let output_readers = vec![
+            capture_output(child.stdout.take().expect("piped stdout"), diagnostics.clone()),
+            capture_output(child.stderr.take().expect("piped stderr"), diagnostics.clone()),
+        ];
         let session_id = Uuid::new_v4();
         self.instances.insert(
             launch.instance_id,
@@ -278,6 +306,8 @@ impl HostProcesses {
                 child: Some(child),
                 api_key,
                 started: tokio::time::Instant::now(),
+                diagnostics,
+                output_readers,
             },
         );
         Ok(session_id)
@@ -352,7 +382,12 @@ impl HostProcesses {
                 instance.child = None;
                 instance.status = InstanceStatus::Failed;
                 instance.model_metadata = None;
-                instance.last_error = Some(format!("engine exited unexpectedly: {exit}"));
+                for mut reader in instance.output_readers.drain(..) {
+                    if tokio::time::timeout(Duration::from_secs(1), &mut reader).await.is_err() { reader.abort(); }
+                }
+                let tail = instance.diagnostics.lock().unwrap_or_else(|e| e.into_inner());
+                let detail = String::from_utf8_lossy(&tail);
+                instance.last_error = Some(format!("engine exited unexpectedly: {exit}\n{}", detail.trim()));
                 continue;
             }
             if instance.status != InstanceStatus::Starting {

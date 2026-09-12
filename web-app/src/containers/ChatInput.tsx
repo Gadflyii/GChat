@@ -1,6 +1,6 @@
 import { EMBEDDING_MODEL_ID } from '@/constants/models'
 import TextareaAutosize from 'react-textarea-autosize'
-import { cn, formatBytes, isLlamacppProvider } from '@/lib/utils'
+import { cn, formatBytes, isGinferProvider } from '@/lib/utils'
 import { usePrompt } from '@/hooks/usePrompt'
 import { useThreads } from '@/hooks/useThreads'
 import {
@@ -189,8 +189,8 @@ const ChatInput = memo(function ChatInput({
   const providers = useModelProvider((state) => state.providers)
   const canSelectAgentMode = canSelectChatAgentMode(initialMessage, projectId)
   const isAgentProviderSelected =
-    selectedProvider === 'ginfer-lan' || isLlamacppProvider(selectedProvider) ||
-    providers.some((p) => isLlamacppProvider(p.provider))
+    selectedProvider === 'ginfer-lan' || isGinferProvider(selectedProvider) ||
+    providers.some((p) => isGinferProvider(p.provider))
   const agentModeKey = canSelectAgentMode
     ? TEMPORARY_CHAT_ID
     : (currentThreadId ?? TEMPORARY_CHAT_ID)
@@ -321,7 +321,7 @@ const ChatInput = memo(function ChatInput({
   // one model runs. switchToModel manages loadingModel, activeModels and is
   // serialised, so no manual state juggling is needed here.
   useEffect(() => {
-    const isLocal = isLlamacppProvider(selectedProvider)
+    const isLocal = isGinferProvider(selectedProvider)
     if (
       !isLocal ||
       !selectedModel?.id ||
@@ -407,7 +407,7 @@ const ChatInput = memo(function ChatInput({
   )
 
   const isLocalModelNotReady =
-    isLlamacppProvider(selectedProvider) &&
+    isGinferProvider(selectedProvider) &&
     !!selectedModel?.id &&
     !activeModels.includes(selectedModel.id)
 
@@ -976,7 +976,7 @@ const ChatInput = memo(function ChatInput({
         const modelReady = await (async () => {
           if (!selectedModel?.id) return false
           if (activeModels.includes(selectedModel.id)) return true
-          if (!isLlamacppProvider(selectedProvider)) return false
+          if (!isGinferProvider(selectedProvider)) return false
           try {
             const { switchToModel } = await import('@/utils/switchModel')
             await switchToModel({
@@ -2831,7 +2831,7 @@ const ChatInput = memo(function ChatInput({
         </div>
       )}
 
-      {isLlamacppProvider(selectedProvider) &&
+      {isGinferProvider(selectedProvider) &&
         isModelActive &&
         !tokenCounterCompact &&
         !initialMessage &&

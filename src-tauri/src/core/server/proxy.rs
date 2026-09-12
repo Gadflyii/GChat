@@ -9,97 +9,20 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_ginfer::state::GinferSession;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::Mutex;
 
-use crate::core::server::api_request_analytics::{
-    ApiRequestAggregator, ApiRequestObservation, ApiRequestSummary, API_REQUEST_SUMMARY_CHANNEL,
-    API_REQUEST_SUMMARY_WINDOW_SECS,
-};
 use crate::core::server::context_expansion::is_context_limit_error as shared_is_context_limit_error;
 use crate::core::state::{ProviderConfig, ServerHandle};
 
-/// Immediate analytics channel retained for bind failures, which happen
-/// before a three-minute request window can exist.
-const ANALYTICS_CHANNEL: &str = "analytics://api_server_request";
-
-/// Mutable metadata accumulated while handling one proxied request.
+/// Routing facts used to translate upstream failures for local clients.
 #[derive(Default)]
-struct EmitState {
-    endpoint: Option<&'static str>,
-    model_id: Option<String>,
+struct RoutingState {
     backend: &'static str,
-    provider: Option<String>,
-    stream: bool,
-    is_anthropic_fallback: bool,
-    error_kind: Option<&'static str>,
-    skip_emit: bool,
-    // ATO-112: error-breakdown fields. `upstream_status` is the model's /
-    // provider's own HTTP status (distinct from the status we return to the
-    // client). The booleans flag specific failure shapes for triage.
-    upstream_status: Option<u16>,
     oom_detected: bool,
     ctx_overflow_detected: bool,
-}
-
-#[derive(serde::Serialize, Clone)]
-struct ApiRequestEvent<'a> {
-    source: &'static str,
-    endpoint: &'static str,
-    method: &'a str,
-    model_id: Option<String>,
-    backend: &'static str,
-    provider: Option<String>,
-    stream: bool,
-    status: u16,
-    latency_ms: u64,
-    is_anthropic_fallback: bool,
-    error_kind: Option<&'static str>,
-    upstream_status: Option<u16>,
-    oom_detected: bool,
-    ctx_overflow_detected: bool,
-    server_bind_failed: bool,
-}
-
-fn emit_api_request_event<R: Runtime>(app: &AppHandle<R>, event: ApiRequestEvent) {
-    if let Err(e) = app.emit(ANALYTICS_CHANNEL, event) {
-        log::debug!("Failed to emit api_server_request analytics event: {e}");
-    }
-}
-
-fn emit_api_request_summary<R: Runtime>(app: &AppHandle<R>, summary: ApiRequestSummary) {
-    if let Err(e) = app.emit(API_REQUEST_SUMMARY_CHANNEL, summary) {
-        log::debug!("Failed to emit api_server_session_summary analytics event: {e}");
-    }
-}
-
-/// Surface a Local API Server bind failure (e.g. the requested port is in use
-/// and no free port could be obtained) as a dedicated analytics signal. This
-/// never rides a real request because binding fails before the proxy serves
-/// anything (ATO-112 / ATO-189).
-fn emit_server_bind_failed<R: Runtime>(app: &AppHandle<R>) {
-    emit_api_request_event(
-        app,
-        ApiRequestEvent {
-            source: "local_api_server",
-            endpoint: "other",
-            method: "BIND",
-            model_id: None,
-            backend: "",
-            provider: None,
-            stream: false,
-            status: 0,
-            latency_ms: 0,
-            is_anthropic_fallback: false,
-            error_kind: Some("server_bind_failed"),
-            upstream_status: None,
-            oom_detected: false,
-            ctx_overflow_detected: false,
-            server_bind_failed: true,
-        },
-    );
 }
 
 const TTFT_TIMING_CHANNEL: &str = "ttft-timing";
@@ -162,7 +85,7 @@ fn log_ttft_prefix_dump(json_body: &serde_json::Value) {
     }
     // Zero-PII (ATO-113): never log message/tool *text* (prompts are PII).
     // Emit only sizes/counts so the diagnostic stays useful for prefix-cache
-    // debugging without leaking conversation content into app.log / Sentry.
+    // debugging without including conversation content in app.log.
     if let Some(messages) = json_body.get("messages") {
         let bytes = serde_json::to_string(messages)
             .map(|s| s.len())
@@ -186,21 +109,6 @@ fn sse_chunk_has_visible_content(chunk: &[u8]) -> bool {
         || text.contains("\"content\": null")
         || text.contains("\"content\":\"\"")
         || text.contains("\"content\": \"\""))
-}
-
-/// Normalises the already prefix-stripped destination path into a closed set
-/// of endpoint labels safe for analytics (never the raw path).
-fn endpoint_from_path(path: &str) -> &'static str {
-    match path {
-        "/chat/completions" => "chat/completions",
-        "/responses" => "responses",
-        "/messages" => "messages",
-        "/completions" => "completions",
-        "/embeddings" => "embeddings",
-        "/messages/count_tokens" => "messages/count_tokens",
-        "/models" => "models",
-        _ => "other",
-    }
 }
 
 /// Transform Anthropic /messages API body to OpenAI /chat/completions body
@@ -671,24 +579,6 @@ fn is_local_backend(backend: &str) -> bool {
     matches!(backend, "ginfer")
 }
 
-/// ATO-112: error_kind for an upstream that responded with a non-2xx status.
-fn upstream_error_kind(backend: &str) -> &'static str {
-    if is_local_backend(backend) {
-        "local_model_error"
-    } else {
-        "remote_provider_error"
-    }
-}
-
-/// ATO-112: error_kind for an upstream we could not reach (transport error).
-fn unreachable_error_kind(backend: &str) -> &'static str {
-    if is_local_backend(backend) {
-        "local_model_unreachable"
-    } else {
-        "remote_provider_error"
-    }
-}
-
 /// ATO-112: best-effort OOM detection from an upstream error body, mirroring
 /// the patterns in `web-app/src/utils/switchModel.ts` and the backend
 /// `error.rs` classifiers. Used only to set the `oom_detected` analytics flag.
@@ -819,7 +709,7 @@ fn build_streaming_response(
 /// See the 2026-06-02 ADR in `AGENTS.md`.
 #[allow(clippy::too_many_arguments)]
 async fn handle_responses_request(
-    state: &mut EmitState,
+    state: &mut RoutingState,
     body: Body,
     headers: &hyper::HeaderMap,
     host_header: &str,
@@ -831,8 +721,6 @@ async fn handle_responses_request(
     provider_configs: &Arc<Mutex<HashMap<String, ProviderConfig>>>,
 ) -> Result<Response<Body>, hyper::Error> {
     use crate::core::server::responses_shim;
-
-    state.endpoint = Some("responses");
 
     let make_err = |status: StatusCode, msg: &str| -> Response<Body> {
         let mut b = Response::builder().status(status);
@@ -848,7 +736,6 @@ async fn handle_responses_request(
     let body_bytes = match hyper::body::to_bytes(body).await {
         Ok(b) => b,
         Err(_) => {
-            state.error_kind = Some("bad_request");
             return Ok(make_err(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to read request body",
@@ -859,7 +746,6 @@ async fn handle_responses_request(
     let json: serde_json::Value = match serde_json::from_slice(&body_bytes) {
         Ok(v) => v,
         Err(e) => {
-            state.error_kind = Some("bad_request");
             return Ok(make_err(
                 StatusCode::BAD_REQUEST,
                 &format!("Invalid JSON body: {e}"),
@@ -871,19 +757,16 @@ async fn handle_responses_request(
         .get("stream")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    state.stream = stream;
 
     let model_id = match json.get("model").and_then(|v| v.as_str()) {
         Some(m) => m.to_string(),
         None => {
-            state.error_kind = Some("bad_request");
             return Ok(make_err(
                 StatusCode::BAD_REQUEST,
                 "Request body must contain a 'model' field",
             ));
         }
     };
-    state.model_id = Some(model_id.clone());
 
     enum Target {
         Passthrough {
@@ -915,7 +798,7 @@ async fn handle_responses_request(
 
     let target = if let Some(p) = provider_name {
         state.backend = "remote";
-        state.provider = Some(p.clone());
+
         let cfg = {
             let pc = provider_configs.lock().await;
             pc.get(&p).cloned()
@@ -927,7 +810,6 @@ async fn handle_responses_request(
                     api_key: c.api_key,
                 },
                 None => {
-                    state.error_kind = Some("proxy_internal");
                     return Ok(make_err(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "Provider has no base_url",
@@ -935,7 +817,6 @@ async fn handle_responses_request(
                 }
             },
             None => {
-                state.error_kind = Some("proxy_internal");
                 return Ok(make_err(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Provider config not found",
@@ -957,7 +838,6 @@ async fn handle_responses_request(
                 api_key: Some(key),
             }
         } else {
-            state.error_kind = Some("not_found");
             return Ok(make_err(
                 StatusCode::NOT_FOUND,
                 &format!("No running session found for model '{model_id}'"),
@@ -998,13 +878,10 @@ async fn handle_responses_request(
                     origin_header,
                     &config.trusted_hosts,
                 )),
-                Err(e) => {
-                    state.error_kind = Some(unreachable_error_kind(state.backend));
-                    Ok(make_err(
-                        StatusCode::BAD_GATEWAY,
-                        &format!("Proxy request to model failed: {e}"),
-                    ))
-                }
+                Err(e) => Ok(make_err(
+                    StatusCode::BAD_GATEWAY,
+                    &format!("Proxy request to model failed: {e}"),
+                )),
             }
         }
         Target::Translate { url, api_key } => {
@@ -1023,7 +900,6 @@ async fn handle_responses_request(
             let resp = match req.body(chat_body.to_string()).send().await {
                 Ok(r) => r,
                 Err(e) => {
-                    state.error_kind = Some(unreachable_error_kind(state.backend));
                     return Ok(make_err(
                         StatusCode::BAD_GATEWAY,
                         &format!("Proxy request to model failed: {e}"),
@@ -1033,8 +909,6 @@ async fn handle_responses_request(
 
             let status = resp.status();
             if !status.is_success() {
-                state.error_kind = Some(upstream_error_kind(state.backend));
-                state.upstream_status = Some(status.as_u16());
                 let err_body = resp
                     .text()
                     .await
@@ -1143,9 +1017,6 @@ async fn handle_responses_request(
     }
 }
 
-/// Wraps `inner_proxy_request` and records one observation in the current
-/// analytics window for each eligible proxied request. For streaming responses
-/// latency is TTFB (headers + status), matching the previous per-request metric.
 #[allow(clippy::too_many_arguments)]
 async fn proxy_request<R: Runtime>(
     req: Request<Body>,
@@ -1154,67 +1025,16 @@ async fn proxy_request<R: Runtime>(
     config: ProxyConfig,
     ginfer_sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     provider_configs: Arc<Mutex<HashMap<String, ProviderConfig>>>,
-    api_request_aggregator: Arc<ApiRequestAggregator>,
     app_handle: AppHandle<R>,
 ) -> Result<Response<Body>, hyper::Error> {
-    let start = Instant::now();
-    let method_str = req.method().as_str().to_string();
-    let mut state = EmitState {
+    let mut state = RoutingState {
         backend: "unknown",
-        ..EmitState::default()
+        ..RoutingState::default()
     };
-
-    let response = inner_proxy_request(
-        &mut state,
-        req,
-        client,
-        local_client,
-        config,
-        ginfer_sessions,
-        provider_configs,
-        app_handle.clone(),
-    )
-    .await?;
-
-    if !state.skip_emit {
-        api_request_aggregator.record(ApiRequestObservation {
-            endpoint: state.endpoint.unwrap_or("other"),
-            method: method_str,
-            model_id: state.model_id.clone(),
-            backend: state.backend,
-            provider: state.provider.clone(),
-            stream: state.stream,
-            status: response.status().as_u16(),
-            latency_ms: start.elapsed().as_millis() as u64,
-            is_anthropic_fallback: state.is_anthropic_fallback,
-            error_kind: state.error_kind,
-            upstream_status: state.upstream_status,
-            oom_detected: state.oom_detected,
-            ctx_overflow_detected: state.ctx_overflow_detected,
-        });
-    }
-
-    Ok(response)
-}
-
-/// Handles the proxy request logic. Populates `state` with request metadata so
-/// the outer `proxy_request` wrapper can aggregate it. Preflight, static docs
-/// and other non-product traffic set `state.skip_emit = true`.
-#[allow(clippy::too_many_arguments)]
-async fn inner_proxy_request<R: Runtime>(
-    state: &mut EmitState,
-    req: Request<Body>,
-    client: Client,
-    local_client: Client,
-    config: ProxyConfig,
-    ginfer_sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
-    provider_configs: Arc<Mutex<HashMap<String, ProviderConfig>>>,
-    app_handle: AppHandle<R>,
-) -> Result<Response<Body>, hyper::Error> {
     if req.method() == hyper::Method::OPTIONS {
         // CORS preflight is not a product signal; suppress analytics for the
         // entire preflight branch regardless of its outcome.
-        state.skip_emit = true;
+
         log::debug!(
             "Handling CORS preflight request from {:?} {:?}",
             req.headers().get(hyper::header::HOST),
@@ -1403,8 +1223,6 @@ async fn inner_proxy_request<R: Runtime>(
     if !is_whitelisted_path {
         if !host_header.is_empty() {
             if !is_valid_host(&host_header, &config.trusted_hosts) {
-                state.endpoint = Some(endpoint_from_path(path.as_str()));
-                state.error_kind = Some("host");
                 let mut error_response = Response::builder().status(StatusCode::FORBIDDEN);
                 error_response = add_cors_headers_with_host_and_origin(
                     error_response,
@@ -1421,8 +1239,6 @@ async fn inner_proxy_request<R: Runtime>(
                     .unwrap());
             }
         } else {
-            state.endpoint = Some(endpoint_from_path(path.as_str()));
-            state.error_kind = Some("bad_request");
             let mut error_response = Response::builder().status(StatusCode::BAD_REQUEST);
             error_response = add_cors_headers_with_host_and_origin(
                 error_response,
@@ -1457,8 +1273,6 @@ async fn inner_proxy_request<R: Runtime>(
             .unwrap_or(false);
 
         if !auth_valid && !api_key_valid {
-            state.endpoint = Some(endpoint_from_path(path.as_str()));
-            state.error_kind = Some("auth");
             let mut error_response = Response::builder().status(StatusCode::UNAUTHORIZED);
             error_response = add_cors_headers_with_host_and_origin(
                 error_response,
@@ -1476,7 +1290,7 @@ async fn inner_proxy_request<R: Runtime>(
 
     if path.contains("/configs") {
         // Hidden/sensitive route: suppress from analytics.
-        state.skip_emit = true;
+
         let mut error_response = Response::builder().status(StatusCode::NOT_FOUND);
         error_response = add_cors_headers_with_host_and_origin(
             error_response,
@@ -1491,46 +1305,92 @@ async fn inner_proxy_request<R: Runtime>(
     // Authenticate the facade request above before consulting any paired host.
     if method == hyper::Method::GET {
         if let Ok(Some(alias)) = crate::core::engine_hosts::model_detail_alias(&path) {
-            let model = crate::core::engine_hosts::available_models().await.into_iter().find(|m|m.get("id").and_then(serde_json::Value::as_str)==Some(alias.as_str()));
-            let (status,payload) = match model {
-                Some(model) => (StatusCode::OK,model),
-                None => (StatusCode::NOT_FOUND,serde_json::json!({"error":{"message":"model instance is not available","type":"invalid_request_error","code":"model_not_found"}})),
+            let model = crate::core::engine_hosts::available_models()
+                .await
+                .into_iter()
+                .find(|m| m.get("id").and_then(serde_json::Value::as_str) == Some(alias.as_str()));
+            let (status, payload) = match model {
+                Some(model) => (StatusCode::OK, model),
+                None => (
+                    StatusCode::NOT_FOUND,
+                    serde_json::json!({"error":{"message":"model instance is not available","type":"invalid_request_error","code":"model_not_found"}}),
+                ),
             };
-            state.backend="ginfer";state.model_id=Some(alias);
-            return Ok(add_cors_headers_with_host_and_origin(Response::builder().status(status).header("content-type","application/json"),&host_header,&origin_header,&config.trusted_hosts).body(Body::from(payload.to_string())).unwrap());
+            return Ok(add_cors_headers_with_host_and_origin(
+                Response::builder()
+                    .status(status)
+                    .header("content-type", "application/json"),
+                &host_header,
+                &origin_header,
+                &config.trusted_hosts,
+            )
+            .body(Body::from(payload.to_string()))
+            .unwrap());
         }
     }
     if path.starts_with("/responses/resp_ginfer_") {
-        state.backend = "ginfer";
-        let result = crate::core::engine_hosts::forward_response_handle(method.clone(),&path,parts.uri.query()).await;
+        let result = crate::core::engine_hosts::forward_response_handle(
+            method.clone(),
+            &path,
+            parts.uri.query(),
+        )
+        .await;
         let response = match result {
             Ok(response) => response,
-            Err(error) => ginfer_host::service::json(StatusCode::BAD_GATEWAY,serde_json::json!({"error":{"message":error,"type":"engine_host_unavailable"}})),
+            Err(error) => ginfer_host::service::json(
+                StatusCode::BAD_GATEWAY,
+                serde_json::json!({"error":{"message":error,"type":"engine_host_unavailable"}}),
+            ),
         };
-        let (parts,body) = response.into_parts();
+        let (parts, body) = response.into_parts();
         let mut builder = Response::builder().status(parts.status);
-        for (name,value) in &parts.headers { builder=builder.header(name,value); }
-        return Ok(add_cors_headers_with_host_and_origin(builder,&host_header,&origin_header,&config.trusted_hosts).body(body).unwrap());
+        for (name, value) in &parts.headers {
+            builder = builder.header(name, value);
+        }
+        return Ok(add_cors_headers_with_host_and_origin(
+            builder,
+            &host_header,
+            &origin_header,
+            &config.trusted_hosts,
+        )
+        .body(body)
+        .unwrap());
     }
     let body = if method == hyper::Method::POST {
         let bytes = hyper::body::to_bytes(body).await?;
         if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            if let Some(alias) = value.get("model").and_then(|m|m.as_str()).filter(|m|m.starts_with("ginfer/")) {
-                state.backend = "ginfer";
-                state.model_id = Some(alias.into());
-                let result = crate::core::engine_hosts::forward_alias(alias,&path,&value).await;
+            if let Some(alias) = value
+                .get("model")
+                .and_then(|m| m.as_str())
+                .filter(|m| m.starts_with("ginfer/"))
+            {
+                let result = crate::core::engine_hosts::forward_alias(alias, &path, &value).await;
                 let response = match result {
                     Ok(response) => response,
-                    Err(error) => ginfer_host::service::json(StatusCode::BAD_GATEWAY,serde_json::json!({"error":{"message":error,"type":"engine_host_unavailable"}})),
+                    Err(error) => ginfer_host::service::json(
+                        StatusCode::BAD_GATEWAY,
+                        serde_json::json!({"error":{"message":error,"type":"engine_host_unavailable"}}),
+                    ),
                 };
-                let (parts,body) = response.into_parts();
+                let (parts, body) = response.into_parts();
                 let mut builder = Response::builder().status(parts.status);
-                for (name,value) in &parts.headers { builder=builder.header(name,value); }
-                return Ok(add_cors_headers_with_host_and_origin(builder,&host_header,&origin_header,&config.trusted_hosts).body(body).unwrap());
+                for (name, value) in &parts.headers {
+                    builder = builder.header(name, value);
+                }
+                return Ok(add_cors_headers_with_host_and_origin(
+                    builder,
+                    &host_header,
+                    &origin_header,
+                    &config.trusted_hosts,
+                )
+                .body(body)
+                .unwrap());
             }
         }
         Body::from(bytes)
-    } else { body };
+    } else {
+        body
+    };
 
     // Codex CLI (and other Responses-only clients) hit `/responses`, which
     // ginfer does not implement. Handle it in a self-contained branch:
@@ -1539,7 +1399,7 @@ async fn inner_proxy_request<R: Runtime>(
     // through the chat-completions retry machinery.
     if method == hyper::Method::POST && path == "/responses" {
         return handle_responses_request(
-            state,
+            &mut state,
             body,
             &headers,
             &host_header,
@@ -1567,14 +1427,13 @@ async fn inner_proxy_request<R: Runtime>(
         // Anthropic /messages endpoint - tries /messages first, falls back to /chat/completions on error
         (hyper::Method::POST, "/messages") => {
             is_anthropic_messages = true;
-            state.endpoint = Some("messages");
+
             log::info!(
                 "Handling POST request to /messages with chat/completions fallback on error",
             );
             let body_bytes = match hyper::body::to_bytes(body).await {
                 Ok(bytes) => bytes,
                 Err(_) => {
-                    state.error_kind = Some("bad_request");
                     let mut error_response =
                         Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR);
                     error_response = add_cors_headers_with_host_and_origin(
@@ -1593,12 +1452,7 @@ async fn inner_proxy_request<R: Runtime>(
             // Parse body to get model_id for routing (don't transform yet)
             match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
                 Ok(json_body) => {
-                    state.stream = json_body
-                        .get("stream")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
                     if let Some(model_id) = json_body.get("model").and_then(|v| v.as_str()) {
-                        state.model_id = Some(model_id.to_string());
                         let pc = provider_configs.lock().await;
 
                         // Try to find a provider for this model
@@ -1621,7 +1475,7 @@ async fn inner_proxy_request<R: Runtime>(
                         if let Some(ref p) = provider_name {
                             log::info!("Using remote provider '{p}' for model '{model_id}'");
                             state.backend = "remote";
-                            state.provider = Some(p.clone());
+
                             let pc2 = provider_configs.lock().await;
                             let provider_config = pc2.get(p.as_str()).cloned();
                             drop(pc2);
@@ -1648,7 +1502,6 @@ async fn inner_proxy_request<R: Runtime>(
                                 target_base_url =
                                     Some(format!("http://127.0.0.1:{}/v1/messages", target_port));
                             } else {
-                                state.error_kind = Some("not_found");
                                 log::warn!("No running session found for model_id: {model_id}");
                                 let mut error_response =
                                     Response::builder().status(StatusCode::NOT_FOUND);
@@ -1666,7 +1519,6 @@ async fn inner_proxy_request<R: Runtime>(
                             }
                         }
                     } else {
-                        state.error_kind = Some("bad_request");
                         let error_msg = "Request body must contain a 'model' field";
                         log::warn!("POST body for /messages missing 'model' field");
                         let mut error_response =
@@ -1681,7 +1533,6 @@ async fn inner_proxy_request<R: Runtime>(
                     }
                 }
                 Err(e) => {
-                    state.error_kind = Some("bad_request");
                     log::warn!("Failed to parse POST body for /messages as JSON: {e}");
                     let mut error_response = Response::builder().status(StatusCode::BAD_REQUEST);
                     error_response = add_cors_headers_with_host_and_origin(
@@ -1699,14 +1550,12 @@ async fn inner_proxy_request<R: Runtime>(
         | (hyper::Method::POST, "/completions")
         | (hyper::Method::POST, "/embeddings")
         | (hyper::Method::POST, "/messages/count_tokens") => {
-            state.endpoint = Some(endpoint_from_path(destination_path.as_str()));
             log::info!(
                 "Handling POST request to {destination_path} requiring model lookup in body",
             );
             let body_bytes = match hyper::body::to_bytes(body).await {
                 Ok(bytes) => bytes,
                 Err(_) => {
-                    state.error_kind = Some("bad_request");
                     let mut error_response =
                         Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR);
                     error_response = add_cors_headers_with_host_and_origin(
@@ -1726,12 +1575,8 @@ async fn inner_proxy_request<R: Runtime>(
                 Ok(json_body) => {
                     emit_ttft_timing(&app_handle, "zetaProxyIn");
                     log_ttft_prefix_dump(&json_body);
-                    state.stream = json_body
-                        .get("stream")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
+
                     if let Some(model_id) = json_body.get("model").and_then(|v| v.as_str()) {
-                        state.model_id = Some(model_id.to_string());
                         log::debug!("Extracted model_id: {model_id}");
 
                         // First, check if there's a registered remote provider for this model
@@ -1763,7 +1608,6 @@ async fn inner_proxy_request<R: Runtime>(
                             // Found a remote provider, stream the response directly
                             log::info!("Found remote provider '{provider}' for model '{model_id}'");
                             state.backend = "remote";
-                            state.provider = Some(provider.clone());
 
                             // Get the provider config
                             let pc2 = provider_configs.lock().await;
@@ -1804,7 +1648,6 @@ async fn inner_proxy_request<R: Runtime>(
                             };
 
                             if ginfer_count == 0 {
-                                state.error_kind = Some("not_found");
                                 log::warn!(
                                     "Request for model '{model_id}' but no models are running."
                                 );
@@ -1829,7 +1672,6 @@ async fn inner_proxy_request<R: Runtime>(
                                     "http://127.0.0.1:{target_port}/v1{destination_path}"
                                 ));
                             } else {
-                                state.error_kind = Some("not_found");
                                 log::warn!("No running session found for model_id: {model_id}");
                                 let mut error_response =
                                     Response::builder().status(StatusCode::NOT_FOUND);
@@ -1847,7 +1689,6 @@ async fn inner_proxy_request<R: Runtime>(
                             }
                         }
                     } else {
-                        state.error_kind = Some("bad_request");
                         let error_msg = "Request body must contain a 'model' field";
                         log::warn!(
                             "POST body for {destination_path} is missing 'model' field or it's not a string"
@@ -1864,7 +1705,6 @@ async fn inner_proxy_request<R: Runtime>(
                     }
                 }
                 Err(e) => {
-                    state.error_kind = Some("bad_request");
                     log::warn!("Failed to parse POST body for {destination_path} as JSON: {e}");
                     let mut error_response = Response::builder().status(StatusCode::BAD_REQUEST);
                     error_response = add_cors_headers_with_host_and_origin(
@@ -1879,10 +1719,9 @@ async fn inner_proxy_request<R: Runtime>(
             }
         }
         (hyper::Method::GET, "/models") => {
-            state.endpoint = Some("models");
             // ATO-112: model-list polling is high-volume and not a product
             // signal (clients refresh it constantly); suppress analytics.
-            state.skip_emit = true;
+
             log::debug!("Handling GET /v1/models request");
 
             // Get local GInfer sessions
@@ -1959,7 +1798,7 @@ async fn inner_proxy_request<R: Runtime>(
 
         (hyper::Method::GET, "/openapi.json") => {
             // Static documentation — not a product signal.
-            state.skip_emit = true;
+
             let static_body = include_str!("../../../static/openapi.json"); // relative to src-tauri/src/
                                                                             // Parse the static OpenAPI JSON and update the server URL with actual host and port
             match serde_json::from_str::<serde_json::Value>(static_body) {
@@ -2003,7 +1842,7 @@ async fn inner_proxy_request<R: Runtime>(
         // DOCS route
         (hyper::Method::GET, "/") => {
             // Swagger landing page — not a product signal.
-            state.skip_emit = true;
+
             let html = r#"
 <!DOCTYPE html>
 <html lang="en">
@@ -2043,7 +1882,6 @@ async fn inner_proxy_request<R: Runtime>(
         }
 
         (hyper::Method::GET, "/docs/swagger-ui.css") => {
-            state.skip_emit = true;
             let css = include_str!("../../../static/swagger-ui/swagger-ui.css");
             return Ok(Response::builder()
                 .status(StatusCode::OK)
@@ -2053,7 +1891,6 @@ async fn inner_proxy_request<R: Runtime>(
         }
 
         (hyper::Method::GET, "/docs/swagger-ui-bundle.js") => {
-            state.skip_emit = true;
             let js = include_str!("../../../static/swagger-ui/swagger-ui-bundle.js");
             return Ok(Response::builder()
                 .status(StatusCode::OK)
@@ -2064,8 +1901,6 @@ async fn inner_proxy_request<R: Runtime>(
 
         _ => {
             if let Some(allowed_methods) = allowed_methods_for_path(destination_path.as_str()) {
-                state.endpoint = Some(endpoint_from_path(destination_path.as_str()));
-                state.error_kind = Some("method_not_allowed");
                 let allow_header = allowed_methods.join(", ");
                 log::warn!(
                     "Method not allowed for known route: {method} {destination_path}; allowed: {allow_header}"
@@ -2084,11 +1919,9 @@ async fn inner_proxy_request<R: Runtime>(
                     .unwrap());
             }
 
-            state.endpoint = Some("other");
-            state.error_kind = Some("not_found");
             // ATO-112: catch-all 404s are dominated by background scanners /
             // misconfigured clients and carry no product signal; suppress.
-            state.skip_emit = true;
+
             log::warn!("Unhandled method/path for dynamic routing: {method} {destination_path}");
             let mut error_response = Response::builder().status(StatusCode::NOT_FOUND);
             error_response = add_cors_headers_with_host_and_origin(
@@ -2104,7 +1937,6 @@ async fn inner_proxy_request<R: Runtime>(
     let upstream_url = match target_base_url.clone() {
         Some(p) => p,
         None => {
-            state.error_kind = Some("proxy_internal");
             log::error!(
                 "Internal API server routing error: target is None after successful lookup"
             );
@@ -2149,7 +1981,6 @@ async fn inner_proxy_request<R: Runtime>(
     let outbound_req_with_body = if let Some(bytes) = buffered_body_for_req {
         outbound_req.body(bytes)
     } else {
-        state.error_kind = Some("proxy_internal");
         log::error!("Internal logic error: Request reached proxy stage without a buffered body.");
         let mut error_response = Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR);
         error_response = add_cors_headers_with_host_and_origin(
@@ -2175,7 +2006,6 @@ async fn inner_proxy_request<R: Runtime>(
 
             // For Anthropic /messages requests with errors, try /chat/completions
             if is_error && is_anthropic_messages {
-                state.is_anthropic_fallback = true;
                 log::warn!("Request failed for /messages with status {status}, trying /chat/completions...");
 
                 // Read the error body to return to client if fallback fails
@@ -2257,17 +2087,11 @@ async fn inner_proxy_request<R: Runtime>(
                         let fallback_status = res.status();
 
                         if !fallback_status.is_success() {
-                            state.error_kind = Some(upstream_error_kind(state.backend));
-                            state.upstream_status = Some(fallback_status.as_u16());
                             // Return fallback error to client
                             let fallback_error = res
                                 .text()
                                 .await
                                 .unwrap_or_else(|e| format!("Failed to read error: {}", e));
-                            state.oom_detected = body_indicates_oom(&fallback_error);
-                            state.ctx_overflow_detected =
-                                is_context_limit_error(fallback_status, &fallback_error);
-
                             // Return the error to client
                             let mut error_response = Response::builder().status(fallback_status);
                             error_response = add_cors_headers_with_host_and_origin(
@@ -2319,10 +2143,7 @@ async fn inner_proxy_request<R: Runtime>(
                 }
 
                 // If fallback failed or wasn't attempted, return error to client
-                state.error_kind = Some(upstream_error_kind(state.backend));
-                state.upstream_status = Some(status.as_u16());
-                state.oom_detected = body_indicates_oom(&error_body);
-                state.ctx_overflow_detected = is_context_limit_error(status, &error_body);
+
                 let mut error_response = Response::builder().status(status);
                 error_response = add_cors_headers_with_host_and_origin(
                     error_response,
@@ -2338,8 +2159,6 @@ async fn inner_proxy_request<R: Runtime>(
                     .await
                     .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
 
-                state.error_kind = Some(upstream_error_kind(state.backend));
-                state.upstream_status = Some(status.as_u16());
                 state.oom_detected = body_indicates_oom(&error_body);
                 state.ctx_overflow_detected = is_context_limit_error(status, &error_body);
                 // ATO-182: For the local engine (ginfer), forward a structured
@@ -2427,12 +2246,10 @@ async fn inner_proxy_request<R: Runtime>(
             Ok(builder.body(body).unwrap())
         }
         Err(e) => {
-            state.error_kind = Some(unreachable_error_kind(state.backend));
             let error_msg = format!("Proxy request to model failed: {e}");
             // WS1.4: warn! (not error!) — a refused/failed proxy connection is a
             // downstream symptom of the model server not being up, not a root-cause
-            // crash, so it must not flood the SentryLogger bridge. The PostHog
-            // error_kind above still records it for analytics.
+            // recoverable connection failure; retain a local warning.
             log::warn!("{error_msg}");
             // ATO-182: A transport error reaching a *local* model server means
             // the backend inference process is down / crashed / not yet
@@ -2560,11 +2377,6 @@ async fn start_server_internal<R: Runtime>(
         .parse()
         .map_err(|e| format!("Invalid address: {e}"))?;
 
-    // ATO-112 / ATO-189: surface local-server bind failures (e.g. the requested
-    // port is already in use) as analytics. Cloned up front because `app_handle`
-    // is later moved into `make_svc`.
-    let app_handle_for_bind = app_handle.clone();
-
     // ATO-189 / ATO-240: bind a std `TcpListener` ourselves so we can
     // (a) transparently fall back to an OS-assigned free port when the
     // requested port is unavailable, and (b) learn the actual bound port
@@ -2595,14 +2407,12 @@ async fn start_server_internal<R: Runtime>(
                 Ok(listener) => listener,
                 Err(e) => {
                     log::error!("Failed to bind a fallback port on {host}: {e}");
-                    emit_server_bind_failed(&app_handle_for_bind);
                     return Err(Box::new(e));
                 }
             }
         }
         Err(e) => {
             log::error!("Failed to bind to {requested_addr}: {e}");
-            emit_server_bind_failed(&app_handle_for_bind);
             return Err(Box::new(e));
         }
     };
@@ -2638,15 +2448,12 @@ async fn start_server_internal<R: Runtime>(
         .no_proxy()
         .build()?;
 
-    let api_request_aggregator = Arc::new(ApiRequestAggregator::new());
-    let api_request_aggregator_for_timer = api_request_aggregator.clone();
     let make_svc = make_service_fn(move |_conn| {
         let client = client.clone();
         let local_client = local_client.clone();
         let config = config.clone();
         let ginfer_sessions = ginfer_sessions.clone();
         let provider_configs = provider_configs.clone();
-        let api_request_aggregator = api_request_aggregator.clone();
         let app_handle = app_handle.clone();
 
         async move {
@@ -2658,7 +2465,6 @@ async fn start_server_internal<R: Runtime>(
                     config.clone(),
                     ginfer_sessions.clone(),
                     provider_configs.clone(),
-                    api_request_aggregator.clone(),
                     app_handle.clone(),
                 )
             }))
@@ -2669,7 +2475,6 @@ async fn start_server_internal<R: Runtime>(
         Ok(builder) => builder.serve(make_svc),
         Err(e) => {
             log::error!("Failed to start server on {bound_addr}: {e}");
-            emit_server_bind_failed(&app_handle_for_bind);
             return Err(Box::new(e));
         }
     };
@@ -2683,36 +2488,7 @@ async fn start_server_internal<R: Runtime>(
         Ok(())
     });
 
-    let (analytics_shutdown, mut analytics_shutdown_rx) = oneshot::channel();
-    let analytics_app_handle = app_handle_for_bind.clone();
-    let analytics_task = tokio::spawn(async move {
-        let mut interval =
-            tokio::time::interval(Duration::from_secs(API_REQUEST_SUMMARY_WINDOW_SECS));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        interval.tick().await;
-
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    if let Some(summary) = api_request_aggregator_for_timer.drain() {
-                        emit_api_request_summary(&analytics_app_handle, summary);
-                    }
-                }
-                _ = &mut analytics_shutdown_rx => {
-                    if let Some(summary) = api_request_aggregator_for_timer.drain() {
-                        emit_api_request_summary(&analytics_app_handle, summary);
-                    }
-                    break;
-                }
-            }
-        }
-    });
-
-    *handle_guard = Some(ServerHandle {
-        server_task,
-        analytics_task,
-        analytics_shutdown,
-    });
+    *handle_guard = Some(ServerHandle { server_task });
     log::info!("GChat API server started successfully on port {actual_port}");
     Ok(actual_port)
 }
@@ -2723,10 +2499,6 @@ pub async fn stop_server(
     let handle = server_handle.lock().await.take();
 
     if let Some(handle) = handle {
-        let _ = handle.analytics_shutdown.send(());
-        if let Err(e) = handle.analytics_task.await {
-            log::warn!("Local API Server analytics flush task failed: {e}");
-        }
         handle.server_task.abort();
         log::info!("GChat API server stopped");
     } else {

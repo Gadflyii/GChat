@@ -3,7 +3,7 @@ import { NavChats } from './NavChats'
 import { NavMain } from './NavMain'
 import { NavProjects } from './NavProjects'
 import { useLeftPanel } from '@/hooks/useLeftPanel'
-import { cn, isLlamacppProvider } from '@/lib/utils'
+import { cn, isGinferProvider } from '@/lib/utils'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useAgentMode, type SidebarMode } from '@/hooks/useAgentMode'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -42,8 +42,8 @@ export function LeftSidebar() {
   const providers = useModelProvider((state) => state.providers)
   const isAgentProviderSelected =
     selectedProvider === 'ginfer-lan' ||
-    isLlamacppProvider(selectedProvider) ||
-    providers.some((p) => isLlamacppProvider(p.provider))
+    isGinferProvider(selectedProvider) ||
+    providers.some((p) => isGinferProvider(p.provider))
   const settingsIconRef = useRef<SettingsIconHandle>(null)
   const [showAgentAttention, setShowAgentAttention] = useState(
     () =>

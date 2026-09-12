@@ -187,7 +187,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
         <li role="presentation" className="px-2 pt-3 pb-1 font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Resources</li>
         <SidebarMenuItem>
           <SidebarMenuButton asChild isActive={pathname.startsWith('/engines')}>
-            <Link to={route.engines.index}><IconServer size={16} /><span>Engines</span></Link>
+            <Link to={route.engines.index}><IconServer size={16} /><span>GInfer Hosts</span></Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>

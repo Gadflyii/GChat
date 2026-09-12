@@ -79,7 +79,6 @@ describe('ServiceHub integration', () => {
       'events',
       'hardware',
       'app',
-      'analytic',
       'messages',
       'mcp',
       'threads',

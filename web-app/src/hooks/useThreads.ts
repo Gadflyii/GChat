@@ -6,9 +6,8 @@ import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { useAgentMode } from '@/hooks/useAgentMode'
 import { ExtensionManager } from '@/lib/extension'
 import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
-import posthog from 'posthog-js'
 import { useThreadReadStatus } from '@/stores/thread-read-store'
-import { LOCAL_LLAMACPP_PROVIDER } from '@/lib/utils'
+import { LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 import { RETIRED_LOCAL_PROVIDERS } from '@/hooks/useModelProvider'
 
 type ThreadState = {
@@ -89,7 +88,7 @@ export const useThreads = create<ThreadState>()((set, get) => ({
                   !thread.model?.provider ||
                   thread.model?.provider === 'llama.cpp' ||
                   RETIRED_LOCAL_PROVIDERS.includes(thread.model.provider)
-                    ? LOCAL_LLAMACPP_PROVIDER
+                    ? LOCAL_GINFER_PROVIDER
                     : thread.model.provider,
                 // Cortex migration: take first two parts of the ID (the last is file name which is not needed)
                 id:
@@ -354,13 +353,6 @@ export const useThreads = create<ThreadState>()((set, get) => ({
       .threads()
       .createThread(newThread)
       .then((createdThread) => {
-        posthog.capture('thread_created', {
-          thread_id: createdThread.id,
-          model_id: model.id,
-          provider: model.provider,
-          has_assistant: Boolean(assistant),
-          has_project: Boolean(projectMetadata),
-        })
 
         set((state) => {
           const nextThreads = { ...state.threads }

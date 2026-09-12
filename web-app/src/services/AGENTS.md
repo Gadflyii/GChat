@@ -9,6 +9,10 @@ the upstream multi-backend registry or search index. Optional `releases` on each
 GInfer entry carry the exact contract in `docs/model-management.md`; incomplete
 entries are unavailable, never inferred download targets. Provider registry
 behavior is unchanged. Do not revive GGUF/MLX discovery through the Models page.
+The generic fuzzy Hugging Face search and coding-settings GGUF recommendation
+have been removed. Metadata lookup requires an explicit repository id; conversion
+offers `.ginfer` files only, without GGUF shards, mmproj or MLX companions. The
+older discovery descriptions below are historical, not a shipping contract.
 
 This file documents two parallel remote-configuration features:
 

@@ -71,7 +71,7 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 
 vi.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
-  LOCAL_LLAMACPP_PROVIDER: 'llamacpp-upstream',
+  LOCAL_GINFER_PROVIDER: 'llamacpp-upstream',
 }))
 
 vi.mock('@/hooks/useThreads', () => ({

@@ -54,7 +54,7 @@ export function roleReadiness(
     return {
       status: 'offline',
       message:
-        'No assigned instance is ready. Start a model in Engines or choose another assignment.',
+        'No assigned instance is ready. Start a model in GInfer Hosts or choose another assignment.',
       canStart: false,
     }
   const capable = available.filter(

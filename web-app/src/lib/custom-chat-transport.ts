@@ -551,12 +551,13 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           }
         } else if (effectiveProviderName === 'ginfer') {
           // ginfer maps OpenAI-compatible `reasoning_effort` onto its
-          // artifact's effort template; the budget dropdown drives it.
+          // artifact's effort template, not a fixed token budget.
           const effortByBudget: Partial<Record<typeof reasoningBudget, string>> =
             {
               low: 'low',
               medium: 'medium',
               high: 'high',
+              xhigh: 'xhigh',
             }
           const effort = effortByBudget[reasoningBudget]
           if (effort) reasoningOverride.reasoning_effort = effort

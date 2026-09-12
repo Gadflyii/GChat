@@ -1,21 +1,4 @@
-/**
- * What "the user gave us an API key" means, in one place.
- *
- * Both the provider settings page and onboarding's cloud-provider dialog write
- * keys, and they must agree: the key lives in two places at once — inside the
- * `api-key` entry of `provider.settings[]` (what the settings UI renders) and
- * on the top-level `api_key` mirror (what the chat, the onboarding gate and
- * `switchToModel` read). Writing one without the other yields a provider that
- * looks configured but cannot send a request, or vice versa.
- *
- * `duringOnboarding` is a required parameter rather than being derived here on
- * purpose: `isOnboardingPending` pulls in `provider-registry-store`, which
- * kicks off a network fetch at import time. Keeping that out of this module
- * lets onboarding components import it without dragging a fetch into their
- * import graph.
- */
 
-import { captureProviderKeyConfigured } from '@/lib/onboarding-telemetry'
 import type { ServiceHub } from '@/services'
 
 /**
@@ -66,21 +49,12 @@ export function buildApiKeyUpdate(
 export function saveProviderApiKey(params: {
   provider: ModelProvider
   apiKey: string
-  duringOnboarding: boolean
   updateProvider: (name: string, data: Partial<ModelProvider>) => void
   serviceHub: Pick<ServiceHub, 'providers'>
 }): void {
-  const { provider, apiKey, duringOnboarding, updateProvider, serviceHub } =
+  const { provider, apiKey, updateProvider, serviceHub } =
     params
   const update = buildApiKeyUpdate(provider, apiKey)
-
-  // Only the presence of a key is reported — never the key itself.
-  if (apiKey.length > 0) {
-    captureProviderKeyConfigured({
-      provider: provider.provider,
-      duringOnboarding,
-    })
-  }
 
   updateProvider(provider.provider, { ...provider, ...update })
 

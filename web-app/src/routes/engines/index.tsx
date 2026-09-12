@@ -37,7 +37,7 @@ function EnginesPage() {
     catch (e) { toast.error(String(e)) } finally { setBusy(false) }
   }
   return <div className="flex h-full flex-col">
-    <HeaderPage><div className="flex w-full items-center justify-between"><h1>Engines</h1><Button variant="outline" disabled={refreshing} onClick={() => void refresh().catch((e) => toast.error(String(e)))}>Refresh</Button></div></HeaderPage>
+    <HeaderPage><div className="flex w-full items-center justify-between"><h1>GInfer Hosts</h1><Button variant="outline" disabled={refreshing} onClick={() => void refresh().catch((e) => toast.error(String(e)))}>Refresh</Button></div></HeaderPage>
     <main className="overflow-y-auto p-6 space-y-6">
       <p className="text-muted-foreground">Manage local serving and GInfer hosts on your network. Your computer does not need a local GPU to use remote hosts.</p>
       <label className="flex items-center gap-2"><input type="checkbox" role="switch" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />Discover nearby GInfer hosts</label>

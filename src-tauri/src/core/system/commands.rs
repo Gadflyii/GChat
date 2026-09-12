@@ -1922,7 +1922,7 @@ fn agent_install_spec(
                     vec![
                         "-NoProfile".to_string(),
                         "-Command".to_string(),
-                        "iex \"& { $(irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1) } -SkipSetup -NonInteractive\"".to_string(),
+                        "$ErrorActionPreference='Stop'; try { & ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1))) -SkipSetup -NonInteractive -Json } catch { Write-Error $_; exit 1 }".to_string(),
                     ],
                 )
             } else {
@@ -2608,26 +2608,27 @@ pub async fn install_agent<R: Runtime>(
                 .spawn()
                 .map_err(|e| format!("Failed to spawn '{}': {}", program, e))?;
 
-            // Accumulate output (bounded) so we can classify network failures.
-            let mut captured = String::new();
-            if let Some(stdout) = child.stdout.take() {
-                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                    if captured.len() < 16_384 {
-                        captured.push_str(&line);
-                        captured.push('\n');
+            // Drain both pipes concurrently; a full stderr pipe must not stall stdout.
+            let captured = std::sync::Mutex::new(String::new());
+            let consume = |stream: Box<dyn std::io::Read + Send>| {
+                    for line in BufReader::new(stream).lines().map_while(Result::ok) {
+                        {
+                            let mut tail = captured.lock().unwrap_or_else(|e| e.into_inner());
+                            tail.push_str(&line);
+                            tail.push('\n');
+                            let mut excess = tail.len().saturating_sub(16_384);
+                            while !tail.is_char_boundary(excess) { excess += 1; }
+                            tail.drain(..excess);
+                        }
+                        let _ = app_handle.emit(&event, line);
                     }
-                    let _ = app_handle.emit(&event, line);
-                }
-            }
-            if let Some(stderr) = child.stderr.take() {
-                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                    if captured.len() < 16_384 {
-                        captured.push_str(&line);
-                        captured.push('\n');
-                    }
-                    let _ = app_handle.emit(&event, line);
-                }
-            }
+            };
+            std::thread::scope(|scope| {
+                let consume = &consume;
+                if let Some(stdout) = child.stdout.take() { scope.spawn(move || consume(Box::new(stdout))); }
+                if let Some(stderr) = child.stderr.take() { scope.spawn(move || consume(Box::new(stderr))); }
+            });
+            let captured = captured.into_inner().unwrap_or_else(|e| e.into_inner());
 
             let status = child.wait().map_err(|e| e.to_string())?;
             Ok((status.success(), captured))
@@ -2636,6 +2637,9 @@ pub async fn install_agent<R: Runtime>(
         .map_err(|e| e.to_string())??;
 
     if success {
+        if agent_id_log == "hermes" && !detect_on_native_path("hermes").await {
+            return Err(format!("Hermes installer did not produce a native executable. Retry installation to repair the partial setup. Installer output:\n{captured}"));
+        }
         log::info!("Agent '{}' installed successfully", agent_id_log);
         Ok(())
     } else if output_indicates_network_failure(&captured) {
@@ -2649,8 +2653,8 @@ pub async fn install_agent<R: Runtime>(
         ))
     } else {
         Err(format!(
-            "The installer for '{}' exited with a non-zero status. See the install log for details.",
-            agent_id_log
+            "The installer for '{}' failed. Installer output:\n{}",
+            agent_id_log, captured
         ))
     }
 }

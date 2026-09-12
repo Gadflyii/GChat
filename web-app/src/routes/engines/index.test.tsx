@@ -50,23 +50,27 @@ describe('Engines host intake and launch controls', () => {
     mocks.instances = [{ instance_id: 'instance', session_id: null, display_name: 'Saved model',
       upstream_model_id: 'model', status: 'stopped', configuration: profile, profile }]
     const view = render(<Page />)
-    expect(screen.queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('start', {
       host_id: 'host', instance_id: 'instance', body: {},
     }))
     mocks.instances[0].status = 'ready'
     view.rerender(<Page />)
-    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
     const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
     expect(mocks.command).not.toHaveBeenCalledWith('restart', expect.anything())
     confirmation.mockReturnValue(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('restart', {
       host_id: 'host', instance_id: 'instance', body: { force: false, expected_session_id: null },
     }))
     expect(screen.getByText('Saved model · ready', { selector: 'p' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Lab host/ }))
+    expect(screen.queryByText('Configured instances')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled()
   })
 
   it('requires a hexadecimal fingerprint and numeric pairing code before submitting', async () => {
@@ -84,7 +88,7 @@ describe('Engines host intake and launch controls', () => {
     }))
   })
 
-  it('blocks fractional launch values and the displayed Qwen vision conflict', async () => {
+  it('blocks fractional launch values but allows Qwen Vision with speculation', async () => {
     render(<Page />)
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'model' } })
     expect(screen.getByLabelText(/RTX 5090 \(GPU-one\)/)).toBeChecked()
@@ -95,8 +99,8 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
     fireEvent.change(screen.getByLabelText('Concurrent requests'), { target: { value: '4' } })
     fireEvent.change(screen.getByLabelText('Speculative decoding'), { target: { value: 'auto' } })
-    expect(load).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Qwen Vision requires')
+    expect(load).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Speculative decoding'), { target: { value: 'none' } })
     fireEvent.click(load)
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {

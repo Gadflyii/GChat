@@ -570,7 +570,7 @@ mod tests {
             weights_id: "nvfp4".into(),
         };
         let directory = serde_json::to_vec(
-            &serde_json::json!({"identity":identity,"tp_size":1,"draft_tp":0,"objects":[{}]}),
+            &serde_json::json!({"identity":identity,"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}),
         )
         .unwrap();
         let mut bytes = b"NINFER\0\x03".to_vec();
