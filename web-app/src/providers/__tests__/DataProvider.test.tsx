@@ -246,7 +246,7 @@ describe('DataProvider', () => {
     await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
     expect(mocks.startServer).not.toHaveBeenCalled()
     const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
-    act(() => useEngineHosts.setState({ snapshots: { lan: snapshot } }))
+    act(() => useEngineHosts.setState({ hosts: [{ host_id: 'lan', local: false, name: 'LAN', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot } }))
     await waitFor(() => expect(mocks.setServerStatus).toHaveBeenCalledWith('running'))
     expect(mocks.startServer).toHaveBeenCalledOnce()
     expect(mocks.setServerPort).toHaveBeenCalledWith(1444)
@@ -257,7 +257,7 @@ describe('DataProvider', () => {
 
   it('does not auto-start for an offline LAN instance or when auto-start is disabled', async () => {
     const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
-    useEngineHosts.setState({ snapshots: { lan: snapshot }, errors: { lan: 'offline' } })
+    useEngineHosts.setState({ hosts: [{ host_id: 'lan', local: false, name: 'LAN', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot }, errors: { lan: 'offline' } })
     const view = render(<DataProvider />)
     await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
     expect(mocks.startServer).not.toHaveBeenCalled()

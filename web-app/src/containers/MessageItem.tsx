@@ -441,6 +441,7 @@ export const MessageItem = memo(
       const toolCount = block.tools.length || summaryToolCount
       const stages = block.agentSummary?.stages ?? []
       const finishReason = block.agentSummary?.finish_reason
+      const runError = block.agentSummary?.error
       const incompleteReason =
         finishReason === 'max_steps' || finishReason === 'max_cycles'
       const instanceMetrics = aggregateAgentMetrics(
@@ -470,6 +471,7 @@ export const MessageItem = memo(
             count: durationSeconds,
           })}
           hasDetails={toolCount > 0 || stages.length > 0 || incompleteReason}
+          error={runError?.message}
         >
           {incompleteReason && (
             <ActivityDetail label="Run outcome">
@@ -568,12 +570,6 @@ export const MessageItem = memo(
               {loop.message}
             </div>
           ))}
-          {block.agentSummary?.error && (
-            <div className="py-1 text-xs text-destructive">
-              {block.agentSummary.error.category}:{' '}
-              {block.agentSummary.error.message}
-            </div>
-          )}
         </AgentActivity>
       )
     }

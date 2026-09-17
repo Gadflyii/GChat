@@ -4,6 +4,7 @@ import { continuationTask } from '@/lib/agent-continuation'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
 import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
 import { AgentLiveRuns } from '@/containers/AgentLiveRuns'
+import { useStudioRuns } from '@/stores/studio-run-store'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   IconAlertTriangle,
@@ -359,6 +360,7 @@ export function AgentStudioPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
+  const historyRevision = useStudioRuns((s) => s.historyRevision)
 
   useEffect(() => {
     if (!draft && definitions.length > 0) {
@@ -371,10 +373,12 @@ export function AgentStudioPage() {
       .then(([nextTemplates, nextRuns]) => {
         setTemplates(nextTemplates)
         setRuns(nextRuns)
-        setSelectedRunId((current) => current ?? nextRuns[0]?.id ?? null)
+        setSelectedRunId((current) =>
+          nextRuns.some((run) => run.id === current) ? current : nextRuns[0]?.id ?? null
+        )
       })
       .catch((reason) => toast.error(String(reason)))
-  }, [])
+  }, [historyRevision])
 
   useEffect(() => {
     if (view !== 'definitions') return
@@ -755,8 +759,10 @@ function DefinitionEditor({
                         name: draft.name,
                         description: draft.description,
                         instructions: draft.instructions,
+                        defaultGoal: draft.defaultGoal,
                         skills: draft.skills,
                         maxSteps: draft.maxSteps,
+                        maxOutputTokens: draft.maxOutputTokens,
                         outputContract: draft.outputContract,
                         modelInstanceId: draft.modelInstanceId,
                         reasoningEffort: draft.reasoningEffort,
@@ -826,6 +832,28 @@ function DefinitionEditor({
       </section>
 
       <section className="grid gap-5">
+        <Field
+          label="Default goal"
+          help="What should this agent accomplish? Save a ready-to-run task here. Run setup starts with this goal; edits there apply only to that run. Operating instructions below describe how the agent should work."
+        >
+          <Textarea
+            aria-label="Default goal"
+            rows={4}
+            maxLength={24000}
+            value={draft.defaultGoal ?? ''}
+            placeholder="Describe the outcome, scope, limits, and what a finished result includes. Example: Run the existing performance tests in the selected workspace without modifying code. Report which tests passed or failed, measured timings, and any tests you could not run."
+            onChange={(event) => common({ defaultGoal: event.target.value })}
+          />
+        </Field>
+        <details className="rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-sm font-medium">Advanced generation settings</summary>
+          <div className="mt-3">
+            <Field label="Output budget per model call" help="Auto balances reasoning effort and available context. This includes thinking and the answer/tool call, not the number of tool steps. An explicit limit is never automatically increased.">
+              <Input type="number" min={256} max={262144} placeholder="Auto" value={draft.maxOutputTokens ?? ''}
+                onChange={(event) => common({ maxOutputTokens: event.target.value === '' ? null : Number(event.target.value) })} />
+            </Field>
+          </div>
+        </details>
         <Field label={copy.instructionsLabel} help={copy.instructionsHelp}>
           <Textarea
             rows={8}

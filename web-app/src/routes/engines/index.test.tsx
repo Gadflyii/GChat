@@ -50,6 +50,11 @@ describe('Engines host intake and launch controls', () => {
     mocks.instances = [{ instance_id: 'instance', session_id: null, display_name: 'Saved model',
       upstream_model_id: 'model', status: 'stopped', configuration: profile, profile }]
     const view = render(<Page />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+    expect(screen.getByText('Edit server instance settings').closest('details')).toHaveAttribute('open')
+    expect(screen.getByLabelText('Custom model')).toHaveFocus()
+    expect(screen.getByLabelText('Context tokens')).toHaveValue(8192)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }))
     expect(screen.getByRole('button', { name: 'Reload' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('start', {
@@ -66,11 +71,41 @@ describe('Engines host intake and launch controls', () => {
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('restart', {
       host_id: 'host', instance_id: 'instance', body: { force: false, expected_session_id: null },
     }))
-    expect(screen.getByText('Saved model · ready', { selector: 'p' })).toBeInTheDocument()
+    expect(screen.getByText(/Instance 1 · Saved model .* · ready/, { selector: 'p' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Lab host/ }))
-    expect(screen.queryByText('Configured instances')).not.toBeInTheDocument()
+    expect(screen.queryByText('Server details')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled()
+  })
+
+  it('labels adjacent selectors and resolves generated instance names without changing command IDs', async () => {
+    const profile: EngineLaunchProfile = {
+      model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 131072, concurrency: 4,
+      vision: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
+      kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
+    }
+    mocks.instances = ['stopped', 'ready'].map((status, index) => ({
+      instance_id: `internal-id-${index}`, session_id: null, display_name: 'model',
+      upstream_model_id: 'model', status: status as EngineInstance['status'], configuration: profile, profile,
+    }))
+    render(<Page />)
+    const instance = screen.getByRole('combobox', { name: 'Lab host serving instance' })
+    const model = screen.getByRole('combobox', { name: 'Lab host model' })
+    expect(instance.closest('label')).toHaveTextContent('Server instance')
+    expect(model.closest('label')).toHaveTextContent('Model')
+    expect(instance).toHaveValue('internal-id-1')
+    const hardwareProfile = screen.getByRole('combobox', { name: 'Hardware profile' })
+    expect(model.parentElement?.parentElement).toBe(hardwareProfile.parentElement?.parentElement)
+    expect(model.parentElement?.parentElement?.querySelectorAll('select')).toHaveLength(2)
+    expect(model.compareDocumentPosition(hardwareProfile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(instance).toHaveTextContent('Qwen3.8 27B · NVFP4 · 4 concurrent · 131,072 context · GPU 1')
+    expect(instance).not.toHaveTextContent('internal-id')
+    expect(model).toHaveTextContent('Qwen3.8 27B · NVFP4')
+    fireEvent.change(instance, { target: { value: 'internal-id-0' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Start', exact: true }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('start', {
+      host_id: 'host', instance_id: 'internal-id-0', body: {},
+    }))
   })
 
   it('requires a hexadecimal fingerprint and numeric pairing code before submitting', async () => {
@@ -90,8 +125,9 @@ describe('Engines host intake and launch controls', () => {
 
   it('blocks fractional launch values but allows Qwen Vision with speculation', async () => {
     render(<Page />)
-    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'model' } })
-    expect(screen.getByLabelText(/RTX 5090 \(GPU-one\)/)).toBeChecked()
+    fireEvent.click(screen.getByText('Custom server settings'))
+    fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
+    expect(screen.getByLabelText('GPU 1: RTX 5090')).toBeChecked()
     const load = screen.getByRole('button', { name: 'Load model' })
     expect(load).toBeEnabled()
     fireEvent.change(screen.getByLabelText('Concurrent requests'), { target: { value: '1.5' } })
@@ -111,8 +147,9 @@ describe('Engines host intake and launch controls', () => {
   it('retains unavailable host inventory without permitting a new load', () => {
     mocks.error = 'Connection refused'
     render(<Page />)
-    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'model' } })
-    fireEvent.click(screen.getByLabelText(/RTX 5090 \(GPU-one\)/))
+    fireEvent.click(screen.getByText('Custom server settings'))
+    fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
+    fireEvent.click(screen.getByLabelText('GPU 1: RTX 5090'))
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('last known')
     expect(mocks.command).not.toHaveBeenCalledWith('launch', expect.anything())

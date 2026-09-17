@@ -198,6 +198,17 @@ pub(crate) struct ScriptedResponse {
 }
 
 impl ScriptedResponse {
+    pub(crate) fn tool_call(name: &str, arguments: Value) -> Self {
+        let mut response = Self::completion("");
+        response.body["choices"][0]["message"]["tool_calls"] = serde_json::json!([{
+            "type":"function", "id":"fixture-call", "function":{"name":name,"arguments":arguments.to_string()}
+        }]);
+        response
+    }
+    pub(crate) fn with_finish_reason(mut self, reason: &str) -> Self {
+        self.body["x_ginfer"]["finish_reason"] = serde_json::json!(reason);
+        self
+    }
     pub(crate) fn completion(content: impl Into<String>) -> Self {
         Self {
             status: StatusCode::OK,
@@ -353,6 +364,14 @@ async fn serve_ginfer(
             StatusCode::OK,
             serde_json::json!({"object": "list", "data": [model]}),
         ));
+    }
+    if request.method() == Method::POST && request.uri().path() == "/v1/chat/completions/count_tokens" {
+        let body = to_bytes(request.into_body()).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        // Deterministic fixture tokenizer; production always uses the engine's tokenizer.
+        let text = payload["messages"].as_array().unwrap().iter()
+            .map(|message| message["content"].as_str().unwrap_or("").len()).sum::<usize>();
+        return Ok(json_response(StatusCode::OK, serde_json::json!({"input_tokens":text / 4 + 32})));
     }
     if request.method() != Method::POST || request.uri().path() != "/v1/chat/completions" {
         return Ok(json_response(

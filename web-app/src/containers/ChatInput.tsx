@@ -199,9 +199,11 @@ const ChatInput = memo(function ChatInput({
   )
   const effectiveAgentMode =
     isAgentMode && !projectId && isAgentProviderSelected
+  const skillsAvailable = !projectId && isAgentProviderSelected
+  const activeSkill = useAgentMode((state) => state.activeSkills[agentModeKey])
   const { skills: agentSkills, loading: agentSkillsLoading } =
-    useAgentSkills(effectiveAgentMode)
-  const { definitions: agentDefinitions } =
+    useAgentSkills(skillsAvailable)
+  const { definitions: agentDefinitions, loading: agentDefinitionsLoading } =
     useAgentDefinitions(effectiveAgentMode)
   const [selectedAgentDefinitionId, setSelectedAgentDefinitionId] = useState(
     preselectedAgentDefinitionId ?? 'general'
@@ -234,27 +236,27 @@ const ChatInput = memo(function ChatInput({
   }, [agentModeKey, isAgentProviderSelected, isAgentMode, setAgentMode])
 
   useEffect(() => {
-    if (effectiveAgentMode) return
+    if (skillsAvailable) return
     setSelectedAgentSkill(null)
     setSelectedAgentDefinitionId('general')
     setAgentSkillSlashQuery(null)
     setAgentSkillMenuOpen(false)
-  }, [effectiveAgentMode])
+  }, [skillsAvailable])
 
   useEffect(() => {
-    if (!effectiveAgentMode) return
-    const requested = preselectedAgentDefinitionId ?? selectedAgentDefinitionId
-    if (agentDefinitions.some((definition) => definition.id === requested)) {
-      setSelectedAgentDefinitionId(requested)
-    } else if (agentDefinitions.length > 0) {
-      setSelectedAgentDefinitionId(agentDefinitions[0].id)
-    } else {
+    if (preselectedAgentDefinitionId) setSelectedAgentDefinitionId(preselectedAgentDefinitionId)
+  }, [preselectedAgentDefinitionId])
+
+  useEffect(() => {
+    if (!effectiveAgentMode || agentDefinitionsLoading) return
+    if (selectedAgentDefinitionId !== 'general' &&
+      !agentDefinitions.some((definition) => definition.id === selectedAgentDefinitionId)) {
       setSelectedAgentDefinitionId('general')
     }
   }, [
     agentDefinitions,
     effectiveAgentMode,
-    preselectedAgentDefinitionId,
+    agentDefinitionsLoading,
     selectedAgentDefinitionId,
   ])
 
@@ -264,7 +266,7 @@ const ChatInput = memo(function ChatInput({
       return
     }
     if (
-      !effectiveAgentMode ||
+      !skillsAvailable ||
       agentSkillsLoading ||
       preselectedAgentSkillAppliedRef.current === preselectedAgentSkillName
     ) {
@@ -279,7 +281,7 @@ const ChatInput = memo(function ChatInput({
   }, [
     agentSkills,
     agentSkillsLoading,
-    effectiveAgentMode,
+    skillsAvailable,
     preselectedAgentSkillName,
   ])
 
@@ -587,7 +589,7 @@ const ChatInput = memo(function ChatInput({
   const MCPToolComponent = mcpExtension?.getToolComponent?.()
 
   const updateAgentSkillSlashQuery = (value: string, cursor: number | null) => {
-    if (!effectiveAgentMode) return
+    if (!skillsAvailable) return
     const nextQuery = findAgentSkillSlashQuery(value, cursor)
     setAgentSkillSlashQuery(nextQuery)
     setAgentSkillMenuOpen(nextQuery !== null)
@@ -607,6 +609,13 @@ const ChatInput = memo(function ChatInput({
   }
 
   const handleSendMessage = async (prompt: string) => {
+    const explicitSkill = prompt.match(/^\/([a-z0-9-]+)(?:\s|$)/)?.[1]
+    const skillName = selectedAgentSkill?.name ??
+      (agentSkills.some((skill) => skill.name === explicitSkill) ? explicitSkill : undefined) ?? activeSkill
+    if (skillName) {
+      useAgentMode.getState().setActiveSkill(agentModeKey, skillName)
+      if (explicitSkill === skillName) prompt = prompt.replace(/^\/[^\s]+\s*/, '')
+    }
     if (!selectedModel) {
       // Model preloading is off by default, so "nothing selected yet" is the
       // normal state on every launch and this hint is now routine rather than
@@ -660,11 +669,11 @@ const ChatInput = memo(function ChatInput({
         onSubmit(
           prompt,
           submissionFiles,
-          selectedAgentSkill?.name,
-          selectedAgentDefinitionId
+          skillName,
+          skillName === 'agent-builder' ? 'general' : selectedAgentDefinitionId
         )
       } else {
-        onSubmit(prompt, submissionFiles, selectedAgentSkill?.name)
+        onSubmit(prompt, submissionFiles, skillName)
       }
       setPrompt('')
       setSelectedAgentSkill(null)
@@ -701,7 +710,7 @@ const ChatInput = memo(function ChatInput({
         text: prompt,
         files: files.length > 0 ? files : [],
         documents: docsSnapshot.length > 0 ? docsSnapshot : undefined,
-        agentSkillName: selectedAgentSkill?.name,
+        agentSkillName: skillName,
         agentDefinitionId: effectiveAgentMode
           ? selectedAgentDefinitionId
           : undefined,
@@ -2222,7 +2231,7 @@ const ChatInput = memo(function ChatInput({
         <div
           className={cn(
             'relative p-0.5 rounded-3xl',
-            effectiveAgentMode ? 'overflow-visible' : 'overflow-hidden',
+            skillsAvailable ? 'overflow-visible' : 'overflow-hidden',
             isStreaming && 'opacity-70'
           )}
         >
@@ -2359,7 +2368,7 @@ const ChatInput = memo(function ChatInput({
                   )}
                 </div>
               )}
-              {effectiveAgentMode && (
+              {skillsAvailable && (
                 <AgentSkillSlashMenu
                   skills={eligibleAgentSkills}
                   activeIndex={agentSkillActiveIndex}
@@ -2370,6 +2379,12 @@ const ChatInput = memo(function ChatInput({
                 />
               )}
               <div className="relative min-w-0 w-full px-4 pt-3">
+                {activeSkill && !selectedAgentSkill && (
+                  <div className="mb-2 flex items-center gap-2 text-xs text-primary">
+                    <span>Skill: /{activeSkill}</span>
+                    <button type="button" onClick={() => useAgentMode.getState().setActiveSkill(agentModeKey)}>Exit skill</button>
+                  </div>
+                )}
                 {selectedAgentSkill && (
                   <span
                     ref={agentSkillTokenRef}
@@ -2590,6 +2605,7 @@ const ChatInput = memo(function ChatInput({
                               setSelectedAgentDefinitionId(event.target.value)
                             }
                           >
+                            <option value="general">Default agent (no workflow)</option>
                             {agentDefinitions.map((definition) => (
                               <option key={definition.id} value={definition.id}>
                                 {definition.name}
@@ -2785,8 +2801,10 @@ const ChatInput = memo(function ChatInput({
                     variant="destructive"
                     size="icon-sm"
                     className="rounded-full mr-1 mb-1"
+                    aria-label="Stop generation"
                     onClick={() => {
-                      if (currentThreadId) stopStreaming(currentThreadId)
+                      if (onStop) onStop()
+                      else if (currentThreadId) stopStreaming(currentThreadId)
                     }}
                   >
                     <IconPlayerStopFilled />

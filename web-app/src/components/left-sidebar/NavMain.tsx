@@ -164,7 +164,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             className="data-[active=true]:bg-sidebar-foreground/15"
           >
             <Link to={route.agents.index}>
-              <IconSparkles className="size-4 text-foreground/70" />
+              <IconSparkles className="size-4 text-primary" />
               <span>Agent Studio</span>
             </Link>
           </SidebarMenuButton>
@@ -177,7 +177,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
               className="data-[active=true]:bg-sidebar-foreground/15"
             >
               <Link to={route.hermes.index}>
-                <IconSparkles className="size-4 text-primary" />
+                <IconSparkles className="size-4 text-white" />
                 <span>Hermes</span>
               </Link>
             </SidebarMenuButton>

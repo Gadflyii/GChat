@@ -37,7 +37,7 @@ export function AgentRunSetup({
 }) {
   const [showPools, setShowPools] = useState(false)
   const { catalog, error: catalogError, refresh } = useStudioCatalog()
-  const [task, setTask] = useState(initialTask)
+  const [task, setTask] = useState(initialTask || definition.defaultGoal || '')
   const [workspace, setWorkspace] = useState(initialWorkspace)
   const [workspaceValid, setWorkspaceValid] = useState(false)
   const [assignments, setAssignments] = useState(defaultAssignments(definition))

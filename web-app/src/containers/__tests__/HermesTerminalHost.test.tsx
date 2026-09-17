@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HermesTerminalHost } from '@/containers/HermesTerminalHost'
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   resizeTerminal: vi.fn(),
   stopTerminal: vi.fn(),
   getTerminalStatus: vi.fn(),
+  updateHermes: vi.fn(),
 }))
 
 const hermesState = vi.hoisted(() => ({
@@ -74,6 +75,7 @@ vi.mock('@/services/terminal/tauri', () => ({
   resizeTerminal: mocks.resizeTerminal,
   stopTerminal: mocks.stopTerminal,
   getTerminalStatus: mocks.getTerminalStatus,
+  updateHermes: mocks.updateHermes,
   base64ToBytes: vi.fn(() => new Uint8Array()),
   terminalBinaryStringToBytes: vi.fn(() => new Uint8Array()),
 }))
@@ -178,13 +180,53 @@ describe('HermesTerminalHost', () => {
       viaWsl: false,
       configPath: '/home/user/.hermes/config.yaml',
     })
-    mocks.spawnTerminal.mockResolvedValue({
+    mocks.spawnTerminal.mockImplementation(async (request) => ({
       phase: 'running',
       generation: 1,
       cwd: '/data/agent-workspace',
-      launch: 'hermes',
+      launch: request.launch,
       replayComplete: true,
+    }))
+  })
+
+  it('confirms, shows background progress, and returns to the normal Hermes TUI', async () => {
+    let finishUpdate!: (value: { logPath: string }) => void
+    mocks.updateHermes.mockImplementation((_path, progress) => {
+      progress('Downloading and installing updates')
+      return new Promise((resolve) => { finishUpdate = resolve })
     })
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    render(<HermesTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('Hermes is running')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Update Hermes' }))
+    expect(screen.getByText(/Updating stops this Hermes session/)).toBeInTheDocument()
+    expect(mocks.stopTerminal).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and update' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open Hermes' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Downloading and installing updates')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Open Hermes' })).toBeDisabled()
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+    finishUpdate({ logPath: '/hermes/gchat-update.log' })
+    await waitFor(() => expect(screen.getByText('Update Successful')).toBeInTheDocument())
+    expect(screen.queryByText('Diagnostics')).not.toBeInTheDocument()
+    expect(screen.queryByText(/theme will be applied/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Hermes' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Update Hermes' })).toBeInTheDocument())
+    expect(mocks.spawnTerminal).toHaveBeenLastCalledWith(expect.objectContaining({ launch: 'hermes' }))
+  })
+
+  it('shows a retryable failure without opening an updater terminal', async () => {
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.updateHermes.mockRejectedValue(new Error('Close other Hermes sessions and retry.'))
+    render(<HermesTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('Hermes is running')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Update Hermes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and update' }))
+    await waitFor(() => expect(screen.getByText('Update needs attention')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Retry update' })).toBeEnabled()
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
   })
 
   it('starts a separate themed Hermes TUI when its tab is first opened', async () => {

@@ -28,7 +28,7 @@
   "dependencies": {
     "@gchat/core": "../../core/package.tgz",
     "@tauri-apps/api": "2.8.0",
-    "@tauri-apps/plugin-http": "2.5.0",
+    "@tauri-apps/plugin-http": "2.5.7",
     "@tauri-apps/plugin-log": "^2.6.0",
     "fetch-retry": "^5.0.6",
     "ulidx": "2.4.1"

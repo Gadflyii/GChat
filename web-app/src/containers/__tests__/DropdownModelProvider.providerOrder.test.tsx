@@ -6,9 +6,13 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 import { useFavoriteModel } from '@/hooks/useFavoriteModel'
 import type { ModelsService } from '@/services/models/types'
 import { seedServiceHub } from '@/test/service-hub'
+import { useAppState } from '@/hooks/useAppState'
 
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: vi.fn(),
+}))
+vi.mock('@/stores/provider-registry-store', () => ({
+  isKnownProvider: (name: string) => ['openai', 'anthropic', 'openrouter'].includes(name),
 }))
 
 // The component subscribes with selectors, so the mock has to apply them.
@@ -113,6 +117,7 @@ describe('DropdownModelProvider - provider ordering', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    useAppState.setState({ activeModels: ['local.gguf'] })
     vi.mocked(useFavoriteModel).mockReturnValue({
       favoriteModels: [],
       addFavorite: vi.fn(),
@@ -160,5 +165,27 @@ describe('DropdownModelProvider - provider ordering', () => {
     render(<DropdownModelProvider />)
 
     expect(providerHeaderOrder().indexOf('ginfer')).toBe(0)
+  })
+
+  it('hides unloaded local models and unconfigured providers, including their headings', () => {
+    useAppState.setState({ activeModels: [] })
+    const providers = [...mockProviders, { provider: 'google', active: true, api_key: '', settings: [], models: [] },
+      { provider: 'openrouter', active: true, api_key: '', settings: [], models: [{ id: 'unconfigured-model', capabilities: [] }] }]
+    mockModelProvider({ providers, selectedProvider: 'openai', selectedModel: mockProviders[1].models[0],
+      getProviderByName: (name: string) => providers.find(p => p.provider === name), selectModelProvider: vi.fn() })
+    render(<DropdownModelProvider />)
+    expect(providerHeaderOrder()).toEqual(['anthropic', 'openai'])
+    expect(screen.queryByTitle('local.gguf')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('unconfigured-model')).not.toBeInTheDocument()
+  })
+
+  it('updates local availability without exposing other installed models', () => {
+    mockProviders[0].models.push({ id: 'unloaded-model', capabilities: [] })
+    const view = render(<DropdownModelProvider />)
+    expect(screen.queryByTitle('unloaded-model')).not.toBeInTheDocument()
+    useAppState.setState({ activeModels: [] })
+    view.rerender(<DropdownModelProvider />)
+    expect(screen.queryByTitle('local.gguf')).not.toBeInTheDocument()
+    mockProviders[0].models.pop()
   })
 })

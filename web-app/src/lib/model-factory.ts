@@ -51,7 +51,8 @@ import {
 } from '@ai-sdk/openai-compatible'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createXai } from '@ai-sdk/xai'
-import { invoke, Channel } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core'
+import { inferenceFetch } from '@/lib/inference-fetch'
 import { SessionInfo } from '@gchat/core'
 import { fetch as httpFetch } from '@tauri-apps/plugin-http'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
@@ -64,21 +65,6 @@ import {
   type GInferContextPolicy,
 } from '@/lib/smart-context'
 
-/**
- * Inactivity budget (seconds) handed to `stream_local_http` on this generic
- * local-provider path, which has no access to a provider's own `timeout`
- * setting (the llama.cpp / MLX extensions pass theirs instead).
- *
- * This bounds the wait for response headers and the gap between consecutive
- * SSE chunks — NOT total generation time. A model that keeps emitting tokens
- * streams for as long as it needs; only a stream that goes silent this long
- * is treated as dead.
- *
- * Matches `STREAM_IDLE_TIMEOUT_FLOOR_SECS` in src-tauri/src/core/http.rs, which
- * floors this value anyway — kept in sync so reading either side gives the
- * same answer.
- */
-const LOCAL_STREAM_IDLE_TIMEOUT_SECS = 1800
 
 /**
  * llama.cpp-style `timings` block emitted by some local inference servers.
@@ -293,13 +279,7 @@ function createCustomFetch(
   }
 }
 
-/**
- * Fetch that bypasses tauri_plugin_http for localhost POST requests.
- * The plugin's ReadableStream bridge does not properly deliver SSE chunks
- * from local inference servers, causing the UI to hang. This uses the
- * stream_local_http Tauri command + IPC Channel to relay response bytes
- * directly to a standard ReadableStream that the AI SDK can consume.
- */
+/** Prepare local context, then use the version-matched native HTTP bridge. */
 function createLocalStreamingFetch(
   fallbackFetch: typeof httpFetch,
   parameters: Record<string, unknown>,
@@ -404,141 +384,7 @@ function createLocalStreamingFetch(
       }
     }
 
-    const chunks: string[] = []
-    let done = false
-    let error: string | null = null
-    let notifyPull: (() => void) | null = null
-    let notifyFirst: (() => void) | null = null
-
-    const channel = new Channel<{ data: string }>()
-    let firstChunkMarked = false
-    channel.onmessage = ({ data }: { data: string }) => {
-      chunks.push(data)
-      if (!firstChunkMarked) {
-        firstChunkMarked = true
-        void import('@/lib/ttft-timing').then(({ ttftMark }) =>
-          ttftMark('epsilonFirstChunk')
-        )
-      }
-      notifyFirst?.()
-      notifyFirst = null
-      notifyPull?.()
-      notifyPull = null
-    }
-
-    const markDone = () => {
-      done = true
-      notifyFirst?.()
-      notifyFirst = null
-      notifyPull?.()
-      notifyPull = null
-    }
-
-    const { ttftMark } = await import('@/lib/ttft-timing')
-    ttftMark('epsilonInvoke')
-
-    // #region agent log
-    // Diagnostic probe: dump the FINAL outgoing body for /chat/completions
-    // straight to console.info so it appears in the Web Inspector log.
-    // We log the reasoning-relevant fields explicitly + a list of all
-    // top-level keys, so we can verify whether the disable-reasoning
-    // override survived all the way to the wire.
-    try {
-      if (urlStr.includes('/chat/completions')) {
-        let parsed: Record<string, unknown> = {}
-        try {
-          parsed = JSON.parse(bodyStr) as Record<string, unknown>
-        } catch {
-          /* non-JSON */
-        }
-        console.info('[final-body-payload]', {
-          url: urlStr,
-          bodyLen: bodyStr.length,
-          messagesCount: Array.isArray(parsed.messages)
-            ? (parsed.messages as Array<unknown>).length
-            : null,
-          model: parsed.model,
-          stream: parsed.stream,
-          enable_thinking_top: parsed.enable_thinking ?? '<absent>',
-          chat_template_kwargs: parsed.chat_template_kwargs ?? '<absent>',
-          reasoning_budget: parsed.reasoning_budget ?? '<absent>',
-          thinking_budget: parsed.thinking_budget ?? '<absent>',
-          thinking: parsed.thinking ?? '<absent>',
-          reasoning_effort: parsed.reasoning_effort ?? '<absent>',
-          topLevelKeys: Object.keys(parsed),
-        })
-      }
-    } catch {
-      /* probe must never throw */
-    }
-    // #endregion
-
-    const cmdPromise = invoke<number>('stream_local_http', {
-      url: urlStr,
-      headers: hdrs,
-      body: bodyStr,
-      timeoutSecs: LOCAL_STREAM_IDLE_TIMEOUT_SECS,
-      onChunk: channel,
-    })
-
-    cmdPromise
-      .then(() => markDone())
-      .catch((e) => {
-        error = String(e)
-        markDone()
-      })
-
-    if (init?.signal) {
-      const onAbort = () => {
-        if (!error) error = 'Request aborted'
-        markDone()
-      }
-      if (init.signal.aborted) onAbort()
-      else init.signal.addEventListener('abort', onAbort, { once: true })
-    }
-
-    // Wait for either first data chunk or early connection error
-    if (chunks.length === 0 && !done) {
-      await new Promise<void>((r) => {
-        notifyFirst = r
-      })
-    }
-
-    // Connection-level error before any data: return a proper error Response
-    const currentError = error as string | null
-    if (currentError && chunks.length === 0) {
-      const m = currentError.match(/^HTTP (\d+):\s*([\s\S]*)$/)
-      return new Response(
-        m ? m[2] : JSON.stringify({ error: { message: currentError } }),
-        {
-          status: m ? parseInt(m[1]) : 502,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-    }
-
-    const enc = new TextEncoder()
-    const readable = new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        while (chunks.length === 0 && !done) {
-          await new Promise<void>((r) => {
-            notifyPull = r
-          })
-        }
-        while (chunks.length > 0) {
-          controller.enqueue(enc.encode(chunks.shift()!))
-        }
-        if (done) {
-          if (error) controller.error(new Error(error))
-          else controller.close()
-        }
-      },
-    })
-
-    return new Response(readable, {
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream' },
-    })
+    return inferenceFetch(fallbackFetch, input, { ...init, body: bodyStr })
   }
 }
 

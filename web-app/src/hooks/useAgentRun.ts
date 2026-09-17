@@ -135,6 +135,9 @@ export function reduceAgentRunState(
               ? {
                   ...stage,
                   activity: event.event.type,
+                  ...(event.event.type === 'context_status'
+                    ? { context: event.event }
+                    : {}),
                   ...(event.event.type === 'inference_measured'
                     ? { inference: event.event.inference }
                     : {}),
@@ -145,6 +148,7 @@ export function reduceAgentRunState(
         },
       }
     case 'inference_measured':
+    case 'context_status':
       return state
     case 'stage_finished':
       return {

@@ -181,7 +181,7 @@ async fn approved_memories_reach_the_agent_prompt_and_survive_session_persistenc
             .await
             .unwrap();
     assert!(loaded
-        .render_conversation(8192)
+        .render_conversation()
         .contains("Important final detail: run pnpm test."));
     assert_eq!(fixture.approval.requests().len(), 1);
 }

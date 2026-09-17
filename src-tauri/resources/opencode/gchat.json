@@ -32,8 +32,8 @@
       "light": "lightPrimary"
     },
     "secondary": {
-      "dark": "darkBlue",
-      "light": "lightBlue"
+      "dark": "darkPrimary",
+      "light": "lightPrimary"
     },
     "accent": {
       "dark": "darkPrimary",

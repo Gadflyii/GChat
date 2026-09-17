@@ -27,6 +27,10 @@ import {
   type BenchmarkSessionInfo,
 } from '@/services/benchmark/tauri'
 import { useBenchmarkStore } from '@/stores/benchmark-store'
+import { useEngineHosts } from '@/stores/engine-hosts-store'
+import { useModelProvider } from '@/hooks/useModelProvider'
+import { engineAlias } from '@/services/engines'
+import { BenchmarkServerSettings } from '@/containers/BenchmarkServerSettings'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.benchmark.index as any)({
@@ -127,33 +131,30 @@ function runLabel(run: BenchmarkResult): string {
   })}`
 }
 
-function ThroughputChart({ points }: { points: BenchmarkPoint[] }) {
+type ThroughputPoint = Pick<BenchmarkPoint, 'concurrency' | 'prompt_tokens_per_second' | 'generation_tokens_per_second'>
+
+export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
   const width = 760
   const height = 280
-  const margin = { left: 66, right: 24, top: 24, bottom: 44 }
+  const margin = { left: 82, right: 82, top: 24, bottom: 44 }
   const plotWidth = width - margin.left - margin.right
   const plotHeight = height - margin.top - margin.bottom
-  const maximum = Math.max(
-    1,
-    ...points.flatMap((point) => [
-      point.prompt_tokens_per_second,
-      point.generation_tokens_per_second,
-    ])
-  )
+  const promptMaximum = Math.max(1, ...points.map((point) => point.prompt_tokens_per_second))
+  const generationMaximum = Math.max(1, ...points.map((point) => point.generation_tokens_per_second))
   const x = (index: number) =>
     margin.left +
     (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth)
-  const y = (value: number) => margin.top + plotHeight - (value / maximum) * plotHeight
-  const path = (selector: (point: BenchmarkPoint) => number) =>
+  const y = (value: number, maximum: number) => margin.top + plotHeight - (value / maximum) * plotHeight
+  const path = (selector: (point: ThroughputPoint) => number, maximum: number) =>
     points
-      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index)} ${y(selector(point))}`)
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index)} ${y(selector(point), maximum)}`)
       .join(' ')
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="min-w-0 w-full">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="min-w-[620px] w-full"
+        className="h-[clamp(160px,30dvh,280px)] w-full"
         role="img"
         aria-label="Prompt and generation throughput by concurrency"
       >
@@ -175,19 +176,27 @@ function ThroughputChart({ points }: { points: BenchmarkPoint[] }) {
                 textAnchor="end"
                 className="fill-muted-foreground text-[11px]"
               >
-                {formatRate(maximum * fraction)}
+                {formatRate(promptMaximum * fraction)}
+              </text>
+              <text
+                x={width - margin.right + 10}
+                y={gridY + 4}
+                textAnchor="start"
+                className="fill-muted-foreground text-[11px]"
+              >
+                {formatRate(generationMaximum * fraction)}
               </text>
             </g>
           )
         })}
-        <path d={path((point) => point.prompt_tokens_per_second)} fill="none" stroke="#20b8a6" strokeWidth="3" />
-        <path d={path((point) => point.generation_tokens_per_second)} fill="none" stroke="#7dd3fc" strokeWidth="3" />
+        <path d={path((point) => point.prompt_tokens_per_second, promptMaximum)} fill="none" stroke="#20b8a6" strokeWidth="3" />
+        <path d={path((point) => point.generation_tokens_per_second, generationMaximum)} fill="none" stroke="#7dd3fc" strokeWidth="3" strokeDasharray="7 4" />
         {points.map((point, index) => (
           <g key={point.concurrency}>
-            <circle cx={x(index)} cy={y(point.prompt_tokens_per_second)} r="5" fill="#20b8a6">
+            <circle cx={x(index)} cy={y(point.prompt_tokens_per_second, promptMaximum)} r="5" fill="#20b8a6">
               <title>{`C${point.concurrency} prompt: ${formatRate(point.prompt_tokens_per_second)} t/s`}</title>
             </circle>
-            <circle cx={x(index)} cy={y(point.generation_tokens_per_second)} r="5" fill="#7dd3fc">
+            <circle cx={x(index)} cy={y(point.generation_tokens_per_second, generationMaximum)} r="4" fill="#7dd3fc">
               <title>{`C${point.concurrency} generation: ${formatRate(point.generation_tokens_per_second)} t/s`}</title>
             </circle>
             <text
@@ -207,12 +216,21 @@ function ThroughputChart({ points }: { points: BenchmarkPoint[] }) {
           textAnchor="middle"
           className="fill-muted-foreground text-[11px]"
         >
-          tokens / second
+          Prompt t/s (left)
+        </text>
+        <text
+          x={width - 16}
+          y={height / 2}
+          transform={`rotate(90 ${width - 16} ${height / 2})`}
+          textAnchor="middle"
+          className="fill-muted-foreground text-[11px]"
+        >
+          Generation t/s (right)
         </text>
       </svg>
       <div className="flex justify-center gap-5 text-xs text-muted-foreground">
-        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#20b8a6]" />Prompt</span>
-        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#7dd3fc]" />Generation</span>
+        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#20b8a6]" />Prompt · left axis</span>
+        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#7dd3fc]" />Generation · right axis (dashed)</span>
       </div>
     </div>
   )
@@ -269,6 +287,7 @@ function BenchmarkPage() {
   const [sessions, setSessions] = useState<BenchmarkSessionInfo[]>([])
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null)
   const [loadingSessions, setLoadingSessions] = useState(true)
+  const [pendingSettings, setPendingSettings] = useState(false)
   const [presetId, setPresetId] = useState<PresetId>('quick')
   const [promptTokens, setPromptTokens] = useState(512)
   const [outputTokens, setOutputTokens] = useState(128)
@@ -284,22 +303,31 @@ function BenchmarkPage() {
   const deleteRun = useBenchmarkStore((state) => state.deleteRun)
 
   const selectedSession = sessions.find((session) => session.target_id === selectedTarget)
+  const selectedIsLocal = useEngineHosts(state => state.hosts.some(host => host.local && selectedTarget?.startsWith(`ginfer/${host.host_id}/`)))
   const maxConcurrency = effectiveConcurrency(selectedSession)
   const selectedRun = runs.find((run) => run.run_id === selectedRunId) ?? runs[0]
 
   const refreshSessions = useCallback(async () => {
     setLoadingSessions(true)
     try {
+      await useEngineHosts.getState().refresh()
+      const { hosts, snapshots, errors } = useEngineHosts.getState()
+      const readyTargets = new Set(hosts.filter(host => !errors[host.host_id]).flatMap(host =>
+        (snapshots[host.host_id]?.instances ?? []).filter(instance => instance.status === 'ready')
+          .map(instance => engineAlias(host.host_id, instance.instance_id))))
       const loaded = (await listBenchmarkSessions()).filter(
-        (session) => !session.is_embedding
+        (session) => !session.is_embedding && readyTargets.has(session.target_id)
       )
       setSessions(loaded)
+      const currentModel = useModelProvider.getState().selectedModel?.id
       setSelectedTarget((current) =>
-        loaded.some((session) => session.target_id === current)
-          ? current
-          : (loaded[0]?.target_id ?? null)
+        current ?? loaded.find(session => session.target_id === currentModel)?.target_id
+          ?? loaded.find(session => session.model_id === currentModel && hosts.some(host => host.local && session.target_id.startsWith(`ginfer/${host.host_id}/`)))?.target_id
+          ?? loaded.find(session => hosts.some(host => host.local && session.target_id.startsWith(`ginfer/${host.host_id}/`)))?.target_id
+          ?? loaded[0]?.target_id ?? null
       )
     } catch (error) {
+      setSessions([])
       toast.error('Could not read loaded GInfer models', {
         description: String(error),
       })
@@ -310,7 +338,10 @@ function BenchmarkPage() {
 
   useEffect(() => {
     void refreshSessions()
-  }, [refreshSessions])
+    if (activeRunId) return
+    const timer = window.setInterval(() => void refreshSessions(), 10000)
+    return () => window.clearInterval(timer)
+  }, [refreshSessions, activeRunId])
 
   useEffect(() => {
     let unlisten: (() => void) | undefined
@@ -359,7 +390,7 @@ function BenchmarkPage() {
   }
 
   const startBenchmark = async () => {
-    if (!selectedSession || activeRunId) return
+    if (!selectedSession || activeRunId || pendingSettings || loadingSessions) return
     const runId = crypto.randomUUID()
     setActiveRunId(runId)
     setProgress({
@@ -409,7 +440,7 @@ function BenchmarkPage() {
     : 0
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <div className="grid h-svh min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-background text-foreground">
       <HeaderPage>
         <div className="flex items-center justify-between pr-4">
           <div className="flex items-center gap-2">
@@ -423,9 +454,9 @@ function BenchmarkPage() {
         </div>
       </HeaderPage>
 
-      <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-8">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
-          {sessions.length === 0 && !loadingSessions ? (
+      <main className="min-h-0 min-w-0 flex-1 overflow-auto px-5 pb-8">
+        <div className="mx-auto flex min-w-0 w-full max-w-7xl flex-col gap-5">
+          {sessions.length === 0 && !loadingSessions && (
             <div className="flex min-h-[420px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/40 text-center">
               <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <IconChartLine className="size-6" />
@@ -438,26 +469,16 @@ function BenchmarkPage() {
                 Open Models
               </Button>
             </div>
-          ) : (
+          )}
             <>
               <section className="rounded-xl border border-border/70 bg-card p-5 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="min-w-0 flex-1">
-                    <label htmlFor="benchmark-model" className="mb-2 block text-sm font-medium">Loaded model</label>
-                    <select
-                      id="benchmark-model"
-                      value={selectedTarget ?? ''}
-                      onChange={(event) => setSelectedTarget(event.target.value)}
-                      disabled={!!activeRunId}
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/40 lg:max-w-xl"
-                    >
-                      {sessions.map((session) => (
-                        <option key={session.target_id} value={session.target_id}>{session.display_name ?? session.model_id}</option>
-                      ))}
-                    </select>
+                    <BenchmarkServerSettings sessions={sessions} selected={selectedSession} select={setSelectedTarget}
+                      disabled={!!activeRunId} refresh={refreshSessions} onPendingChange={setPendingSettings} />
                     {selectedSession && (
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span className="rounded-full bg-muted px-2.5 py-1">{selectedSession.pid == null ? 'Paired LAN instance · benchmark shares its capacity' : 'This computer'}</span>
+                        <span className="rounded-full bg-muted px-2.5 py-1">{selectedIsLocal ? 'This computer' : 'Paired LAN instance · benchmark shares its capacity'}</span>
                         <span className="rounded-full bg-muted px-2.5 py-1">C1–C{maxConcurrency}</span>
                         <span className="rounded-full bg-muted px-2.5 py-1">Context {selectedSession.max_context ? selectedSession.max_context.toLocaleString() : 'engine default'}</span>
                         <span className="rounded-full bg-muted px-2.5 py-1">KV {selectedSession.kv_dtype || 'auto'}</span>
@@ -471,7 +492,7 @@ function BenchmarkPage() {
                       <IconSquare /> Stop
                     </Button>
                   ) : (
-                    <Button onClick={() => void startBenchmark()} disabled={!selectedSession || concurrencies.length === 0}>
+                    <Button onClick={() => void startBenchmark()} disabled={!selectedSession || pendingSettings || loadingSessions || concurrencies.length === 0}>
                       <IconPlayerPlay /> Run benchmark
                     </Button>
                   )}
@@ -603,7 +624,6 @@ function BenchmarkPage() {
                 )}
               </section>
             </>
-          )}
         </div>
       </main>
     </div>

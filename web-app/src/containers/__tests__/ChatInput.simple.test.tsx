@@ -7,6 +7,8 @@ import { usePrompt } from '@/hooks/usePrompt'
 import { seedServiceHub } from '@/test/service-hub'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import type { AgentDefinition } from '@/types/agent'
+import type { AgentSkill } from '@/services/agent/skills'
+import { useAppState } from '@/hooks/useAppState'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -14,9 +16,13 @@ const mocks = vi.hoisted(() => ({
 }))
 const agentDefinitions = vi.hoisted(() => ({
   value: [] as AgentDefinition[],
+  loading: false,
 }))
+const agentSkills = vi.hoisted(() => ({ value: [] as AgentSkill[] }))
 const agentModeState = vi.hoisted(() => ({
   agentThreads: {} as Record<string, boolean>,
+  activeSkills: {} as Record<string, string>,
+  setActiveSkill: vi.fn(),
   approvalModes: {} as Record<string, 'manual' | 'skip'>,
   setAgentMode: vi.fn(),
   setApprovalMode: vi.fn(),
@@ -56,11 +62,11 @@ vi.mock('@/hooks/useTools', () => ({
 }))
 
 vi.mock('@/hooks/useAgentSkills', () => ({
-  useAgentSkills: () => ({ skills: [], loading: false }),
+  useAgentSkills: () => ({ skills: agentSkills.value, loading: false }),
 }))
 
 vi.mock('@/hooks/useAgentDefinitions', () => ({
-  useAgentDefinitions: () => ({ definitions: agentDefinitions.value }),
+  useAgentDefinitions: () => ({ definitions: agentDefinitions.value, loading: agentDefinitions.loading }),
 }))
 
 vi.mock('@/hooks/useAgentMode', () => {
@@ -121,13 +127,25 @@ vi.mock('@/components/TokenCounter', () => ({
 }))
 
 describe('ChatInput', () => {
+  it.each(['submitted', 'streaming'] as const)('keeps Stop usable during %s without requiring a route thread ID', (chatStatus) => {
+    const onStop = vi.fn()
+    render(<ChatInput chatStatus={chatStatus} onStop={onStop} />)
+    const stop = screen.getByRole('button', { name: 'Stop generation' })
+    expect(stop).toBeEnabled()
+    fireEvent.click(stop)
+    expect(onStop).toHaveBeenCalledOnce()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     seedServiceHub()
     usePrompt.setState({ prompt: '' })
     useChatAttachments.setState({ attachmentsByThread: {} })
     agentDefinitions.value = []
+    agentDefinitions.loading = false
+    agentSkills.value = []
     agentModeState.agentThreads = {}
+    agentModeState.activeSkills = {}
     agentModeState.approvalModes = {}
     agentModeState.setAgentMode.mockReset()
     agentModeState.setApprovalMode.mockReset()
@@ -186,7 +204,7 @@ describe('ChatInput', () => {
     unmount()
   })
 
-  it('shows the Agent picker only when a user definition exists', () => {
+  it('keeps skill invocation on the default agent unless a saved workflow is explicitly selected', () => {
     const model = {
       id: 'agent-model',
       capabilities: [],
@@ -205,6 +223,7 @@ describe('ChatInput', () => {
       selectedModel: model,
     })
     agentModeState.agentThreads = { [TEMPORARY_CHAT_ID]: true }
+    useAppState.setState({ activeModels: ['agent-model'] })
 
     const empty = render(<ChatInput initialMessage />)
     expect(screen.queryByLabelText('Agent definition')).not.toBeInTheDocument()
@@ -225,10 +244,45 @@ describe('ChatInput', () => {
         builtIn: false,
       },
     ]
-    render(<ChatInput initialMessage />)
+    agentSkills.value = [{ name: 'agent-builder', description: 'Build agents', version: '1.1.0',
+      requiresTools: [], requiresScripts: [], dangerous: false, platforms: null, enabled: true,
+      compatible: true, reserved: false, unavailableReasons: [], error: null }]
+    const onSubmit = vi.fn()
+    const view = render(<ChatInput initialMessage onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" />)
 
-    expect(screen.getByLabelText('Agent definition')).toHaveValue('researcher')
+    expect(screen.getByLabelText('Agent definition')).toHaveValue('general')
     expect(screen.queryByRole('option', { name: 'General Agent' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Build a model inventory agent' } })
+    fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
+    expect(onSubmit).toHaveBeenLastCalledWith('Build a model inventory agent', undefined, 'agent-builder', 'general')
+
+    fireEvent.change(screen.getByLabelText('Agent definition'), { target: { value: 'researcher' } })
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Run my saved workflow' } })
+    fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
+    expect(onSubmit).toHaveBeenLastCalledWith('Run my saved workflow', undefined, undefined, 'researcher')
+
+    agentDefinitions.loading = true
+    agentDefinitions.value = []
+    view.rerender(<ChatInput initialMessage onSubmit={onSubmit} />)
+    agentDefinitions.loading = false
+    view.rerender(<ChatInput initialMessage onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Continue without deleted workflow' } })
+    fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
+    expect(onSubmit).toHaveBeenLastCalledWith('Continue without deleted workflow', undefined, undefined, 'general')
+  })
+
+  it('invokes a skill from ordinary chat without selecting an agent workflow', () => {
+    agentSkills.value = [{ name: 'agent-builder', description: 'Build agents', version: '1.2.0',
+      requiresTools: [], requiresScripts: [], dangerous: false, platforms: null, enabled: true,
+      compatible: true, reserved: false, unavailableReasons: [], error: null }]
+    const onSubmit = vi.fn()
+    render(<ChatInput initialMessage onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: '/agent-builder Make an inventory agent' } })
+    fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
+    expect(onSubmit).toHaveBeenCalledWith('Make an inventory agent', undefined, 'agent-builder')
+    expect(agentModeState.setAgentMode).not.toHaveBeenCalled()
+    expect(agentModeState.setActiveSkill).toHaveBeenCalledWith(expect.any(String), 'agent-builder')
+    expect(screen.getByTestId('chat-input')).toHaveValue('')
   })
 
   it('asks for a model instead of sending when none is selected', async () => {

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   resizeTerminal: vi.fn(),
   stopTerminal: vi.fn(),
   getTerminalStatus: vi.fn(),
+  updateCode: vi.fn(),
 }))
 
 vi.mock('@xterm/xterm', () => ({
@@ -66,6 +67,7 @@ vi.mock('@/services/terminal/tauri', () => ({
   resizeTerminal: mocks.resizeTerminal,
   stopTerminal: mocks.stopTerminal,
   getTerminalStatus: mocks.getTerminalStatus,
+  updateCode: mocks.updateCode,
   base64ToBytes: vi.fn(() => new Uint8Array()),
   terminalBinaryStringToBytes: vi.fn(() => new Uint8Array()),
 }))
@@ -233,6 +235,44 @@ describe('CodeTerminalHost', () => {
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
     expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  it('updates Code in the background with confirmation and returns to the TUI', async () => {
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    let finishUpdate!: (value: { logPath: string }) => void
+    mocks.updateCode.mockImplementation((_path, progress) => {
+      progress('Downloading and installing updates')
+      return new Promise(resolve => { finishUpdate = resolve })
+    })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Update Code' }))
+    expect(mocks.stopTerminal).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and update' }))
+    await waitFor(() => expect(screen.getByText('Downloading and installing updates')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Open Code' })).toBeDisabled()
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+    finishUpdate({ logPath: '/code/gchat-update.log' })
+    await waitFor(() => expect(screen.getByText('Update Successful')).toBeInTheDocument())
+    expect(screen.queryByText('Diagnostics')).not.toBeInTheDocument()
+    expect(screen.queryByText(/theme will be applied/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Code' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Update Code' })).toBeInTheDocument())
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows an update failure with retry instead of an updater terminal', async () => {
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.updateCode.mockRejectedValue(new Error('Code did not reach the requested version.'))
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Update Code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and update' }))
+    await waitFor(() => expect(screen.getByText('Update needs attention')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Retry update' })).toBeEnabled()
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
   })
 

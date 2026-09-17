@@ -107,7 +107,7 @@ export function LeftSidebar() {
               className="size-10 shrink-0"
               draggable={false}
             />
-            <div className="min-w-0"><div className="text-xl font-medium tracking-tight">GChat</div><div className="text-xs leading-snug text-muted-foreground">by Sectile Research Laboratories</div></div>
+            <div className="min-w-0"><div className="text-xl font-medium tracking-tight">GChat</div><div className="whitespace-nowrap text-xs leading-snug text-muted-foreground">by Sectile Research Labs</div></div>
           </div>
           <div className="mt-[6px] px-1">
             <ChatAgentModeSwitch

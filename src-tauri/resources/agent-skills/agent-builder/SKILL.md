@@ -1,7 +1,7 @@
 ---
 name: agent-builder
-description: Design, validate, and revise GChat Agent Studio agents, goal loops, coordinator teams, workflows, and worker pools; inspect and explain their execution and monitoring.
-version: 1.0.0
+description: Build or revise a reusable GChat agent definition from a user's description, choosing a native template and asking necessary clarifying questions. Does not execute the proposed agent's task.
+version: 1.2.0
 requires_tools:
   - studio.inspect
   - studio.manage
@@ -15,12 +15,18 @@ platforms:
 
 Help the user turn an outcome into a runnable, understandable Agent Studio
 definition. Use the actual Studio contracts, not generated files in the workspace.
-Load `tool.view` for `studio.inspect` and `studio.manage` before using them.
+You are authoring an agent, not performing its future task. For an inventory
+agent, define its inventory procedure; do not inventory the user's files now.
+Do not browse the filesystem, run shell commands, or create workspace files.
+This workflow is available in ordinary chat and Agent chat.
 
 ## Design and validate
 
 Call `studio.inspect` with `action: "catalog"` to obtain current native templates,
 saved definitions, pools, instance IDs/capabilities, and role-key conventions.
+Results are inline JSON. Do not search for archive files. Use `tool.view` if you
+need an operation's arguments. Prefer Standard unless evaluation, parallel
+specialists, or ordered stages materially help the requested task.
 Use a returned template as the schema source. Preserve every required field;
 use schemaVersion 3, builtIn false, and a new lowercase hyphenated ID for a new
 definition. For editing, retrieve the exact saved definition with
@@ -42,11 +48,23 @@ desired result, completion conditions, input locations, tool permissions, or
 execution budget. Explain maximum tool steps and loop cycles separately. Hitting
 a limit is incomplete, not success; do not simply raise limits to hide a bad loop.
 
+Set `defaultGoal` to a concrete, ready-to-run task for every definition you create.
+Describe the intended outcome, scope, limits, and expected result; do not invent
+paths, benchmarks, or permissions. Keep it distinct from `instructions` (how the
+agent works) and `outputContract` (how the result is presented). For example:
+"Run the existing performance tests in the selected workspace without modifying
+code. Report pass/fail results, measured timings, and any tests you could not run."
+When revising a definition, preserve its default goal unless the requested change
+affects the task. If a meaningful goal requires missing information, ask for it.
+
 Define instructions, output contract, skills, limits, and evaluator behavior in
 plain language. Preview the proposal and its role assignments before saving.
 Use `validate_definition` with the entire definition in `args`, correct reported
-errors, then use approval-gated `studio.manage` / `save_definition` only when the
-user authorizes saving. Never write agent-definitions.json or bypass validation.
+errors, then call approval-gated `studio.manage` / `save_definition` to present
+the definition preview. The user chooses Create agent or Revise. A rejected
+preview means ask what they want changed, not retry the identical save. Keep the
+same ID while revising this draft so retries do not create duplicate definitions.
+Never write agent-definitions.json or bypass validation.
 
 ## Placement and multimodal tasks
 
@@ -59,7 +77,7 @@ Use `roleAssignments` keyed by the catalog's role IDs. Each entry contains:
 Other targets are `{"kind":"current"}` and
 `{"kind":"instance","id":"exact-registry-instance-id"}`. Do not derive IDs
 from a display name, URL, or model filename. Pool membership is explicit, never all
-discovered hosts. Use `save_pool` only after the user approves its members/limits.
+discovered hosts. Refer only to existing pools; pool editing belongs in Studio.
 Pool args contain `id` (empty for new), `name`, and `members`, each with
 `instanceId` and `workerLimit`.
 
@@ -78,12 +96,14 @@ can still consume engine capacity. Tools run on the GChat computer, not the GPU 
 ## Run and monitor
 
 After saving, guide the user to **Agent Studio → saved agent → Save & run**.
-Run setup supplies the task, workspace, role overrides, and optional saved
+Run setup prefills the task from `defaultGoal`; the user can edit it for that run
+without changing the saved definition. Re-run uses the previous run's task instead.
+Run setup also supplies workspace, role overrides, and optional saved
 defaults. The user clicks **Run** to start; these tools do not silently launch
 background agents or change normal chat routing.
 
-Use `studio.inspect` / `monitor` for active worker events and completed records,
-or `runs` for preserved results. Explain queued vs running vs tool/approval waits,
+Direct the user to Studio's run monitor for active workers and completed records.
+Explain queued vs running vs tool/approval waits,
 exact host/model assignments, measured generation tokens/sec, and stop reasons.
 Rate is worker-specific generation time, not aggregate host throughput or total
 wall time. A queued Vision role may need a suitable instance, not a larger budget.
@@ -91,6 +111,5 @@ wall time. A queued Vision role may need a suitable instance, not a larger budge
 Assignments stay pinned once work starts. No automatic model loading, session
 substitution, or tool replay after failure. For a lost session, preserve the run
 and review side effects before proposing a new run. On explicit user request,
-approval-gated `studio.manage` / `stop_run` takes `args: {"id":"run-id"}`.
-Read monitoring again to verify the outcome. Do not infer permission to stop
-another run or modify a pool merely from a request for status.
+the user can stop the run from Studio. The authoring workflow cannot stop runs
+or modify pools.

@@ -44,6 +44,10 @@ export default function AgentApprovalDialog() {
     threadId ? state.runs[threadId] : undefined
   )
   const approval = run?.pendingApproval
+  const definitionPreview = approval?.tool === 'studio.manage' &&
+    (approval.preview as { action?: string })?.action === 'save_definition'
+    ? (approval.preview as { args?: Record<string, unknown> }).args
+    : undefined
   const preview = useMemo(
     () => (approval ? boundedJson(approval.preview) : ''),
     [approval]
@@ -92,9 +96,9 @@ export default function AgentApprovalDialog() {
     >
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{t('agentApproval.title')}</DialogTitle>
+          <DialogTitle>{definitionPreview ? 'Review your agent' : t('agentApproval.title')}</DialogTitle>
           <DialogDescription>
-            {t('agentApproval.description', { tool: approval.tool })}
+            {definitionPreview ? 'Create this reusable definition. It will not run until you choose Run in Agent Studio.' : t('agentApproval.description', { tool: approval.tool })}
           </DialogDescription>
         </DialogHeader>
 
@@ -106,7 +110,14 @@ export default function AgentApprovalDialog() {
             <p className="text-sm text-muted-foreground">{approval.reason}</p>
           </div>
 
-          {preview && (
+          {definitionPreview && (
+            <dl className="max-h-[45dvh] space-y-3 overflow-auto text-sm">
+              {Object.entries({ Name: 'name', Type: 'kind', Goal: 'defaultGoal', Instructions: 'instructions', 'Expected output': 'outputContract', 'Model instance': 'modelInstanceId', 'Role assignments': 'roleAssignments', Skills: 'skills', 'Maximum tool steps': 'maxSteps' }).map(([label, key]) => (
+                <div key={key}><dt className="font-medium">{label}</dt><dd className="whitespace-pre-wrap break-words text-muted-foreground">{typeof definitionPreview[key] === 'string' ? String(definitionPreview[key]) : definitionPreview[key] == null ? 'Current model / automatic' : JSON.stringify(definitionPreview[key], null, 2)}</dd></div>
+              ))}
+            </dl>
+          )}
+          {preview && !definitionPreview && (
             <div>
               <div className="mb-1 text-xs font-medium">
                 {t('agentApproval.preview')}
@@ -152,9 +163,9 @@ export default function AgentApprovalDialog() {
             disabled={run.approvalResolving}
             onClick={() => void resolve('deny')}
           >
-            {t('agentApproval.deny')}
+            {definitionPreview ? 'Revise' : t('agentApproval.deny')}
           </Button>
-          {approval.can_remember && (
+          {approval.can_remember && !definitionPreview && (
             <Button
               variant="outline"
               size="sm"
@@ -170,7 +181,7 @@ export default function AgentApprovalDialog() {
             onClick={() => void resolve('allow_once')}
             autoFocus
           >
-            {t('agentApproval.approveOnce')}
+            {definitionPreview ? 'Create agent' : t('agentApproval.approveOnce')}
           </Button>
         </DialogFooter>
       </DialogContent>

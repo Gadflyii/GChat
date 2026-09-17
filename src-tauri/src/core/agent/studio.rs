@@ -47,6 +47,11 @@ pub async fn operation<R: Runtime>(
     args: Value,
 ) -> Result<Value, String> {
     let data = get_jan_data_folder_path(app.clone());
+    if action == "compact_worker" {
+        let id = args.get("id").and_then(Value::as_str).ok_or("Worker context id is required")?;
+        super::context::request_compaction(id)?;
+        return Ok(json!({"queued":true}));
+    }
     if action == "stop_run" {
         let id = args
             .get("id")
@@ -62,6 +67,8 @@ pub async fn operation<R: Runtime>(
     match action.as_str() {
         "capacity" => Ok(json!({"pools":worker_pools::list(&data)?,"usage":worker_pools::Allocator::shared().usage()})),
         "catalog" => Ok(json!({
+            "localModelDirectory": data.join("ginfer").join("models"),
+            "definitionSchema": definitions::definition_json_schema(),
             "definitions": definitions::list_definitions(&data)?,
             "templates": definitions::built_in_templates(),
             "pools": worker_pools::list(&data)?,

@@ -102,7 +102,7 @@ tauri-plugin-hardware = { path = "./plugins/tauri-plugin-hardware", optional = t
 tauri-plugin-ginfer = { path = "./plugins/tauri-plugin-ginfer" }
 tauri-plugin-vector-db = { path = "./plugins/tauri-plugin-vector-db" }
 tauri-plugin-rag = { path = "./plugins/tauri-plugin-rag" }
-tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
+tauri-plugin-http = { version = "=2.5.7", features = ["unsafe-headers"] }
 tauri-plugin-log = "2.0.0-rc"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2.2.7"
@@ -177,7 +177,7 @@ tauri-plugin-window-state = "2"
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 reqwest = { version = "0.11", features = ["json", "blocking", "stream", "rustls-tls"], default-features = false }
 tauri-plugin-dialog = { version = "2.2.1", default-features = false }
-tauri-plugin-http = { version = "2", default-features = false }
+tauri-plugin-http = { version = "=2.5.7", default-features = false }
 tauri-plugin-log = { version = "2.0.0-rc", default-features = false }
 tauri-plugin-opener = { version = "2.2.7", default-features = false }
 tauri-plugin-os = { version = "2.2.1", default-features = false }

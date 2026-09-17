@@ -167,31 +167,29 @@ pub async fn agent_compact_session<R: Runtime>(
     let _session_guard = session_lock.lock().await;
     let data_folder = get_jan_data_folder_path(app_handle);
     let mut session = load_session(&data_folder, &session_id).await?;
-    let Some(plan) = session.manual_checkpoint_plan() else {
-        return Ok(AgentContextCompactionResult {
-            status: "nothing_to_compact".into(),
-            summarized_turns: 0,
-            retained_turns: session.turns.len(),
-        });
-    };
-
     let target = find_session_by_model_id(&model_id, &ginfer_state)
         .await
         .map_err(|error| error.to_string())?;
     let client = GinferClient::new(&target).map_err(|error| error.to_string())?;
     let cancellation = CancellationToken::new();
-    let checkpoint = client
-        .checkpoint_conversation(session.checkpoint.as_deref(), &plan.source, &cancellation)
-        .await
-        .map_err(|error| error.to_string())?
-        .content;
-    let summarized_turns = plan.dropped_turns;
-    session.apply_checkpoint(&plan, checkpoint.trim().to_owned());
+    let archive = crate::core::threads::utils::get_thread_dir(&data_folder, &session_id).join("context");
+    let mut context = super::context::WorkerContext::new(Some(&archive)).await?;
+    context.record(serde_json::json!({"type":"manual_compaction", "session":session})).await?;
+    context.compact_at_next_boundary();
+    let before = session.turns.len();
+    let goal = session.turns.iter().rev().find_map(|turn| match turn {
+        super::session::AgentSessionTurn::User { text } => Some(text.clone()), _ => None,
+    }).unwrap_or_else(|| session.current_goal.clone());
+    context.prepare(&mut session, &client, &cancellation, |state| {
+        super::ginfer_client::CompletionRequest::tool_call(
+            format!("Current task:\n{goal}\n\n{}", state.render_conversation()), None)
+    }, &mut |_| Ok(())).await?;
+    let summarized_turns = before - session.turns.len();
     let retained_turns = session.turns.len();
     save_session(&data_folder, &session).await?;
 
     Ok(AgentContextCompactionResult {
-        status: "compacted".into(),
+        status: if summarized_turns > 0 { "compacted" } else { "nothing_to_compact" }.into(),
         summarized_turns,
         retained_turns,
     })
@@ -452,10 +450,15 @@ async fn read_workspace_text(path: &Path, limit: usize) -> Result<(String, bool)
 pub async fn agent_run_turn<R: Runtime>(
     app_handle: AppHandle<R>,
     state: State<'_, AppState>,
-    request: AgentTurnRequest,
+    mut request: AgentTurnRequest,
     on_event: Channel<AgentEvent>,
 ) -> Result<(), String> {
     validate_request(&request)?;
+    if request.selected_skill.as_deref() == Some("agent-builder") {
+        request.auto_approve = false;
+        request.definition_id = Some("general".into());
+        request.role_assignments.clear();
+    }
     let data_folder = get_jan_data_folder_path(app_handle.clone());
     let definition_data = data_folder.clone();
     let definition_id = request
@@ -514,6 +517,7 @@ pub async fn agent_run_turn<R: Runtime>(
     ));
     // Worker placement is cancellable and happens after run registration, not
     // before the cancellation channel exists. No model is loaded here.
+    super::session::initialize_session(&data_folder, &request.session_id).await?;
     let staged = stage_attachments(&data_folder, &request.session_id, &request.attachments).await?;
     let user_message = staged.append_manifest(&request.user_message);
     let mut trusted_read_roots = read_only_external_roots;

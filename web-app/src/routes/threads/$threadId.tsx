@@ -14,6 +14,7 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useAssistant } from '@/hooks/useAssistant'
 import { useTools } from '@/hooks/useTools'
 import { useAppState } from '@/hooks/useAppState'
+import { listAgentModelInstances } from '@/services/agent/definitions'
 import {
   InitialMessageFile,
   useInitialMessage,
@@ -556,7 +557,7 @@ function ThreadDetail() {
   useEffect(() => {
     setCurrentThreadId(threadId)
     setSidebarMode(
-      useAgentMode.getState().isAgentMode(threadId) ? 'agent' : 'chat'
+      useAgentMode.getState().usesAgentTools(threadId) ? 'agent' : 'chat'
     )
     useThreadReadStatus.getState().markRead(threadId)
     const assistant = assistants.find(
@@ -685,7 +686,7 @@ function ThreadDetail() {
       agentDefinitionId?: string,
       persistUserMessage = true
     ) => {
-      if (!isGinferProvider(selectedProvider)) {
+      if (!isGinferProvider(selectedProvider) && selectedProvider !== 'ginfer-lan') {
         toast.error(t('chat:agentErrors.providerUnavailableTitle'), {
           description: t('chat:agentErrors.providerUnavailableDescription'),
         })
@@ -736,8 +737,10 @@ function ThreadDetail() {
       ]
       const workspace = useAgentMode.getState().getWorkspace(threadId)
       const workingDir = workspace.primaryRoot?.path
-      const providerSupportsAgent = isGinferProvider(selectedProvider)
-      const providerActiveModels = providerSupportsAgent
+      const providerSupportsAgent = isGinferProvider(selectedProvider) || selectedProvider === 'ginfer-lan'
+      const providerActiveModels = selectedProvider === 'ginfer-lan'
+        ? await listAgentModelInstances().then((instances) => instances.map((instance) => instance.id)).catch(() => [])
+        : providerSupportsAgent
         ? await serviceHub
             .models()
             .getActiveModels(selectedProvider)
@@ -861,15 +864,16 @@ function ThreadDetail() {
       agentDefinitionId?: string
     ) => {
       if (
-        resolveMessageExecutionRoute(
-          useAgentMode.getState().isAgentMode(threadId)
+        agentSkillName || useAgentMode.getState().activeSkills[threadId] || resolveMessageExecutionRoute(
+          useAgentMode.getState().usesAgentTools(threadId)
         ) === 'agent-ipc'
       ) {
+        if (agentSkillName) useAgentMode.getState().setActiveSkill(threadId, agentSkillName)
         await processAndRunAgent(
           text,
           files,
           documentsFromPayload,
-          agentSkillName,
+          agentSkillName ?? useAgentMode.getState().activeSkills[threadId],
           agentDefinitionId
         )
         return
@@ -1122,7 +1126,7 @@ function ThreadDetail() {
         try {
           const isAgentThread = useAgentMode
             .getState()
-            .isAgentMode(threadId)
+            .usesAgentTools(threadId)
           if (isAgentThread) {
             if (!selectedModel?.id) {
               throw new Error('Load a GInfer model before compacting context.')
@@ -1200,7 +1204,7 @@ function ThreadDetail() {
       const currentLocalMessages = useMessages.getState().getMessages(threadId)
       const isAgentThread =
         resolveMessageExecutionRoute(
-          useAgentMode.getState().isAgentMode(threadId)
+          useAgentMode.getState().usesAgentTools(threadId)
         ) === 'agent-ipc'
 
       if (isAgentThread) {
@@ -1322,7 +1326,7 @@ function ThreadDetail() {
       const originalMessage = currentLocalMessages[messageIndex]
       const isAgentThread =
         resolveMessageExecutionRoute(
-          useAgentMode.getState().isAgentMode(threadId)
+          useAgentMode.getState().usesAgentTools(threadId)
         ) === 'agent-ipc'
 
       // Update the message content. Attachments are kept for every thread, not

@@ -18,11 +18,14 @@ export type AgentWorkspace = {
 type AgentModeState = {
   /** Map of threadId → agent mode enabled */
   agentThreads: Record<string, boolean>
+  activeSkills: Record<string, string>
+  setActiveSkill: (threadId: string, skill?: string) => void
   approvalModes: Record<string, AgentApprovalMode>
   workspaces: Record<string, AgentWorkspace>
   sidebarMode: SidebarMode
 
   isAgentMode: (threadId: string) => boolean
+  usesAgentTools: (threadId: string) => boolean
   getApprovalMode: (threadId: string) => AgentApprovalMode
   getWorkingDir: (threadId: string) => string | undefined
   getWorkspace: (threadId: string) => AgentWorkspace
@@ -49,6 +52,13 @@ export const useAgentMode = create<AgentModeState>()(
   persist(
     (set, get) => ({
       agentThreads: {},
+      activeSkills: {},
+      setActiveSkill: (threadId, skill) => set((state) => {
+        const activeSkills = { ...state.activeSkills }
+        if (skill) activeSkills[threadId] = skill
+        else delete activeSkills[threadId]
+        return { activeSkills }
+      }),
       approvalModes: {},
       workspaces: {},
       sidebarMode: 'chat',
@@ -56,6 +66,7 @@ export const useAgentMode = create<AgentModeState>()(
       isAgentMode: (threadId) => {
         return get().agentThreads[threadId] === true
       },
+      usesAgentTools: (threadId) => get().agentThreads[threadId] === true || !!get().activeSkills[threadId],
 
       getApprovalMode: (threadId) => {
         return get().approvalModes[threadId] ?? 'manual'
@@ -201,6 +212,11 @@ export const useAgentMode = create<AgentModeState>()(
           const approvalMode = state.approvalModes[fromThreadId] ?? 'manual'
           const workspace = state.workspaces[fromThreadId]
           const remainingThreads = { ...state.agentThreads }
+          const activeSkills = { ...state.activeSkills }
+          const skill = activeSkills[fromThreadId]
+          delete activeSkills[fromThreadId]
+          delete activeSkills[toThreadId]
+          if (skill) activeSkills[toThreadId] = skill
           const remainingApprovalModes = { ...state.approvalModes }
           const remainingWorkspaces = { ...state.workspaces }
           delete remainingThreads[fromThreadId]
@@ -211,6 +227,7 @@ export const useAgentMode = create<AgentModeState>()(
           delete remainingWorkspaces[toThreadId]
 
           return {
+            activeSkills,
             agentThreads: isAgentMode
               ? { ...remainingThreads, [toThreadId]: true }
               : remainingThreads,
@@ -218,7 +235,7 @@ export const useAgentMode = create<AgentModeState>()(
               ? { ...remainingApprovalModes, [toThreadId]: approvalMode }
               : remainingApprovalModes,
             workspaces:
-              isAgentMode && workspace
+              (isAgentMode || skill) && workspace
                 ? { ...remainingWorkspaces, [toThreadId]: workspace }
                 : remainingWorkspaces,
           }
@@ -228,17 +245,20 @@ export const useAgentMode = create<AgentModeState>()(
       removeThread: (threadId) => {
         set((state) => {
           const agentThreads = { ...state.agentThreads }
+          const activeSkills = { ...state.activeSkills }
+          delete activeSkills[threadId]
           const approvalModes = { ...state.approvalModes }
           const workspaces = { ...state.workspaces }
           delete agentThreads[threadId]
           delete approvalModes[threadId]
           delete workspaces[threadId]
-          return { agentThreads, approvalModes, workspaces }
+          return { agentThreads, approvalModes, workspaces, activeSkills }
         })
       },
 
       clearAll: () => {
         set({
+          activeSkills: {},
           agentThreads: {},
           approvalModes: {},
           workspaces: {},

@@ -5,26 +5,23 @@ use serde::{Deserialize, Serialize};
 use super::compressor::{compress_tool_result, should_compress_tool};
 use super::prompt::ToolTier;
 use super::skills::loaded::{LoadedSkillState, LOADED_SKILLS_CAP, LOADED_SKILL_BODY_MAX_CHARS};
-use super::token_budget::estimate_tokens;
 use super::tools::tool_view::{descriptor_for, LOADED_TOOLS_CAP};
 use super::types::{ToolCallPayload, ToolOutcome, ToolStatus};
 use crate::core::threads::utils::{get_data_dir, get_thread_dir};
 
 const SESSION_VERSION: u32 = 3;
 const SESSION_FILE_NAME: &str = "agent-session.json";
-const MAX_SESSION_FILE_BYTES: u64 = 512 * 1024;
-const MAX_TURNS: usize = 512;
-const MAX_USER_TEXT_CHARS: usize = 8_000;
-const MAX_REPLY_TEXT_CHARS: usize = 12_000;
+const MAX_SESSION_FILE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_TOOL_SUMMARY_CHARS: usize = 1_200;
 fn tool_summary_limit(tool: &str) -> usize {
-    if tool == "memory.recall" {
+    if tool == "studio.inspect" || tool == "studio.manage" {
+        48_000
+    } else if tool == "memory.recall" {
         6500
     } else {
         MAX_TOOL_SUMMARY_CHARS
     }
 }
-const CHECKPOINT_TOKEN_RESERVE: usize = 3_072;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -34,7 +31,7 @@ pub enum AgentSessionTurn {
     },
     AssistantToolCall {
         tool: String,
-        #[serde(skip)]
+        #[serde(default)]
         args: Option<serde_json::Value>,
     },
     ToolResult {
@@ -58,12 +55,10 @@ pub struct AgentSessionState {
     pub loaded_skills: Vec<LoadedSkillState>,
     #[serde(default)]
     pub checkpoint: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AgentCheckpointPlan {
-    pub dropped_turns: usize,
-    pub source: String,
+    #[serde(default)]
+    pub current_goal: String,
+    #[serde(default)]
+    pub archive_roots: Vec<PathBuf>,
 }
 
 impl AgentSessionState {
@@ -76,12 +71,15 @@ impl AgentSessionState {
             loaded_tools: Vec::new(),
             loaded_skills: Vec::new(),
             checkpoint: None,
+            current_goal: String::new(),
+            archive_roots: Vec::new(),
         }
     }
 
     pub fn push_user(&mut self, text: &str) {
+        self.current_goal = text.to_owned();
         self.push_turn(AgentSessionTurn::User {
-            text: truncate_chars(text, MAX_USER_TEXT_CHARS),
+            text: text.to_owned(),
         });
     }
 
@@ -106,16 +104,11 @@ impl AgentSessionState {
 
     pub fn push_reply(&mut self, text: &str) {
         self.push_turn(AgentSessionTurn::AssistantReply {
-            text: truncate_chars(text, MAX_REPLY_TEXT_CHARS),
+            text: text.to_owned(),
         });
     }
 
     pub fn finish_turn(&mut self) {
-        for turn in &mut self.turns {
-            if let AgentSessionTurn::AssistantToolCall { args, .. } = turn {
-                *args = None;
-            }
-        }
         self.turn_count = self.turn_count.saturating_add(1);
     }
 
@@ -127,7 +120,7 @@ impl AgentSessionState {
         self.loaded_skills = skills.into_iter().take(LOADED_SKILLS_CAP).collect();
     }
 
-    pub fn render_conversation(&self, _max_tokens: usize) -> String {
+    pub fn render_conversation(&self) -> String {
         let mut rendered = Vec::new();
         if let Some(checkpoint) = &self.checkpoint {
             rendered.push(format!(
@@ -136,81 +129,6 @@ impl AgentSessionState {
         }
         rendered.extend(self.turns.iter().map(render_turn));
         rendered.join("\n")
-    }
-
-    pub fn checkpoint_plan(
-        &self,
-        max_tokens: usize,
-    ) -> Result<Option<AgentCheckpointPlan>, String> {
-        let rendered = self.turns.iter().map(render_turn).collect::<Vec<_>>();
-        let checkpoint_tokens = self.checkpoint.as_deref().map(estimate_tokens).unwrap_or(0);
-        let turn_tokens = rendered
-            .iter()
-            .map(|turn| estimate_tokens(turn) + 1)
-            .collect::<Vec<_>>();
-        if checkpoint_tokens + turn_tokens.iter().sum::<usize>() <= max_tokens {
-            return Ok(None);
-        }
-
-        let user_starts = self
-            .turns
-            .iter()
-            .enumerate()
-            .filter_map(|(index, turn)| {
-                matches!(turn, AgentSessionTurn::User { .. }).then_some(index)
-            })
-            .collect::<Vec<_>>();
-        for retained_user_turns in [2usize, 1] {
-            let Some(&start) =
-                user_starts.get(user_starts.len().saturating_sub(retained_user_turns))
-            else {
-                continue;
-            };
-            if start == 0 {
-                continue;
-            }
-            let retained_tokens = turn_tokens.iter().skip(start).sum::<usize>();
-            let checkpoint_budget = checkpoint_tokens.max(CHECKPOINT_TOKEN_RESERVE);
-            if checkpoint_budget + retained_tokens <= max_tokens {
-                return Ok(Some(AgentCheckpointPlan {
-                    dropped_turns: start,
-                    source: rendered[..start].join("\n"),
-                }));
-            }
-        }
-        Err("The current Agent turn is too large to preserve intact in the loaded model's context. Reduce its attachment or tool-result payload.".into())
-    }
-
-    /// Plan an explicit `/compact` operation. Keep the two newest complete
-    /// user turns as the live working set and checkpoint everything before
-    /// their boundary. Tool calls and results remain attached to their user
-    /// turn because the cut can occur only at a user-turn start.
-    pub fn manual_checkpoint_plan(&self) -> Option<AgentCheckpointPlan> {
-        let user_starts = self
-            .turns
-            .iter()
-            .enumerate()
-            .filter_map(|(index, turn)| {
-                matches!(turn, AgentSessionTurn::User { .. }).then_some(index)
-            })
-            .collect::<Vec<_>>();
-        let &start = user_starts.get(user_starts.len().checked_sub(2)?)?;
-        if start == 0 {
-            return None;
-        }
-        Some(AgentCheckpointPlan {
-            dropped_turns: start,
-            source: self.turns[..start]
-                .iter()
-                .map(render_turn)
-                .collect::<Vec<_>>()
-                .join("\n"),
-        })
-    }
-
-    pub fn apply_checkpoint(&mut self, plan: &AgentCheckpointPlan, checkpoint: String) {
-        self.turns.drain(..plan.dropped_turns);
-        self.checkpoint = Some(checkpoint);
     }
 
     fn push_turn(&mut self, turn: AgentSessionTurn) {
@@ -226,9 +144,6 @@ impl AgentSessionState {
         }
         if self.session_id != expected_session_id {
             return Err("Agent session id does not match its thread directory".into());
-        }
-        if self.turns.len() > MAX_TURNS {
-            return Err("Agent session contains too many turns".into());
         }
         if self.loaded_tools.len() > LOADED_TOOLS_CAP
             || self.loaded_tools.iter().any(|name| {
@@ -248,19 +163,6 @@ impl AgentSessionState {
         }
         for turn in &self.turns {
             match turn {
-                AgentSessionTurn::User { text } if text.chars().count() > MAX_USER_TEXT_CHARS => {
-                    return Err("Agent session contains an oversized user turn".into());
-                }
-                AgentSessionTurn::AssistantReply { text }
-                    if text.chars().count() > MAX_REPLY_TEXT_CHARS =>
-                {
-                    return Err("Agent session contains an oversized assistant reply".into());
-                }
-                AgentSessionTurn::ToolResult { tool, summary, .. }
-                    if summary.chars().count() > tool_summary_limit(tool) =>
-                {
-                    return Err("Agent session contains an oversized tool result".into());
-                }
                 AgentSessionTurn::AssistantToolCall { tool, .. }
                 | AgentSessionTurn::ToolResult { tool, .. }
                     if descriptor_for(tool).is_none() =>
@@ -283,6 +185,15 @@ pub fn validate_session_id(session_id: &str) -> Result<(), String> {
     if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
         return Err("session_id must be a safe single path component".into());
     }
+    Ok(())
+}
+
+pub async fn initialize_session(data_dir: &Path, session_id: &str) -> Result<(), String> {
+    validate_session_id(session_id)?;
+    tokio::fs::create_dir_all(get_thread_dir(data_dir, session_id))
+        .await
+        .map_err(|error| format!("Could not create agent thread directory: {error}"))?;
+    session_file_path(data_dir, session_id).await?;
     Ok(())
 }
 
@@ -383,12 +294,12 @@ fn temporary_path(path: &Path) -> PathBuf {
 }
 
 #[cfg(not(windows))]
-async fn atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+pub(crate) async fn atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
     tokio::fs::rename(source, destination).await
 }
 
 #[cfg(windows)]
-async fn atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+pub(crate) async fn atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::{
         MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
@@ -418,7 +329,7 @@ async fn atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()
     }
 }
 
-fn render_turn(turn: &AgentSessionTurn) -> String {
+pub(crate) fn render_turn(turn: &AgentSessionTurn) -> String {
     match turn {
         AgentSessionTurn::User { text } => format!("USER: {text}"),
         AgentSessionTurn::AssistantToolCall { tool, args } => {
@@ -510,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn tool_arguments_are_prompt_visible_only_until_the_turn_finishes() {
+    fn tool_arguments_survive_turn_completion_and_session_persistence() {
         let mut state = AgentSessionState::new("thread-a");
         state.push_tool_observations(
             &[ToolCallPayload {
@@ -521,14 +432,14 @@ mod tests {
         );
 
         assert!(state
-            .render_conversation(32_000)
+            .render_conversation()
             .contains(r#"{"path":"secret.txt"}"#));
-        assert!(!serde_json::to_string(&state)
+        assert!(serde_json::to_string(&state)
             .expect("serialize session")
             .contains("secret.txt"));
 
         state.finish_turn();
-        assert!(!state.render_conversation(32_000).contains("secret.txt"));
+        assert!(state.render_conversation().contains("secret.txt"));
     }
 
     #[test]
@@ -547,7 +458,7 @@ mod tests {
             std::slice::from_ref(&outcome),
         );
 
-        let rendered = state.render_conversation(32_000);
+        let rendered = state.render_conversation();
         assert!(rendered.contains("… [omitted 18 lines]"));
         assert!(rendered.contains("detailed line 29"));
         assert!(!rendered.contains("detailed line 0\n"));
@@ -575,7 +486,7 @@ mod tests {
         );
 
         assert!(state
-            .render_conversation(32_000)
+            .render_conversation()
             .contains("key: Error: database connection failed"));
     }
 
@@ -607,71 +518,41 @@ mod tests {
             &[ToolOutcome::ok(summary)],
         );
 
-        assert!(state.render_conversation(32_000).contains(summary));
+        assert!(state.render_conversation().contains(summary));
     }
 
-    #[test]
-    fn token_budget_plans_a_complete_turn_checkpoint_without_dropping_state() {
-        let mut state = AgentSessionState::new("thread-a");
-        state.push_user(&format!("old question {}", "detail ".repeat(1_200)));
-        state.push_reply(&format!("old answer {}", "detail ".repeat(1_200)));
-        state.push_user("latest question");
-
-        let plan = state
-            .checkpoint_plan(3_100)
-            .expect("checkpoint planning")
-            .expect("oversized session requires checkpoint");
-        assert_eq!(plan.dropped_turns, 2);
-        assert!(plan.source.contains("old question"));
-        assert!(plan.source.contains("old answer"));
-        assert!(!plan.source.contains("latest question"));
-
-        state.apply_checkpoint(&plan, "## Objective\nPreserve the old work.".into());
-        let rendered = state.render_conversation(3_100);
-        assert!(rendered.contains("conversation checkpoint"));
-        assert!(rendered.contains("Preserve the old work"));
-        assert!(rendered.contains("USER: latest question"));
-        assert!(!rendered.contains("old question"));
-    }
-
-    #[test]
-    fn manual_checkpoint_keeps_two_complete_user_turns_and_their_tools() {
-        let mut state = AgentSessionState::new("thread-a");
-        state.push_user("old question");
-        state.push_reply("old answer");
-        state.push_user("middle question");
-        state.push_tool_observations(
-            &[ToolCallPayload {
-                tool: "os.fs.read".into(),
-                args: serde_json::json!({"path": "middle.txt"}),
+    #[tokio::test]
+    async fn standalone_studio_session_initializes_without_a_chat_thread() {
+        let fixture = SessionFixture::new(&[]);
+        let data_dir = fixture.data_dir.join("fresh-install");
+        initialize_session(&data_dir, "studio-run").await.unwrap();
+        let attachment_path = fixture.data_dir.join("task.txt");
+        tokio::fs::write(&attachment_path, b"test").await.unwrap();
+        let staged = super::super::attachments::stage_attachments(
+            &data_dir,
+            "studio-run",
+            &[super::super::types::AgentAttachment {
+                kind: super::super::types::AgentAttachmentKind::File,
+                name: "task.txt".into(),
+                media_type: Some("text/plain".into()),
+                path: Some(attachment_path.to_string_lossy().into_owned()),
+                data_url: None,
             }],
-            &[ToolOutcome::ok("middle result")],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            tokio::fs::read(&staged.items[0].path).await.unwrap(),
+            b"test"
         );
-        state.push_reply("middle answer");
-        state.push_user("current question");
+        let mut state = load_session(&data_dir, "studio-run").await.unwrap();
+        state.push_user("Run the defined performance test");
+        state.push_reply("Saved result");
+        state.finish_turn();
+        save_session(&data_dir, &state).await.unwrap();
 
-        let plan = state
-            .manual_checkpoint_plan()
-            .expect("three user turns permit manual compaction");
-        assert_eq!(plan.dropped_turns, 2);
-        assert!(plan.source.contains("old question"));
-        assert!(!plan.source.contains("middle question"));
-
-        state.apply_checkpoint(&plan, "## Objective\nPreserve old work.".into());
-        let rendered = state.render_conversation(32_000);
-        assert!(rendered.contains("middle question"));
-        assert!(rendered.contains("middle result"));
-        assert!(rendered.contains("current question"));
-        assert!(!rendered.contains("old question"));
-    }
-
-    #[test]
-    fn manual_checkpoint_requires_history_older_than_two_user_turns() {
-        let mut state = AgentSessionState::new("thread-a");
-        state.push_user("first");
-        state.push_reply("answer");
-        state.push_user("second");
-        assert_eq!(state.manual_checkpoint_plan(), None);
+        initialize_session(&data_dir, "studio-run").await.unwrap();
+        assert_eq!(load_session(&data_dir, "studio-run").await.unwrap(), state);
     }
 
     #[tokio::test]
@@ -705,9 +586,7 @@ mod tests {
 
         assert_eq!(loaded, state);
         assert_eq!(loaded.turn_count, 1);
-        assert!(loaded
-            .render_conversation(32_000)
-            .contains("first observation"));
+        assert!(loaded.render_conversation().contains("first observation"));
         assert_eq!(loaded.loaded_tools, ["os.fs.hash"]);
         assert_eq!(loaded.loaded_skills[0].name, "pdf");
     }
@@ -745,7 +624,7 @@ mod tests {
             .expect("load second session");
         assert_eq!(second.turn_count, 0);
         assert!(second.turns.is_empty());
-        assert!(!second.render_conversation(32_000).contains("only in a"));
+        assert!(!second.render_conversation().contains("only in a"));
     }
 
     #[tokio::test]

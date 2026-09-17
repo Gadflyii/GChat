@@ -34,6 +34,7 @@ import {
   spawnTerminal,
   stopTerminal,
   writeTerminal,
+  updateCode,
 } from '@/services/terminal/tauri'
 import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useLaunchSettings } from '@/stores/launch-settings-store'
@@ -200,6 +201,12 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     setError,
   ])
 
+  const [updateRequested, setUpdateRequested] = useState(false)
+  const [updatePhase, setUpdatePhase] = useState<string>()
+  const [updateResult, setUpdateResult] = useState<{ logPath: string }>()
+  const [updateError, setUpdateError] = useState<string>()
+  const updateMode = Boolean(updatePhase || updateResult || updateError)
+
   const startSession = useCallback(async () => {
     if (!workspace) throw new Error(t('code:workspaceUnavailable'))
     const terminal = terminalRef.current
@@ -214,6 +221,9 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       executable: customOpenCodePath || undefined,
     })
     updateStatus(next)
+    setUpdateRequested(false)
+    setUpdateResult(undefined)
+    setUpdateError(undefined)
     if (next.cwd && next.cwd !== workspace) {
       setConfiguredWorkspace(next.cwd)
     }
@@ -290,9 +300,15 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     terminalRef.current?.focus()
   }, [generationRef, setError, statusRef, terminalRef])
 
-  const restart = useCallback(async () => {
+  const restart = useCallback(async (update = false) => {
     setBusy(true)
     setError(undefined)
+    if (update) {
+      setUpdateRequested(false)
+      setUpdateError(undefined)
+      setUpdateResult(undefined)
+      setUpdatePhase('Stopping Code')
+    }
     try {
       if (statusRef.current.phase === 'running') await stopTerminal('code')
       for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -305,19 +321,25 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
         await delay(50)
       }
       bootstrappedRef.current = true
-      await startSession()
+      if (update) {
+        setUpdateResult(await updateCode(customOpenCodePath || undefined, setUpdatePhase))
+      } else {
+        await startSession()
+      }
     } catch (reason) {
-      setError(String(reason))
+      if (update) setUpdateError(String(reason))
+      else setError(String(reason))
     } finally {
+      setUpdatePhase(undefined)
       setBusy(false)
     }
-  }, [setError, startSession, statusRef, t, updateStatus])
+  }, [customOpenCodePath, setError, startSession, statusRef, t, updateStatus])
 
   const running = status.phase === 'running' || status.phase === 'stopping'
   const workspaceChanged =
     running && Boolean(workspace) && status.cwd !== workspace
   const configuredModel = activeModel ?? defaultModelLocalApiServer?.model
-  const setupState = !desktopTerminalAvailable
+  const setupState = updateMode ? undefined : !desktopTerminalAvailable
     ? 'desktop'
     : !enabled
       ? 'disabled'
@@ -359,11 +381,15 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
             aria-label={t(`code:status.${status.phase}`)}
           />
           <div className="ml-auto flex min-w-0 items-center gap-1.5">
+            {!updateResult && <Button size="sm" variant="outline" disabled={busy || !workspace || !readiness?.installed}
+              onClick={() => updateMode ? void restart() : setUpdateRequested(true)}>
+              {updateMode ? 'Open Code' : 'Update Code'}
+            </Button>}
             <AgentWorkspaceSelect
               workingDir={workspace}
               onChange={setConfiguredWorkspace}
             />
-            {(workspaceChanged || status.phase === 'exited') && (
+            {!updateMode && (workspaceChanged || status.phase === 'exited') && (
               <Button
                 size="sm"
                 variant="outline"
@@ -407,15 +433,36 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
         </div>
       </HeaderPage>
 
+      {updateRequested && (
+        <div className="flex flex-wrap items-center gap-2 border-t bg-muted/40 px-4 py-3 text-sm">
+          <span className="flex-1">Updating stops this Code session. Finish active work first. Your settings, history, workspace and GChat theme are kept.</span>
+          <Button size="sm" disabled={busy} onClick={() => void restart(true)}>Stop and update</Button>
+          <Button size="sm" variant="ghost" onClick={() => setUpdateRequested(false)}>Cancel</Button>
+        </div>
+      )}
+
       <div className="relative min-h-0 flex-1 border-t bg-background">
         <div
           ref={containerRef}
           data-testid="code-terminal"
           className={cn(
             'absolute inset-0 overflow-hidden px-3 py-2 transition-opacity',
-            status.phase === 'idle' && !busy ? 'opacity-0' : 'opacity-100'
+            updateMode || (status.phase === 'idle' && !busy) ? 'opacity-0 pointer-events-none' : 'opacity-100'
           )}
         />
+
+        {updateMode && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-background p-6">
+            <div className="w-full max-w-md rounded-xl border bg-card p-6 text-center shadow-sm" role="status" aria-live="polite">
+              {updatePhase && <IconLoader2 className="mx-auto mb-4 size-7 animate-spin text-primary" />}
+              <h1 className="font-semibold">{updatePhase ? 'Updating Code' : updateError ? 'Update needs attention' : 'Update Successful'}</h1>
+              {(updatePhase || updateError) && <p className="mt-2 text-sm text-muted-foreground">{updatePhase || updateError}</p>}
+              {updatePhase && <p className="mt-2 text-xs text-muted-foreground">Keep GChat open until the update finishes.</p>}
+              {updateResult && <Button className="mt-4" disabled={busy} onClick={() => void restart()}>Open Code</Button>}
+              {updateError && <Button className="mt-4" size="sm" disabled={busy} onClick={() => void restart(true)}>Retry update</Button>}
+            </div>
+          </div>
+        )}
 
         {replayUnavailable && (
           <div className="absolute inset-x-3 top-3 z-10 flex items-center gap-2 rounded-md border border-amber-500/30 bg-background/95 px-3 py-2 text-xs text-amber-700 shadow-sm backdrop-blur dark:text-amber-300">

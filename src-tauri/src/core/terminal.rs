@@ -18,6 +18,7 @@ const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_COLS: u16 = 80;
 const GCHAT_OPENCODE_THEME: &str = include_str!("../../resources/opencode/gchat.json");
 const GCHAT_OPENCODE_TUI_CONFIG: &str = include_str!("../../resources/opencode/gchat-tui.json");
+const GCHAT_OPENCODE_STARTUP: &str = include_str!("../../resources/opencode/gchat-startup.mjs");
 const GCHAT_HERMES_DARK_SKIN: &str = include_str!("../../resources/hermes/gchat-dark.yaml");
 const GCHAT_HERMES_LIGHT_SKIN: &str = include_str!("../../resources/hermes/gchat-light.yaml");
 
@@ -482,6 +483,11 @@ fn command_for_shell(
     #[cfg(not(windows))]
     let mut command = CommandBuilder::new_default_prog();
 
+    // Shells and their Python/Node children expect a normal drive/UNC path,
+    // not the verbatim path returned by Windows canonicalization.
+    #[cfg(windows)]
+    command.cwd(windows_cli_path(cwd));
+    #[cfg(not(windows))]
     command.cwd(cwd.as_os_str());
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
@@ -575,6 +581,12 @@ fn format_hermes_command(executable: Option<&str>, windows: bool) -> String {
 
 fn quote_hermes_command(executable: Option<&str>) -> Result<Vec<u8>, String> {
     let executable = executable.map(str::trim).filter(|path| !path.is_empty());
+    #[cfg(windows)]
+    if executable.is_none() {
+        super::system::hermes_runtime::repair_managed_runtime(
+            &super::system::commands::resolve_hermes_dir()?,
+        )?;
+    }
     if let Some(path) = executable {
         let path = Path::new(path);
         if !path.is_absolute() || !path.is_file() {
@@ -1083,8 +1095,14 @@ fn install_gchat_opencode_theme(config_directory: &Path) -> Result<PathBuf, Stri
     })?;
 
     write_managed_terminal_asset(&theme_directory.join("gchat.json"), GCHAT_OPENCODE_THEME)?;
+    let startup = config_directory.join("gchat-startup.mjs");
+    write_managed_terminal_asset(&startup, GCHAT_OPENCODE_STARTUP)?;
     let tui_config = config_directory.join("gchat-tui.json");
-    write_managed_terminal_asset(&tui_config, GCHAT_OPENCODE_TUI_CONFIG)?;
+    let mut config: serde_json::Value = serde_json::from_str(GCHAT_OPENCODE_TUI_CONFIG)
+        .map_err(|error| error.to_string())?;
+    config["plugin"] = serde_json::json!([url::Url::from_file_path(&startup)
+        .map_err(|_| "OpenCode startup plugin must have an absolute path")?.to_string()]);
+    write_managed_terminal_asset(&tui_config, &serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?)?;
     Ok(tui_config)
 }
 
@@ -1440,6 +1458,18 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn native_shell_uses_normal_windows_workspace_paths() {
+        for (input, expected) in [
+            (r"\\?\C:\Users\Ron\agent-workspace", r"C:\Users\Ron\agent-workspace"),
+            (r"\\?\UNC\server\share\workspace", r"\\server\share\workspace"),
+        ] {
+            let command = command_for_shell(Path::new(input), None, Some(TerminalAppearance::Dark));
+            assert_eq!(command.get_cwd().unwrap(), std::ffi::OsStr::new(expected));
+        }
+    }
+
     #[test]
     fn gchat_opencode_configuration_requires_the_selected_registered_model() {
         let temp = tempfile::tempdir().unwrap();
@@ -1539,6 +1569,7 @@ mod tests {
             .get("theme")
             .and_then(|value| value.as_object())
             .unwrap();
+        assert_eq!(tokens["secondary"], tokens["primary"]);
         for key in REQUIRED_THEME_KEYS {
             assert!(
                 tokens.contains_key(key),

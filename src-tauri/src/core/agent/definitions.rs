@@ -20,6 +20,50 @@ const MAX_NAME_CHARS: usize = 80;
 const MAX_DESCRIPTION_CHARS: usize = 500;
 const MAX_INSTRUCTIONS_CHARS: usize = 24_000;
 const MAX_MODEL_INSTANCE_ID_CHARS: usize = 256;
+
+/// Tool-facing shape; semantic validation remains owned by validate_definition.
+pub fn definition_json_schema() -> serde_json::Value {
+    use serde_json::json;
+    let string = json!({"type":"string"});
+    let skills = json!({"type":"array","items":{"type":"string"}});
+    let model = json!({"type":["string","null"],"description":"Use null for the current model. Otherwise copy an exact registered instance ID from the Studio catalog; never invent IDs."});
+    let effort = json!({"enum":[null,"none","minimal","low","medium","high","xhigh","max"]});
+    let mut role = json!({"type":"object","properties":{
+        "id":string,"name":string,"instructions":string,"skills":skills,
+        "maxSteps":{"type":"integer","minimum":1,"maximum":MAX_STEPS},
+        "modelInstanceId":model,"reasoningEffort":effort
+    },"required":["id","name"],"additionalProperties":false});
+    let worker = role.clone();
+    role["properties"]["workspace"] = json!({"enum":["isolated","shared"]});
+    json!({"type":"object","description":"The AgentDefinition itself, not a string and not a definition wrapper. Start with a catalog template.",
+      "properties":{
+        "schemaVersion":{"type":"integer","const":AGENT_DEFINITION_SCHEMA_VERSION},
+        "id":string,"name":string,"description":string,"defaultGoal":string,"instructions":string,
+        "skills":skills,"maxSteps":{"type":"integer","minimum":1,"maximum":MAX_STEPS},
+        "maxOutputTokens":{"type":["integer","null"]},"outputContract":string,
+        "modelInstanceId":model,"reasoningEffort":effort,"builtIn":{"type":"boolean","const":false},
+        "roleAssignments":{"type":"object","additionalProperties":{"type":"object","properties":{
+          "target":{"oneOf":[
+            {"type":"object","properties":{"kind":{"const":"current"}},"required":["kind"],"additionalProperties":false},
+            {"type":"object","properties":{"kind":{"enum":["instance","pool"]},"id":{"type":"string"}},"required":["kind","id"],"additionalProperties":false}
+          ]},"vision":{"type":"boolean"},"minimumContext":{"type":"integer","minimum":0}
+        },"additionalProperties":false}},
+        "kind":{"enum":["standard","goal_loop","coordinator","workflow"]},
+        "maxCycles":{"type":"integer","minimum":1},"successCriteria":string,"evaluatorInstructions":string,
+        "evaluatorModelInstanceId":model,"evaluatorReasoningEffort":effort,
+        "maxParallel":{"type":"integer","minimum":1,"maximum":MAX_COMPOSITE_NODES},
+        "coordinatorInstructions":string,"synthesisInstructions":string,
+        "synthesisModelInstanceId":model,"synthesisReasoningEffort":effort,
+        "workers":{"type":"array","items":worker},"nodes":{"type":"array","items":role},
+        "edges":{"type":"array","items":{"type":"object","properties":{"from":string,"to":string},"required":["from","to"],"additionalProperties":false}}
+      },"required":["schemaVersion","id","name","kind","defaultGoal"],"additionalProperties":false,
+      "oneOf":[
+        {"properties":{"kind":{"const":"standard"}}},
+        {"properties":{"kind":{"const":"goal_loop"}},"required":["maxCycles","successCriteria","evaluatorInstructions"]},
+        {"properties":{"kind":{"const":"coordinator"}},"required":["maxParallel","coordinatorInstructions","synthesisInstructions","workers"]},
+        {"properties":{"kind":{"const":"workflow"}},"required":["nodes","edges"]}
+      ]})
+}
 static DEFINITION_STORE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,11 +75,15 @@ pub struct AgentDefinition {
     #[serde(default)]
     pub description: String,
     #[serde(default)]
+    pub default_goal: String,
+    #[serde(default)]
     pub instructions: String,
     #[serde(default)]
     pub skills: Vec<String>,
     #[serde(default = "default_max_steps")]
     pub max_steps: u32,
+    #[serde(default)]
+    pub max_output_tokens: Option<u32>,
     #[serde(default)]
     pub output_contract: String,
     /// Stable registered model ID. `None` binds the run's active chat model.
@@ -196,9 +244,11 @@ pub fn general_agent() -> AgentDefinition {
         id: "general".into(),
         name: "General Agent".into(),
         description: "A capable autonomous agent for everyday local tasks.".into(),
+        default_goal: String::new(),
         instructions: String::new(),
         skills: Vec::new(),
         max_steps: MAX_STEPS,
+        max_output_tokens: None,
         output_contract: String::new(),
         model_instance_id: None,
         role_assignments: Default::default(),
@@ -293,9 +343,11 @@ fn template(id: &str, name: &str, description: &str, strategy: AgentStrategy) ->
             id: String::new(),
             name: name.into(),
             description: description.into(),
+            default_goal: String::new(),
             instructions: String::new(),
             skills: Vec::new(),
             max_steps: MAX_STEPS,
+            max_output_tokens: None,
             output_contract: String::new(),
             model_instance_id: None,
             role_assignments: Default::default(),
@@ -424,6 +476,9 @@ pub fn validate_definition(definition: &AgentDefinition) -> Result<(), String> {
         ));
     }
     validate_id("Agent definition", &definition.id)?;
+    if definition.max_output_tokens.is_some_and(|value| !(256..=262144).contains(&value)) {
+        return Err("Output budget must be Auto or between 256 and 262144 tokens".into());
+    }
     validate_common(
         &definition.name,
         &definition.description,
@@ -433,6 +488,9 @@ pub fn validate_definition(definition: &AgentDefinition) -> Result<(), String> {
     )?;
     if definition.output_contract.chars().count() > MAX_INSTRUCTIONS_CHARS {
         return Err("Agent output contract is too long".into());
+    }
+    if definition.default_goal.chars().count() > MAX_INSTRUCTIONS_CHARS {
+        return Err("Agent default goal is too long".into());
     }
     validate_model_instance_id("Agent default", &definition.model_instance_id)?;
 
@@ -871,15 +929,30 @@ mod tests {
             name: "Custom".into(),
             role_assignments: Default::default(),
             description: String::new(),
+            default_goal: String::new(),
             instructions: "Do the work.".into(),
             skills: vec!["code".into()],
             max_steps: 10,
+            max_output_tokens: None,
             output_contract: String::new(),
             model_instance_id: None,
             reasoning_effort: None,
             strategy: AgentStrategy::Standard,
             built_in: false,
         }
+    }
+
+    #[test]
+    fn saves_and_reloads_the_default_goal() {
+        let root = tempfile::tempdir().unwrap();
+        let mut definition = custom_standard("performance-test");
+        definition.default_goal = "Run the existing workspace performance tests.".into();
+        save_definition(root.path(), definition.clone()).unwrap();
+        let saved = get_definition(root.path(), &definition.id).unwrap();
+        assert_eq!(saved.default_goal, definition.default_goal);
+        assert_eq!(serde_json::to_value(&saved).unwrap()["defaultGoal"], definition.default_goal);
+        definition.default_goal = "x".repeat(MAX_INSTRUCTIONS_CHARS + 1);
+        assert!(save_definition(root.path(), definition).unwrap_err().contains("default goal"));
     }
 
     #[test]

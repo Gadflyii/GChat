@@ -99,12 +99,14 @@ export type AgentWorkflowEdge = {
 }
 
 type AgentDefinitionBase = {
+  maxOutputTokens?: number | null
   roleAssignments?: Record<string, AgentRoleAssignment>
   schemaVersion: 3
   id: string
   name: string
   description: string
   instructions: string
+  defaultGoal?: string
   skills: string[]
   maxSteps: number
   outputContract: string
@@ -257,6 +259,9 @@ export type AgentToolExecution = {
 }
 
 export type AgentEvent =
+  | { type: 'context_status'; context_id: string; input_tokens: number;
+      context_tokens: number; reserved_tokens: number; compactions: number;
+      status: 'ready' | 'compacting' | 'nothing_to_compact' | 'blocked'; archive_path: string | null }
   | { type: 'inference_measured'; inference: AgentInferenceMetrics }
   | { type: 'stage_queued'; stage_id: string; name: string; reason: string }
   | { type: 'stage_activity'; stage_id: string; event: AgentEvent }
@@ -405,6 +410,7 @@ export type AgentRunTrace = {
       | 'failed'
       | 'cancelled'
     activity?: string
+    context?: Extract<AgentEvent, { type: 'context_status' }>
     events?: AgentEvent[]
     cycle?: number
     summary?: string

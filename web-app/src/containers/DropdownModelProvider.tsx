@@ -28,6 +28,8 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { getLastUsedModel } from '@/utils/getModelToStart'
 import { switchToModel } from '@/utils/switchModel'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import { useAppState } from '@/hooks/useAppState'
+import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 import { ChevronsUpDown } from 'lucide-react'
 
 interface SearchableModel {
@@ -58,7 +60,15 @@ interface DropdownModelProviderProps {
 const DropdownModelProvider = memo(function DropdownModelProvider({
   showSampler = true,
 }: DropdownModelProviderProps) {
-  const providers = useModelProvider((state) => state.providers)
+  const allProviders = useModelProvider((state) => state.providers)
+  const activeModels = useAppState((state) => state.activeModels)
+  const providers = useMemo(() => allProviders.filter(provider => provider.active && (
+    isGinferProvider(provider.provider) || provider.provider === 'ginfer-lan' ||
+    !!provider.api_key?.trim() || !isKnownProvider(provider.provider)
+  )).map(provider => ({ ...provider, models: provider.models.filter(model =>
+    !model.embedding && model.id !== EMBEDDING_MODEL_ID &&
+    (!isGinferProvider(provider.provider) || activeModels.includes(model.id))
+  ) })).filter(provider => provider.models.length > 0), [allProviders, activeModels])
   const getProviderByName = useModelProvider((state) => state.getProviderByName)
   const selectModelProvider = useModelProvider(
     (state) => state.selectModelProvider
@@ -165,12 +175,18 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
     if (!open) {
       requestAnimationFrame(() => setSearchValue(''))
     } else {
+      void serviceHub.models().getActiveModels('ginfer')
+        .then(models => syncActiveModelsFromEngines(models))
+        .catch(error => {
+          syncActiveModelsFromEngines([])
+          console.debug('Unable to refresh running chat models:', error)
+        })
       // Focus search input when opening
       setTimeout(() => {
         searchInputRef.current?.focus()
       }, 100)
     }
-  }, [])
+  }, [serviceHub])
 
   // Clear search and focus input
   const onClearSearch = useCallback(() => {
@@ -205,7 +221,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
         const isPredefined = isKnownProvider(provider.provider)
         if (
           provider &&
-          !isGinferProvider(provider.provider) &&
+          !isGinferProvider(provider.provider) && provider.provider !== 'ginfer-lan' &&
           !provider.api_key?.length &&
           (isPredefined || provider.models.length === 0)
         )
@@ -286,7 +302,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
 
     if (!searchValue) {
       const activeProviders = providers
-        .filter((p) => p.active)
+        .filter((p) => p.active && filteredItems.some(item => item.provider.provider === p.provider && !favoriteModels.some(fav => fav.id === item.model.id)))
         .sort((a, b) => {
           // Local providers first, regardless of whether they have models
           const aIsLocal = isGinferProvider(a.provider)
@@ -322,14 +338,12 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
 
     // Add the filtered items to their respective groups
     filteredItems.forEach((item) => {
+      const isFavorite = favoriteModels.some((fav) => fav.id === item.model.id)
+      if (!searchValue && isFavorite) return
       const providerKey = item.provider.provider
       if (!groups[providerKey]) {
         groups[providerKey] = []
       }
-
-      // When not searching, exclude favorite models from regular provider sections
-      const isFavorite = favoriteModels.some((fav) => fav.id === item.model.id)
-      if (!searchValue && isFavorite) return // Skip adding this item to regular provider section
 
       groups[providerKey].push(item)
     })
@@ -373,7 +387,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
      [selectModelProvider, serviceHub]
    )
 
-  if (!providers.length) return null
+  if (!allProviders.length) return null
 
   const provider = getProviderByName(selectedProvider)
 

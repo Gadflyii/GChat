@@ -18,6 +18,32 @@ use tokio::{
 };
 use uuid::Uuid;
 
+/// The same publication catalog used by GChat; unpublished entries are never downloads.
+pub async fn published_releases() -> Result<Vec<Release>, String> {
+    let url = std::env::var("GINFER_MODEL_CATALOG_URL").ok()
+        .or_else(|| option_env!("VITE_MODEL_CATALOG_URL").map(str::to_owned));
+    let Some(url) = url else { return Ok(Vec::new()); };
+    let value: serde_json::Value = reqwest::Client::builder().https_only(true)
+        .timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?
+        .get(url).send().await.map_err(|e| e.to_string())?
+        .error_for_status().map_err(|e| e.to_string())?
+        .json().await.map_err(|e| e.to_string())?;
+    catalog_releases(&value)
+}
+
+fn catalog_releases(value: &serde_json::Value) -> Result<Vec<Release>, String> {
+    let models = value["models"].as_array().ok_or("publication catalog requires models")?;
+    let mut releases = BTreeMap::new();
+    for model in models.iter().filter(|m| m["library_name"] == "ginfer") {
+        for release in model["releases"].as_array().into_iter().flatten() {
+            let release: Release = serde_json::from_value(release.clone()).map_err(|e| e.to_string())?;
+            release.validate()?;
+            releases.insert(release.sha256.clone(), release);
+        }
+    }
+    Ok(releases.into_values().collect())
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Release {
@@ -125,9 +151,11 @@ pub struct Download {
     pub bytes_per_second: u64,
     pub error: Option<String>,
     pub path: Option<PathBuf>,
+    #[serde(default)]
+    pub storage_root: PathBuf,
 }
 pub struct ModelDownloads {
-    root: PathBuf,
+    root: std::sync::RwLock<PathBuf>,
     state_path: PathBuf,
     jobs: Mutex<BTreeMap<Uuid, Download>>,
     serial: Arc<Semaphore>,
@@ -164,6 +192,9 @@ impl ModelDownloads {
             Err(e) => return Err(e.to_string()),
         };
         for job in jobs.values_mut() {
+            if job.storage_root.as_os_str().is_empty() {
+                job.storage_root = root.clone();
+            }
             if matches!(
                 job.status.as_str(),
                 "queued" | "downloading" | "verifying" | "pausing"
@@ -175,7 +206,7 @@ impl ModelDownloads {
             job.bytes_per_second = 0;
         }
         let manager = Arc::new(Self {
-            root,
+            root: std::sync::RwLock::new(root),
             state_path,
             jobs: Mutex::new(jobs),
             serial: Arc::new(Semaphore::new(1)),
@@ -183,8 +214,11 @@ impl ModelDownloads {
         });
         Ok(manager)
     }
-    pub fn root(&self) -> &std::path::Path {
-        &self.root
+    pub fn root(&self) -> PathBuf {
+        self.root.read().unwrap().clone()
+    }
+    pub fn set_root(&self, root: PathBuf) {
+        *self.root.write().unwrap() = root;
     }
     fn save(&self, jobs: &BTreeMap<Uuid, Download>) -> Result<(), String> {
         write_private(
@@ -216,6 +250,7 @@ impl ModelDownloads {
             bytes_per_second: 0,
             error: None,
             path: None,
+            storage_root: self.root(),
         };
         jobs.insert(job.id, job.clone());
         if let Err(e) = self.save(&jobs) {
@@ -233,17 +268,13 @@ impl ModelDownloads {
             if !matches!(job.status.as_str(), "paused" | "failed") {
                 return Err("pause the download before removing incomplete files".into());
             }
-            let partial = self.root.join(format!("{id}.part"));
+            let partial = job.storage_root.join(format!("{id}.part"));
             match tokio::fs::remove_file(partial).await {
                 Ok(()) => (),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
                 Err(e) => return Err(e.to_string()),
             }
-            let staging = self
-                .state_path
-                .parent()
-                .ok_or("download state has no directory")?
-                .join(format!(".model-install-{id}"));
+            let staging = job.storage_root.join(format!(".model-install-{id}"));
             if staging.exists() {
                 for name in ["model.ginfer", "model.yml"] {
                     match tokio::fs::remove_file(staging.join(name)).await {
@@ -285,15 +316,15 @@ impl ModelDownloads {
             .values()
             .find(|job| {
                 job.status == "installed"
-                    && (if self.local_layout { self.root.join(&job.release.sha256).join("model.ginfer") }
-                        else { self.root.join(format!("{}.ginfer", job.release.sha256)) }) == path
+                    && (if self.local_layout { job.storage_root.join(&job.release.sha256).join("model.ginfer") }
+                        else { job.storage_root.join(format!("{}.ginfer", job.release.sha256)) }) == path
             })
             .map(|j| j.id)
             .ok_or("only packages installed into managed storage can be removed")?;
         let job = jobs.get(&id).ok_or("installed download disappeared")?;
         job.release.validate()?;
         if self.local_layout {
-            tokio::fs::remove_dir_all(self.root.join(&job.release.sha256)).await.map_err(|e| e.to_string())?;
+            tokio::fs::remove_dir_all(job.storage_root.join(&job.release.sha256)).await.map_err(|e| e.to_string())?;
         } else {
             tokio::fs::remove_file(&path).await.map_err(|e| e.to_string())?;
         }
@@ -315,7 +346,9 @@ impl ModelDownloads {
             }
             let result = manager.transfer(id).await;
             if let Err(error) = result {
-                let received = tokio::fs::metadata(manager.root.join(format!("{id}.part")))
+                let root = manager.jobs.lock().await.get(&id).map(|job| job.storage_root.clone());
+                let Some(root) = root else { return; };
+                let received = tokio::fs::metadata(root.join(format!("{id}.part")))
                     .await
                     .map(|m| m.len())
                     .unwrap_or(0);
@@ -363,25 +396,22 @@ impl ModelDownloads {
         self.transfer_with_client(id, client).await
     }
     async fn transfer_with_client(&self, id: Uuid, client: reqwest::Client) -> Result<(), String> {
-        let release = self
+        let job = self
             .jobs
             .lock()
             .await
             .get(&id)
             .ok_or("unknown download")?
-            .release
             .clone();
-        let partial = self.root.join(format!("{id}.part"));
+        let release = job.release;
+        let root = job.storage_root;
+        let partial = root.join(format!("{id}.part"));
         let destination = if self.local_layout {
-            self.root.join(&release.sha256).join("model.ginfer")
+            root.join(&release.sha256).join("model.ginfer")
         } else {
-            self.root.join(format!("{}.ginfer", release.sha256))
+            root.join(format!("{}.ginfer", release.sha256))
         };
-        let staging = self
-            .state_path
-            .parent()
-            .ok_or("download state has no directory")?
-            .join(format!(".model-install-{id}"));
+        let staging = root.join(format!(".model-install-{id}"));
         if destination.is_file() {
             self.update(id, release.bytes, 0, "verifying").await?;
             verify_package(destination.clone(), &release).await?;
@@ -400,7 +430,7 @@ impl ModelDownloads {
             return Err("partial file exceeds release size; remove this incomplete download before retrying".into());
         }
         self.update(id, received, 0, "downloading").await?;
-        let available = available_bytes(self.root.clone()).await?;
+        let available = available_bytes(root.clone()).await?;
         if available < release.bytes - received + 64 * 1024 * 1024 {
             return Err("Not enough free disk space on the destination host.".into());
         }
@@ -474,7 +504,10 @@ impl ModelDownloads {
             tokio::fs::create_dir_all(&staging)
                 .await
                 .map_err(|e| e.to_string())?;
-            let manifest = serde_json::json!({"model_path":format!("ginfer/models/{}/model.ginfer", release.sha256),
+            let model_path = if self.state_path.parent().is_some_and(|p| root == p.join("models")) {
+                format!("ginfer/models/{}/model.ginfer", release.sha256)
+            } else { destination.to_string_lossy().into_owned() };
+            let manifest = serde_json::json!({"model_path":model_path,
                 "name":release.name,"size_bytes":release.bytes,"sha256":release.sha256,"identity":release.identity,
                 "capabilities":release.capabilities,"embedding":false,"source":"local"});
             write_private(
@@ -484,7 +517,7 @@ impl ModelDownloads {
             tokio::fs::rename(&partial, staging.join("model.ginfer"))
                 .await
                 .map_err(|e| e.to_string())?;
-            tokio::fs::rename(&staging, self.root.join(&release.sha256))
+            tokio::fs::rename(&staging, root.join(&release.sha256))
                 .await
                 .map_err(|e| e.to_string())?;
         } else {
@@ -536,7 +569,7 @@ async fn verify_package(path: PathBuf, release: &Release) -> Result<(), String> 
     Ok(())
 }
 
-async fn available_bytes(path: PathBuf) -> Result<u64, String> {
+pub async fn available_bytes(path: PathBuf) -> Result<u64, String> {
     #[cfg(windows)]
     let path = path
         .to_string_lossy()
@@ -549,7 +582,7 @@ async fn available_bytes(path: PathBuf) -> Result<u64, String> {
         .output()
         .await;
     #[cfg(windows)]
-    let output = tokio::process::Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", "$p=[IO.Path]::GetPathRoot($env:GCHAT_TRANSFER_ROOT); ([IO.DriveInfo]::new($p)).AvailableFreeSpace"]).env("GCHAT_TRANSFER_ROOT", path).output().await;
+    let output = tokio::process::Command::new("powershell.exe").creation_flags(0x08000000).args(["-NoProfile", "-NonInteractive", "-Command", "$p=[IO.Path]::GetPathRoot($env:GCHAT_TRANSFER_ROOT); ([IO.DriveInfo]::new($p)).AvailableFreeSpace"]).env("GCHAT_TRANSFER_ROOT", path).output().await;
     let output = output.map_err(|e| format!("cannot check destination disk space: {e}"))?;
     if !output.status.success() {
         return Err("cannot check destination disk space".into());
@@ -628,6 +661,7 @@ mod tests {
                 bytes_per_second: 0,
                 error: None,
                 path: None,
+                storage_root: manager.root(),
             },
         );
         manager.save(&jobs).unwrap();
@@ -646,6 +680,42 @@ mod tests {
         release.qualified_sm.clear();
         assert!(release.validate().is_err());
     }
+
+    #[test]
+    fn catalog_omits_unpublished_models_and_validates_published_packages() {
+        let (release, _) = fixture();
+        let catalog = serde_json::json!({"models":[
+            {"library_name":"ginfer","releases":[release]},
+            {"library_name":"ginfer","model_name":"not-published"}
+        ]});
+        assert_eq!(catalog_releases(&catalog).unwrap().len(), 1);
+        let mut bad = catalog;
+        bad["models"][0]["releases"][0]["sha256"] = serde_json::json!("invalid");
+        assert!(catalog_releases(&bad).is_err());
+    }
+
+    #[tokio::test]
+    async fn storage_change_preserves_existing_transfer_and_installed_package() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("first");
+        let second = dir.path().join("second");
+        std::fs::create_dir(&second).unwrap();
+        let state = dir.path().join("jobs.json");
+        let manager = ModelDownloads::open(first.clone(), state.clone()).unwrap();
+        let (release, bytes) = fixture();
+        let id = insert(&manager, release.clone()).await;
+        std::fs::write(first.join(format!("{id}.part")), bytes).unwrap();
+        manager.set_root(second.clone());
+        manager.transfer(id).await.unwrap();
+        let installed = first.join(format!("{}.ginfer", release.sha256));
+        assert!(installed.exists());
+        assert!(!second.join(format!("{}.ginfer", release.sha256)).exists());
+        let reopened = ModelDownloads::open(first, state).unwrap();
+        reopened.set_root(second);
+        assert_eq!(reopened.list().await[0].path.as_ref(), Some(&installed));
+        reopened.remove_installed(&installed).await.unwrap();
+        assert!(!installed.exists());
+    }
     #[tokio::test]
     async fn complete_partial_is_verified_published_and_removed_only_from_managed_storage() {
         let dir = tempfile::tempdir().unwrap();
@@ -653,7 +723,7 @@ mod tests {
             ModelDownloads::open(dir.path().join("models"), dir.path().join("jobs.json")).unwrap();
         let (release, bytes) = fixture();
         let id = insert(&manager, release.clone()).await;
-        std::fs::write(manager.root.join(format!("{id}.part")), &bytes).unwrap();
+        std::fs::write(manager.root().join(format!("{id}.part")), &bytes).unwrap();
         manager.transfer(id).await.unwrap();
         let job = manager.list().await.pop().unwrap();
         assert_eq!(job.status, "installed");
@@ -694,10 +764,10 @@ mod tests {
         let (release, mut bytes) = fixture();
         let id = insert(&manager, release.clone()).await;
         bytes[4095] = 1;
-        std::fs::write(manager.root.join(format!("{id}.part")), bytes).unwrap();
+        std::fs::write(manager.root().join(format!("{id}.part")), bytes).unwrap();
         assert!(manager.transfer(id).await.unwrap_err().contains("SHA256"));
         assert!(!manager
-            .root
+            .root()
             .join(format!("{}.ginfer", release.sha256))
             .exists());
     }
@@ -803,7 +873,7 @@ mod tests {
         let manager =
             ModelDownloads::open(dir.path().join("models"), dir.path().join("jobs.json")).unwrap();
         let id = insert(&manager, release).await;
-        std::fs::write(manager.root.join(format!("{id}.part")), &bytes[..128]).unwrap();
+        std::fs::write(manager.root().join(format!("{id}.part")), &bytes[..128]).unwrap();
         manager
             .transfer_with_client(id, reqwest::Client::builder().no_proxy().build().unwrap())
             .await

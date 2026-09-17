@@ -31,6 +31,7 @@ import {
 import { resolveBinaryPath } from './util'
 import { checkGinferHardware } from './hardware'
 import { ginferModelProfile } from './model-profile'
+import { countTokens, loadedContext } from './session-metadata'
 
 /**
  * Override the default app.log function to use the Tauri logging system.
@@ -395,22 +396,13 @@ export default class ginfer_extension extends AIEngine {
     const session = await findSessionByModel(modelId)
     if (!session) return undefined
 
-    const response = await globalThis.fetch(
-      `http://localhost:${session.port}/v1/models`,
-      {
-        headers: { Authorization: `Bearer ${session.api_key}` },
-      }
-    )
-    if (!response.ok) return undefined
-    const payload = (await response.json()) as {
-      data?: Array<{ id?: string; max_model_len?: number | string }>
-    }
-    const advertised = payload.data?.find((candidate) =>
-      candidate.id === modelId ||
-      candidate.id?.replace(/\./g, '_') === modelId.replace(/\./g, '_')
-    )
-    const value = Number(advertised?.max_model_len)
-    return Number.isFinite(value) && value > 0 ? value : undefined
+    return loadedContext(session)
+  }
+
+  async getTokensCount(opts: { model: string; messages: unknown[] }): Promise<number> {
+    const session = await findSessionByModel(opts.model)
+    if (!session) throw new Error(`No active GInfer session for ${opts.model}`)
+    return countTokens(session, opts.model, opts.messages)
   }
 
   override async chat(

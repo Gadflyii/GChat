@@ -164,6 +164,8 @@ pub fn run() {
         core::terminal::terminal_stop,
         core::terminal::opencode_readiness,
         core::terminal::hermes_readiness,
+        core::system::hermes_update::update_hermes,
+        core::system::code_update::update_code,
         // Server commands
         core::server::commands::start_server,
         core::server::commands::stop_server,
@@ -237,7 +239,6 @@ pub fn run() {
         // HTTP (bypasses tauri_plugin_http fetch interception)
         core::http::post_local_http,
         core::http::get_local_http,
-        core::http::stream_local_http,
         // HTML artifact preview (served via the artifact:// protocol)
         core::artifact::set_artifact_html,
         core::artifact::clear_artifact_html,

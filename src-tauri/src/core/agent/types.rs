@@ -134,7 +134,7 @@ pub struct AgentAttachment {
 pub struct AgentTurnRequest {
     /// Opaque id chosen by the caller; used for cancellation.
     pub run_id: String,
-    /// Durable session id. The frontend binds this to the owning thread id.
+    /// Durable session id: the chat thread id or a standalone Studio session id.
     pub session_id: String,
     /// The `model_id` whose `ginfer-serve` session the agent should target.
     pub model_id: String,
@@ -254,6 +254,15 @@ pub enum LoopDetector {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
+    ContextStatus {
+        context_id: String,
+        input_tokens: usize,
+        context_tokens: usize,
+        reserved_tokens: usize,
+        compactions: u32,
+        status: String,
+        archive_path: Option<String>,
+    },
     TurnStarted {
         run_id: String,
         session_id: String,

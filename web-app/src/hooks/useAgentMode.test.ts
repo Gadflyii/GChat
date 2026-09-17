@@ -8,6 +8,21 @@ describe('useAgentMode', () => {
     useAgentMode.getState().clearAll()
   })
 
+  it('keeps a main-chat skill and workspace through thread creation, then exits it', () => {
+    useAgentMode.getState().setActiveSkill(TEMPORARY_CHAT_ID, 'agent-builder')
+    useAgentMode.getState().setWorkingDir(TEMPORARY_CHAT_ID, '/workspace')
+    useAgentMode.getState().transferAgentMode(TEMPORARY_CHAT_ID, 'skill-thread')
+
+    expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
+    expect(useAgentMode.getState().usesAgentTools('skill-thread')).toBe(true)
+    expect(useAgentMode.getState().activeSkills['skill-thread']).toBe('agent-builder')
+    expect(useAgentMode.getState().getWorkingDir('skill-thread')).toBe('/workspace')
+    expect(useAgentMode.getState().activeSkills[TEMPORARY_CHAT_ID]).toBeUndefined()
+
+    useAgentMode.getState().setActiveSkill('skill-thread')
+    expect(useAgentMode.getState().usesAgentTools('skill-thread')).toBe(false)
+  })
+
   it('moves the Home selection to the created thread', () => {
     useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, true)
     useAgentMode.getState().setApprovalMode(TEMPORARY_CHAT_ID, 'skip')

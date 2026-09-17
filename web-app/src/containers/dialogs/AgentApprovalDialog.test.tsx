@@ -51,6 +51,20 @@ describe('AgentApprovalDialog', () => {
     ).toBeInTheDocument()
   })
 
+  it('previews an agent definition and requires an explicit creation decision', async () => {
+    useAgentRun.getState().applyEvent('thread-1', {
+      type: 'approval_requested', run_id: 'run-1', approval_id: 'builder-save', tool: 'studio.manage', reason: 'Save definition',
+      preview: { action: 'save_definition', args: { name: 'Model inventory', kind: 'standard', defaultGoal: 'List local models and total size', instructions: 'Use registered model inventory', outputContract: 'A table with sizes' } },
+      affected_resources: [], can_remember: false,
+    })
+    render(<AgentApprovalDialog />)
+    expect(screen.getByText('Model inventory')).toBeInTheDocument()
+    expect(screen.getByText('List local models and total size')).toBeInTheDocument()
+    expect(resolveAgentApproval).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await waitFor(() => expect(resolveAgentApproval).toHaveBeenCalledWith({ approval_id: 'builder-save', decision: 'allow_once' }))
+  })
+
   it('approves once and guards against a double click', async () => {
     let finish: (() => void) | undefined
     resolveAgentApproval.mockReturnValue(

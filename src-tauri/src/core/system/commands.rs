@@ -2065,14 +2065,14 @@ fn login_shell_path() -> Option<String> {
 /// builds can find user-installed tools (`npm`/`node`, agent binaries). No-op
 /// on Windows, where processes inherit the registry (user/system) PATH.
 #[cfg(not(windows))]
-fn apply_login_path(cmd: &mut std::process::Command) {
+pub(crate) fn apply_login_path(cmd: &mut std::process::Command) {
     if let Some(path) = login_shell_path() {
         cmd.env("PATH", path);
     }
 }
 
 #[cfg(windows)]
-fn apply_login_path(_cmd: &mut std::process::Command) {}
+pub(crate) fn apply_login_path(_cmd: &mut std::process::Command) {}
 
 /// PATH used by long-lived embedded terminal shells. Unlike `apply_*`, this
 /// can be passed to portable-pty's `CommandBuilder` and sees tools installed
@@ -2164,14 +2164,14 @@ pub(crate) fn agent_runtime_path() -> Option<String> {
 /// Apply the freshly-read registry PATH to a spawned command (Windows only).
 /// No-op off Windows or when the registry read fails (the inherited PATH stands).
 #[cfg(windows)]
-fn apply_runtime_path(cmd: &mut std::process::Command) {
+pub(crate) fn apply_runtime_path(cmd: &mut std::process::Command) {
     if let Some(path) = refresh_windows_path() {
         cmd.env("PATH", path);
     }
 }
 
 #[cfg(not(windows))]
-fn apply_runtime_path(_cmd: &mut std::process::Command) {}
+pub(crate) fn apply_runtime_path(_cmd: &mut std::process::Command) {}
 
 /// Decode bytes captured from a spawned process into a String. On Windows,
 /// `cmd.exe` emits its own diagnostics (e.g. "... is not recognized as an

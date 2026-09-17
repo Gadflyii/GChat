@@ -79,6 +79,18 @@ export function stopTerminal(terminalId: TerminalId): Promise<TerminalStatus> {
   return invoke<TerminalStatus>('terminal_stop', { terminalId })
 }
 
+export function updateHermes(customPath: string | undefined, onProgress: (phase: string) => void): Promise<{ logPath: string }> {
+  const channel = new Channel<string>()
+  channel.onmessage = onProgress
+  return invoke('update_hermes', { customPath: customPath || null, onProgress: channel })
+}
+
+export function updateCode(customPath: string | undefined, onProgress: (phase: string) => void): Promise<{ logPath: string }> {
+  const channel = new Channel<string>()
+  channel.onmessage = onProgress
+  return invoke('update_code', { customPath: customPath || null, onProgress: channel })
+}
+
 export function getOpenCodeReadiness(
   customPath?: string
 ): Promise<OpenCodeReadiness> {

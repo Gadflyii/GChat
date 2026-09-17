@@ -1,5 +1,19 @@
 # Engineering Decisions (ADR)
 
+- [Agent Builder native tool contract](2026-09-17-agent-builder-tool-contract.md)
+
+- [Background Code updates](2026-09-17-background-code-updates.md)
+
+- [Background Hermes updates](2026-09-17-background-hermes-updates.md)
+
+- [Agent clarification replies](2026-09-17-agent-clarification-replies.md)
+
+- [Full Code sessions and visible Hermes updates](2026-09-17-full-code-session-and-hermes-updates.md)
+
+- [Native terminal startup](2026-09-17-native-terminal-startup.md)
+
+- [Chat skills and focused agent authoring](2026-09-17-chat-skills-and-agent-authoring.md)
+
 One decision per file. Append-only: never edit or delete an existing record — if a
 decision is reversed, add a new one that says which record it supersedes.
 
@@ -14,6 +28,16 @@ decision is reversed, add a new one that says which record it supersedes.
 ---
 
 ## Load-bearing — read before touching platform / provider / agent code
+
+- **2026-09-17** — [Reuse server instances across launches](2026-09-17-reuse-host-gpu-group-instances.md)
+
+- **2026-09-16** — [Manage worker context at completed tool boundaries](2026-09-16-worker-context-checkpoints.md)
+
+- **2026-09-16** — [Save default goals with agent definitions](2026-09-16-agent-default-goals.md)
+
+- **2026-09-16** — [Align the native HTTP bridge](2026-09-16-align-native-http-bridge.md)
+
+- **2026-09-16** — [Guided native GInfer launcher](2026-09-16-guided-native-launcher.md)
 
 - **2026-09-10** — [Native integrations and host startup controls](2026-09-10-native-integrations-and-host-controls.md)
 - **2026-09-10** — [Remove external telemetry](2026-09-10-remove-external-telemetry.md)

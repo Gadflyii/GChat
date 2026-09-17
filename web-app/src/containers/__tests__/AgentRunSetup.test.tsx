@@ -81,6 +81,30 @@ const definition: AgentDefinition = {
 }
 
 describe('Agent Studio run setup', () => {
+  it('prefills the saved goal and submits edits only for this run', async () => {
+    const saved = { ...definition, defaultGoal: 'Run the workspace performance tests' }
+    render(<AgentRunSetup definition={saved} onClose={vi.fn()} onRun={vi.fn()} />)
+    expect(screen.getByLabelText('Task or goal')).toHaveValue(saved.defaultGoal)
+    fireEvent.change(screen.getByLabelText('Task or goal'), {
+      target: { value: 'Run only the startup test' },
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+    await waitFor(() => expect(mocks.start).toHaveBeenCalledOnce())
+    expect(mocks.start.mock.calls[0][1].user_message).toBe('Run only the startup test')
+    expect(saved.defaultGoal).toBe('Run the workspace performance tests')
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+
+  it('uses the previous run task instead of the default when rerunning', () => {
+    render(<AgentRunSetup
+      definition={{ ...definition, defaultGoal: 'Default goal' }}
+      initialTask="Previous run task"
+      onClose={vi.fn()} onRun={vi.fn()}
+    />)
+    expect(screen.getByLabelText('Task or goal')).toHaveValue('Previous run task')
+  })
+
   it('assigns a pool to a Vision role and a fixed evaluator without mutating the definition', async () => {
     const onRun = vi.fn()
     render(

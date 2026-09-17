@@ -9,6 +9,23 @@ import { Tool } from '@/components/ai-elements/tools/tool'
 import { ToolRenderer } from '@/components/ai-elements/tools/tool-renderer'
 
 describe('AgentActivity', () => {
+  it('shows a failed run error even when activity details are collapsed', () => {
+    render(
+      <AgentActivity
+        active={false}
+        workingLabel="Working"
+        durationLabel="Worked for 0.1 s"
+        error="GInfer did not advertise the selected model"
+        hasDetails={false}
+      >
+        {null}
+      </AgentActivity>
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'GInfer did not advertise the selected model'
+    )
+  })
+
   beforeAll(() => {
     vi.stubGlobal(
       'ResizeObserver',

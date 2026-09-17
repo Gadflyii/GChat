@@ -233,7 +233,7 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
                 vision: profile["options"]["vision"].as_bool() == Some(true),
                 concurrency: profile["concurrency"].as_u64().unwrap_or(8),
                 label: format!(
-                    "{} · {} · TP{} · C{} · {} context · {} · {}",
+                    "{} · {} · TP{} · C{} · {} context · {}",
                     profile["name"].as_str().unwrap_or("Profile"),
                     if profile["options"]["vision"].as_bool() == Some(true) {
                         "Vision + text (default)"
@@ -249,11 +249,6 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
                         Some("calculated-pending-validation") => "Calculated — pending validation (startup/memory/inference unverified; may require engine update)",
                         _ => "Unknown evidence tier",
                     },
-                    group
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .collect::<Vec<_>>()
-                        .join(", ")
                 ),
                 body: json!({"profile_id":profile["id"],"model_id":entry["model_id"],
                     "gpu_uuids":group,"instance_id":replacing,"force":false,
@@ -281,15 +276,6 @@ fn prompt(text: &str) -> Result<String, String> {
     Ok(line.trim().to_string())
 }
 
-fn print_choices(items: &[Choice]) {
-    for (index, item) in items.iter().enumerate() {
-        println!("  {}. {}", index + 1, item.label);
-    }
-    if items.is_empty() {
-        println!("  No qualified profiles match this host's platform, installed models, and available GPU groups.");
-    }
-}
-
 async fn start(control: &LocalControl, choice: &Choice) -> Result<(), String> {
     println!("Checking profile and artifact, then starting serving...");
     let result = control
@@ -314,6 +300,139 @@ fn require_terminal() -> Result<(), String> {
     Ok(())
 }
 
+const BANNER: &str = " ██████╗     ██╗███╗   ██╗███████╗███████╗██████╗\n██╔════╝     ██║████╗  ██║██╔════╝██╔════╝██╔══██╗\n██║  ███╗ ██╗██║██╔██╗ ██║█████╗  █████╗  ██████╔╝\n██║   ██║ ╚═╝██║██║╚██╗██║██╔══╝  ██╔══╝  ██╔══██╗\n╚██████╔╝    ██║██║ ╚████║██║     ███████╗██║  ██║\n ╚═════╝     ╚═╝╚═╝  ╚═══╝╚═╝     ╚══════╝╚═╝  ╚═╝";
+
+fn print_banner() {
+    let terminal = std::io::stdout().is_terminal();
+    let dumb = std::env::var("TERM").is_ok_and(|v| v == "dumb");
+    let unicode = terminal && !dumb && (cfg!(windows) || ["LC_ALL", "LC_CTYPE", "LANG"].iter()
+        .find_map(|key| std::env::var(key).ok().filter(|v| !v.is_empty()))
+        .is_some_and(|v| v.to_uppercase().contains("UTF-8") || v.to_uppercase().contains("UTF8")));
+    let color = terminal && !dumb && std::env::var_os("NO_COLOR").is_none();
+    if color { print!("\x1b[38;2;61;211;200m"); }
+    println!("\n{}", if unicode { BANNER } else { "G [#] INFER" });
+    if color { print!("\x1b[0m"); }
+    println!("\n              by Sectile Research Labs\n");
+}
+
+fn gpu_occupied(snapshot: &Value, id: &str) -> bool {
+    snapshot["instances"].as_array().into_iter().flatten().any(|instance| {
+        matches!(instance["status"].as_str(), Some("ready" | "starting" | "stopping"))
+            && instance["configuration"]["gpu_uuids"].as_array().is_some_and(|g| g.iter().any(|g| g == id))
+    })
+}
+
+fn group_label(snapshot: &Value, group: &Value) -> String {
+    group.as_array().into_iter().flatten().map(|id| {
+        snapshot["gpus"].as_array().into_iter().flatten().enumerate()
+            .find(|(_, gpu)| gpu["uuid"] == *id)
+            .map(|(index, gpu)| format!("GPU {index} — {}", gpu["name"].as_str().unwrap_or("GPU")))
+            .unwrap_or_else(|| "Unavailable GPU".into())
+    }).collect::<Vec<_>>().join(" + ")
+}
+
+fn select(labels: &[String], title: &str) -> Result<Option<usize>, String> {
+    println!("\n{title}");
+    if labels.is_empty() { println!("  None available."); return Ok(None); }
+    for (index, label) in labels.iter().enumerate() { println!("  {}. {label}", index + 1); }
+    loop {
+        let input = prompt("Number (q to go back): ")?;
+        if input == "q" || input.is_empty() { return Ok(None); }
+        if let Some(index) = input.parse::<usize>().ok().and_then(|n| n.checked_sub(1)).filter(|i| *i < labels.len()) {
+            return Ok(Some(index));
+        }
+        println!("Choose a listed number.");
+    }
+}
+
+fn model_label(snapshot: &Value, id: &Value) -> String {
+    snapshot["models"].as_array().into_iter().flatten().find(|model| model["id"] == *id)
+        .map(|model| format!("{} / {}", model["metadata"]["identity"]["model_id"].as_str().unwrap_or("Model"),
+            model["metadata"]["identity"]["weights_id"].as_str().unwrap_or("Package")))
+        .unwrap_or_else(|| "Installed model".into())
+}
+
+async fn launch_menu(control: &LocalControl, snapshot: &Value, replacing: Option<&str>) -> Result<(), String> {
+    let available = choices(snapshot, replacing);
+    let mut groups = Vec::new();
+    for choice in &available {
+        let group = &choice.body["gpu_uuids"];
+        if !groups.contains(group) { groups.push(group.clone()); }
+    }
+    let labels: Vec<_> = groups.iter().map(|g| format!("{} · TP{}", group_label(snapshot, g), g.as_array().map_or(0, Vec::len))).collect();
+    let Some(group) = select(&labels, "Launch on")? else { return Ok(()); };
+    let mut models = Vec::new();
+    for choice in available.iter().filter(|c| c.body["gpu_uuids"] == groups[group]) {
+        let model = &choice.body["model_id"];
+        if !models.contains(model) { models.push(model.clone()); }
+    }
+    let Some(model) = select(&models.iter().map(|id| model_label(snapshot, id)).collect::<Vec<_>>(), "Select model")? else { return Ok(()); };
+    let profiles: Vec<_> = available.iter().filter(|c| c.body["gpu_uuids"] == groups[group] && c.body["model_id"] == models[model]).collect();
+    let Some(profile) = select(&profiles.iter().map(|p| p.label.clone()).collect::<Vec<_>>(), "Select profile (C = simultaneous requests)")? else { return Ok(()); };
+    if prompt(if replacing.is_some() { "Restart with this model/profile? [y/N]: " } else { "Start this instance? [y/N]: " })?.eq_ignore_ascii_case("y") {
+        start(control, profiles[profile]).await?;
+    }
+    Ok(())
+}
+
+async fn storage_menu(control: &LocalControl) -> Result<(), String> {
+    let storage = control.request("/host/v1/model-storage", None).await?;
+    println!("\nModel downloads: {}\nFree space: {:.1} GiB", storage["path"].as_str().unwrap_or("unknown"),
+        storage["available_bytes"].as_u64().unwrap_or(0) as f64 / 1073741824.0);
+    println!("Changing this folder affects new downloads only. Existing models and transfers stay where they are.");
+    let path = prompt("New absolute folder (blank to keep current): ")?;
+    if !path.is_empty() {
+        control.request("/host/v1/model-storage", Some(json!({"path":path.trim_matches('"')}))).await?;
+        println!("Model download folder updated.");
+    }
+    Ok(())
+}
+
+async fn download_menu(control: &LocalControl, snapshot: &Value) -> Result<(), String> {
+    println!("Checking published models…");
+    let releases: Vec<crate::model_downloads::Release> = serde_json::from_value(control.request("/host/v1/model-catalog", None).await?).map_err(|e| e.to_string())?;
+    if releases.is_empty() {
+        println!("No published compatible models are available in the configured catalog yet.\nUse Add a local model to register an existing .ginfer package.");
+        return Ok(());
+    }
+    let gpus: Vec<crate::service::Gpu> = serde_json::from_value(snapshot["gpus"].clone()).map_err(|e| e.to_string())?;
+    let labels: Vec<_> = releases.iter().map(|r| format!("{} · TP{} · {:.1} GiB download · {}", r.name, r.tp,
+        r.bytes as f64 / 1073741824.0, group_label(snapshot, &json!(r.compatible_group(&gpus).unwrap_or_default())))).collect();
+    let Some(index) = select(&labels, "Download a compatible model")? else { return Ok(()); };
+    let release = &releases[index];
+    let storage = control.request("/host/v1/model-storage", None).await?;
+    let required = release.bytes + 64 * 1024 * 1024;
+    println!("Destination: {}\nRequired free space: {:.1} GiB", storage["path"].as_str().unwrap_or("unknown"), required as f64 / 1073741824.0);
+    if storage["available_bytes"].as_u64().unwrap_or(0) < required { return Err("Not enough disk space. Change Model storage or free space first.".into()); }
+    if prompt("Download this model? [y/N]: ")?.eq_ignore_ascii_case("y") {
+        control.request("/host/v1/downloads", Some(serde_json::to_value(release).map_err(|e| e.to_string())?)).await?;
+        println!("Download queued. It continues if you close this menu.");
+        download_progress(control).await?;
+    }
+    Ok(())
+}
+
+async fn download_progress(control: &LocalControl) -> Result<(), String> {
+    loop {
+        let jobs: Vec<crate::model_downloads::Download> = serde_json::from_value(control.request("/host/v1/downloads", None).await?).map_err(|e| e.to_string())?;
+        let labels: Vec<_> = jobs.iter().map(|j| format!("{} · {} · {:.1}% · {:.1} MiB/s{}", j.release.name, j.status,
+            100.0 * j.received as f64 / j.release.bytes.max(1) as f64, j.bytes_per_second as f64 / 1048576.0,
+            j.error.as_ref().map(|e| format!(" · {e}")).unwrap_or_default())).collect();
+        let Some(index) = select(&labels, "Downloads (select to manage or launch)")? else { return Ok(()); };
+        let job = &jobs[index];
+        if job.status == "installed" {
+            control.request("/host/v1/scan", Some(json!({}))).await?;
+            return launch_menu(control, &control.snapshot().await?, None).await;
+        }
+        let action = prompt("[r] Refresh  [p] Pause  [c] Continue/resume  [q] Back: ")?;
+        match action.as_str() {
+            "q" | "" => return Ok(()),
+            "p" | "c" => { control.request("/host/v1/download-actions", Some(json!({"id":job.id,"action":if action == "p" { "pause" } else { "resume" }}))).await?; }
+            _ => (),
+        }
+    }
+}
+
 pub async fn menu(directory: &Path, origin: &str) -> Result<(), String> {
     require_terminal()?;
     let control = LocalControl::open(directory, origin)?;
@@ -321,43 +440,53 @@ pub async fn menu(directory: &Path, origin: &str) -> Result<(), String> {
 }
 
 async fn menu_control(control: LocalControl) -> Result<(), String> {
+    print_banner();
     loop {
         let snapshot = control.snapshot().await?;
         println!(
             "\nGInfer — {}\n",
             snapshot["display_name"].as_str().unwrap_or("Local host")
         );
-        for gpu in snapshot["gpus"].as_array().into_iter().flatten() {
+        for (index, gpu) in snapshot["gpus"].as_array().into_iter().flatten().enumerate() {
             println!(
-                "  {} · {} MiB · SM {}",
+                "  GPU {index}: {} · {} MiB · SM {} · {}",
                 gpu["name"].as_str().unwrap_or("GPU"),
                 gpu["memory_mib"],
-                gpu["compute_capability"].as_str().unwrap_or("unknown")
+                gpu["compute_capability"].as_str().unwrap_or("unknown"),
+                if gpu_occupied(&snapshot, gpu["uuid"].as_str().unwrap_or("")) { "In use" } else { "Available" }
             );
         }
         if let Some(error) = snapshot["profile_error"].as_str() {
             println!("Profile catalog: {error}");
         }
-        println!("\nAvailable launch profiles:");
         let available = choices(&snapshot, None);
-        print_choices(&available);
+        if snapshot["models"].as_array().is_none_or(Vec::is_empty) {
+            println!("\nNo local models registered. Download a model or add an existing local package.");
+        } else if available.is_empty() {
+            println!("\nNo launch profiles match the installed models and available GPU groups.");
+        }
         println!("\nInstances:");
         for instance in snapshot["instances"].as_array().into_iter().flatten() {
             println!(
-                "  {} · {} · {}",
+                "  {} · {}",
                 instance["display_name"].as_str().unwrap_or("Model"),
                 instance["status"].as_str().unwrap_or("unknown"),
-                instance["instance_id"].as_str().unwrap_or("")
             );
         }
-        println!("\n[number] Start profile   [m] Manage instance   [r] Refresh   [p] Pair GChat   [q] Quit");
-        if available.first().is_some_and(|choice| choice.vision) {
-            println!("[Enter] Start the first Vision profile");
-        }
+        println!("\n[l] Launch instance      [m] Manage instances\n[d] Download models      [a] Add a local model\n[s] Model storage        [t] Download progress\n[r] Refresh              [p] Pair GChat\n[q] Quit (keep serving)");
         let input = prompt("Select: ")?;
         let result = match input.as_str() {
-            "" if available.first().is_some_and(|choice| choice.vision) => {
-                start(&control, &available[0]).await
+            "l" => launch_menu(&control, &snapshot, None).await,
+            "d" => download_menu(&control, &snapshot).await,
+            "t" => download_progress(&control).await,
+            "s" => storage_menu(&control).await,
+            "a" => {
+                let path = prompt("Absolute local .ginfer package path (blank to cancel): ")?;
+                if path.is_empty() { Ok(()) } else {
+                    control.register_model(Path::new(path.trim_matches('"'))).await.map(|model| {
+                        println!("Registered {}. Choose Launch instance to select its profile.", model.id);
+                    })
+                }
             }
             "q" => {
                 println!("Serving continues on the host. Stop instances from this menu or GChat.");
@@ -378,18 +507,7 @@ async fn menu_control(control: LocalControl) -> Result<(), String> {
                     );
                 }),
             "m" => manage(&control, &snapshot).await,
-            _ => match input
-                .parse::<usize>()
-                .ok()
-                .and_then(|n| n.checked_sub(1))
-                .and_then(|n| available.get(n))
-            {
-                Some(choice) => start(&control, choice).await,
-                None => {
-                    println!("Choose a listed number or command.");
-                    Ok(())
-                }
-            },
+            _ => { println!("Choose a listed command."); Ok(()) },
         };
         if let Err(error) = result {
             println!("Could not complete the action: {error}");
@@ -427,24 +545,7 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
         return Ok(());
     }
     if action == "p" {
-        let available = choices(snapshot, Some(id));
-        print_choices(&available);
-        let number = prompt("Profile number (q to cancel): ")?;
-        if number == "q" {
-            return Ok(());
-        }
-        let choice = number
-            .parse::<usize>()
-            .ok()
-            .and_then(|n| n.checked_sub(1))
-            .and_then(|n| available.get(n))
-            .ok_or("invalid profile number")?;
-        if prompt("Restart this instance with the selected model/profile? [y/N]: ")?
-            .eq_ignore_ascii_case("y")
-        {
-            start(control, choice).await?;
-        }
-        return Ok(());
+        return launch_menu(control, snapshot, Some(id)).await;
     }
     let operation = match action.as_str() {
         "s" => "start",
@@ -470,6 +571,18 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gpu_labels_identify_distinct_devices_and_occupancy() {
+        let snapshot = json!({"gpus":[
+            {"uuid":"a","name":"RTX 3090"},{"uuid":"b","name":"RTX 5090"}],
+            "instances":[{"status":"ready","configuration":{"gpu_uuids":["a"]}}]});
+        assert_eq!(group_label(&snapshot, &json!(["b"])), "GPU 1 — RTX 5090");
+        assert!(gpu_occupied(&snapshot, "a"));
+        assert!(!gpu_occupied(&snapshot, "b"));
+        let models = json!({"models":[{"id":"model", "metadata":{"identity":{
+            "model_id":"muse-glimmer-30b", "weights_id":"nvfp4"}}}]});
+        assert_eq!(model_label(&models, &json!("model")), "muse-glimmer-30b / nvfp4");
+    }
     #[test]
     fn menu_uses_host_profiles_and_excludes_other_instances_gpu_groups() {
         let snapshot = json!({"instances":[{"instance_id":"running","status":"ready","configuration":{"gpu_uuids":["gpu0"]}}],

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { useAppState } from '@/hooks/useAppState'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import DropdownModelProvider from '../DropdownModelProvider'
@@ -193,7 +194,8 @@ describe('DropdownModelProvider - Display Name Integration', () => {
     expect(screen.queryByDisplayValue('model1.gguf')).not.toBeInTheDocument()
   })
 
-  it('marks the first detected GInfer model as the persisted default', async () => {
+  it('marks the running GInfer model as the persisted default', async () => {
+    useAppState.setState({ activeModels: ['muse_glimmer_30b_nvfp4_dflash2'] })
     const selectModelProvider = vi.fn()
     const ginferProviders = [
       {

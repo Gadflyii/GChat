@@ -166,7 +166,7 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
                     )
                     .await
                     .map(|value| {
-                        let mut result = ToolOutcome::ok("Agent Studio operation completed");
+                        let mut result = ToolOutcome::ok(value.to_string());
                         result.details = Some(value);
                         result
                     })
@@ -250,6 +250,10 @@ async fn authorize_call(
         .map_err(ToolOutcome::error)?;
     }
     let mut reasons = Vec::new();
+    if prepared.call.tool == "studio.manage" && prepared.call.args["action"] == "save_definition" {
+        context.desktop.studio("validate_definition", prepared.call.args["args"].clone())
+            .await.map_err(ToolOutcome::error)?;
+    }
     let mut skill_invocation = None;
     if prepared.call.tool == "os.shell.run" {
         let invocation = shell::parse_invocation(&prepared.call.args)?;
@@ -294,7 +298,8 @@ async fn authorize_call(
         return Ok(prepared.call);
     }
     let fingerprint = fingerprint_prepared_action(&prepared.call.tool, &prepared.call.args);
-    let can_remember = is_approval_gated && !prepared.escaped_root;
+    let can_remember = is_approval_gated && !prepared.escaped_root
+        && prepared.call.tool != "studio.manage";
     if can_remember && context.approval.is_allowed(&fingerprint).await {
         return Ok(prepared.call);
     }

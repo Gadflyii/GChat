@@ -94,6 +94,21 @@ operations, not additions to the OpenAI inference API.
 
 ## Runtime presets
 
+Prebuilt profiles are reusable model/hardware settings, not server instances or
+launch history. The host retains one server identity per exact GPU group. Ordinary
+loads reuse that identity even when changing model, context or concurrency;
+attempting to launch over a live instance still requires an explicit restart.
+Each host card presents Model (left) and Hardware profile (right). Multiple GPU
+groups have separate instance controls; additional servers require selecting
+another GPU group. Stopped instances retain their last settings, not every prior
+configuration.
+
+On service startup, duplicate records from older builds are consolidated, keeping
+the lowest UUID per GPU group. Retired settings are backed up privately in
+`retired-instance-records.json` next to `host.json`; model files, catalogs and run
+history are unchanged. Saved agent assignments to retired IDs need explicit
+reselection. This cleanup does not modify a currently running service's state.
+
 GInfer qualification owns context, concurrency and KV settings. GChat contains no
 VRAM-to-settings table. ginfer-host reads producer-supplied `launch-profiles.json`
 from its service state directory during inventory scan. Missing catalogs produce
@@ -216,6 +231,30 @@ and unified local supervisor work remain in the current
 
 ## Text launcher
 
+Run `ginfer` without arguments in an interactive terminal on Windows or Linux.
+The branded menu lists GPU names, capacity and occupancy. Choose **Launch
+instance**, then GPU/group, model and profile. **Manage instances** offers
+start, stop, restart and profile replacement. Closing the menu leaves serving
+and downloads running in ginfer-host.
+
+**Download models**, **Add a local model**, **Model storage** and **Download
+progress** are always available, including before the first model is installed.
+Downloads use verified published releases from the GChat catalog (`models[].releases`),
+filtered by hardware and TP requirements. Configure `GINFER_MODEL_CATALOG_URL`
+on the host, or build it with `VITE_MODEL_CATALOG_URL`. An empty publication catalog
+does not offer speculative downloads. Import a local `.ginfer` package instead.
+
+`GET /host/v1/model-catalog` returns compatible releases. `GET /host/v1/model-storage`
+reports the destination and free bytes; `POST` with `{"path":"absolute path"}`
+changes the destination for new downloads. Existing transfers and installed
+models retain their original locations; no files are moved or removed. The menu
+shows download size, destination and required space before confirmation, and
+offers pause/resume and profile selection once a download is installed.
+
+The banner respects `NO_COLOR` and uses plain text for noninteractive/dumb or
+non-UTF-8 terminals. Windows serving processes run without a console popup;
+their diagnostics remain captured by the host.
+
 ### Native local-client bridge
 
 Local administrator clients can register a selected absolute `.ginfer` path through
@@ -260,6 +299,15 @@ GChat-owned executable. It is built from this repository, not inserted into or
 validated as part of the separately supplied engine runtime archive. Bundling the
 executable is started on demand by desktop model loading. It is not yet installed
 as an automatic OS service by the desktop installer.
+
+For an engine refresh, first build the selected clean GInfer revision with
+`packaging/windows/build.ps1 -Architecture 120a` in the engine repository. Pass
+that explicit archive to GChat's `scripts/build-windows-release.ps1` with
+`-GinferRuntimeArchive <archive>` and `-GinferSourceCommit <full-commit-id>`.
+The revision option rejects a stale or dirty engine archive; file hashes,
+platform, architecture and the server help smoke check are verified separately.
+Do not reuse a previous campaign archive when refreshing the engine. Existing
+capacity-profile evidence does not automatically qualify a changed engine.
 
 `ginfer-host --ensure-running --data-dir /absolute/state --engine
 /absolute/ginfer-serve --listen 127.0.0.1:7443` provides native bootstrap. It returns

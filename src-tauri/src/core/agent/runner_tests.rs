@@ -19,6 +19,322 @@ struct TestRun {
     session: AgentSessionState,
 }
 
+#[tokio::test]
+#[ignore = "requires an explicitly selected live Muse endpoint; writes only temporary test definitions"]
+async fn live_builder_clarification_validation_and_approved_save() {
+    run_live_builder_case("standard", &[
+        "Use Agent Builder to create a Standard agent that inventories GChat's locally installed .ginfer model files. Before creating it, ask me whether to include a combined total. Do not inventory anything now.",
+        "Yes, include each file's size and the combined total. Use GChat's default local model directory from the catalog and the current model. Create the reusable agent definition now, without running its inventory task."
+    ]).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an explicitly selected live Muse endpoint"]
+async fn live_builder_goal_loop() {
+    run_live_builder_case("goal_loop", &[
+        "Use Agent Builder to create and save a Goal Loop agent named Release Note Reviewer. It reads release-notes.md in the selected workspace and drafts an improved release note in its reply, never changing files. The executor revises the draft; the evaluator checks clear user-facing language, explicit breaking changes, and preservation of every factual claim. Use at most 3 cycles, PASS only when all criteria hold, otherwise REVISE with specific feedback. Use the current model for both roles. Include a ready-to-run default goal. Create only the reusable definition, do not perform the review now."
+    ]).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an explicitly selected live Muse endpoint"]
+async fn live_builder_coordinator() {
+    run_live_builder_case("coordinator", &[
+        "Use Agent Builder to create and save a Coordinator agent named Documentation Review Team. It reviews README.md in the selected workspace without changing files. Use exactly two parallel specialist workers: one checks clarity for beginners, one checks internal consistency of commands and instructions. A coordinator assigns their independent reviews and a synthesizer returns one prioritized report. Set maximum parallel workers to 2. Use the current model for all roles, without a pool or specific instance. Include a ready-to-run default goal. Create only the reusable definition, do not review files now."
+    ]).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an explicitly selected live Muse endpoint"]
+async fn live_builder_workflow() {
+    run_live_builder_case("workflow", &[
+        "Use Agent Builder to create and save a Workflow agent named Documentation Checklist. Use exactly three sequential stages: inventory markdown files in the selected workspace; read those files and extract explicit TODO items; produce a grouped checklist citing source paths. Each stage depends on the previous stage (two dependency edges). Do not modify source files. Use the current model for every stage and include a ready-to-run default goal. Create only the reusable definition, do not inventory or read files now."
+    ]).await;
+}
+
+async fn run_live_builder_case(kind: &str, messages: &[&str]) {
+    use super::{definitions, ginfer_client::{GinferClient, GinferConnection, GinferSessionTarget}, tools::DesktopServices};
+    use serde_json::{json, Value};
+    struct LiveStudio(std::path::PathBuf);
+    #[async_trait::async_trait]
+    impl DesktopServices for LiveStudio {
+        async fn studio(&self, action: &str, args: Value) -> Result<Value, String> {
+            match action {
+                "catalog" => Ok(json!({"templates":definitions::built_in_templates(),"definitions":[],"instances":[],"pools":[],"localModelDirectory":r"C:\Users\Ron\AppData\Roaming\GChat\data\ginfer\models","definitionSchema":definitions::definition_json_schema()})),
+                "validate_definition" => { let definition = serde_json::from_value(args).map_err(|e|e.to_string())?; definitions::validate_definition(&definition)?; Ok(json!({"valid":true})) },
+                "save_definition" => Ok(json!(definitions::save_definition(&self.0, serde_json::from_value(args).map_err(|e|e.to_string())?)?)),
+                _ => Err(format!("Unexpected operation: {action}")),
+            }
+        }
+        async fn write_clipboard(&self, _: String) -> Result<(), String> { Err("Not allowed in authoring".into()) }
+        async fn notify(&self, _: String, _: String) -> Result<(), String> { Err("Not allowed in authoring".into()) }
+    }
+    let port = std::env::var("GCHAT_BUILDER_LIVE_PORT").expect("explicit endpoint port").parse().unwrap();
+    let client = GinferClient::new(&GinferSessionTarget {
+        connection: GinferConnection::Local { port, api_key:std::env::var("GCHAT_BUILDER_LIVE_KEY").unwrap_or_default() },
+        model_id:std::env::var("GCHAT_BUILDER_LIVE_MODEL").expect("explicit model identity"), has_vision:false,
+    }).unwrap();
+    let workspace = TestWorkspace::new();
+    workspace.write(".agent-skills/agent-builder/SKILL.md", include_str!("../../../resources/agent-skills/agent-builder/SKILL.md"));
+    let registry = super::skills::SkillRegistry::load(workspace.path().join(".agent-skills"), &std::collections::BTreeSet::new(), &super::prompt::ITERATION_ONE_TOOLS.iter().map(|tool|tool.name.to_owned()).collect()).unwrap();
+    let mut session = AgentSessionState::new("live-builder-test");
+    let approval = RecordingApproval::allow();
+    let mut events = Vec::new();
+    eprintln!("LIVE_CASE {kind}");
+    for (index, message) in messages.iter().enumerate() {
+        run_turn(RunTurnInput {
+            run_id:"live-builder-test",session_id:"live-builder-test",user_message:message,selected_skill:Some("agent-builder"),stable_prefix:"",reasoning_effort:Some(definitions::AgentReasoningEffort::High),
+            working_dir:workspace.path(),editable_roots:&EditableRoots::for_test(workspace.path()),external_read_only_roots:&[],trusted_read_roots:&[],max_steps:8,
+            client:&client,approval:&approval,folder_access:&RecordingFolderAccess::deny(),desktop:&LiveStudio(workspace.path().to_owned()),cancellation:&CancellationToken::new(),session:&mut session,skill_registry:&registry,bundled_script_runtime:None,
+        }, |event| { eprintln!("{}", json!(event)); collect_event(&mut events,event) }).await.unwrap();
+        if messages.len() > 1 && index == 0 { assert!(approval.requests().is_empty(), "must clarify before save"); }
+    }
+    let saved = definitions::list_definitions(workspace.path()).unwrap().into_iter().filter(|d|!d.built_in).collect::<Vec<_>>();
+    assert_eq!(saved.len(),1);
+    assert_eq!(json!(saved[0])["kind"], kind);
+    match &saved[0].strategy {
+        definitions::AgentStrategy::GoalLoop { max_cycles, success_criteria, evaluator_instructions, .. } => {
+            assert_eq!(*max_cycles, 3);
+            assert!(!success_criteria.trim().is_empty() && !evaluator_instructions.trim().is_empty());
+        }
+        definitions::AgentStrategy::Coordinator { max_parallel, workers, .. } => {
+            assert_eq!(*max_parallel, 2);
+            assert_eq!(workers.len(), 2);
+            assert!(workers.iter().all(|worker| worker.model_instance_id.is_none()));
+        }
+        definitions::AgentStrategy::Workflow { nodes, edges } => {
+            assert_eq!(nodes.len(), 3);
+            assert_eq!(edges.len(), 2);
+            assert!(nodes.iter().all(|node| node.model_instance_id.is_none()));
+        }
+        definitions::AgentStrategy::Standard => {}
+    }
+    assert!(!saved[0].default_goal.trim().is_empty());
+    assert!(saved[0].model_instance_id.is_none());
+    assert_eq!(approval.requests().len(),1);
+    assert!(events.iter().any(|e| matches!(e, AgentEvent::ToolCallExecuted { result } if result.call.tool == "studio.inspect" && result.call.args["action"] == "validate_definition" && result.outcome.status == ToolStatus::Ok)));
+    assert!(!events.iter().any(|e| matches!(e, AgentEvent::ToolCallExecuted { result } if result.call.tool.starts_with("os."))));
+    eprintln!("LIVE_SAVED_DEFINITION {}",json!(saved[0]));
+}
+
+#[tokio::test]
+async fn builder_inventory_definition_is_saved_only_after_confirmation() {
+    use super::definitions;
+    use super::tools::DesktopServices;
+    use serde_json::{json, Value};
+
+    struct StudioDesktop(std::path::PathBuf);
+    #[async_trait::async_trait]
+    impl DesktopServices for StudioDesktop {
+        async fn studio(&self, action: &str, args: Value) -> Result<Value, String> {
+            match action {
+                "catalog" => Ok(json!({"templates": definitions::built_in_templates()})),
+                "validate_definition" => {
+                    let definition = serde_json::from_value(args).map_err(|e| e.to_string())?;
+                    definitions::validate_definition(&definition)?;
+                    Ok(json!({"valid": true}))
+                }
+                "save_definition" => {
+                    let definition = serde_json::from_value(args).map_err(|e| e.to_string())?;
+                    Ok(json!(definitions::save_definition(&self.0, definition)?))
+                }
+                _ => Err("Unsupported Studio action".into()),
+            }
+        }
+        async fn write_clipboard(&self, _: String) -> Result<(), String> { Err("Unavailable".into()) }
+        async fn notify(&self, _: String, _: String) -> Result<(), String> { Err("Unavailable".into()) }
+    }
+
+    for approved in [false, true] {
+        let workspace = TestWorkspace::new();
+        workspace.write(".agent-skills/agent-builder/SKILL.md", include_str!("../../../resources/agent-skills/agent-builder/SKILL.md"));
+        let mut definition = definitions::general_agent();
+        definition.id = "local-model-inventory".into();
+        definition.name = "Local model inventory".into();
+        definition.built_in = false;
+        definition.default_goal = "List installed local models with file sizes.".into();
+        definition.instructions = "Inspect local installed models and report their file sizes without modifying files.".into();
+        let wrapped = json!({"definition":definition}).to_string();
+        let save = format!(r#"<atem:function_calls><atem:invoke name="studio_manage.studio_manage"><atem:parameter name="action">save_definition</atem:parameter><atem:parameter name="args">{wrapped}</atem:parameter></atem:invoke></atem:function_calls>"#);
+        let server = ScriptedGinferServer::start(vec![
+            ScriptedResponse::completion("<|message|>Should the inventory include a combined total?"),
+            ScriptedResponse::completion(r#"[{"tool":"studio.inspect","args":{"action":"catalog","args":{}}}]"#),
+            ScriptedResponse::tool_call("studio_inspect", json!({"action":"validate_definition","args":wrapped})),
+            ScriptedResponse::completion(&save),
+            ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"Review complete."}}]"#),
+        ]).await;
+        let approval = if approved { RecordingApproval::allow() } else { RecordingApproval::deny() };
+        let mut session = AgentSessionState::new("builder-save");
+        let registry = super::skills::SkillRegistry::load(workspace.path().join(".agent-skills"), &std::collections::BTreeSet::new(), &super::prompt::ITERATION_ONE_TOOLS.iter().map(|tool| tool.name.to_owned()).collect()).unwrap();
+        let mut events = Vec::new();
+        run_turn(RunTurnInput {
+            run_id: "builder-clarify", session_id: "builder-save", user_message: "Build an inventory agent", selected_skill: Some("agent-builder"), stable_prefix: "Do not ask for confirmation unless a tool is approval-gated", reasoning_effort: None,
+            working_dir: workspace.path(), editable_roots: &EditableRoots::for_test(workspace.path()), external_read_only_roots: &[], trusted_read_roots: &[], max_steps: 4,
+            client: &server.client(), approval: &approval, folder_access: &RecordingFolderAccess::deny(), desktop: &StudioDesktop(workspace.path().to_owned()), cancellation: &CancellationToken::new(), session: &mut session,
+            skill_registry: &registry, bundled_script_runtime: None,
+        }, |event| collect_event(&mut events, event)).await.unwrap();
+        assert!(events.iter().any(|event| matches!(event, AgentEvent::AssistantReply { text } if text == "Should the inventory include a combined total?")));
+        assert!(approval.requests().is_empty());
+        assert!(!server.requests()[0].to_string().contains("Do not ask for confirmation"));
+        run_turn(RunTurnInput {
+            run_id: "builder-save", session_id: "builder-save", user_message: "Yes, include the combined total for local models", selected_skill: Some("agent-builder"), stable_prefix: "Author a definition", reasoning_effort: None,
+            working_dir: workspace.path(), editable_roots: &EditableRoots::for_test(workspace.path()), external_read_only_roots: &[], trusted_read_roots: &[], max_steps: 4,
+            client: &server.client(), approval: &approval, folder_access: &RecordingFolderAccess::deny(), desktop: &StudioDesktop(workspace.path().to_owned()), cancellation: &CancellationToken::new(), session: &mut session,
+            skill_registry: &registry, bundled_script_runtime: None,
+        }, |event| collect_event(&mut events, event)).await.unwrap();
+        let saved = definitions::list_definitions(workspace.path()).unwrap();
+        assert_eq!(saved.iter().any(|item| item.id == definition.id), approved);
+        assert_eq!(approval.requests().len(), 1);
+        assert_eq!(server.requests().len(), 5, "clarification and known wire forms need no repair calls");
+        assert!(server.requests()[1].to_string().contains("Should the inventory include a combined total?"));
+        assert!(server.requests()[2]["messages"].as_array().unwrap().iter().any(|message|
+            message["content"].as_str().is_some_and(|content| content.contains("\"templates\""))));
+        assert!(!workspace.path().join("inventory.txt").exists());
+    }
+}
+
+#[tokio::test]
+async fn output_exhaustion_gets_one_larger_retry_not_a_small_json_repair() {
+    let run = run_script(&TestWorkspace::new(), vec![
+        ScriptedResponse::completion("").with_finish_reason("output_limit"),
+        ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"ready"}}]"#),
+    ], &RecordingApproval::deny(), &CancellationToken::new(), 2).await;
+    run.result.unwrap();
+    assert_eq!(run.requests.len(), 2);
+    assert!(run.requests[1]["max_tokens"].as_u64().unwrap() > run.requests[0]["max_tokens"].as_u64().unwrap());
+    assert_eq!(run.requests[0]["reasoning_effort"], run.requests[1]["reasoning_effort"]);
+    assert!(!request_prompt(&run.requests[1]).contains("tool-call-repair"));
+}
+
+#[tokio::test]
+async fn repeated_output_exhaustion_is_reported_without_executing_partial_calls() {
+    let run = run_script(&TestWorkspace::new(), vec![
+        ScriptedResponse::completion("").with_finish_reason("output_limit"),
+        ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"unfinished"}}]"#).with_finish_reason("output_limit"),
+    ], &RecordingApproval::deny(), &CancellationToken::new(), 2).await;
+    assert_eq!(run.requests.len(), 2);
+    assert!(run.events.iter().any(|event| matches!(event, AgentEvent::StepError { category, .. } if category == "output_budget")));
+    assert!(!run.events.iter().any(|event| matches!(event, AgentEvent::ToolCallExecuted { .. })));
+}
+
+#[tokio::test]
+async fn builder_cannot_execute_the_inventory_it_is_asked_to_define() {
+    let workspace = TestWorkspace::new();
+    workspace.write(".agent-skills/agent-builder/SKILL.md", include_str!("../../../resources/agent-skills/agent-builder/SKILL.md"));
+    let server = ScriptedGinferServer::start(vec![
+        ScriptedResponse::completion(r#"[{"tool":"os.fs.write","args":{"path":"inventory.txt","content":"must not happen"}}]"#),
+        ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"Should the inventory include remote hosts or only this computer?"}}]"#),
+    ]).await;
+    let mut session = AgentSessionState::new("builder");
+    let registry = super::skills::SkillRegistry::load(workspace.path().join(".agent-skills"), &std::collections::BTreeSet::new(), &super::prompt::ITERATION_ONE_TOOLS.iter().map(|tool| tool.name.to_owned()).collect()).unwrap();
+    let mut events = Vec::new();
+    run_turn(RunTurnInput {
+        run_id: "builder", session_id: "builder", user_message: "Build a model inventory agent", selected_skill: Some("agent-builder"), stable_prefix: "Author a definition", reasoning_effort: None,
+        working_dir: workspace.path(), editable_roots: &EditableRoots::for_test(workspace.path()), external_read_only_roots: &[], trusted_read_roots: &[], max_steps: 3,
+        client: &server.client(), approval: &RecordingApproval::allow(), folder_access: &RecordingFolderAccess::deny(), desktop: &RecordingDesktop::default(), cancellation: &CancellationToken::new(), session: &mut session,
+        skill_registry: &registry, bundled_script_runtime: None,
+    }, |event| collect_event(&mut events, event)).await.unwrap();
+    assert!(!workspace.path().join("inventory.txt").exists());
+    assert!(events.iter().any(|event| matches!(event, AgentEvent::ToolCallExecuted { result } if result.outcome.status == ToolStatus::Denied)));
+    let requests = server.requests();
+    assert_eq!(requests[0]["messages"][0]["role"], "system");
+    assert!(requests[0]["tools"].as_array().unwrap().iter().all(|tool| !tool["function"]["name"].as_str().unwrap().starts_with("os_")));
+}
+
+#[tokio::test]
+async fn manual_worker_checkpoint_preserves_tool_step_budget_and_full_outputs() {
+    let workspace = TestWorkspace::new();
+    workspace.write("a.txt", "first result");
+    workspace.write("b.txt", "second result");
+    let server = ScriptedGinferServer::start(vec![
+        ScriptedResponse::completion(r#"[{"tool":"os.fs.read","args":{"path":"a.txt"}}]"#),
+        ScriptedResponse::completion("## Completed work\nEarlier file operations completed.\n## Pending work\nContinue the current task."),
+        ScriptedResponse::completion(r#"[{"tool":"os.fs.read","args":{"path":"b.txt"}}]"#),
+    ]).await;
+    let mut session = AgentSessionState::new("test-session");
+    session.push_user("Previous task");
+    for _ in 0..3 {
+        session.push_tool_observations(
+            &[super::types::ToolCallPayload {
+                tool: "os.fs.write".into(),
+                args: serde_json::json!({"path":"old.txt", "content":"x".repeat(2000)}),
+            }],
+            &[super::types::ToolOutcome::ok("written")],
+        );
+    }
+    let archive = workspace.path().join("archive");
+    let roots = EditableRoots::new(workspace.path(), &[]).await.unwrap();
+    let client = server.client();
+    let skills = workspace.skill_registry();
+    let mut events = Vec::new();
+    let mut requested = false;
+    let result = super::runner::run_turn_with_options(
+        RunTurnInput {
+            run_id: "test-run",
+            session_id: "test-session",
+            user_message: "Read both files, preserving this goal",
+            selected_skill: None,
+            stable_prefix: "TEST",
+            reasoning_effort: None,
+            working_dir: workspace.path(),
+            editable_roots: &roots,
+            external_read_only_roots: &[],
+            trusted_read_roots: &[],
+            max_steps: 2,
+            client: &client,
+            approval: &RecordingApproval::allow(),
+            folder_access: &RecordingFolderAccess::deny(),
+            desktop: &RecordingDesktop::default(),
+            cancellation: &CancellationToken::new(),
+            session: &mut session,
+            skill_registry: &skills,
+            bundled_script_runtime: None,
+        },
+        super::runner::RunTurnOptions {
+            max_output_tokens: None,
+            additional_skills: &[],
+            archive_dir: Some(&archive),
+        },
+        |event| {
+            if let AgentEvent::ContextStatus {
+                context_id, status, ..
+            } = &event
+            {
+                if status == "ready" && !requested {
+                    super::context::request_compaction(context_id)?;
+                    requested = true;
+                }
+            }
+            events.push(event);
+            Ok(())
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.reason, "max_steps");
+    assert_eq!(result.step_count, 2);
+    assert_eq!(server.requests().len(), 3);
+    assert_eq!(executed(&events).len(), 2);
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::ContextStatus { compactions: 1, .. })));
+    assert!(request_prompt(&server.requests()[2]).contains("Read both files, preserving this goal"));
+    let transcript = workspace.read("archive/transcript.jsonl");
+    let records = String::from_utf8(transcript)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(records.iter().filter(|v| v["type"] == "tool").count(), 2);
+    let full: serde_json::Value =
+        serde_json::from_slice(&workspace.read("archive/step-0-tool-0.json")).unwrap();
+    assert_eq!(full["call"]["args"]["path"], "a.txt");
+    assert_eq!(records.last().unwrap()["reason"], "max_steps");
+    let saved: AgentSessionState =
+        serde_json::from_slice(&workspace.read("archive/working-state.json")).unwrap();
+    assert_eq!(saved, session);
+}
+
 fn request_prompt(request: &serde_json::Value) -> &str {
     request
         .pointer("/messages/0/content")
@@ -76,6 +392,7 @@ async fn run_script(
 
 fn event_kind(event: &AgentEvent) -> &'static str {
     match event {
+        AgentEvent::ContextStatus { .. } => "context_status",
         AgentEvent::StageQueued { .. } => "stage_queued",
         AgentEvent::StageActivity { .. } => "stage_activity",
         AgentEvent::InferenceMeasured { .. } => "inference_measured",
@@ -141,6 +458,7 @@ async fn immediate_reply_preserves_event_order_and_completion_contract() {
         [
             "turn_started",
             "step_started",
+            "context_status",
             "inference_measured",
             "tool_call_parsed",
             "tool_call_executed",
@@ -160,7 +478,8 @@ async fn immediate_reply_preserves_event_order_and_completion_contract() {
     assert!(request.get("cache_prompt").is_none());
     assert!(request.get("slot_id").is_none());
     assert!(request.get("grammar").is_none());
-    assert!(request_prompt(request).contains("### conversation\nUSER: perform the fixture task"));
+    assert!(request_prompt(request)
+        .contains("Current task (preserve verbatim):\nperform the fixture task"));
 }
 
 #[tokio::test]
@@ -484,8 +803,32 @@ async fn malformed_completion_is_repaired_once() {
     );
     assert_eq!(run.requests.len(), 2);
     assert_eq!(run.requests[0]["max_tokens"], 8192);
-    assert_eq!(run.requests[1]["max_tokens"], 1024);
+    assert_eq!(run.requests[1]["max_tokens"], run.requests[0]["max_tokens"]);
     assert!(request_prompt(&run.requests[1]).contains("### tool-call-repair"));
+}
+
+#[tokio::test]
+async fn bare_reply_clarification_is_published_without_repair_or_execution() {
+    let workspace = TestWorkspace::new();
+    let question = r#"Where are your local .ginfer model objects? e.g. C:\Users\Ron\models"#;
+    let output = serde_json::json!({"text": question}).to_string();
+    for needs_repair in [false, true] {
+        let mut responses = Vec::new();
+        if needs_repair {
+            responses.push(ScriptedResponse::completion("not-json"));
+        }
+        responses.push(ScriptedResponse::completion(&output));
+        let approval = RecordingApproval::deny();
+        let run = run_script(&workspace, responses, &approval, &CancellationToken::new(), 2).await;
+        assert!(run.result.is_ok());
+        assert_eq!(run.requests.len(), if needs_repair { 2 } else { 1 });
+        assert!(approval.requests().is_empty());
+        assert_eq!(finished_reason(&run.events), Some(("reply", 1)));
+        assert_eq!(run.events.iter().find_map(|event| match event {
+            AgentEvent::AssistantReply { text } => Some(text.as_str()),
+            _ => None,
+        }), Some(question));
+    }
 }
 
 #[tokio::test]
@@ -537,7 +880,7 @@ async fn timed_out_completion_is_repaired_once() {
             if reason.contains("600-second deadline")
     )));
     assert_eq!(run.requests.len(), 2);
-    assert_eq!(run.requests[1]["max_tokens"], 1024);
+    assert_eq!(run.requests[1]["max_tokens"], run.requests[0]["max_tokens"]);
     assert_eq!(run.requests[0]["tools"], run.requests[1]["tools"]);
 }
 

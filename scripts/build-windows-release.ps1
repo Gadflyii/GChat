@@ -15,14 +15,44 @@ param(
     [string]$SourceRoot,
     # Producer-final archive emitted by ginfer's packaging/windows/build.ps1.
     [string]$GinferRuntimeArchive,
+    # Exact engine revision required for this release (when supplied).
+    [ValidatePattern('^[0-9a-f]{40}$')]
+    [string]$GinferSourceCommit,
     # Explicit qualified catalog paths, separated by semicolons on Windows.
-    [string]$GinferProfileCatalogs = $env:GINFER_PROFILE_CATALOGS
+    [string]$GinferProfileCatalogs = $env:GINFER_PROFILE_CATALOGS,
+    [switch]$ValidateInputsOnly
 )
 
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = $PSScriptRoot | Split-Path
+if (-not $GinferProfileCatalogs) {
+    $catalogRoot = Join-Path (Split-Path -Parent $projectRoot) 'ginfer\config\launch-profiles'
+    if (-not (Test-Path -LiteralPath $catalogRoot -PathType Container)) {
+        throw 'GInfer profile catalogs are required. Pass -GinferProfileCatalogs with Windows catalog paths separated by semicolons.'
+    }
+    $GinferProfileCatalogs = (Get-ChildItem -LiteralPath $catalogRoot -Filter 'windows-*.json' -File |
+        Sort-Object Name | ForEach-Object { $_.FullName }) -join ';'
+}
+if (-not $GinferProfileCatalogs) { throw 'Cannot build an installer with an empty profile catalog.' }
+$profileIds = [System.Collections.Generic.HashSet[string]]::new()
+$catalogPaths = @($GinferProfileCatalogs -split ';' | ForEach-Object {
+    (Resolve-Path -LiteralPath $_ -ErrorAction Stop).ProviderPath
+})
+foreach ($catalogPath in $catalogPaths) {
+    $catalog = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json
+    if ($catalog.schema -ne 'ginfer-launch-profiles-v1' -or @($catalog.profiles).Count -eq 0) {
+        throw "Invalid or empty GInfer profile catalog: $catalogPath"
+    }
+    foreach ($profile in $catalog.profiles) {
+        if ($profile.platform -ne 'windows' -or -not $profile.id -or -not $profileIds.Add($profile.id)) {
+            throw "Wrong-platform, missing, or duplicate profile ID in $catalogPath"
+        }
+    }
+}
+$GinferProfileCatalogs = $catalogPaths -join ';'
 $env:GINFER_PROFILE_CATALOGS = $GinferProfileCatalogs
+Write-Host "  Selected $($profileIds.Count) Windows profiles from $($catalogPaths.Count) catalogs."
 
 if (-not $GinferRuntimeArchive) {
     $workspaceRoot = Split-Path -Parent $projectRoot
@@ -41,6 +71,7 @@ if (-not $GinferRuntimeArchive -or
     exit 1
 }
 $GinferRuntimeArchive = (Resolve-Path -LiteralPath $GinferRuntimeArchive).Path
+if ($ValidateInputsOnly) { exit 0 }
 
 if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
     $nativeBuildRoot = if ($env:GCHAT_WINDOWS_BUILD_ROOT) {
@@ -95,11 +126,22 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
 
     $nativeRuntimeArchive = Join-Path $nativeBuildRoot 'ginfer-windows-x64-sm120a.zip'
     Copy-Item -LiteralPath $GinferRuntimeArchive -Destination $nativeRuntimeArchive -Force
+    $nativeCatalogRoot = Join-Path $nativeBuildRoot 'profile-catalogs'
+    New-Item -ItemType Directory -Path $nativeCatalogRoot -Force | Out-Null
+    $nativeCatalogPaths = @()
+    for ($catalogIndex = 0; $catalogIndex -lt $catalogPaths.Count; $catalogIndex++) {
+        $nativeCatalogPath = Join-Path $nativeCatalogRoot "$catalogIndex.json"
+        Copy-Item -LiteralPath $catalogPaths[$catalogIndex] -Destination $nativeCatalogPath -Force
+        $nativeCatalogPaths += $nativeCatalogPath
+    }
+    $GinferProfileCatalogs = $nativeCatalogPaths -join ';'
 
     $nativeScript = Join-Path $nativeSourceRoot 'scripts\build-windows-release.ps1'
+    $revisionArguments = @()
+    if ($GinferSourceCommit) { $revisionArguments = @('-GinferSourceCommit', $GinferSourceCommit) }
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $nativeScript `
         -NativeMirror -SourceRoot $projectRoot `
-        -GinferRuntimeArchive $nativeRuntimeArchive
+        -GinferRuntimeArchive $nativeRuntimeArchive -GinferProfileCatalogs $GinferProfileCatalogs @revisionArguments
     exit $LASTEXITCODE
 }
 
@@ -321,6 +363,9 @@ if (-not (Test-Path -LiteralPath $ginferManifestPath -PathType Leaf) -or
 }
 
 $ginferManifest = Get-Content -LiteralPath $ginferManifestPath -Raw | ConvertFrom-Json
+if ($GinferSourceCommit -and ($ginferManifest.source_commit -ne $GinferSourceCommit -or $ginferManifest.source_dirty -ne $false)) {
+    throw "GInfer archive must come from clean revision $GinferSourceCommit; found $($ginferManifest.source_commit), dirty=$($ginferManifest.source_dirty). Rebuild the engine archive."
+}
 if ($ginferManifest.schema -ne 'ginfer-windows-runtime-v1' -or
     $ginferManifest.platform -ne 'windows-x64' -or
     $ginferManifest.cuda_architecture -ne 'sm_120a') {
@@ -424,6 +469,12 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host 'tauri build failed' -ForegroundColor Red
     exit 1
 }
+$bundledProfiles = Get-Content -LiteralPath (Join-Path $projectRoot 'src-tauri\resources\bin\launch-profiles.json') -Raw | ConvertFrom-Json
+$bundledIds = @($bundledProfiles.profiles | ForEach-Object { $_.id })
+if ($bundledIds.Count -ne $profileIds.Count -or @($bundledIds | Where-Object { -not $profileIds.Contains($_) }).Count) {
+    throw 'Packaged profile catalog does not match the selected Windows profiles.'
+}
+Write-Host "  Verified bundled profile catalog: $($bundledIds.Count) profiles."
 
 # ── Done ──────────────────────────────────────────────────────
 Write-Host ''

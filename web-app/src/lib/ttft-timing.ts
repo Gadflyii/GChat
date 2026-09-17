@@ -5,7 +5,7 @@
  * β — after processAttachmentsForSend
  * γ — refreshTools start / end
  * δ — ModelFactory.createModel start / end
- * ε — stream_local_http invoke / first IPC chunk
+ * ε — native HTTP request / first response chunk
  * ζ — (Rust) proxy request received / upstream headers
  * η — (Rust) llama first token / prompt_eval logged
  * θ — first non-empty content rendered in RenderMarkdown

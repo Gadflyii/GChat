@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createAgentRunState, reduceAgentRunState } from '@/hooks/useAgentRun'
 import { runAgentTurn } from '@/services/agent/tauri'
+import { deleteAgentRun, listAgentRuns } from '@/services/agent/definitions'
 import type { AgentEvent, AgentRunState, AgentTurnRequest } from '@/types/agent'
 
 type Approval = Extract<
@@ -12,13 +13,45 @@ export type StudioRun = {
   request: AgentTurnRequest
   state: AgentRunState
   approvals: Approval[]
+  settled?: boolean
 }
 export const useStudioRuns = create<{
   runs: Record<string, StudioRun>
+  deleting: boolean
+  historyRevision: number
+  deleteHistory: (id?: string) => Promise<void>
   start: (name: string, request: AgentTurnRequest) => void
   resolve: (id: string, approvalId: string) => void
-}>((set) => ({
+}>((set, get) => ({
   runs: {},
+  deleting: false,
+  historyRevision: 0,
+  deleteHistory: async (id) => {
+    if (get().deleting) return
+    const snapshot = get().runs
+    if (id && snapshot[id] && !snapshot[id].settled) return
+    const active = new Set(Object.keys(snapshot).filter((key) => !snapshot[key].settled))
+    set({ deleting: true })
+    try {
+      const records = await listAgentRuns()
+      for (const record of records) {
+        if (active.has(record.runId) || (id && record.runId !== id)) continue
+        await deleteAgentRun(record.id)
+        set((s) => {
+          const runs = { ...s.runs }
+          delete runs[record.runId]
+          return { runs }
+        })
+      }
+      set((s) => ({
+        runs: Object.fromEntries(Object.entries(s.runs).filter(([key]) =>
+          !snapshot[key]?.settled || (id !== undefined && key !== id)
+        )),
+      }))
+    } finally {
+      set((s) => ({ deleting: false, historyRevision: s.historyRevision + 1 }))
+    }
+  },
   resolve: (id, approvalId) =>
     set((s) => ({
       runs: {
@@ -38,7 +71,7 @@ export const useStudioRuns = create<{
     set((s) => {
       const runs = { ...s.runs }
       const completed = Object.keys(runs).filter(
-        (id) => runs[id].state.finishedAtMs !== undefined
+        (id) => runs[id].settled
       )
       for (const id of completed.slice(0, Math.max(0, completed.length - 9)))
         delete runs[id]
@@ -105,6 +138,12 @@ export const useStudioRuns = create<{
         })
         event({ type: 'turn_finished', reason: 'failed', step_count: 0 })
       })
-      .finally(flush)
+      .finally(() => {
+        flush()
+        set((s) => {
+          const run = s.runs[request.run_id]
+          return run ? { runs: { ...s.runs, [request.run_id]: { ...run, settled: true } } } : s
+        })
+      })
   },
 }))

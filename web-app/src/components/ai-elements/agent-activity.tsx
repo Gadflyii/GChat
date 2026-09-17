@@ -13,6 +13,7 @@ type AgentActivityProps = {
   durationLabel: string
   workingLabel: string
   hasDetails?: boolean
+  error?: string
   className?: string
   children: ReactNode
 }
@@ -22,6 +23,7 @@ export function AgentActivity({
   durationLabel,
   workingLabel,
   hasDetails = true,
+  error,
   className,
   children,
 }: AgentActivityProps) {
@@ -56,6 +58,11 @@ export function AgentActivity({
           />
         )}
       </CollapsibleTrigger>
+      {error && (
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
       {hasDetails && (
         <CollapsibleContent className="mt-2 space-y-1 border-l border-border/60 pl-3">
           {children}

@@ -55,6 +55,7 @@ pub struct OrchestrationInput<'a> {
 }
 
 struct StageContext<'a> {
+    max_output_tokens: Option<u32>,
     events: tokio::sync::mpsc::UnboundedSender<AgentEvent>,
     run_id: &'a str,
     capabilities: &'a CapabilitiesSummary,
@@ -235,6 +236,7 @@ async fn run_definition_inner(
         input.active_model_instance_id,
     );
     let stage_context = StageContext {
+        max_output_tokens: input.definition.max_output_tokens,
         events,
         run_id: input.run_id,
         capabilities: input.capabilities,
@@ -279,8 +281,10 @@ async fn run_definition_inner(
                 &input.definition.instructions,
                 &input.definition.output_contract,
             );
+            let authoring = input.selected_skill == Some("agent-builder");
+            let authoring_tools = ITERATION_ONE_TOOLS.iter().filter(|tool| matches!(tool.name, "studio.inspect" | "studio.manage" | "tool.view" | "reply" | "finish")).cloned().collect::<Vec<_>>();
             let mut stable_prefix = build_stable_prefix(
-                ITERATION_ONE_TOOLS,
+                if authoring { &authoring_tools } else { ITERATION_ONE_TOOLS },
                 input.skill_descriptors,
                 input.capabilities,
                 DEFAULT_MAX_PARALLEL_TOOL_CALLS,
@@ -336,7 +340,9 @@ async fn run_definition_inner(
                     bundled_script_runtime: input.bundled_script_runtime,
                 },
                 RunTurnOptions {
+                    max_output_tokens: input.definition.max_output_tokens,
                     additional_skills: &skills,
+                    archive_dir: Some(&stage_context.run_root.join("agent").join("context")),
                 },
                 |event| match event {
                     AgentEvent::TurnStarted { .. } | AgentEvent::TurnFinished { .. } => Ok(()),
@@ -482,7 +488,7 @@ async fn run_goal_loop(
         } else {
             format!(
                 "Goal:\n{goal}\n\nEvaluator feedback from the previous cycle:\n{}\n\nRevise the result and complete the goal.",
-                clip(&feedback)
+                handoff(context.run_root, &format!("evaluate-{}", cycle - 1), &feedback)
             )
         };
         let executor = StageSpec {
@@ -526,7 +532,7 @@ async fn run_goal_loop(
             workspace: StageWorkspace::Isolated,
             message: format!(
                 "Success criteria:\n{success_criteria}\n\nGoal:\n{goal}\n\nExecutor result:\n{}",
-                clip(&executor_reply)
+                handoff(context.run_root, &format!("execute-{cycle}"), &executor_reply)
             ),
             cycle: Some(cycle),
             model_instance_id: resolved_model_instance_id(
@@ -637,7 +643,7 @@ async fn run_coordinator(
             workspace: StageWorkspace::Isolated,
             message: format!(
                 "Goal:\n{goal}\n\nCoordinator plan:\n{}\n\nComplete the part of the plan assigned to your role. The source workspace is available read-only; put any produced artifacts in your isolated run workspace.",
-                clip(&plan_text)
+                handoff(context.run_root, "plan", &plan_text)
             ),
             cycle: None,
             model_instance_id: resolved_model_instance_id(
@@ -684,7 +690,7 @@ async fn run_coordinator(
             cancelled = true;
             continue;
         }
-        reports.push((result.name, result.outcome.reply.unwrap_or_default()));
+        reports.push((result.name, handoff(context.run_root, &result.id, result.outcome.reply.as_deref().unwrap_or_default())));
     }
     if let Some(error) = first_error {
         return Err(error);
@@ -710,10 +716,10 @@ async fn run_coordinator(
         workspace: StageWorkspace::Shared,
         message: format!(
             "Goal:\n{goal}\n\nCoordinator plan:\n{}\n\nSpecialist reports:\n{}",
-            clip(&plan_text),
+            handoff(context.run_root, "plan", &plan_text),
             reports
                 .iter()
-                .map(|(name, report)| format!("## {name}\n{}", clip(report)))
+                .map(|(name, report)| format!("## {name}\n{report}"))
                 .collect::<Vec<_>>()
                 .join("\n\n")
         ),
@@ -767,7 +773,7 @@ async fn run_workflow(
                     .filter_map(|edge| {
                         results
                             .get(&edge.from)
-                            .map(|reply| format!("## {}\n{}", edge.from, clip(reply)))
+                            .map(|reply| format!("## {}\n{}", edge.from, handoff(context.run_root, &edge.from, reply)))
                     })
                     .collect::<Vec<_>>();
                 StageSpec {
@@ -955,6 +961,8 @@ async fn execute_stage(
         }
     };
 
+    tokio::fs::write(context.run_root.join(&spec.id).join("result.txt"), outcome.reply.as_deref().unwrap_or_default())
+        .await.map_err(|e| format!("Could not preserve stage handoff: {e}"))?;
     let result = StageResult {
         id: spec.id,
         name: spec.name,
@@ -1007,6 +1015,8 @@ async fn run_stage_with_workspace(
     session: &mut AgentSessionState,
     route: &AgentModelRoute,
 ) -> Result<AgentTurnOutcome, String> {
+    let mut stage_read_roots = trusted_read_roots.to_vec();
+    stage_read_roots.push(context.run_root.to_path_buf());
     run_turn_with_options(
         RunTurnInput {
             run_id: context.run_id,
@@ -1018,7 +1028,7 @@ async fn run_stage_with_workspace(
             working_dir,
             editable_roots,
             external_read_only_roots,
-            trusted_read_roots,
+            trusted_read_roots: &stage_read_roots,
             max_steps: spec.max_steps.clamp(1, MAX_STEPS),
             client: &route.client,
             approval: context.approval,
@@ -1030,7 +1040,9 @@ async fn run_stage_with_workspace(
             bundled_script_runtime: context.bundled_script_runtime,
         },
         RunTurnOptions {
+            max_output_tokens: context.max_output_tokens,
             additional_skills: &spec.skills,
+            archive_dir: Some(&context.run_root.join(&spec.id).join("context")),
         },
         |event| {
             context
@@ -1156,6 +1168,10 @@ fn clip(value: &str) -> String {
         clipped.push_str("\n… [handoff truncated]");
         clipped
     }
+}
+
+fn handoff(root: &Path, stage: &str, text: &str) -> String {
+    format!("{}\nFull stage result: {}", clip(text), root.join(stage).join("result.txt").display())
 }
 
 #[cfg(test)]

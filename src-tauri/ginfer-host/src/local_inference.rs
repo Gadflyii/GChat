@@ -62,6 +62,46 @@ async fn forward(
     instance_id: Uuid,
     session_id: Uuid,
     secret: String,
+    request: Request<Body>,
+) -> Result<Response<Body>, Infallible> {
+    let origin = request.headers().get("origin").cloned();
+    let allowed = origin.as_ref().and_then(|v| v.to_str().ok()).is_some_and(|origin| {
+        matches!(origin, "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost")
+            || (cfg!(debug_assertions) && matches!(origin, "http://localhost:1420" | "http://127.0.0.1:1420"))
+    });
+    if origin.is_some() && !allowed {
+        return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"origin is not allowed"})));
+    }
+    let preflight = request.method() == hyper::Method::OPTIONS;
+    let mut response = if preflight {
+        if !allowed { return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"app origin required"}))); }
+        let method = request.headers().get("access-control-request-method").and_then(|v| v.to_str().ok());
+        if !matches!(method, Some("GET" | "POST" | "DELETE")) {
+            return Ok(json(StatusCode::METHOD_NOT_ALLOWED, serde_json::json!({"error":"unsupported preflight method"})));
+        }
+        let mut response = Response::new(Body::empty());
+        *response.status_mut() = StatusCode::NO_CONTENT;
+        response.headers_mut().insert("access-control-allow-methods", "GET, POST, DELETE, OPTIONS".parse().unwrap());
+        if let Some(headers) = request.headers().get("access-control-request-headers") {
+            response.headers_mut().insert("access-control-allow-headers", headers.clone());
+        }
+        response.headers_mut().insert("access-control-max-age", "600".parse().unwrap());
+        response
+    } else {
+        forward_authenticated(owner, instance_id, session_id, secret, request).await?
+    };
+    if let Some(origin) = origin.filter(|_| allowed) {
+        response.headers_mut().insert("access-control-allow-origin", origin);
+        response.headers_mut().append("vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers".parse().unwrap());
+    }
+    Ok(response)
+}
+
+async fn forward_authenticated(
+    owner: Weak<Host>,
+    instance_id: Uuid,
+    session_id: Uuid,
+    secret: String,
     mut request: Request<Body>,
 ) -> Result<Response<Body>, Infallible> {
     let Some(host) = owner.upgrade() else {
@@ -119,4 +159,38 @@ async fn forward(
                 serde_json::json!({"error":error}),
             )
         }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn desktop_preflight_succeeds_without_credentials_but_other_origins_do_not() {
+        for origin in ["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"] {
+            let request = Request::builder().method("OPTIONS").uri("/v1/models")
+                .header("origin", origin).header("access-control-request-method", "GET")
+                .header("access-control-request-headers", "authorization,content-type")
+                .body(Body::empty()).unwrap();
+            let response = forward(Weak::new(), Uuid::nil(), Uuid::nil(), "secret".into(), request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::NO_CONTENT);
+            assert_eq!(response.headers()["access-control-allow-origin"], origin);
+            assert_eq!(response.headers()["access-control-allow-headers"], "authorization,content-type");
+        }
+        let request = Request::builder().method("OPTIONS").uri("/v1/models")
+            .header("origin", "https://unrelated.example").header("access-control-request-method", "GET")
+            .body(Body::empty()).unwrap();
+        let response = forward(Weak::new(), Uuid::nil(), Uuid::nil(), "secret".into(), request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(!response.headers().contains_key("access-control-allow-origin"));
+    }
+
+    #[tokio::test]
+    async fn desktop_can_read_errors_instead_of_hanging_behind_cors() {
+        let request = Request::builder().uri("/v1/models").header("origin", "http://tauri.localhost")
+            .body(Body::empty()).unwrap();
+        let response = forward(Weak::new(), Uuid::nil(), Uuid::nil(), "secret".into(), request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["access-control-allow-origin"], "http://tauri.localhost");
+    }
 }

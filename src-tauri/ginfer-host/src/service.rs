@@ -47,6 +47,32 @@ pub struct LaunchRequest {
     #[serde(flatten)]
     pub options: LaunchOptions,
 }
+fn gpu_group(gpus: &[String]) -> Vec<String> {
+    let mut group = gpus.to_vec();
+    group.sort();
+    group
+}
+
+fn consolidate_instances(data: &mut Persistent, directory: &Path) -> Result<(), String> {
+    let mut groups = BTreeMap::new();
+    let mut retired = BTreeMap::new();
+    for (id, profile) in &data.profiles {
+        if groups.insert(gpu_group(&profile.gpu_uuids), *id).is_some() {
+            retired.insert(*id, profile.clone());
+        }
+    }
+    if retired.is_empty() { return Ok(()); }
+    let archive = directory.join("retired-instance-records.json");
+    let mut archived: BTreeMap<Uuid, LaunchRequest> = match std::fs::read(&archive) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| error.to_string())?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
+        Err(error) => return Err(error.to_string()),
+    };
+    archived.extend(retired.clone());
+    write_private(&archive, &serde_json::to_vec(&archived).map_err(|error| error.to_string())?)?;
+    data.profiles.retain(|id, _| !retired.contains_key(id));
+    Ok(())
+}
 #[derive(Serialize, Deserialize)]
 pub struct ClientGrant {
     pub name: String,
@@ -66,6 +92,8 @@ pub struct Persistent {
     pub profiles: BTreeMap<Uuid, LaunchRequest>,
     #[serde(default)]
     pub local_artifacts: Vec<PathBuf>,
+    #[serde(default)]
+    pub managed_model_root: Option<PathBuf>,
 }
 pub struct Pairing {
     code: String,
@@ -165,7 +193,7 @@ impl Host {
             return Err("desktop provider storage must use its dedicated provider/host state directory".into());
         }
         let path = directory.join("host.json");
-        let data = match std::fs::read(&path) {
+        let mut data = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice::<Persistent>(&bytes).map_err(|e| e.to_string())?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Persistent {
                 management_origin: None,
@@ -181,9 +209,11 @@ impl Host {
                 models: BTreeMap::new(),
                 profiles: BTreeMap::new(),
                 local_artifacts: vec![],
+                managed_model_root: None,
             },
             Err(e) => return Err(e.to_string()),
         };
+        consolidate_instances(&mut data, &directory)?;
         write_private(
             &path,
             &serde_json::to_vec(&data).map_err(|e| e.to_string())?,
@@ -199,6 +229,10 @@ impl Host {
             None => crate::model_downloads::ModelDownloads::open(
                 directory.join("managed-models"), directory.join("model-downloads.json"))?,
         };
+        if let Some(root) = &data.managed_model_root {
+            std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
+            downloads.set_root(root.canonicalize().map_err(|e| e.to_string())?);
+        }
         let host = Arc::new(Self {
             inference_client: reqwest::Client::builder()
                 .no_proxy()
@@ -280,6 +314,7 @@ impl Host {
         let mut roots = self.model_dirs.clone();
         roots.extend(self.data.lock().await.local_artifacts.iter().cloned());
         roots.push(self.downloads.root().to_path_buf());
+        roots.extend(self.downloads.list().await.into_iter().filter_map(|job| job.path));
         let sets = self.artifact_sets.clone();
         let (entries, errors) = tokio::task::spawn_blocking(move || {
             let mut pending: Vec<_> = roots.into_iter().map(|p| (p, false)).chain(sets.into_iter().map(|p|(p,true))).collect();
@@ -451,7 +486,14 @@ impl Host {
             .find(|m| m.id == request.model_id)
             .cloned()
             .ok_or("model is not installed")?;
-        let id = request.instance_id.unwrap_or_else(Uuid::new_v4);
+        let group = gpu_group(&request.gpu_uuids);
+        let existing = self.data.lock().await.profiles.iter()
+            .find(|(_, saved)| gpu_group(&saved.gpu_uuids) == group)
+            .map(|(id, _)| *id);
+        if request.instance_id.is_some() && existing.is_some() && request.instance_id != existing {
+            return Err("This GPU group already has a server instance; select that instance to change its model or profile".into());
+        }
+        let id = request.instance_id.or(existing).unwrap_or_else(Uuid::new_v4);
         let metadata = if model.artifact_set {
             inspect_artifact_set(&model.path)?
                 .into_iter()
@@ -1070,6 +1112,35 @@ impl Host {
                 self.scan().await?;
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
+            ("GET", "/host/v1/model-catalog") => {
+                let releases = crate::model_downloads::published_releases().await?;
+                let releases: Vec<_> = releases.into_iter().filter(|r| r.compatible_group(&self.gpus).is_some()).collect();
+                Ok(json(StatusCode::OK, serde_json::to_value(releases).map_err(|e| e.to_string())?))
+            }
+            ("GET", "/host/v1/model-storage") => {
+                let root = self.downloads.root();
+                let free = crate::model_downloads::available_bytes(root.clone()).await?;
+                Ok(json(StatusCode::OK, serde_json::json!({"path":root,"available_bytes":free})))
+            }
+            ("POST", "/host/v1/model-storage") => {
+                let body = body_json(req).await?;
+                let root = PathBuf::from(body["path"].as_str().ok_or("storage path required")?);
+                if !root.is_absolute() { return Err("model storage must be an absolute path".into()); }
+                tokio::fs::create_dir_all(&root).await.map_err(|e| e.to_string())?;
+                let root = tokio::fs::canonicalize(root).await.map_err(|e| e.to_string())?;
+                let probe = root.join(format!(".ginfer-write-check-{}", Uuid::new_v4()));
+                tokio::fs::write(&probe, []).await.map_err(|e| format!("model storage is not writable: {e}"))?;
+                tokio::fs::remove_file(probe).await.map_err(|e| e.to_string())?;
+                let _lifecycle = self.lifecycle.lock().await;
+                let mut data = self.data.lock().await;
+                let previous = data.managed_model_root.replace(root.clone());
+                if let Err(error) = write_private(&self.directory.join("host.json"), &serde_json::to_vec(&*data).map_err(|e| e.to_string())?) {
+                    data.managed_model_root = previous;
+                    return Err(error);
+                }
+                self.downloads.set_root(root.clone());
+                Ok(json(StatusCode::OK, serde_json::json!({"path":root})))
+            }
             ("GET", "/host/v1/downloads") => Ok(json(StatusCode::OK, serde_json::to_value(self.downloads.list().await).map_err(|e| e.to_string())?)),
             ("POST", "/host/v1/downloads") => {
                 let release: crate::model_downloads::Release =
@@ -1169,6 +1240,25 @@ mod lifecycle_tests {
     }
 
     #[tokio::test]
+    async fn model_storage_selection_survives_host_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("state");
+        let engine = std::env::current_exe().unwrap();
+        let host = Host::open(state.clone(), "Test".into(), engine.clone(), vec![], vec![], vec![]).await.unwrap();
+        let root = dir.path().join("chosen-models");
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = Request::post("/host/v1/model-storage")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"path":root}).to_string())).unwrap();
+        assert_eq!(host.clone().route(request).await.unwrap().status(), StatusCode::OK);
+        assert_eq!(host.downloads.root(), root.canonicalize().unwrap());
+        drop(host);
+        let reopened = Host::open(state, "Test".into(), engine, vec![], vec![], vec![]).await.unwrap();
+        assert_eq!(reopened.downloads.root(), root.canonicalize().unwrap());
+        assert_eq!(reopened.snapshot().await["model_management"]["managed_root"], root.to_string_lossy().as_ref());
+    }
+
+    #[tokio::test]
     async fn invalid_reload_preserves_session_and_restart_preserves_profile() {
         let dir = tempfile::tempdir().unwrap();
         let engine = dir.path().join("engine");
@@ -1182,12 +1272,13 @@ mod lifecycle_tests {
         artifact.extend(metadata.as_bytes());
         artifact.resize(4096, 0);
         std::fs::write(models.join("model.ginfer"), artifact).unwrap();
-        let gpus = vec![Gpu {
+        let mut gpus = vec![Gpu {
             uuid: "GPU-test".into(),
             name: "Test".into(),
             memory_mib: 32768,
             compute_capability: Some("12.0".into()),
         }];
+        gpus.push(Gpu { uuid: "GPU-second".into(), name: "Test".into(), memory_mib: 32768, compute_capability: Some("12.0".into()) });
         let host = Host::open(
             dir.path().join("state"),
             "Test".into(),
@@ -1218,7 +1309,7 @@ mod lifecycle_tests {
                 token_verifier: hex::encode(verifier(&token).finalize().into_bytes()),
             },
         );
-        let mut invalid = profile;
+        let mut invalid = profile.clone();
         invalid.gpu_uuids = vec!["GPU-missing".into()];
         let req = Request::post(format!("/host/v1/instances/{id}/reload"))
             .header("authorization", format!("Bearer {token}"))
@@ -1401,6 +1492,17 @@ mod lifecycle_tests {
         assert!(!host.snapshot().await.to_string().contains(api_key));
         let base = format!("http://127.0.0.1:{}", connection["port"]);
         let client = reqwest::Client::new();
+        let preflight = client.request(reqwest::Method::OPTIONS, format!("{base}/v1/models"))
+            .header("origin", "http://tauri.localhost")
+            .header("access-control-request-method", "GET")
+            .header("access-control-request-headers", "authorization")
+            .send().await.unwrap();
+        assert_eq!(preflight.status(), 204);
+        assert_eq!(preflight.headers()["access-control-allow-origin"], "http://tauri.localhost");
+        let unauthorized = client.get(format!("{base}/v1/models"))
+            .header("origin", "http://tauri.localhost").send().await.unwrap();
+        assert_eq!(unauthorized.status(), 401);
+        assert_eq!(unauthorized.headers()["access-control-allow-origin"], "http://tauri.localhost");
         assert_eq!(
             client
                 .get(format!("{base}/v1/models"))
@@ -1412,12 +1514,14 @@ mod lifecycle_tests {
         );
         let result = client
             .post(format!("{base}/v1/chat/completions"))
+            .header("origin", "http://tauri.localhost")
             .bearer_auth(api_key)
             .json(&serde_json::json!({"model":"client-alias","messages":[]}))
             .send()
             .await
             .unwrap();
         assert_eq!(result.status(), 200);
+        assert_eq!(result.headers()["access-control-allow-origin"], "http://tauri.localhost");
         assert_eq!(
             result.json::<serde_json::Value>().await.unwrap()["fixture"],
             "forwarded"
@@ -1433,6 +1537,14 @@ mod lifecycle_tests {
             503
         );
         upstream.abort();
+        let duplicate_id = Uuid::from_u128(u128::MAX);
+        {
+            let mut data = host.data.lock().await;
+            let mut duplicate = data.profiles[&id].clone();
+            duplicate.instance_id = Some(duplicate_id);
+            data.profiles.insert(duplicate_id, duplicate);
+        }
+        host.save().await.unwrap();
         let restored = Host::open(
             dir.path().join("state"),
             "Test".into(),
@@ -1448,6 +1560,26 @@ mod lifecycle_tests {
         assert_eq!(snapshot["instances"][0]["status"], "stopped");
         assert!(snapshot["instances"][0]["session_id"].is_null());
         assert_eq!(snapshot["instances"][0]["profile"]["max_context"], 8192);
+        assert_eq!(snapshot["instances"].as_array().unwrap().len(), 1);
+        let retired: BTreeMap<Uuid, LaunchRequest> = serde_json::from_slice(
+            &std::fs::read(dir.path().join("state/retired-instance-records.json")).unwrap()
+        ).unwrap();
+        assert!(retired.contains_key(&duplicate_id));
+        let mut replacement = profile.clone();
+        replacement.concurrency = 2;
+        assert_eq!(restored.launch(replacement.clone()).await.unwrap(), id);
+        assert_eq!(restored.data.lock().await.profiles.len(), 1);
+        assert!(restored.launch(replacement.clone()).await.is_err());
+        restored.processes.lock().await.shutdown().await.unwrap();
+        assert_eq!(restored.launch(replacement.clone()).await.unwrap(), id);
+        assert_eq!(restored.data.lock().await.profiles.len(), 1);
+        replacement.gpu_uuids = vec!["GPU-second".into()];
+        let second_id = restored.launch(replacement.clone()).await.unwrap();
+        assert_ne!(second_id, id);
+        assert_eq!(restored.data.lock().await.profiles.len(), 2);
+        replacement.instance_id = Some(Uuid::new_v4());
+        assert!(restored.launch(replacement).await.is_err());
+        restored.processes.lock().await.shutdown().await.unwrap();
         serde_json::from_value::<crate::engine_registry::HostSnapshot>(snapshot).unwrap();
     }
 }

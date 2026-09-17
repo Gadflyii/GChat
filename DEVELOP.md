@@ -107,11 +107,17 @@ Setup offers replacement directories; existing registered hosts retain their pat
 
 Desktop builds select qualified profile catalogs through `GINFER_PROFILE_CATALOGS`
 (colon-separated absolute paths on Linux, semicolon-separated on Windows).
-The Windows release script also accepts `-GinferProfileCatalogs`. The Rust build
+The Windows release script also accepts `-GinferProfileCatalogs`. When omitted,
+it selects `windows-*.json` from the sibling `ginfer/config/launch-profiles`
+directory. Release builds reject missing/empty catalogs, duplicate IDs and
+non-Windows entries, and verify the staged catalog against the selected IDs.
+Use `-ValidateInputsOnly` to check these inputs without compiling.
+The Rust build
 stages their combined `resources/bin/launch-profiles.json` for both desktop and
 installed CLI hosts. Duplicate IDs or another platform's profiles stop the build.
-Unset selection produces an explicit empty catalog, not inferred presets or stale
-build resources. Changing the selected files triggers regeneration.
+Direct development/test Cargo builds with unset selection produce an explicit
+empty catalog, not inferred presets or stale build resources; the Windows release
+wrapper does not allow this. Changing selected files triggers regeneration.
 
 If a user has relocated the data folder via `Settings → Advanced → Change data folder location` (`change_app_data_folder`), the uninstaller and `make clean-windows-all` **do not** delete that custom path — only the default `%APPDATA%\GChat\` is cleaned. Removing a custom data folder is the user's responsibility.
 

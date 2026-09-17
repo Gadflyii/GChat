@@ -4,7 +4,11 @@ import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { StatusLabel } from './StatusLabel'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog'
 import { useStudioRuns } from '@/stores/studio-run-store'
+import { studioCommand } from '@/services/agent/studio'
 import {
   cancelAgentTurn,
   resolveAgentApproval,
@@ -13,6 +17,8 @@ import {
 
 export function AgentLiveRuns() {
   const runIds = useStudioRuns((s) => Object.keys(s.runs).join(','))
+  const deleting = useStudioRuns((s) => s.deleting)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const { catalog, error, refresh } = useStudioCatalog()
   if (!runIds) return null
   return (
@@ -20,7 +26,29 @@ export function AgentLiveRuns() {
       className="space-y-4 border-b p-6"
       aria-label="Live Agent Studio runs"
     >
-      <h2 className="font-studio text-lg font-semibold">Live runs</h2>
+      <div className="flex items-center gap-3">
+        <h2 className="font-studio text-lg font-semibold">Live runs</h2>
+        <Button variant="outline" size="sm" disabled={deleting} onClick={() => setConfirmDelete(true)}>
+          Delete all
+        </Button>
+      </div>
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete run history?</DialogTitle>
+            <DialogDescription>
+              Delete all saved run history and generated run outputs. Active runs,
+              agent definitions, and your working directories will be kept. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={deleting} onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button variant="destructive" disabled={deleting} onClick={() => {
+              void useStudioRuns.getState().deleteHistory().then(() => setConfirmDelete(false)).catch((e) => toast.error(String(e)))
+            }}>{deleting ? 'Deleting…' : 'Delete history'}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {error && (
         <p role="alert" className="text-sm text-destructive">
           Engine capacity is unavailable; showing last-known labels.{' '}
@@ -44,6 +72,7 @@ function LiveRun({
   instances: AgentModelInstance[]
 }) {
   const run = useStudioRuns((s) => s.runs[id])
+  const deleting = useStudioRuns((s) => s.deleting)
   const [selected, setSelected] = useState<string>()
   const [pending, setPending] = useState<string[]>([])
   if (!run) return null
@@ -66,16 +95,30 @@ function LiveRun({
             {stages.filter((s) => s.status === 'running').length} running
           </p>
         </div>
-        {running && (
+        <div className="flex items-start gap-2">
+          {running && (
+            <Button
+              variant="outline"
+              onClick={() =>
+                void cancelAgentTurn(id).catch((e) => toast.error(String(e)))
+              }
+            >
+              Stop run
+            </Button>
+          )}
           <Button
             variant="outline"
-            onClick={() =>
-              void cancelAgentTurn(id).catch((e) => toast.error(String(e)))
-            }
+            disabled={!run.settled || deleting}
+            aria-label={`Delete run ${run.name}`}
+            title={!run.settled
+              ? 'Stop the run and wait for it to finish before deleting'
+              : 'Delete run history and generated outputs'}
+            onClick={() => void useStudioRuns.getState().deleteHistory(id)
+              .catch((e) => toast.error(String(e)))}
           >
-            Stop run
+            Delete
           </Button>
-        )}
+        </div>
       </div>
       {run.approvals.map((approval) => {
         const approvalId =
@@ -145,6 +188,7 @@ function LiveRun({
               <th className="p-2">Host / Model</th>
               <th className="p-2">Activity</th>
               <th className="p-2">Tokens/sec</th>
+              <th className="p-2">Context</th>
             </tr>
           </thead>
           <tbody>
@@ -182,6 +226,29 @@ function LiveRun({
                         ).toFixed(1)
                       : '—'}
                   </td>
+                  <td className="p-2">
+                    {stage.context ? (
+                      <div className="space-y-1 text-xs">
+                        <div>{stage.context.input_tokens.toLocaleString()} / {stage.context.context_tokens.toLocaleString()} tokens</div>
+                        <progress className="h-1.5 w-full accent-primary" aria-label={`${stage.name} context usage`}
+                          value={stage.context.input_tokens} max={stage.context.context_tokens} />
+                        <div className="text-muted-foreground">
+                          {stage.context.reserved_tokens.toLocaleString()} reserved · {stage.context.compactions} compactions
+                        </div>
+                        <div>{stage.context.status === 'compacting' ? 'Compacting…' : stage.context.status === 'blocked' ? 'Context blocked' : stage.context.status === 'nothing_to_compact' ? 'Nothing to compact yet' : ''}</div>
+                        {stage.status === 'running' && <Button size="sm" variant="outline"
+                          disabled={stage.context.status === 'compacting' || pending.includes(stage.context.context_id)}
+                          onClick={() => {
+                            const id = stage.context!.context_id
+                            setPending((s) => [...s, id])
+                            void studioCommand('compact_worker', { id })
+                              .then(() => toast.info('Compaction requested for the next safe tool-step boundary.'))
+                              .catch((e) => toast.error(String(e)))
+                              .finally(() => setPending((s) => s.filter((v) => v !== id)))
+                          }}>Compact</Button>}
+                      </div>
+                    ) : '—'}
+                  </td>
                 </tr>
               )
             })}
@@ -197,6 +264,7 @@ function LiveRun({
         <div className="rounded border p-3 space-y-2">
           <h4 className="font-medium">{detail.name}</h4>
           <p className="whitespace-pre-wrap text-sm">{detail.summary}</p>
+          {detail.context?.archive_path && <p className="break-all text-xs text-muted-foreground">Full transcript and tool outputs: {detail.context.archive_path}</p>}
           <WorkerDetails events={detail.events ?? []} />
         </div>
       )}

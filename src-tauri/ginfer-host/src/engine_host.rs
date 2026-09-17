@@ -248,6 +248,8 @@ impl HostProcesses {
     fn spawn(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
         let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         let mut command = Command::new(&self.executable);
+        #[cfg(windows)]
+        command.creation_flags(0x08000000); // Background serving has no console window.
         if let Some(directory) = self.executable.parent() {
             let variable = if cfg!(windows) { "PATH" } else { "LD_LIBRARY_PATH" };
             let mut paths = vec![directory.to_path_buf()];

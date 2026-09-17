@@ -140,8 +140,10 @@ async fn run(
         return Err("LAN discovery requires a LAN or wildcard --listen address".into());
     }
     let _owner = ginfer_host::service_owner::ServiceOwner::acquire(&data_dir)?;
-    let output = tokio::process::Command::new(&args.nvidia_smi)
-        .args([
+    let mut inventory = tokio::process::Command::new(&args.nvidia_smi);
+    #[cfg(windows)]
+    inventory.creation_flags(0x08000000);
+    let output = inventory.args([
             "--query-gpu=uuid,name,memory.total,compute_cap",
             "--format=csv,noheader,nounits",
         ])

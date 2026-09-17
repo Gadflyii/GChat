@@ -4,6 +4,30 @@ Implemented on `feat/agent-worker-pools`. Native dispatch tests use controlled
 loopback GInfer sessions; physical multi-host inference and the Windows installer
 remain manual integration checks.
 
+## Worker context
+
+Every native Studio role uses its assigned model's reported context capacity and
+exact prompt-count endpoint. There is no fixed 32K conversation ceiling. The
+response reserve is one quarter of context (256–8,192 tokens); additional working
+headroom is one eighth (512–4,096 tokens). Context too small for the task and
+instructions produces a preserved, actionable failure rather than truncation.
+
+Older completed tool exchanges are checkpointed while the original goal,
+instructions, and recent exchanges remain available. Checkpoints are counted and
+validated before replacing working history; larger checkpoint inputs are processed
+in fitting chunks. Tools, approval state, step limits, and cycle limits are not reset.
+Live Runs shows exact prompt use, reserved capacity, checkpoint count, and a Compact
+button per worker. Manual requests wait until the current tool batch completes.
+
+Run-owned stage directories contain `context/transcript.jsonl`, full tool-result
+JSON artifacts, `context/working-state.json`, and `result.txt` for stage handoffs.
+These contain local task data and model reasoning. Workers can read referenced
+archives through scoped file tools. Deleting run history also removes these outputs,
+but not the user's working directory. A failed checkpoint preserves working state
+and reports a context error; it does not automatically rerun tools. Agent chat
+`/compact` uses the same checkpoint manager; normal chat and external terminal agents
+continue to use their own context implementations.
+
 ## Outcome
 
 Agent Studio owns Build, Run, and Monitor. Engines remains the host/model lifecycle
