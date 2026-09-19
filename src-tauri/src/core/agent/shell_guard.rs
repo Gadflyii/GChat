@@ -27,12 +27,6 @@ pub fn evaluate_shell_command(command: &str) -> ShellGuardVerdict {
     ShellGuardVerdict::Allow
 }
 
-pub fn needs_shell_interpretation(cmd: &str, args: &[String]) -> bool {
-    contains_shell_syntax(cmd)
-        || args.iter().any(|arg| contains_shell_syntax(arg))
-        || (args.is_empty() && cmd.split_whitespace().count() > 1)
-}
-
 pub fn join_command_stream(cmd: &str, args: &[String]) -> String {
     std::iter::once(cmd)
         .chain(args.iter().map(String::as_str))
@@ -40,12 +34,20 @@ pub fn join_command_stream(cmd: &str, args: &[String]) -> String {
         .join(" ")
 }
 
-fn contains_shell_syntax(value: &str) -> bool {
-    value
-        .chars()
-        .any(|character| matches!(character, '|' | '&' | ';' | '>' | '<' | '$' | '`'))
-        || value.contains("$(")
-        || value.contains("${")
+pub fn evaluate_process_command(cmd: &str, args: &[String]) -> ShellGuardVerdict {
+    let mut verdict = evaluate_shell_command(&join_command_stream(cmd, args));
+    let executable = cmd.rsplit(['/', '\\']).next().unwrap_or(cmd).to_ascii_lowercase();
+    let name = executable.strip_suffix(".exe").unwrap_or(&executable);
+    if matches!(name, "sh" | "bash" | "zsh" | "cmd" | "powershell" | "pwsh") {
+        for pair in args.windows(2) {
+            if matches!(pair[0].to_ascii_lowercase().as_str(), "-c" | "-command" | "/c" | "/k") {
+                let script = evaluate_shell_command(&pair[1]);
+                if matches!(script, ShellGuardVerdict::Block(_)) { return script; }
+                if matches!(verdict, ShellGuardVerdict::Allow) { verdict = script; }
+            }
+        }
+    }
+    verdict
 }
 
 fn is_catastrophic_command(command: &str) -> bool {
@@ -508,18 +510,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn direct_argv_does_not_require_shell() {
-        assert!(!needs_shell_interpretation(
-            "git",
-            &["status".into(), "--short".into()]
-        ));
-    }
-
-    #[test]
-    fn routes_shell_syntax_and_prejoined_commands() {
-        assert!(needs_shell_interpretation("printf hi | wc -c", &[]));
-        assert!(needs_shell_interpretation("echo", &["$HOME".into()]));
-        assert!(needs_shell_interpretation("git status --short", &[]));
+    fn explicit_shell_scripts_keep_catastrophic_command_checks() {
+        assert!(matches!(evaluate_process_command("sh", &["-c".into(), "rm -rf /".into()]), ShellGuardVerdict::Block(_)));
+        assert_eq!(evaluate_process_command("sh", &["-c".into(), "printf '%s' hello".into()]), ShellGuardVerdict::Allow);
     }
 
     #[test]

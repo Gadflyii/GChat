@@ -1,19 +1,17 @@
 use crate::state::{BenchmarkControl, GinferState, SessionInfo};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, Runtime, State};
-use tokio::task::JoinSet;
-use tokio::time::Instant;
 
 const MAX_BENCHMARK_ROUNDS: u32 = 5;
 const MAX_PROMPT_TOKENS: u32 = 262_144;
-const MAX_OUTPUT_TOKENS: u32 = 16_384;
+const MAX_OUTPUT_TOKENS: u32 = 65_536;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct BenchmarkRequest {
+    pub benchmark_id: String,
     pub run_id: String,
     pub session_pid: Option<i32>,
     pub prompt_tokens: u32,
@@ -98,9 +96,11 @@ pub struct BenchmarkPoint {
     pub average_prompt_tokens: f64,
     pub average_completion_tokens: f64,
     pub cached_prompt_tokens: u64,
-    pub prompt_tokens_per_second: f64,
-    pub generation_tokens_per_second: f64,
-    pub per_request_generation_tokens_per_second: f64,
+    pub cold_prompt_tokens_per_second: Option<f64>,
+    pub prompt_tokens_per_second: Option<f64>,
+    pub generation_tokens_per_second: Option<f64>,
+    pub per_request_generation_tokens_per_second: Option<f64>,
+    pub evidence: PointReport,
     pub wave_output_tokens_per_second: f64,
     pub average_prefill_seconds: f64,
     pub average_decode_seconds: f64,
@@ -111,6 +111,9 @@ pub struct BenchmarkPoint {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BenchmarkResult {
+    pub benchmark_id: String,
+    pub hardware: Option<serde_json::Value>,
+    pub methodology: &'static str,
     pub run_id: String,
     pub started_at_ms: u64,
     pub completed_at_ms: u64,
@@ -127,165 +130,31 @@ struct BenchmarkProgress {
     phase: &'static str,
 }
 
-#[derive(Clone, Serialize)]
-struct ChatMessage {
-    role: &'static str,
-    content: String,
-}
-
-#[derive(Clone, Serialize)]
-struct ChatRequest {
-    model: String,
-    messages: Vec<ChatMessage>,
-    stream: bool,
-    max_tokens: u32,
-    temperature: f64,
-    top_p: f64,
-    top_k: u32,
-    reasoning_effort: &'static str,
-}
-
-#[derive(Deserialize)]
-struct ChatResponse {
-    choices: Vec<ChatChoice>,
-    usage: ChatUsage,
-    #[serde(rename = "x_ginfer")]
-    metrics: CompletionMetrics,
-}
-
-#[derive(Deserialize)]
-struct ChatChoice {
-    finish_reason: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct ChatUsage {
-    prompt_tokens: u64,
-    completion_tokens: u64,
-    #[serde(default)]
-    prompt_tokens_details: PromptTokenDetails,
-}
-
-#[derive(Default, Deserialize)]
-struct PromptTokenDetails {
-    #[serde(default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Wave {
+    full_cold_prompt: bool,
+    cold_pp: Option<f64>,
+    computed_tokens: u64,
+    compute_seconds: f64,
     cached_tokens: u64,
-}
-
-#[derive(Deserialize)]
-struct CompletionMetrics {
-    finish_reason: String,
-    #[serde(default)]
-    computed_prefill_tokens: u64,
-    prefill_seconds: f64,
+    output_tokens: u64,
+    mean_ttft_seconds: f64,
+    decode_tokens: u64,
+    decode_rounds: u64,
     decode_seconds: f64,
-}
-
-#[derive(Deserialize)]
-struct ModelsResponse {
-    data: Vec<ModelDescription>,
-}
-
-#[derive(Deserialize)]
-struct ModelDescription {
-    id: String,
-    max_model_len: u32,
-}
-
-struct RequestSample {
-    prompt_tokens: u64,
-    completion_tokens: u64,
-    cached_tokens: u64,
-    computed_prefill_tokens: u64,
-    prefill_seconds: f64,
-    decode_seconds: f64,
-    request_seconds: f64,
-    finish_reason: String,
-}
-
-struct WaveResult {
-    samples: Vec<RequestSample>,
+    prefill_seconds_sum: f64,
+    decode_seconds_sum: f64,
+    request_seconds_sum: f64,
     wall_seconds: f64,
 }
 
-#[derive(Default)]
-struct PointAccumulator {
-    completed_requests: u32,
-    prompt_tokens: u64,
-    completion_tokens: u64,
-    cached_tokens: u64,
-    computed_prefill_tokens: u64,
-    prefill_phase_seconds: f64,
-    decode_phase_seconds: f64,
-    request_seconds: f64,
-    prefill_seconds: f64,
-    decode_seconds: f64,
-    wave_seconds: f64,
-    finish_reasons: BTreeSet<String>,
-}
-
-impl PointAccumulator {
-    fn add_wave(&mut self, wave: WaveResult) {
-        self.wave_seconds += wave.wall_seconds;
-        self.prefill_phase_seconds += wave
-            .samples
-            .iter()
-            .map(|sample| sample.prefill_seconds)
-            .fold(0.0, f64::max);
-        self.decode_phase_seconds += wave
-            .samples
-            .iter()
-            .map(|sample| sample.decode_seconds)
-            .fold(0.0, f64::max);
-
-        for sample in wave.samples {
-            self.completed_requests += 1;
-            self.prompt_tokens += sample.prompt_tokens;
-            self.completion_tokens += sample.completion_tokens;
-            self.cached_tokens += sample.cached_tokens;
-            self.computed_prefill_tokens += sample.computed_prefill_tokens;
-            self.prefill_seconds += sample.prefill_seconds;
-            self.decode_seconds += sample.decode_seconds;
-            self.request_seconds += sample.request_seconds;
-            self.finish_reasons.insert(sample.finish_reason);
-        }
-    }
-
-    fn finish(
-        self,
-        concurrency: u32,
-        requested_prompt_tokens: u32,
-        requested_output_tokens: u32,
-    ) -> BenchmarkPoint {
-        let request_count = f64::from(self.completed_requests.max(1));
-        BenchmarkPoint {
-            concurrency,
-            requested_prompt_tokens,
-            requested_output_tokens,
-            completed_requests: self.completed_requests,
-            average_prompt_tokens: self.prompt_tokens as f64 / request_count,
-            average_completion_tokens: self.completion_tokens as f64 / request_count,
-            cached_prompt_tokens: self.cached_tokens,
-            prompt_tokens_per_second: safe_rate(
-                self.computed_prefill_tokens,
-                self.prefill_phase_seconds,
-            ),
-            generation_tokens_per_second: safe_rate(
-                self.completion_tokens,
-                self.decode_phase_seconds,
-            ),
-            per_request_generation_tokens_per_second: safe_rate(
-                self.completion_tokens,
-                self.decode_seconds,
-            ),
-            wave_output_tokens_per_second: safe_rate(self.completion_tokens, self.wave_seconds),
-            average_prefill_seconds: self.prefill_seconds / request_count,
-            average_decode_seconds: self.decode_seconds / request_count,
-            average_request_seconds: self.request_seconds / request_count,
-            wave_seconds: self.wave_seconds,
-            finish_reasons: self.finish_reasons.into_iter().collect(),
-        }
-    }
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PointReport {
+    configuration: serde_json::Value,
+    schema: String,
+    corpus: String,
+    warmup: Vec<Wave>,
+    measured: Vec<Wave>,
 }
 
 fn safe_rate(tokens: u64, seconds: f64) -> f64 {
@@ -294,6 +163,55 @@ fn safe_rate(tokens: u64, seconds: f64) -> f64 {
     } else {
         0.0
     }
+}
+
+fn score(
+    request: &BenchmarkRequest,
+    concurrency: u32,
+    report: PointReport,
+) -> Result<BenchmarkPoint, String> {
+    if report.schema != "ginfer-resident-benchmark-v1"
+        || report.warmup.len() != request.warmup_rounds as usize
+        || report.measured.len() != request.measured_rounds as usize
+    {
+        return Err("invalid resident benchmark report".into());
+    }
+    let sum = |field: fn(&Wave) -> f64| report.measured.iter().map(field).sum::<f64>();
+    let count = concurrency * request.measured_rounds;
+    let output: u64 = report.measured.iter().map(|w| w.output_tokens).sum();
+    let cached = report.measured.iter().map(|w| w.cached_tokens).sum();
+    let decode_tokens = report.measured.iter().map(|w| w.decode_tokens).sum();
+    if output != u64::from(count) * u64::from(request.max_output_tokens) {
+        return Err("benchmark did not return the exact output budget".into());
+    }
+    let mean_ttft_sum = sum(|w| w.mean_ttft_seconds);
+    let decode_seconds = sum(|w| w.decode_seconds);
+    let tg = (decode_seconds > 0.0).then(|| safe_rate(decode_tokens, decode_seconds));
+    Ok(BenchmarkPoint {
+        concurrency,
+        requested_prompt_tokens: request.prompt_tokens,
+        requested_output_tokens: request.max_output_tokens,
+        completed_requests: count,
+        average_prompt_tokens: f64::from(request.prompt_tokens),
+        average_completion_tokens: output as f64 / f64::from(count),
+        cached_prompt_tokens: cached,
+        cold_prompt_tokens_per_second: report.warmup[0].cold_pp,
+        prompt_tokens_per_second: (mean_ttft_sum > 0.0).then(|| {
+            safe_rate(
+                u64::from(count) * u64::from(request.prompt_tokens),
+                mean_ttft_sum,
+            )
+        }),
+        generation_tokens_per_second: tg,
+        per_request_generation_tokens_per_second: tg.map(|value| value / f64::from(concurrency)),
+        evidence: report.clone(),
+        wave_output_tokens_per_second: safe_rate(output, sum(|w| w.wall_seconds)),
+        average_prefill_seconds: sum(|w| w.prefill_seconds_sum) / f64::from(count),
+        average_decode_seconds: sum(|w| w.decode_seconds_sum) / f64::from(count),
+        average_request_seconds: sum(|w| w.request_seconds_sum) / f64::from(count),
+        wave_seconds: sum(|w| w.wall_seconds),
+        finish_reasons: vec!["output_limit".into()],
+    })
 }
 
 fn unix_millis() -> u64 {
@@ -312,6 +230,14 @@ fn effective_concurrency(session: &BenchmarkTarget) -> u32 {
 }
 
 fn validate_request(request: &BenchmarkRequest, session: &BenchmarkTarget) -> Result<(), String> {
+    if !["standard", "serving", "long-context", "big-bench", "custom"].contains(&request.benchmark_id.as_str()) {
+        return Err("unknown benchmark identity".into());
+    }
+    if request.benchmark_id == "standard" && (request.prompt_tokens != 2048 ||
+        request.max_output_tokens != 500 || request.warmup_rounds != 1 || request.measured_rounds != 1 ||
+        request.concurrencies != [1, 4, 8].into_iter().filter(|c| *c <= effective_concurrency(session)).collect::<Vec<_>>()) {
+        return Err("Standard Benchmark requires the fixed 2048/500 workload and all supported C1/C4/C8 points".into());
+    }
     if request.run_id.trim().is_empty() || request.run_id.len() > 128 {
         return Err("benchmark run_id must contain 1..=128 characters".into());
     }
@@ -330,9 +256,9 @@ fn validate_request(request: &BenchmarkRequest, session: &BenchmarkTarget) -> Re
             "benchmark measured_rounds must be in 1..={MAX_BENCHMARK_ROUNDS}"
         ));
     }
-    if request.warmup_rounds > MAX_BENCHMARK_ROUNDS {
+    if request.warmup_rounds == 0 || request.warmup_rounds > MAX_BENCHMARK_ROUNDS {
         return Err(format!(
-            "benchmark warmup_rounds must be in 0..={MAX_BENCHMARK_ROUNDS}"
+            "benchmark warmup_rounds must be in 1..={MAX_BENCHMARK_ROUNDS}"
         ));
     }
     if request.concurrencies.is_empty() {
@@ -349,246 +275,6 @@ fn validate_request(request: &BenchmarkRequest, session: &BenchmarkTarget) -> Re
         ));
     }
     Ok(())
-}
-
-fn benchmark_prompt(run_id: &str, round: u32, lane: u32, corpus_repetitions: usize) -> String {
-    const CORPUS: &str = "A production inference service balances request admission, prefix processing, cache locality, speculative proposal quality, verification cost, and token publication. Measure each phase independently, preserve exact state transitions, and prefer repeatable end-to-end evidence over isolated peak numbers. ";
-    let mut prompt = format!(
-        "Benchmark sample {run_id}-{round}-{lane}. Analyze the following technical workload. After the analysis, continue with numbered optimization observations until the output limit; do not conclude early.\n\n"
-    );
-    for _ in 0..corpus_repetitions {
-        prompt.push_str(CORPUS);
-    }
-    prompt
-}
-
-fn initial_corpus_repetitions(target_tokens: u32) -> usize {
-    ((target_tokens as usize).saturating_sub(40) / 42).max(1)
-}
-
-async fn request_model_context(
-    client: &reqwest::Client,
-    session: &BenchmarkTarget,
-) -> Result<u32, String> {
-    let response = client
-        .get(format!("{}/v1/models", session.base_url))
-        .bearer_auth(&session.api_key)
-        .send()
-        .await
-        .map_err(|error| format!("could not query the loaded GInfer model: {error}"))?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "loaded GInfer server returned {status} from /v1/models: {body}"
-        ));
-    }
-    let models = response
-        .json::<ModelsResponse>()
-        .await
-        .map_err(|error| format!("invalid /v1/models response: {error}"))?;
-    models
-        .data
-        .into_iter()
-        .find(|model| model.id == session.model_id)
-        .map(|model| model.max_model_len)
-        .ok_or_else(|| {
-            format!(
-                "loaded GInfer server did not report model '{}'",
-                session.model_id
-            )
-        })
-}
-
-async fn count_prompt_tokens(
-    client: &reqwest::Client,
-    session: &BenchmarkTarget,
-    prompt: String,
-) -> Result<u32, String> {
-    #[derive(Serialize)]
-    struct CountRequest {
-        model: String,
-        messages: Vec<ChatMessage>,
-        reasoning_effort: &'static str,
-    }
-    #[derive(Deserialize)]
-    struct CountResponse {
-        input_tokens: u32,
-    }
-
-    let response = client
-        .post(format!(
-            "{}/v1/chat/completions/count_tokens",
-            session.base_url
-        ))
-        .bearer_auth(&session.api_key)
-        .json(&CountRequest {
-            model: session.model_id.clone(),
-            messages: vec![ChatMessage {
-                role: "user",
-                content: prompt,
-            }],
-            reasoning_effort: "none",
-        })
-        .send()
-        .await
-        .map_err(|error| format!("could not count benchmark prompt tokens: {error}"))?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "loaded GInfer server returned {status} while counting tokens: {body}"
-        ));
-    }
-    response
-        .json::<CountResponse>()
-        .await
-        .map(|body| body.input_tokens)
-        .map_err(|error| format!("invalid token-count response: {error}"))
-}
-
-async fn calibrate_prompt(
-    client: &reqwest::Client,
-    session: &BenchmarkTarget,
-    request: &BenchmarkRequest,
-) -> Result<(usize, u32), String> {
-    let mut repetitions = initial_corpus_repetitions(request.prompt_tokens);
-    let mut best = (repetitions, u32::MAX, 0u32);
-    for _ in 0..5 {
-        let count = count_prompt_tokens(
-            client,
-            session,
-            benchmark_prompt(&request.run_id, 0, 0, repetitions),
-        )
-        .await?;
-        let distance = count.abs_diff(request.prompt_tokens);
-        if distance < best.1 {
-            best = (repetitions, distance, count);
-        }
-        if distance <= (request.prompt_tokens / 50).max(4) {
-            break;
-        }
-        repetitions =
-            ((repetitions as f64 * request.prompt_tokens as f64 / f64::from(count.max(1))).round()
-                as usize)
-                .max(1);
-        if repetitions == best.0 {
-            break;
-        }
-    }
-    Ok((best.0, best.2))
-}
-
-async fn request_completion(
-    client: reqwest::Client,
-    session: BenchmarkTarget,
-    prompt: String,
-    max_output_tokens: u32,
-) -> Result<RequestSample, String> {
-    let started = Instant::now();
-    let response = client
-        .post(format!("{}/v1/chat/completions", session.base_url))
-        .bearer_auth(&session.api_key)
-        .json(&ChatRequest {
-            model: session.model_id.clone(),
-            messages: vec![ChatMessage {
-                role: "user",
-                content: prompt,
-            }],
-            stream: false,
-            max_tokens: max_output_tokens,
-            temperature: 0.0,
-            top_p: 1.0,
-            top_k: 1,
-            reasoning_effort: "none",
-        })
-        .send()
-        .await
-        .map_err(|error| format!("benchmark request failed: {error}"))?;
-    let request_seconds = started.elapsed().as_secs_f64();
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!(
-            "loaded GInfer server returned {status} during benchmark: {body}"
-        ));
-    }
-    let body = response
-        .json::<ChatResponse>()
-        .await
-        .map_err(|error| format!("invalid GInfer benchmark response: {error}"))?;
-    let finish_reason = if body.metrics.finish_reason.is_empty() {
-        body.choices
-            .first()
-            .and_then(|choice| choice.finish_reason.clone())
-            .unwrap_or_else(|| "unknown".into())
-    } else {
-        body.metrics.finish_reason.clone()
-    };
-    Ok(RequestSample {
-        prompt_tokens: body.usage.prompt_tokens,
-        completion_tokens: body.usage.completion_tokens,
-        cached_tokens: body.usage.prompt_tokens_details.cached_tokens,
-        computed_prefill_tokens: body.metrics.computed_prefill_tokens,
-        prefill_seconds: body.metrics.prefill_seconds,
-        decode_seconds: body.metrics.decode_seconds,
-        request_seconds,
-        finish_reason,
-    })
-}
-
-async fn run_wave(
-    client: &reqwest::Client,
-    session: &BenchmarkTarget,
-    control: &Arc<BenchmarkControl>,
-    request: &BenchmarkRequest,
-    concurrency: u32,
-    round: u32,
-    corpus_repetitions: usize,
-) -> Result<WaveResult, String> {
-    if control.cancelled.load(Ordering::Acquire) {
-        return Err("benchmark cancelled".into());
-    }
-
-    let started = Instant::now();
-    let mut tasks = JoinSet::new();
-    for lane in 0..concurrency {
-        tasks.spawn(request_completion(
-            client.clone(),
-            session.clone(),
-            benchmark_prompt(&request.run_id, round, lane, corpus_repetitions),
-            request.max_output_tokens,
-        ));
-    }
-
-    let mut samples = Vec::with_capacity(concurrency as usize);
-    while !tasks.is_empty() {
-        tokio::select! {
-            _ = control.notify.notified() => {
-                tasks.abort_all();
-                return Err("benchmark cancelled".into());
-            }
-            joined = tasks.join_next() => {
-                match joined {
-                    Some(Ok(Ok(sample))) => samples.push(sample),
-                    Some(Ok(Err(error))) => {
-                        tasks.abort_all();
-                        return Err(error);
-                    }
-                    Some(Err(error)) => {
-                        tasks.abort_all();
-                        return Err(format!("benchmark worker failed: {error}"));
-                    }
-                    None => break,
-                }
-            }
-        }
-    }
-
-    Ok(WaveResult {
-        samples,
-        wall_seconds: started.elapsed().as_secs_f64(),
-    })
 }
 
 fn emit_progress<R: Runtime>(
@@ -616,74 +302,50 @@ async fn execute_benchmark<R: Runtime>(
     session: &BenchmarkTarget,
     control: &Arc<BenchmarkControl>,
 ) -> Result<BenchmarkResult, String> {
-    let client = session.client.clone();
-    let max_context = request_model_context(&client, session).await?;
-    emit_progress(app_handle, request, 0, 0, "preparing");
-    let (corpus_repetitions, calibrated_prompt_tokens) =
-        calibrate_prompt(&client, session, request).await?;
-    if calibrated_prompt_tokens.saturating_add(request.max_output_tokens) > max_context {
-        return Err(format!(
-            "calibrated prompt ({calibrated_prompt_tokens}) plus output reservation ({}) exceeds the loaded model context ({max_context})",
-            request.max_output_tokens
-        ));
-    }
-
     let started_at_ms = unix_millis();
-    let mut points = Vec::with_capacity(request.concurrencies.len());
-    for (point_index, concurrency) in request.concurrencies.iter().copied().enumerate() {
-        emit_progress(app_handle, request, point_index, concurrency, "warming");
-        for warmup in 0..request.warmup_rounds {
-            let round = 10_000 + (point_index as u32 * 100) + warmup;
-            run_wave(
-                &client,
-                session,
-                control,
-                request,
-                concurrency,
-                round,
-                corpus_repetitions,
-            )
-            .await?;
+    let mut points = Vec::new();
+    for (index, &concurrency) in request.concurrencies.iter().enumerate() {
+        if control.cancelled.load(Ordering::Acquire) {
+            return Err("benchmark cancelled".into());
         }
-
-        emit_progress(app_handle, request, point_index, concurrency, "measuring");
-        let mut accumulator = PointAccumulator::default();
-        for measured in 0..request.measured_rounds {
-            let round = 20_000 + (point_index as u32 * 100) + measured;
-            let wave = run_wave(
-                &client,
-                session,
-                control,
-                request,
-                concurrency,
-                round,
-                corpus_repetitions,
-            )
-            .await?;
-            accumulator.add_wave(wave);
+        emit_progress(app_handle, request, index, concurrency, "measuring");
+        let response = session
+            .client
+            .post(format!("{}/v1/ginfer/benchmark", session.base_url))
+            .bearer_auth(&session.api_key)
+            .json(&serde_json::json!({
+                "prompt_tokens": request.prompt_tokens,
+                "output_tokens": request.max_output_tokens,
+                "concurrency": concurrency,
+                "warmup_rounds": request.warmup_rounds,
+                "measured_rounds": request.measured_rounds,
+            }))
+            .send()
+            .await
+            .map_err(|e| format!("resident benchmark request failed: {e}"))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            if status == reqwest::StatusCode::NOT_FOUND {
+                return Err("This engine needs an update to support the resident Max Perf benchmark endpoint.".into());
+            }
+            return Err(format!("resident benchmark failed ({status}): {body}"));
         }
-        points.push(accumulator.finish(
-            concurrency,
-            request.prompt_tokens,
-            request.max_output_tokens,
-        ));
-        emit_progress(
-            app_handle,
-            request,
-            point_index + 1,
-            concurrency,
-            "complete",
-        );
+        let report = response
+            .json::<PointReport>()
+            .await
+            .map_err(|e| format!("invalid benchmark report: {e}"))?;
+        points.push(score(request, concurrency, report)?);
+        emit_progress(app_handle, request, index + 1, concurrency, "complete");
     }
-
     Ok(BenchmarkResult {
+        benchmark_id: request.benchmark_id.clone(),
+        hardware: None,
+        methodology: "ginfer-resident-max-perf-v1",
         run_id: request.run_id.clone(),
         started_at_ms,
         completed_at_ms: unix_millis(),
-        session: BenchmarkSession {
-            max_context,
-            ..session.info.clone()
-        },
+        session: session.info.clone(),
         points,
     })
 }
@@ -779,6 +441,7 @@ mod tests {
 
     fn request() -> BenchmarkRequest {
         BenchmarkRequest {
+            benchmark_id: "custom".into(),
             run_id: "run-1".into(),
             session_pid: Some(1),
             prompt_tokens: 512,
@@ -790,6 +453,23 @@ mod tests {
     }
 
     #[test]
+    fn standard_requires_its_fixed_workload_and_supported_points() {
+        let mut value = request();
+        value.benchmark_id = "standard".into();
+        value.prompt_tokens = 2048;
+        value.max_output_tokens = 500;
+        value.concurrencies = vec![1, 4];
+        assert!(validate_request(&value, &session(4)).is_ok());
+        assert!(validate_request(&value, &session(8)).is_err());
+        value.concurrencies = vec![1, 4, 8];
+        assert!(validate_request(&value, &session(8)).is_ok());
+        value.measured_rounds = 2;
+        assert!(validate_request(&value, &session(8)).is_err());
+        value.benchmark_id = "custom".into();
+        assert!(validate_request(&value, &session(8)).is_ok());
+    }
+
+    #[test]
     fn validation_caps_points_to_resident_server_concurrency() {
         assert!(validate_request(&request(), &session(4)).is_ok());
         assert!(validate_request(&request(), &session(2)).is_err());
@@ -797,37 +477,68 @@ mod tests {
     }
 
     #[test]
-    fn accumulator_reports_aggregate_phase_rates() {
-        let mut accumulator = PointAccumulator::default();
-        accumulator.add_wave(WaveResult {
-            wall_seconds: 2.5,
-            samples: vec![
-                RequestSample {
-                    prompt_tokens: 100,
-                    completion_tokens: 50,
-                    cached_tokens: 0,
-                    computed_prefill_tokens: 100,
-                    prefill_seconds: 0.5,
-                    decode_seconds: 2.0,
-                    request_seconds: 2.5,
-                    finish_reason: "length".into(),
-                },
-                RequestSample {
-                    prompt_tokens: 100,
-                    completion_tokens: 50,
-                    cached_tokens: 0,
-                    computed_prefill_tokens: 100,
-                    prefill_seconds: 0.4,
-                    decode_seconds: 2.0,
-                    request_seconds: 2.4,
-                    finish_reason: "length".into(),
-                },
-            ],
-        });
-        let point = accumulator.finish(2, 100, 50);
-        assert_eq!(point.prompt_tokens_per_second, 400.0);
-        assert_eq!(point.generation_tokens_per_second, 50.0);
-        assert_eq!(point.per_request_generation_tokens_per_second, 25.0);
-        assert_eq!(point.wave_output_tokens_per_second, 40.0);
+    fn scores_cold_compute_cached_ttft_and_exact_batch_decode_separately() {
+        let request = request();
+        let wave = || Wave {
+            computed_tokens: 512,
+            full_cold_prompt: true,
+            compute_seconds: 0.512,
+            decode_rounds: 127,
+            cold_pp: Some(1000.0),
+            cached_tokens: 1024,
+            output_tokens: 256,
+            mean_ttft_seconds: 0.01,
+            decode_tokens: 254,
+            decode_seconds: 2.0,
+            prefill_seconds_sum: 0.02,
+            decode_seconds_sum: 4.0,
+            request_seconds_sum: 4.02,
+            wall_seconds: 2.01,
+        };
+        let report = PointReport {
+            configuration: serde_json::json!({}),
+            schema: "ginfer-resident-benchmark-v1".into(),
+            corpus: "test".into(),
+            warmup: vec![wave()],
+            measured: vec![wave()],
+        };
+        let point = score(&request, 2, report).unwrap();
+        assert_eq!(point.cold_prompt_tokens_per_second, Some(1000.0));
+        assert_eq!(point.prompt_tokens_per_second, Some(102400.0));
+        assert_eq!(point.generation_tokens_per_second, Some(127.0));
+        assert_eq!(point.per_request_generation_tokens_per_second, Some(63.5));
+    }
+
+    #[test]
+    fn rejects_truncated_output_and_keeps_unobserved_rates_unavailable() {
+        let request = request();
+        let wave = || Wave {
+            cold_pp: None,
+            full_cold_prompt: false,
+            computed_tokens: 0,
+            compute_seconds: 0.0,
+            cached_tokens: 512,
+            output_tokens: 128,
+            mean_ttft_seconds: 0.01,
+            decode_tokens: 0,
+            decode_rounds: 0,
+            decode_seconds: 0.0,
+            prefill_seconds_sum: 0.0,
+            decode_seconds_sum: 0.0,
+            request_seconds_sum: 1.0,
+            wall_seconds: 1.0,
+        };
+        let mut report = PointReport {
+            configuration: serde_json::json!({}),
+            schema: "ginfer-resident-benchmark-v1".into(),
+            corpus: "test".into(),
+            warmup: vec![wave()],
+            measured: vec![wave()],
+        };
+        let point = score(&request, 1, report.clone()).unwrap();
+        assert_eq!(point.cold_prompt_tokens_per_second, None);
+        assert_eq!(point.generation_tokens_per_second, None);
+        report.measured[0].output_tokens -= 1;
+        assert!(score(&request, 1, report).is_err());
     }
 }

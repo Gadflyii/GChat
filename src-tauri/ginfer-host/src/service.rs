@@ -656,6 +656,7 @@ impl Host {
                 matches!(
                     suffix,
                     "v1/chat/completions"
+                        | "v1/ginfer/benchmark"
                         | "v1/chat/completions/count_tokens"
                         | "v1/messages"
                         | "v1/messages/count_tokens"
@@ -714,7 +715,9 @@ impl Host {
                 if !body.is_object() {
                     return Err("inference body must be a JSON object".into());
                 }
-                body["model"] = model.into();
+                if suffix != "v1/ginfer/benchmark" {
+                    body["model"] = model.into();
+                }
                 upstream = upstream.json(&body);
             }
         }
@@ -865,6 +868,15 @@ impl Host {
                 }
                 if let Some(suffix) = operation.strip_prefix("inference/") {
                     return self.inference(id, suffix, req).await;
+                }
+                if req.method() == hyper::Method::GET && operation == "benchmark-hardware" {
+                    let (_, _, _, session_id) = self.processes.lock().await.endpoint(id)?;
+                    let profile = self.data.lock().await.profiles.get(&id).cloned().ok_or("instance profile missing")?;
+                    let gpus: Vec<_> = self.gpus.iter().filter(|gpu| profile.gpu_uuids.contains(&gpu.uuid))
+                        .map(|gpu| serde_json::json!({"model":gpu.name,"vram_mib":gpu.memory_mib,"sm":gpu.compute_capability})).collect();
+                    let mut hardware = crate::benchmark_hardware::collect().await;
+                    hardware["gpus"] = serde_json::json!(gpus);
+                    return Ok(json(StatusCode::OK, serde_json::json!({"session_id":session_id,"hardware":hardware})));
                 }
                 if req.method() == hyper::Method::POST
                     && matches!(operation, "start" | "stop" | "restart" | "reload")
@@ -1382,7 +1394,7 @@ mod lifecycle_tests {
             max_context: 8192,
             concurrency: 4,
             options: LaunchOptions {
-                kv_arena_bytes: Some(4096),
+                kv_arena_bytes: None,
                 ..LaunchOptions::default()
             },
             qualification: crate::launch_profiles::Qualification {
@@ -1426,6 +1438,17 @@ mod lifecycle_tests {
             "fixture-c4"
         );
         assert_ne!(snapshot["instances"][0]["session_id"], session);
+        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
+        let saved: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(dir.path().join("state/host.json")).unwrap(),
+        ).unwrap();
+        assert!(saved["profiles"][id.to_string()]["kv_arena_bytes"].is_null());
+        let restart = Request::post(format!("/host/v1/instances/{id}/restart"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}")).unwrap();
+        assert!(host.clone().route(restart).await.unwrap().status().is_success());
+        let snapshot = host.snapshot().await;
+        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
         session = snapshot["instances"][0]["session_id"].clone();
         qualified.artifact_sha256 = "0".repeat(64);
         *host.launch_profiles.write().await = vec![qualified];
@@ -1453,6 +1476,11 @@ mod lifecycle_tests {
                         move |request: Request<Body>| {
                             let model = model.clone();
                             async move {
+                                if request.uri().path() == "/v1/ginfer/benchmark" {
+                                    let body = hyper::body::to_bytes(request.into_body()).await.unwrap();
+                                    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                                    return Ok::<_, std::convert::Infallible>(json(StatusCode::OK, body));
+                                }
                                 Ok::<_, std::convert::Infallible>(json(
                                     StatusCode::OK,
                                     if request.uri().path() == "/v1/models" {
@@ -1526,6 +1554,11 @@ mod lifecycle_tests {
             result.json::<serde_json::Value>().await.unwrap()["fixture"],
             "forwarded"
         );
+        let benchmark_body = serde_json::json!({"prompt_tokens":2048,"output_tokens":500,"concurrency":4,"warmup_rounds":1,"measured_rounds":1});
+        let benchmark = client.post(format!("{base}/v1/ginfer/benchmark"))
+            .bearer_auth(api_key).json(&benchmark_body).send().await.unwrap();
+        assert_eq!(benchmark.status(), 200);
+        assert_eq!(benchmark.json::<serde_json::Value>().await.unwrap(), benchmark_body);
         host.processes.lock().await.shutdown().await.unwrap();
         assert_eq!(
             client

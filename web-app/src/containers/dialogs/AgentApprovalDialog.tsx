@@ -112,6 +112,7 @@ export default function AgentApprovalDialog() {
 
           {definitionPreview && (
             <dl className="max-h-[45dvh] space-y-3 overflow-auto text-sm">
+              <div><dt className="font-medium">Permissions</dt><dd className="whitespace-pre-wrap text-muted-foreground">{definitionPreview.permissions && Object.keys(definitionPreview.permissions as object).length ? JSON.stringify(definitionPreview.permissions, null, 2) : 'Default tool approvals'}</dd></div>
               {Object.entries({ Name: 'name', Type: 'kind', Goal: 'defaultGoal', Instructions: 'instructions', 'Expected output': 'outputContract', 'Model instance': 'modelInstanceId', 'Role assignments': 'roleAssignments', Skills: 'skills', 'Maximum tool steps': 'maxSteps' }).map(([label, key]) => (
                 <div key={key}><dt className="font-medium">{label}</dt><dd className="whitespace-pre-wrap break-words text-muted-foreground">{typeof definitionPreview[key] === 'string' ? String(definitionPreview[key]) : definitionPreview[key] == null ? 'Current model / automatic' : JSON.stringify(definitionPreview[key], null, 2)}</dd></div>
               ))}

@@ -26,6 +26,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = $PSScriptRoot | Split-Path
+. (Join-Path $PSScriptRoot 'import-gbench-signing.ps1')
+Import-GbenchSigning
 if (-not $GinferProfileCatalogs) {
     $catalogRoot = Join-Path (Split-Path -Parent $projectRoot) 'ginfer\config\launch-profiles'
     if (-not (Test-Path -LiteralPath $catalogRoot -PathType Container)) {

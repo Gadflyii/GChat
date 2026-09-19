@@ -556,6 +556,11 @@ fn wire_tool_name(agent_name: &str) -> String {
 fn tool_parameters(name: &str, authoring: bool) -> Value {
     use serde_json::json;
     match name {
+        "os.shell.run" => json!({"type":"object","properties":{
+            "cmd":{"type":"string","minLength":1,"description":"Executable name or path only, not a command line."},
+            "args":{"type":"array","items":{"type":"string"},"description":"Literal arguments. For PowerShell put the complete script in one argument after -Command; no extra surrounding quotes."},
+            "cwd":{"type":"string"},"timeoutMs":{"type":"integer","minimum":1000,"maximum":600000}
+        },"required":["cmd"],"additionalProperties":false}),
         "reply" | "finish" => json!({"type":"object","properties":{"text":{"type":"string","minLength":1}},"required":["text"],"additionalProperties":false}),
         "tool.view" => json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}),
         "studio.inspect" | "studio.manage" => {
@@ -1253,6 +1258,11 @@ mod tests {
         assert_eq!(payload["messages"][0]["content"], "inspect");
         assert_eq!(payload["tool_choice"], "required");
         assert_eq!(payload["reasoning_effort"], "xhigh");
+        let shell = payload["tools"].as_array().unwrap().iter()
+            .find(|tool| tool["function"]["name"] == "os_shell_run").unwrap();
+        assert_eq!(shell["function"]["parameters"]["properties"]["args"]["type"], "array");
+        assert_eq!(shell["function"]["parameters"]["properties"]["args"]["items"]["type"], "string");
+        assert_eq!(shell["function"]["parameters"]["required"], serde_json::json!(["cmd"]));
         assert!(payload["tools"]
             .as_array()
             .is_some_and(|tools| !tools.is_empty()));

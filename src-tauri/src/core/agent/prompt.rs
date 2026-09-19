@@ -125,7 +125,7 @@ const DEFAULT_SYSTEM_PERSONA_LINES: &[&str] = &[
 /// Windows-specific shell hint, appended to `### capabilities` when the
 /// platform is `win32`. Ported verbatim from `WINDOWS_PLATFORM_HINT`.
 const WINDOWS_PLATFORM_HINT_LINES: &[&str] = &[
-    "Windows environment: `os.shell.run` uses a `cmd.exe` subshell. Prefer native Windows commands — `findstr` (not grep), `where` (not which), `type` (not cat), `dir` (not `ls -la`), `copy`/`move`/`ren`, `del`/`rmdir` semantics. Reference environment variables as `%VAR%` and use backslash `\\` path separators (e.g. `C:\\Users\\me\\file.txt`). Chain commands with `&&`, `||`, and pipe with `|`.",
+    "Windows environment: os.shell.run directly launches an executable with separate arguments, not a cmd.exe subshell. For PowerShell use cmd=powershell.exe and args=[-NoProfile, -NonInteractive, -Command, <script>]. The script is one argument: do not surround it with extra shell quotes. PowerShell variables and pipelines belong inside that script. Use Get-CimInstance for system inventory; do not assume wmic is installed. cmd.exe built-ins require explicit cmd.exe /C. Respect user restrictions such as no file writes.",
 ];
 
 /// The fixed iteration-1 tool catalog. Order is load-bearing — it mirrors the
@@ -191,7 +191,7 @@ pub const ITERATION_ONE_TOOLS: &[ToolDescriptor] = &[
     },
     ToolDescriptor {
         name: "os.shell.run",
-        summary: "Run a shell command. Direct-exec by default; routes through a subshell when the command needs shell interpretation. Approval-gated. Prefer a dedicated fs/git tool when one exists.",
+        summary: "Launch an executable directly. cmd is only the executable name or path; args is an array of literal arguments, preserved without shell expansion or joining. For pipelines invoke powershell.exe -Command or sh -c explicitly with the script as one argument. Approval-gated. Prefer a dedicated fs/git tool when one exists.",
         args_schema: r#"{ cmd: string, args?: string[], cwd?: string, timeoutMs?: number }"#,
         tier: ToolTier::Frequent,
         examples: &[],
@@ -795,11 +795,11 @@ mod tests {
     #[test]
     fn windows_hint_gated_on_platform() {
         let mac = build_stable_prefix(ITERATION_ONE_TOOLS, &[], &test_caps("darwin"), 8, None);
-        assert!(!mac.contains("`cmd.exe` subshell"));
+        assert!(!mac.contains("Windows environment:"));
 
         let win = build_stable_prefix(ITERATION_ONE_TOOLS, &[], &test_caps("win32"), 8, None);
-        assert!(win.contains("`cmd.exe` subshell"));
-        assert!(win.contains("C:\\Users\\me\\file.txt"));
+        assert!(win.contains("Windows environment:"));
+        assert!(win.contains("-NonInteractive"));
     }
 
     #[test]

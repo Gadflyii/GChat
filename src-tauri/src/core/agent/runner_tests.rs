@@ -20,6 +20,40 @@ struct TestRun {
 }
 
 #[tokio::test]
+#[ignore = "requires a live endpoint and explicit saved definition; executes local read-only inventory"]
+async fn live_saved_disk_inventory_execution() {
+    use super::{definitions, ginfer_client::{GinferClient, GinferConnection, GinferSessionTarget}, prompt};
+    let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        std::env::var("GCHAT_LIVE_DEFINITIONS").expect("saved definitions path")
+    ).unwrap()).unwrap();
+    let definition: definitions::AgentDefinition = serde_json::from_value(saved["definitions"].as_array().unwrap()
+        .iter().find(|d|d["id"]=="local-disk-free-space-inventory").unwrap().clone()).unwrap();
+    let workspace = TestWorkspace::new();
+    let registry = super::skills::SkillRegistry::load(workspace.path().join(".agent-skills"), &Default::default(), &Default::default()).unwrap();
+    let caps = prompt::CapabilitiesSummary { platform:"win32".into(), arch:"x64".into(), browser_channel:"none".into(), working_dir:workspace.path().display().to_string(), has_clipboard:false, has_wmctrl:false, has_notifications:false };
+    let persona = prompt::compose_agent_persona(&definition.instructions, &definition.output_contract);
+    let prefix = prompt::build_stable_prefix(prompt::ITERATION_ONE_TOOLS, &[], &caps, 8, Some(&persona));
+    let client = GinferClient::new(&GinferSessionTarget {
+        connection:GinferConnection::Local { port:std::env::var("GCHAT_BUILDER_LIVE_PORT").unwrap().parse().unwrap(), api_key:std::env::var("GCHAT_BUILDER_LIVE_KEY").unwrap_or_default() },
+        model_id:std::env::var("GCHAT_BUILDER_LIVE_MODEL").unwrap(), has_vision:false,
+    }).unwrap();
+    let mut session = AgentSessionState::new("live-disk-inventory");
+    let mut events = Vec::new();
+    run_turn(RunTurnInput {
+        run_id:"live-disk-inventory",session_id:"live-disk-inventory",user_message:&definition.default_goal,
+        selected_skill:None,stable_prefix:&prefix,reasoning_effort:definition.reasoning_effort,
+        working_dir:workspace.path(),editable_roots:&EditableRoots::for_test(workspace.path()),external_read_only_roots:&[],trusted_read_roots:&[],max_steps:definition.max_steps,
+        client:&client,approval:&RecordingApproval::allow(),folder_access:&RecordingFolderAccess::deny(),desktop:&RecordingDesktop::default(),cancellation:&CancellationToken::new(),session:&mut session,skill_registry:&registry,bundled_script_runtime:None,
+    }, |event| { eprintln!("{}",serde_json::json!(event)); collect_event(&mut events,event) }).await.unwrap();
+    let serialized = serde_json::to_value(&events).unwrap();
+    assert!(!serialized.to_string().contains("max_steps"), "must finish within original step limit");
+    assert!(events.iter().any(|event|matches!(event,AgentEvent::ToolCallExecuted{result} if matches!(result.call.tool.as_str(), "reply" | "finish") && result.outcome.status==ToolStatus::Ok && result.call.args["text"].as_str().is_some_and(|text|text.lines().any(|line|line.starts_with('C') && line.contains('%'))))));
+    assert!(events.iter().any(|event|matches!(event,AgentEvent::ToolCallExecuted{result} if result.call.tool=="os.shell.run" && result.outcome.status==ToolStatus::Ok && result.outcome.summary.contains("C:"))));
+    assert!(!events.iter().any(|event|matches!(event,AgentEvent::ToolCallExecuted{result} if result.call.tool=="os.fs.write")));
+    eprintln!("LIVE_DISK_RESULT {}",serialized);
+}
+
+#[tokio::test]
 #[ignore = "requires an explicitly selected live Muse endpoint; writes only temporary test definitions"]
 async fn live_builder_clarification_validation_and_approved_save() {
     run_live_builder_case("standard", &[

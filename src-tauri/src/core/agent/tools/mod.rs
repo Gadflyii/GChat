@@ -43,6 +43,8 @@ pub const MAX_TOOL_OUTPUT_CHARS: usize = 16_000;
 
 #[async_trait]
 pub trait ApprovalHook: Send + Sync {
+    fn permission(&self, _tool: &str) -> super::permissions::Permission { Default::default() }
+    fn permission_summary(&self) -> Option<String> { None }
     async fn is_allowed(&self, fingerprint: &str) -> bool;
     async fn request(&self, request: ApprovalRequest) -> Result<ApprovalDecision, String>;
 }
@@ -215,6 +217,11 @@ async fn authorize_call(
     call: &ToolCallPayload,
     context: &ToolContext<'_>,
 ) -> Result<ToolCallPayload, ToolOutcome> {
+    use super::permissions::Permission;
+    let permission = context.approval.permission(&call.tool);
+    if permission == Permission::Deny {
+        return Err(ToolOutcome::denied("Blocked by this agent definition's permissions", "definition-permission"));
+    }
     let mut prepared = prepare_call_paths(
         call,
         context.working_dir,
@@ -257,10 +264,10 @@ async fn authorize_call(
     let mut skill_invocation = None;
     if prepared.call.tool == "os.shell.run" {
         let invocation = shell::parse_invocation(&prepared.call.args)?;
-        match evaluate_shell_command(&join_command_stream(
+        match super::shell_guard::evaluate_process_command(
             &invocation.program,
             &invocation.arguments,
-        )) {
+        ) {
             ShellGuardVerdict::Allow => {}
             ShellGuardVerdict::ApprovalRequired(reason) => reasons.push(reason),
             ShellGuardVerdict::Block(reason) => {
@@ -294,11 +301,17 @@ async fn authorize_call(
     if prepared.escaped_root {
         reasons.push("one or more paths escape the connected workspace roots".to_string());
     }
+    if permission == Permission::Ask {
+        reasons.push("agent definition requires approval for each action".into());
+    }
+    if permission == Permission::Allow && !prepared.escaped_root {
+        return Ok(prepared.call);
+    }
     if reasons.is_empty() {
         return Ok(prepared.call);
     }
     let fingerprint = fingerprint_prepared_action(&prepared.call.tool, &prepared.call.args);
-    let can_remember = is_approval_gated && !prepared.escaped_root
+    let can_remember = permission != Permission::Ask && is_approval_gated && !prepared.escaped_root
         && prepared.call.tool != "studio.manage";
     if can_remember && context.approval.is_allowed(&fingerprint).await {
         return Ok(prepared.call);

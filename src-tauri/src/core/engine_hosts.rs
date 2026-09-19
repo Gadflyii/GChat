@@ -365,8 +365,14 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                     .ok_or("benchmark request is required")?,
             )
             .map_err(|e| e.to_string())?;
-            let result =
+            let hardware = response_json(self::request(reference.host_id, reqwest::Method::GET,
+                &format!("/host/v1/instances/{}/benchmark-hardware", reference.instance_id), None).await?).await?;
+            if hardware["session_id"].as_str() != target.info.session_id.as_deref() {
+                return Err("engine session changed while capturing benchmark hardware".into());
+            }
+            let mut result =
                 tauri_plugin_ginfer::benchmark::run_benchmark_target(app, request, target).await?;
+            result.hardware = Some(hardware["hardware"].clone());
             serde_json::to_value(result).map_err(|e| e.to_string())
         }
         "list" => {

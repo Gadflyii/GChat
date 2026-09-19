@@ -1,5 +1,15 @@
 # Engineering Decisions (ADR)
 
+- [G.bench community leaderboard](2026-09-18-gbench-community-leaderboard.md)
+
+- [Resident Max Perf benchmarks](2026-09-17-resident-max-perf-benchmarks.md)
+
+- [Agent definition permissions](2026-09-17-agent-definition-permissions.md)
+
+- [Explicit agent process arguments](2026-09-17-agent-process-arguments.md)
+
+- [Dynamic KV sizing in packaged profiles](2026-09-17-dynamic-profile-kv.md)
+
 - [Agent Builder native tool contract](2026-09-17-agent-builder-tool-contract.md)
 
 - [Background Code updates](2026-09-17-background-code-updates.md)

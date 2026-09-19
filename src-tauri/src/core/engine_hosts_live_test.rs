@@ -68,8 +68,8 @@ fn desktop_ipc_pair_launch_route_benchmark_and_forget_live_host() {
         let sessions=invoke("benchmark_sessions",json!({}))?;
         if !sessions.as_array().ok_or("benchmark sessions missing")?.iter().any(|s|s["target_id"]==alias) {return Err("benchmark selection missing".into());}
         let bench=invoke("benchmark",json!({"target_id":alias,"request":{
-            "run_id":Uuid::new_v4().to_string(),"prompt_tokens":128,"max_output_tokens":16,
-            "concurrencies":[1],"warmup_rounds":0,"measured_rounds":1
+            "benchmark_id":"custom","run_id":Uuid::new_v4().to_string(),"prompt_tokens":128,"max_output_tokens":16,
+            "concurrencies":[1],"warmup_rounds":1,"measured_rounds":1
         }}))?;
         if bench["points"].as_array().is_none_or(|p|p.is_empty()) {return Err(format!("benchmark returned no points: {bench}"));}
         let persisted=std::fs::read_to_string(harness.data_root().join("ginfer/hosts.json")).map_err(|e|e.to_string())?;

@@ -236,7 +236,7 @@ export function AgentRunSetup({
             : definition.kind === 'coordinator'
               ? `; up to ${definition.maxParallel} parallel workers`
               : ''}
-          . Tool approvals remain enabled.
+          . The definition’s permissions apply to every role; folder access and hard safety blocks remain enforced.
         </p>
         {missing && (
           <p role="alert" className="text-sm text-destructive">

@@ -53,6 +53,7 @@ export const localStorageKey = {
   // Hermes' enabled state, selected model, and independent terminal workspace.
   hermesAgent: 'hermes-agent-integration',
   benchmarkRuns: 'ginfer-benchmark-runs',
+  gbenchReceipts: 'gbench-owner-receipts',
   engineDiscovery: 'ginfer-engine-discovery',
 }
 

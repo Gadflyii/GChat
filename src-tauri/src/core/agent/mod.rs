@@ -16,6 +16,7 @@ pub mod loop_guard;
 pub mod orchestrator;
 pub mod path_policy;
 pub mod prompt;
+pub mod permissions;
 pub mod resource_class;
 // `loop` is a reserved keyword; the run loop lives in `runner`.
 pub mod runner;

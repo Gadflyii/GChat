@@ -40,6 +40,12 @@ pub fn definition_json_schema() -> serde_json::Value {
         "schemaVersion":{"type":"integer","const":AGENT_DEFINITION_SCHEMA_VERSION},
         "id":string,"name":string,"description":string,"defaultGoal":string,"instructions":string,
         "skills":skills,"maxSteps":{"type":"integer","minimum":1,"maximum":MAX_STEPS},
+        "permissions":{"type":"object","description":"Optional enforced tool permissions. Default preserves normal approvals. Set allow only when the user explicitly requests unattended access. Shell and scripts can access files and network independently; block both for tool-level read-only restrictions.","properties":{
+          "fileRead":{"enum":["default","allow","ask","deny"]},"fileWrite":{"enum":["default","allow","ask","deny"]},
+          "shell":{"enum":["default","allow","ask","deny"]},"scripts":{"enum":["default","allow","ask","deny"]},
+          "network":{"enum":["default","allow","ask","deny"]},"management":{"enum":["default","allow","ask","deny"]},
+          "clipboard":{"enum":["default","allow","ask","deny"]}
+        },"additionalProperties":false},
         "maxOutputTokens":{"type":["integer","null"]},"outputContract":string,
         "modelInstanceId":model,"reasoningEffort":effort,"builtIn":{"type":"boolean","const":false},
         "roleAssignments":{"type":"object","additionalProperties":{"type":"object","properties":{
@@ -69,6 +75,8 @@ static DEFINITION_STORE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentDefinition {
+    #[serde(default)]
+    pub permissions: super::permissions::Permissions,
     pub schema_version: u32,
     pub id: String,
     pub name: String,
@@ -240,6 +248,7 @@ fn default_role_max_steps() -> u32 {
 
 pub fn general_agent() -> AgentDefinition {
     AgentDefinition {
+        permissions: Default::default(),
         schema_version: AGENT_DEFINITION_SCHEMA_VERSION,
         id: "general".into(),
         name: "General Agent".into(),
@@ -339,6 +348,7 @@ fn template(id: &str, name: &str, description: &str, strategy: AgentStrategy) ->
         name: name.into(),
         description: description.into(),
         definition: AgentDefinition {
+            permissions: Default::default(),
             schema_version: AGENT_DEFINITION_SCHEMA_VERSION,
             id: String::new(),
             name: name.into(),
@@ -924,6 +934,7 @@ mod tests {
 
     fn custom_standard(id: &str) -> AgentDefinition {
         AgentDefinition {
+            permissions: Default::default(),
             schema_version: AGENT_DEFINITION_SCHEMA_VERSION,
             id: id.into(),
             name: "Custom".into(),
@@ -947,9 +958,11 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let mut definition = custom_standard("performance-test");
         definition.default_goal = "Run the existing workspace performance tests.".into();
+        definition.permissions.insert(super::super::permissions::Capability::Shell, super::super::permissions::Permission::Ask);
         save_definition(root.path(), definition.clone()).unwrap();
         let saved = get_definition(root.path(), &definition.id).unwrap();
         assert_eq!(saved.default_goal, definition.default_goal);
+        assert_eq!(saved.permissions, definition.permissions);
         assert_eq!(serde_json::to_value(&saved).unwrap()["defaultGoal"], definition.default_goal);
         definition.default_goal = "x".repeat(MAX_INSTRUCTIONS_CHARS + 1);
         assert!(save_definition(root.path(), definition).unwrap_err().contains("default goal"));

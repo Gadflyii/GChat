@@ -24,6 +24,7 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'is_update_available',
   'opencode_readiness',
   'post_local_http',
+  'submit_benchmark',
   'terminal_attach',
   'terminal_resize',
   'terminal_set_flow',

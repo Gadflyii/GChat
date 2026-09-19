@@ -2,7 +2,6 @@ use serde_json::Value;
 use tokio::process::Command;
 
 use super::{command_outcome, required_string, resolve_path, ToolContext};
-use crate::core::agent::shell_guard::{join_command_stream, needs_shell_interpretation};
 use crate::core::agent::types::ToolOutcome;
 
 pub(super) struct ShellInvocation {
@@ -40,17 +39,8 @@ pub async fn execute(args: &Value, context: &ToolContext<'_>) -> Result<ToolOutc
         .and_then(Value::as_u64)
         .unwrap_or(120_000)
         .clamp(1_000, 600_000);
-    let shell_mode = needs_shell_interpretation(&invocation.program, &invocation.arguments);
-    let mut command = if shell_mode {
-        platform_shell_command(join_command_stream(
-            &invocation.program,
-            &invocation.arguments,
-        ))
-    } else {
-        let mut command = Command::new(&invocation.program);
-        command.args(&invocation.arguments);
-        command
-    };
+    let mut command = Command::new(&invocation.program);
+    command.args(&invocation.arguments);
     command.current_dir(cwd).kill_on_drop(true);
     let output = tokio::select! {
         _ = context.cancellation.cancelled() => {
@@ -63,24 +53,10 @@ pub async fn execute(args: &Value, context: &ToolContext<'_>) -> Result<ToolOutc
         result = tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), command.output()) => {
             result
                 .map_err(|_| ToolOutcome::error(format!("Shell command timed out after {timeout_ms}ms")))?
-                .map_err(|error| ToolOutcome::error(format!("Could not run command: {error}")))?
+                .map_err(|error| ToolOutcome::error(format!("Could not run executable '{}': {error}. Pass only the executable in cmd and each argument separately in args. For shell syntax invoke powershell.exe with -Command on Windows or sh with -c on Unix.", invocation.program)))?
         }
     };
     command_outcome(output)
-}
-
-#[cfg(windows)]
-fn platform_shell_command(command_line: String) -> Command {
-    let mut command = Command::new("cmd.exe");
-    command.arg("/C").arg(command_line);
-    command
-}
-
-#[cfg(not(windows))]
-fn platform_shell_command(command_line: String) -> Command {
-    let mut command = Command::new("sh");
-    command.arg("-c").arg(command_line);
-    command
 }
 
 #[cfg(test)]

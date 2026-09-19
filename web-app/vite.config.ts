@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
-import packageJson from './package.json'
+import tauriConfig from '../src-tauri/tauri.conf.json'
 const host = process.env.TAURI_DEV_HOST
 
 // https://vite.dev/config/
@@ -58,7 +58,7 @@ export default defineConfig(({ mode }) => {
       ),
       PLATFORM: JSON.stringify(process.env.TAURI_ENV_PLATFORM),
 
-      VERSION: JSON.stringify(packageJson.version),
+      VERSION: JSON.stringify(tauriConfig.version),
 
       // Legacy compile-time constant: the original `janhq/model-catalog`
       // CDN. Kept for one release window so any out-of-band code path that

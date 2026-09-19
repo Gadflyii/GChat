@@ -28,6 +28,7 @@ describe('GInfer benchmark IPC', () => {
 
   it('passes the complete workload to the resident-server runner', async () => {
     const request = {
+      benchmark_id: 'custom' as const,
       run_id: 'run-1',
       session_pid: 42,
       prompt_tokens: 2048,
@@ -70,7 +71,7 @@ describe('GInfer benchmark IPC', () => {
     ])
     const sessions = await listBenchmarkSessions()
     expect(sessions.map((s) => s.target_id)).toEqual(['ginfer/host-a/instance', 'ginfer/host-b/instance'])
-    const request = { run_id: 'remote-run', session_pid: null, prompt_tokens: 512, max_output_tokens: 128, concurrencies: [1], warmup_rounds: 0, measured_rounds: 1 }
+    const request = { benchmark_id: 'custom' as const, run_id: 'remote-run', session_pid: null, prompt_tokens: 512, max_output_tokens: 128, concurrencies: [1], warmup_rounds: 1, measured_rounds: 1 }
     mocks.invoke.mockResolvedValue({ run_id: 'remote-run' })
     await runBenchmark(request, sessions[1].target_id)
     expect(mocks.invoke).toHaveBeenLastCalledWith('engine_hosts_command', {

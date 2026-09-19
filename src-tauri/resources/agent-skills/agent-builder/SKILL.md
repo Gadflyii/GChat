@@ -57,6 +57,14 @@ code. Report pass/fail results, measured timings, and any tests you could not ru
 When revising a definition, preserve its default goal unless the requested change
 affects the task. If a meaningful goal requires missing information, ask for it.
 
+Use the definition's `permissions` object for enforced tool controls: `fileRead`,
+`fileWrite`, `shell`, `scripts`, `network`, `management`, and `clipboard`, each
+`default`, `allow`, `ask`, or `deny`. Preserve existing settings when revising.
+Do not grant unattended `allow` without the user's explicit request. For a no-file-write
+task, set `fileWrite` to `deny` and explain that shell commands and scripts have
+independent OS access. Ask about that tradeoff if execution requires them; disabling
+file tools alone is not a read-only sandbox. All roles inherit the parent permissions.
+
 Define instructions, output contract, skills, limits, and evaluator behavior in
 plain language. Preview the proposal and its role assignments before saving.
 Use `validate_definition` with the entire definition in `args`, correct reported

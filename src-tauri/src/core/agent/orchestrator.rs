@@ -210,6 +210,10 @@ async fn run_definition_inner(
     mut emit: impl FnMut(AgentEvent) -> Result<(), String>,
 ) -> Result<AgentTurnOutcome, String> {
     let kind = strategy_name(&input.definition.strategy);
+    let approval = super::permissions::DefinitionApproval {
+        permissions: &input.definition.permissions,
+        inner: input.approval,
+    };
     emit(AgentEvent::TurnStarted {
         run_id: input.run_id.to_owned(),
         session_id: input.session_id.to_owned(),
@@ -247,7 +251,7 @@ async fn run_definition_inner(
         external_read_only_roots: input.external_read_only_roots,
         trusted_read_roots: input.trusted_read_roots,
         model_routes: input.model_routes,
-        approval: input.approval,
+        approval: &approval,
         folder_access: input.folder_access,
         desktop: input.desktop,
         cancellation: input.cancellation,
@@ -331,7 +335,7 @@ async fn run_definition_inner(
                         .max_steps_override
                         .unwrap_or(input.definition.max_steps),
                     client: &route.client,
-                    approval: input.approval,
+                    approval: &approval,
                     folder_access: input.folder_access,
                     desktop: input.desktop,
                     cancellation: input.cancellation,
@@ -1228,6 +1232,7 @@ mod tests {
         .unwrap();
         let mut definition = general_agent();
         definition.id = "test-loop".into();
+        definition.permissions.insert(super::super::permissions::Capability::FileWrite, super::super::permissions::Permission::Deny);
         definition.max_steps = max_steps;
         definition.model_instance_id = Some("executor-model".into());
         definition.strategy = AgentStrategy::GoalLoop {
@@ -1286,11 +1291,77 @@ mod tests {
         .await
         .unwrap();
 
+        assert!(!workspace.path().join("blocked-by-definition.txt").exists());
+        for requests in [executor.requests(), evaluator.requests()] {
+            if requests.len() > 1 && requests[1].to_string().contains("blocked-by-definition.txt") {
+                assert!(requests[1].to_string().contains("Blocked by this agent definition"));
+            }
+        }
         (
             outcome,
             executor.requests().len(),
             evaluator.requests().len(),
         )
+    }
+
+    #[tokio::test]
+    async fn goal_loop_executor_and_evaluator_inherit_definition_permissions() {
+        let write = || ScriptedResponse::completion(r#"[{"tool":"os.fs.write","args":{"path":"blocked-by-definition.txt","content":"not permitted"}}]"#);
+        let (outcome, executor_requests, evaluator_requests) = run_test_goal_loop(
+            vec![write(), ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"Complete without writing"}}]"#)],
+            vec![write(), ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"PASS"}}]"#)],
+            3, 1,
+        ).await;
+        assert_eq!(outcome.reason, "reply");
+        assert_eq!((executor_requests,evaluator_requests), (2,2));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn every_composition_preserves_process_arguments_and_enforces_permissions() {
+        use super::super::permissions::{Capability, Permission};
+        for template in super::super::definitions::built_in_templates() {
+            let mut definition = template.definition;
+            definition.model_instance_id = None;
+            definition.skills.clear();
+            definition.permissions.insert(Capability::Shell, Permission::Allow);
+            definition.permissions.insert(Capability::FileWrite, Permission::Deny);
+            let stages = match &mut definition.strategy {
+                AgentStrategy::Standard => 1,
+                AgentStrategy::GoalLoop { max_cycles, .. } => { *max_cycles = 1; 2 },
+                AgentStrategy::Coordinator { max_parallel, workers, .. } => { *max_parallel = 1; workers.len() + 2 },
+                AgentStrategy::Workflow { nodes, .. } => nodes.len(),
+            };
+            let literal = "literal spaces | $VALUE & quoted \"text\"";
+            let mut responses = Vec::new();
+            for _ in 0..stages {
+                for call in [
+                    serde_json::json!({"tool":"os.shell.run","args":{"cmd":"printf","args":["%s",literal]}}),
+                    serde_json::json!({"tool":"os.fs.write","args":{"path":"forbidden.txt","content":"blocked"}}),
+                    serde_json::json!({"tool":"reply","args":{"text":"PASS"}}),
+                ] { responses.push(ScriptedResponse::completion(&serde_json::json!([call]).to_string())); }
+            }
+            let server = ScriptedGinferServer::start(responses).await;
+            let routes = AgentModelRoutes::new(vec![AgentModelRoute { instance_id:"active".into(),model_id:"active".into(),client:server.client() }]).unwrap();
+            let workspace = TestWorkspace::new();
+            let roots = EditableRoots::new(workspace.path(), &[]).await.unwrap();
+            let caps = CapabilitiesSummary { platform:"linux".into(),arch:"x86_64".into(),browser_channel:"none".into(),working_dir:workspace.path().display().to_string(),has_clipboard:false,has_wmctrl:false,has_notifications:false };
+            let approval = RecordingApproval::deny();
+            let registry = workspace.skill_registry();
+            let mut session = AgentSessionState::new("matrix");
+            let mut events = Vec::new();
+            let outcome = run_definition(OrchestrationInput {
+                run_id:"matrix",storage_id:"matrix",session_id:"matrix",user_message:"Exercise the process and permissions contract",selected_skill:None,
+                definition:&definition,capabilities:&caps,skill_descriptors:&[],active_model_instance_id:"active",working_dir:workspace.path(),editable_roots:&roots,external_read_only_roots:&[],trusted_read_roots:&[],max_steps_override:None,model_routes:&routes,
+                approval:&approval,folder_access:&RecordingFolderAccess::deny(),desktop:&RecordingDesktop::default(),cancellation:&CancellationToken::new(),session:&mut session,skill_registry:&registry,bundled_script_runtime:None,data_folder:workspace.path(),
+            }, |event| { events.push(event); Ok(()) }).await.unwrap();
+            assert_eq!(outcome.reason, "reply", "{}", definition.name);
+            let activity = events.iter().filter_map(|event| match event { AgentEvent::StageActivity { event, .. } => Some(event.as_ref()), _ => None }).collect::<Vec<_>>();
+            let shell_count = activity.iter().filter(|event|matches!(event,AgentEvent::ToolCallExecuted{result} if result.call.tool=="os.shell.run" && result.outcome.status==super::super::types::ToolStatus::Ok && result.outcome.summary==literal)).count();
+            let blocked_count = activity.iter().filter(|event|matches!(event,AgentEvent::ToolCallExecuted{result} if result.call.tool=="os.fs.write" && result.outcome.status==super::super::types::ToolStatus::Denied)).count();
+            assert_eq!((shell_count,blocked_count),(stages,stages),"{}",definition.name);
+            assert!(approval.requests().is_empty());
+        }
     }
 
     #[tokio::test]

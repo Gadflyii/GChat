@@ -762,6 +762,7 @@ function DefinitionEditor({
                         defaultGoal: draft.defaultGoal,
                         skills: draft.skills,
                         maxSteps: draft.maxSteps,
+                        permissions: draft.permissions,
                         maxOutputTokens: draft.maxOutputTokens,
                         outputContract: draft.outputContract,
                         modelInstanceId: draft.modelInstanceId,
@@ -900,6 +901,27 @@ function DefinitionEditor({
             because different stages may need very different amounts of work.
           </div>
         )}
+        <details className="rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-sm font-medium">Permissions</summary>
+          <p className="mt-2 text-xs text-muted-foreground">Applies to every role and stage. Default keeps normal tool approvals. Allow runs without a tool confirmation; Ask requires approval each time; Block prevents the action. Folder access and hard safety blocks still apply.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {([
+              ['fileRead', 'Read files and Git history'], ['fileWrite', 'Write, edit, or delete files'],
+              ['shell', 'Run shell commands'], ['scripts', 'Run skill scripts'],
+              ['network', 'Web and HTTP requests'], ['management', 'Manage agents, memories, processes and notifications'],
+              ['clipboard', 'Read or write clipboard'],
+            ] as const).map(([key, label]) => (
+              <Field key={key} label={label}>
+                <select aria-label={label} className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                  value={draft.permissions?.[key] ?? 'default'}
+                  onChange={(event) => common({ permissions: { ...draft.permissions, [key]: event.target.value as 'default' | 'allow' | 'ask' | 'deny' } })}>
+                  <option value="default">Default</option><option value="allow">Allow</option><option value="ask">Ask every time</option><option value="deny">Block</option>
+                </select>
+              </Field>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">Shell commands and scripts can also write files and access the network. Block both if you need those capabilities restricted; these controls are tool permissions, not an OS sandbox.</p>
+        </details>
         <Field label="Output contract" help={copy.outputHelp}>
           <Textarea
             rows={4}

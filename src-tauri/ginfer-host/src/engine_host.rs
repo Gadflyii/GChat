@@ -444,6 +444,17 @@ impl HostProcesses {
 
 #[cfg(all(test, unix))]
 mod tests {
+    #[test]
+    fn dynamic_arena_launch_keeps_headroom_without_a_fixed_pool() {
+        let options = super::LaunchOptions {
+            kv_arena_bytes: None,
+            kv_arena_headroom_bytes: 314572800,
+            ..Default::default()
+        };
+        let args = options.args();
+        assert!(!args.iter().any(|arg| arg == "--kv-arena-bytes"));
+        assert!(args.windows(2).any(|pair| pair == ["--kv-arena-headroom-bytes", "314572800"]));
+    }
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 

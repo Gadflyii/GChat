@@ -60,6 +60,10 @@ impl ToolFixture {
     }
 
     async fn call(&self, tool: &str, args: serde_json::Value) -> ToolOutcome {
+        Box::pin(self.call_with_approval(tool, args, &self.approval)).await
+    }
+
+    async fn call_with_approval(&self, tool: &str, args: serde_json::Value, approval: &dyn super::ApprovalHook) -> ToolOutcome {
         execute(
             &ToolCallPayload {
                 tool: tool.into(),
@@ -72,7 +76,7 @@ impl ToolFixture {
                 client: None,
                 reasoning_effort: None,
                 inference: None,
-                approval: &self.approval,
+                approval,
                 folder_access: &self.folder_access,
                 cancellation: &self.cancellation,
                 loaded_tools: &self.loaded_tools,
@@ -84,6 +88,35 @@ impl ToolFixture {
         )
         .await
     }
+}
+
+#[tokio::test]
+async fn definition_permissions_enforce_deny_ask_allow_and_hard_blocks() {
+    use super::super::permissions::{Capability, Permission, DefinitionApproval};
+    let fixture = ToolFixture::denied();
+    fixture.workspace.write("read.txt", "visible");
+    for (permission, expected, prompts) in [
+        (Permission::Deny, ToolStatus::Denied, 0),
+        (Permission::Allow, ToolStatus::Ok, 0),
+        (Permission::Ask, ToolStatus::Denied, 1),
+    ] {
+        let permissions = [(Capability::FileRead, permission)].into_iter().collect();
+        let approval = DefinitionApproval { permissions: &permissions, inner: &fixture.approval };
+        let before = fixture.approval.requests().len();
+        let outcome = fixture.call_with_approval("os.fs.read", serde_json::json!({"path":"read.txt"}), &approval).await;
+        assert_eq!(outcome.status, expected);
+        assert_eq!(fixture.approval.requests().len() - before, prompts);
+    }
+    let permissions = [(Capability::FileWrite, Permission::Deny), (Capability::Shell, Permission::Allow)].into_iter().collect();
+    let approval = DefinitionApproval { permissions: &permissions, inner: &fixture.approval };
+    let blocked = fixture.call_with_approval("os.fs.write", serde_json::json!({"path":"blocked.txt","content":"no"}), &approval).await;
+    assert_eq!(blocked.status, ToolStatus::Denied);
+    assert!(!fixture.workspace.path().join("blocked.txt").exists());
+    let allowed = fixture.call_with_approval("os.shell.run", serde_json::json!({"cmd":"printf","args":["allowed"]}), &approval).await;
+    assert_eq!(allowed.status, ToolStatus::Ok);
+    assert!(matches!(super::super::shell_guard::evaluate_shell_command("rm -rf /"), super::super::shell_guard::ShellGuardVerdict::Block(_)));
+    let hard_block = fixture.call_with_approval("os.shell.run", serde_json::json!({"cmd":"rm -rf /"}), &approval).await;
+    assert_eq!(hard_block.status, ToolStatus::Denied);
 }
 
 #[tokio::test]
@@ -820,6 +853,45 @@ async fn git_read_tools_report_a_real_repository() {
 
     let branch = fixture.call("os.git.branch", serde_json::json!({})).await;
     assert!(branch.summary.contains('*'));
+}
+
+#[tokio::test]
+async fn shell_preserves_literal_argument_boundaries() {
+    let fixture = ToolFixture::allowed();
+    let literal = "space $HOME | & ; < > ` \"quoted\" 'single'";
+    let result = fixture.call("os.shell.run", serde_json::json!({
+        "cmd":"printf", "args":["%s", literal]
+    })).await;
+    assert_eq!(result.status, ToolStatus::Ok);
+    assert_eq!(result.summary, literal);
+    let explicit_shell = fixture.call("os.shell.run", serde_json::json!({
+        "cmd":"sh", "args":["-c", "value=42; printf '%s' \"$value\" | tr 4 5"]
+    })).await;
+    assert_eq!(explicit_shell.status, ToolStatus::Ok);
+    assert_eq!(explicit_shell.summary, "52");
+    let failure = fixture.call("os.shell.run", serde_json::json!({
+        "cmd":"sh", "args":["-c", "printf 'diagnostic' >&2; exit 7"]
+    })).await;
+    assert_eq!(failure.status, ToolStatus::Error);
+    assert_eq!(failure.details.unwrap()["exitCode"], 7);
+    assert!(failure.summary.contains("diagnostic"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn shell_supports_executable_and_working_directory_paths_with_spaces() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = ToolFixture::allowed();
+    fixture.workspace.write("tool with spaces", "#!/bin/sh\nprintf '%s\\n' \"$1\"\npwd\n");
+    let executable = fixture.workspace.path().join("tool with spaces");
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let cwd = fixture.workspace.path().join("working directory");
+    std::fs::create_dir(&cwd).unwrap();
+    let outcome = fixture.call("os.shell.run", serde_json::json!({
+        "cmd":executable, "args":["literal | $VALUE & text"], "cwd":cwd
+    })).await;
+    assert_eq!(outcome.status, ToolStatus::Ok);
+    assert_eq!(outcome.summary, format!("literal | $VALUE & text\n{}", cwd.display()));
 }
 
 #[tokio::test]

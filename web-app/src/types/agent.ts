@@ -99,6 +99,7 @@ export type AgentWorkflowEdge = {
 }
 
 type AgentDefinitionBase = {
+  permissions?: Partial<Record<'fileRead' | 'fileWrite' | 'shell' | 'scripts' | 'network' | 'management' | 'clipboard', 'default' | 'allow' | 'ask' | 'deny'>>
   maxOutputTokens?: number | null
   roleAssignments?: Record<string, AgentRoleAssignment>
   schemaVersion: 3

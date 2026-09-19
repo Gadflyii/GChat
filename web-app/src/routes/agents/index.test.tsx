@@ -136,11 +136,13 @@ describe('AgentStudioPage', () => {
     fireEvent.change(await screen.findByLabelText('Default goal'), {
       target: { value: 'Run existing performance tests and report timings.' },
     })
+    fireEvent.change(screen.getByLabelText('Write, edit, or delete files'), { target: { value: 'deny' } })
+    fireEvent.change(screen.getByLabelText('Run shell commands'), { target: { value: 'ask' } })
     fireEvent.click(screen.getByRole('button', { name: /Goal Loop/i }))
     expect(screen.getByLabelText('Default goal')).toHaveValue('Run existing performance tests and report timings.')
     fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
     await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'goal_loop', defaultGoal: 'Run existing performance tests and report timings.' })
+      expect.objectContaining({ kind: 'goal_loop', defaultGoal: 'Run existing performance tests and report timings.', permissions: { fileWrite: 'deny', shell: 'ask' } })
     ))
   })
 

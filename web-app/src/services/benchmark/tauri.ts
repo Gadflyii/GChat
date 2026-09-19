@@ -23,6 +23,7 @@ export type BenchmarkSessionInfo = {
 }
 
 export type BenchmarkRequest = {
+  benchmark_id: 'standard' | 'serving' | 'long-context' | 'big-bench' | 'custom'
   run_id: string
   session_pid: number | null
   prompt_tokens: number
@@ -33,6 +34,13 @@ export type BenchmarkRequest = {
 }
 
 export type BenchmarkPoint = {
+  evidence: {
+    schema: string
+    corpus: string
+    configuration: BenchmarkConfiguration
+    warmup: BenchmarkWave[]
+    measured: BenchmarkWave[]
+  }
   concurrency: number
   requested_prompt_tokens: number
   requested_output_tokens: number
@@ -40,9 +48,10 @@ export type BenchmarkPoint = {
   average_prompt_tokens: number
   average_completion_tokens: number
   cached_prompt_tokens: number
-  prompt_tokens_per_second: number
-  generation_tokens_per_second: number
-  per_request_generation_tokens_per_second: number
+  cold_prompt_tokens_per_second: number | null
+  prompt_tokens_per_second: number | null
+  generation_tokens_per_second: number | null
+  per_request_generation_tokens_per_second: number | null
   wave_output_tokens_per_second: number
   average_prefill_seconds: number
   average_decode_seconds: number
@@ -51,7 +60,24 @@ export type BenchmarkPoint = {
   finish_reasons: string[]
 }
 
+export type BenchmarkConfiguration = {
+  engine_build: string; model: string; weights: string
+  tp: number; draft_tp: number; max_context: number; max_concurrency: number
+  kv_dtype: string; spec: string; draft_tokens: number; draft_policy: string
+  cuda_graph: boolean; vision: boolean
+}
+
+export type BenchmarkWave = {
+  full_cold_prompt: boolean; computed_tokens: number; compute_seconds: number
+  cached_tokens: number; output_tokens: number; mean_ttft_seconds: number
+  decode_tokens: number; decode_rounds: number; decode_seconds: number
+  wall_seconds: number
+}
+
 export type BenchmarkResult = {
+  benchmark_id: BenchmarkRequest['benchmark_id']
+  hardware: BenchmarkHardware | null
+  methodology: 'ginfer-resident-max-perf-v1'
   run_id: string
   started_at_ms: number
   completed_at_ms: number
@@ -73,6 +99,18 @@ export type BenchmarkResult = {
     cuda_graph: boolean
   }
   points: BenchmarkPoint[]
+}
+
+export type BenchmarkHardware = {
+  cpu_model: string | null
+  physical_cores: number | null
+  logical_threads: number | null
+  ram_bytes: number | null
+  ram_speed_mt_s: number | null
+  os: 'Windows' | 'WSL' | 'Linux'
+  os_version: string | null
+  resource_scope: string
+  gpus: { model: string; vram_mib: number; sm: string | null }[]
 }
 
 export type BenchmarkProgress = {

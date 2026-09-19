@@ -31,6 +31,7 @@ import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { engineAlias } from '@/services/engines'
 import { BenchmarkServerSettings } from '@/containers/BenchmarkServerSettings'
+import { BenchmarkLeaderboard } from '@/containers/BenchmarkLeaderboard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.benchmark.index as any)({
@@ -53,41 +54,41 @@ type Preset = {
 const PRESETS: Preset[] = [
   {
     id: 'quick',
-    name: 'Quick check',
-    description: 'A short C1/C4 health and regression check.',
-    promptTokens: 512,
-    outputTokens: 128,
-    concurrencies: [1, 4],
+    name: 'Standard Benchmark',
+    description: 'Max Perf: 2K prompt, 500 output tokens, C1/C4/C8.',
+    promptTokens: 2048,
+    outputTokens: 500,
+    concurrencies: [1, 4, 8],
     warmupRounds: 1,
     measuredRounds: 1,
   },
   {
     id: 'standard',
-    name: 'Standard serving',
+    name: 'Serving',
     description: 'Balanced prompt and generation work across C1–C8.',
-    promptTokens: 2048,
-    outputTokens: 512,
-    concurrencies: [1, 2, 4, 8],
+    promptTokens: 4096,
+    outputTokens: 1000,
+    concurrencies: [1, 2, 3, 4, 5, 6, 7, 8],
     warmupRounds: 1,
     measuredRounds: 1,
   },
   {
     id: 'long-context',
     name: 'Long context',
-    description: 'Heavier KV and prefill pressure with an 8K prompt.',
-    promptTokens: 8192,
+    description: 'Heavier KV and prefill pressure with a 32K prompt.',
+    promptTokens: 32768,
     outputTokens: 512,
-    concurrencies: [1, 2, 4, 8],
+    concurrencies: [1, 2, 3, 4, 5, 6, 7, 8],
     warmupRounds: 1,
     measuredRounds: 1,
   },
   {
     id: 'generation',
-    name: 'Generation',
-    description: 'A longer decode window for sustained generation rates.',
-    promptTokens: 512,
-    outputTokens: 2048,
-    concurrencies: [1, 2, 4, 8],
+    name: 'Big Bench',
+    description: '64K prompt and 64K generated tokens.',
+    promptTokens: 65536,
+    outputTokens: 65536,
+    concurrencies: [1, 2, 3, 4, 5, 6, 7, 8],
     warmupRounds: 1,
     measuredRounds: 1,
   },
@@ -107,8 +108,8 @@ function effectiveConcurrency(session?: BenchmarkSessionInfo): number {
   return session?.max_concurrency || 1
 }
 
-function formatRate(value: number): string {
-  if (!Number.isFinite(value)) return '—'
+function formatRate(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—'
   return value >= 1000
     ? value.toLocaleString(undefined, { maximumFractionDigits: 0 })
     : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
@@ -131,7 +132,7 @@ function runLabel(run: BenchmarkResult): string {
   })}`
 }
 
-type ThroughputPoint = Pick<BenchmarkPoint, 'concurrency' | 'prompt_tokens_per_second' | 'generation_tokens_per_second'>
+type ThroughputPoint = Pick<BenchmarkPoint, 'concurrency' | 'cold_prompt_tokens_per_second' | 'prompt_tokens_per_second' | 'generation_tokens_per_second'>
 
 export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
   const width = 760
@@ -139,16 +140,22 @@ export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
   const margin = { left: 82, right: 82, top: 24, bottom: 44 }
   const plotWidth = width - margin.left - margin.right
   const plotHeight = height - margin.top - margin.bottom
-  const promptMaximum = Math.max(1, ...points.map((point) => point.prompt_tokens_per_second))
-  const generationMaximum = Math.max(1, ...points.map((point) => point.generation_tokens_per_second))
+  const promptMaximum = Math.max(1, ...points.flatMap((point) => [point.prompt_tokens_per_second ?? 0, point.cold_prompt_tokens_per_second ?? 0]))
+  const generationMaximum = Math.max(1, ...points.map((point) => point.generation_tokens_per_second ?? 0))
   const x = (index: number) =>
     margin.left +
     (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth)
   const y = (value: number, maximum: number) => margin.top + plotHeight - (value / maximum) * plotHeight
-  const path = (selector: (point: ThroughputPoint) => number, maximum: number) =>
-    points
-      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(index)} ${y(selector(point), maximum)}`)
-      .join(' ')
+  const path = (selector: (point: ThroughputPoint) => number | null | undefined, maximum: number) => {
+    let connected = false
+    return points.map((point, index) => {
+      const value = selector(point)
+      if (value == null) { connected = false; return '' }
+      const segment = `${connected ? 'L' : 'M'} ${x(index)} ${y(value, maximum)}`
+      connected = true
+      return segment
+    }).join(' ')
+  }
 
   return (
     <div className="min-w-0 w-full">
@@ -189,16 +196,18 @@ export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
             </g>
           )
         })}
+        <path d={path((point) => point.cold_prompt_tokens_per_second, promptMaximum)} fill="none" stroke="currentColor" className="text-primary" strokeWidth="2" strokeDasharray="3 4" />
         <path d={path((point) => point.prompt_tokens_per_second, promptMaximum)} fill="none" stroke="#20b8a6" strokeWidth="3" />
         <path d={path((point) => point.generation_tokens_per_second, generationMaximum)} fill="none" stroke="#7dd3fc" strokeWidth="3" strokeDasharray="7 4" />
         {points.map((point, index) => (
           <g key={point.concurrency}>
-            <circle cx={x(index)} cy={y(point.prompt_tokens_per_second, promptMaximum)} r="5" fill="#20b8a6">
+            {point.prompt_tokens_per_second != null && <circle cx={x(index)} cy={y(point.prompt_tokens_per_second, promptMaximum)} r="5" fill="#20b8a6">
               <title>{`C${point.concurrency} prompt: ${formatRate(point.prompt_tokens_per_second)} t/s`}</title>
-            </circle>
-            <circle cx={x(index)} cy={y(point.generation_tokens_per_second, generationMaximum)} r="4" fill="#7dd3fc">
+            </circle>}
+            {point.generation_tokens_per_second != null && <circle cx={x(index)} cy={y(point.generation_tokens_per_second, generationMaximum)} r="4" fill="#7dd3fc">
               <title>{`C${point.concurrency} generation: ${formatRate(point.generation_tokens_per_second)} t/s`}</title>
-            </circle>
+            </circle>}
+            {point.cold_prompt_tokens_per_second != null && <circle cx={x(index)} cy={y(point.cold_prompt_tokens_per_second, promptMaximum)} r="4" fill="currentColor" className="text-primary"><title>{`C${point.concurrency} Cold PP: ${formatRate(point.cold_prompt_tokens_per_second)} t/s`}</title></circle>}
             <text
               x={x(index)}
               y={height - 16}
@@ -229,7 +238,8 @@ export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
         </text>
       </svg>
       <div className="flex justify-center gap-5 text-xs text-muted-foreground">
-        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#20b8a6]" />Prompt · left axis</span>
+        <span className="flex items-center gap-2 text-primary">Cold PP · left axis (dotted)</span>
+        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#20b8a6]" />PP · left axis</span>
         <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#7dd3fc]" />Generation · right axis (dashed)</span>
       </div>
     </div>
@@ -245,7 +255,8 @@ function ResultsTable({ points }: { points: BenchmarkPoint[] }) {
             <th className="px-3 py-2.5 font-medium">Concurrency</th>
             <th className="px-3 py-2.5 font-medium">Prompt / request</th>
             <th className="px-3 py-2.5 font-medium">Output / request</th>
-            <th className="px-3 py-2.5 font-medium">Prompt t/s</th>
+            <th className="px-3 py-2.5 font-medium">Cold PP t/s</th>
+            <th className="px-3 py-2.5 font-medium">PP t/s</th>
             <th className="px-3 py-2.5 font-medium">Generation t/s</th>
             <th className="px-3 py-2.5 font-medium">Per-request t/s</th>
             <th className="px-3 py-2.5 font-medium">Prefill</th>
@@ -260,6 +271,7 @@ function ResultsTable({ points }: { points: BenchmarkPoint[] }) {
               <td className="px-3 py-3 font-medium text-foreground">C{point.concurrency}</td>
               <td className="px-3 py-3">{formatTokens(point.average_prompt_tokens)}</td>
               <td className="px-3 py-3">{formatTokens(point.average_completion_tokens)}</td>
+              <td className="px-3 py-3 font-mono text-foreground" title="Actual prefill compute rate from the first warmup. Unavailable when a full cold prompt was not computed.">{formatRate(point.cold_prompt_tokens_per_second)}</td>
               <td className="px-3 py-3 font-mono text-foreground">{formatRate(point.prompt_tokens_per_second)}</td>
               <td className="px-3 py-3 font-mono text-foreground">{formatRate(point.generation_tokens_per_second)}</td>
               <td className="px-3 py-3 font-mono">{formatRate(point.per_request_generation_tokens_per_second)}</td>
@@ -289,9 +301,9 @@ function BenchmarkPage() {
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [pendingSettings, setPendingSettings] = useState(false)
   const [presetId, setPresetId] = useState<PresetId>('quick')
-  const [promptTokens, setPromptTokens] = useState(512)
-  const [outputTokens, setOutputTokens] = useState(128)
-  const [concurrencies, setConcurrencies] = useState<number[]>([1, 4])
+  const [promptTokens, setPromptTokens] = useState(2048)
+  const [outputTokens, setOutputTokens] = useState(500)
+  const [concurrencies, setConcurrencies] = useState<number[]>([1, 4, 8])
   const [warmupRounds, setWarmupRounds] = useState(1)
   const [measuredRounds, setMeasuredRounds] = useState(1)
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
@@ -357,10 +369,11 @@ function BenchmarkPage() {
 
   useEffect(() => {
     setConcurrencies((values) => {
+      if (presetId === 'quick') return [1, 4, 8].filter(value => value <= maxConcurrency)
       const valid = values.filter((value) => value <= maxConcurrency)
       return valid.length > 0 ? valid : [1]
     })
-  }, [maxConcurrency])
+  }, [maxConcurrency, presetId])
 
   const selectPreset = (preset: Preset) => {
     setPresetId(preset.id)
@@ -374,12 +387,11 @@ function BenchmarkPage() {
   }
 
   const availableConcurrency = useMemo(
-    () => [1, 2, 4, 8].filter((value) => value <= maxConcurrency),
-    [maxConcurrency]
+    () => (presetId === 'quick' ? [1, 4, 8] : [1, 2, 3, 4, 5, 6, 7, 8]).filter((value) => value <= maxConcurrency),
+    [maxConcurrency, presetId]
   )
 
   const toggleConcurrency = (value: number) => {
-    setPresetId('custom')
     setConcurrencies((current) => {
       if (current.includes(value)) {
         const next = current.filter((item) => item !== value)
@@ -402,6 +414,7 @@ function BenchmarkPage() {
     })
     try {
       const result = await runBenchmark({
+        benchmark_id: presetId === 'quick' ? 'standard' : presetId === 'standard' ? 'serving' : presetId === 'generation' ? 'big-bench' : presetId,
         run_id: runId,
         session_pid: selectedSession.pid,
         prompt_tokens: promptTokens,
@@ -507,8 +520,28 @@ function BenchmarkPage() {
 
               <section className="rounded-xl border border-border/70 bg-card p-5 shadow-sm">
                 <div className="mb-4">
-                  <h2 className="font-medium">Workload</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">Each preset calibrates its prompt with the resident server tokenizer, warms the selected points, then sends simultaneous non-streaming requests.</p>
+                  <h2 className="font-medium">Benchmarks</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Each preset calls the GInfer engine’s benchmark endpoint with a repeating prompt to exercise its new K/V engine, K/V prefix cache, DFlash2 performance when enabled, and kernels tuned for each GPU architecture (SM) and model. Benchmarks use the selected server’s loaded model and profile.</p>
+                  <h3 className="mt-4 text-sm font-medium">Scores captured</h3>
+                  <dl className="mt-2 grid gap-x-6 gap-y-3 text-sm md:grid-cols-2">
+                    <div>
+                      <dt className="font-medium">Cold PP · prompt processing</dt>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">The rate at which the engine actually computes prompt tokens during the first warmup, in tokens per second (t/s). If the prompt was already cached and no complete cold measurement is available, the score shows —.</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">PP · effective prompt processing</dt>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">Total prompt tokens across concurrent requests divided by their average time to first token in the measured run. Prefix-cache reuse avoids repeated computation, so this effective rate can be much higher than Cold PP.</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">C1–C8 · concurrent requests</dt>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">C1 runs one request at a time; C4 runs four together; C8 runs eight together. Available concurrency depends on the loaded profile. Per-request TG is the aggregate generation rate divided by the number of concurrent requests—not a guarantee that every request runs at exactly that rate.</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium">TG · aggregate token generation</dt>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">The combined generation speed across all requests at the selected concurrency, measured from the engine’s decode work. For example, 800 t/s at C4 means 200 t/s per request on average. The first token produced during prompt processing is excluded.</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Repeating prompts highlight cache reuse and speculative decoding. These are synthetic best-case benchmarks, not predictions of everyday chat or agent performance.</p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   {PRESETS.map((preset) => (
@@ -537,11 +570,11 @@ function BenchmarkPage() {
                   </label>
                   <label className="space-y-1.5 text-sm">
                     <span className="font-medium">Max output tokens</span>
-                    <Input type="number" min={1} max={16384} value={outputTokens} disabled={!!activeRunId} onChange={(event) => { setPresetId('custom'); setOutputTokens(Number(event.target.value)) }} />
+                    <Input type="number" min={1} max={65536} value={outputTokens} disabled={!!activeRunId} onChange={(event) => { setPresetId('custom'); setOutputTokens(Number(event.target.value)) }} />
                   </label>
                   <label className="space-y-1.5 text-sm">
                     <span className="font-medium">Warmup rounds</span>
-                    <Input type="number" min={0} max={5} value={warmupRounds} disabled={!!activeRunId} onChange={(event) => { setPresetId('custom'); setWarmupRounds(Number(event.target.value)) }} />
+                    <Input type="number" min={1} max={5} value={warmupRounds} disabled={!!activeRunId} onChange={(event) => { setPresetId('custom'); setWarmupRounds(Number(event.target.value)) }} />
                   </label>
                   <label className="space-y-1.5 text-sm">
                     <span className="font-medium">Measured rounds</span>
@@ -549,12 +582,12 @@ function BenchmarkPage() {
                   </label>
                   <div className="space-y-1.5 text-sm">
                     <span className="font-medium">Concurrency points</span>
-                    <div className="flex h-9 items-center gap-1.5">
+                    <div className="flex min-h-9 flex-wrap items-center gap-1.5">
                       {availableConcurrency.map((value) => (
                         <button
                           key={value}
                           type="button"
-                          disabled={!!activeRunId}
+                          disabled={!!activeRunId || presetId === 'quick'}
                           onClick={() => toggleConcurrency(value)}
                           className={cn(
                             'h-8 min-w-10 rounded-full border px-2 text-xs font-medium transition-colors disabled:opacity-50',
@@ -583,7 +616,7 @@ function BenchmarkPage() {
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="font-medium">Results</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">Aggregate phase throughput from the loaded server’s native <code>x_ginfer</code> timings.</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Cold prefill, effective cached-input throughput, and exact-concurrency generation from native Engine counters.</p>
                   </div>
                   {runs.length > 0 && (
                     <div className="flex items-center gap-2">
@@ -609,10 +642,11 @@ function BenchmarkPage() {
                       <div className="rounded-lg bg-muted/45 p-3"><div className="text-xs text-muted-foreground">KV / speculative</div><div className="mt-1 text-sm font-medium">{selectedRun.session.kv_dtype} · {selectedRun.session.spec}{selectedRun.session.draft_tp ? ` DTP${selectedRun.session.draft_tp}` : ''}</div></div>
                       <div className="rounded-lg bg-muted/45 p-3"><div className="text-xs text-muted-foreground">Runtime</div><div className="mt-1 text-sm font-medium">CUDA Graph {selectedRun.session.cuda_graph ? 'on' : 'off'} · {formatSeconds((selectedRun.completed_at_ms - selectedRun.started_at_ms) / 1000)}</div></div>
                     </div>
+                    <BenchmarkLeaderboard key={selectedRun.run_id} run={selectedRun} />
                     <ThroughputChart points={selectedRun.points} />
                     <ResultsTable points={selectedRun.points} />
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Prompt and generation t/s are aggregate phase rates: total tokens divided by the longest request phase in each simultaneous wave. Per-request t/s divides output tokens by summed request decode time. Cached prompt tokens and early stop reasons remain visible so a contaminated or truncated run cannot masquerade as a clean result.
+                      Cold PP measures actual prefill computation in the first warmup; — means a complete cold prompt was not observed. PP divides logical input tokens by mean time to first token and includes work avoided by caching. TG uses committed decode tokens and time at the requested concurrency. This repeated-text workload measures synthetic best-case performance, not typical agent workloads.
                     </p>
                   </div>
                 ) : (

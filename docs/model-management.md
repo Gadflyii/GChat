@@ -171,9 +171,10 @@ profile's selected headroom free on every GPU during the declared test;
 settings below 300 MiB are rejected. Manual/auto launch defaults remain 1 GiB. A smaller context
 than the model maximum is ordinary profile behavior, not a warning. These metadata
 checks do not create qualification: producers must retain the actual physical evidence.
-Prebuilt entries must supply a positive, explicit `options.kv_arena_bytes` value
-from that qualification. Automatic arenas remain available for custom launches,
-not as a substitute for the catalog's validated settings.
+Prebuilt entries accept omitted or null `options.kv_arena_bytes` for dynamic sizing
+after engine startup allocations, using the selected headroom. A positive explicit
+value requests a fixed arena; zero is invalid. Selection, persistence and restart
+preserve this policy. Recorded capacity is evidence, not a fixed allocation override.
 
 Qualification tiers are mandatory and shown in the launcher and GChat:
 
@@ -191,7 +192,8 @@ never manufacture Vision support or alter a profile's DFlash setting.
   using the saved full-context settings; this does not assert an exact scheduler
   cohort. `calculation.required_kv_bytes_per_rank` includes the complete cohort's
   layout padding and growth reservations; it must be positive and no larger than
-  the explicit arena. `calculation.available_kv_bytes_per_rank` is the safe arena
+  the explicit arena, or the measured available arena for dynamic sizing.
+  `calculation.available_kv_bytes_per_rank` is the safe arena
   budget resolved by actual startup at the same context, concurrency and execution
   options; it must cover the saved arena. Measure `free_bytes_per_gpu` during the
   smoke wave, not by subtracting calculated allocations. Full-context execution
@@ -199,7 +201,8 @@ never manufacture Vision support or alter a profile's DFlash setting.
 - `calculated-pending-validation`: capacity is calculated but startup, memory
   margin and inference have not been validated. Set `full_context_requests` to
   zero, omit `free_bytes_per_gpu` and `smoke_requests`, and include only positive
-  `calculation.required_kv_bytes_per_rank` no larger than the explicit arena.
+  `calculation.required_kv_bytes_per_rank` no larger than the explicit arena when
+  one is selected. Dynamic sizing does not claim a measured capacity at this tier.
   Omit `calculation.available_kv_bytes_per_rank`: no measured startup budget exists.
   These profiles are selectable with a warning and may fail on the installed
   runtime until required engine support is implemented. Evidence must name the

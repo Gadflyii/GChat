@@ -20,8 +20,8 @@ const Page = Route.options.component as ComponentType
 
 it('scales generation independently of prompt throughput with labeled axes', () => {
   const { container } = render(<ThroughputChart points={[
-    { concurrency: 1, prompt_tokens_per_second: 10000, generation_tokens_per_second: 100 },
-    { concurrency: 4, prompt_tokens_per_second: 20000, generation_tokens_per_second: 200 },
+    { concurrency: 1, cold_prompt_tokens_per_second: null, prompt_tokens_per_second: 10000, generation_tokens_per_second: 100 },
+    { concurrency: 4, cold_prompt_tokens_per_second: null, prompt_tokens_per_second: 20000, generation_tokens_per_second: 200 },
   ]} />)
   expect(screen.getByText('Prompt t/s (left)')).toBeInTheDocument()
   expect(screen.getByText('Generation t/s (right)')).toBeInTheDocument()
@@ -35,12 +35,22 @@ it('scales generation independently of prompt throughput with labeled axes', () 
 
 it('renders finite chart coordinates for a single zero-throughput point', () => {
   const { container } = render(<ThroughputChart points={[
-    { concurrency: 1, prompt_tokens_per_second: 0, generation_tokens_per_second: 0 },
+    { concurrency: 1, cold_prompt_tokens_per_second: null, prompt_tokens_per_second: 0, generation_tokens_per_second: 0 },
   ]} />)
   for (const circle of container.querySelectorAll('circle')) {
     expect(Number.isFinite(Number(circle.getAttribute('cy')))).toBe(true)
     expect(Number.isFinite(Number(circle.getAttribute('cx')))).toBe(true)
   }
+})
+
+it('plots Cold PP on the prompt scale and leaves missing measurements unplotted', () => {
+  const { container } = render(<ThroughputChart points={[
+    { concurrency: 1, cold_prompt_tokens_per_second: 1000, prompt_tokens_per_second: 10000, generation_tokens_per_second: 100 },
+    { concurrency: 4, cold_prompt_tokens_per_second: null, prompt_tokens_per_second: 20000, generation_tokens_per_second: null },
+  ]} />)
+  expect(container.querySelectorAll('circle')).toHaveLength(4)
+  expect(screen.getByText('Cold PP · left axis (dotted)')).toBeInTheDocument()
+  expect(container.querySelector('svg')?.innerHTML).not.toContain('NaN')
 })
 
 beforeEach(() => {
@@ -63,7 +73,7 @@ beforeEach(() => {
 
 it('keeps saved results visible without an online server', async () => {
   mocks.list.mockResolvedValue([])
-  useBenchmarkStore.setState({ runs: [{ run_id: 'saved', started_at_ms: 1, completed_at_ms: 1001, points: [],
+  useBenchmarkStore.setState({ runs: [{ benchmark_id: 'custom', hardware: null, methodology: 'ginfer-resident-max-perf-v1', run_id: 'saved', started_at_ms: 1, completed_at_ms: 1001, points: [],
     session: { display_name: 'Saved Muse run', pid: null, target_id: 'ginfer/local/instance', session_id: 'session',
       model_id: 'model', model_path: '/model.ginfer', max_context: 8192, max_concurrency: 1, vision: true,
       spec: 'auto', draft_tokens: 0, draft_tp: 0, kv_dtype: 'int8', prefill_chunk: 0, cuda_graph: true },
@@ -75,6 +85,27 @@ it('keeps saved results visible without an online server', async () => {
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
+
+it('offers the new workloads and every supported concurrency outside Standard Benchmark', async () => {
+  mocks.list.mockResolvedValue([{ target_id: 'ginfer/local/instance', model_id: 'model', max_concurrency: 8, max_context: 131072, pid: null, is_embedding: false }])
+  render(<Page />)
+  await screen.findByRole('option', { name: /Current settings/ })
+  fireEvent.click(screen.getByRole('button', { name: /^Standard Benchmark/ }))
+  expect(screen.getByRole('button', { name: 'C8', exact: true })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'C3', exact: true })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Prompt tokens')).toHaveValue(2048)
+  expect(screen.getByLabelText('Max output tokens')).toHaveValue(500)
+  fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
+  for (let c = 1; c <= 8; c++) expect(screen.getByRole('button', { name: `C${c}`, exact: true })).toBeInTheDocument()
+  expect(screen.getByLabelText('Prompt tokens')).toHaveValue(4096)
+  expect(screen.getByLabelText('Max output tokens')).toHaveValue(1000)
+  fireEvent.click(screen.getByRole('button', { name: /^Long context/ }))
+  expect(screen.getByLabelText('Prompt tokens')).toHaveValue(32768)
+  expect(screen.getByLabelText('Max output tokens')).toHaveValue(512)
+  fireEvent.click(screen.getByRole('button', { name: /^Big Bench/ }))
+  expect(screen.getByLabelText('Prompt tokens')).toHaveValue(65536)
+  expect(screen.getByLabelText('Max output tokens')).toHaveValue(65536)
+})
 
 it('defaults to the running local model, excludes unavailable targets and benchmarks the selected remote instance', async () => {
   render(<Page />)

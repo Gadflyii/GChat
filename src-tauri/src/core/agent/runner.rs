@@ -218,8 +218,8 @@ async fn run_turn_inner(
             let archive_guidance = if authoring { "" } else {
                 "\n\nArchived tool results are readable with os.fs.read; use bounded excerpts when needed."
             };
-            let conversation = format!("Current task (preserve verbatim):\n{}\n\n{}{archive_guidance}",
-                input.user_message, session.render_conversation());
+            let conversation = format!("Current task (preserve verbatim):\n{}\n\n{}\n\n{}{archive_guidance}",
+                input.user_message, input.approval.permission_summary().unwrap_or_default(), session.render_conversation());
             let mut request = CompletionRequest::tool_call(build_prompt_with_workspace(
                 if authoring { AUTHORING_PROMPT } else { input.stable_prefix }, &loaded_tool_names, &loaded_skill_entries,
                 Some(&workspace), &conversation, notice.as_deref(),

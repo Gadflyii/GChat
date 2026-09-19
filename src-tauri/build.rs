@@ -30,6 +30,8 @@ fn build_tauri() {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_KEY_ID");
+    println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_SEED_HEX");
     stage_launch_profiles();
 
     #[cfg(all(windows, feature = "test-tauri"))]

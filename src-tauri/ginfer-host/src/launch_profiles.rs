@@ -129,7 +129,6 @@ impl LaunchProfile {
             || self.qualification.evidence.trim().is_empty()
             || self.qualification.engine_revision.trim().is_empty()
             || self.options.kv_arena_headroom_bytes < MIN_PROFILE_HEADROOM_BYTES
-            || self.options.kv_arena_bytes.is_none()
         {
             return Err(fail());
         }
@@ -143,10 +142,11 @@ impl LaunchProfile {
                 self.qualification.full_context_requests == 0
                     && self.qualification.smoke_requests == Some(self.concurrency)
                     && self.qualification.calculation.as_ref().is_some_and(|calculation| {
-                        let arena = self.options.kv_arena_bytes.unwrap_or(0);
                         calculation.required_kv_bytes_per_rank > 0
-                            && calculation.required_kv_bytes_per_rank <= arena
-                            && calculation.available_kv_bytes_per_rank.is_some_and(|available| arena <= available)
+                            && calculation.available_kv_bytes_per_rank.is_some_and(|available| {
+                                let arena = self.options.kv_arena_bytes.unwrap_or(available);
+                                calculation.required_kv_bytes_per_rank <= arena && arena <= available
+                            })
                     })
             }
             QualificationTier::CalculatedPendingValidation => {
@@ -155,7 +155,7 @@ impl LaunchProfile {
                     && self.qualification.smoke_requests.is_none()
                     && self.qualification.calculation.as_ref().is_some_and(|calculation| {
                         calculation.required_kv_bytes_per_rank > 0
-                            && calculation.required_kv_bytes_per_rank <= self.options.kv_arena_bytes.unwrap_or(0)
+                            && self.options.kv_arena_bytes.is_none_or(|arena| calculation.required_kv_bytes_per_rank <= arena)
                             && calculation.available_kv_bytes_per_rank.is_none()
                     })
             }
@@ -400,15 +400,45 @@ mod tests {
         assert!(p.validate().is_err());
     }
     #[test]
-    fn prebuilt_profiles_require_an_explicit_arena() {
+    fn prebuilt_profiles_accept_dynamic_or_positive_explicit_arenas() {
         let mut p = profile();
         p.options.kv_arena_bytes = None;
-        assert!(p.validate().is_err());
+        p.validate().unwrap();
         p.options.kv_arena_bytes = Some(0);
         assert!(p.validate().is_err());
         p.options.kv_arena_bytes = Some(4096);
         p.validate().unwrap();
         LaunchOptions::default().validate(1).unwrap();
+    }
+    #[test]
+    fn dynamic_catalog_preserves_policy_and_capacity_evidence() {
+        let mut p = profile();
+        p.options.kv_arena_bytes = None;
+        p.qualification.tier = QualificationTier::CalculatedStartupSmoke;
+        p.qualification.full_context_requests = 0;
+        p.qualification.smoke_requests = Some(p.concurrency);
+        p.qualification.calculation = Some(CapacityCalculation {
+            required_kv_bytes_per_rank: 4096,
+            available_kv_bytes_per_rank: Some(8192),
+        });
+        p.validate().unwrap();
+        p.qualification.calculation.as_mut().unwrap().available_kv_bytes_per_rank = Some(4095);
+        assert!(p.validate().is_err());
+        p.qualification.tier = QualificationTier::CalculatedPendingValidation;
+        p.qualification.smoke_requests = None;
+        p.qualification.free_bytes_per_gpu = None;
+        p.qualification.calculation.as_mut().unwrap().available_kv_bytes_per_rank = None;
+        p.validate().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profiles.json");
+        let mut json = serde_json::to_value(ProfileCatalog {
+            schema: "ginfer-launch-profiles-v1".into(), profiles: vec![p],
+        }).unwrap();
+        for omitted in [false, true] {
+            if omitted { json["profiles"][0]["options"].as_object_mut().unwrap().remove("kv_arena_bytes"); }
+            std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
+            assert_eq!(ProfileCatalog::read(&path).unwrap()[0].options.kv_arena_bytes, None);
+        }
     }
     #[test]
     fn other_platform_profiles_are_not_launch_choices() {

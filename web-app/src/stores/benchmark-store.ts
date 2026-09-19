@@ -43,6 +43,8 @@ export const useBenchmarkStore = create<BenchmarkState>()(
     }),
     {
       name: localStorageKey.benchmarkRuns,
+      version: 1,
+      migrate: () => ({ runs: [], selectedRunId: null }),
       storage: createJSONStorage(() => localStorage),
       partialize: ({ runs, selectedRunId }) => ({ runs, selectedRunId }),
     }
