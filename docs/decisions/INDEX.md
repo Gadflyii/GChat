@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Official reference results](2026-09-19-official-reference-results.md)
+
 - [G.bench community leaderboard](2026-09-18-gbench-community-leaderboard.md)
 
 - [Resident Max Perf benchmarks](2026-09-17-resident-max-perf-benchmarks.md)

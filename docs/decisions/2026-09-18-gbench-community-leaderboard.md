@@ -1,7 +1,7 @@
 # G.bench community leaderboard
 
-Status: publication enabled in GChat 2.0.42 and the private deployment config at
-the user's request; the enabled config still requires upload to the host.
+Status: deployed with publication enabled. Twelve signed official reference series
+(36 points) have been published and read back from the live database.
 
 Only completed Standard Benchmark runs offer publication. Standard is an explicit
 run identity, not a guess based on token lengths: 2,048 prompt / 500 output tokens,
@@ -19,13 +19,15 @@ The initial backend is PHP/PDO MySQL, suitable for the user's cPanel website, at
 `sectilelabs.ai/gbench`. Its source is in the user's existing Sectile Web directory,
 not the inference engine repository. No Node hosting service is required. The
 live leaderboard reads, HTTPS routing, and Apache private-directory protection
-have been checked. End-to-end signed submission/deletion and database transaction
-validation remain outstanding; enabling publication does not establish those checks.
+have been checked. Signed official submission, database insertion, and public
+readback passed. Installed community-client publication, deletion, lost-response
+recovery, and concurrent replay remain in [open work](../open-work.md).
 
 The server rejects unknown fields and derives scores from timing counters. Results
 are community self-reports, not hardware attestations. Cold PP may be unavailable
-when the warmup uses an existing prefix. The page compares exact GPU inventories,
-model/weights, TP/DTP and relevant launch settings; C1/C4/C8 are separate scores.
+when the warmup uses an existing prefix. The page offers independent Hardware and Model filters, defaulting to Show all,
+and shows target TP in its own column. C1/C4/C8 are separate scores. Execution
+settings identify each row; reserved capacities remain in run details.
 The initial board is explicitly bounded to the latest 500 submissions, not an
 all-time ranking. Public lookup uses the original GChat Run ID.
 
@@ -59,7 +61,8 @@ Challenge issuance and submission each have independent 20/hour/IP quotas, so
 the two-step flow still permits 20 submission attempts/hour. A retry after a lost
 receipt fetches a fresh challenge and recovers the original receipt by run ID.
 No browser popup, account, CAPTCHA, or unsigned compatibility path is provided.
-Database replay/transaction behavior remains a staging gate until MySQL is tested.
+Positive MySQL insertion/readback is verified; concurrent replay and rollback
+behavior still require a live exercise.
 
 The maintainer workstation is provisioned with release key ID
 `gchat-release-20260918`. Its private seed is outside the repositories at
@@ -75,8 +78,9 @@ key is separate from Windows installer code signing.
 ## Reserved publisher identity
 
 `Sectile.labs` is the canonical name for every official public result. Names that
-contain `sectile` after ASCII case folding and removing spaces, dots, underscores
-and hyphens are reserved, including Sectile Labs and the full laboratory name.
+contain `sectile`, `ginfer`, `gchat`, or `gbench` after ASCII case folding and
+removing spaces, dots, underscores and hyphens are reserved, including Sectile Labs
+and the full laboratory name.
 The frontend and native public client reject these names. Server enforcement uses
 a separate `official_signing_public_keys` map after signature verification, never
 a caller-supplied role. Public release keys cannot claim the brand nickname.
@@ -94,12 +98,12 @@ without issuing a challenge or submitting. No real results are published by test
 ## Run identity and detail view
 
 The GChat Run ID is the database primary key, receipt identifier, GET/DELETE route
-identifier and first visible leaderboard field. No separate public submission ID
-is generated. Clicking it opens a dedicated `?run=...` view with the GChat graph
+identifier. The first leaderboard field is a compact UTC publication date linked
+through the Run ID; the ID is not printed in the table. No separate public
+submission ID is generated. Clicking the date opens a dedicated `?run=...` view with the GChat graph
 geometry, separate PP/TG scales, identical series and null-gap behavior, scores
 table, and readable hardware/run settings. Standardized workload metadata is not
-repeated as per-run display fields. The broader leaderboard grouping review is
-separate from this change and is not silently redesigned here.
+repeated as per-run display fields. Hardware and Model filters are independent; all filters default to Show all.
 
 Because Run IDs are public, receipt recovery also requires a private per-run
 ownership token. GChat saves it before uploading; signatures bind it together
@@ -107,4 +111,7 @@ with the payload. The database stores only its hash. A copied public result cann
 recover its owner's deletion receipt. The official CLI derives its ownership token
 from its private publisher seed and the Run ID. Neither token nor hash is returned
 by public read endpoints. A one-time SQL alteration removes the old ID column
-without deleting rows; the initial unpublished database has no accepted results.
+without deleting rows; it was applied before reference publication.
+
+Official matrix reference imports and authenticated wordmark display are specified
+in [Official reference results](2026-09-19-official-reference-results.md).

@@ -1,6 +1,6 @@
 # Agent Studio worker pools
 
-Implemented on `feat/agent-worker-pools`. Native dispatch tests use controlled
+Implemented on `main`. Native dispatch tests use controlled
 loopback GInfer sessions; physical multi-host inference and the Windows installer
 remain manual integration checks.
 
@@ -92,8 +92,8 @@ individual worker rate or show tools running as token generation.
 Verify scheduler semantics with deterministic concurrent tests, native command and
 tool contracts, rendered UI interaction tests, existing run regressions, and `make
 verify`. Real-host inference only if needed to resolve an integration question and
-after coordinating host availability. Preserve pending secure-storage work. No commit,
-push, package installation, or engine change is included without further instruction.
+after coordinating host availability. Remaining acceptance is tracked in
+[open work](open-work.md).
 
 ## Concurrency and memory
 

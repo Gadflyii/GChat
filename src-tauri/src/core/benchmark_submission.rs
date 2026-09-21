@@ -29,7 +29,8 @@ fn is_hex(value: &str, length: usize) -> bool {
 }
 
 fn reserved_nickname(name: &str) -> bool {
-    name.chars().filter(|c| !matches!(c, ' ' | '.' | '_' | '-')).collect::<String>().to_ascii_lowercase().contains("sectile")
+    let normalized = name.chars().filter(|c| !matches!(c, ' ' | '.' | '_' | '-')).collect::<String>().to_ascii_lowercase();
+    ["sectile", "ginfer", "gchat", "gbench"].iter().any(|brand| normalized.contains(brand))
 }
 
 async fn response_json(response: reqwest::Response) -> Result<serde_json::Value, String> {
@@ -50,7 +51,7 @@ pub async fn submit_benchmark(payload: String, owner_token: String) -> Result<Re
     if !is_hex(&owner_token, 64) { return Err("Invalid private submission ownership token".into()); }
     let value: serde_json::Value = serde_json::from_str(&payload).map_err(|_| "Invalid benchmark submission")?;
     if reserved_nickname(value["nickname"].as_str().unwrap_or_default()) {
-        return Err("Sectile.labs is reserved for official Sectile Labs results".into());
+        return Err("Sectile, GInfer, GChat, and GBench names are reserved for official Sectile Labs results".into());
     }
     if value["schema"] != "gbench-submission-v1" || value["benchmark_id"] != "standard" {
         return Err("Only Standard Benchmark results may be submitted".into());
@@ -87,7 +88,18 @@ mod tests {
         for name in ["Sectile.labs", "SECTILE.LABS", "Sectile Labs", "sectile_labs", "sectile-labs", "Sectile Research Laboratories", "Official Sectile", "s.e.c.t.i.l.e"] {
             assert!(reserved_nickname(name));
         }
-        assert!(!reserved_nickname("Player One"));
+        for brand in ["ginfer", "gchat", "gbench"] {
+            for name in [brand.to_string(), brand.to_ascii_uppercase(), format!("Official {brand} Team")] {
+                assert!(reserved_nickname(&name), "{name}");
+            }
+            for separator in [" ", ".", "_", "-", " ._-"] {
+                let name = brand.chars().map(|c| c.to_string()).collect::<Vec<_>>().join(separator);
+                assert!(reserved_nickname(&name), "{name}");
+            }
+        }
+        for name in ["Player One", "GPU Tester", "Chat Fan", "Bench Runner"] {
+            assert!(!reserved_nickname(name), "{name}");
+        }
     }
 
     #[test]

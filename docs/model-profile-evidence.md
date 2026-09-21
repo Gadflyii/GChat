@@ -1,104 +1,10 @@
-# Host-aware model management
+# Model profile implementation and qualification evidence
 
-## Installed UI punch list — GChat 2.0.27
-
-The Windows installer completed cleanly. Follow-up implementation and automated
-checks are complete; replacement 2.0.28 EXE/MSI packaging is complete. Installed
-WebView testing remains the next acceptance step.
-
-- External analytics and crash-upload SDKs, switches, endpoints, events, build
-  secrets and public tracking notices removed. Local logs and performance meters
-  retained. Telemetry-only verification passed before the remaining UI edits.
-- GInfer Hosts rename, collapsible cards and persistent selected-instance controls
-  implemented. Quick model changes require restart confirmation. Empty profile
-  lists now explain missing models/catalogs versus reserved GPU groups.
-- Native Integrations controls shared between Settings and Integrations; new Hermes
-  installations default off, OpenCode on. Saved choices remain unchanged.
-- Settings links now include both SectileLabs repositories and the public collection
-  `https://huggingface.co/collections/SectileLabs/ginfer-models-6aa0682395e628be98a798ef`.
-- Reset wording changed to defaults. Chat owns the reasoning-effort selector;
-  misleading fixed token budgets removed. Retired local-provider identifiers and
-  preserved llama.cpp backend preference removed. Unsupported quick-start coding
-  recommendations, fuzzy GGUF discovery, and GGUF/MLX catalog conversion removed.
-- Agent Studio monitor/navigation changes are deferred until this punch list is done.
-
-1. **Hermes provisioning reports success without a launchable installation.**
-   Opening Hermes reports “Hermes installation completed without a native
-   executable on PATH.” Native inspection found its source checkout and uv
-   binaries under `%LOCALAPPDATA%\hermes`, but no Hermes launcher in `bin` or
-   `hermes-agent\venv\Scripts`. User PATH already contains the Hermes bin/node
-   directories. GChat logs installation success twice; the underlying installer
-   failure is not yet established. The upstream installer catches failures without
-   a nonzero exit outside its JSON mode; GChat now requests JSON mode, drains both
-   pipes concurrently and checks executable readiness. Preserve/report details and
-   require a launchable native CLI before reporting success; verify recovery from
-   this partial installation without repeatedly claiming successful installs.
-2. **Engine failure details and artifact-specific KV compatibility.**
-   Configured Muse `nvfp4`, TP1/C4/131072, Vision+DFlash/NVFP4 KV/graphs exits
-   with code 1. The installed host log gives the concrete cause:
-   “Muse NVFP4 KV was requested but calibration metadata is absent.” This
-   failure is not evidence of GPU contention. The UI currently hides that cause
-   behind the exit code. A bounded per-instance diagnostic tail and artifact/rank
-   calibration availability gate are now implemented. Surface the diagnostic and prevent selecting
-   unsupported KV formats for an artifact; NVFP4 weights alone do not establish
-   NVFP4 KV calibration. Do not silently change the user's selected KV format.
-   The candidate calibrated native-NVFP4 Muse artifact was copied to the Windows
-   GChat model root without replacing the old model. Its SHA256 matches the source
-   (`6d6cc348c75a75c60ca011d267eb389dcbb8530f6c51a680dad911d25365b61f`), and header
-   inspection confirms TP1/DTP1 and all three Muse calibration objects. The resident
-   host has discovered the new file. No GPU workload was stopped or started.
-
-Follow-up verification: `make verify`, focused header/default-switch tests,
-NVFP4 metadata inventory test, `cargo check`, and `cargo clippy` passed. The final
-frontend suite passed 1,985 tests with six intentional skips. Existing warnings
-remain; unused telemetry routing assignments introduced by the removal were cleaned.
-The official Hermes repair completed, including its optional CUA driver (approved
-by the user). Native `hermes.exe --version` succeeds: 0.21.1, Python 3.11.16.
-The installer preserved local Hermes checkout changes while updating upstream.
-The Hermes TUI also builds successfully (`npm.cmd run build --workspace ui-tui`).
-Both 2.0.28 installers are available in `%LOCALAPPDATA%\GChat\release-output`;
-the MSI database opens successfully and reports ProductVersion 2.0.28. They retain
-the previously selected GInfer runtime; this work does not rebuild the CUDA engine.
-Interactive Hermes use against a model and the installed WebView walkthrough are
-not yet verified. No model inference was launched for this UI cleanup.
-
-Status: host-aware management foundation implemented and verified. On 2026-09-09
-the user expanded this same goal to build the missing profile system and interactive
-launcher, with shared multi-instance lifecycle and complete GChat remote controls.
-The missing preset interface is now implementation work, not an external prerequisite.
-
-Current handoff: the launcher/control foundation is merged on both main branches.
-The fleet catalog delivery adds 275 profiles in 36 editable catalogs: 105 retain
-full-context evidence, four have calculated capacity with startup/short-smoke
-evidence, and 166 are explicitly calculated/pending validation. This includes
-C1–C8 text and Vision+DFlash for both available models on the authorized Linux
-SM80/86/89/120a fleet and native Windows RTX4090/5090, with native NVFP4 variants
-on Blackwell. Extra entries preserve existing draft/graph alternatives. All
-catalogs passed the actual Rust profile reader; no pending entry is a physical
-qualification claim. GInfer source and catalogs are merged at `6b0bfce`.
-The subsequently authorized hygiene pass
-removed obsolete task worktrees, builds and installers, preserving current
-releases, source, model roots, selected evidence and other-session campaigns.
-Remaining work is final packaging and the real installer/LAN/WebView walkthrough;
-engine-dependent qualification is explicitly deferred, not a catalog blocker.
-
-C8 graph choices: the user explicitly approved offering both graph-enabled and
-no-graph profiles when each can be physically qualified. Investigate a smaller
-context for the graph-enabled option before concluding it cannot fit; startup
-graph reservation and runtime KV capacity are distinct constraints. Label the
-execution mode clearly. The user clarified that validation covers package size,
-per-GPU memory fit, full-context execution, correctness/accounting, headroom and
-operations. Performance tuning is not part of this goal. Optional performance
-checks must be brief, bounded smoke checks on the selected updated engine, not
-repeated campaigns or a prerequisite for acceptance. Do not benchmark the outdated
-engine. Existing timing fields are not release performance evidence. Revalidate
-resource profiles against the updated engine before claiming they qualify it.
-Graph-enabled Qwen C8 failed startup reservation on RTX4090 at 8192, 4096,
-2048 and 512 context. Even the 512-context probe requested 6,785,633,536 bytes
-against 5,891,972,608 available. No graph-enabled C8 profile is qualified on this
-revision. Keep the qualified no-graph C8 option and graph-enabled C1/C2/C4
-choices; revisit C8 with the updated engine instead of further shrinking context
-or changing the obsolete planner.
+This record preserves the delivered host/profile design and measured qualification
+evidence from the September implementation. Measurements apply only to the recorded
+engine, artifact, hardware, and settings; they do not qualify later runtime builds.
+The current contract is [model management](model-management.md). Outstanding release
+acceptance belongs in [open work](open-work.md), not this evidence record.
 
 ## Outcome
 
@@ -607,7 +513,7 @@ at the original 1 GiB guard, with 60 C peak core / 65 C peak HBM and verified
   tests and `git diff --check` also passed after Linux staging integration.
   Clippy was installed with user approval and passed with existing style warnings.
 
-## Remaining completion gates
+## Recorded qualification follow-up
 
 After the headroom-policy change, full GChat `make verify`, focused profile tests,
 host `cargo check` and host Clippy passed; Clippy retained two existing style
@@ -831,55 +737,3 @@ eager decode rounds. Both choices are cataloged alongside the C7 graph option.
 Qwen now has current-runtime resource-fit coverage at C1–C8 on the RTX3090;
 C1/C2 capacity refinement and saved-profile lifecycle remain pending. The missing
 RTX3090 Muse cells have now completed C1–C8 full-context resource-fit checks.
-
-1. Finish the catalog/source handoff on main. Do not relabel old fit results as
-   new-engine qualification. Pending entries assume the corrected engine and
-   retain their declared Vision/DFlash modes; runtime validation remains explicit
-   follow-up work, not a blocker for this catalog delivery.
-2. Complete C1–C8 calculated profile coverage for both models where exact artifacts
-   and authorized hardware exist: RTX4090, RTX3090, local RTX5090, native Windows,
-   64+ GiB and homogeneous TP2/TP4. Include AutoRound/INT8 KV and the Blackwell
-   native-NVFP4 target/draft/KV combination defined above; existing Q4-draft
-   NVFP4-target profiles do not fill that combination. Preserve already completed
-   cells; do not resume the long validation matrix. No 16 GiB Smol package or homogeneous TP4
-   inventory is currently available in this task. Verify availability before use;
-   record unavailable prerequisites without inventing qualified profiles.
-   Server1 requires an explicit coordinated release before execution;
-   Server2's heterogeneous GPUs are independent TP1 devices, never a TP2 group.
-   The user explicitly authorizes local RTX5090, WSL RTX4090 and both Server2
-   GPUs. Server2's unlocked CMP170HX reports a 65,536 MiB framebuffer (the
-   Engine sees 64,912 MiB after protected reservation) and can supply 64 GiB-class
-   TP1 coverage if its exact artifact and operational checks pass. The user lifted
-   the prior 8,192-token ceiling for this profile work: context is limited by the
-   registered model and measured capacity. Use 180 W and stop at 80 C on either
-   core or HBM; monitor during execution and restore the previous power limit
-   afterward, including failure cleanup. Keep these controls local to this profile
-   task rather than modifying another session's suspended campaign policy.
-   The user subsequently explicitly handed Server2 to this session. Direct
-   inspection found the existing controllers already suspended, with only zombie
-   children and no GPU clients; leave them suspended and preserve their state.
-   The takeover is recorded in the shared mailbox. This inventory does not
-   supply homogeneous TP2/TP4.
-3. Complete the real multi-host launcher-to-GChat control walkthrough and native
-   Windows installer/menu/WebView walkthrough. Mocked tests and single-host
-   API evidence do not establish those results. Coordinate host ownership before
-   deployment; do not disturb other sessions or their inference processes.
-   Built-in Windows UI Automation is available, but GChat has no complete isolated
-   application-profile switch: `CI=e2e` does not isolate thread/database and WebView
-   storage. Do not launch with guessed overrides. Approval to use the existing
-   Windows profile after the local GPU tests, or a user-operated walkthrough,
-   is pending; preserve existing chats/models and restore test-only settings.
-4. Assemble final selected-platform bundles with all accepted catalogs and the
-   selected engine runtime. Check the packaged contents and rerun affected
-   integration checks. Existing archives have different catalog selections;
-   do not treat every old archive as the final distribution.
-5. Preserve the completed source handoff and hygiene state. Retain only current
-   operational builds and selected release outputs; archive selected qualification
-   evidence, not stale binaries. Coordinate ownership before further cleanup and
-   preserve models, active jobs and other-session work. Commit further changes
-   only when requested.
-
-Public release feeds and exact published model URLs remain producer-owned release
-inputs. No URLs, Smol packages, hardware measurements or qualification were invented.
-The goal remains unfinished and the user has authorized continuing these gates;
-packaging success alone does not complete it.

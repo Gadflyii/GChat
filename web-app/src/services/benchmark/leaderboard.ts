@@ -23,7 +23,8 @@ function wave(w: BenchmarkWave): BenchmarkWave {
 export function buildSubmission(run: BenchmarkResult, nickname: string) {
   if (run.benchmark_id !== 'standard' || run.methodology !== 'ginfer-resident-max-perf-v1') throw new Error('Only Standard Benchmark results can be submitted.')
   const name = nickname.trim()
-  if (name.toLowerCase().replace(/[ ._-]/g, '').includes('sectile')) throw new Error('Sectile names are reserved for official Sectile Labs results. Please choose another nickname.')
+  const normalizedName = name.toLowerCase().replace(/[ ._-]/g, '')
+  if (['sectile', 'ginfer', 'gchat', 'gbench'].some(brand => normalizedName.includes(brand))) throw new Error('Sectile, GInfer, GChat, and GBench names are reserved for official Sectile Labs results. Please choose another nickname.')
   if (!/^[\p{L}\p{N}_. -]{2,32}$/u.test(name)) throw new Error('Use 2–32 letters, numbers, spaces, dots, underscores or hyphens for your public nickname.')
   const h = run.hardware
   if (!h || !h.gpus.length || !run.points.length) throw new Error('This run has no complete inference-host hardware record. Run Standard Benchmark on an updated host.')

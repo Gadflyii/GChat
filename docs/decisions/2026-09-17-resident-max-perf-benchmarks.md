@@ -25,4 +25,7 @@ legacy scoring path or record conversion; only the new methodology is supported.
 
 An idle engine grants exclusive benchmark admission; disconnect cancels execution.
 These synthetic best-case results are not representative agent workloads.
-Leaderboard, page redesign and installer packaging remain separate work.
+The deployed leaderboard and presentation are documented in
+[community publishing](2026-09-18-gbench-community-leaderboard.md) and
+[official reference results](2026-09-19-official-reference-results.md). Remaining
+installed-release checks are tracked in [open work](../open-work.md).

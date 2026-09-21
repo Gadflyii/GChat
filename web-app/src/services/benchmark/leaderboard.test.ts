@@ -30,11 +30,19 @@ function fixture(): BenchmarkResult {
 }
 
 describe('G.bench public submission', () => {
-  it('reserves the official nickname including case and separator variants', () => {
+  it('reserves brand nicknames including case and separator variants', () => {
     for (const nickname of ['Sectile.labs', 'SECTILE.LABS', 'sectilelabs', 'Sectile Labs', 'sectile_labs', 'sectile-labs', 'Sectile Research Laboratories', 'Official Sectile', 's.e.c.t.i.l.e']) {
       expect(() => buildSubmission(fixture(), nickname)).toThrow('reserved')
     }
-    expect(buildSubmission(fixture(), 'Player One').nickname).toBe('Player One')
+    for (const brand of ['ginfer', 'gchat', 'gbench']) {
+      for (const nickname of [brand, brand.toUpperCase(), `Official ${brand} Team`,
+        ...[' ', '.', '_', '-', ' ._-'].map(separator => [...brand].join(separator))]) {
+        expect(() => buildSubmission(fixture(), nickname), nickname).toThrow('reserved')
+      }
+    }
+    for (const nickname of ['Player One', 'GPU Tester', 'Chat Fan', 'Bench Runner']) {
+      expect(buildSubmission(fixture(), nickname).nickname).toBe(nickname)
+    }
   })
   it('sends only public hardware, configuration and raw evidence', () => {
     const run = fixture()

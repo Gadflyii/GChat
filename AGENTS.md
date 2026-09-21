@@ -23,7 +23,8 @@ facade: `ginfer`.
 [ginfer]: https://github.com/SectileLabs/ginfer
 
 Targets: Linux x86_64 (AppImage) with an NVIDIA GPU (CUDA 13.1, SM 86/89/120a).
-Windows is gated until the ginfer port ships; other platforms are unsupported.
+Windows x86_64 is also a release target; see README.md for current release status.
+Other platforms are unsupported.
 
 **Product name is GChat.** Clean-slate fork of Atomic Chat (itself a hard fork
 of [Jan](https://github.com/janhq/jan)); the legacy `jan*` / `atomic`
@@ -73,7 +74,7 @@ Hugging Face organization.
 - Hardware gate: **Linux x86_64 + NVIDIA, CUDA 13.1 driver, SM 86/89/120a.**
   The gate must surface a clear "unsupported" state everywhere the UI assumes
   a local engine — never let an unsupported host fall through to loading.
-  Windows is gated until the ginfer port ships.
+  Windows x86_64 uses the same GInfer-only product contract.
 - RAG/vector DB extensions stay wired but embedding is feature-disabled until
   ginfer ships an embeddings endpoint; do not revive llama.cpp/MLX code paths.
 

@@ -292,6 +292,9 @@ the desktop application.
 
 ## Documentation
 
+- [Documentation map](docs/README.md)
+- [Open work and release acceptance](docs/open-work.md)
+
 - [Memory library and workspace instructions](docs/memory.md) — personal/workspace facts, bounded recall, and optional `AGENTS.md` instructions.
 
 - [Development workflow](DEVELOP.md)

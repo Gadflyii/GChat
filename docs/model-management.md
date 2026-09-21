@@ -228,9 +228,9 @@ engine startup failure is reported normally; it is not represented as a successf
 GChat's Launch profiles panel uses this endpoint for new instances and confirmed
 model/profile changes. Saved configurations retain `qualified_profile_id`; subsequent
 restarts validate that their settings still match the catalog. Editing settings without
-that ID uses the explicit custom route, not a qualification claim. Profile publication
-and unified local supervisor work remain in the current
-[implementation plan](model-management-plan.md).
+that ID uses the explicit custom route, not a qualification claim. Recorded implementation and qualification are in
+[profile evidence](model-profile-evidence.md); remaining release acceptance is in
+[open work](open-work.md).
 
 ## Text launcher
 

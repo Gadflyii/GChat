@@ -3,7 +3,7 @@
 Development status: real two-machine discovery, pairing, GPU lifecycle, and
 Windows desktop-to-LAN routing checks pass, as do Windows SCM and Linux systemd
 installation/lifecycle checks. Packages are local, unsigned, and unpublished;
-the GChat installer has not been rebuilt with this integration.
+current installed-app acceptance is tracked in [open work](open-work.md).
 Use an explicitly selected `ginfer-serve` build; host installation never updates
 the engine or downloads/repackages models. After pairing, the Models page can
 explicitly download verified published packages into dedicated managed storage;
@@ -331,3 +331,18 @@ systemctl --user disable ginfer-host.service
 Stopping the service stops only its owned inference children. It does not kill
 unrelated engine or kernel-agent jobs. Disabling leaves the host identity, client
 grants, models, and saved profiles intact.
+
+## Verification and handoff
+
+- Real two-host discovery, distinct identities with duplicate display names, pinned pairing, revocation, and durable identity across restart passed between WSL5090 and WSL4090.
+- Real Muse AutoRound TP1 load, generation, reload with a new session, stop, and grant revocation passed on both GPUs. Workload: C1, 8K context, INT8 KV 1 GiB, speculation and Vision off. These establish lifecycle behavior, not optimized performance or TP qualification.
+- Windows desktop IPC-to-WSL4090 passed using the native credential vault, exact model/agent target selection, alias-preserving JSON/SSE forwarding, benchmark dispatch, stop, revoke, and Forget. Shared facade adapters additionally have loopback HTTP and Responses scope/continuation tests. This is not a visual OpenCode/Hermes or full Agent Studio walkthrough.
+- LAN-only facade startup now reacts to a paired instance becoming ready without loading a local model, respects disabled auto-start, ignores stale offline readiness, and does not restart on every poll. Rendered DataProvider tests cover those cases. Provider projection tracks an assigned port and local credentials immediately.
+- Engines/intake UI tests cover discovery preferences, ignored hosts, offline inventory, pairing validation, explicit launch arguments, invalid launch settings, reload controls, and remote intake without a local GPU. Requested settings are distinguished from engine-reported metadata.
+- Linux systemd install/start/pair/restart/stop and elevated Windows SCM installation/readiness/pair/restart/stop passed. Windows uses a dedicated virtual service account and private state. Test services and owned GPU instances were stopped; temporary service registrations were removed.
+- Native Linux and Windows host release archives are available under `src-tauri/ginfer-host/target/distribution/`. They contain only the host executable, matching installer, setup guide, and license. Packaging checks cover architecture, contents, executable permissions, and refusal to overwrite.
+- The final GChat verification gate includes frontend lint/types/tests, critical coverage gates, supported native suites, and host tests. Relevant native Windows tests ran separately. No GInfer source, engine bundle, or existing user model was changed.
+
+
+Linux desktop credentials require an unlocked Secret Service provider; headless WSL
+checks do not establish that path. Windows native vault storage has been verified.

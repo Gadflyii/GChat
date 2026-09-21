@@ -61,5 +61,5 @@ title: "Share profile launch and instance control"
   This extends the selected-host decision without changing artifact ownership,
   read-only external storage, publication integrity or public inference protocols.
 - **Owner:** team.
-- **Links:** [Current goal plan](../model-management-plan.md),
+- **Links:** [Profile evidence](../model-profile-evidence.md),
   [Selected-host management](2026-09-08-manage-models-on-the-selected-host.md).
