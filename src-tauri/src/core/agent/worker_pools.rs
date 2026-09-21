@@ -190,7 +190,7 @@ impl Allocator {
                     && (!requirement.vision || c.vision)
                     && c.context >= requirement.minimum_context
                     && affinity
-                        .is_none_or(|(id, session)| c.instance_id == id && c.session_id == session)
+                        .map_or(true, |(id, session)| c.instance_id == id && c.session_id == session)
             })
             .min_by(|a, b| {
                 let au = active.get(&a.instance_id).copied().unwrap_or(0);
@@ -227,14 +227,14 @@ mod tests {
         let a = candidate("a");
         let b = candidate("b");
         let first = allocator
-            .try_acquire(&[a.clone()], &RoleAssignment::default(), None)
+            .try_acquire(std::slice::from_ref(&a), &RoleAssignment::default(), None)
             .unwrap();
         let second = allocator
             .try_acquire(&[a.clone(), b], &RoleAssignment::default(), None)
             .unwrap();
         assert_eq!(second.candidate.instance_id, "b");
         assert!(allocator
-            .try_acquire(&[a.clone()], &RoleAssignment::default(), None)
+            .try_acquire(std::slice::from_ref(&a), &RoleAssignment::default(), None)
             .is_none());
         drop(first);
         assert!(allocator

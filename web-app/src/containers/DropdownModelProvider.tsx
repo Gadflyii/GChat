@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react'
 import {
   Popover,

@@ -13,7 +13,7 @@ interface TokenSpeed {
   tokenSpeed: number
   tokenCount?: number
   durationMs?: number
-  // Speculative decoding stats (llama.cpp draft model: n_drafted / n_accepted).
+  // Speculative drafted/accepted token counts.
   draftTokensTotal?: number
   draftTokensAccepted?: number
 }

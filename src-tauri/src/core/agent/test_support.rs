@@ -119,13 +119,6 @@ pub(crate) struct RecordingFolderAccess {
 }
 
 impl RecordingFolderAccess {
-    pub(crate) fn allow() -> Self {
-        Self {
-            allowed: true,
-            requests: Mutex::new(Vec::new()),
-        }
-    }
-
     pub(crate) fn deny() -> Self {
         Self {
             allowed: false,
@@ -156,19 +149,6 @@ impl FolderAccessHook for RecordingFolderAccess {
 pub(crate) struct RecordingDesktop {
     clipboard_writes: Mutex<Vec<String>>,
     notifications: Mutex<Vec<(String, String)>>,
-}
-
-impl RecordingDesktop {
-    pub(crate) fn clipboard_writes(&self) -> Vec<String> {
-        self.clipboard_writes
-            .lock()
-            .expect("clipboard writes")
-            .clone()
-    }
-
-    pub(crate) fn notifications(&self) -> Vec<(String, String)> {
-        self.notifications.lock().expect("notifications").clone()
-    }
 }
 
 #[async_trait]

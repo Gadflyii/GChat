@@ -15,7 +15,7 @@ export const PlatformFeatures: Record<PlatformFeature, boolean> = {
   [PlatformFeature.HARDWARE_MONITORING]:
     isPlatformTauri() && !isPlatformIOS() && !isPlatformAndroid(),
 
-  // Local model inference (llama.cpp)
+  // Local model inference (GInfer)
   [PlatformFeature.LOCAL_INFERENCE]:
     isPlatformTauri() && !isPlatformIOS() && !isPlatformAndroid(),
 

@@ -887,12 +887,12 @@ async fn execute_stage(
             .send(AgentEvent::StageQueued {
                 stage_id: spec.id.clone(),
                 name: spec.name.clone(),
-                reason: dispatcher.queue_reason(&role),
+                reason: dispatcher.queue_reason(role),
             })
             .map_err(|e| e.to_string())?;
         Some(
             dispatcher
-                .select(&role, &spec.model_instance_id, context.cancellation)
+                .select(role, &spec.model_instance_id, context.cancellation)
                 .await?,
         )
     } else {
@@ -1339,7 +1339,7 @@ mod tests {
                     serde_json::json!({"tool":"os.shell.run","args":{"cmd":"printf","args":["%s",literal]}}),
                     serde_json::json!({"tool":"os.fs.write","args":{"path":"forbidden.txt","content":"blocked"}}),
                     serde_json::json!({"tool":"reply","args":{"text":"PASS"}}),
-                ] { responses.push(ScriptedResponse::completion(&serde_json::json!([call]).to_string())); }
+                ] { responses.push(ScriptedResponse::completion(serde_json::json!([call]).to_string())); }
             }
             let server = ScriptedGinferServer::start(responses).await;
             let routes = AgentModelRoutes::new(vec![AgentModelRoute { instance_id:"active".into(),model_id:"active".into(),client:server.client() }]).unwrap();

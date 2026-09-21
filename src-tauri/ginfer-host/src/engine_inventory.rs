@@ -209,7 +209,7 @@ pub fn inspect_artifact(path: &Path) -> Result<ArtifactMetadata, String> {
         || !matches!(directory.draft_tp, 0 | 1 | 2 | 4)
         || (directory.draft_tp != 0
             && (directory.draft_tp > directory.tp_size
-                || directory.tp_size % directory.draft_tp != 0))
+                || !directory.tp_size.is_multiple_of(directory.draft_tp)))
     {
         return Err("container declares an invalid TP or draft TP degree".into());
     }

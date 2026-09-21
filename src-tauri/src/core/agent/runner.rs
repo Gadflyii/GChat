@@ -79,21 +79,13 @@ pub struct AgentTurnOutcome {
     pub inference: AgentInferenceMetrics,
 }
 
+#[derive(Default)]
 pub struct RunTurnOptions<'a> {
     pub max_output_tokens: Option<u32>,
     pub additional_skills: &'a [String],
     pub archive_dir: Option<&'a Path>,
 }
 
-impl Default for RunTurnOptions<'_> {
-    fn default() -> Self {
-        Self {
-            max_output_tokens: None,
-            additional_skills: &[],
-            archive_dir: None,
-        }
-    }
-}
 
 pub async fn run_turn(
     input: RunTurnInput<'_>,
@@ -742,7 +734,7 @@ fn validate_batch(calls: &[ToolCallPayload]) -> Result<(), BatchValidationError>
                     .args
                     .get("text")
                     .and_then(serde_json::Value::as_str)
-                    .is_none_or(|text| text.trim().is_empty())
+                    .map_or(true, |text| text.trim().is_empty())
             {
                 issues.push(BatchValidationIssue {
                     kind: BatchValidationKind::EmptyReply,

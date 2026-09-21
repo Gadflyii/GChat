@@ -1,6 +1,5 @@
 use crate::commands::*;
 use crate::types::CpuStaticInfo;
-use tauri::test::mock_app;
 
 #[test]
 fn test_system_info() {

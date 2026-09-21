@@ -1,5 +1,5 @@
 pub mod commands;
-pub(crate) mod context_expansion;
+pub(crate) mod context_error;
 pub mod proxy;
 pub mod remote_provider_commands;
 pub mod responses_shim;

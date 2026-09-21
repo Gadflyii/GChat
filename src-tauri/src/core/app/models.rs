@@ -18,23 +18,19 @@ pub struct AppConfiguration {
     pub data_folder: String,
     #[serde(default = "existing_install_autostart_preference")]
     pub autostart_preference: AutostartPreference,
-    // Add other fields as needed
+}
+
+impl Default for AppConfiguration {
+    fn default() -> Self {
+        Self {
+            data_folder: String::from("./data"),
+            autostart_preference: AutostartPreference::Unmanaged,
+        }
+    }
 }
 
 impl AppConfiguration {
-    pub fn default() -> Self {
-        Self {
-            data_folder: String::from("./data"), // Set a default value for the data_folder
-            autostart_preference: AutostartPreference::Unmanaged,
-            // Add other fields with default values as needed
-        }
-    }
-
-    /// A freshly created configuration. New installs no longer claim a Login
-    /// Item / startup entry: the app has to open fast and cold, and autostart
-    /// is opt-in from Settings. `PendingDefaultOn` is kept as a variant so
-    /// configurations written by older builds still deserialize and complete
-    /// the contract they were created under.
+    /// New installations leave autostart opt-in.
     pub fn new_install() -> Self {
         Self {
             autostart_preference: AutostartPreference::Unmanaged,

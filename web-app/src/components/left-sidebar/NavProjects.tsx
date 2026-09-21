@@ -27,8 +27,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
-  useSidebar,
 } from '@/components/ui/sidebar'
+import { useSidebar } from '@/hooks/use-sidebar'
 import { useLeftPanel } from '@/hooks/useLeftPanel'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
 import { useThreads } from '@/hooks/useThreads'
@@ -212,10 +212,7 @@ export function NavProjects() {
     null
   )
 
-  const sortableProjectIds = useMemo(
-    () => folders.map((f) => f.id),
-    [folders]
-  )
+  const sortableProjectIds = useMemo(() => folders.map((f) => f.id), [folders])
 
   const threadsByProject = useMemo(() => {
     const out: Record<string, Thread[]> = {}

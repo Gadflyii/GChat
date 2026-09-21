@@ -27,8 +27,7 @@ export async function deleteLocalModel(
   useFavoriteModel.getState().removeFavorite(modelId)
   useModelProvider.getState().deleteModel(modelId)
 
-  // Re-list the engines so a model the other llama.cpp provider also registered
-  // (both read the same models directory) disappears too.
+  // Refresh provider inventory after deletion.
   const providers = await serviceHub.providers().getProviders()
   useModelProvider.getState().setProviders(
     providers.map((entry) => ({

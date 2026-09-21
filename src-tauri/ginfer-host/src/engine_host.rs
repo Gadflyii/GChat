@@ -76,7 +76,7 @@ impl LaunchOptions {
         if self.draft_tokens != 0 && self.spec != "dflash" {
             return Err("explicit draft tokens require spec dflash".into());
         }
-        if self.prefill_chunk != 0 && self.prefill_chunk % 128 != 0 {
+        if self.prefill_chunk != 0 && !self.prefill_chunk.is_multiple_of(128) {
             return Err("prefill chunk must be a multiple of 128, or automatic".into());
         }
         if self.spec == "none" && (self.draft_tokens != 0 || self.draft_tp != 0) {

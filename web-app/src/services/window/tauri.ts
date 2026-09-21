@@ -1,3 +1,6 @@
+import { listen } from '@tauri-apps/api/event'
+import { localStorageKey } from '@/constants/localStorage'
+import { createSafeUnlisten } from '@/lib/tauriEvent'
 /**
  * Tauri Window Service - Desktop implementation
  */
@@ -12,28 +15,15 @@ export class TauriWindowService extends DefaultWindowService {
   ): Promise<WebviewWindowInstance> {
     try {
       // Get current theme from localStorage
-      const storedTheme = localStorage.getItem('jan-theme')
+      const storedTheme = localStorage.getItem(localStorageKey.theme)
       let theme: 'light' | 'dark' | undefined = undefined
 
       if (storedTheme) {
         try {
           const themeData = JSON.parse(storedTheme)
           const activeTheme = themeData?.state?.activeTheme
-          const isDark = themeData?.state?.isDark
-
-          // Set theme based on stored preference
-          if (activeTheme === 'auto') {
-            theme = undefined // Let OS decide
-          } else if (
-            activeTheme === 'dark' ||
-            (activeTheme === 'auto' && isDark)
-          ) {
-            theme = 'dark'
-          } else if (
-            activeTheme === 'light' ||
-            (activeTheme === 'auto' && !isDark)
-          ) {
-            theme = 'light'
+          if (activeTheme === 'dark' || activeTheme === 'light') {
+            theme = activeTheme
           }
         } catch (e) {
           console.warn('Failed to parse theme from localStorage:', e)
@@ -55,7 +45,7 @@ export class TauriWindowService extends DefaultWindowService {
       })
 
       // Setup theme listener for this window
-      this.setupThemeListenerForWindow(webviewWindow)
+      await this.setupThemeListenerForWindow(webviewWindow)
 
       return {
         label: config.label,
@@ -180,27 +170,41 @@ export class TauriWindowService extends DefaultWindowService {
     }
   }
 
-  private setupThemeListenerForWindow(window: WebviewWindow): void {
-    // Listen to theme change events from Tauri backend
-    import('@tauri-apps/api/event')
-      .then(({ listen }) => {
-        return listen<string>('theme-changed', async (event) => {
-          const theme = event.payload
-          try {
-            if (theme === 'dark') {
-              await window.setTheme('dark')
-            } else if (theme === 'light') {
-              await window.setTheme('light')
-            } else {
-              await window.setTheme(null)
-            }
-          } catch (err) {
-            console.error('Failed to update window theme:', err)
-          }
-        })
+  private async setupThemeListenerForWindow(
+    window: WebviewWindow
+  ): Promise<void> {
+    let disposed = false
+    let detachTheme: (() => Promise<void>) | undefined
+    await window
+      .once('tauri://destroyed', () => {
+        disposed = true
+        void detachTheme?.()
       })
-      .catch((err) => {
-        console.error('Failed to setup theme listener for window:', err)
+      .then(async (unlistenDestroyed) => {
+        if (disposed) return
+        try {
+          const unlisten = await listen<string>(
+            'theme-changed',
+            async ({ payload }) => {
+              if (disposed) return
+              try {
+                await window.setTheme(
+                  payload === 'dark' || payload === 'light' ? payload : null
+                )
+              } catch (error) {
+                console.error('Failed to update window theme:', error)
+              }
+            }
+          )
+          detachTheme = createSafeUnlisten(unlisten)
+          if (disposed) await detachTheme()
+        } catch (error) {
+          await createSafeUnlisten(unlistenDestroyed)()
+          throw error
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to setup theme listener for window:', error)
       })
   }
 }

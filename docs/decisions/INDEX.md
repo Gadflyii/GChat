@@ -367,3 +367,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-07-28** — [Isolate the unstable Tauri IPC test API](2026-07-28-isolate-tauri-ipc-test-api.md)
 - **2026-07-23** — [Isolate the Windows Common Controls test manifest by feature](2026-07-23-isolate-the-windows-common-controls-test-manifest-by-feature.md)
 - **2026-07-20** — [Open Agent-referenced files from assistant summaries](2026-07-20-open-agent-referenced-files-from-assistant-summaries.md)
+
+- [2026-09-20: Remove retired context reloads and tighten code hygiene](2026-09-20-remove-retired-context-reloads.md)

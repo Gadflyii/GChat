@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_ginfer::state::GinferSession;
 use tokio::sync::Mutex;
 
-use crate::core::server::context_expansion::is_context_limit_error as shared_is_context_limit_error;
+use crate::core::server::context_error::is_context_limit_error as shared_is_context_limit_error;
 use crate::core::state::{ProviderConfig, ServerHandle};
 
 /// Routing facts used to translate upstream failures for local clients.
@@ -243,10 +243,7 @@ fn convert_messages(
             continue;
         }
 
-        let content_array = match content.as_array() {
-            Some(arr) => arr,
-            None => return None,
-        };
+        let content_array = content.as_array()?;
 
         match role {
             "assistant" => {
@@ -1086,7 +1083,7 @@ async fn proxy_request<R: Runtime>(
         } else if !host.is_empty() {
             log::debug!(
                 "CORS preflight: Host is '{host}', trusted hosts: {:?}",
-                &config.trusted_hosts
+                config.trusted_hosts
             );
             is_valid_host(host, &config.trusted_hosts)
         } else {
@@ -2859,7 +2856,7 @@ async fn forward_non_streaming(
 }
 
 #[cfg(test)]
-mod auto_increase_ctx_tests {
+mod context_error_tests {
     use super::*;
 
     // --- is_context_limit_error -------------------------------------------------

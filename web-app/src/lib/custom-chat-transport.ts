@@ -20,13 +20,7 @@ import {
 } from './custom-chat-transport-helpers'
 import type { MCPTool } from '@/types/completion'
 
-/// Hugging Face special-token convention (`<|im_end|>`, `<|eot_id|>`,
-/// `<|endoftext|>`, etc.). Some MLX backends — most visibly the DFlash
-/// custom `stream_generate` path — leak the EOS marker as plain text in
-/// the final delta instead of using it purely as a stop signal. These
-/// markers never appear in well-formed assistant output, so we strip
-/// them unconditionally before the chunk reaches the UI or the saved
-/// message body.
+// Strip leaked special-token markers before displaying or saving text.
 const SPECIAL_TOKEN_REGEX = /<\|[a-zA-Z0-9_]+\|>/g
 
 /// `streamText` transform that scrubs the special-token markers from
@@ -88,12 +82,6 @@ import {
 /// Remote providers (OpenAI, Anthropic, …) are unaffected.
 const LOCAL_INFERENCE_PROVIDERS = new Set<string>(['ginfer'])
 
-/// Pull audio attachments out of the latest user message as `input_audio`
-/// payloads. Audio is carried in the UI as a `file` part with an `audio/*`
-/// media type, but the `@ai-sdk/openai-compatible` message converter only
-/// understands `image/*` file parts and throws `UnsupportedFunctionalityError`
-/// on anything else — so audio never travels through the normal message path.
-/// Instead we extract it here and inject it at the MLX fetch layer.
 /// Whether a part may travel to the model as-is.
 ///
 /// `image/*` is the only file part any converter we route to accepts:
@@ -613,13 +601,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     let preparedMessages = stripUnsupportedFileParts(
       this.mapUserInlineAttachments(messagesToConvert)
     )
-    // Local backends serialize tool results to a `role: "tool"` text message
-    // (JSON.stringify), so an image in a tool result (e.g. an MCP screenshot
-    // tool) would otherwise be sent as full base64 TEXT and flood the context
-    // window — the root cause of ATO-208's MLX 400s. Strip the base64 out of
-    // the model payload (placeholder) and, for vision models, re-attach the
-    // image as a proper multimodal user message. Cloud providers are left
-    // untouched (they have large contexts and handle this differently).
+    // Keep tool-image base64 out of text context; Vision receives image parts.
     if (LOCAL_INFERENCE_PROVIDERS.has(effectiveProviderName)) {
       const supportsVision =
         useModelProvider
@@ -745,12 +727,12 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           const durationMs = streamStartTime ? Date.now() - streamStartTime : 0
           const durationSec = durationMs / 1000
 
-          // Use provider's outputTokens, or llama.cpp completionTokens, or fall back to text delta count
+          // Prefer reported output tokens; fall back to text delta count.
           const outputTokens = usage?.outputTokens ?? 0
           const inputTokens = usage?.inputTokens
 
           // Prefer the provider-reported decode TPS (mlx-vlm `generation_tps`
-          // or llama.cpp / dflash `predicted_per_second`). Fall back to a
+          // or timing `predicted_per_second`). Fall back to a
           // wall-clock estimate measured from the first delta — but only if
           // the timer ever started AND we actually produced tokens (e.g. a
           // pure tool-call response yields 0 tokens and no delta, so the

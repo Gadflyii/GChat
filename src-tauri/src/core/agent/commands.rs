@@ -328,7 +328,7 @@ async fn list_workspace_directory(
             .to_string();
         entries.push(AgentWorkspaceEntry {
             name: entry.file_name().to_string_lossy().into_owned(),
-            path: workspace_relative_path(&root, &entry_path)?,
+            path: workspace_relative_path(root, &entry_path)?,
             kind,
             size: metadata
                 .as_ref()
@@ -670,16 +670,16 @@ pub async fn agent_run_turn<R: Runtime>(
                         }
                     }
                 }
-                let mut record = AgentRunRecord::completed(
-                    &storage_id,
-                    &request.run_id,
-                    &request.session_id,
-                    &user_message,
-                    &definition,
+                let mut record = AgentRunRecord::completed(super::runs::CompletedRun {
+                    id: &storage_id,
+                    run_id: &request.run_id,
+                    session_id: &request.session_id,
+                    user_message: &user_message,
+                    definition: &definition,
                     started_at_ms,
-                    &recorded_events,
-                    &run_result,
-                );
+                    events: &recorded_events,
+                    result: &run_result,
+                });
                 let record_data = data_folder.clone();
                 record.workspace = Some(working_dir.to_string_lossy().into_owned());
                 let output_workspace = data_folder.join("agent-runs").join(&storage_id);
@@ -919,7 +919,7 @@ async fn resolve_workspace_candidate(root: &Path, relative: &str) -> Result<Path
     let candidate = tokio::fs::canonicalize(root.join(relative))
         .await
         .map_err(|error| format!("Could not resolve workspace path: {error}"))?;
-    if !candidate.starts_with(&root) {
+    if !candidate.starts_with(root) {
         return Err("Workspace path escapes the selected Agent workspace".into());
     }
     Ok(candidate)

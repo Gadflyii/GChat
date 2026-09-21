@@ -60,18 +60,6 @@ export default defineConfig(({ mode }) => {
 
       VERSION: JSON.stringify(tauriConfig.version),
 
-      // Legacy compile-time constant: the original `janhq/model-catalog`
-      // CDN. Kept for one release window so any out-of-band code path that
-      // still reads `MODEL_CATALOG_URL` does not break. New runtime code
-      // (see `services/model-catalog-registry.ts`) reads the curated
-      // catalog from `AtomicBot-ai/atomic-chat-model-catalog`'s
-      // `dist/` folder on main via `raw.githubusercontent.com` (and the
-      // override `VITE_MODEL_CATALOG_URL` / `VITE_MODEL_CATALOG_INDEX_URL`).
-      // Once the legacy consumers are gone, this define block can be deleted.
-      MODEL_CATALOG_URL: JSON.stringify(
-        env.VITE_MODEL_CATALOG_URL ||
-          'https://raw.githubusercontent.com/AtomicBot-ai/atomic-chat-model-catalog/main/dist/catalog.json'
-      ),
       AUTO_UPDATER_DISABLED: JSON.stringify(
         env.AUTO_UPDATER_DISABLED === 'true'
       ),
@@ -80,8 +68,7 @@ export default defineConfig(({ mode }) => {
           env.FORCE_ONBOARDING === 'true'
       ),
       // Dev-only (`make dev-fresh`): wipes webview localStorage once per app
-      // launch so every startup runs the fresh-install path (onboarding,
-      // turboquant disabled, upstream default). false in every shipped build.
+      // launch to exercise onboarding. Disabled in shipped builds.
       FRESH_INSTALL: JSON.stringify(
         process.env.FRESH_INSTALL === 'true' || env.FRESH_INSTALL === 'true'
       ),

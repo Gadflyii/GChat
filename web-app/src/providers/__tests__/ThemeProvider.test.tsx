@@ -1,82 +1,81 @@
-import { render } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { act, render } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { listen } from '@tauri-apps/api/event'
 import { ThemeProvider } from '../ThemeProvider'
 import { useTheme } from '@/hooks/useTheme'
 
-// Mock hooks
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }))
+vi.mock('@/lib/platform/utils', () => ({ isPlatformTauri: () => true }))
 vi.mock('@/hooks/useTheme', () => ({
-  useTheme: vi.fn(() => ({
-    activeTheme: 'light',
-    setIsDark: vi.fn(),
-    setTheme: vi.fn(),
-  })),
-  checkOSDarkMode: vi.fn(() => false),
+  useTheme: vi.fn(),
+  checkOSDarkMode: () => false,
 }))
 
 describe('ThemeProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-  })
-
-  it('renders without crashing', () => {
-    render(<ThemeProvider />)
-    
-    // ThemeProvider doesn't render anything visible, just manages theme state
-    expect(document.body).toBeInTheDocument()
-  })
-
-  it('calls theme hooks on mount', () => {
-    render(<ThemeProvider />)
-    
-    // Verify that the theme hook was called
-    expect(useTheme).toHaveBeenCalled()
-  })
-
-  it('sets up media query listener for auto theme', () => {
-    const mockSetIsDark = vi.fn()
-    const mockSetTheme = vi.fn()
-    
-    vi.mocked(useTheme).mockReturnValue({
-      activeTheme: 'auto',
-      setIsDark: mockSetIsDark,
-      setTheme: mockSetTheme,
-    })
-    
-    render(<ThemeProvider />)
-    
-    // Theme provider should call setTheme when in auto mode
-    expect(mockSetTheme).toHaveBeenCalledWith('auto')
-  })
-
-  it('handles light theme correctly', () => {
-    const mockSetIsDark = vi.fn()
-    const mockSetTheme = vi.fn()
-    
-    vi.mocked(useTheme).mockReturnValue({
-      activeTheme: 'light',
-      setIsDark: mockSetIsDark,
-      setTheme: mockSetTheme,
-    })
-    
-    render(<ThemeProvider />)
-    
-    // Should be called on mount
-    expect(useTheme).toHaveBeenCalled()
-  })
-
-  it('handles dark theme correctly', () => {
-    const mockSetIsDark = vi.fn()
-    const mockSetTheme = vi.fn()
-    
     vi.mocked(useTheme).mockReturnValue({
       activeTheme: 'dark',
-      setIsDark: mockSetIsDark,
-      setTheme: mockSetTheme,
+      isDark: true,
+      setIsDark: vi.fn(),
+      setTheme: vi.fn(),
     })
-    
+    vi.mocked(listen).mockResolvedValue(vi.fn())
+  })
+
+  it('applies the selected light and dark styles', () => {
+    const { rerender } = render(<ThemeProvider />)
+    expect(document.documentElement).toHaveClass('dark')
+    vi.mocked(useTheme).mockReturnValue({
+      ...useTheme(),
+      activeTheme: 'light',
+      isDark: false,
+    })
+    rerender(<ThemeProvider />)
+    expect(document.documentElement).not.toHaveClass('dark')
+  })
+
+  it('follows the OS in automatic mode', () => {
+    const setIsDark = vi.fn()
+    const setTheme = vi.fn()
+    vi.mocked(useTheme).mockReturnValue({
+      activeTheme: 'auto',
+      isDark: true,
+      setIsDark,
+      setTheme,
+    })
     render(<ThemeProvider />)
-    
-    // Should be called on mount
-    expect(useTheme).toHaveBeenCalled()
+    expect(setIsDark).toHaveBeenCalledWith(false)
+    expect(setTheme).toHaveBeenCalledWith('auto')
+  })
+
+  it('detaches a listener that finishes registering after unmount', async () => {
+    let finish!: (unlisten: () => void) => void
+    vi.mocked(listen).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      })
+    )
+    const detach = vi.fn()
+    const { unmount } = render(<ThemeProvider />)
+    unmount()
+    await act(async () => {
+      finish(detach)
+    })
+    expect(detach).toHaveBeenCalledTimes(1)
+  })
+
+  it('detaches a registered listener when the selected theme changes', async () => {
+    const detach = vi.fn()
+    vi.mocked(listen).mockResolvedValue(detach)
+    const { rerender } = render(<ThemeProvider />)
+    await act(async () => {})
+    vi.mocked(useTheme).mockReturnValue({
+      ...useTheme(),
+      activeTheme: 'light',
+      isDark: false,
+    })
+    rerender(<ThemeProvider />)
+    expect(detach).toHaveBeenCalledTimes(1)
   })
 })

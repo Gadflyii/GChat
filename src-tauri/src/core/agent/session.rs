@@ -147,7 +147,7 @@ impl AgentSessionState {
         }
         if self.loaded_tools.len() > LOADED_TOOLS_CAP
             || self.loaded_tools.iter().any(|name| {
-                descriptor_for(name).is_none_or(|descriptor| descriptor.tier != ToolTier::Rare)
+                descriptor_for(name).map_or(true, |descriptor| descriptor.tier != ToolTier::Rare)
             })
         {
             return Err("Agent session contains invalid loaded tools".into());

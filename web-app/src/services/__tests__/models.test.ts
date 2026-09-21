@@ -45,13 +45,6 @@ vi.mock('@tauri-apps/plugin-http', () => ({
 // Mock fetch
 global.fetch = vi.fn()
 
-// Mock MODEL_CATALOG_URL
-Object.defineProperty(global, 'MODEL_CATALOG_URL', {
-  value: 'https://example.com/models',
-  writable: true,
-  configurable: true,
-})
-
 describe('DefaultModelsService', () => {
   let modelsService: DefaultModelsService
 

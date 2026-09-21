@@ -1,8 +1,8 @@
+import { canSelectChatAgentMode } from '@/lib/chat-agent-mode'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  canSelectChatAgentMode,
   ChatAgentModeSwitch,
 } from '@/containers/ChatAgentModeSwitch'
 import { AgentTaskSuggestions } from '@/containers/AgentTaskSuggestions'

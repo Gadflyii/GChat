@@ -592,10 +592,8 @@ Two independent version dials:
   `useModelSources` — `model-catalog-store` owns the localStorage cache
   via `model-catalog-registry`. Double-writing a multi-MB catalog hits
   `QuotaExceededError` fast.
-- **Do not** reach for the old `MODEL_CATALOG_URL` global. It still
-  exists in `vite.config.ts` as a transitional alias but new code must
-  read from `useModelCatalogStore` (React) or `getCatalogSync()`
-  (non-React).
+- Read catalogs from `useModelCatalogStore` (React) or `getCatalogSync()`
+  (non-React). The obsolete `MODEL_CATALOG_URL` global has been removed.
 - **Do not** introduce another search library on top of MiniSearch.
   The Hub UI used to keep Fuse.js around for this; it is now removed
   from `package.json` and must not return.

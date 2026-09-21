@@ -17,45 +17,7 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { saveProviderApiKey } from '@/lib/provider-api-key'
 import { cn, getProviderTitle } from '@/lib/utils'
-import {
-  isLocalProvider,
-  isLoopbackUrl,
-} from '@/utils/registerRemoteProvider'
-
-/**
- * Providers that ship in the list but cannot be configured from a key alone.
- * Azure's `base_url` is the literal placeholder
- * `https://YOUR-RESOURCE-NAME.openai.azure.com/openai/v1` — every account has
- * its own resource host, so a key-only save produces a provider that looks
- * connected and fails on first request.
- */
-const KEY_ONLY_UNSUPPORTED = new Set(['azure'])
-
-/**
- * The cloud providers worth offering during onboarding: everything that takes
- * an API key and talks to somebody else's server.
- *
- * Sourced from the live provider list rather than the remote registry, because
- * `updateProvider` silently no-ops on a name that is not already in that list —
- * so offering a card the store has never heard of would save nothing, with no
- * error anywhere.
- *
- * Order is the registry's own (flagship-first), deliberately not sorted.
- */
-export function selectCloudGalleryProviders(
-  providers: ModelProvider[]
-): ModelProvider[] {
-  return providers.filter(
-    (p) =>
-      !isLocalProvider(p.provider) &&
-      // Catches `ollama` and any future LM-Studio-style entry without
-      // hardcoding an id: a loopback base URL means the "cloud" is this machine.
-      !isLoopbackUrl(p.base_url) &&
-      !p.persist &&
-      !KEY_ONLY_UNSUPPORTED.has(p.provider) &&
-      p.settings?.some((s) => s.key === 'api-key')
-  )
-}
+import { selectCloudGalleryProviders } from '@/lib/cloud-gallery'
 
 type Step = { name: 'gallery' } | { name: 'key'; provider: ModelProvider }
 
@@ -72,14 +34,6 @@ type AddCloudProviderDialogProps = {
   onKeySaved: (result: CloudProviderSaveResult) => void
 }
 
-/**
- * Two-step "connect a cloud provider" flow: pick a provider, paste its key.
- *
- * One `Dialog` with internal step state rather than two components, so focus
- * management, the overlay and Escape handling stay in one place and the parent
- * has a single `open` boolean to drive (onboarding's auto-exit timer depends on
- * knowing whether this is open).
- */
 export function AddCloudProviderDialog({
   open,
   onOpenChange,

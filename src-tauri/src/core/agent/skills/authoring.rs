@@ -187,12 +187,12 @@ fn import_skill_directory(data_folder: &Path, source: &Path) -> Result<String, S
         let _ = fs::remove_dir_all(&destination);
         format!("Failed to resolve imported skill destination: {error}")
     })?;
-    if destination_canonical.starts_with(&source) {
+    if destination_canonical.starts_with(source) {
         let _ = fs::remove_dir_all(&destination);
         return Err("The Agent skills root cannot be imported as a skill".into());
     }
     let mut budget = ImportBudget::default();
-    let result = copy_directory_contents(&source, &destination, &mut budget);
+    let result = copy_directory_contents(source, &destination, &mut budget);
     if result.is_err() {
         let _ = fs::remove_dir_all(&destination);
     }
@@ -231,7 +231,7 @@ fn import_skill_archive(data_folder: &Path, source: &Path) -> Result<String, Str
         .map_err(|error| format!("Uploaded skill is not a valid ZIP archive: {error}"))?;
     let manifest_index = find_archive_manifest(&mut archive)?;
     let (name, root) = {
-        let mut manifest = archive
+        let manifest = archive
             .by_index(manifest_index)
             .map_err(|error| format!("Failed to open archived SKILL.md: {error}"))?;
         if manifest.size() > MAX_IMPORTED_BYTES {
@@ -271,11 +271,10 @@ fn find_archive_manifest(archive: &mut zip::ZipArchive<File>) -> Result<usize, S
         let path = entry
             .enclosed_name()
             .ok_or_else(|| "Archive contains an unsafe path".to_string())?;
-        if !entry.is_dir() && path.file_name().is_some_and(|name| name == "SKILL.md") {
-            if manifest_index.replace(index).is_some() {
+        if !entry.is_dir() && path.file_name().is_some_and(|name| name == "SKILL.md")
+            && manifest_index.replace(index).is_some() {
                 return Err("Archive must contain exactly one SKILL.md file".into());
             }
-        }
     }
     manifest_index.ok_or_else(|| "Archive must include a SKILL.md file".into())
 }

@@ -1,16 +1,13 @@
 //! Direct OpenAI-compatible HTTP client to the local `ginfer-serve` backend.
 
-use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use tauri_plugin_ginfer::state::GinferState;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
-use crate::core::server::context_expansion::is_context_limit_error;
 
 use super::definitions::AgentReasoningEffort;
 use super::prompt::ITERATION_ONE_TOOLS;
@@ -36,15 +33,6 @@ pub struct GinferSessionTarget {
     pub connection: GinferConnection,
     pub model_id: String,
     pub has_vision: bool,
-}
-
-#[async_trait]
-pub trait ContextExpansionHook: Send + Sync {
-    async fn expand(
-        &self,
-        target: &GinferSessionTarget,
-        cancellation: &CancellationToken,
-    ) -> Result<GinferSessionTarget, String>;
 }
 
 #[derive(Debug, Clone)]
@@ -222,8 +210,7 @@ struct GinferMetrics {
 
 pub struct GinferClient {
     client: reqwest::Client,
-    target: RwLock<GinferSessionTarget>,
-    context_expansion: Option<Arc<dyn ContextExpansionHook>>,
+    target: GinferSessionTarget,
 }
 
 impl GinferClient {
@@ -234,16 +221,8 @@ impl GinferClient {
             .map_err(|error| GinferClientError::Transport(error.to_string()))?;
         Ok(Self {
             client,
-            target: RwLock::new(target.clone()),
-            context_expansion: None,
+            target: target.clone(),
         })
-    }
-
-    pub fn with_context_expansion(mut self, hook: Arc<dyn ContextExpansionHook>) -> Self {
-        if matches!(self.target().connection, GinferConnection::Local { .. }) {
-            self.context_expansion = Some(hook);
-        }
-        self
     }
 
     async fn request_target(
@@ -284,15 +263,8 @@ impl GinferClient {
         }
     }
 
-    pub fn retarget(&self, target: &GinferSessionTarget) {
-        *self.target.write().expect("ginfer target lock poisoned") = target.clone();
-    }
-
     pub fn target(&self) -> GinferSessionTarget {
-        self.target
-            .read()
-            .expect("ginfer target lock poisoned")
-            .clone()
+        self.target.clone()
     }
 
     pub async fn fetch_context_window(
@@ -440,38 +412,7 @@ impl GinferClient {
         cancellation: &CancellationToken,
     ) -> Result<reqwest::Response, GinferClientError> {
         let target = self.target();
-        match self.send_to_target(&target, request, cancellation).await {
-            Err(GinferClientError::Http { status, detail })
-                if is_context_limit_error(status, &detail) && self.context_expansion.is_some() =>
-            {
-                let hook = self.context_expansion.as_ref().unwrap();
-                let replacement = match hook.expand(&target, cancellation).await {
-                    Ok(replacement) => replacement,
-                    Err(_) if cancellation.is_cancelled() => {
-                        return Err(GinferClientError::Cancelled);
-                    }
-                    Err(error) => return Err(GinferClientError::Transport(error)),
-                };
-                if !model_ids_match(&replacement.model_id, &target.model_id) {
-                    return Err(GinferClientError::Transport(
-                        "Context expansion returned a different model".into(),
-                    ));
-                }
-                self.retarget(&replacement);
-                match self.fetch_context_window(cancellation).await {
-                    Err(GinferClientError::Cancelled) => {
-                        return Err(GinferClientError::Cancelled);
-                    }
-                    Err(error) => {
-                        log::warn!("Agent context profile refresh failed after expansion: {error}");
-                    }
-                    Ok(_) => {}
-                }
-                self.send_to_target(&replacement, request, cancellation)
-                    .await
-            }
-            result => result,
-        }
+        self.send_to_target(&target, request, cancellation).await
     }
 
     async fn send_to_target(
@@ -681,7 +622,7 @@ pub fn parse_tool_calls(raw: &str) -> Result<ParsedToolCalls, GinferClientError>
     let atem_start = ["atem:function_calls", "<atem:invoke"].iter()
         .filter_map(|marker| body.find(marker)).min();
     let json_start = body.find(['{', '[']);
-    if atem_start.is_some_and(|position| json_start.is_none_or(|json| position < json)) {
+    if atem_start.is_some_and(|position| json_start.map_or(true, |json| position < json)) {
         return Ok(ParsedToolCalls {
             calls: parse_atem_tool_calls(&body)?,
             reasoning: (!reasoning.is_empty()).then_some(reasoning),
@@ -1188,43 +1129,11 @@ fn model_ids_match(left: &str, right: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use reqwest::StatusCode;
 
     use super::*;
     use crate::core::agent::test_support::{ScriptedGinferServer, ScriptedResponse};
-
-    struct StaticExpansion {
-        calls: AtomicUsize,
-        result: Result<GinferSessionTarget, String>,
-    }
-
-    #[async_trait]
-    impl ContextExpansionHook for StaticExpansion {
-        async fn expand(
-            &self,
-            _target: &GinferSessionTarget,
-            _cancellation: &CancellationToken,
-        ) -> Result<GinferSessionTarget, String> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            self.result.clone()
-        }
-    }
-
-    struct CancellingExpansion;
-
-    #[async_trait]
-    impl ContextExpansionHook for CancellingExpansion {
-        async fn expand(
-            &self,
-            _target: &GinferSessionTarget,
-            cancellation: &CancellationToken,
-        ) -> Result<GinferSessionTarget, String> {
-            cancellation.cancel();
-            Err("cancelled".into())
-        }
-    }
 
     #[test]
     fn normal_completion_uses_atomic_agent_limit() {
@@ -1429,132 +1338,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retries_once_after_context_expansion_and_retargets() {
-        let first = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
+    async fn context_overflow_preserves_target_and_does_not_retry() {
+        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
             StatusCode::BAD_REQUEST,
             "the request exceeds the available context size",
-        )])
-        .await;
-        let replacement =
-            ScriptedGinferServer::start(vec![ScriptedResponse::completion("ok")]).await;
-        let replacement_target = replacement.client().target();
-        let hook = Arc::new(StaticExpansion {
-            calls: AtomicUsize::new(0),
-            result: Ok(replacement_target.clone()),
-        });
-        let client = first.client().with_context_expansion(hook.clone());
-
-        let completion = client
-            .complete(
-                &CompletionRequest::tool_call("prompt", None),
-                &CancellationToken::new(),
-            )
-            .await
-            .expect("retry after context expansion");
-
-        assert_eq!(completion.content, "ok");
-        assert_eq!(hook.calls.load(Ordering::SeqCst), 1);
-        assert_eq!(client.target().connection, replacement_target.connection);
-        assert_eq!(first.requests().len(), 1);
-        assert_eq!(replacement.requests().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn does_not_expand_for_non_context_http_errors() {
-        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "backend crashed",
-        )])
-        .await;
-        let hook = Arc::new(StaticExpansion {
-            calls: AtomicUsize::new(0),
-            result: Err("must not run".into()),
-        });
-        let client = server.client().with_context_expansion(hook.clone());
-
-        let error = client
-            .complete(
-                &CompletionRequest::tool_call("prompt", None),
-                &CancellationToken::new(),
-            )
-            .await
-            .unwrap_err();
-
-        assert!(matches!(error, GinferClientError::Http { status: 500, .. }));
-        assert_eq!(hook.calls.load(Ordering::SeqCst), 0);
-    }
-
-    #[tokio::test]
-    async fn reports_context_expansion_failure_without_second_completion() {
-        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "context length exceeded",
-        )])
-        .await;
-        let hook = Arc::new(StaticExpansion {
-            calls: AtomicUsize::new(0),
-            result: Err("timeout_after_60s".into()),
-        });
-        let client = server.client().with_context_expansion(hook.clone());
-
-        let error = client
-            .complete(
-                &CompletionRequest::tool_call("prompt", None),
-                &CancellationToken::new(),
-            )
-            .await
-            .unwrap_err();
-
-        assert!(error.to_string().contains("timeout_after_60s"));
-        assert_eq!(hook.calls.load(Ordering::SeqCst), 1);
-        assert_eq!(server.requests().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn cancellation_during_context_expansion_stops_without_retry() {
-        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
-            StatusCode::BAD_REQUEST,
-            "context size exceeded",
-        )])
-        .await;
-        let client = server
-            .client()
-            .with_context_expansion(Arc::new(CancellingExpansion));
-        let cancellation = CancellationToken::new();
-
-        let error = client
-            .complete(&CompletionRequest::tool_call("prompt", None), &cancellation)
-            .await
-            .unwrap_err();
-
-        assert!(matches!(error, GinferClientError::Cancelled));
-        assert_eq!(server.requests().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn rejects_context_expansion_target_from_another_model() {
-        let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
-            StatusCode::BAD_REQUEST,
-            "context size exceeded",
-        )])
-        .await;
-        let mut replacement = server.client().target();
-        replacement.model_id = "some-other-model".into();
-        let hook = Arc::new(StaticExpansion {
-            calls: AtomicUsize::new(0),
-            result: Ok(replacement),
-        });
-        let client = server.client().with_context_expansion(hook);
-
-        let error = client
-            .complete(
-                &CompletionRequest::tool_call("prompt", None),
-                &CancellationToken::new(),
-            )
-            .await
-            .unwrap_err();
-
-        assert!(error.to_string().contains("different model"));
+        )]).await;
+        let client = server.client();
+        let target = client.target();
+        let error = client.complete(
+            &CompletionRequest::tool_call("prompt", None),
+            &CancellationToken::new(),
+        ).await.unwrap_err();
+        assert!(matches!(error, GinferClientError::Http { status: 400, .. }));
+        assert_eq!(client.target(), target);
         assert_eq!(server.requests().len(), 1);
     }
 

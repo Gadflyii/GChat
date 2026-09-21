@@ -120,9 +120,8 @@ fn extract_archive(
         let plans = validate_zip_entries(&mut archive, destination, overwrite)?;
         let total_bytes: u64 = plans.iter().map(|entry| entry.size).sum();
         std::fs::create_dir_all(destination).map_err(io_error)?;
-        for index in 0..archive.len() {
+        for (index, plan) in plans.iter().enumerate() {
             let mut entry = archive.by_index(index).map_err(io_error)?;
-            let plan = &plans[index];
             if plan.is_dir {
                 std::fs::create_dir_all(&plan.output).map_err(io_error)?;
                 continue;

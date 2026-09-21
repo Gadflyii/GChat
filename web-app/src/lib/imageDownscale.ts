@@ -1,9 +1,4 @@
-/**
- * Result of normalizing an image. `mimeType` may differ from the input: WebP is
- * transcoded to PNG (not every vision backend — notably local llama.cpp — can
- * decode WebP), and downscaled non-PNG images are re-encoded as JPEG to keep the
- * payload small.
- */
+/** Normalized image; WebP becomes PNG and resized non-PNG input becomes JPEG. */
 export type DownscaledImage = {
   dataUrl: string
   base64: string

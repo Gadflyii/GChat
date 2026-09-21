@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 import { useTheme, checkOSDarkMode } from '@/hooks/useTheme'
 import { createSafeUnlisten } from '@/lib/tauriEvent'
@@ -51,28 +52,27 @@ export function ThemeProvider() {
 
     // Listen to Tauri native theme events (fallback for platforms where
     // the media query listener may not fire)
+    let disposed = false
     let unlistenTauri: (() => void) | undefined
 
     if (isPlatformTauri()) {
-      import('@tauri-apps/api/event')
-        .then(({ listen }) => {
-          return listen<string>('theme-changed', (event) => {
-            if (activeTheme === 'auto') {
-              const isDark = event.payload === 'dark'
-              setIsDark(isDark)
-            }
-          })
-        })
+      listen<string>('theme-changed', (event) => {
+        if (!disposed && activeTheme === 'auto') {
+          setIsDark(event.payload === 'dark')
+        }
+      })
         .then((unlisten) => {
-          unlistenTauri = createSafeUnlisten(unlisten)
+          const detach = createSafeUnlisten(unlisten)
+          if (disposed) void detach()
+          else unlistenTauri = detach
         })
         .catch((err) => {
           console.error('Failed to setup Tauri theme listener:', err)
         })
     }
 
-    // Clean up
     return () => {
+      disposed = true
       clearTimeout(timeoutId)
       mediaQuery.removeEventListener('change', handleMediaChange)
       if (unlistenTauri) {

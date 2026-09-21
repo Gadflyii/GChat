@@ -3,24 +3,8 @@ import { type UIMessage } from '@ai-sdk/react'
 import { downscaleImageDataUrl } from './imageDownscale'
 
 /**
- * Tool results (especially MCP image tools such as Blender's
- * `get_viewport_screenshot`) can carry full-resolution images. Two problems
- * follow for local models (MLX / llama.cpp), see ATO-208/ATO-170/ATO-10:
- *
- *  1. The image base64 is never downscaled (the "Max image size" guard only
- *     runs on user-uploaded attachments), so a single screenshot is huge.
- *  2. The AI SDK serializes a tool result into a `role: "tool"` message via
- *     `JSON.stringify(content)` — i.e. the entire base64 is sent to the model
- *     as TEXT, tokenized in full. On a default 4096-token MLX context this
- *     instantly overflows and the next request 400s.
- *
- * This module addresses both:
- *  - {@link downscaleToolResultContent} shrinks image blocks at ingest time so
- *    the stored history / UI preview stays reasonable.
- *  - {@link prepareToolResultImagesForModel} strips the base64 out of the
- *    model-bound copy (replacing it with a short placeholder) and, for
- *    vision-capable models, re-attaches the image as a proper multimodal
- *    `image_url` user message so the model can actually see it.
+ * Downscale stored tool images. For local inference, replace base64 tool text
+ * with placeholders and attach images as multimodal input when Vision is enabled.
  */
 
 type UnknownRecord = Record<string, unknown>

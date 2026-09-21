@@ -66,16 +66,13 @@ import {
 } from '@/lib/smart-context'
 
 
-/**
- * llama.cpp-style `timings` block emitted by some local inference servers.
- */
+/** Optional server timing counters. */
 interface ServerTimings {
   prompt_n?: number
   predicted_n?: number
   predicted_per_second?: number
   prompt_per_second?: number
-  // Speculative decoding (draft model / MTP): total drafted and accepted
-  // tokens, emitted by llama.cpp when a draft mechanism is active.
+  // Speculative draft and accepted-token counts.
   draft_n?: number
   draft_n_accepted?: number
 }
@@ -153,15 +150,7 @@ const hasAnyMetric = (m: NormalizedMetrics): boolean =>
   m.promptPerSecond != null ||
   m.ginferFinishReason != null
 
-/**
- * Merge `usage` (mlx-vlm shape) and `timings` (llama.cpp / dflash shape)
- * into a single normalized view. Usage takes priority for token counts
- * unconditionally, but for TPS fields we only let usage override timings
- * when the usage value is *positive* — otherwise a server that emits
- * `usage` with token counts only (the dflash case: it ships
- * `predicted_per_second` exclusively in `timings`) would clobber a
- * perfectly valid TPS reading with `null`.
- */
+// Prefer usage counts, but preserve timing rates when usage has no positive rate.
 const mergeMetrics = (
   usage: ServerUsage | undefined,
   timings: ServerTimings | undefined,

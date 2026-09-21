@@ -124,7 +124,7 @@ const ROW_MAX_CHARS: usize = 32;
 
 #[cfg(desktop)]
 #[inline]
-fn put_pixel(buf: &mut [u8], x: u32, y: u32, width: u32, r: u8, g: u8, b: u8, a: u8) {
+fn put_pixel(buf: &mut [u8], x: u32, y: u32, width: u32, [r, g, b, a]: [u8; 4]) {
     let idx = ((y * width + x) * 4) as usize;
     buf[idx] = r;
     buf[idx + 1] = g;
@@ -132,12 +132,10 @@ fn put_pixel(buf: &mut [u8], x: u32, y: u32, width: u32, r: u8, g: u8, b: u8, a:
     buf[idx + 3] = a;
 }
 
-/// Premultiplied straight-alpha source-over compositing. Used by the copy icon
-/// so the back rectangle visibly "peeks out" from behind the front one without
-/// fully obscuring it.
+/// Source-over compositing of straight-alpha pixels.
 #[cfg(desktop)]
 #[inline]
-fn blend_pixel(buf: &mut [u8], x: u32, y: u32, width: u32, r: u8, g: u8, b: u8, a: u8) {
+fn blend_pixel(buf: &mut [u8], x: u32, y: u32, width: u32, [r, g, b, a]: [u8; 4]) {
     if a == 0 {
         return;
     }
@@ -251,7 +249,7 @@ pub fn render_dot(running: bool) -> Image<'static> {
                 0.0
             };
             if alpha > 0.0 {
-                put_pixel(&mut buf, x, y, canvas, r, g, b, alpha.round() as u8);
+                put_pixel(&mut buf, x, y, canvas, [r, g, b, alpha.round() as u8]);
             }
         }
     }
@@ -266,10 +264,8 @@ pub fn render_dot(running: bool) -> Image<'static> {
 fn draw_rounded_rect(
     buf: &mut [u8],
     canvas_w: u32,
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
+    (x, y): (u32, u32),
+    (w, h): (u32, u32),
     radius: f32,
     color: (u8, u8, u8),
     alpha: u8,
@@ -295,7 +291,7 @@ fn draw_rounded_rect(
                 continue;
             }
             let a = (alpha as f32 * mask).round() as u8;
-            blend_pixel(buf, x + dx, y + dy, canvas_w, color.0, color.1, color.2, a);
+            blend_pixel(buf, x + dx, y + dy, canvas_w, [color.0, color.1, color.2, a]);
         }
     }
 }
@@ -319,10 +315,8 @@ pub fn render_copy_icon() -> Image<'static> {
     draw_rounded_rect(
         &mut buf,
         size,
-        5 * SCALE,
-        1 * SCALE,
-        8 * SCALE,
-        10 * SCALE,
+        (5 * SCALE, SCALE),
+        (8 * SCALE, 10 * SCALE),
         radius,
         color,
         170,
@@ -331,10 +325,8 @@ pub fn render_copy_icon() -> Image<'static> {
     draw_rounded_rect(
         &mut buf,
         size,
-        2 * SCALE,
-        4 * SCALE,
-        8 * SCALE,
-        10 * SCALE,
+        (2 * SCALE, 4 * SCALE),
+        (8 * SCALE, 10 * SCALE),
         radius,
         color,
         235,
@@ -395,10 +387,8 @@ pub fn render_segmented_bar(percent: u8) -> Image<'static> {
             draw_rounded_rect(
                 &mut buf,
                 canvas_w,
-                x,
-                0,
-                seg_w,
-                canvas_h,
+                (x, 0),
+                (seg_w, canvas_h),
                 segment_radius,
                 (r, g, b),
                 255,
@@ -409,10 +399,8 @@ pub fn render_segmented_bar(percent: u8) -> Image<'static> {
             draw_rounded_rect(
                 &mut buf,
                 canvas_w,
-                x,
-                0,
-                seg_w,
-                canvas_h,
+                (x, 0),
+                (seg_w, canvas_h),
                 segment_radius,
                 rail,
                 90,
@@ -469,7 +457,7 @@ pub async fn update_tray_status(app: AppHandle, payload: TrayStatusPayload) -> R
     if payload.server_running && !payload.server_url.is_empty() {
         handles
             .server_url_row
-            .set_text(&truncate_tail(&payload.server_url, ROW_MAX_CHARS))
+            .set_text(truncate_tail(&payload.server_url, ROW_MAX_CHARS))
             .map_err(|e| e.to_string())?;
         handles
             .server_url_row

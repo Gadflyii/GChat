@@ -15,6 +15,12 @@ pub struct DownloadTask {
     pub superseded: Arc<AtomicBool>,
 }
 
+impl Default for DownloadTask {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DownloadTask {
     pub fn new() -> Self {
         Self {

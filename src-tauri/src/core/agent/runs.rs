@@ -75,17 +75,29 @@ struct RunHistory {
     runs: Vec<AgentRunRecord>,
 }
 
+pub struct CompletedRun<'a> {
+    pub id: &'a str,
+    pub run_id: &'a str,
+    pub session_id: &'a str,
+    pub user_message: &'a str,
+    pub definition: &'a AgentDefinition,
+    pub started_at_ms: u64,
+    pub events: &'a [AgentEvent],
+    pub result: &'a Result<AgentTurnOutcome, String>,
+}
+
 impl AgentRunRecord {
-    pub fn completed(
-        id: &str,
-        run_id: &str,
-        session_id: &str,
-        user_message: &str,
-        definition: &AgentDefinition,
-        started_at_ms: u64,
-        events: &[AgentEvent],
-        result: &Result<AgentTurnOutcome, String>,
-    ) -> Self {
+    pub fn completed(input: CompletedRun<'_>) -> Self {
+        let CompletedRun {
+            id,
+            run_id,
+            session_id,
+            user_message,
+            definition,
+            started_at_ms,
+            events,
+            result,
+        } = input;
         let stages = events
             .iter()
             .filter_map(|event| match event {
@@ -321,16 +333,16 @@ mod tests {
             });
             record_run(
                 root.path(),
-                AgentRunRecord::completed(
-                    &uuid::Uuid::new_v4().to_string(),
-                    &format!("run-{index}"),
-                    "session",
-                    &format!("task-{index}"),
-                    &general_agent(),
-                    index,
-                    &[],
-                    &outcome,
-                ),
+                AgentRunRecord::completed(CompletedRun {
+                    id: &uuid::Uuid::new_v4().to_string(),
+                    run_id: &format!("run-{index}"),
+                    session_id: "session",
+                    user_message: &format!("task-{index}"),
+                    definition: &general_agent(),
+                    started_at_ms: index,
+                    events: &[],
+                    result: &outcome,
+                }),
             )
             .unwrap();
         }
@@ -374,16 +386,16 @@ mod tests {
             },
         ];
 
-        let record = AgentRunRecord::completed(
-            "record",
-            "run",
-            "session",
-            "investigate",
-            &general_agent(),
-            10,
-            &events,
-            &outcome,
-        );
+        let record = AgentRunRecord::completed(CompletedRun {
+            id: "record",
+            run_id: "run",
+            session_id: "session",
+            user_message: "investigate",
+            definition: &general_agent(),
+            started_at_ms: 10,
+            events: &events,
+            result: &outcome,
+        });
 
         assert_eq!(record.default_model_instance_id, "coordinator-model");
         assert_eq!(record.user_message, "investigate");
@@ -409,16 +421,16 @@ mod tests {
             inference: AgentInferenceMetrics::default(),
         });
 
-        let record = AgentRunRecord::completed(
-            "record",
-            "run",
-            "session",
-            "task",
-            &definition,
-            10,
-            &[],
-            &outcome,
-        );
+        let record = AgentRunRecord::completed(CompletedRun {
+            id: "record",
+            run_id: "run",
+            session_id: "session",
+            user_message: "task",
+            definition: &definition,
+            started_at_ms: 10,
+            events: &[],
+            result: &outcome,
+        });
 
         assert_eq!(record.status, "incomplete");
         assert_eq!(record.finish_reason, "max_cycles");
@@ -439,16 +451,16 @@ mod tests {
         });
         record_run(
             root.path(),
-            AgentRunRecord::completed(
-                &id,
-                "run",
-                "session",
-                "task",
-                &general_agent(),
-                1,
-                &[],
-                &outcome,
-            ),
+            AgentRunRecord::completed(CompletedRun {
+                id: &id,
+                run_id: "run",
+                session_id: "session",
+                user_message: "task",
+                definition: &general_agent(),
+                started_at_ms: 1,
+                events: &[],
+                result: &outcome,
+            }),
         )
         .unwrap();
         let workspace = root.path().join("agent-runs").join(&id);

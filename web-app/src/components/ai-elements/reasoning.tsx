@@ -72,7 +72,6 @@ export const Reasoning = memo(
     const [startTime, setStartTime] = useState<number | null>(null)
     const wasStreamingRef = useRef(isStreaming)
 
-    // Track duration when streaming starts and ends
     useEffect(() => {
       if (isStreaming) {
         if (startTime === null) {
@@ -84,18 +83,13 @@ export const Reasoning = memo(
       }
     }, [isStreaming, startTime, setDuration])
 
-    // Auto-close when streaming ends (only when transitioning from streaming to not streaming)
+    // Close only on a streaming-to-idle transition.
     useEffect(() => {
       if (wasStreamingRef.current && !isStreaming) {
-        // Streaming just ended, auto-close
         setIsOpen(false)
       }
       wasStreamingRef.current = isStreaming
     }, [isStreaming, setIsOpen])
-
-    const handleOpenChange = (newOpen: boolean) => {
-      setIsOpen(newOpen)
-    }
 
     const contextValue = useMemo(
       () => ({
@@ -104,14 +98,14 @@ export const Reasoning = memo(
         setIsOpen,
         duration,
       }),
-      [isStreaming, isOpen, duration]
+      [isStreaming, isOpen, setIsOpen, duration]
     )
 
     return (
       <ReasoningContext.Provider value={contextValue}>
         <Collapsible
           className={cn('not-prose mb-4', className)}
-          onOpenChange={handleOpenChange}
+          onOpenChange={setIsOpen}
           open={isOpen}
           {...props}
         >
@@ -188,11 +182,7 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      {/* Streamdown's own utility classes (list-inside, pl-6, ...) are not
-      emitted by this build (Tailwind doesn't scan node_modules), so markdown
-      here must be styled by the app's `.markdown` stylesheet — without it,
-      list markers fall back to `outside` with zero padding and overlap the
-      dotted border. */}
+      {/* Tailwind does not scan Streamdown; use the app's markdown list styles. */}
       <div className="markdown ml-2 pl-4 border-l-2 border-dotted">
         <Streamdown animate={true} animationDuration={500} {...props}>
           {children}

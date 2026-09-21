@@ -137,7 +137,7 @@ async fn fetch_direct(
         HeaderValue::from_static("text/markdown,text/html;q=0.9,text/plain;q=0.8,*/*;q=0.5"),
     );
     let response =
-        request_guarded(Method::GET, &url, headers, None, Duration::from_secs(30)).await?;
+        request_guarded(Method::GET, url, headers, None, Duration::from_secs(30)).await?;
     let status = response.status();
     let final_url = response.url().to_string();
     let content_type = response

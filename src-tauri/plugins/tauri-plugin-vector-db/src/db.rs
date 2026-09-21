@@ -6,15 +6,6 @@ use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct FileMetadata {
-    pub name: Option<String>,
-    pub path: String,
-    #[serde(rename = "type")]
-    pub file_type: Option<String>,
-    pub size: Option<i64>,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     pub id: String,

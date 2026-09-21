@@ -30,7 +30,7 @@ type ToolContextValue = {
 
 const ToolContext = createContext<ToolContextValue | null>(null)
 
-export const useTool = () => {
+const useTool = () => {
   const context = useContext(ToolContext)
   if (!context) {
     throw new Error('Tool components must be used within Tool')

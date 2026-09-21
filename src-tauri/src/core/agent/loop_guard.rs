@@ -628,9 +628,11 @@ mod tests {
 
     #[test]
     fn detects_and_escalates_wandering_distinct_arguments() {
-        let mut options = ToolLoopTrackerOptions::default();
-        options.wandering_threshold = 3;
-        options.wandering_escalation = 4;
+        let options = ToolLoopTrackerOptions {
+            wandering_threshold: 3,
+            wandering_escalation: 4,
+            ..Default::default()
+        };
         let mut tracker = ToolLoopTracker::new(options);
         for index in 0..2 {
             let args = serde_json::json!({"url": format!("https://e/{index}")});
@@ -649,9 +651,11 @@ mod tests {
 
     #[test]
     fn detects_varying_skill_view_names_as_wandering() {
-        let mut options = ToolLoopTrackerOptions::default();
-        options.wandering_threshold = 3;
-        options.wandering_escalation = 4;
+        let options = ToolLoopTrackerOptions {
+            wandering_threshold: 3,
+            wandering_escalation: 4,
+            ..Default::default()
+        };
         let mut tracker = ToolLoopTracker::new(options);
         for name in ["pdf", "web-research"] {
             let args = serde_json::json!({"name": name});

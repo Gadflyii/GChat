@@ -158,9 +158,7 @@ async fn validate_downloaded_file(
     // Use model_id from item if available, otherwise extract from save path
     // Path structure: ginfer/models/{modelId}/model.ginfer
     let model_id = item
-        .model_id
-        .as_ref()
-        .map(|s| s.as_str())
+        .model_id.as_deref()
         .unwrap_or_else(|| {
             save_path
                 .parent() // get parent directory (modelId folder)

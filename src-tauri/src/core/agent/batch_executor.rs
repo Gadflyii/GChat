@@ -103,7 +103,7 @@ where
     ExecuteFuture: Future<Output = T> + Send,
 {
     let execute = &execute;
-    let mut outcomes = execute_grouped_by_class(classes, |index| execute(index)).await;
+    let mut outcomes = execute_grouped_by_class(classes, execute).await;
     if let Some(index) = terminal_index {
         outcomes.push(execute(index).await);
     }

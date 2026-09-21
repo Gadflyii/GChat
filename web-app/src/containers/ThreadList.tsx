@@ -21,8 +21,8 @@ import {
   SidebarMenuItem,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  useSidebar,
 } from '@/components/ui/sidebar'
+import { useSidebar } from '@/hooks/use-sidebar'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { memo, useMemo, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
@@ -35,10 +35,7 @@ import { useThreadReadStatus } from '@/stores/thread-read-store'
 import { ThreadStatusDot } from '@/components/left-sidebar/ThreadStatusDot'
 
 //* Заголовок приветственного треда: новый бренд и старая строка из прошлых версий
-const WELCOME_THREAD_TITLES = new Set([
-  'What is GChat?',
-  'What is Overchat?',
-])
+const WELCOME_THREAD_TITLES = new Set(['What is GChat?', 'What is Overchat?'])
 
 const ThreadItem = memo(
   ({

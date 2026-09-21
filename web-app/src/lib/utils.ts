@@ -317,15 +317,7 @@ export const OPERATION_TIMED_OUT_CODE = 'OPERATION_TIMED_OUT'
  */
 export const SERVER_START_WATCHDOG_MS = 60 * 1000
 
-/**
- * Safety-net ceiling for a local model load kicked off as part of starting
- * the Local API Server (auto-start on launch, or the manual "Start server"
- * toggle). Set comfortably above the llama.cpp extensions' own 30-minute
- * model-load-readiness floor so a legitimately slow/large load is never cut
- * off early — this only guards against a step with NO timeout of its own
- * (e.g. an un-timeboxed backend-preparation network call) hanging forever
- * and leaving the "Starting Server" UI stuck indefinitely (ATO-270).
- */
+/** Bounds the full model-load chain when starting the Local API Server. */
 export const MODEL_LOAD_WATCHDOG_MS = 35 * 60 * 1000
 
 /**

@@ -179,7 +179,6 @@ export const useTokensCount = (
       provider: selectedProvider,
       messagesCount: messagesWithPrompt.length,
       maxTokensNum,
-      ctxLenRaw: selectedModel?.settings?.ctx_len,
     })
 
     setTokenData((prev) => ({ ...prev, loading: true, error: undefined, maxTokens: maxTokensNum }))

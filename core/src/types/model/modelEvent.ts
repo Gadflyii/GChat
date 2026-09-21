@@ -14,12 +14,4 @@ export enum ModelEvent {
   OnModelStopped = 'OnModelStopped',
   /** The `OnModelUpdate` event is emitted when the model list is updated. */
   OnModelsUpdate = 'OnModelsUpdate',
-  /**
-   * The `OnAutoIncreasedCtxLen` event is emitted by a local backend extension
-   * (e.g. ginfer) when the Local API Server proxy asked it to grow a
-   * model's context window after an overflow. The web-app listens to this so
-   * the Zustand provider store mirrors the reload. Payload shape:
-   * `{ provider: string, modelId: string, newCtxLen: number }`.
-   */
-  OnAutoIncreasedCtxLen = 'OnAutoIncreasedCtxLen',
 }

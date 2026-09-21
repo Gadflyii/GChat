@@ -413,7 +413,7 @@ pub fn definitions_path(data_folder: &Path) -> PathBuf {
 
 pub fn list_definitions(data_folder: &Path) -> Result<Vec<AgentDefinition>, String> {
     let mut definitions = read_store(data_folder)?.definitions;
-    definitions.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    definitions.sort_by_key(|left| left.name.to_lowercase());
     Ok(definitions)
 }
 

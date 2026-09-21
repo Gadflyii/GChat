@@ -22,8 +22,11 @@ vi.mock('@tanstack/react-router', () => ({
 
 // Lightweight sidebar mock that surfaces `isActive` as `data-active` so the
 // test asserts the real wiring without pulling in the full sidebar context.
-vi.mock('@/components/ui/sidebar', () => ({
+vi.mock('@/hooks/use-sidebar', () => ({
   useSidebar: () => ({ isMobile: false }),
+}))
+
+vi.mock('@/components/ui/sidebar', () => ({
   SidebarMenuItem: ({ children, className }: any) => (
     <li className={className}>{children}</li>
   ),

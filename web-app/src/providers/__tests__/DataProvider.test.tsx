@@ -139,7 +139,6 @@ vi.mock('@/utils/switchModel', () => ({
 
 vi.mock('@gchat/core', () => ({
   AppEvent: { onModelImported: 'onModelImported' },
-  ModelEvent: { OnAutoIncreasedCtxLen: 'OnAutoIncreasedCtxLen' },
   events: {
     on: vi.fn(),
     off: vi.fn(),

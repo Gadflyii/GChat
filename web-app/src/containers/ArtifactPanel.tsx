@@ -10,7 +10,8 @@ import { Code2, Eye } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
 import { useArtifactStore } from '@/stores/artifact-store'
-import { HtmlArtifact, estimateHtmlProgress } from './HtmlArtifact'
+import { HtmlArtifact } from './HtmlArtifact'
+import { estimateHtmlProgress } from '@/lib/html-progress'
 
 /**
  * Whether the message hosting the trigger is still streaming.

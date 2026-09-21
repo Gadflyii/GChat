@@ -18,7 +18,7 @@ export enum PlatformFeature {
 
   SHORTCUT = 'shortcut',
 
-  // Local model inference (llama.cpp)
+  // Local model inference (GInfer)
   LOCAL_INFERENCE = 'localInference',
 
   // Local API server

@@ -424,7 +424,7 @@ mod tests {
             instructions(Some(&root)).unwrap(),
             "Run pnpm test before handoff."
         );
-        workspace.write("AGENTS.md", &"x".repeat(16_385));
+        workspace.write("AGENTS.md", "x".repeat(16_385));
         assert!(instructions(Some(&root)).unwrap_err().contains("16 KiB"));
     }
 

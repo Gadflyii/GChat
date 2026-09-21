@@ -8,7 +8,6 @@ use crate::core::agent::prompt::{ToolDescriptor, ToolTier, ITERATION_ONE_TOOLS};
 use crate::core::agent::types::ToolOutcome;
 
 pub const LOADED_TOOLS_CAP: usize = 8;
-pub const LOADED_TOOLS_MAX_CHARS: usize = 8_000;
 
 #[derive(Default)]
 pub struct LoadedTools {

@@ -193,9 +193,10 @@ pub async fn factory_reset<R: Runtime>(
     }
 
     // Reset the configuration
-    let mut default_config = AppConfiguration::default();
-    default_config.data_folder = default_data_folder_path(app_handle.clone());
-    default_config.autostart_preference = autostart_preference;
+    let default_config = AppConfiguration {
+        data_folder: default_data_folder_path(app_handle.clone()),
+        autostart_preference,
+    };
     let _ = update_app_configuration(app_handle.clone(), default_config);
 
     restart_app(&app_handle)
@@ -510,11 +511,12 @@ pub fn launch_claude_code_with_config(
         match std::fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false) // Probe writability without erasing existing settings.
             .open(&env_file_path)
         {
             Ok(_) => {
                 write_env_to_shell(&env_file_path, &env_vars)?;
-                return Ok(());
+                Ok(())
             }
             Err(_) => {
                 // Use admin privileges to write
@@ -558,7 +560,7 @@ pub fn launch_claude_code_with_config(
                     "Env vars written to {} with admin privileges",
                     env_file_path
                 );
-                return Ok(());
+                Ok(())
             }
         }
     } else if cfg!(target_os = "linux") {
@@ -573,17 +575,18 @@ pub fn launch_claude_code_with_config(
         match std::fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false) // Probe writability without erasing existing settings.
             .open(&env_file_path)
         {
             Ok(_) => {
                 write_env_to_shell(&env_file_path, &env_vars)?;
-                return Ok(());
+                Ok(())
             }
             Err(_) => {
                 let gchat_config_dir = format!("{}/.config/gchat", home_dir);
                 let ext = if shell_name == "bash" { "bash" } else { "zsh" };
                 let env_file = format!("{}/claude-code-env.{}", gchat_config_dir, ext);
-                return Err(format!("NEED_PERMISSION:{}", env_file));
+                Err(format!("NEED_PERMISSION:{}", env_file))
             }
         }
     } else {
@@ -602,7 +605,7 @@ pub fn launch_claude_code_with_config(
         }
 
         log::info!("Environment variables set permanently in Windows registry.");
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -918,11 +921,12 @@ pub fn clear_claude_code_env() -> Result<(), String> {
         match std::fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false) // Probe writability without erasing existing settings.
             .open(&env_file_path)
         {
             Ok(_) => {
                 std::fs::write(&env_file_path, &cleaned).map_err(|e| e.to_string())?;
-                return Ok(());
+                Ok(())
             }
             Err(_) => {
                 // Write cleaned content to a temp file, then use osascript to move it
@@ -944,7 +948,7 @@ pub fn clear_claude_code_env() -> Result<(), String> {
                     "CC env cleared from {} with admin privileges",
                     env_file_path
                 );
-                return Ok(());
+                Ok(())
             }
         }
     } else if cfg!(target_os = "linux") {
@@ -961,6 +965,7 @@ pub fn clear_claude_code_env() -> Result<(), String> {
         match std::fs::OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false) // Probe writability without erasing existing settings.
             .open(&env_file_path)
         {
             Ok(_) => {
@@ -1537,11 +1542,10 @@ fn split_custom_providers(content: &str) -> (Vec<String>, Vec<Vec<String>>, Vec<
     let mut current: Vec<String> = Vec::new();
 
     for line in &block_lines {
-        if line.starts_with("- ") {
-            if !current.is_empty() {
+        if line.starts_with("- ")
+            && !current.is_empty() {
                 entries.push(std::mem::take(&mut current));
             }
-        }
         if !line.trim().is_empty() {
             current.push(line.clone());
         }
@@ -1574,7 +1578,7 @@ fn rebuild_custom_providers(
 ) -> String {
     let mut result: Vec<String> = before.to_vec();
 
-    while result.last().map_or(false, |l| l.trim().is_empty()) {
+    while result.last().is_some_and(|l| l.trim().is_empty()) {
         result.pop();
     }
 
@@ -1656,7 +1660,7 @@ fn upsert_provider_request_timeout(content: &str, provider_id: &str, seconds: u3
 
     match providers_idx {
         None => {
-            while lines.last().map_or(false, |l| l.trim().is_empty()) {
+            while lines.last().is_some_and(|l| l.trim().is_empty()) {
                 lines.pop();
             }
             lines.push("providers:".to_string());
@@ -1670,8 +1674,8 @@ fn upsert_provider_request_timeout(content: &str, provider_id: &str, seconds: u3
 
             // Extent of the providers block: until the next top-level key.
             let mut block_end = lines.len();
-            for i in (pidx + 1)..lines.len() {
-                if is_top_level_yaml_key(&lines[i]) {
+            for (i, line) in lines.iter().enumerate().skip(pidx + 1) {
+                if is_top_level_yaml_key(line) {
                     block_end = i;
                     break;
                 }
@@ -1689,8 +1693,7 @@ fn upsert_provider_request_timeout(content: &str, provider_id: &str, seconds: u3
                     // Extent of this provider's sub-block: until the next key at
                     // indent <= 2 (a sibling provider) or the block end.
                     let mut sub_end = block_end;
-                    for i in (pk + 1)..block_end {
-                        let l = &lines[i];
+                    for (i, l) in lines.iter().enumerate().take(block_end).skip(pk + 1) {
                         if l.trim().is_empty() {
                             continue;
                         }
@@ -4163,16 +4166,13 @@ pub fn configure_dsh(
 pub fn goose_env_vars(api_url: &str, model: &str, api_key: Option<&str>) -> Vec<(String, String)> {
     let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("gchat");
 
-    let mut env_vars: Vec<(String, String)> = Vec::with_capacity(5);
-    env_vars.push(("GOOSE_PROVIDER".to_string(), "openai".to_string()));
-    env_vars.push(("GOOSE_MODEL".to_string(), model.to_string()));
-    env_vars.push(("OPENAI_HOST".to_string(), api_url.to_string()));
-    env_vars.push((
-        "OPENAI_BASE_PATH".to_string(),
-        "v1/chat/completions".to_string(),
-    ));
-    env_vars.push(("OPENAI_API_KEY".to_string(), key_val.to_string()));
-    env_vars
+    vec![
+        ("GOOSE_PROVIDER".into(), "openai".into()),
+        ("GOOSE_MODEL".into(), model.into()),
+        ("OPENAI_HOST".into(), api_url.into()),
+        ("OPENAI_BASE_PATH".into(), "v1/chat/completions".into()),
+        ("OPENAI_API_KEY".into(), key_val.into()),
+    ]
 }
 
 /// Configure Goose via its BYOK environment variables. Goose has no provider
@@ -4404,11 +4404,11 @@ pub fn poolside_env_vars(
     let key_val = api_key.filter(|k| !k.is_empty()).unwrap_or("gchat");
     let standalone_base = poolside_standalone_base_url(api_url);
 
-    let mut env_vars: Vec<(String, String)> = Vec::with_capacity(3);
-    env_vars.push(("POOLSIDE_STANDALONE_BASE_URL".to_string(), standalone_base));
-    env_vars.push(("POOLSIDE_API_KEY".to_string(), key_val.to_string()));
-    env_vars.push(("POOLSIDE_STANDALONE_MODEL".to_string(), model.to_string()));
-    env_vars
+    vec![
+        ("POOLSIDE_STANDALONE_BASE_URL".into(), standalone_base),
+        ("POOLSIDE_API_KEY".into(), key_val.into()),
+        ("POOLSIDE_STANDALONE_MODEL".into(), model.into()),
+    ]
 }
 
 #[tauri::command]
@@ -4903,7 +4903,7 @@ mod tests {
             sanitized_appimage_restart_command(std::ffi::OsStr::new("/tmp/gchat.AppImage"));
         let removed: Vec<_> = command
             .get_envs()
-            .filter_map(|(key, value)| value.is_none().then(|| key.to_os_string()))
+            .filter(|&(_, value)| value.is_none()).map(|(key, _)| key.to_os_string())
             .collect();
 
         for variable in APPIMAGE_RUNTIME_ENV_VARS {

@@ -112,7 +112,7 @@ import { useDownloadStore } from '@/hooks/useDownloadStore'
 import ReasoningToggle from '@/containers/ReasoningToggle'
 import { ttftPreBegin } from '@/lib/ttft-timing'
 import { ModelFactory } from '@/lib/model-factory'
-import { canSelectChatAgentMode } from '@/containers/ChatAgentModeSwitch'
+import { canSelectChatAgentMode } from '@/lib/chat-agent-mode'
 import { AgentApprovalModeSelect } from '@/containers/AgentApprovalModeSelect'
 import { AgentExternalFolderButton } from '@/containers/AgentExternalFolderButton'
 import { AgentSkillSlashMenu } from '@/containers/AgentSkillSlashMenu'
@@ -1682,8 +1682,7 @@ const ChatInput = memo(function ChatInput({
     }
   }
 
-  // Open the image picker dialog (extracted for reuse)
-  const openImagePicker = useCallback(async () => {
+  const openImagePicker = async () => {
     if (isPlatformTauri()) {
       try {
         const selected = await serviceHub.dialog().open({
@@ -1749,7 +1748,7 @@ const ChatInput = memo(function ChatInput({
       // Fallback to input click for web
       fileInputRef.current?.click()
     }
-  }, [serviceHub, processImageFiles])
+  }
 
   const handleImagePickerClick = async () => {
     if (hasVision) {

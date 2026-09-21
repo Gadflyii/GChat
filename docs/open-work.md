@@ -21,6 +21,9 @@ implementation and historical measurements are not pending tasks.
   receipt-based deletion, lost-response retry, and concurrent replay/rollback with
   designated test results. Official signed publication and readback of 12 reference
   series / 36 points have passed. Preserve those reference results and receipts.
+- **Frontend bundle size:** the production build reports chunks above 500 kB,
+  including syntax grammars and the main application bundle. Review loading and
+  splitting with measurements; do not hide the advisory by raising its threshold.
 - **Performance evidence:** idle and long-chat UI performance has not been measured.
   Profile a concrete issue before proposing further rendering changes.
 

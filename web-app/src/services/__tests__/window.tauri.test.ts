@@ -1,3 +1,5 @@
+import { emit } from '@tauri-apps/api/event'
+import { localStorageKey } from '@/constants/localStorage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import type { InvokeArgs } from '@tauri-apps/api/core'
@@ -8,6 +10,7 @@ describe('TauriWindowService', () => {
   let windowService: TauriWindowService
 
   beforeEach(() => {
+    localStorage.clear()
     mockWindows('main', 'logs-app-window')
     ipcHandler = vi.fn()
     mockIPC(
@@ -44,5 +47,40 @@ describe('TauriWindowService', () => {
 
     const commands = ipcHandler.mock.calls.map(([command]) => command)
     expect(commands).not.toContain('plugin:webview|create_webview_window')
+  })
+  it('uses the GChat theme preference for a new window', async () => {
+    localStorage.setItem(
+      localStorageKey.theme,
+      JSON.stringify({ state: { activeTheme: 'light' } })
+    )
+    await windowService.createWebviewWindow({
+      label: 'new-window',
+      url: '/logs',
+    })
+    const creation = ipcHandler.mock.calls.find(
+      ([command]) => command === 'plugin:webview|create_webview_window'
+    )
+    expect(creation?.[1]).toMatchObject({ options: { theme: 'light' } })
+  })
+
+  it('stops forwarding theme updates after the window is destroyed', async () => {
+    await windowService.createWebviewWindow({
+      label: 'new-window',
+      url: '/logs',
+    })
+    await emit('theme-changed', 'dark')
+    expect(
+      ipcHandler.mock.calls.some(
+        ([command]) => command === 'plugin:window|set_theme'
+      )
+    ).toBe(true)
+    await emit('tauri://destroyed')
+    ipcHandler.mockClear()
+    await emit('theme-changed', 'light')
+    expect(
+      ipcHandler.mock.calls.some(
+        ([command]) => command === 'plugin:window|set_theme'
+      )
+    ).toBe(false)
   })
 })
