@@ -39,6 +39,8 @@ pub fn computer_name() -> Result<String, String> {
 pub struct LocalHost {
     pub binary: PathBuf,
     pub engine: PathBuf,
+    #[serde(default)]
+    pub engine_runtimes: std::collections::BTreeMap<String, PathBuf>,
     pub directory: PathBuf,
     pub desktop_provider: Option<PathBuf>,
     pub models: Vec<PathBuf>,
@@ -73,6 +75,7 @@ impl LocalHost {
     }
 
     pub(crate) fn validate(&self) -> Result<(), String> {
+        crate::engine_host::validate_runtimes(&self.engine_runtimes)?;
         if !self.listen.ip().is_loopback() || self.listen.port() == 0 {
             return Err("local bootstrap requires a fixed loopback management address".into());
         }
@@ -132,6 +135,9 @@ impl LocalHost {
                 .kill_on_drop(false);
             for model in &self.models {
                 command.arg("--models").arg(model);
+            }
+            for (architecture, executable) in &self.engine_runtimes {
+                command.arg("--engine-runtime").arg(format!("{architecture}={}", executable.display()));
             }
             if let Some(provider) = &self.desktop_provider { command.arg("--desktop-provider").arg(provider); }
             for descriptor in &self.artifact_sets {

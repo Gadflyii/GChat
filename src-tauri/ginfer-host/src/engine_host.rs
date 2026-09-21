@@ -12,6 +12,18 @@ use uuid::Uuid;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
+pub fn validate_runtimes(runtimes: &BTreeMap<String, PathBuf>) -> Result<(), String> {
+    for (architecture, path) in runtimes {
+        if !matches!(architecture.as_str(), "8.0" | "8.6" | "8.9" | "12.0") {
+            return Err(format!("Unsupported runtime compute capability: {architecture}"));
+        }
+        if !path.is_absolute() || !path.is_file() {
+            return Err(format!("Runtime for {architecture} must be an existing absolute executable path"));
+        }
+    }
+    Ok(())
+}
+
 type Diagnostics = Arc<Mutex<Vec<u8>>>;
 
 fn capture_output(reader: impl AsyncRead + Unpin + Send + 'static, diagnostics: Diagnostics) -> tokio::task::JoinHandle<()> {
@@ -154,6 +166,8 @@ pub struct ManagedInstance {
 pub struct HostProcesses {
     executable: PathBuf,
     known_gpus: BTreeSet<String>,
+    runtimes: BTreeMap<String, PathBuf>,
+    gpu_architectures: BTreeMap<String, String>,
     instances: BTreeMap<Uuid, ManagedInstance>,
     client: reqwest::Client,
     startup_timeout: Duration,
@@ -177,14 +191,37 @@ impl HostProcesses {
         Ok(Self {
             executable,
             known_gpus: gpu_uuids,
+            runtimes: BTreeMap::new(),
+            gpu_architectures: BTreeMap::new(),
             instances: BTreeMap::new(),
             client,
             startup_timeout,
         })
     }
 
+    pub fn configure_runtimes(&mut self, runtimes: BTreeMap<String, PathBuf>, gpu_architectures: BTreeMap<String, String>) -> Result<(), String> {
+        validate_runtimes(&runtimes)?;
+        if self.instances.values().any(|instance| instance.child.is_some()) {
+            return Err("Stop active instances before changing runtime assignments".into());
+        }
+        self.runtimes = runtimes;
+        self.gpu_architectures = gpu_architectures;
+        Ok(())
+    }
+
+    fn executable_for(&self, gpus: &[String]) -> Result<&PathBuf, String> {
+        if self.runtimes.is_empty() { return Ok(&self.executable); }
+        let architecture = gpus.first().and_then(|gpu| self.gpu_architectures.get(gpu))
+            .ok_or("Selected GPU has no known compute capability")?;
+        if gpus.iter().any(|gpu| self.gpu_architectures.get(gpu) != Some(architecture)) {
+            return Err("A GPU group must use one compute architecture".into());
+        }
+        self.runtimes.get(architecture).ok_or_else(|| format!("No engine runtime configured for compute capability {architecture}"))
+    }
+
     /// Local clients may select an installed engine without replacing live instances.
     pub fn configure_executable(&mut self, path: PathBuf) -> Result<(), String> {
+        if !self.runtimes.is_empty() { return Err("This host uses per-architecture runtimes; update its runtime assignments and restart the host".into()); }
         if !path.is_absolute() || !path.is_file() { return Err("engine executable must be an existing absolute file path".into()); }
         if self.executable != path && self.instances.values().any(|instance| instance.child.is_some()) {
             return Err("Stop the host's active instances before changing its engine executable".into());
@@ -201,7 +238,7 @@ impl HostProcesses {
     }
 
     pub fn validate_launch(&self, launch: &EngineLaunch, replacing: bool) -> Result<(), String> {
-        if !self.executable.is_file() { return Err("Install the configured engine executable before loading a model".into()); }
+        if !self.executable_for(&launch.gpu_uuids)?.is_file() { return Err("Install the configured engine executable before loading a model".into()); }
         launch.options.validate(launch.tp)?;
         if self
             .instances
@@ -247,10 +284,11 @@ impl HostProcesses {
 
     fn spawn(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
         let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        let mut command = Command::new(&self.executable);
+        let executable = self.executable_for(&launch.gpu_uuids)?;
+        let mut command = Command::new(executable);
         #[cfg(windows)]
         command.creation_flags(0x08000000); // Background serving has no console window.
-        if let Some(directory) = self.executable.parent() {
+        if let Some(directory) = executable.parent() {
             let variable = if cfg!(windows) { "PATH" } else { "LD_LIBRARY_PATH" };
             let mut paths = vec![directory.to_path_buf()];
             if let Some(existing) = std::env::var_os(variable) { paths.extend(std::env::split_paths(&existing)); }
@@ -457,6 +495,49 @@ mod tests {
     }
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
+    #[tokio::test]
+    async fn launches_each_gpu_with_its_declared_runtime_without_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut runtimes = BTreeMap::new();
+        for architecture in ["8.0", "8.6"] {
+            let executable = dir.path().join(format!("engine-{architecture}"));
+            std::fs::write(&executable, format!("#!/bin/sh\necho {architecture}:$CUDA_VISIBLE_DEVICES\nexec sleep 60\n")).unwrap();
+            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+            runtimes.insert(architecture.into(), executable);
+        }
+        let mut host = HostProcesses::new(dir.path().join("unused-default"),
+            BTreeSet::from(["GPU-80".into(), "GPU-86".into(), "GPU-89".into()]), Duration::from_secs(10)).unwrap();
+        host.configure_runtimes(runtimes, BTreeMap::from([
+            ("GPU-80".into(), "8.0".into()), ("GPU-86".into(), "8.6".into()), ("GPU-89".into(), "8.9".into()),
+        ])).unwrap();
+        let artifact = dir.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture").unwrap();
+        let launch = |gpu: &str, port| EngineLaunch {
+            instance_id: Uuid::new_v4(), artifact: artifact.clone(), artifact_set: false,
+            model_id: "fixture".into(), gpu_uuids: vec![gpu.into()], tp: 1, port,
+            max_context: 4096, concurrency: 1, options: LaunchOptions::default(),
+        };
+        assert!(host.launch(launch("GPU-89", 40103)).unwrap_err().contains("No engine runtime"));
+        let mut mixed = launch("GPU-80", 40104);
+        mixed.tp = 2;
+        mixed.gpu_uuids.push("GPU-86".into());
+        assert!(host.launch(mixed).unwrap_err().contains("one compute architecture"));
+        for (gpu, sm, port) in [("GPU-80", "8.0", 40101), ("GPU-86", "8.6", 40102)] {
+            let request = launch(gpu, port);
+            let id = request.instance_id;
+            host.launch(request).unwrap();
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let output = host.instances.get(&id).unwrap().diagnostics.lock().unwrap().clone();
+                    if String::from_utf8_lossy(&output).contains(&format!("{sm}:{gpu}")) { break; }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }).await.unwrap();
+        }
+        let ids: Vec<_> = host.instances.keys().copied().collect();
+        for id in ids { host.stop(id).await.unwrap(); }
+    }
 
     #[tokio::test]
     async fn owned_process_reserves_gpu_until_stopped_then_relaunches_with_new_session() {

@@ -252,6 +252,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" }),
             engine: provider.join("bin").join(if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" }),
             directory: provider.join("host"), desktop_provider: Some(provider),
+            engine_runtimes: Default::default(),
             models: vec![], artifact_sets: vec![], name:ginfer_host::local_host::computer_name()?,
             nvidia_smi:"nvidia-smi".into(), listen:"127.0.0.1:7443".parse().unwrap(),
         }.ensure_shared_running().await?;

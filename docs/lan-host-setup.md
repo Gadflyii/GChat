@@ -331,7 +331,12 @@ checks do not establish desktop credential-vault integration or performance.
 
 ## Use and stop
 
-After pairing, choose an installed model and GPU group in Engines. Loading remains
+After pairing, choose **Model → GPU / GPU group → Hardware profile** in GInfer
+Hosts. The GPU selector lists physical cards with their memory and any declared
+multi-GPU groups. Profiles are filtered to that selection; occupied cards are
+disabled. An existing instance keeps its assigned GPUs; create another instance
+to choose a different group. Cards without matching profiles show an explanation
+and cannot launch through the profile picker. Loading remains
 explicit. Saved launch profiles survive host restart as **stopped**, not automatically
 running. Models with equal names on different hosts remain distinct instance choices.
 Stop drains tracked requests; Force stop cancels them. Reload validates settings first.
@@ -400,3 +405,54 @@ their registration through native credential storage. No model was started.
 `make verify`, host and desktop Clippy, and native Windows pairing/sharing tests
 passed. TLS tests cover first-use certificate capture, saved-pin rejection,
 sharing-off enrollment rejection, revocation, and explicit re-enrollment.
+
+For Server 2, include both text and Vision catalogs for `linux-rtx3090` and
+`linux-cmp170hx`, for the exact Qwen groupwise INT/DFlash2-Q4 and Muse groupwise
+INT/DFlash-Q4 artifacts. There are eight selected catalog files: 34 text and 33
+calculated Vision profiles. Vision catalogs are separate; omitting them makes
+all installed profiles appear text-only. Set `GINFER_PROFILE_CATALOGS` to the
+colon-separated absolute paths before building both CLI and desktop. Keep the
+same merged catalog beside the configured standalone host executable.
+
+Vision profiles retain pending-validation labels until their startup and media
+checks pass. Qwen and Muse support joint Vision/DFlash startup. Catalog presence
+does not establish full-context capacity or hardware qualification.
+
+The RTX 3090 Qwen C1 INT8 KV profiles allow 172,032 tokens for text and
+92,832 for Vision. The Vision estimate subtracts 295,719,424 bytes of weights,
+2,081,097,472 bytes of workspace, and 314,572,800 bytes of lane outputs from
+the text KV arena. It conservatively credits no shared text workspace; this is
+not a measured maximum for the current engine. The CMP170HX C1 profiles allow
+the full 262,144 tokens for both text and Vision.
+
+### Mixed GPU architectures
+
+The host can select an explicitly installed engine for each compute capability:
+
+```bash
+ginfer-host --data-dir /absolute/host/state --engine /absolute/sm86/ginfer-serve \
+  --engine-runtime 8.0=/absolute/sm80/ginfer-serve \
+  --engine-runtime 8.6=/absolute/sm86/ginfer-serve \
+  --models /absolute/model-directory
+```
+
+With `--engine-runtime`, the map must cover every architecture you intend to use;
+there is no fallback to `--engine` for missing entries. A TP group cannot mix
+architectures. Separate instances may run concurrently on different architectures.
+Each runtime owns its adjacent libraries. The host never downloads, guesses,
+rebuilds, or swaps runtime binaries during a launch.
+
+A desktop owner's `local-host.json` stores the same explicit paths under
+`owner.engine_runtimes`, for example `{"8.0":"/absolute/sm80/ginfer-serve",
+"8.6":"/absolute/sm86/ginfer-serve"}`. Stop its active instances and restart the
+host after editing runtime assignments. Single-runtime installations leave this
+map empty. The local single-executable API cannot override a configured map.
+
+Server 2 runtime routing was checked on 2026-09-21 using its existing SM80 and
+SM86 binaries. Each CMP card and the RTX 3090 separately started the exact Muse
+C1/128K calculated Vision profile with DFlash enabled. The process executable was
+checked against the selected GPU architecture; each returned “red” for a 64×64
+red image. All three instances were stopped and their temporary saved records
+removed. This establishes TP1 startup, runtime routing, and a small media request;
+it does not qualify full-context capacity, other concurrency levels, TP2/TP4, or
+Qwen joint Vision/DFlash. Catalog qualification labels remain unchanged.

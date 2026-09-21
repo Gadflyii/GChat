@@ -144,7 +144,7 @@ describe('Engines host intake and launch controls', () => {
     expect(instance).toHaveValue('internal-id-1')
     const hardwareProfile = screen.getByRole('combobox', { name: 'Hardware profile' })
     expect(model.parentElement?.parentElement).toBe(hardwareProfile.parentElement?.parentElement)
-    expect(model.parentElement?.parentElement?.querySelectorAll('select')).toHaveLength(2)
+    expect(model.parentElement?.parentElement?.querySelectorAll('select')).toHaveLength(3)
     expect(model.compareDocumentPosition(hardwareProfile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(instance).toHaveTextContent('Qwen3.8 27B · NVFP4 · 4 concurrent · 131,072 context · GPU 1')
     expect(instance).not.toHaveTextContent('internal-id')

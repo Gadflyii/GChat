@@ -76,6 +76,7 @@ impl InstalledConfiguration {
             let local = crate::local_host::LocalHost {
                 binary: std::env::current_exe().map_err(|e| e.to_string())?,
                 engine: desktop.engine,
+            engine_runtimes: Default::default(),
                 directory: self.data_dir.clone(),
                 desktop_provider: Some(desktop.provider),
                 models: Vec::new(), artifact_sets: Vec::new(),

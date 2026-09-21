@@ -31,6 +31,9 @@ struct Args {
     nvidia_smi: PathBuf,
     #[arg(long, required_unless_present = "menu")]
     engine: Option<PathBuf>,
+    /// Explicit per-architecture runtimes (repeat SM=PATH); disables fallback to --engine.
+    #[arg(long, value_parser = parse_runtime)]
+    engine_runtime: Vec<(String, PathBuf)>,
     #[arg(long)]
     models: Vec<PathBuf>,
     /// Own the desktop provider's model cache and existing transfer journal.
@@ -49,6 +52,13 @@ struct Args {
     /// Management origin for explicit menu commands; pinned from local state.
     #[arg(long, default_value = "https://127.0.0.1:7443")]
     host_url: String,
+}
+
+fn parse_runtime(value: &str) -> Result<(String, PathBuf), String> {
+    let (architecture, path) = value.split_once('=').ok_or("runtime must be COMPUTE_CAPABILITY=/absolute/executable")?;
+    let entry = (architecture.to_owned(), PathBuf::from(path));
+    ginfer_host::engine_host::validate_runtimes(&std::collections::BTreeMap::from([entry.clone()]))?;
+    Ok(entry)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -79,10 +89,15 @@ async fn run(
     let data_dir = args
         .data_dir
         .ok_or("--data-dir is required for host service operations")?;
+    let mut engine_runtimes = std::collections::BTreeMap::new();
+    for (architecture, path) in args.engine_runtime {
+        if engine_runtimes.insert(architecture, path).is_some() { return Err("Duplicate runtime compute capability".into()); }
+    }
     if args.ensure_running {
         let local = ginfer_host::local_host::LocalHost {
             binary: std::env::current_exe().map_err(|e| e.to_string())?,
             engine: args.engine.ok_or("engine is required")?,
+            engine_runtimes,
             directory: data_dir,
             desktop_provider: args.desktop_provider,
             models: args.models,
@@ -138,6 +153,8 @@ async fn run(
         args.desktop_provider,
     )
     .await?;
+    host.processes.lock().await.configure_runtimes(engine_runtimes,
+        host.gpus.iter().filter_map(|gpu| gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))).collect())?;
     let listener = tokio::net::TcpListener::bind(args.listen)
         .await
         .map_err(|e| e.to_string())?;

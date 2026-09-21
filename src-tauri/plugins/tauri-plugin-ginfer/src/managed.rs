@@ -107,6 +107,7 @@ pub async fn load(
         LocalHost {
             binary: host_binary,
             engine: engine.clone(),
+            engine_runtimes: Default::default(),
             desktop_provider: directory.parent().map(std::path::Path::to_path_buf),
             directory,
             models: vec![],

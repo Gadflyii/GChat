@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Host runtimes by GPU architecture](2026-09-21-select-host-runtimes-by-gpu-architecture.md)
+
 - [One-click LAN pairing](2026-09-21-one-click-lan-pairing.md)
 
 - [Official reference results](2026-09-19-official-reference-results.md)

@@ -21,6 +21,7 @@ it('reserves other instances GPUs and requires confirmation before switching the
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
   fireEvent.change(screen.getByLabelText('Server Host'), { target: { value: 'existing' } })
   expect(screen.getByLabelText('Hardware profile')).toBeEnabled()
+  expect(screen.getByLabelText('GPU / GPU group')).toBeDisabled()
   const option = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
@@ -110,5 +111,47 @@ it('filters profiles by model and assigned hardware and clears a previous model 
   expect(screen.getByRole('option', { name: /Qwen C4/ })).toBeInTheDocument()
   expect(screen.queryByRole('option', { name: /Other GPU profile|Unsupported hardware/ })).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Apply profile and restart' })).toBeDisabled()
+  expect(launch).not.toHaveBeenCalled()
+})
+
+it('selects physical GPUs separately and filters profiles before launching', async () => {
+  const data = snapshot()
+  data.instances = []
+  data.gpus.push({ uuid: 'GPU-two', name: 'Other GPU', memory_mib: 24576 })
+  const second = structuredClone(data.launch_profiles![0])
+  second.profile.id = 'second'
+  second.profile.name = 'Second GPU profile'
+  second.compatible_gpu_groups = [['GPU-two']]
+  data.launch_profiles!.push(second)
+  const launch = vi.fn().mockResolvedValue(undefined)
+  render(<EngineProfilePicker snapshot={data} instanceId="" disabled={false} launch={launch} />)
+  const gpu = screen.getByLabelText('GPU / GPU group')
+  expect(gpu).toHaveValue(JSON.stringify(['GPU-one']))
+  expect(screen.queryByRole('option', { name: /Second GPU profile/ })).not.toBeInTheDocument()
+  const first = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: first.value } })
+  fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-two']) } })
+  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
+  expect(screen.queryByRole('option', { name: /Fixture C4/ })).not.toBeInTheDocument()
+  const option = screen.getByRole('option', { name: /Second GPU profile/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ gpu_uuids: ['GPU-two'], profile_id: 'second' })))
+})
+
+it('offers declared TP groups and explains cards without a matching profile', () => {
+  const data = snapshot()
+  data.instances = []
+  data.gpus.push({ ...data.gpus[0], uuid: 'GPU-two' }, { uuid: 'GPU-three', name: 'Different GPU', memory_mib: 24576 })
+  data.launch_profiles![0].profile.tp = 2
+  data.launch_profiles![0].compatible_gpu_groups = [['GPU-one', 'GPU-two']]
+  const launch = vi.fn()
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+  const gpu = screen.getByLabelText('GPU / GPU group')
+  expect(gpu).toHaveValue(JSON.stringify(['GPU-one', 'GPU-two']))
+  fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-three']) } })
+  expect(screen.getByLabelText('Hardware profile')).toBeDisabled()
+  expect(screen.getByText(/No profiles match this model on the selected GPU group/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
   expect(launch).not.toHaveBeenCalled()
 })
