@@ -456,3 +456,9 @@ red image. All three instances were stopped and their temporary saved records
 removed. This establishes TP1 startup, runtime routing, and a small media request;
 it does not qualify full-context capacity, other concurrency levels, TP2/TP4, or
 Qwen joint Vision/DFlash. Catalog qualification labels remain unchanged.
+
+The Hosts page scrolls within the window. Each host's Launch Server Instance and
+Server details sections start collapsed and open independently; saved-instance
+Start, Stop, and Reload controls remain visible. CMP 170HX devices use a PCI-ID
+based display alias in GChat and the GInfer launch menu. The driver-reported name
+remains the profile-matching identity.

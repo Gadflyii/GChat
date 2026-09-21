@@ -16,6 +16,7 @@ export type ModelDownload = {
   bytes_per_second: number; error: string | null; path: string | null
 }
 export type ModelGpu = {
+  display_name?: string | null
   uuid: string; name: string; memory_mib: number; compute_capability?: string | null
 }
 

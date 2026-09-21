@@ -366,6 +366,7 @@ mod tests {
             vec![artifact.clone()],
             vec![],
             vec![Gpu {
+                display_name: None,
                 uuid: "GPU-test".into(),
                 name: "Fixture".into(),
                 memory_mib: 32768,

@@ -26,6 +26,13 @@ vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector?: (sta
 import { Route } from './index'
 const Page = Route.options.component as ComponentType
 
+function renderExpandedPage() {
+  const view = render(<Page />)
+  fireEvent.click(screen.getByText('Launch Server Instance', { selector: 'summary' }))
+  fireEvent.click(screen.getByText('Server details', { selector: 'summary' }))
+  return view
+}
+
 beforeEach(() => {
   mocks.error = ''
   mocks.local = false
@@ -37,15 +44,30 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('Engines host intake and launch controls', () => {
+  it('keeps launch and details independently collapsed without hiding host controls', () => {
+    render(<Page />)
+    const launch = screen.getByText('Launch Server Instance', { selector: 'summary' })
+    const details = screen.getByText('Server details', { selector: 'summary' })
+    expect(launch.closest('details')).not.toHaveAttribute('open')
+    expect(details.closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(launch)
+    expect(screen.getByRole('combobox', { name: 'Lab host model' })).toBeVisible()
+    expect(details.closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(details)
+    fireEvent.click(launch)
+    expect(details.closest('details')).toHaveAttribute('open')
+    expect(launch.closest('details')).not.toHaveAttribute('open')
+  })
+
   it('shows the automatic local host without a forget action', () => {
     mocks.local = true
-    render(<Page />)
+    renderExpandedPage()
     expect(screen.getByText('Local host')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Forget' })).not.toBeInTheDocument()
   })
   it('shares independently of discovery', async () => {
     mocks.local = true
-    render(<Page />)
+    renderExpandedPage()
     const share = screen.getByRole('checkbox', { name: 'Share this host' })
     expect(share).toBeChecked()
     expect(screen.getByRole('switch', { name: 'Discover nearby GInfer hosts' })).not.toBeChecked()
@@ -55,14 +77,14 @@ describe('Engines host intake and launch controls', () => {
   })
 
   it('does not change sharing on a remote host', () => {
-    render(<Page />)
+    renderExpandedPage()
     expect(screen.getByRole('checkbox', { name: 'Share this host' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Generate pairing code' })).not.toBeInTheDocument()
   })
 
   it('offers Pair and Ignore for a discovered host without requiring address selection', async () => {
     mocks.nearby = [{ host_id: 'nearby-host', name: 'Server 2', urls: ['https://192.168.1.111:7444', 'https://10.0.0.1:7444'] }]
-    render(<Page />)
+    renderExpandedPage()
     expect(screen.getByRole('button', { name: 'Ignore', exact: true })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /https:/ })).not.toBeInTheDocument()
     const pair = screen.getByRole('button', { name: 'Pair', exact: true })
@@ -79,7 +101,7 @@ describe('Engines host intake and launch controls', () => {
     mocks.command.mockImplementation((action: string) => action === 'pair'
       ? new Promise((_resolve, reject) => { fail = reject })
       : Promise.resolve({ ready: true, platform: 'linux', can_install: false }))
-    render(<Page />)
+    renderExpandedPage()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Pair', exact: true })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Pair', exact: true }))
     expect(screen.getByRole('button', { name: 'Pairing…' })).toBeDisabled()
@@ -97,7 +119,7 @@ describe('Engines host intake and launch controls', () => {
     }
     mocks.instances = [{ instance_id: 'instance', session_id: null, display_name: 'Saved model',
       upstream_model_id: 'model', status: 'stopped', configuration: profile, profile }]
-    const view = render(<Page />)
+    const view = renderExpandedPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
     expect(screen.getByText('Edit server instance settings').closest('details')).toHaveAttribute('open')
     expect(screen.getByLabelText('Custom model')).toHaveFocus()
@@ -120,8 +142,8 @@ describe('Engines host intake and launch controls', () => {
       host_id: 'host', instance_id: 'instance', body: { force: false, expected_session_id: null },
     }))
     expect(screen.getByText(/Instance 1 · Saved model .* · ready/, { selector: 'p' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Lab host/ }))
-    expect(screen.queryByText('Server details')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Server details', { selector: 'summary' }))
+    expect(screen.getByText('Server details').closest('details')).not.toHaveAttribute('open')
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled()
   })
@@ -136,7 +158,7 @@ describe('Engines host intake and launch controls', () => {
       instance_id: `internal-id-${index}`, session_id: null, display_name: 'model',
       upstream_model_id: 'model', status: status as EngineInstance['status'], configuration: profile, profile,
     }))
-    render(<Page />)
+    renderExpandedPage()
     const instance = screen.getByRole('combobox', { name: 'Lab host serving instance' })
     const model = screen.getByRole('combobox', { name: 'Lab host model' })
     expect(instance.closest('label')).toHaveTextContent('Server instance')
@@ -157,7 +179,7 @@ describe('Engines host intake and launch controls', () => {
   })
 
   it('pairs a manually entered address without a code', async () => {
-    render(<Page />)
+    renderExpandedPage()
     fireEvent.click(screen.getByText('Enter a host address manually'))
     fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })
     expect(screen.getByRole('button', { name: 'Pair host' })).toBeDisabled()
@@ -169,7 +191,7 @@ describe('Engines host intake and launch controls', () => {
   })
 
   it('blocks fractional launch values but allows Qwen Vision with speculation', async () => {
-    render(<Page />)
+    renderExpandedPage()
     fireEvent.click(screen.getByText('Custom server settings'))
     fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
     expect(screen.getByLabelText('GPU 1: RTX 5090')).toBeChecked()
@@ -191,7 +213,7 @@ describe('Engines host intake and launch controls', () => {
 
   it('retains unavailable host inventory without permitting a new load', () => {
     mocks.error = 'Connection refused'
-    render(<Page />)
+    renderExpandedPage()
     fireEvent.click(screen.getByText('Custom server settings'))
     fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
     fireEvent.click(screen.getByLabelText('GPU 1: RTX 5090'))
@@ -201,7 +223,7 @@ describe('Engines host intake and launch controls', () => {
   })
   it('blocks pairing when storage is unavailable even after skipping setup', async () => {
     mocks.command.mockResolvedValue({ ready: false, platform: 'linux', can_install: false })
-    render(<Page />)
+    renderExpandedPage()
     fireEvent.click(screen.getByText('Enter a host address manually'))
     fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })
     await screen.findByText('Secure storage is unavailable. Set it up or unlock it before pairing.')

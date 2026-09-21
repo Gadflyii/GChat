@@ -327,7 +327,7 @@ fn group_label(snapshot: &Value, group: &Value) -> String {
     group.as_array().into_iter().flatten().map(|id| {
         snapshot["gpus"].as_array().into_iter().flatten().enumerate()
             .find(|(_, gpu)| gpu["uuid"] == *id)
-            .map(|(index, gpu)| format!("GPU {index} — {}", gpu["name"].as_str().unwrap_or("GPU")))
+            .map(|(index, gpu)| format!("GPU {index} — {}", gpu["display_name"].as_str().or_else(|| gpu["name"].as_str()).unwrap_or("GPU")))
             .unwrap_or_else(|| "Unavailable GPU".into())
     }).collect::<Vec<_>>().join(" + ")
 }
@@ -451,7 +451,7 @@ async fn menu_control(control: LocalControl) -> Result<(), String> {
         for (index, gpu) in snapshot["gpus"].as_array().into_iter().flatten().enumerate() {
             println!(
                 "  GPU {index}: {} · {} MiB · SM {} · {}",
-                gpu["name"].as_str().unwrap_or("GPU"),
+                gpu["display_name"].as_str().or_else(|| gpu["name"].as_str()).unwrap_or("GPU"),
                 gpu["memory_mib"],
                 gpu["compute_capability"].as_str().unwrap_or("unknown"),
                 if gpu_occupied(&snapshot, gpu["uuid"].as_str().unwrap_or("")) { "In use" } else { "Available" }

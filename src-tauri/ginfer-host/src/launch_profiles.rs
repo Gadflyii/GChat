@@ -364,7 +364,7 @@ mod tests {
         let mut gpus: Vec<_> = (0..4)
             .map(|i| Gpu {
                 uuid: format!("GPU-{i}"),
-                name: "Fixture GPU".into(),
+                name: "Fixture GPU".into(), display_name: None,
                 memory_mib: 32607,
                 compute_capability: Some("12.0".into()),
             })
@@ -444,7 +444,7 @@ mod tests {
     fn other_platform_profiles_are_not_launch_choices() {
         let mut p = profile();
         let gpus = vec![Gpu {
-            uuid: "GPU-fixture".into(), name: "Fixture GPU".into(),
+            uuid: "GPU-fixture".into(), name: "Fixture GPU".into(), display_name: None,
             memory_mib: 32607, compute_capability: Some("12.0".into()),
         }];
         p.tp = 1;

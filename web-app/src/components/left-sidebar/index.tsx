@@ -101,13 +101,10 @@ export function LeftSidebar() {
               IS_MACOS && 'mt-3'
             )}
           >
-            <img
-              src="/images/logo-app.png"
-              alt=""
-              className="size-10 shrink-0"
-              draggable={false}
-            />
-            <div className="min-w-0"><div className="text-xl font-medium tracking-tight">GChat</div><div className="whitespace-nowrap text-xs leading-snug text-muted-foreground">by Sectile Research Labs</div></div>
+            <div className="w-full max-w-60 overflow-hidden">
+              <img src="/images/gchat-lockup.png" alt="GChat by Sectile Research Laboratories" className="w-[170%] max-w-none dark:hidden" draggable={false} />
+              <img src="/images/gchat-lockup-reversed.png" alt="GChat by Sectile Research Laboratories" className="hidden w-[170%] max-w-none dark:block" draggable={false} />
+            </div>
           </div>
           <div className="mt-[6px] px-1">
             <ChatAgentModeSwitch

@@ -117,7 +117,7 @@ it('filters profiles by model and assigned hardware and clears a previous model 
 it('selects physical GPUs separately and filters profiles before launching', async () => {
   const data = snapshot()
   data.instances = []
-  data.gpus.push({ uuid: 'GPU-two', name: 'Other GPU', memory_mib: 24576 })
+  data.gpus.push({ uuid: 'GPU-two', name: 'NVIDIA Graphics Device', display_name: 'NVIDIA CMP 170HX', memory_mib: 65536 })
   const second = structuredClone(data.launch_profiles![0])
   second.profile.id = 'second'
   second.profile.name = 'Second GPU profile'
@@ -127,6 +127,7 @@ it('selects physical GPUs separately and filters profiles before launching', asy
   render(<EngineProfilePicker snapshot={data} instanceId="" disabled={false} launch={launch} />)
   const gpu = screen.getByLabelText('GPU / GPU group')
   expect(gpu).toHaveValue(JSON.stringify(['GPU-one']))
+  expect(screen.getByRole('option', { name: 'GPU 2: NVIDIA CMP 170HX · 64 GB' })).toHaveValue(JSON.stringify(['GPU-two']))
   expect(screen.queryByRole('option', { name: /Second GPU profile/ })).not.toBeInTheDocument()
   const first = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: first.value } })

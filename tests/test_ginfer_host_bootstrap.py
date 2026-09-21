@@ -18,7 +18,7 @@ class LocalHostBootstrap(unittest.TestCase):
             inventory = root / 'inventory'
             inventory.write_text('#!/bin/sh\nprintf "%s\\n" "$PPID" >> "' +
                                  str(root / 'owners') + '"\n'
-                                 'printf "GPU-test, Bootstrap fixture, 32607, 12.0\\n"\n')
+                                 'printf "GPU-test, Bootstrap fixture, 32607, 12.0, 0x2B8510DE\\nGPU-cmp, NVIDIA Graphics Device, 65536, 8.0, 0x20C210DE\\n"\n')
             inventory.chmod(0o700)
             with socket.socket() as reserved:
                 reserved.bind(('127.0.0.1', 0))
@@ -39,6 +39,8 @@ class LocalHostBootstrap(unittest.TestCase):
                     snapshots.append(json.loads(stdout))
                 self.assertEqual(snapshots[0]['boot_id'], snapshots[1]['boot_id'])
                 self.assertEqual(snapshots[0]['gpus'][0]['name'], 'Bootstrap fixture')
+                self.assertEqual(snapshots[0]['gpus'][1]['name'], 'NVIDIA Graphics Device')
+                self.assertEqual(snapshots[0]['gpus'][1]['display_name'], 'NVIDIA CMP 170HX')
                 self.assertEqual(snapshots[0]['model_management']['managed_root'],
                                  str(root / 'provider/models'))
                 private = json.loads((root / 'provider/host/host.json').read_text())

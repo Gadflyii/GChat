@@ -24,7 +24,7 @@ class NativeLauncher(unittest.TestCase):
             inventory = root / 'nvidia-smi'
             inventory.write_text('#!/bin/sh\nprintf "%s\\n" "$PPID" > "' +
                                  str(root / 'owner') + '"\n'
-                                 'printf "GPU-fixture, Desktop launcher GPU, 32607, 12.0\\n"\n')
+                                 'printf "GPU-fixture, Desktop launcher GPU, 32607, 12.0, 0x2B8510DE\\n"\n')
             inventory.chmod(0o700)
             with socket.socket() as reservation:
                 reservation.bind(('127.0.0.1', 0))
@@ -104,7 +104,7 @@ class NativeLauncher(unittest.TestCase):
             host = root / 'ginfer-host'
             shutil.copy2(os.environ['GINFER_HOST_BINARY'], host)
             inventory = root / 'fixture-nvidia-smi'
-            inventory.write_text('#!/bin/sh\nprintf "GPU-fixture, Synthetic launcher GPU, 32607, 12.0\\n"\n')
+            inventory.write_text('#!/bin/sh\nprintf "GPU-fixture, NVIDIA Graphics Device, 65536, 8.0, 0x20C210DE\\n"\n')
             inventory.chmod(0o700)
             with socket.socket() as reservation:
                 reservation.bind(('127.0.0.1', 0))
@@ -143,8 +143,8 @@ class NativeLauncher(unittest.TestCase):
                         except OSError:
                             break
                 self.assertIn(b'Select:', output, output.decode(errors='replace'))
-                self.assertIn(b'Synthetic launcher GPU', output)
-                self.assertIn(b'No qualified profiles', output)
+                self.assertIn(b'NVIDIA CMP 170HX', output)
+                self.assertIn(b'No local models registered', output)
                 os.write(master, b'q\n')
                 self.assertEqual(terminal.wait(timeout=5), 0)
                 self.assertIsNone(service.poll(), 'quitting the menu must not stop the service')

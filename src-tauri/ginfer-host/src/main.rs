@@ -121,7 +121,7 @@ async fn run(
     #[cfg(windows)]
     inventory.creation_flags(0x08000000);
     let output = inventory.args([
-            "--query-gpu=uuid,name,memory.total,compute_cap",
+            "--query-gpu=uuid,name,memory.total,compute_cap,pci.device_id",
             "--format=csv,noheader,nounits",
         ])
         .output()
@@ -133,12 +133,13 @@ async fn run(
     let mut gpus = Vec::new();
     for line in String::from_utf8_lossy(&output.stdout).lines() {
         let values: Vec<_> = line.split(',').map(str::trim).collect();
-        if values.len() != 4 {
+        if values.len() != 5 {
             return Err("unrecognized NVIDIA inventory row".into());
         }
         gpus.push(Gpu {
             uuid: values[0].into(),
             name: values[1].into(),
+            display_name: gpu_display_alias(values[4]).map(str::to_owned),
             memory_mib: values[2].parse::<u64>().map_err(|e| e.to_string())?,
             compute_capability: values[3].parse::<f32>().ok().map(|_| values[3].to_string()),
         });
@@ -254,5 +255,22 @@ async fn shutdown_signal() {
     #[cfg(not(unix))]
     {
         let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
+fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
+    match u32::from_str_radix(pci_device_id.trim_start_matches("0x").trim_start_matches("0X"), 16) {
+        Ok(0x20c210de) => Some("NVIDIA CMP 170HX"),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn cmp_alias_uses_device_identity_not_generic_driver_name() {
+        assert_eq!(super::gpu_display_alias("0x20C210DE"), Some("NVIDIA CMP 170HX"));
+        assert_eq!(super::gpu_display_alias("0x220410DE"), None);
+        assert_eq!(super::gpu_display_alias("N/A"), None);
     }
 }

@@ -13,13 +13,14 @@ const selectStyle: CSSProperties = {
   paddingRight: '2rem',
 }
 
-export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: controlledInstanceId, labelPrefix, hostSelector, currentSettings = false, onPendingChange }: {
+export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: controlledInstanceId, labelPrefix, hostSelector, currentSettings = false, hideHeading = false, onPendingChange }: {
   snapshot: EngineSnapshot
   disabled: boolean
   launch: (body: Record<string, unknown>) => Promise<void>
   instanceId?: string
   labelPrefix?: string
   hostSelector?: ReactNode
+  hideHeading?: boolean
   currentSettings?: boolean
   onPendingChange?: (pending: boolean) => void
 }) {
@@ -60,7 +61,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
   const pending = currentSettings && (!!choice || (modelId !== (instance?.profile?.model_id ?? snapshot.models[0]?.id)))
   useEffect(() => { onPendingChange?.(pending) }, [pending, onPendingChange])
   return <div className="space-y-3 rounded-lg border p-4">
-    <h3 className="font-medium">{currentSettings ? 'Benchmark server' : 'Launch Server Instance'}</h3>
+    {!hideHeading && <h3 className="font-medium">{currentSettings ? 'Benchmark server' : 'Launch Server Instance'}</h3>}
     <p className="text-sm text-muted-foreground">Choose a model, GPU or GPU group, then a profile. Existing instances keep their GPU group. Selections take effect only when you apply or start the profile.</p>
     {snapshot.profile_error && <p role="alert" className="text-sm text-destructive">{snapshot.profile_error}</p>}
     <div className={`grid min-w-0 gap-3 ${hostSelector || controlledInstanceId === undefined ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
@@ -84,7 +85,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
         onChange={e => { setGpuChoice({ instanceId, key: e.target.value }); setChoice('') }}>
         {!gpuKey && <option value="">No available GPUs</option>}
         {groups.map(group => <option key={groupKey(group)} value={groupKey(group)} disabled={group.some(gpu => occupied.has(gpu))}>
-          {group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `GPU ${index + 1}: ${gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GB` : 'Unavailable GPU' }).join(' + ')}
+          {group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `GPU ${index + 1}: ${gpu.display_name ?? gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GB` : 'Unavailable GPU' }).join(' + ')}
           {group.some(gpu => occupied.has(gpu)) ? ' · In use' : ''}
         </option>)}
       </select>

@@ -23,6 +23,8 @@ use uuid::Uuid;
 pub struct Gpu {
     pub uuid: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
     pub memory_mib: u64,
     #[serde(default)]
     pub compute_capability: Option<String>,
@@ -1261,11 +1263,11 @@ mod lifecycle_tests {
         std::fs::write(models.join("model.ginfer"), artifact).unwrap();
         let mut gpus = vec![Gpu {
             uuid: "GPU-test".into(),
-            name: "Test".into(),
+            name: "Test".into(), display_name: None,
             memory_mib: 32768,
             compute_capability: Some("12.0".into()),
         }];
-        gpus.push(Gpu { uuid: "GPU-second".into(), name: "Test".into(), memory_mib: 32768, compute_capability: Some("12.0".into()) });
+        gpus.push(Gpu { uuid: "GPU-second".into(), name: "Test".into(), display_name: None, memory_mib: 32768, compute_capability: Some("12.0".into()) });
         let host = Host::open(
             dir.path().join("state"),
             "Test".into(),

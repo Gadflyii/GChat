@@ -16,7 +16,6 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [context, setContext] = useState(8192)
   const [concurrency, setConcurrency] = useState(1)
   const [busy, setBusy] = useState(false)
-  const [expanded, setExpanded] = useState(true)
   const [activeId, setActiveId] = useState('')
   const active = activeId === 'additional' ? undefined : snapshot?.instances.find(i => i.instance_id === activeId) ??
     snapshot?.instances.find(i => i.status === 'ready') ?? snapshot?.instances[0]
@@ -53,7 +52,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   }
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><button className="font-semibold" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? '▾' : '▸'} {host.name}</button><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Unavailable' : snapshot ? 'Connected' : 'Connecting'}</p></div>
+      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Unavailable' : snapshot ? 'Connected' : 'Connecting'}</p></div>
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
         {snapshot.instances.length > 1 ? <label className="min-w-0 text-xs font-medium">Server instance
@@ -75,17 +74,18 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     </div>
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} />}
     {error && <p role="alert" className="text-sm text-destructive">{error}. Saved models below are last known; reconnect before using them.</p>}
-    {snapshot && <>
-      <EngineProfilePicker key={active?.instance_id ?? 'additional'} instanceId={active?.instance_id ?? ''} labelPrefix={host.name}
+    {snapshot && <details className="rounded-lg border p-4 space-y-3">
+      <summary className="cursor-pointer font-medium">Launch Server Instance</summary>
+      <EngineProfilePicker hideHeading key={active?.instance_id ?? 'additional'} instanceId={active?.instance_id ?? ''} labelPrefix={host.name}
         snapshot={snapshot} disabled={busy || !!error || active?.status === 'starting' || active?.status === 'stopping'}
         launch={async body => { if (await act('profile_launch', { body })) setActiveId('') }} />
       {active && snapshot.gpus.some(gpu => !snapshot.instances.some(instance => instance.configuration.gpu_uuids.includes(gpu.uuid))) &&
         <Button variant="outline" disabled={busy || !!error} onClick={() => setActiveId('additional')}>Add server on another GPU group</Button>}
       {activeId === 'additional' && <Button variant="outline" onClick={() => setActiveId('')}>Cancel additional server</Button>}
-    </>}
-    {snapshot && expanded && <>
-      <div className="flex flex-wrap gap-2">{snapshot.gpus.map((gpu, index) => <span className="rounded border px-3 py-1 text-sm" key={gpu.uuid}>GPU {index + 1}: {gpu.name} · {(gpu.memory_mib / 1024).toFixed(0)} GB</span>)}</div>
-      <h3 className="font-medium">Server details</h3>
+    </details>}
+    {snapshot && <details className="rounded-lg border p-4 space-y-3">
+      <summary className="cursor-pointer font-medium">Server details</summary>
+      <div className="flex flex-wrap gap-2">{snapshot.gpus.map((gpu, index) => <span className="rounded border px-3 py-1 text-sm" key={gpu.uuid}>GPU {index + 1}: {gpu.display_name ?? gpu.name} · {(gpu.memory_mib / 1024).toFixed(0)} GB</span>)}</div>
       {active?.status === 'stopped' && <p className="text-sm text-muted-foreground">Server stopped. Select a model and profile above to reuse this instance.</p>}
       {!snapshot.instances.length && <p className="text-sm text-muted-foreground">No models are loaded. Choose an installed model below to start one.</p>}
       {(active ? [active] : []).map((instance) => <div key={instance.instance_id} className="rounded-lg bg-muted/40 p-3 space-y-2">
@@ -123,7 +123,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         <option value="">Choose an installed model</option>
         {snapshot.models.map((m) => <option key={m.id} value={m.id}>{hostModelLabel(m)} · TP{m.metadata.tp_size} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GB{m.artifact_set ? ' · deployment set' : ''}</option>)}
       </select></label>
-      <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />GPU {index + 1}: {gpu.name}</label>)}</div>
+      <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />GPU {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
       <div className="flex flex-wrap gap-4">
         <label className="text-sm">Context tokens<Input type="number" min={1} value={context} onChange={(e) => setContext(Number(e.target.value))} /></label>
         <label className="text-sm">Concurrent requests<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
@@ -150,6 +150,6 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         {editing && <Button variant="outline" onClick={() => { setEditing(null); setSettingsOpen(false) }}>Cancel editing</Button>}
       </div>
       </details>
-    </>}
+    </details>}
   </section>
 }
