@@ -14,6 +14,9 @@ implementation and historical measurements are not pending tasks.
 - **Release assembly:** confirm the selected engine runtime and accepted catalogs
   in final platform bundles, then validate the installed result. Local Windows
   2.0.42 installers exist; their presence does not qualify subsequent source edits.
+  The Linux 2.0.42 AppImage now builds against Ubuntu 24.04 and has been installed
+  and visually checked on Server 2 under X11. This establishes desktop startup,
+  not a new engine/model qualification matrix.
   Per-SKU model and TP qualification requires exact artifacts and available hardware;
   see [profile evidence](model-profile-evidence.md). Do not relabel older measurements
   as qualification of a new engine.

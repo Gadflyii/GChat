@@ -268,8 +268,9 @@ The first Sectile distribution is being prepared as a matched set:
 | **Model packages** | Version-3 `.ginfer` artifacts distributed separately from the application |
 
 The native Windows GInfer runtime and its packaged lifecycle now build together locally. Public
-Windows release links remain gated on signing and the complete release matrix. Linux is the current
-development host; the README does not present local or unqualified packages as released assets.
+Windows release links remain gated on signing and the complete release matrix. A Linux 2.0.42
+AppImage built against Ubuntu 24.04 has been installed and visually checked on Server 2 under X11.
+These local packages are not published release assets.
 
 ## Data and security
 

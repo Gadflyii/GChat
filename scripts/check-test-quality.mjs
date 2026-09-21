@@ -10,10 +10,12 @@ const allowlist = existsSync(allowlistPath)
 
 const ignoredDirectories = new Set([
   '.git',
+  '.cache',
   '.yarn',
   'coverage',
   'dist',
   'node_modules',
+  'out',
   'target',
 ])
 

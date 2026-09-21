@@ -18,6 +18,7 @@ fn embed_windows_test_manifest() {
 }
 
 #[cfg(all(windows, feature = "test-tauri"))]
+#[cfg(not(feature = "cli"))]
 fn build_tauri() {
     let attributes = tauri_build::Attributes::new()
         .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
@@ -25,11 +26,15 @@ fn build_tauri() {
 }
 
 #[cfg(not(all(windows, feature = "test-tauri")))]
+#[cfg(not(feature = "cli"))]
 fn build_tauri() {
     tauri_build::build();
 }
 
 fn main() {
+    // CLI builds skip Tauri's helper but still compile platform-gated modules.
+    println!("cargo:rustc-check-cfg=cfg(desktop)");
+    println!("cargo:rustc-check-cfg=cfg(mobile)");
     println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_KEY_ID");
     println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_SEED_HEX");
     stage_launch_profiles();

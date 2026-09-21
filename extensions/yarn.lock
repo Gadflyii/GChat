@@ -303,73 +303,73 @@ __metadata:
 
 "@gchat/core@file:../../core/package.tgz::locator=%40gchat%2Fassistant-extension%40workspace%3Aassistant-extension":
   version: 0.1.10
-  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=14fe9b&locator=%40gchat%2Fassistant-extension%40workspace%3Aassistant-extension"
+  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=23b997&locator=%40gchat%2Fassistant-extension%40workspace%3Aassistant-extension"
   dependencies:
     rxjs: "npm:^7.8.1"
     ulidx: "npm:^2.3.0"
   peerDependencies:
     react: 19.0.0
-  checksum: 10c0/ff61b2f9e555960f3c9fe9d81e691f0d0d1980576672afd4b648fff6534f6681e101964188d559591378e7ea4a37216a2a981be881fa33a60e73e421ca31b83c
+  checksum: 10c0/bf0abf14648f467c8b706dbd9688aa16ae98ed03a3c9459d2082606f106ff4a6d8de2174d4d0cba2a9cd5c4a8f163cf3260236d99159eba87b5b6ac5ee3273e4
   languageName: node
   linkType: hard
 
 "@gchat/core@file:../../core/package.tgz::locator=%40gchat%2Fconversational-extension%40workspace%3Aconversational-extension":
   version: 0.1.10
-  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=14fe9b&locator=%40gchat%2Fconversational-extension%40workspace%3Aconversational-extension"
+  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=23b997&locator=%40gchat%2Fconversational-extension%40workspace%3Aconversational-extension"
   dependencies:
     rxjs: "npm:^7.8.1"
     ulidx: "npm:^2.3.0"
   peerDependencies:
     react: 19.0.0
-  checksum: 10c0/ff61b2f9e555960f3c9fe9d81e691f0d0d1980576672afd4b648fff6534f6681e101964188d559591378e7ea4a37216a2a981be881fa33a60e73e421ca31b83c
+  checksum: 10c0/bf0abf14648f467c8b706dbd9688aa16ae98ed03a3c9459d2082606f106ff4a6d8de2174d4d0cba2a9cd5c4a8f163cf3260236d99159eba87b5b6ac5ee3273e4
   languageName: node
   linkType: hard
 
 "@gchat/core@file:../../core/package.tgz::locator=%40gchat%2Fdownload-extension%40workspace%3Adownload-extension":
   version: 0.1.10
-  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=14fe9b&locator=%40gchat%2Fdownload-extension%40workspace%3Adownload-extension"
+  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=23b997&locator=%40gchat%2Fdownload-extension%40workspace%3Adownload-extension"
   dependencies:
     rxjs: "npm:^7.8.1"
     ulidx: "npm:^2.3.0"
   peerDependencies:
     react: 19.0.0
-  checksum: 10c0/ff61b2f9e555960f3c9fe9d81e691f0d0d1980576672afd4b648fff6534f6681e101964188d559591378e7ea4a37216a2a981be881fa33a60e73e421ca31b83c
+  checksum: 10c0/bf0abf14648f467c8b706dbd9688aa16ae98ed03a3c9459d2082606f106ff4a6d8de2174d4d0cba2a9cd5c4a8f163cf3260236d99159eba87b5b6ac5ee3273e4
   languageName: node
   linkType: hard
 
 "@gchat/core@file:../../core/package.tgz::locator=%40gchat%2Fginfer-extension%40workspace%3Aginfer-extension":
   version: 0.1.10
-  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=14fe9b&locator=%40gchat%2Fginfer-extension%40workspace%3Aginfer-extension"
+  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=23b997&locator=%40gchat%2Fginfer-extension%40workspace%3Aginfer-extension"
   dependencies:
     rxjs: "npm:^7.8.1"
     ulidx: "npm:^2.3.0"
   peerDependencies:
     react: 19.0.0
-  checksum: 10c0/ff61b2f9e555960f3c9fe9d81e691f0d0d1980576672afd4b648fff6534f6681e101964188d559591378e7ea4a37216a2a981be881fa33a60e73e421ca31b83c
+  checksum: 10c0/bf0abf14648f467c8b706dbd9688aa16ae98ed03a3c9459d2082606f106ff4a6d8de2174d4d0cba2a9cd5c4a8f163cf3260236d99159eba87b5b6ac5ee3273e4
   languageName: node
   linkType: hard
 
 "@gchat/core@file:../../core/package.tgz::locator=%40gchat%2Frag-extension%40workspace%3Arag-extension":
   version: 0.1.10
-  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=14fe9b&locator=%40gchat%2Frag-extension%40workspace%3Arag-extension"
+  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=23b997&locator=%40gchat%2Frag-extension%40workspace%3Arag-extension"
   dependencies:
     rxjs: "npm:^7.8.1"
     ulidx: "npm:^2.3.0"
   peerDependencies:
     react: 19.0.0
-  checksum: 10c0/ff61b2f9e555960f3c9fe9d81e691f0d0d1980576672afd4b648fff6534f6681e101964188d559591378e7ea4a37216a2a981be881fa33a60e73e421ca31b83c
+  checksum: 10c0/bf0abf14648f467c8b706dbd9688aa16ae98ed03a3c9459d2082606f106ff4a6d8de2174d4d0cba2a9cd5c4a8f163cf3260236d99159eba87b5b6ac5ee3273e4
   languageName: node
   linkType: hard
 
 "@gchat/core@file:../../core/package.tgz::locator=%40gchat%2Fvector-db-extension%40workspace%3Avector-db-extension":
   version: 0.1.10
-  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=14fe9b&locator=%40gchat%2Fvector-db-extension%40workspace%3Avector-db-extension"
+  resolution: "@gchat/core@file:../../core/package.tgz#../../core/package.tgz::hash=23b997&locator=%40gchat%2Fvector-db-extension%40workspace%3Avector-db-extension"
   dependencies:
     rxjs: "npm:^7.8.1"
     ulidx: "npm:^2.3.0"
   peerDependencies:
     react: 19.0.0
-  checksum: 10c0/ff61b2f9e555960f3c9fe9d81e691f0d0d1980576672afd4b648fff6534f6681e101964188d559591378e7ea4a37216a2a981be881fa33a60e73e421ca31b83c
+  checksum: 10c0/bf0abf14648f467c8b706dbd9688aa16ae98ed03a3c9459d2082606f106ff4a6d8de2174d4d0cba2a9cd5c4a8f163cf3260236d99159eba87b5b6ac5ee3273e4
   languageName: node
   linkType: hard
 

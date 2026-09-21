@@ -346,3 +346,21 @@ grants, models, and saved profiles intact.
 
 Linux desktop credentials require an unlocked Secret Service provider; headless WSL
 checks do not establish that path. Windows native vault storage has been verified.
+
+## Linux desktop installation evidence
+
+The 2.0.42 AppImage was built against Ubuntu 24.04 in an isolated container and
+installed on Server 2 (Ubuntu 24.04, NVIDIA 610.43.03, GNOME/X11). The window
+rendered successfully. The per-user application and desktop entries launch
+`~/Applications/GChat_2.0.42_amd64.AppImage`; FUSE 2 is installed.
+
+The local host uses the existing SM86 engine and RTX 3090 profiles, with the two
+existing Qwen/Muse artifact files referenced in place. It reports all three GPUs
+and both models without inventory errors. No model was started during this
+desktop acceptance check. The separate SM80 GPUs require their matching runtime
+and qualification; this installation does not establish that path.
+
+Build requirements include GTK/WebKit development libraries, appindicator,
+`patchelf`, `squashfs-tools`, `xdg-utils`, and `desktop-file-utils`. Use a build
+distribution no newer than the deployment baseline. Rebuild the core and extension
+archives before packaging; verification placeholders are not release resources.

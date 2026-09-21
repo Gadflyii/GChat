@@ -25,6 +25,6 @@ if [ ! -f "$LINUXDEPLOY" ]; then
 fi
 
 rm -f "$SYMLINK"
-ln -s "$LINUXDEPLOY" "$SYMLINK"
+ln -s "$(basename "$LINUXDEPLOY")" "$SYMLINK"
 
 "$@"
