@@ -2436,7 +2436,6 @@ dependencies = [
  "hmac",
  "hyper 0.14.32",
  "mdns-sd",
- "rand 0.8.5",
  "rcgen",
  "reqwest 0.11.27",
  "rustls 0.21.12",

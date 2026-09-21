@@ -8,13 +8,14 @@ pub const PORT: u16 = 7444;
 pub struct LanSharing {
     pub(crate) port: u16,
     pub managed: bool,
+    pub standalone: bool,
     pub error: Option<String>,
     running: Option<Listener>,
 }
 
 impl Default for LanSharing {
     fn default() -> Self {
-        Self { port: PORT, managed: false, error: None, running: None }
+        Self { port: PORT, managed: false, standalone: false, error: None, running: None }
     }
 }
 
@@ -136,7 +137,6 @@ impl Host {
             sharing.error = Some(format!("Cannot save LAN sharing: {error}; rollback: {rollback:?}"));
             return Err(sharing.error.clone().unwrap());
         }
-        if !enabled { *self.pairing.lock().await = None; }
         Ok(())
     }
 }
@@ -169,9 +169,8 @@ mod tests {
         let client = crate::transport::pinned_client(&fingerprint).unwrap();
         let url = format!("https://127.0.0.1:{port}");
         assert_eq!(client.get(format!("{url}/host/v1/snapshot")).send().await.unwrap().status(), StatusCode::UNAUTHORIZED);
-        let code = host.enable_pairing().await;
         let paired: serde_json::Value = client.post(format!("{url}/host/v1/pair"))
-            .json(&serde_json::json!({"code":code,"client_name":"Remote test"}))
+            .json(&serde_json::json!({"client_name":"Remote test"}))
             .send().await.unwrap().json().await.unwrap();
         let remote_token = paired["token"].as_str().unwrap();
         assert_eq!(client.get(format!("{url}/host/v1/snapshot")).bearer_auth(remote_token)
@@ -191,16 +190,17 @@ mod tests {
         assert_eq!(host.boot_id, before);
         assert_eq!(client.get(format!("{url}/host/v1/snapshot")).bearer_auth(remote_token)
             .send().await.unwrap().json::<serde_json::Value>().await.unwrap()["display_name"], "Lab workstation");
-        host.enable_pairing().await;
         let request = Request::post("/host/v1/lan-sharing")
             .header("authorization", format!("Bearer {token}"))
             .body(Body::from(r#"{"enabled":false}"#)).unwrap();
         assert_eq!(host.clone().route(request).await.unwrap().status(), StatusCode::OK);
-        assert!(host.pairing.lock().await.is_none());
         assert!(tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port)).await.is_err());
         assert!(!host.data.lock().await.share_lan);
         assert!(client.get(format!("{url}/host/v1/snapshot")).bearer_auth(remote_token)
             .timeout(Duration::from_secs(2)).send().await.is_err());
+        let request = Request::post("/host/v1/pair")
+            .body(Body::from(r#"{"client_name":"Blocked client"}"#)).unwrap();
+        assert_eq!(host.clone().route(request).await.unwrap().status(), StatusCode::FORBIDDEN);
         drop(host);
         let host = open().await.unwrap();
         host.initialize_lan_sharing().await;

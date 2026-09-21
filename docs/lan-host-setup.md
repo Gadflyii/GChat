@@ -199,15 +199,17 @@ A listener failure appears on the local host card; local inference remains avail
 Standalone service installations retain their explicit `--share-lan` installer option
 and port 7443; desktop controls do not override their service configuration.
 
-To pair, click **Pair** beside the discovered host. Addresses are tucked under
-**Connection details**; GChat probes them with the supplied certificate fingerprint
-and selects a reachable matching identity before submitting the code once.
-On the serving computer, click
-**Generate pairing code** on its local host card. Enter that eight-digit, one-use code
-and the displayed certificate SHA256 in the client's pairing form. The code expires
-after five minutes. Pairing grants host management and inference access, persists across
-restarts, and is directional; pair the reverse direction separately if needed.
-Discovery alone grants no access. Disabling sharing also invalidates a pending code.
+To pair, click **Pair** beside a discovered host. GChat selects a reachable
+address, trusts its TLS certificate on this first connection, and saves the
+credential in the OS vault. No code or fingerprint entry is required. Later
+connections require the saved certificate; a changed certificate is rejected.
+Addresses remain under **Connection details**, with manual address entry available.
+
+Sharing allows computers on the LAN to enroll for host management and inference.
+Discovery alone does not enroll. Pairing survives restarts and is directional;
+pair the reverse direction separately if needed. Revoking a client invalidates
+its token; while sharing remains enabled, it can explicitly pair again.
+Disabling sharing disconnects remote clients and blocks new pairing.
 
 ## Windows host
 
@@ -250,10 +252,9 @@ network drives are not available to it; network storage requires explicit UNC
 paths and server-side access for the service's machine identity. Copying models
 to a dedicated local directory avoids that deployment dependency.
 
-Pair from an elevated terminal using the installed executable and private state:
+With sharing enabled, click **Pair** in GChat. Service lifecycle commands:
 
 ```powershell
-& C:\GInferHost\bin\ginfer-host.exe --data-dir C:\GInferHost\state --request-pairing
 Stop-Service GInferHost
 # Optional after successful startup/pairing qualification:
 Set-Service GInferHost -StartupType Automatic
@@ -261,7 +262,7 @@ Set-Service GInferHost -StartupType Automatic
 
 LAN sharing remains opt-in and creates no firewall rules. Limit TCP 7443 and
 UDP 5353 to trusted network interfaces/subnets. Actual SCM installation/start/stop,
-restart, pinned pairing activation, native compilation, host tests, and non-mutating
+restart, native compilation, host tests, and non-mutating
 installer-preview tests pass. Service failures are recorded in the protected
 state directory's `service-status.txt`; Windows SCM reports a service-specific
 failure code. Run the preview checks with
@@ -270,30 +271,17 @@ failure code. Run the preview checks with
 The opt-in elevated test is
 `tests/test_ginfer_host_scm_windows.ps1 -HostBinary <built-host.exe>`. It refuses
 an existing `GInferHost` or occupied port 7443, installs with empty inventory,
-checks virtual-account startup and pinned local pairing activation twice across
+checks virtual-account startup twice across
 a service restart, verifies durable identity, and removes only its own service
 registration. It loads no model and retains its private test files for inspection.
 Do not use this test to claim Windows GPU inference qualification.
 
 ## Pair without restarting inference
 
-Run locally as the host-service owner:
-
-```bash
-/absolute/host/bin/ginfer-host --data-dir /absolute/host/state --request-pairing
-```
-
-For a non-default management origin, also pass `--host-url https://HOST:PORT`.
-The command reads private host state, pins its certificate, and requests a fresh
-five-minute, single-use code. It does not enumerate GPUs, restart the host, or
-stop models. Paired desktop credentials cannot activate pairing.
-
-In GChat, open **Engines**, select a discovered address (or enter it manually),
-and copy the certificate SHA256 fingerprint and code from the host's own terminal.
-Never trust a fingerprint supplied only by an unsolicited discovery announcement.
-The host's `host.json` contains its private certificate and local pairing-admin
-credential. Keep the dedicated state directory private (0700 on Linux); do not
-copy it into model storage, logs, datasets, or a public repository.
+Enable sharing on the serving host, then click **Pair** in the other computer's
+**GInfer Hosts** page. Pairing does not restart the host or load or stop models.
+The host's private state contains its certificate and local administrator credential;
+keep that directory private and separate from model storage.
 
 **Linux GChat client prerequisite:** install and enable a Secret Service provider
 (for example, GNOME Keyring) using your distribution's package manager, and unlock
@@ -320,8 +308,8 @@ Do not work around an unavailable client vault by saving paired tokens as plaint
 
 The opt-in tests in `src-tauri/ginfer-host/tests/live_lan.rs` use the production
 discovery and pinned TLS client against two explicitly configured hosts. Supply
-`GINFER_LAN_HOSTS` as a JSON array with `origin`, out-of-band `fingerprint`, fresh
-`code`, and `host_id` for each host. The real-engine test additionally requires
+`GINFER_LAN_HOSTS` as a JSON array with `origin`, expected `fingerprint`,
+and `host_id` for each host. The real-engine test additionally requires
 the exact `artifact` path on each host and a released singleton GPU. Never use
 an occupied GPU merely because its utilization is low.
 
@@ -329,7 +317,7 @@ an occupied GPU merely because its utilization is low.
 cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --test live_lan \
   physical_lan_discovery_pairing_snapshot_and_revocation -- --ignored --nocapture
 
-# Separate fresh pairing codes required; this starts and stops real inference.
+# Sharing must be enabled; this starts and stops real inference.
 cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --test live_lan \
   physical_lan_real_engine_load_infer_reload_and_stop -- --ignored --nocapture
 ```
@@ -401,5 +389,14 @@ X11 window was checked for the adjacent sharing checkbox, Pair/Ignore controls,
 automatic-address pairing form, and General settings host-name field. Toggling
 sharing preserved the host boot identity; renaming updated the other computer's
 discovery display. Automated TLS tests cover address selection, certificate and
-host-identity rejection, one-use pairing, administrator-only settings, and saved
+host-identity rejection, administrator-only settings, and saved
 names/sharing preferences. These checks do not add engine/model qualification.
+
+One-click pairing validated on 2026-09-21 with the updated 2.0.42 Windows and
+Ubuntu 24.04 AppImage installations. A single Pair click in each desktop connected
+`RON-9950X3D2` and `AIS-1-2950X-L02` in both directions. Both displayed Connected
+and remote inventory; each host issued one client grant and both desktops saved
+their registration through native credential storage. No model was started.
+`make verify`, host and desktop Clippy, and native Windows pairing/sharing tests
+passed. TLS tests cover first-use certificate capture, saved-pin rejection,
+sharing-off enrollment rejection, revocation, and explicit re-enrollment.

@@ -1,8 +1,7 @@
 use clap::Parser;
 use ginfer_host::{
     discovery::advertise,
-    service::{Gpu, Host, Persistent},
-    transport::pinned_client,
+    service::{Gpu, Host},
 };
 use std::{path::PathBuf, sync::atomic::Ordering, time::Duration};
 
@@ -14,15 +13,15 @@ mod windows_service;
 struct Args {
     /// Run under the Windows Service Control Manager (installer-owned mode).
     #[cfg(windows)]
-    #[arg(long, conflicts_with_all = ["pair", "request_pairing", "menu", "ensure_running"])]
+    #[arg(long, conflicts_with_all = ["menu", "ensure_running"])]
     windows_service: bool,
     #[arg(long, required_unless_present = "menu")]
     data_dir: Option<PathBuf>,
     /// Open the installed host menu; desktop installations bootstrap their local owner.
-    #[arg(long, conflicts_with_all = ["pair", "request_pairing"])]
+    #[arg(long)]
     menu: bool,
     /// Reconnect or start an independent loopback host, then print its snapshot.
-    #[arg(long, conflicts_with_all = ["pair", "request_pairing", "menu", "discoverable"])]
+    #[arg(long, conflicts_with_all = ["menu", "discoverable"])]
     ensure_running: bool,
     /// Allow the desktop to manage a separate, persistent LAN listener.
     #[arg(long, conflicts_with = "discoverable")]
@@ -30,7 +29,7 @@ struct Args {
     /// NVIDIA inventory executable; installers resolve service-specific PATHs.
     #[arg(long, default_value = "nvidia-smi")]
     nvidia_smi: PathBuf,
-    #[arg(long, required_unless_present_any = ["request_pairing", "menu"])]
+    #[arg(long, required_unless_present = "menu")]
     engine: Option<PathBuf>,
     #[arg(long)]
     models: Vec<PathBuf>,
@@ -47,13 +46,7 @@ struct Args {
     /// Advertise this host on the LAN; requires a reachable --listen address.
     #[arg(long)]
     discoverable: bool,
-    /// Print a one-use pairing code and certificate fingerprint, valid five minutes.
-    #[arg(long)]
-    pair: bool,
-    /// Activate pairing on an already-running service using its local private state.
-    #[arg(long, conflicts_with = "pair")]
-    request_pairing: bool,
-    /// Management origin for explicit menu/pairing commands; pinned from local state.
+    /// Management origin for explicit menu commands; pinned from local state.
     #[arg(long, default_value = "https://127.0.0.1:7443")]
     host_url: String,
 }
@@ -100,43 +93,6 @@ async fn run(
         };
         let control = local.ensure_running().await?;
         println!("{}", control.snapshot().await?);
-        return Ok(());
-    }
-    if args.request_pairing {
-        let data: Persistent = serde_json::from_slice(
-            &std::fs::read(data_dir.join("host.json")).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-        let mut url = reqwest::Url::parse(&args.host_url).map_err(|e| e.to_string())?;
-        if url.scheme() != "https"
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.query().is_some()
-            || url.fragment().is_some()
-            || url.path() != "/"
-        {
-            return Err("host URL must be an HTTPS origin".into());
-        }
-        url.set_path("/host/v1/pairing");
-        let response = pinned_client(&data.certificate.fingerprint())?
-            .post(url)
-            .bearer_auth(data.pairing_admin_token)
-            .timeout(Duration::from_secs(10))
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        if !response.status().is_success() {
-            return Err(format!("pairing activation failed: {}", response.status()));
-        }
-        let result: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-        println!(
-            "Host: {}\nCertificate SHA256: {}\nPairing code (5 minutes): {}",
-            result["host_id"].as_str().ok_or("missing host ID")?,
-            result["certificate_sha256"]
-                .as_str()
-                .ok_or("missing certificate fingerprint")?,
-            result["code"].as_str().ok_or("missing code")?
-        );
         return Ok(());
     }
     if args.desktop_managed && !args.listen.ip().is_loopback() {
@@ -211,9 +167,7 @@ async fn run(
         None
     };
     drop(data);
-    if args.pair {
-        println!("Pairing code (5 minutes): {}", host.enable_pairing().await);
-    }
+    host.lan_sharing.lock().await.standalone = args.discoverable;
     if args.desktop_managed { host.initialize_lan_sharing().await; }
     let mut connections = tokio::task::JoinSet::new();
     ready()?;

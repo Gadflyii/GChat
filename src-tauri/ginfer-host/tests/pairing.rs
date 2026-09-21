@@ -2,7 +2,7 @@ use ginfer_host::{service::Host, transport::pinned_client};
 use std::sync::Arc;
 
 #[tokio::test]
-async fn tls_pairing_authentication_replay_revocation_and_persistence() {
+async fn tls_one_click_pairing_authentication_revocation_and_persistence() {
     let directory = tempfile::tempdir().unwrap();
     let host = Host::open(
         directory.path().into(),
@@ -44,10 +44,9 @@ async fn tls_pairing_authentication_replay_revocation_and_persistence() {
     let client = pinned_client(&fingerprint).unwrap();
     let host_id = host.data.lock().await.host_id;
     let origins = vec!["https://127.0.0.1:1".into(), base.clone()];
-    let selected = ginfer_host::transport::pairing_origin(&origins, &fingerprint, Some(host_id)).await.unwrap();
-    assert_eq!(selected, (base.clone(), host_id, "Test host".into()));
-    assert!(ginfer_host::transport::pairing_origin(&origins, &fingerprint, Some(uuid::Uuid::new_v4())).await.is_err());
-    assert!(ginfer_host::transport::pairing_origin(&origins, &"00".repeat(32), Some(host_id)).await.is_err());
+    let selected = ginfer_host::transport::pairing_origin(&origins, Some(host_id)).await.unwrap();
+    assert_eq!(selected, (base.clone(), host_id, "Test host".into(), fingerprint.clone()));
+    assert!(ginfer_host::transport::pairing_origin(&origins, Some(uuid::Uuid::new_v4())).await.is_err());
     assert!(host.data.lock().await.clients.is_empty());
 
     let launcher = ginfer_host::launcher::LocalControl::open(directory.path(), &base).unwrap();
@@ -92,8 +91,10 @@ async fn tls_pairing_authentication_replay_revocation_and_persistence() {
             .status(),
         401
     );
-    let code = host.enable_pairing().await;
-    let body = serde_json::json!({"code":code,"client_name":"Test client"});
+    let body = serde_json::json!({"client_name":"Test client"});
+    assert_eq!(client.post(format!("{base}/host/v1/pair")).json(&body)
+        .send().await.unwrap().status(), 403);
+    host.lan_sharing.lock().await.standalone = true;
     let paired = client
         .post(format!("{base}/host/v1/pair"))
         .json(&body)
@@ -132,65 +133,6 @@ async fn tls_pairing_authentication_replay_revocation_and_persistence() {
         ginfer_host::transport::host_snapshot_at(&base, &"00".repeat(32), token, host_id)
             .await
             .is_err()
-    );
-    assert_eq!(
-        client
-            .post(format!("{base}/host/v1/pairing"))
-            .bearer_auth(token)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        401
-    );
-    assert_eq!(
-        client
-            .post(format!("{base}/host/v1/pairing"))
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        401
-    );
-    let administrator = host.data.lock().await.pairing_admin_token.clone();
-    let activated = client
-        .post(format!("{base}/host/v1/pairing"))
-        .bearer_auth(&administrator)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(activated.status(), 200);
-    let activation: serde_json::Value = activated.json().await.unwrap();
-    assert_eq!(activation["certificate_sha256"], fingerprint);
-    assert_eq!(activation["code"].as_str().unwrap().len(), 8);
-    let activation_command = tokio::process::Command::new(env!("CARGO_BIN_EXE_ginfer-host"))
-        .arg("--data-dir")
-        .arg(directory.path())
-        .arg("--request-pairing")
-        .arg("--host-url")
-        .arg(&base)
-        .output()
-        .await
-        .unwrap();
-    assert!(
-        activation_command.status.success(),
-        "{}",
-        String::from_utf8_lossy(&activation_command.stderr)
-    );
-    let display = String::from_utf8_lossy(&activation_command.stdout);
-    assert!(display.contains(&fingerprint));
-    assert!(display.contains("Pairing code (5 minutes):"));
-    assert!(!display.contains(&administrator));
-    // Re-enabling pairing invalidates the old code; a normal paired client still works.
-    assert_eq!(
-        client
-            .post(format!("{base}/host/v1/pair"))
-            .json(&body)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        400
     );
     let snapshot: serde_json::Value = client
         .get(format!("{base}/host/v1/snapshot"))
@@ -249,5 +191,10 @@ async fn tls_pairing_authentication_replay_revocation_and_persistence() {
             .status(),
         401
     );
+    let enrolled_again: serde_json::Value = client.post(format!("{base}/host/v1/pair"))
+        .json(&body).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    assert_ne!(enrolled_again["client_id"], paired["client_id"]);
+    assert!(ginfer_host::transport::host_snapshot_at(&base, &fingerprint,
+        enrolled_again["token"].as_str().unwrap(), host_id).await.is_ok());
     server.abort();
 }

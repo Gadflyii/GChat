@@ -43,18 +43,12 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.getByText('Local host')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Forget' })).not.toBeInTheDocument()
   })
-  it('shares independently of discovery and generates a one-use pairing code', async () => {
+  it('shares independently of discovery', async () => {
     mocks.local = true
-    mocks.command.mockImplementation(async (action: string) => action === 'pairing'
-      ? { code: '87654321', certificate_sha256: 'a'.repeat(64), expires_in_seconds: 300 } : {})
     render(<Page />)
     const share = screen.getByRole('checkbox', { name: 'Share this host' })
     expect(share).toBeChecked()
     expect(screen.getByRole('switch', { name: 'Discover nearby GInfer hosts' })).not.toBeChecked()
-    fireEvent.click(screen.getByRole('button', { name: 'Generate pairing code' }))
-    await waitFor(() => expect(screen.getByText('87654321')).toBeInTheDocument())
-    expect(screen.getByText('a'.repeat(64))).toBeInTheDocument()
-    expect(mocks.command).toHaveBeenCalledWith('pairing', { host_id: 'host' })
     fireEvent.click(share)
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('lan_sharing', { host_id: 'host', body: { enabled: false } }))
     await waitFor(() => expect(share).toBeEnabled())
@@ -71,14 +65,28 @@ describe('Engines host intake and launch controls', () => {
     render(<Page />)
     expect(screen.getByRole('button', { name: 'Ignore', exact: true })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /https:/ })).not.toBeInTheDocument()
+    const pair = screen.getByRole('button', { name: 'Pair', exact: true })
+    await waitFor(() => expect(pair).toBeEnabled())
+    fireEvent.click(pair)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', { host_id: 'nearby-host' }))
+    expect(screen.queryByLabelText('Certificate SHA256')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Pairing code')).not.toBeInTheDocument()
+  })
+
+  it('prevents duplicate clicks and allows retry after a pairing failure', async () => {
+    mocks.nearby = [{ host_id: 'nearby-host', name: 'Server 2', urls: ['https://192.168.1.111:7444'] }]
+    let fail: (error: Error) => void = () => undefined
+    mocks.command.mockImplementation((action: string) => action === 'pair'
+      ? new Promise((_resolve, reject) => { fail = reject })
+      : Promise.resolve({ ready: true, platform: 'linux', can_install: false }))
+    render(<Page />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair', exact: true })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Pair', exact: true }))
-    expect(screen.getByRole('heading', { name: 'Pair with Server 2' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Host address')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Certificate SHA256'), { target: { value: 'a'.repeat(64) } })
-    fireEvent.change(screen.getByLabelText('Pairing code'), { target: { value: '12345678' } })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair host' })).toBeEnabled())
-    fireEvent.click(screen.getByRole('button', { name: 'Pair host' }))
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', { host_id: 'nearby-host', fingerprint: 'a'.repeat(64), code: '12345678' }))
+    expect(screen.getByRole('button', { name: 'Pairing…' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Pairing…' }))
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toHaveLength(1)
+    fail(new Error('Host unavailable'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair', exact: true })).toBeEnabled())
   })
 
   it('starts saved instances and confirms a running-instance restart', async () => {
@@ -148,18 +156,15 @@ describe('Engines host intake and launch controls', () => {
     }))
   })
 
-  it('requires a hexadecimal fingerprint and numeric pairing code before submitting', async () => {
+  it('pairs a manually entered address without a code', async () => {
     render(<Page />)
+    fireEvent.click(screen.getByText('Enter a host address manually'))
     fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })
-    fireEvent.change(screen.getByLabelText('Certificate SHA256'), { target: { value: 'z'.repeat(64) } })
-    fireEvent.change(screen.getByLabelText('Pairing code'), { target: { value: 'abcdefgh' } })
     expect(screen.getByRole('button', { name: 'Pair host' })).toBeDisabled()
-    fireEvent.change(screen.getByLabelText('Certificate SHA256'), { target: { value: 'a'.repeat(64) } })
-    fireEvent.change(screen.getByLabelText('Pairing code'), { target: { value: '12345678' } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Pair host' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Pair host' }))
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', {
-      base_url: 'https://host:7443', fingerprint: 'a'.repeat(64), code: '12345678',
+      base_url: 'https://host:7443',
     }))
   })
 
@@ -197,9 +202,8 @@ describe('Engines host intake and launch controls', () => {
   it('blocks pairing when storage is unavailable even after skipping setup', async () => {
     mocks.command.mockResolvedValue({ ready: false, platform: 'linux', can_install: false })
     render(<Page />)
+    fireEvent.click(screen.getByText('Enter a host address manually'))
     fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })
-    fireEvent.change(screen.getByLabelText('Certificate SHA256'), { target: { value: 'a'.repeat(64) } })
-    fireEvent.change(screen.getByLabelText('Pairing code'), { target: { value: '12345678' } })
     await screen.findByText('Secure storage is unavailable. Set it up or unlock it before pairing.')
     fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
     expect(screen.getByRole('button', { name: 'Pair host' })).toBeDisabled()

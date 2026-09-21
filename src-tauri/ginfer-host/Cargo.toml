@@ -18,7 +18,6 @@ rcgen = "0.12"
 mdns-sd = "0.11"
 sha2 = "0.10"
 hex = "0.4"
-rand = "0.8"
 hmac = "0.12"
 futures-util = "0.3"
 clap = { version = "4", features = ["derive"] }

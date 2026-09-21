@@ -112,7 +112,7 @@ def main():
         print('Installed and started. The host is initializing inventory and its management endpoint.')
     print('Open the launch menu: ' + shlex.join([str(target), '--menu']))
     print('Put the installed host directory on PATH (or alongside ginfer) to launch it by typing ginfer.')
-    print('Pair after startup: ' + shlex.join([str(target), '--data-dir', str(data), '--request-pairing']))
+    print('With LAN sharing enabled, open GChat and click Pair beside this host.')
     if args.share_lan:
         print('Allow TCP 7443 and UDP 5353 only on the trusted LAN. No firewall rules were changed.')
 

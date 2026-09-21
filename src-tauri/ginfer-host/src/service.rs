@@ -5,7 +5,6 @@ use crate::{
 };
 use hmac::{Hmac, Mac};
 use hyper::{Body, Request, Response, StatusCode};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::{
@@ -99,11 +98,6 @@ pub struct Persistent {
     #[serde(default)]
     pub managed_model_root: Option<PathBuf>,
 }
-pub struct Pairing {
-    code: String,
-    expires: tokio::time::Instant,
-    attempts: u32,
-}
 pub struct Host {
     pub lan_sharing: Mutex<crate::lan_sharing::LanSharing>,
     inference_client: reqwest::Client,
@@ -121,7 +115,6 @@ pub struct Host {
     pub directory: PathBuf,
     pub model_dirs: Vec<PathBuf>,
     pub artifact_sets: Vec<PathBuf>,
-    pub pairing: Mutex<Option<Pairing>>,
     lifecycle: Mutex<()>,
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
 }
@@ -260,7 +253,6 @@ impl Host {
             directory,
             model_dirs,
             artifact_sets,
-            pairing: Mutex::new(None),
             lifecycle: Mutex::new(()),
             traffic: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
         });
@@ -274,15 +266,7 @@ impl Host {
             &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
         )
     }
-    pub async fn enable_pairing(&self) -> String {
-        let code = format!("{:08}", rand::thread_rng().gen_range(0..100_000_000u32));
-        *self.pairing.lock().await = Some(Pairing {
-            code: code.clone(),
-            expires: tokio::time::Instant::now() + Duration::from_secs(300),
-            attempts: 0,
-        });
-        code
-    }
+
     pub async fn scan(&self) -> Result<(), String> {
         let path = self.directory.join("launch-profiles.json");
         let catalog = tokio::task::spawn_blocking(move || {
@@ -789,53 +773,17 @@ impl Host {
             }
             return Ok(json(StatusCode::OK, self.snapshot().await));
         }
-        if req.method() == hyper::Method::POST && path == "/host/v1/pairing" {
-            let token = req
-                .headers()
-                .get("authorization")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.strip_prefix("Bearer "))
-                .unwrap_or("");
-            let data = self.data.lock().await;
-            let expected = verifier(&data.pairing_admin_token).finalize().into_bytes();
-            if verifier(token).verify_slice(&expected).is_err() {
-                return Ok(json(
-                    StatusCode::UNAUTHORIZED,
-                    serde_json::json!({"error":"local administrator credential required"}),
-                ));
-            }
-            let host_id = data.host_id;
-            let fingerprint = data.certificate.fingerprint();
-            drop(data);
-            let code = self.enable_pairing().await;
-            return Ok(json(
-                StatusCode::OK,
-                serde_json::json!({"host_id":host_id,"certificate_sha256":fingerprint,"code":code,"expires_in_seconds":300}),
-            ));
-        }
         if req.method() == hyper::Method::POST && path == "/host/v1/pair" {
             let body = body_json(req).await?;
-            let code = body
-                .get("code")
-                .and_then(|v| v.as_str())
-                .ok_or("pairing code is required")?;
             let name = body
                 .get("client_name")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.trim().is_empty())
                 .ok_or("client name is required")?;
-            let mut pairing = self.pairing.lock().await;
-            let grant = pairing
-                .as_mut()
-                .ok_or("pairing is not enabled on this host")?;
-            if grant.expires <= tokio::time::Instant::now() || grant.attempts >= 5 {
-                return Err("pairing code expired; enable pairing on the host again".into());
+            let sharing = self.lan_sharing.lock().await;
+            if !sharing.active() && !sharing.standalone {
+                return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"Enable Share this host before pairing"})));
             }
-            grant.attempts += 1;
-            if code != grant.code {
-                return Err("incorrect pairing code".into());
-            }
-            *pairing = None;
             let id = Uuid::new_v4();
             let token = format!(
                 "{id}.{}{}",
@@ -853,6 +801,7 @@ impl Host {
             let host_id = data.host_id;
             drop(data);
             self.save().await?;
+            drop(sharing);
             return Ok(json(
                 StatusCode::OK,
                 serde_json::json!({"host_id":host_id,"client_id":id,"token":token}),

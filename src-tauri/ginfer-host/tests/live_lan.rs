@@ -1,5 +1,5 @@
-//! Opt-in physical LAN test. Launch two hosts with --discoverable --pair first.
-//! GINFER_LAN_HOSTS is a JSON array of {origin, fingerprint, code, host_id}.
+//! Opt-in physical LAN test. Launch two hosts with --discoverable first.
+//! GINFER_LAN_HOSTS is a JSON array of {origin, fingerprint, host_id}.
 //! Credentials remain in memory and are revoked after each host check.
 use ginfer_host::{discovery::Discovery, transport::pinned_client};
 use serde::Deserialize;
@@ -9,7 +9,6 @@ use std::time::Duration;
 struct Target {
     origin: String,
     fingerprint: String,
-    code: String,
     host_id: uuid::Uuid,
     artifact: Option<String>,
 }
@@ -52,7 +51,7 @@ async fn ready(
 }
 
 #[tokio::test]
-#[ignore = "loads real models on explicitly released singleton GPUs; requires fresh pairing codes"]
+#[ignore = "loads real models on explicitly released singleton GPUs; requires LAN sharing"]
 async fn physical_lan_real_engine_load_infer_reload_and_stop() {
     let targets: Vec<Target> =
         serde_json::from_str(&std::env::var("GINFER_LAN_HOSTS").expect("set GINFER_LAN_HOSTS"))
@@ -62,7 +61,7 @@ async fn physical_lan_real_engine_load_infer_reload_and_stop() {
         let client = pinned_client(&target.fingerprint).unwrap();
         let url = |path: &str| format!("{}{path}", target.origin);
         let pair: serde_json::Value = client.post(url("/host/v1/pair"))
-            .json(&serde_json::json!({"code":target.code,"client_name":"Real Engine LAN qualification"}))
+            .json(&serde_json::json!({"client_name":"Real Engine LAN qualification"}))
             .timeout(Duration::from_secs(10)).send().await.unwrap()
             .error_for_status().unwrap().json().await.unwrap();
         let token = pair["token"].as_str().unwrap();
@@ -125,7 +124,7 @@ async fn physical_lan_real_engine_load_infer_reload_and_stop() {
 }
 
 #[tokio::test]
-#[ignore = "requires two explicitly configured physical LAN hosts and fresh pairing codes"]
+#[ignore = "requires two explicitly configured physical LAN hosts with LAN sharing"]
 async fn physical_lan_discovery_pairing_snapshot_and_revocation() {
     let targets: Vec<Target> =
         serde_json::from_str(&std::env::var("GINFER_LAN_HOSTS").expect("set GINFER_LAN_HOSTS"))
@@ -157,7 +156,7 @@ async fn physical_lan_discovery_pairing_snapshot_and_revocation() {
             .post(url("/host/v1/pair"))
             .timeout(Duration::from_secs(10))
             .json(
-                &serde_json::json!({"code":target.code,"client_name":"Physical LAN qualification"}),
+                &serde_json::json!({"client_name":"Physical LAN qualification"}),
             )
             .send()
             .await

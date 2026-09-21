@@ -323,10 +323,11 @@ This operation does not install an OS service or enable boot-time startup.
 The host publishes its actual management origin in private `host.json` after
 binding. GChat automatically registers that owner during host-list refresh, using
 the private local credential in native memory rather than provisioning a keyring
-entry or requesting a pairing code. Public host listings and `hosts.json` contain
+entry or remote pairing. Public host listings and `hosts.json` contain
 connection metadata only, never that credential. The Engines panel labels the
 automatic entry “Local host” and does not offer Forget; instance controls remain
-available. Remote pairing and its OS-vault requirements are unchanged.
+available. Remote pairing stores credentials in the OS vault; see
+[LAN host setup](lan-host-setup.md).
 
 Host identity and lifecycle state live below `<data>/ginfer/host`. With
 `--desktop-provider <data>/ginfer`, that owner takes over the existing
@@ -385,6 +386,6 @@ older engines that lack the option are not silently launched without ownership.
 
 Menu choices list hardware and the host's qualified profiles, not locally estimated
 settings. Start submits a profile selection, Manage provides start/stop/restart/profile
-switch, Refresh rescans models and profiles, and Pair GChat creates a short-lived
-pairing code. Quitting the menu leaves host-owned processes and downloads running.
+switch, and Refresh rescans models and profiles. LAN clients pair from GChat when
+sharing is enabled. Quitting the menu leaves host-owned processes and downloads running.
 The menu shows starting state until a refreshed snapshot reports ready or failed.

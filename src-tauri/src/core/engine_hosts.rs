@@ -397,6 +397,8 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             Ok(json!({"enabled":enabled}))
         }
         "pair" => {
+            static PAIRING: OnceLock<Mutex<()>> = OnceLock::new();
+            let _pairing = PAIRING.get_or_init(|| Mutex::new(())).lock().await;
             credential_setup::require_ready().await?;
             let expected = args.get("host_id").and_then(Value::as_str)
                 .map(str::parse::<Uuid>).transpose().map_err(|error| error.to_string())?;
@@ -407,19 +409,17 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             } else {
                 vec![endpoint(args.get("base_url").and_then(Value::as_str).ok_or("host address is required")?)?]
             };
-            let fingerprint = args
-                .get("fingerprint")
-                .and_then(Value::as_str)
-                .ok_or("host certificate fingerprint is required")?
-                .trim()
-                .to_lowercase();
+            let (base_url, host_id, host_name, fingerprint) = ginfer_host::transport::pairing_origin(&origins, expected).await?;
+            if let Some(saved) = state().lock().await.saved.get(&host_id) {
+                if saved.certificate_sha256 != fingerprint { return Err("Paired host certificate has changed; forget it explicitly before pairing again".into()); }
+                return Ok(json!({"host_id":host_id}));
+            }
             let client = pinned_client(&fingerprint)?;
-            let (base_url, host_id, host_name) = ginfer_host::transport::pairing_origin(&origins, &fingerprint, expected).await?;
             let paired = response_json(
                 client
                     .post(format!("{base_url}/host/v1/pair"))
                     .timeout(std::time::Duration::from_secs(10))
-                    .json(&json!({"code":args.get("code"),"client_name":"GChat"}))
+                    .json(&json!({"client_name":format!("GChat on {}", ginfer_host::local_host::computer_name()?)}))
                     .send()
                     .await
                     .map_err(|e| e.to_string())?,
@@ -593,12 +593,11 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 }
             }
         }
-        "host_name" | "lan_sharing" | "pairing" | "remove_model" | "download" | "download_action" | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
+        "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action" | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
             let id = argument_id(&args, "host_id")?;
             let path = match action.as_str() {
                 "host_name" => "/host/v1/name".into(),
                 "lan_sharing" => "/host/v1/lan-sharing".into(),
-                "pairing" => "/host/v1/pairing".into(),
                 "launch" => "/host/v1/instances".into(),
                 "profile_launch" => "/host/v1/profile-launch".into(),
                 "scan" => "/host/v1/scan".into(),

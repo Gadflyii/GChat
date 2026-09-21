@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [One-click LAN pairing](2026-09-21-one-click-lan-pairing.md)
+
 - [Official reference results](2026-09-19-official-reference-results.md)
 
 - [G.bench community leaderboard](2026-09-18-gbench-community-leaderboard.md)

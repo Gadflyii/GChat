@@ -1,4 +1,4 @@
-//! TLS with an explicit certificate fingerprint obtained from the host pairing display.
+//! Trust on first pairing; saved connections pin the enrolled TLS certificate.
 use rustls::{Certificate, PrivateKey, ServerName};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -95,7 +95,7 @@ impl rustls::client::ServerCertVerifier for PinnedCertificate {
                 "paired host certificate has changed".into(),
             ));
         }
-        // Identity is this exact out-of-band certificate, rather than WebPKI DNS.
+        // Identity is the enrolled certificate, rather than WebPKI DNS.
         // Default rustls TLS signature verification still proves key possession.
         Ok(rustls::client::ServerCertVerified::assertion())
     }
@@ -129,12 +129,14 @@ pub fn pinned_client_with_headers(
         .map_err(|e| e.to_string())
 }
 
-/// Select an authenticated destination before sending the one-use pairing code.
+/// Enroll a certificate on explicit first pairing; never use this to recover saved connections.
 pub async fn pairing_origin(
-    origins: &[String], fingerprint: &str, expected: Option<uuid::Uuid>,
-) -> Result<(String, uuid::Uuid, String), String> {
+    origins: &[String], expected: Option<uuid::Uuid>,
+) -> Result<(String, uuid::Uuid, String, String), String> {
     use futures_util::{stream::FuturesUnordered, StreamExt};
-    let client = pinned_client(fingerprint)?;
+    let client = reqwest::Client::builder().https_only(true).no_proxy()
+        .redirect(reqwest::redirect::Policy::none()).danger_accept_invalid_certs(true)
+        .tls_info(true).build().map_err(|error| error.to_string())?;
     let mut probes = FuturesUnordered::new();
     for origin in origins {
         let mut url = reqwest::Url::parse(origin).map_err(|e| e.to_string())?;
@@ -147,10 +149,13 @@ pub async fn pairing_origin(
         url.set_path("/.well-known/ginfer");
         let client = client.clone();
         probes.push(async move {
-            let identity: serde_json::Value = client.get(url).timeout(Duration::from_secs(3))
+            let response = client.get(url).timeout(Duration::from_secs(3))
                 .send().await.map_err(|e| e.to_string())?
-                .error_for_status().map_err(|e| e.to_string())?
-                .json().await.map_err(|e| e.to_string())?;
+                .error_for_status().map_err(|e| e.to_string())?;
+            let certificate = response.extensions().get::<reqwest::tls::TlsInfo>()
+                .and_then(|tls| tls.peer_certificate()).ok_or("host certificate missing")?;
+            let fingerprint = hex::encode(Sha256::digest(certificate));
+            let identity: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
             if identity["protocol_version"].as_u64() != Some(1) {
                 return Err("unsupported host protocol".into());
             }
@@ -160,7 +165,7 @@ pub async fn pairing_origin(
                 return Err("endpoint identity does not match the selected host".into());
             }
             let name = identity["display_name"].as_str().ok_or("host name missing")?.to_owned();
-            Ok::<_, String>((origin, id, name))
+            Ok::<_, String>((origin, id, name, fingerprint))
         });
     }
     let mut errors = vec![];
@@ -170,5 +175,5 @@ pub async fn pairing_origin(
             Err(error) => errors.push(error),
         }
     }
-    Err(format!("Cannot reach this host with the supplied certificate fingerprint. Check sharing and the fingerprint, then retry. {}", errors.join("; ")))
+    Err(format!("Cannot reach this host. Check that sharing is enabled, then retry. {}", errors.join("; ")))
 }

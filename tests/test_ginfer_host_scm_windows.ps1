@@ -33,8 +33,6 @@ try {
         $record = Get-CimInstance Win32_Service -Filter "Name='GInferHost'"
         if ($record.StartName -ne 'NT SERVICE\GInferHost') { throw 'Incorrect service identity' }
         $ownedPid = $record.ProcessId
-        $activation = (& $destination --data-dir $state --request-pairing 2>&1) -join "`n"
-        if ($LASTEXITCODE -ne 0 -or $activation -notmatch 'Pairing code \(5 minutes\): \d{8}') { throw 'SCM service did not support pinned local pairing activation' }
         $identity = Get-Content -LiteralPath (Join-Path $state 'host.json') -Raw | ConvertFrom-Json
         if ($cycle -eq 0) { $original = $identity.host_id }
         elseif ($identity.host_id -ne $original) { throw 'Restart replaced durable host identity' }
@@ -43,7 +41,7 @@ try {
         try { $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) } finally { $service.Dispose() }
         if (Get-Process -Id $ownedPid -ErrorAction SilentlyContinue) { throw 'Stopped service left its process running' }
     }
-    Write-Output 'SCM virtual-account startup, pinned pairing activation, stop, restart, and persistent identity passed.'
+    Write-Output 'SCM virtual-account startup, stop, restart, and persistent identity passed.'
 } finally {
     $record = Get-CimInstance Win32_Service -Filter "Name='GInferHost'"
     if ($null -ne $record) {

@@ -473,7 +473,7 @@ async fn menu_control(control: LocalControl) -> Result<(), String> {
                 instance["status"].as_str().unwrap_or("unknown"),
             );
         }
-        println!("\n[l] Launch instance      [m] Manage instances\n[d] Download models      [a] Add a local model\n[s] Model storage        [t] Download progress\n[r] Refresh              [p] Pair GChat\n[q] Quit (keep serving)");
+        println!("\n[l] Launch instance      [m] Manage instances\n[d] Download models      [a] Add a local model\n[s] Model storage        [t] Download progress\n[r] Refresh\n[q] Quit (keep serving)");
         let input = prompt("Select: ")?;
         let result = match input.as_str() {
             "l" => launch_menu(&control, &snapshot, None).await,
@@ -496,16 +496,6 @@ async fn menu_control(control: LocalControl) -> Result<(), String> {
                 .request("/host/v1/scan", Some(json!({})))
                 .await
                 .map(|_| ()),
-            "p" => control
-                .request("/host/v1/pairing", Some(json!({})))
-                .await
-                .map(|pairing| {
-                    println!(
-                        "Pairing code (5 minutes): {}\nCertificate: {}",
-                        pairing["code"].as_str().unwrap_or(""),
-                        pairing["certificate_sha256"].as_str().unwrap_or("")
-                    );
-                }),
             "m" => manage(&control, &snapshot).await,
             _ => { println!("Choose a listed command."); Ok(()) },
         };

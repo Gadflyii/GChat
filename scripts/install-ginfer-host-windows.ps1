@@ -110,5 +110,5 @@ Grant-Service $DataDir 'Modify' $true
 Write-Output 'Installed, not started. Review runtime/model access, then: Start-Service GInferHost'
 Write-Output ('Open the local-admin launch menu: & ' + (Quote-Argument $destination) + ' --menu')
 Write-Output 'To start on boot after qualification: Set-Service GInferHost -StartupType Automatic'
-Write-Output ('Pair from an elevated terminal: & ' + (Quote-Argument $destination) + ' --data-dir ' + (Quote-Argument $DataDir) + ' --request-pairing')
+Write-Output 'With LAN sharing enabled, open GChat and click Pair beside this host.'
 if ($ShareLan) { Write-Output 'Allow TCP 7443 and UDP 5353 on the trusted LAN only. No firewall rules were changed.' }
