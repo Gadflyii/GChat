@@ -78,8 +78,12 @@ pub struct ClientGrant {
     pub name: String,
     pub token_verifier: String,
 }
+fn default_share_lan() -> bool { true }
+
 #[derive(Serialize, Deserialize)]
 pub struct Persistent {
+    #[serde(default = "default_share_lan")]
+    pub share_lan: bool,
     #[serde(default)]
     pub management_origin: Option<String>,
     pub host_id: Uuid,
@@ -101,6 +105,7 @@ pub struct Pairing {
     attempts: u32,
 }
 pub struct Host {
+    pub lan_sharing: Mutex<crate::lan_sharing::LanSharing>,
     inference_client: reqwest::Client,
     local_inference: Mutex<BTreeMap<Uuid, crate::local_inference::LocalInference>>,
     pub launch_profiles: RwLock<Vec<crate::launch_profiles::LaunchProfile>>,
@@ -197,6 +202,7 @@ impl Host {
             Ok(bytes) => serde_json::from_slice::<Persistent>(&bytes).map_err(|e| e.to_string())?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Persistent {
                 management_origin: None,
+                share_lan: true,
                 host_id: Uuid::new_v4(),
                 name,
                 certificate: HostCertificate::generate()?,
@@ -234,6 +240,7 @@ impl Host {
             downloads.set_root(root.canonicalize().map_err(|e| e.to_string())?);
         }
         let host = Arc::new(Self {
+            lan_sharing: Mutex::new(Default::default()),
             inference_client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -396,6 +403,10 @@ impl Host {
         Ok(())
     }
     pub async fn snapshot(&self) -> serde_json::Value {
+        let sharing = self.lan_sharing.lock().await;
+        let network = serde_json::json!({"managed":sharing.managed,"active":sharing.active(),
+            "port":sharing.port,"error":sharing.error});
+        drop(sharing);
         let data = self.data.lock().await;
         let processes = self.processes.lock().await;
         let reserved = processes.reserved_gpus(None);
@@ -429,6 +440,8 @@ impl Host {
             }
         }
         serde_json::json!({"protocol_version":1,"host_id":data.host_id,"boot_id":self.boot_id,
+            "lan_sharing": {"enabled":data.share_lan,"managed":network["managed"],
+                "active":network["active"],"port":network["port"],"error":network["error"]},
             "display_name":data.name,"revision":self.revision.load(Ordering::SeqCst),
             "instances":instances,"gpus":self.gpus,"models":*self.inventory.read().await,
             "inventory_errors":*self.inventory_errors.read().await,
@@ -762,6 +775,19 @@ impl Host {
                 StatusCode::OK,
                 serde_json::json!({"protocol_version":1,"host_id":data.host_id,"display_name":data.name}),
             ));
+        }
+        if req.method() == hyper::Method::POST && matches!(path.as_str(), "/host/v1/lan-sharing" | "/host/v1/name") {
+            if !self.local_administrator(req).await {
+                return Ok(json(StatusCode::UNAUTHORIZED, serde_json::json!({"error":"local administrator credential required"})));
+            }
+            let body = body_json(req).await?;
+            if path == "/host/v1/name" {
+                self.set_name(body["name"].as_str().ok_or("name must be text")?).await?;
+            } else {
+                let enabled = body["enabled"].as_bool().ok_or("enabled must be a boolean")?;
+                self.set_lan_sharing(enabled).await?;
+            }
+            return Ok(json(StatusCode::OK, self.snapshot().await));
         }
         if req.method() == hyper::Method::POST && path == "/host/v1/pairing" {
             let token = req

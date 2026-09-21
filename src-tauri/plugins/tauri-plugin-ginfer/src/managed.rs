@@ -111,7 +111,7 @@ pub async fn load(
             directory,
             models: vec![],
             artifact_sets: vec![],
-            name: "This computer".into(),
+            name: ginfer_host::local_host::computer_name()?,
             nvidia_smi: "nvidia-smi".into(),
             listen: "127.0.0.1:7443".parse().unwrap(),
         }

@@ -27,6 +27,7 @@ export type EngineLaunchProfile = EngineLaunchOptions & {
   instance_id?: string; model_id: string; gpu_uuids: string[]; max_context: number; concurrency: number;
 }
 export type EngineSnapshot = {
+  lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
       options: { vision: boolean };

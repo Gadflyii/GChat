@@ -42,6 +42,14 @@ async fn tls_pairing_authentication_replay_revocation_and_persistence() {
         }
     });
     let client = pinned_client(&fingerprint).unwrap();
+    let host_id = host.data.lock().await.host_id;
+    let origins = vec!["https://127.0.0.1:1".into(), base.clone()];
+    let selected = ginfer_host::transport::pairing_origin(&origins, &fingerprint, Some(host_id)).await.unwrap();
+    assert_eq!(selected, (base.clone(), host_id, "Test host".into()));
+    assert!(ginfer_host::transport::pairing_origin(&origins, &fingerprint, Some(uuid::Uuid::new_v4())).await.is_err());
+    assert!(ginfer_host::transport::pairing_origin(&origins, &"00".repeat(32), Some(host_id)).await.is_err());
+    assert!(host.data.lock().await.clients.is_empty());
+
     let launcher = ginfer_host::launcher::LocalControl::open(directory.path(), &base).unwrap();
     let local_snapshot = launcher.snapshot().await.unwrap();
     assert_eq!(local_snapshot["display_name"], "Test host");

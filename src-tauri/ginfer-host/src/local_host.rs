@@ -24,6 +24,16 @@ fn keep_client_pipes_private() -> Result<(), String> {
     Ok(())
 }
 
+pub fn computer_name() -> Result<String, String> {
+    #[cfg(windows)]
+    let name = std::env::var("COMPUTERNAME").map_err(|error| error.to_string())?;
+    #[cfg(not(windows))]
+    let name = std::fs::read_to_string("/proc/sys/kernel/hostname").map_err(|error| error.to_string())?;
+    let name = name.trim();
+    if name.is_empty() { return Err("Computer name is unavailable".into()); }
+    Ok(name.to_owned())
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LocalHost {
@@ -105,6 +115,7 @@ impl LocalHost {
             keep_client_pipes_private()?;
             let mut command = tokio::process::Command::new(&self.binary);
             command
+                .arg("--desktop-managed")
                 .arg("--data-dir")
                 .arg(&self.directory)
                 .arg("--engine")

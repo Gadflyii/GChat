@@ -175,10 +175,39 @@ an administrator can enable lingering for that account with `loginctl enable-lin
 On WSL, systemd and network reachability must be configured first. No installer
 changes host firewall rules or WSL networking.
 
-LAN sharing is opt-in: `--share-lan` binds IPv4 port 7443 and advertises DNS-SD.
+Standalone service LAN sharing is opt-in: `--share-lan` binds IPv4 port 7443 and advertises DNS-SD.
 Permit TCP 7443 and mDNS UDP 5353 only on the trusted LAN interfaces/subnet.
 Without the switch the service listens on loopback. Manual pairing does not need
 multicast; WSL NAT and containers can require explicit port/network configuration.
+
+## Desktop LAN sharing
+
+GChat desktop hosts share on the LAN by default. In **GInfer Hosts**, the
+**Share this host** checkbox sits beside **Discover nearby GInfer hosts**.
+New desktop hosts use the OS hostname. **Settings → General → Host name** lets
+users save a custom display name. The host persists it and updates its LAN
+announcement immediately without changing identity, pairings, or model instances.
+Sharing and browsing are independent; turning browsing off does not hide your host.
+Sharing preferences persist in the host's private state, including an explicit opt-out.
+
+Desktop management stays on loopback TCP 7443. The separate IPv4 LAN listener uses
+TCP 7444 and advertises `_ginfer._tcp.local` through UDP 5353. Permit these ports
+on the trusted LAN if the OS firewall blocks them. GChat does not create firewall rules.
+Turning sharing off withdraws the advertisement and closes LAN connections without
+restarting local model instances. Existing pairings remain saved for re-enabling sharing.
+A listener failure appears on the local host card; local inference remains available.
+Standalone service installations retain their explicit `--share-lan` installer option
+and port 7443; desktop controls do not override their service configuration.
+
+To pair, click **Pair** beside the discovered host. Addresses are tucked under
+**Connection details**; GChat probes them with the supplied certificate fingerprint
+and selects a reachable matching identity before submitting the code once.
+On the serving computer, click
+**Generate pairing code** on its local host card. Enter that eight-digit, one-use code
+and the displayed certificate SHA256 in the client's pairing form. The code expires
+after five minutes. Pairing grants host management and inference access, persists across
+restarts, and is directional; pair the reverse direction separately if needed.
+Discovery alone grants no access. Disabling sharing also invalidates a pending code.
 
 ## Windows host
 
@@ -364,3 +393,13 @@ Build requirements include GTK/WebKit development libraries, appindicator,
 `patchelf`, `squashfs-tools`, `xdg-utils`, and `desktop-file-utils`. Use a build
 distribution no newer than the deployment baseline. Rebuild the core and extension
 archives before packaging; verification placeholders are not release resources.
+
+Desktop sharing update validated on 2026-09-20: the installed Windows host
+`RON-9950X3D2` and Server 2 (`AIS-1-2950X-L02`) discover each other and expose their
+LAN identity endpoints on port 7444. No firewall changes were needed. The Linux
+X11 window was checked for the adjacent sharing checkbox, Pair/Ignore controls,
+automatic-address pairing form, and General settings host-name field. Toggling
+sharing preserved the host boot identity; renaming updated the other computer's
+discovery display. Automated TLS tests cover address selection, certificate and
+host-identity rejection, one-use pairing, administrator-only settings, and saved
+names/sharing preferences. These checks do not add engine/model qualification.

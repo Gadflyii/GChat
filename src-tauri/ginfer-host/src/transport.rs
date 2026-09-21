@@ -128,3 +128,47 @@ pub fn pinned_client_with_headers(
         .build()
         .map_err(|e| e.to_string())
 }
+
+/// Select an authenticated destination before sending the one-use pairing code.
+pub async fn pairing_origin(
+    origins: &[String], fingerprint: &str, expected: Option<uuid::Uuid>,
+) -> Result<(String, uuid::Uuid, String), String> {
+    use futures_util::{stream::FuturesUnordered, StreamExt};
+    let client = pinned_client(fingerprint)?;
+    let mut probes = FuturesUnordered::new();
+    for origin in origins {
+        let mut url = reqwest::Url::parse(origin).map_err(|e| e.to_string())?;
+        if url.scheme() != "https" || url.host_str().is_none() || !url.username().is_empty()
+            || url.password().is_some() || url.query().is_some() || url.fragment().is_some()
+            || url.path() != "/" {
+            return Err("host address must be an HTTPS origin".into());
+        }
+        let origin = url.as_str().trim_end_matches('/').to_owned();
+        url.set_path("/.well-known/ginfer");
+        let client = client.clone();
+        probes.push(async move {
+            let identity: serde_json::Value = client.get(url).timeout(Duration::from_secs(3))
+                .send().await.map_err(|e| e.to_string())?
+                .error_for_status().map_err(|e| e.to_string())?
+                .json().await.map_err(|e| e.to_string())?;
+            if identity["protocol_version"].as_u64() != Some(1) {
+                return Err("unsupported host protocol".into());
+            }
+            let id: uuid::Uuid = identity["host_id"].as_str().ok_or("host identity missing")?
+                .parse().map_err(|e: uuid::Error| e.to_string())?;
+            if expected.is_some_and(|expected| expected != id) {
+                return Err("endpoint identity does not match the selected host".into());
+            }
+            let name = identity["display_name"].as_str().ok_or("host name missing")?.to_owned();
+            Ok::<_, String>((origin, id, name))
+        });
+    }
+    let mut errors = vec![];
+    while let Some(result) = probes.next().await {
+        match result {
+            Ok(selected) => return Ok(selected),
+            Err(error) => errors.push(error),
+        }
+    }
+    Err(format!("Cannot reach this host with the supplied certificate fingerprint. Check sharing and the fingerprint, then retry. {}", errors.join("; ")))
+}

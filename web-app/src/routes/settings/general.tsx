@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { invoke } from '@tauri-apps/api/core'
 import { isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart'
 import { route } from '@/constants/routes'
+import { EngineHostName } from '@/containers/EngineHostName'
 import SettingsMenu from '@/containers/SettingsMenu'
 import HeaderPage from '@/containers/HeaderPage'
 import { Switch } from '@/components/ui/switch'
@@ -286,6 +287,7 @@ function General() {
           <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
             {/* General */}
             <Card title={t('common:general')}>
+              <CardItem title="Host name" description="Defaults to this computer’s hostname. This name identifies your host in GChat and on the network." actions={<EngineHostName />} />
               <CardItem
                 title={t('settings:general.appVersion')}
                 actions={

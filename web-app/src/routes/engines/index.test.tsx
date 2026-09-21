@@ -1,20 +1,21 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentType, ReactNode } from 'react'
-import type { EngineInstance, EngineLaunchProfile } from '@/services/engines'
+import type { EngineInstance, EngineLaunchProfile, NearbyHost } from '@/services/engines'
 
-const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), error: '', local: false, instances: [] as EngineInstance[] }))
+const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), error: '', local: false, nearby: [] as NearbyHost[], instances: [] as EngineInstance[] }))
 vi.mock('@tanstack/react-router', () => ({ createFileRoute: () => (options: unknown) => ({ options }) }))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock('@/services/engines', () => ({ engineCommand: mocks.command }))
-vi.mock('@/stores/engine-discovery-store', () => ({ useEngineDiscovery: () => ({ enabled: false, ignored: {}, setEnabled: vi.fn(), ignore: vi.fn(), restore: vi.fn() }) }))
+vi.mock('@/stores/engine-discovery-store', () => ({ useEngineDiscovery: () => ({ enabled: mocks.nearby.length > 0, ignored: {}, setEnabled: vi.fn(), ignore: vi.fn(), restore: vi.fn() }) }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector?: (state: { refresh: typeof mocks.refresh }) => unknown) => {
   if (selector) return selector({ refresh: mocks.refresh })
   return {
     hosts: [{ host_id: 'host', name: 'Lab host', base_url: 'https://host:7443', local: mocks.local }],
-    nearby: [], errors: mocks.error ? { host: mocks.error } : {}, refresh: mocks.refresh,
+    nearby: mocks.nearby, errors: mocks.error ? { host: mocks.error } : {}, refresh: mocks.refresh,
     refreshing: false, discoveryError: null,
     snapshots: { host: { host_id: 'host', display_name: 'Lab host', revision: 1, instances: mocks.instances,
+      lan_sharing: { managed: true, enabled: true, active: true, port: 7444 },
       gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768 }],
       models: [{ id: 'model', artifact_set: false, path: '/models/qwen.ginfer', metadata: {
         identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' }, tp_size: 1, draft_tp: 0, size_bytes: 1024,
@@ -28,6 +29,7 @@ const Page = Route.options.component as ComponentType
 beforeEach(() => {
   mocks.error = ''
   mocks.local = false
+  mocks.nearby = []
   mocks.instances = []
   mocks.command.mockReset().mockImplementation(async (action: string) => action === 'credential_status' ? { ready: true, platform: 'linux', can_install: false } : {})
   mocks.refresh.mockReset().mockResolvedValue(undefined)
@@ -41,6 +43,44 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.getByText('Local host')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Forget' })).not.toBeInTheDocument()
   })
+  it('shares independently of discovery and generates a one-use pairing code', async () => {
+    mocks.local = true
+    mocks.command.mockImplementation(async (action: string) => action === 'pairing'
+      ? { code: '87654321', certificate_sha256: 'a'.repeat(64), expires_in_seconds: 300 } : {})
+    render(<Page />)
+    const share = screen.getByRole('checkbox', { name: 'Share this host' })
+    expect(share).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Discover nearby GInfer hosts' })).not.toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Generate pairing code' }))
+    await waitFor(() => expect(screen.getByText('87654321')).toBeInTheDocument())
+    expect(screen.getByText('a'.repeat(64))).toBeInTheDocument()
+    expect(mocks.command).toHaveBeenCalledWith('pairing', { host_id: 'host' })
+    fireEvent.click(share)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('lan_sharing', { host_id: 'host', body: { enabled: false } }))
+    await waitFor(() => expect(share).toBeEnabled())
+  })
+
+  it('does not change sharing on a remote host', () => {
+    render(<Page />)
+    expect(screen.getByRole('checkbox', { name: 'Share this host' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Generate pairing code' })).not.toBeInTheDocument()
+  })
+
+  it('offers Pair and Ignore for a discovered host without requiring address selection', async () => {
+    mocks.nearby = [{ host_id: 'nearby-host', name: 'Server 2', urls: ['https://192.168.1.111:7444', 'https://10.0.0.1:7444'] }]
+    render(<Page />)
+    expect(screen.getByRole('button', { name: 'Ignore', exact: true })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /https:/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Pair', exact: true }))
+    expect(screen.getByRole('heading', { name: 'Pair with Server 2' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Host address')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Certificate SHA256'), { target: { value: 'a'.repeat(64) } })
+    fireEvent.change(screen.getByLabelText('Pairing code'), { target: { value: '12345678' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair host' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Pair host' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', { host_id: 'nearby-host', fingerprint: 'a'.repeat(64), code: '12345678' }))
+  })
+
   it('starts saved instances and confirms a running-instance restart', async () => {
     const profile: EngineLaunchProfile = {
       model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,

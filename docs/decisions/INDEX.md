@@ -369,3 +369,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-07-20** — [Open Agent-referenced files from assistant summaries](2026-07-20-open-agent-referenced-files-from-assistant-summaries.md)
 
 - [2026-09-20: Remove retired context reloads and tighten code hygiene](2026-09-20-remove-retired-context-reloads.md)
+
+- **2026-09-20** — [Separate desktop LAN sharing from loopback management](2026-09-20-desktop-lan-sharing.md)

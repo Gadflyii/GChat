@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { engineCommand, type EngineHost, type EngineSnapshot, type EngineLaunchOptions } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
+import { EngineHostSharing } from '@/containers/EngineHostSharing'
 import { EngineInstanceSettings } from '@/containers/EngineInstanceSettings'
 import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
@@ -72,6 +73,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
       }}>Forget</Button>}
     </div>
+    {host.local && snapshot && <EngineHostSharing hostId={host.host_id} sharing={snapshot.lan_sharing} />}
     {error && <p role="alert" className="text-sm text-destructive">{error}. Saved models below are last known; reconnect before using them.</p>}
     {snapshot && <>
       <EngineProfilePicker key={active?.instance_id ?? 'additional'} instanceId={active?.instance_id ?? ''} labelPrefix={host.name}

@@ -7,8 +7,15 @@ use std::{
 
 pub const SERVICE_TYPE: &str = "_ginfer._tcp.local.";
 
-pub fn advertise(host_id: uuid::Uuid, name: &str, port: u16) -> Result<ServiceDaemon, String> {
+pub fn advertise(host_id: uuid::Uuid, name: &str, address: std::net::SocketAddr) -> Result<ServiceDaemon, String> {
     let daemon = ServiceDaemon::new().map_err(|e| e.to_string())?;
+    daemon.disable_interface(if address.is_ipv4() { mdns_sd::IfKind::IPv6 } else { mdns_sd::IfKind::IPv4 })
+        .map_err(|e| e.to_string())?;
+    announce(&daemon, host_id, name, address.port())?;
+    Ok(daemon)
+}
+
+pub fn announce(daemon: &ServiceDaemon, host_id: uuid::Uuid, name: &str, port: u16) -> Result<(), String> {
     let properties = [
         ("version", "1"),
         ("host_id", &host_id.to_string()),
@@ -25,8 +32,7 @@ pub fn advertise(host_id: uuid::Uuid, name: &str, port: u16) -> Result<ServiceDa
     )
     .map_err(|e| e.to_string())?
     .enable_addr_auto();
-    daemon.register(info).map_err(|e| e.to_string())?;
-    Ok(daemon)
+    daemon.register(info).map_err(|e| e.to_string())
 }
 
 #[derive(Clone, Serialize)]

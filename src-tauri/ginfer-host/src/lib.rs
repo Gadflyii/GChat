@@ -14,3 +14,4 @@ pub mod response_route;
 pub mod service;
 pub mod service_owner;
 pub mod transport;
+pub mod lan_sharing;

@@ -252,7 +252,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" }),
             engine: provider.join("bin").join(if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" }),
             directory: provider.join("host"), desktop_provider: Some(provider),
-            models: vec![], artifact_sets: vec![], name:"This computer".into(),
+            models: vec![], artifact_sets: vec![], name:ginfer_host::local_host::computer_name()?,
             nvidia_smi:"nvidia-smi".into(), listen:"127.0.0.1:7443".parse().unwrap(),
         }.ensure_shared_running().await?;
         return match action.as_str() {
@@ -398,11 +398,15 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
         }
         "pair" => {
             credential_setup::require_ready().await?;
-            let base_url = endpoint(
-                args.get("base_url")
-                    .and_then(Value::as_str)
-                    .ok_or("host address is required")?,
-            )?;
+            let expected = args.get("host_id").and_then(Value::as_str)
+                .map(str::parse::<Uuid>).transpose().map_err(|error| error.to_string())?;
+            let origins = if let Some(id) = expected {
+                state().lock().await.discovery.as_ref().map(|discovery| discovery.hosts())
+                    .unwrap_or_default().into_iter().find(|host| host.host_id == id.to_string())
+                    .ok_or("Host is no longer nearby; refresh discovery or enter its address manually")?.urls
+            } else {
+                vec![endpoint(args.get("base_url").and_then(Value::as_str).ok_or("host address is required")?)?]
+            };
             let fingerprint = args
                 .get("fingerprint")
                 .and_then(Value::as_str)
@@ -410,24 +414,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 .trim()
                 .to_lowercase();
             let client = pinned_client(&fingerprint)?;
-            let identity = response_json(
-                client
-                    .get(format!("{base_url}/.well-known/ginfer"))
-                    .timeout(std::time::Duration::from_secs(10))
-                    .send()
-                    .await
-                    .map_err(|e| e.to_string())?,
-            )
-            .await?;
-            if identity.get("protocol_version").and_then(Value::as_u64) != Some(1) {
-                return Err("unsupported host protocol".into());
-            }
-            let host_id = identity
-                .get("host_id")
-                .and_then(Value::as_str)
-                .ok_or("host identity missing")?
-                .parse::<Uuid>()
-                .map_err(|e| e.to_string())?;
+            let (base_url, host_id, host_name) = ginfer_host::transport::pairing_origin(&origins, &fingerprint, expected).await?;
             let paired = response_json(
                 client
                     .post(format!("{base_url}/host/v1/pair"))
@@ -469,11 +456,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             }
             let host = SavedHost {
                 host_id,
-                name: identity
-                    .get("display_name")
-                    .and_then(Value::as_str)
-                    .unwrap_or("GInfer host")
-                    .into(),
+                name: host_name,
                 base_url,
                 certificate_sha256: fingerprint,
                 client_id,
@@ -589,12 +572,14 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                         state.registry.disconnect(connection);
                         return Err(error);
                     }
-                    if origin != host.base_url {
+                    let name = snapshot["display_name"].as_str().ok_or("host name missing")?;
+                    if origin != host.base_url || name != host.name {
                         let saved = state.saved.get_mut(&id).ok_or("host was forgotten")?;
-                        let previous = saved.base_url.clone();
+                        let previous = saved.clone();
                         saved.base_url = origin;
+                        saved.name = name.into();
                         if let Err(error) = persist(&state) {
-                            state.saved.get_mut(&id).unwrap().base_url = previous;
+                            state.saved.insert(id, previous);
                             state.registry.disconnect(connection);
                             return Err(error);
                         }
@@ -608,9 +593,12 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 }
             }
         }
-        "remove_model" | "download" | "download_action" | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
+        "host_name" | "lan_sharing" | "pairing" | "remove_model" | "download" | "download_action" | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
             let id = argument_id(&args, "host_id")?;
             let path = match action.as_str() {
+                "host_name" => "/host/v1/name".into(),
+                "lan_sharing" => "/host/v1/lan-sharing".into(),
+                "pairing" => "/host/v1/pairing".into(),
                 "launch" => "/host/v1/instances".into(),
                 "profile_launch" => "/host/v1/profile-launch".into(),
                 "scan" => "/host/v1/scan".into(),

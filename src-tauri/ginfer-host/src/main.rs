@@ -24,6 +24,9 @@ struct Args {
     /// Reconnect or start an independent loopback host, then print its snapshot.
     #[arg(long, conflicts_with_all = ["pair", "request_pairing", "menu", "discoverable"])]
     ensure_running: bool,
+    /// Allow the desktop to manage a separate, persistent LAN listener.
+    #[arg(long, conflicts_with = "discoverable")]
+    desktop_managed: bool,
     /// NVIDIA inventory executable; installers resolve service-specific PATHs.
     #[arg(long, default_value = "nvidia-smi")]
     nvidia_smi: PathBuf,
@@ -136,6 +139,9 @@ async fn run(
         );
         return Ok(());
     }
+    if args.desktop_managed && !args.listen.ip().is_loopback() {
+        return Err("desktop management requires a loopback listen address".into());
+    }
     if args.discoverable && args.listen.ip().is_loopback() {
         return Err("LAN discovery requires a LAN or wildcard --listen address".into());
     }
@@ -199,7 +205,7 @@ async fn run(
         Some(advertise(
             data.host_id,
             &data.name,
-            listener.local_addr().map_err(|e| e.to_string())?.port(),
+            listener.local_addr().map_err(|e| e.to_string())?,
         )?)
     } else {
         None
@@ -208,6 +214,7 @@ async fn run(
     if args.pair {
         println!("Pairing code (5 minutes): {}", host.enable_pairing().await);
     }
+    if args.desktop_managed { host.initialize_lan_sharing().await; }
     let mut connections = tokio::task::JoinSet::new();
     ready()?;
     // Disk inventory and health requests must never prevent accepting a fresh
@@ -257,6 +264,7 @@ async fn run(
     if let Some(advertisement) = advertisement {
         let _ = advertisement.shutdown();
     }
+    host.lan_sharing.lock().await.stop().await;
     connections.abort_all();
     while connections.join_next().await.is_some() {}
     maintenance.abort_all();
