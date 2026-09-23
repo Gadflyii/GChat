@@ -5,7 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Shimmer } from '@/components/ai-elements/shimmer'
+import { SectileActivityIndicator } from '@/components/ai-elements/sectile-activity-indicator'
 import { cn } from '@/lib/utils'
 
 type AgentActivityProps = {
@@ -44,11 +44,8 @@ export function AgentActivity({
             : 'cursor-default hover:text-muted-foreground'
         )}
       >
-        {active ? (
-          <Shimmer duration={1}>{workingLabel}</Shimmer>
-        ) : (
-          <span>{durationLabel}</span>
-        )}
+        <SectileActivityIndicator active={active} />
+        <span>{active ? workingLabel : durationLabel}</span>
         {hasDetails && (
           <ChevronDownIcon
             className={cn(

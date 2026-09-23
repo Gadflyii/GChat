@@ -1,0 +1,34 @@
+.sectile-activity-indicator {
+  display: inline-block;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 1px solid currentColor;
+}
+
+.sectile-activity-indicator-square {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 50%;
+  height: 50%;
+  background: #14b8a6;
+  transform: translate(100%, 100%);
+}
+
+.sectile-activity-indicator[data-active='true'] .sectile-activity-indicator-square {
+  animation: sectile-activity-corners 2.4s ease-in-out infinite;
+}
+
+@keyframes sectile-activity-corners {
+  0%, 15%, 100% { transform: translate(100%, 100%); }
+  25%, 40% { transform: translate(0, 100%); }
+  50%, 65% { transform: translate(0, 0); }
+  75%, 90% { transform: translate(100%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sectile-activity-indicator[data-active='true'] .sectile-activity-indicator-square {
+    animation: none;
+  }
+}
