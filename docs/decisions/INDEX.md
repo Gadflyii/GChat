@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Separate Chat view selection from Agent execution](2026-09-23-separate-chat-view-from-agent-execution.md)
+
 - [Host runtimes by GPU architecture](2026-09-21-select-host-runtimes-by-gpu-architecture.md)
 
 - [One-click LAN pairing](2026-09-21-one-click-lan-pairing.md)

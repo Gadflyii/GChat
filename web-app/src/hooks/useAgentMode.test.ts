@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { localStorageKey } from '@/constants/localStorage'
 import { useAgentMode } from '@/hooks/useAgentMode'
+import { resolveMessageExecutionRoute } from '@/lib/agent-route'
+import { filterSidebarHistoryThreads } from '@/lib/sidebar-thread-mode'
 
 describe('useAgentMode', () => {
   beforeEach(() => {
     useAgentMode.getState().clearAll()
   })
 
-  it('keeps a main-chat skill and workspace through thread creation, then exits it', () => {
+  it('keeps a main-chat skill and workspace through creation, reopening, and exit', async () => {
     useAgentMode.getState().setActiveSkill(TEMPORARY_CHAT_ID, 'agent-builder')
     useAgentMode.getState().setWorkingDir(TEMPORARY_CHAT_ID, '/workspace')
     useAgentMode.getState().transferAgentMode(TEMPORARY_CHAT_ID, 'skill-thread')
@@ -18,9 +20,27 @@ describe('useAgentMode', () => {
     expect(useAgentMode.getState().activeSkills['skill-thread']).toBe('agent-builder')
     expect(useAgentMode.getState().getWorkingDir('skill-thread')).toBe('/workspace')
     expect(useAgentMode.getState().activeSkills[TEMPORARY_CHAT_ID]).toBeUndefined()
+    expect(
+      filterSidebarHistoryThreads(
+        [{ id: 'skill-thread' }],
+        'chat',
+        useAgentMode.getState().agentThreads
+      )
+    ).toEqual([{ id: 'skill-thread' }])
+    expect(
+      resolveMessageExecutionRoute(
+        useAgentMode.getState().usesAgentTools('skill-thread')
+      )
+    ).toBe('agent-ipc')
+
+    await useAgentMode.persist.rehydrate()
+    expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
+    expect(useAgentMode.getState().activeSkills['skill-thread']).toBe('agent-builder')
+    expect(useAgentMode.getState().getWorkingDir('skill-thread')).toBe('/workspace')
 
     useAgentMode.getState().setActiveSkill('skill-thread')
     expect(useAgentMode.getState().usesAgentTools('skill-thread')).toBe(false)
+    expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
   })
 
   it('moves the Home selection to the created thread', () => {
@@ -33,6 +53,13 @@ describe('useAgentMode', () => {
     expect(useAgentMode.getState().isAgentMode('thread-1')).toBe(true)
     expect(useAgentMode.getState().getApprovalMode('thread-1')).toBe('skip')
     expect(useAgentMode.getState().getWorkingDir('thread-1')).toBe('/workspace')
+    expect(
+      filterSidebarHistoryThreads(
+        [{ id: 'thread-1' }],
+        'agent',
+        useAgentMode.getState().agentThreads
+      )
+    ).toEqual([{ id: 'thread-1' }])
     expect(useAgentMode.getState().isAgentMode(TEMPORARY_CHAT_ID)).toBe(false)
     expect(useAgentMode.getState().getApprovalMode(TEMPORARY_CHAT_ID)).toBe(
       'manual'

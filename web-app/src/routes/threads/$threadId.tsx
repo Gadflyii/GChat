@@ -557,7 +557,7 @@ function ThreadDetail() {
   useEffect(() => {
     setCurrentThreadId(threadId)
     setSidebarMode(
-      useAgentMode.getState().usesAgentTools(threadId) ? 'agent' : 'chat'
+      useAgentMode.getState().isAgentMode(threadId) ? 'agent' : 'chat'
     )
     useThreadReadStatus.getState().markRead(threadId)
     const assistant = assistants.find(
