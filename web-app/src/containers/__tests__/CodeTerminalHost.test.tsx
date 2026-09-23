@@ -180,6 +180,9 @@ vi.mock('@/containers/HeaderPage', () => ({
 vi.mock('@/containers/AgentWorkspaceSelect', () => ({
   AgentWorkspaceSelect: () => <button>workspace</button>,
 }))
+vi.mock('@/containers/CodeBridgePanel', () => ({
+  CodeBridgePanel: () => <button>GChat tools</button>,
+}))
 vi.mock('@/components/ui/button', () => ({
   Button: ({
     children,

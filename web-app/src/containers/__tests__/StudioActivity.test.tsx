@@ -1,12 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { StudioActivity } from '../StudioActivity'
 import { useStudioRuns } from '@/stores/studio-run-store'
 import { createAgentRunState } from '@/hooks/useAgentRun'
+import { useOpenCodeBridgeRuns } from '@/stores/opencode-bridge-runs'
 
-vi.mock('../AgentLiveRuns', () => ({
-  AgentLiveRuns: () => <div>Approve workers here</div>,
+vi.mock('@/hooks/useStudioCatalog', () => ({
+  useStudioCatalog: () => ({ catalog: { instances: [] }, refresh: vi.fn() }),
 }))
+
+beforeEach(() => {
+  useOpenCodeBridgeRuns.setState({ runs: [], refresh: vi.fn().mockResolvedValue(undefined) })
+})
 it('exposes pending Studio approvals outside the Runs page', () => {
   useStudioRuns.setState({
     runs: {
@@ -37,5 +42,32 @@ it('exposes pending Studio approvals outside the Runs page', () => {
   })
   render(<StudioActivity />)
   fireEvent.click(screen.getByRole('button', { name: /1 approvals needed/ }))
-  expect(screen.getByRole('dialog')).toHaveTextContent('Approve workers here')
+  expect(screen.getByRole('dialog')).toHaveTextContent('Remember a fact')
+})
+
+it('counts delegated OpenCode runs and approvals in the shared activity control', () => {
+  useStudioRuns.setState({ runs: {} })
+  useOpenCodeBridgeRuns.setState({
+    runs: [{
+      runId: 'bridge-run',
+      definitionName: 'Review agent',
+      status: 'running',
+      workspace: 'C:\\Projects\\gchat',
+      approvals: [{
+        type: 'folder_access_requested',
+        runId: 'bridge-run',
+        approvalId: 'access',
+        tool: 'fileWrite',
+        reason: 'Edit project',
+        path: '/project',
+      }],
+    }],
+    refresh: vi.fn().mockResolvedValue(undefined),
+  })
+  render(<StudioActivity />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Agent activity: 1 active runs, 1 approvals needed, 0 queued workers' }))
+  expect(screen.getByRole('dialog')).toHaveTextContent('Review agent')
+  expect(screen.getByRole('dialog')).toHaveTextContent('Project: gchat')
+  expect(screen.getByRole('dialog')).toHaveTextContent('Edit project')
 })

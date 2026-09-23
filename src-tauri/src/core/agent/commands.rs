@@ -449,10 +449,33 @@ async fn read_workspace_text(path: &Path, limit: usize) -> Result<(String, bool)
 #[tauri::command]
 pub async fn agent_run_turn<R: Runtime>(
     app_handle: AppHandle<R>,
-    state: State<'_, AppState>,
-    mut request: AgentTurnRequest,
+    request: AgentTurnRequest,
     on_event: Channel<AgentEvent>,
 ) -> Result<(), String> {
+    run_turn_with_sink(
+        app_handle,
+        request,
+        Arc::new(move |event| on_event.send(event).map_err(|error| error.to_string())),
+    )
+    .await
+}
+
+/// Shared Agent Studio execution path for desktop IPC and the Code MCP bridge.
+pub async fn run_turn_with_sink<R: Runtime>(
+    app_handle: AppHandle<R>,
+    request: AgentTurnRequest,
+    emit: Arc<dyn Fn(AgentEvent) -> Result<(), String> + Send + Sync>,
+) -> Result<(), String> {
+    run_turn_with_sink_ready(app_handle, request, emit, None).await
+}
+
+pub async fn run_turn_with_sink_ready<R: Runtime>(
+    app_handle: AppHandle<R>,
+    mut request: AgentTurnRequest,
+    emit: Arc<dyn Fn(AgentEvent) -> Result<(), String> + Send + Sync>,
+    registered: Option<Arc<dyn Fn() + Send + Sync>>,
+) -> Result<(), String> {
+    let state = app_handle.state::<AppState>();
     validate_request(&request)?;
     if request.selected_skill.as_deref() == Some("agent-builder") {
         request.auto_approve = false;
@@ -525,6 +548,8 @@ pub async fn agent_run_turn<R: Runtime>(
     if let Some(attachment_root) = staged.trusted_root.as_ref() {
         trusted_read_roots.push(attachment_root.clone());
     }
+    let skill_registry = load_registry(&data_folder)?;
+    let bundled_script_runtime = resolve_bundled_script_runtime(&app_handle);
     let (cancel_tx, cancel_rx) = oneshot::channel();
     {
         let mut cancellations = state.tool_call_cancellations.lock().await;
@@ -532,6 +557,9 @@ pub async fn agent_run_turn<R: Runtime>(
             return Err(format!("Agent run '{}' is already active", request.run_id));
         }
         cancellations.insert(request.run_id.clone(), cancel_tx);
+    }
+    if let Some(notify) = registered {
+        notify();
     }
     let cancellation_bridge = cancellation.clone();
     tokio::spawn(async move {
@@ -549,8 +577,6 @@ pub async fn agent_run_turn<R: Runtime>(
         has_wmctrl: false,
         has_notifications: cfg!(desktop),
     };
-    let skill_registry = load_registry(&data_folder)?;
-    let bundled_script_runtime = resolve_bundled_script_runtime(&app_handle);
     let skill_descriptors = skill_registry
         .enabled()
         .map(|record| SkillDescriptor {
@@ -562,28 +588,20 @@ pub async fn agent_run_turn<R: Runtime>(
             dangerous: record.manifest.dangerous,
         })
         .collect::<Vec<_>>();
-    let approval_events = on_event.clone();
+    let approval_events = emit.clone();
     let approval = ApprovalGate::new(
         request.run_id.clone(),
         request.auto_approve,
         state.agent_pending_approvals.clone(),
         state.agent_approval_allowlist.clone(),
-        Arc::new(move |event| {
-            approval_events
-                .send(event)
-                .map_err(|error| error.to_string())
-        }),
+        Arc::new(move |event| approval_events(event)),
         cancellation.clone(),
     );
-    let folder_access_events = on_event.clone();
+    let folder_access_events = emit.clone();
     let folder_access = FolderAccessGate::new(
         request.run_id.clone(),
         state.agent_pending_folder_access.clone(),
-        Arc::new(move |event| {
-            folder_access_events
-                .send(event)
-                .map_err(|error| error.to_string())
-        }),
+        Arc::new(move |event| folder_access_events(event)),
         cancellation.clone(),
     );
     let desktop = AgentDesktopServices {
@@ -637,7 +655,7 @@ pub async fn agent_run_turn<R: Runtime>(
                         ) {
                             recorded_events.push(event.clone());
                         }
-                        on_event.send(event).map_err(|error| error.to_string())
+                        emit(event)
                     },
                 )
                 .await;
@@ -666,7 +684,7 @@ pub async fn agent_run_turn<R: Runtime>(
                         ] {
                             recorded_events.push(event.clone());
                             super::studio::observe(&request.run_id, &event);
-                            let _ = on_event.send(event);
+                            let _ = emit(event);
                         }
                     }
                 }
@@ -686,18 +704,15 @@ pub async fn agent_run_turn<R: Runtime>(
                 if output_workspace.is_dir() {
                     record.output_workspace = Some(output_workspace.to_string_lossy().into_owned());
                 }
-                if let Err(error) =
+                let record_result =
                     tokio::task::spawn_blocking(move || record_run(&record_data, record))
                         .await
                         .map_err(|e| e.to_string())
-                        .and_then(|result| result)
-                {
-                    log::warn!("Failed to record Agent Studio run: {error}");
-                }
-                match save_session(&data_folder, &session).await {
-                    Ok(()) => run_result.map(|_| ()),
-                    Err(error) => Err(error),
-                }
+                        .and_then(|result| result);
+                let session_result = save_session(&data_folder, &session).await;
+                session_result
+                    .and(record_result)
+                    .and(run_result.map(|_| ()))
             }
             Err(error) => Err(error),
         }

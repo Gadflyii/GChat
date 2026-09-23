@@ -212,6 +212,9 @@ pub fn run() {
         core::agent::skills::commands::agent_export_skill,
         core::agent::skills::commands::agent_delete_skill,
         core::agent::skills::commands::agent_refresh_skills,
+        core::code_bridge::opencode_bridge_status,
+        core::code_bridge::opencode_bridge_list_runs,
+        core::code_bridge::opencode_bridge_cancel_run,
         core::mcp::commands::restart_mcp_servers,
         core::mcp::commands::get_connected_servers,
         core::mcp::commands::save_mcp_configs,
@@ -365,6 +368,9 @@ pub fn run() {
         core::agent::skills::commands::agent_export_skill,
         core::agent::skills::commands::agent_delete_skill,
         core::agent::skills::commands::agent_refresh_skills,
+        core::code_bridge::opencode_bridge_status,
+        core::code_bridge::opencode_bridge_list_runs,
+        core::code_bridge::opencode_bridge_cancel_run,
         core::mcp::commands::restart_mcp_servers,
         core::mcp::commands::get_connected_servers,
         core::mcp::commands::save_mcp_configs,
@@ -658,6 +664,9 @@ pub fn run() {
                         use crate::core::mcp::helpers::background_cleanup_mcp_servers;
 
                         let state = app_handle.state::<AppState>();
+
+                        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+                        core::code_bridge::shutdown(&app_handle).await;
 
                         if let Err(e) =
                             crate::core::server::proxy::stop_server(state.server_handle.clone())

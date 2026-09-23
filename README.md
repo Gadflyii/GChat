@@ -147,10 +147,17 @@ GChat can detect, install, configure, and launch external coding agents against 
 OpenCode, Codex, Claude Code, Cline, Goose, OpenHands, Kilo Code, and other supported clients share
 the model already managed by GChat rather than starting a second inference backend.
 
-The Code tab is in development. It will embed a persistent PTY running the real OpenCode TUI, so
-navigation does not terminate the coding session and GChat does not reimplement an upstream agent
-interface. Until that surface lands, the Launch page and `gchat-cli launch` provide the supported
-entry points.
+The Code tab embeds a persistent PTY running the real OpenCode TUI. Its **GChat tools** bridge lets
+OpenCode discover enabled skills and saved agents, then delegate asynchronous runs to the Agent
+Studio runtime. Saved worker-pool assignments remain active; progress, approvals, and cancellation
+are available in the Code panel and Agent activity view, and completed runs appear in Agent Studio
+history. OpenCode can also list project runs from earlier Code launches. Skill instructions can be
+read directly, while skills that need GChat tools or scripts run through a delegated Agent Studio
+task. Each delegated run starts a fresh Agent session, so include necessary conversation context in
+its task. Runs use the GChat model configured at Code launch unless the saved definition pins a
+model; pass a ready `modelId` to select another instance. A model switch inside OpenCode does not
+change the bridge's default. The bridge is limited to the Code project's local workspace and uses
+GChat's normal approval rules.
 
 ```bash
 gchat-cli models list

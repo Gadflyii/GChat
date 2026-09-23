@@ -39,7 +39,7 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-253 records, 2026-05-19 → 2026-09-10.
+254 records, 2026-05-19 → 2026-09-23.
 
 ---
 
@@ -108,6 +108,8 @@ decision is reversed, add a new one that says which record it supersedes.
 ---
 
 ## Launch page & external coding agents (18)
+
+- **2026-09-23** — [Connect embedded OpenCode to Agent Studio through scoped MCP](2026-09-23-connect-opencode-to-agent-studio.md)
 
 - **2026-09-01** — [Enable and provision embedded agents by default](2026-09-01-enable-and-provision-embedded-agents-by-default.md)
 - **2026-08-30** — [Embed Hermes as an independent managed terminal](2026-08-30-embed-hermes-as-an-independent-managed-terminal.md)

@@ -40,6 +40,41 @@ editable draft. It does not appear in the Agent Studio library or task picker.
 - Agent mode bypasses the port-1337 proxy. It has no llama.cpp `/props`,
   `/completion`, GBNF, slot, or model-profile compatibility path.
 
+## OpenCode bridge
+
+The embedded Code terminal connects to the same Agent Studio executor through
+a per-launch MCP endpoint. GChat binds it to loopback on an ephemeral port,
+scopes its bearer token and canonical workspace to that terminal launch, and
+closes the endpoint when the terminal stops. The adapter targets OpenCode's
+v1 remote-MCP configuration contract.
+
+OpenCode can list and read enabled GChat skills, list saved agents, start an
+asynchronous Agent Studio run, list project runs across Code launches, inspect
+or cancel a run. A new run uses the GChat model captured when that Code
+terminal launched unless its definition pins a model; an explicit `modelId`
+can select another ready instance. The bridge does not follow model switches
+inside OpenCode. Saved worker-pool assignments pass unchanged to the shared
+dispatcher. Each delegated run gets a fresh durable Agent session, so OpenCode
+must include needed prior context in the task. A `requestId` is idempotent
+within one bridge launch: retrying the same request returns its original run,
+while reusing the key for different input fails.
+
+The bridge returns compact run status, stage, cycle, summary, result, and
+approval snapshots rather than raw Agent events. Closing a Code terminal
+releases its endpoint but leaves delegated runs active. At app exit, GChat
+requests cancellation and waits up to 15 seconds for runs to unwind and persist;
+history may be incomplete if a run exceeds that deadline.
+
+The bridge has no separate skill or definition CRUD API. Enabled authoring
+skills can use the runtime's existing management tools and approval policy.
+
+Runs keep normal Agent Studio approval rules and never auto-approve actions.
+Progress and pending approvals appear in the Code panel and Agent activity
+view; people resolve approvals in GChat. Completed runs enter the regular
+Agent Studio history. Closing the Code terminal closes its MCP endpoint but
+does not stop already delegated runs. Quitting GChat requests cancellation of
+active bridge runs.
+
 ## Agent Studio orchestration
 
 Definitions use schema version 3.

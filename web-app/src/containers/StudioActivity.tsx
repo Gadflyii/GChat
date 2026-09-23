@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStudioRuns } from '@/stores/studio-run-store'
+import { useOpenCodeBridgeRuns } from '@/stores/opencode-bridge-runs'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,6 +13,25 @@ import { AgentLiveRuns } from './AgentLiveRuns'
 
 export function StudioActivity() {
   const [open, setOpen] = useState(false)
+  const bridgeRuns = useOpenCodeBridgeRuns((s) => s.runs)
+  const refreshBridgeRuns = useOpenCodeBridgeRuns((s) => s.refresh)
+  useEffect(() => {
+    let stopped = false
+    let timeout: number | undefined
+    const poll = async () => {
+      try {
+        await refreshBridgeRuns()
+      } catch {
+        // The Code bridge is optional while OpenCode is unavailable.
+      }
+      if (!stopped) timeout = window.setTimeout(() => void poll(), 3000)
+    }
+    void poll()
+    return () => {
+      stopped = true
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
+  }, [refreshBridgeRuns])
   const summary = useStudioRuns((s) => {
     let active = 0,
       approvals = 0,
@@ -25,7 +45,11 @@ export function StudioActivity() {
     }
     return `${active}:${approvals}:${queued}`
   })
-  const [active, approvals, queued] = summary.split(':').map(Number)
+  const [studioActive, studioApprovals, studioQueued] = summary.split(':').map(Number)
+  const activeBridgeRuns = bridgeRuns.filter((run) => run.status === 'queued' || run.status === 'running')
+  const active = studioActive + activeBridgeRuns.length
+  const approvals = studioApprovals + activeBridgeRuns.reduce((count, run) => count + (run.approvals?.length ?? 0), 0)
+  const queued = studioQueued + activeBridgeRuns.filter((run) => run.status === 'queued').length
   if (!active && !approvals && !open) return null
   return (
     <>

@@ -9,7 +9,7 @@ use std::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
-use tauri::{ipc::Channel, State};
+use tauri::{ipc::Channel, AppHandle, Runtime, State};
 
 const REPLAY_CAPACITY_BYTES: usize = 1024 * 1024;
 const MAX_INPUT_BYTES: usize = 64 * 1024;
@@ -228,6 +228,14 @@ impl ReplayLog {
     }
 }
 
+struct BridgeLease(String);
+
+impl Drop for BridgeLease {
+    fn drop(&mut self) {
+        super::code_bridge::close_session(&self.0);
+    }
+}
+
 struct Session {
     phase: TerminalPhase,
     generation: u64,
@@ -242,6 +250,7 @@ struct Session {
     channel: Option<Channel<TerminalEvent>>,
     replay: ReplayLog,
     flow_paused: bool,
+    bridge: Option<BridgeLease>,
 }
 
 impl Default for Session {
@@ -260,6 +269,7 @@ impl Default for Session {
             channel: None,
             replay: ReplayLog::default(),
             flow_paused: false,
+            bridge: None,
         }
     }
 }
@@ -359,6 +369,7 @@ impl TerminalSlot {
                     session.phase = TerminalPhase::Stopping;
                 }
                 session.flow_paused = false;
+                session.bridge = None;
                 let resources = (
                     session.killer.take(),
                     session.writer.take(),
@@ -699,6 +710,7 @@ fn start_waiter(
             session.master = None;
             session.writer = None;
             session.killer = None;
+            session.bridge = None;
             session.flow_paused = false;
             shared.flow_changed.notify_all();
 
@@ -780,7 +792,8 @@ pub fn terminal_status(
 }
 
 #[tauri::command]
-pub fn terminal_spawn(
+pub fn terminal_spawn<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, TerminalState>,
     request: TerminalSpawnRequest,
 ) -> Result<TerminalStatus, String> {
@@ -877,7 +890,21 @@ pub fn terminal_spawn(
             terminal_id.label()
         )
     })?;
-    let command = command_for_shell(&cwd, opencode_tui_config.as_deref(), hermes_appearance);
+    let mut command = command_for_shell(&cwd, opencode_tui_config.as_deref(), hermes_appearance);
+    let mut bridge = None;
+    if request.launch == TerminalLaunch::OpenCode {
+        let inherited_config = std::env::var("OPENCODE_CONFIG_CONTENT").ok();
+        let configured = super::system::opencode_config::read_merged_global_config(
+            &opencode_config_directory()?,
+        )?;
+        let default_model =
+            opencode_bridge_model(configured.as_ref(), inherited_config.as_deref())?;
+        let connection = super::code_bridge::prepare_session(&app, &cwd, default_model)?;
+        bridge = Some(BridgeLease(connection.session_id));
+        let config = opencode_bridge_config(inherited_config.as_deref(), &connection.url)?;
+        command.env("OPENCODE_CONFIG_CONTENT", config);
+        command.env("GCHAT_BRIDGE_TOKEN", connection.token);
+    }
     let mut child = pair.slave.spawn_command(command).map_err(|error| {
         format!(
             "Could not start {} terminal shell: {error}",
@@ -918,6 +945,7 @@ pub fn terminal_spawn(
         session.master = Some(pair.master);
         session.writer = Some(writer);
         session.killer = Some(killer);
+        session.bridge = bridge;
         session.flow_paused = false;
         session.replay.reset();
 
@@ -1045,6 +1073,7 @@ pub fn terminal_stop(
             return Ok(session.status());
         }
         session.phase = TerminalPhase::Stopping;
+        session.bridge = None;
         session.flow_paused = false;
         slot.shared.flow_changed.notify_all();
         let status = session.status();
@@ -1069,6 +1098,52 @@ fn opencode_config_directory() -> Result<PathBuf, String> {
     Ok(super::system::opencode_config::config_directory(
         &super::system::commands::agent_home_dir()?,
     ))
+}
+
+fn opencode_bridge_config(existing: Option<&str>, url: &str) -> Result<String, String> {
+    let mut config = match existing.filter(|content| !content.trim().is_empty()) {
+        Some(content) => serde_json::from_str::<serde_json::Value>(content)
+            .map_err(|_| "OPENCODE_CONFIG_CONTENT must contain a JSON object".to_string())?,
+        None => serde_json::json!({}),
+    };
+    let root = config
+        .as_object_mut()
+        .ok_or("OPENCODE_CONFIG_CONTENT must contain a JSON object")?;
+    let servers = root
+        .entry("mcp")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or("OpenCode MCP configuration must be an object")?;
+    servers.insert(
+        "gchat".into(),
+        serde_json::json!({
+            "type": "remote",
+            "url": url,
+            "enabled": true,
+            "oauth": false,
+            "headers": { "Authorization": "Bearer {env:GCHAT_BRIDGE_TOKEN}" }
+        }),
+    );
+    serde_json::to_string(&config).map_err(|error| error.to_string())
+}
+
+fn opencode_bridge_model(
+    configured: Option<&serde_json::Value>,
+    inherited: Option<&str>,
+) -> Result<Option<String>, String> {
+    let inherited = inherited
+        .filter(|content| !content.trim().is_empty())
+        .map(serde_json::from_str::<serde_json::Value>)
+        .transpose()
+        .map_err(|_| "OPENCODE_CONFIG_CONTENT must contain a JSON object".to_string())?;
+    Ok(inherited
+        .as_ref()
+        .and_then(|value| value.get("model"))
+        .or_else(|| configured.and_then(|value| value.get("model")))
+        .and_then(|model| model.as_str())
+        .and_then(|model| model.strip_prefix("gchat/"))
+        .filter(|model| !model.is_empty())
+        .map(str::to_owned))
 }
 
 fn write_managed_terminal_asset(path: &Path, content: &str) -> Result<(), String> {
@@ -1398,6 +1473,57 @@ mod tests {
         assert_eq!(
             format_open_code_command(None, Path::new("/home/ron/agent work"), false),
             "opencode '/home/ron/agent work'\r"
+        );
+    }
+
+    #[test]
+    fn embedded_bridge_preserves_other_opencode_configuration() {
+        let config = opencode_bridge_config(
+            Some(r#"{"model":"gchat/model","mcp":{"other":{"type":"local","command":["tool"]}}}"#),
+            "http://127.0.0.1:12345/mcp/session",
+        )
+        .unwrap();
+        let config: serde_json::Value = serde_json::from_str(&config).unwrap();
+        assert_eq!(config["model"], "gchat/model");
+        assert_eq!(config["mcp"]["other"]["command"][0], "tool");
+        assert_eq!(
+            config["mcp"]["gchat"]["url"],
+            "http://127.0.0.1:12345/mcp/session"
+        );
+        assert_eq!(
+            config["mcp"]["gchat"]["headers"]["Authorization"],
+            "Bearer {env:GCHAT_BRIDGE_TOKEN}"
+        );
+        assert_eq!(config["mcp"]["gchat"]["oauth"], false);
+    }
+
+    #[test]
+    fn embedded_bridge_rejects_invalid_inherited_configuration() {
+        for config in ["not json", "[]", r#"{"mcp":false}"#] {
+            assert!(opencode_bridge_config(Some(config), "http://127.0.0.1:1/mcp").is_err());
+        }
+        assert!(opencode_bridge_config(None, "http://127.0.0.1:1/mcp").is_ok());
+    }
+
+    #[test]
+    fn bridge_inherits_the_configured_gchat_model() {
+        let global = serde_json::json!({"model":"gchat/qwen/model"});
+        assert_eq!(
+            opencode_bridge_model(Some(&global), None)
+                .unwrap()
+                .as_deref(),
+            Some("qwen/model")
+        );
+        assert_eq!(
+            opencode_bridge_model(Some(&global), Some(r#"{"model":"gchat/muse"}"#))
+                .unwrap()
+                .as_deref(),
+            Some("muse")
+        );
+        assert!(
+            opencode_bridge_model(Some(&global), Some(r#"{"model":"other/model"}"#))
+                .unwrap()
+                .is_none()
         );
     }
 

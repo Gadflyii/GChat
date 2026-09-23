@@ -16,6 +16,7 @@ import {
 } from 'react'
 
 import { AgentWorkspaceSelect } from '@/containers/AgentWorkspaceSelect'
+import { CodeBridgePanel } from '@/containers/CodeBridgePanel'
 import HeaderPage from '@/containers/HeaderPage'
 import { Button } from '@/components/ui/button'
 import { useAppState } from '@/hooks/useAppState'
@@ -381,6 +382,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
             aria-label={t(`code:status.${status.phase}`)}
           />
           <div className="ml-auto flex min-w-0 items-center gap-1.5">
+            {desktopTerminalAvailable && <CodeBridgePanel visible={visible} workspace={status.cwd ?? workspace} />}
             {!updateResult && <Button size="sm" variant="outline" disabled={busy || !workspace || !readiness?.installed}
               onClick={() => updateMode ? void restart() : setUpdateRequested(true)}>
               {updateMode ? 'Open Code' : 'Update Code'}

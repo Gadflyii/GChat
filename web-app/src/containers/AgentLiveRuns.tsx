@@ -8,6 +8,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
 import { useStudioRuns } from '@/stores/studio-run-store'
+import { useOpenCodeBridgeRuns } from '@/stores/opencode-bridge-runs'
+import { BridgeRun } from './CodeBridgePanel'
 import { studioCommand } from '@/services/agent/studio'
 import {
   cancelAgentTurn,
@@ -17,10 +19,12 @@ import {
 
 export function AgentLiveRuns() {
   const runIds = useStudioRuns((s) => Object.keys(s.runs).join(','))
+  const bridgeRuns = useOpenCodeBridgeRuns((s) => s.runs).filter((run) => run.status === 'queued' || run.status === 'running')
+  const refreshBridgeRuns = useOpenCodeBridgeRuns((s) => s.refresh)
   const deleting = useStudioRuns((s) => s.deleting)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const { catalog, error, refresh } = useStudioCatalog()
-  if (!runIds) return null
+  if (!runIds && bridgeRuns.length === 0) return null
   return (
     <section
       className="space-y-4 border-b p-6"
@@ -28,9 +32,9 @@ export function AgentLiveRuns() {
     >
       <div className="flex items-center gap-3">
         <h2 className="font-studio text-lg font-semibold">Live runs</h2>
-        <Button variant="outline" size="sm" disabled={deleting} onClick={() => setConfirmDelete(true)}>
+        {runIds && <Button variant="outline" size="sm" disabled={deleting} onClick={() => setConfirmDelete(true)}>
           Delete all
-        </Button>
+        </Button>}
       </div>
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
@@ -57,8 +61,11 @@ export function AgentLiveRuns() {
           </Button>
         </p>
       )}
-      {runIds.split(',').map((id) => (
+      {runIds.split(',').filter(Boolean).map((id) => (
         <LiveRun key={id} id={id} instances={catalog.instances} />
+      ))}
+      {bridgeRuns.map((run) => (
+        <BridgeRun key={run.runId} run={run} onChanged={refreshBridgeRuns} />
       ))}
     </section>
   )
