@@ -47,6 +47,7 @@ import { useServiceStore } from '@/hooks/useServiceHub'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { ModelFactory } from './model-factory'
 import { useModelProvider } from '@/hooks/useModelProvider'
+import { useContextUsage } from '@/hooks/useContextUsage'
 import { getSamplingParamsForThread } from '@/lib/samplingParams'
 import { withRecommendedSampling } from '@/lib/predefinedParams'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -54,9 +55,10 @@ import { useThreads } from '@/hooks/useThreads'
 import { useAttachments } from '@/hooks/useAttachments'
 import { useAppState } from '@/hooks/useAppState'
 import { ExtensionManager } from '@/lib/extension'
-import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
+import { EngineManager, ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ttftMark } from '@/lib/ttft-timing'
 import { extractModelErrorMessage } from '@/lib/modelErrorMessage'
+import { getSmartContextFailure } from '@/utils/error'
 import type { ServiceHub } from '@/services'
 import { ensureRemoteProviderReady } from '@/utils/ensureRemoteProviderReady'
 import { isLocalProvider as isLocalProviderName } from '@/utils/registerRemoteProvider'
@@ -164,49 +166,6 @@ export type OnToolCallCallback = (params: {
   toolCall: { toolCallId: string; toolName: string; input: unknown }
 }) => void
 
-/**
- * Wraps a UIMessageChunk stream so that when the first `text-start` chunk
- * arrives, a `text-delta` carrying `prefixText` is immediately injected into
- * the same text block. This makes the new message show the partial content
- * right away while continuation tokens stream in after it.
- */
-function prependTextDeltaToUIStream(
-  stream: ReadableStream<UIMessageChunk>,
-  prefixText: string
-): ReadableStream<UIMessageChunk> {
-  const reader = stream.getReader()
-  let prefixEmitted = false
-  return new ReadableStream<UIMessageChunk>({
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read()
-        if (done) {
-          controller.close()
-          return
-        }
-        controller.enqueue(value)
-        if (
-          !prefixEmitted &&
-          (value as { type: string }).type === 'text-start'
-        ) {
-          prefixEmitted = true
-          const id = (value as { type: 'text-start'; id: string }).id
-          controller.enqueue({
-            type: 'text-delta',
-            id,
-            delta: prefixText,
-          } as UIMessageChunk)
-        }
-      } catch (error) {
-        controller.error(error)
-      }
-    },
-    cancel() {
-      reader.cancel()
-    },
-  })
-}
-
 export class CustomChatTransport implements ChatTransport<UIMessage> {
   public model: LanguageModel | null = null
   private tools: Record<string, Tool> = {}
@@ -217,7 +176,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
   private systemMessage?: string
   private serviceHub: ServiceHub | null
   private threadId?: string
-  private continueFromContent: string | null = null
   private toolsCacheKey = ''
   private toolsCacheValid = false
   private contextState: GInferContextState = { lastCompaction: null }
@@ -399,14 +357,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
   }
 
   /**
-   * Set partial assistant content to send as a prefill on the next request,
-   * so the model continues generation from where it left off.
-   */
-  setContinueFromContent(content: string) {
-    this.continueFromContent = content
-  }
-
-  /**
    * Run the normal GInfer request serializer far enough to create or extend
    * the thread checkpoint. The local fetch adapter replaces the final answer
    * with an empty synthetic stream, so `/compact` never becomes a chat turn.
@@ -558,19 +508,34 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         if (!isLocalProviderName(effectiveProvider.provider)) {
           await ensureRemoteProviderReady(effectiveProvider, this.serviceHub)
         }
+        const contextPolicy = effectiveProviderName === 'ginfer'
+          ? ginferContextPolicyForModel(
+              this.threadId ?? options.chatId, modelId,
+              updatedProvider?.models, provider.models, this.contextState
+            )
+          : undefined
+        if (contextPolicy) {
+          const engine = EngineManager.instance().get('ginfer') as
+            | { getLoadedContext?: (id: string) => Promise<number | undefined> }
+            | undefined
+          const loadedContext = await engine?.getLoadedContext?.(modelId)
+          if (loadedContext && Number.isInteger(loadedContext) && loadedContext > 0) {
+            contextPolicy.configuredContextTokens = loadedContext
+          }
+        }
         this.model = await ModelFactory.createModel(
           modelId,
           effectiveProvider,
           inferenceParams ?? {},
           hasOverride ? effectiveReasoningOverride : undefined,
-          effectiveProviderName === 'ginfer'
-            ? ginferContextPolicyForModel(
-                this.threadId ?? options.chatId,
-                modelId,
-                updatedProvider?.models,
-                provider.models,
-                this.contextState
-              )
+          contextPolicy
+            ? {
+                ...contextPolicy,
+                onUsage: (usage) => useContextUsage.getState().record(
+                  this.threadId ?? options.chatId,
+                  { ...usage, modelId, outputTokens: 0 }
+                ),
+              }
             : undefined
         )
         ttftMark('deltaEnd')
@@ -613,16 +578,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     }
     const baseMessages = convertToModelMessages(preparedMessages)
 
-    // If continuing a truncated response, append the partial assistant content as a
-    // prefill so the model resumes from where it left off rather than regenerating.
-    const continueContent = this.continueFromContent
-    this.continueFromContent = null
-    const modelMessages = continueContent
-      ? [
-          ...baseMessages,
-          { role: 'assistant' as const, content: continueContent },
-        ]
-      : baseMessages
+    const modelMessages = baseMessages
 
     // Local providers (ginfer):
     // when tools are also active we don't pass a `system` message (gemma-4 and
@@ -730,6 +686,14 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           // Prefer reported output tokens; fall back to text delta count.
           const outputTokens = usage?.outputTokens ?? 0
           const inputTokens = usage?.inputTokens
+          const contextThreadId = this.threadId ?? options.chatId
+          const counted = useContextUsage.getState().requests[contextThreadId]
+          const contextUsage = providerId === 'ginfer' && counted?.modelId === modelId
+            ? { ...counted, outputTokens }
+            : undefined
+          if (contextUsage) {
+            useContextUsage.getState().record(contextThreadId, contextUsage)
+          }
 
           // Prefer the provider-reported decode TPS (mlx-vlm `generation_tps`
           // or timing `predicted_per_second`). Fall back to a
@@ -765,6 +729,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
             // recorded anywhere, so a finished turn could not be attributed.
             modelId,
             providerId,
+            ...(contextUsage ? { contextUsage } : {}),
             usage: {
               inputTokens: inputTokens,
               outputTokens: outputTokens,
@@ -791,6 +756,8 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         return undefined
       },
       onError: (error) => {
+        const contextFailure = getSmartContextFailure(error)
+        if (contextFailure) return JSON.stringify({ error: contextFailure })
         const errorMessage =
           error == null
             ? 'Unknown error'
@@ -816,14 +783,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       },
     })
 
-    // When continuing a truncated response, inject the partial content as the
-    // very first text-delta so the new message immediately shows it and the
-    // user sees a seamless continuation rather than an empty box.
-    const finalStream = continueContent
-      ? prependTextDeltaToUIStream(uiStream, continueContent)
-      : uiStream
-
-    return finalStream
+    return uiStream
   }
 
   async reconnectToStream(

@@ -1,3 +1,5 @@
+import { EngineManager } from '@gchat/core'
+import { useContextUsage } from '@/hooks/useContextUsage'
 import type { UIMessage } from '@ai-sdk/react'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -98,6 +100,39 @@ describe('CustomChatTransport production harness', () => {
         },
       ] as never,
     })
+  })
+
+  it('uses loaded capacity and publishes exact request usage through finish metadata', async () => {
+    const engine = vi.spyOn(EngineManager, 'instance').mockReturnValue({
+      get: () => ({ getLoadedContext: async () => 131072 }),
+    } as unknown as EngineManager)
+    vi.spyOn(ModelFactory, 'createModel').mockImplementation(async (...args) => {
+      const policy = args[4]!
+      expect(policy.configuredContextTokens).toBe(131072)
+      policy.onUsage?.({ inputTokens: 42158, contextTokens: 131072, reservedOutputTokens: 8192 })
+      return fakeStreamingModel([
+        { type: 'stream-start', warnings: [] },
+        { type: 'finish', finishReason: 'stop', usage: {
+          inputTokens: 42158, outputTokens: 234, totalTokens: 42392,
+        } },
+      ])
+    })
+    try {
+      const chunks = await readChunks(await new CustomChatTransport().sendMessages({
+        chatId: 'counted-chat', messages: [userMessage], abortSignal: undefined,
+        trigger: 'submit-message', messageId: undefined,
+      }) as ReadableStream<Record<string, unknown>>)
+      const expected = {
+        modelId: 'fixture-model', inputTokens: 42158, outputTokens: 234,
+        contextTokens: 131072, reservedOutputTokens: 8192,
+      }
+      expect(useContextUsage.getState().requests['counted-chat']).toEqual(expected)
+      expect(chunks).toContainEqual(expect.objectContaining({
+        messageMetadata: expect.objectContaining({ contextUsage: expected }),
+      }))
+    } finally {
+      engine.mockRestore()
+    }
   })
 
   it('preserves delta order while stripping leaked MLX special tokens', async () => {

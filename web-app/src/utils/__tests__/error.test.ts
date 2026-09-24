@@ -3,11 +3,63 @@ import {
   OUT_OF_CONTEXT_SIZE,
   MODEL_ACCESS_DENIED_TITLE,
   MODEL_ACCESS_DENIED_MESSAGE,
+  GINFER_CONTEXT_OVERFLOW_MESSAGE,
+  getSmartContextFailure,
   isModelAccessError,
   isOutOfMemoryError,
 } from '../error'
 
 describe('error utilities', () => {
+  describe('GInfer context failures', () => {
+    const wrapped = (code: string, message: string) =>
+      new Error(
+        `API request failed with status 400: ${JSON.stringify({ error: { code, message } })}`
+      )
+
+    it('keeps the actionable checkpoint and current-turn failures', () => {
+      expect(
+        getSmartContextFailure(
+          wrapped('context_checkpoint_failed', 'Remove a large historical tool result.')
+        )
+      ).toEqual({
+        code: 'context_checkpoint_failed',
+        message: 'Remove a large historical tool result.',
+      })
+      expect(
+        getSmartContextFailure(
+          wrapped('context_turn_too_large', 'Reduce the current tool output.')
+        )
+      ).toEqual({
+        code: 'context_turn_too_large',
+        message: 'Reduce the current tool output.',
+      })
+    })
+
+    it('reads the provider HTTP error body without losing the specific failure', () => {
+      const error = Object.assign(new Error('Request failed'), {
+        responseBody: JSON.stringify({ error: {
+          code: 'context_checkpoint_failed', message: 'The tool-result summary could not finish.',
+        } }, null, 2),
+      })
+      expect(getSmartContextFailure(error)).toEqual({
+        code: 'context_checkpoint_failed', message: 'The tool-result summary could not finish.',
+      })
+    })
+
+    it('ignores unrelated errors and malformed response bodies', () => {
+      expect(getSmartContextFailure(wrapped('invalid_request', 'Bad request'))).toBeNull()
+      expect(getSmartContextFailure(wrapped('context_growth_required', 'Old growth error'))).toBeNull()
+      expect(getSmartContextFailure(new Error('API request failed: {"error":'))).toBeNull()
+    })
+
+    it('falls back to profile guidance if a recognized error lacks a message', () => {
+      expect(getSmartContextFailure(wrapped('context_turn_too_large', ''))).toEqual({
+        code: 'context_turn_too_large',
+        message: GINFER_CONTEXT_OVERFLOW_MESSAGE,
+      })
+    })
+  })
+
   describe('OUT_OF_CONTEXT_SIZE', () => {
     it('should have correct error message', () => {
       expect(OUT_OF_CONTEXT_SIZE).toBe(

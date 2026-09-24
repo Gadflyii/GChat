@@ -7,7 +7,55 @@ export const MODEL_ACCESS_DENIED_MESSAGE =
 
 export const CONTEXT_OVERFLOW_TITLE = 'Context window full'
 export const CONTEXT_OVERFLOW_MESSAGE =
-  'This message — including search results and tool output — is longer than the model can process at once. Increase the context size, or reduce the amount of attached / retrieved content (e.g. fewer web-search results) and try again.'
+  'This request reached the model’s context limit. Increase the context size if the provider supports it, or reduce the message, attachments, or tool output before retrying.'
+export const GINFER_CONTEXT_OVERFLOW_MESSAGE =
+  'This request reached the loaded model’s context limit. Select a larger launch profile in Engines if one is available, or reduce the message, attachments, or tool output before retrying.'
+
+type SmartContextFailureCode =
+  | 'context_turn_too_large'
+  | 'context_checkpoint_failed'
+
+/** Read the structured local context failure through the model adapter's HTTP error wrapper. */
+export function getSmartContextFailure(
+  error: unknown
+): { code: SmartContextFailureCode; message: string } | null {
+  const responseBody = error && typeof error === 'object' && 'responseBody' in error
+    ? error.responseBody
+    : undefined
+  const raw = typeof responseBody === 'string'
+    ? responseBody
+    : typeof error === 'string'
+      ? error
+      : error instanceof Error
+        ? error.message
+        : null
+  if (!raw) return null
+  const start = raw.indexOf('{')
+  if (start < 0) return null
+
+  try {
+    const envelope = JSON.parse(raw.slice(start)) as {
+      error?: { code?: unknown; message?: unknown }
+    }
+    const code = envelope.error?.code
+    if (
+      code !== 'context_turn_too_large' &&
+      code !== 'context_checkpoint_failed'
+    ) {
+      return null
+    }
+    const message = envelope.error?.message
+    return {
+      code,
+      message:
+        typeof message === 'string' && message.trim()
+          ? message
+          : GINFER_CONTEXT_OVERFLOW_MESSAGE,
+    }
+  } catch {
+    return null
+  }
+}
 
 export const OUT_OF_MEMORY_TITLE = 'Ran out of memory'
 export const OUT_OF_MEMORY_MESSAGE =

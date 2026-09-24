@@ -169,10 +169,6 @@ export function useChat(
     }
   }, [])
 
-  const setContinueFromContent = useCallback((content: string) => {
-    transportRef.current?.setContinueFromContent(content)
-  }, [])
-
   const compactContext = useCallback(
     async (messages: UIMessage[]) => {
       if (!transportRef.current || !sessionId) {
@@ -204,7 +200,6 @@ export function useChat(
   return {
     ...chatResult,
     updateRagToolsAvailability,
-    setContinueFromContent,
     compactContext,
   }
 }

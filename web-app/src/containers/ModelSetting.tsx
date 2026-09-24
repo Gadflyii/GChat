@@ -37,11 +37,6 @@ const LEGACY_SAMPLING_KEYS = new Set<string>([
   'frequency_penalty',
 ])
 
-const GINFER_MODEL_SETTING_KEYS = new Set([
-  'auto_increase_ctx_len',
-  'ctx_len',
-])
-
 const RESTART_REQUIRED_SETTINGS = new Set([
   'ctx_len',
   'ngl',
@@ -55,6 +50,16 @@ const RESTART_REQUIRED_SETTINGS = new Set([
 ])
 
 export function ModelSetting({
+  model,
+  provider,
+}: ModelSettingProps) {
+  // GInfer context and execution settings belong to the selected host profile.
+  if (provider.provider === 'ginfer') return null
+
+  return <ConfigurableModelSetting model={model} provider={provider} />
+}
+
+function ConfigurableModelSetting({
   model,
   provider,
 }: ModelSettingProps) {
@@ -160,24 +165,7 @@ export function ModelSetting({
 
         <div className="px-4 space-y-8 pb-4">
           {Object.entries(model.settings || {})
-          .reduce<[string, unknown][]>((acc, entry) => {
-            if (entry[0] === 'auto_increase_ctx_len') return acc
-            if (entry[0] === 'ctx_len') {
-              const autoIncrease = Object.entries(model.settings || {}).find(
-                ([k]) => k === 'auto_increase_ctx_len'
-              )
-              if (autoIncrease) acc.push(autoIncrease)
-            }
-            acc.push(entry)
-            return acc
-          }, [])
           .filter(([key]) => {
-            if (
-              provider.provider === 'ginfer' &&
-              !GINFER_MODEL_SETTING_KEYS.has(key)
-            ) {
-              return false
-            }
             // Sampling now lives solely in the global Sampling popover
             // (model bar). Hide the legacy load-time sampling controls here
             // so there is exactly one place to tune sampling. The persisted

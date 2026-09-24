@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Count and compact GInfer chat requests without reloading profiles](2026-09-24-count-and-compact-ginfer-chat-requests.md)
+
 - [Separate Chat view selection from Agent execution](2026-09-23-separate-chat-view-from-agent-execution.md)
 
 - [Host runtimes by GPU architecture](2026-09-21-select-host-runtimes-by-gpu-architecture.md)
@@ -41,7 +43,7 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-254 records, 2026-05-19 → 2026-09-23.
+255 records, 2026-05-19 → 2026-09-24.
 
 ---
 

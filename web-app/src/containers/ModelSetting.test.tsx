@@ -101,6 +101,24 @@ describe('ModelSetting', () => {
     vi.useRealTimers()
   })
 
+  it('does not offer context changes outside GInfer host profiles', () => {
+    const model = {
+      id: 'muse',
+      settings: {
+        ctx_len: {
+          key: 'ctx_len',
+          title: 'Context Size',
+          controller_type: 'input',
+          controller_props: { value: 131_072 },
+        },
+      },
+    } as Model
+    const provider = { provider: 'ginfer', models: [model] } as ModelProvider
+    const { container } = render(<ModelSetting model={model} provider={provider} />)
+
+    expect(container).toBeEmptyDOMElement()
+  })
+
   it.each([
     ['Disable KV Offload', 'no_kv_offload', true],
     ['Override Tensor Buffer Type', 'override_tensor_buffer_t', 'layers.0=CPU'],

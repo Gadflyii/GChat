@@ -81,6 +81,37 @@ function overflowingBody(tools = false): Record<string, unknown> {
   }
 }
 
+function toolResultBody(result: string): Record<string, unknown> {
+  return {
+    model: 'muse',
+    max_tokens: 100,
+    tools: [{ type: 'function', function: { name: 'crawl', parameters: {} } }],
+    messages: [
+      { role: 'user', content: 'Find the relevant source and answer the question.' },
+      {
+        role: 'assistant',
+        tool_calls: [{ id: 'call-crawl-1', type: 'function', function: { name: 'crawl', arguments: '{"url":"https://example.com/a"}' } }],
+      },
+      { role: 'tool', tool_call_id: 'call-crawl-1', content: result },
+    ],
+  }
+}
+
+function toolSummaryFetch(options: { fail?: boolean; empty?: boolean } = {}) {
+  const chunks: string[] = []
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> }
+    if (String(input).endsWith('/count_tokens')) {
+      return new Response(JSON.stringify({ input_tokens: Math.ceil(JSON.stringify(request.messages).length / 4) + 40 }), { status: 200 })
+    }
+    const prompt = request.messages.at(-1)?.content ?? ''
+    chunks.push(prompt.split('Next result chunk:\n')[1] ?? '')
+    if (options.fail) return new Response('summary unavailable', { status: 503 })
+    return new Response(JSON.stringify({ choices: [{ message: { content: options.empty ? '' : 'Source https://example.com/a; finding 42.' } }] }), { status: 200 })
+  })
+  return { fetcher, chunks }
+}
+
 describe('smart GInfer context', () => {
   beforeEach(() => clearSmartContextCacheForTests())
 
@@ -107,9 +138,6 @@ describe('smart GInfer context', () => {
             id: 'muse',
             settings: {
               ctx_len: { controller_props: { value: 32_768, max: 131_072 } },
-              auto_increase_ctx_len: {
-                controller_props: { value: false },
-              },
             },
           },
         ],
@@ -119,29 +147,19 @@ describe('smart GInfer context', () => {
     ).toEqual({
       threadId: 'thread-a',
       configuredContextTokens: 32_768,
-      nativeContextTokens: 131_072,
-      autoIncrease: false,
       state,
     })
   })
 
-  it('requests model growth before first-time compaction below native max', async () => {
-    await expect(
-      prepareGInferContextRequest(
-        completionUrl,
-        overflowingBody(),
-        headers,
-        scriptedFetch(),
-        {
-          threadId: 'thread-a',
-          configuredContextTokens: 5_000,
-          nativeContextTokens: 8_000,
-          autoIncrease: true,
-        }
-      )
-    ).rejects.toMatchObject<Partial<SmartContextError>>({
-      code: 'context_growth_required',
-    })
+  it('compacts at the configured host context even below profile maximum', async () => {
+    const prepared = await prepareGInferContextRequest(
+      completionUrl,
+      overflowingBody(),
+      headers,
+      scriptedFetch(),
+      { threadId: 'thread-a', configuredContextTokens: 5_000 }
+    )
+    expect(prepared.report?.inputTokensAfter).toBe(220)
   })
 
   it('generates and reuses a structured checkpoint without mutating the transcript', async () => {
@@ -326,5 +344,159 @@ describe('smart GInfer context', () => {
     ).rejects.toMatchObject<Partial<SmartContextError>>({
       code: 'context_turn_too_large',
     })
+  })
+
+  it('summarizes every chunk of an oversized current tool result and preserves call pairing', async () => {
+    const result = `https://example.com/a\n${'finding 42. '.repeat(1_300)}`
+    const original = toolResultBody(result)
+    const snapshot = structuredClone(original)
+    const { fetcher, chunks } = toolSummaryFetch()
+    const usages: number[] = []
+    const policy = {
+      threadId: 'tool-chunks',
+      configuredContextTokens: 2_000,
+      onUsage: (usage: { inputTokens: number }) => usages.push(usage.inputTokens),
+    }
+    const prepared = await prepareGInferContextRequest(
+      completionUrl, original, headers, fetcher, policy
+    )
+    const wire = JSON.parse(prepared.body) as { messages: Array<Record<string, unknown>> }
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.join('')).toBe(result)
+    expect(wire.messages[0]).toEqual((original.messages as unknown[])[0])
+    expect(wire.messages[1]).toEqual((original.messages as unknown[])[1])
+    expect(wire.messages[2]).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'call-crawl-1',
+      content: expect.stringContaining('Source https://example.com/a'),
+    })
+    expect(original).toEqual(snapshot)
+    expect(prepared.report?.summarizedMessages).toBe(1)
+    expect(usages).toHaveLength(2)
+    expect(usages[1]).toBeLessThanOrEqual(2_000 - 100 - 256)
+
+    const again = await prepareGInferContextRequest(
+      completionUrl, original, headers, fetcher, policy
+    )
+    expect(again.report?.reusedCheckpoint).toBe(true)
+    expect(chunks.join('')).toBe(result)
+  })
+
+  it('leaves the original tool result intact and fails clearly when summarization fails', async () => {
+    const original = toolResultBody('large source '.repeat(2_000))
+    const snapshot = structuredClone(original)
+    await expect(prepareGInferContextRequest(
+      completionUrl, original, headers, toolSummaryFetch({ fail: true }).fetcher,
+      { threadId: 'tool-failure', configuredContextTokens: 2_000 }
+    )).rejects.toMatchObject<Partial<SmartContextError>>({
+      code: 'context_checkpoint_failed',
+      message: expect.stringContaining('summarize the tool result'),
+    })
+    expect(original).toEqual(snapshot)
+  })
+
+  it('reuses the current-turn summary when that result becomes older history', async () => {
+    const result = 'https://example.com/a\n' + 'finding 42. '.repeat(1_300)
+    const original = toolResultBody(result)
+    const { fetcher } = toolSummaryFetch()
+    const policy = { threadId: 'follow-up', configuredContextTokens: 2_000 }
+    await prepareGInferContextRequest(completionUrl, original, headers, fetcher, policy)
+
+    const followUp = structuredClone(original)
+    ;(followUp.messages as unknown[]).push({ role: 'user', content: 'What did the source say?' })
+    const snapshot = structuredClone(followUp)
+    const callsBefore = fetcher.mock.calls.length
+    const prepared = await prepareGInferContextRequest(
+      completionUrl, followUp, headers, fetcher, policy
+    )
+    const newSummaryRequests = fetcher.mock.calls.slice(callsBefore)
+      .filter(([url]) => String(url) === completionUrl)
+      .map(([, init]) => JSON.parse(String(init?.body)) as { messages: Array<{ content: string }> })
+    expect(newSummaryRequests).toHaveLength(0)
+    expect(prepared.report?.inputTokensAfter).toBeLessThanOrEqual(2_000 - 100 - 256)
+    expect(JSON.parse(prepared.body).messages[2].content).toContain('Source https://example.com/a')
+    expect(JSON.parse(prepared.body).messages.at(-1).content).toContain('What did the source say?')
+    expect(followUp).toEqual(snapshot)
+  })
+
+  it('recovers a historical oversized result after the in-memory cache is cleared', async () => {
+    const result = 'https://example.com/a\n' + 'finding 42. '.repeat(1_300)
+    const original = toolResultBody(result)
+    const policy = { threadId: 'reopened-thread', configuredContextTokens: 2_000 }
+    await prepareGInferContextRequest(
+      completionUrl, original, headers, toolSummaryFetch().fetcher, policy
+    )
+    clearSmartContextCacheForTests()
+
+    const followUp = structuredClone(original)
+    ;(followUp.messages as unknown[]).push({ role: 'user', content: 'Continue from that source.' })
+    const snapshot = structuredClone(followUp)
+    const { fetcher } = toolSummaryFetch()
+    const prepared = await prepareGInferContextRequest(
+      completionUrl, followUp, headers, fetcher, policy
+    )
+    expect(fetcher.mock.calls.some(([url]) => String(url) === completionUrl)).toBe(true)
+    expect(prepared.report?.inputTokensAfter).toBeLessThanOrEqual(2_000 - 100 - 256)
+    expect(JSON.parse(prepared.body).messages[2]).toMatchObject({
+      tool_call_id: 'call-crawl-1',
+      content: expect.stringContaining('model-generated tool-result summary'),
+    })
+    expect(followUp).toEqual(snapshot)
+  })
+
+  it('uses bounded tool-result recovery for manual compaction of one oversized turn', async () => {
+    const state = {
+      lastCompaction: null,
+      manualCompactionRequested: true,
+      manualCompactionResult: null as null | { status: string },
+    }
+    const prepared = await prepareGInferContextRequest(
+      completionUrl,
+      toolResultBody('tool result '.repeat(1_300)),
+      headers,
+      toolSummaryFetch().fetcher,
+      { threadId: 'manual-tool', configuredContextTokens: 2_000, state }
+    )
+    expect(state.manualCompactionResult?.status).toBe('compacted')
+    expect(prepared.report?.inputTokensAfter).toBeLessThanOrEqual(2_000 - 100 - 256)
+  })
+
+  it('keeps separate call IDs when multiple results need recovery', async () => {
+    const body = toolResultBody('first result '.repeat(900))
+    const messages = body.messages as Array<Record<string, unknown>>
+    ;(messages[1].tool_calls as Array<Record<string, unknown>>).push({
+      id: 'call-crawl-2', type: 'function',
+      function: { name: 'crawl', arguments: '{"url":"https://example.com/b"}' },
+    })
+    messages.push({ role: 'tool', tool_call_id: 'call-crawl-2', content: 'second result '.repeat(900) })
+    const { fetcher } = toolSummaryFetch()
+    const prepared = await prepareGInferContextRequest(
+      completionUrl, body, headers, fetcher,
+      { threadId: 'two-results', configuredContextTokens: 2_000 }
+    )
+    const wire = JSON.parse(prepared.body).messages as Array<Record<string, unknown>>
+    expect(wire.slice(2).map((message) => message.tool_call_id)).toEqual([
+      'call-crawl-1', 'call-crawl-2',
+    ])
+    expect(wire.slice(2).every((message) => String(message.content).includes('model-generated tool-result summary'))).toBe(true)
+    expect(prepared.report?.inputTokensAfter).toBeLessThanOrEqual(2_000 - 100 - 256)
+  })
+
+  it('omits embedded media bytes from the tool-summary question', async () => {
+    const body = toolResultBody('crawl result '.repeat(1_300))
+    ;(body.messages as Array<Record<string, unknown>>)[0].content = [
+      { type: 'text', text: 'Find this source.' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,PRIVATE_BYTES' } },
+    ]
+    const { fetcher } = toolSummaryFetch()
+    await prepareGInferContextRequest(
+      completionUrl, body, headers, fetcher,
+      { threadId: 'media-question', configuredContextTokens: 2_000 }
+    )
+    const summaryRequests = fetcher.mock.calls
+      .filter(([url]) => String(url) === completionUrl)
+      .map(([, init]) => String(init?.body))
+    expect(summaryRequests.length).toBeGreaterThan(0)
+    expect(summaryRequests.every((request) => !request.includes('PRIVATE_BYTES'))).toBe(true)
   })
 })

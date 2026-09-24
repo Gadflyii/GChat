@@ -51,9 +51,6 @@ import {
   MessageStatus,
   ChatCompletionRole,
   ContentType,
-  computeNextCtxLen,
-  EngineManager,
-  type AIEngine,
 } from '@gchat/core'
 import { toast } from 'sonner'
 import {
@@ -81,11 +78,13 @@ import {
   MODEL_ACCESS_DENIED_MESSAGE,
   CONTEXT_OVERFLOW_TITLE,
   CONTEXT_OVERFLOW_MESSAGE,
+  GINFER_CONTEXT_OVERFLOW_MESSAGE,
   OUT_OF_MEMORY_TITLE,
   OUT_OF_MEMORY_MESSAGE,
   isModelAccessError,
   isContextLimitError,
   isOutOfMemoryError,
+  getSmartContextFailure,
 } from '@/utils/error'
 import { Button } from '@/components/ui/button'
 import { LinkifiedText } from '@/components/LinkifiedText'
@@ -268,7 +267,6 @@ function ThreadDetail() {
   // Get model and provider for useChat
   const selectedModel = useModelProvider((state) => state.selectedModel)
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
-  const getProviderByName = useModelProvider((state) => state.getProviderByName)
   const agentRun = useAgentRun((state) => state.runs[threadId])
   const persistedAgentRunsRef = useRef(new Set<string>())
   const chatMessagesRef = useRef<UIMessage[]>([])
@@ -291,11 +289,6 @@ function ThreadDetail() {
     ? renderInstructions(effectiveInstructions)
     : undefined
 
-  // Holds the partial assistant message while the model reloads after a
-  // context-limit hit, so the user sees it instead of a blank gap.
-  const [pendingContinueMessage, setPendingContinueMessage] =
-    useState<UIMessage | null>(null)
-  const [isAutoIncreasingContext, setIsAutoIncreasingContext] = useState(false)
   const [contextLimitError, setContextLimitError] = useState<Error | null>(null)
   const [isChatRequestActive, setIsChatRequestActive] = useState(false)
 
@@ -310,12 +303,6 @@ function ThreadDetail() {
     (s) => s.byThread[threadId]
   )
 
-  // Refs so onFinish (captured in closure) always calls the latest callbacks
-  const handleContextSizeIncreaseRef = useRef<(() => void) | null>(null)
-  const setContinueFromContentRef = useRef<((content: string) => void) | null>(
-    null
-  )
-
   // Use the AI SDK chat hook
   const {
     messages: chatMessages,
@@ -327,7 +314,6 @@ function ThreadDetail() {
     stop,
     addToolOutput,
     updateRagToolsAvailability,
-    setContinueFromContent,
     compactContext,
   } = useChat({
     sessionId: threadId,
@@ -343,17 +329,12 @@ function ThreadDetail() {
 
       if (isAbort) {
         setIsChatRequestActive(false)
-        // Stop during an auto-continue never reaches the non-abort clear
-        // below, and a stale placeholder would flip the indicator row to
-        // "Growing the Mind..." on every later send in this thread.
-        setPendingContinueMessage(null)
       }
 
-      // Context limit hit: send partial content as prefill so the model continues
-      // from where it stopped. The stream wrapper injects it as the first text-delta
-      // of the new message, so the user sees the partial text immediately.
+      // A startup-fixed GInfer context belongs to the selected host profile.
+      // A length finish at capacity ends this request; the user can select a
+      // larger profile or reduce the prompt before retrying.
       if (!isAbort && finishReason === 'length') {
-        let willContinue = false
         const selectedModelState = useModelProvider.getState().selectedModel
         const usage = msgMeta?.usage as
           { inputTokens?: number; outputTokens?: number } | undefined
@@ -367,40 +348,16 @@ function ThreadDetail() {
           : totalTokens >= ctxLen * 0.9
 
         if (isContextLimit) {
-          const autoIncrease =
-            selectedModelState?.settings?.auto_increase_ctx_len
-              ?.controller_props?.value ?? true
-          if (autoIncrease) {
-            const partialText = message.parts
-              .filter((p) => p.type === 'text')
-              .map((p) => (p as { type: 'text'; text: string }).text)
-              .join('')
-            if (partialText) {
-              setContinueFromContentRef.current?.(partialText)
-              // Keep the partial message visible while the model reloads
-              setPendingContinueMessage(message)
-              willContinue = true
-            }
-            handleContextSizeIncreaseRef.current?.()
-          } else {
-            setContextLimitError(new Error(OUT_OF_CONTEXT_SIZE))
-          }
+          setContextLimitError(new Error(OUT_OF_CONTEXT_SIZE))
         }
-        if (!willContinue) {
-          setIsChatRequestActive(false)
-        }
-        return
+        setIsChatRequestActive(false)
       }
-
-      if (!isAbort && message.parts.length) setPendingContinueMessage(null)
 
       if (!isAbort && sessionData.tools.length === 0) {
         setIsChatRequestActive(false)
       }
 
-      // Persist assistant message to backend (skip if aborted).
-      // For continuations, message.parts already contains partial + new content
-      // because the stream wrapper prepended the partial text as the first delta.
+      // Preserve partial answers when a request reaches a limit.
       if (!isAbort && message.role === 'assistant') {
         const contentParts = extractContentPartsFromUIMessage(message)
 
@@ -1400,94 +1357,7 @@ function ThreadDetail() {
     [threadId, deleteMessage, chatMessages, setChatMessages]
   )
 
-  // Handler for increasing context size
-  const handleContextSizeIncrease = useCallback(async () => {
-    if (!selectedModel) return
-
-    const updateProvider = useModelProvider.getState().updateProvider
-    const provider = getProviderByName(selectedProvider)
-    if (!provider) return
-
-    const modelIndex = provider.models.findIndex(
-      (m) => m.id === selectedModel.id
-    )
-    if (modelIndex === -1) return
-
-    const model = provider.models[modelIndex]
-
-    const currentCtxLen =
-      (model.settings?.ctx_len?.controller_props?.value as number) ?? 8192
-
-    /// Ask the owning local-provider engine for the model's training-max
-    /// context. Duck-typed so non-local providers (or extensions that
-    /// haven't been updated yet) gracefully fall back to the open-ended
-    /// ladder instead of crashing. The shared `computeNextCtxLen` ladder
-    /// then clamps the next step so we never push past what the model's
-    /// positional embeddings actually support.
-    let maxCtxLen: number | undefined
-    try {
-      const engine = EngineManager.instance().get(selectedProvider) as
-        | (AIEngine & {
-            getMaxCtxTrain?: (id: string) => Promise<number | undefined>
-          })
-        | undefined
-      if (engine && typeof engine.getMaxCtxTrain === 'function') {
-        maxCtxLen = await engine.getMaxCtxTrain(selectedModel.id)
-      }
-    } catch (e) {
-      console.warn(
-        `[auto-expand-ctx] getMaxCtxTrain failed for ${selectedProvider}/${selectedModel.id}:`,
-        e
-      )
-    }
-
-    const newCtxLen = computeNextCtxLen(currentCtxLen, maxCtxLen)
-    if (newCtxLen <= currentCtxLen) {
-      toast.error('Model reached its maximum context, auto-expand stopped', {
-        id: `ctx-at-max-${selectedProvider}-${selectedModel.id}`,
-      })
-      return
-    }
-
-    const updatedModel = {
-      ...model,
-      settings: {
-        ...model.settings,
-        ctx_len: {
-          ...(model.settings?.ctx_len ?? {}),
-          controller_props: {
-            ...(model.settings?.ctx_len?.controller_props ?? {}),
-            value: newCtxLen,
-          },
-        },
-      },
-    }
-
-    const updatedModels = [...provider.models]
-    updatedModels[modelIndex] = updatedModel as Model
-
-    updateProvider(provider.provider, {
-      models: updatedModels,
-    })
-
-    await serviceHub.models().stopModel(selectedModel.id)
-
-    setTimeout(() => {
-      handleRegenerate()
-    }, 1000)
-  }, [
-    selectedModel,
-    selectedProvider,
-    getProviderByName,
-    serviceHub,
-    handleRegenerate,
-  ])
-
-  // Keep refs in sync so onFinish always calls the latest versions
-  handleContextSizeIncreaseRef.current = handleContextSizeIncrease
-  setContinueFromContentRef.current = setContinueFromContent
-
-  // Skip auto-context-increase in agent mode
+  // Agent mode has its own context handling.
   const agentModeActive = useAgentMode((s) => s.agentThreads[threadId] === true)
   const agentWorkspace = useAgentMode((s) => s.workspaces[threadId])
   useEffect(() => {
@@ -1525,43 +1395,13 @@ function ThreadDetail() {
     })
   }, [serviceHub, threadId])
   useEffect(() => {
-    if (!error || agentModeActive) return
-    const autoIncrease =
-      selectedModel?.settings?.auto_increase_ctx_len?.controller_props?.value ??
-      true
-    if (!autoIncrease) return
-    if (isContextLimitError(error)) {
-      setIsAutoIncreasingContext(true)
-      handleContextSizeIncrease()
-    }
-  }, [error]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
     // #region agent log
     ttftPreBegin('chat-status-change', { threadId, status })
     // #endregion
     if (status === 'streaming' || status === 'submitted') {
       setContextLimitError(null)
     }
-    if (
-      isAutoIncreasingContext &&
-      (status === 'streaming' || status === 'error')
-    ) {
-      setIsAutoIncreasingContext(false)
-    }
-    if (status === 'error' && pendingContinueMessage) {
-      setPendingContinueMessage(null)
-    }
-    if (
-      status === 'error' &&
-      !(
-        error &&
-        isContextLimitError(error) &&
-        (selectedModel?.settings?.auto_increase_ctx_len?.controller_props
-          ?.value ??
-          true)
-      )
-    ) {
+    if (status === 'error') {
       setIsChatRequestActive(false)
     }
   }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1671,8 +1511,6 @@ function ThreadDetail() {
                         onDelete={
                           agentModeActive ? undefined : handleDeleteMessage
                         }
-                        isAnimating={!pendingContinueMessage}
-                        hideActions={!!pendingContinueMessage}
                         agentAttachmentReferences={agentAttachmentReferencesByMessageId.get(
                           message.id
                         )}
@@ -1701,47 +1539,19 @@ function ThreadDetail() {
                       </div>
                     </>
                   )}
-                  {pendingContinueMessage && status === 'submitted' && (
-                    <MessageItem
-                      key={`continue-placeholder-${pendingContinueMessage.id}`}
-                      message={pendingContinueMessage}
-                      isFirstMessage={false}
-                      isLastMessage={true}
-                      status={status}
-                      // The placeholder is a frozen snapshot: its activity must
-                      // read "Worked for Xs", not add a second live "Working"
-                      // shimmer under "Growing the Mind...".
-                      requestActive={false}
-                      reasoningContainerRef={reasoningContainerRef}
-                      onRegenerate={handleRegenerate}
-                      onEdit={agentModeActive ? undefined : handleEditMessage}
-                      onDelete={
-                        agentModeActive ? undefined : handleDeleteMessage
-                      }
-                      hideActions
-                      isAnimating={false}
-                    />
-                  )}
-                  {(inputStatus === CHAT_STATUS.SUBMITTED ||
-                    isAutoIncreasingContext) && (
+                  {inputStatus === CHAT_STATUS.SUBMITTED && (
                     <div className="flex flex-row items-center gap-2">
-                      {/* One indicator at a time: the context-growth shimmer
-                      replaces the generic "Working" progress, never joins it. */}
-                      {pendingContinueMessage || isAutoIncreasingContext ? (
-                        <Shimmer duration={1}>Growing the Mind...</Shimmer>
-                      ) : (
-                        inputStatus === CHAT_STATUS.SUBMITTED &&
-                        !agentModeActive &&
-                        !hasActiveAssistantMessage && <PromptProgress />
-                      )}
+                      {!agentModeActive &&
+                        !hasActiveAssistantMessage && <PromptProgress />}
                     </div>
                   )}
                   {(error || contextLimitError) &&
-                    !isAutoIncreasingContext &&
                     (() => {
                       const activeError = error ?? contextLimitError
                       const rawMessage = activeError?.message
-                      const isContextError = isContextLimitError(activeError)
+                      const smartFailure = getSmartContextFailure(activeError)
+                      const isContextError =
+                        smartFailure !== null || isContextLimitError(activeError)
                       const isAccessError =
                         !isContextError && isModelAccessError(activeError)
                       // ATO-197: a fatal Metal/compute failure (GPU OOM) surfaces
@@ -1761,8 +1571,12 @@ function ThreadDetail() {
                           : isOomError
                             ? OUT_OF_MEMORY_TITLE
                             : 'Error generating response'
-                      const body = isContextError
-                        ? CONTEXT_OVERFLOW_MESSAGE
+                      const body = smartFailure
+                        ? smartFailure.message
+                        : isContextError
+                        ? selectedProvider === 'ginfer' || selectedProvider === 'ginfer-lan'
+                          ? GINFER_CONTEXT_OVERFLOW_MESSAGE
+                          : CONTEXT_OVERFLOW_MESSAGE
                         : isAccessError
                           ? MODEL_ACCESS_DENIED_MESSAGE
                           : isOomError
@@ -1788,17 +1602,7 @@ function ThreadDetail() {
                                   <LinkifiedText text={body ?? ''} />
                                 </span>
                               </div>
-                              {isContextError ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="mt-3"
-                                  onClick={handleContextSizeIncrease}
-                                >
-                                  <IconAlertCircle className="size-4 mr-2" />
-                                  Increase Context Size
-                                </Button>
-                              ) : (
+                              {!isContextError && (
                                 <Button
                                   variant="outline"
                                   size="sm"

@@ -2783,6 +2783,7 @@ const ChatInput = memo(function ChatInput({
 
               <div className="flex items-center gap-2">
                 <ContextSizeControl
+                  threadId={currentThreadId}
                   messages={threadMessages || []}
                   uploadedFiles={attachments
                     .filter((a) => a.type === 'image' && a.dataUrl)

@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import debounce from 'lodash.debounce'
+import { useEffect, useState } from 'react'
 import {
   EngineManager,
   type AIEngine,
@@ -17,17 +16,16 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
-import { Slider } from '@/components/ui/slider'
 import { useModelProvider } from '@/hooks/useModelProvider'
-import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTokensCount } from '@/hooks/useTokensCount'
+import { useContextUsage, type RequestContextUsage } from '@/hooks/useContextUsage'
 import { cn, LOCAL_GINFER_PROVIDER } from '@/lib/utils'
-import { restartLocalModel } from '@/utils/restartLocalModel'
 
 const LOCAL_CONTEXT_PROVIDERS = new Set([LOCAL_GINFER_PROVIDER])
 const FALLBACK_MAX_CONTEXT = 8 * 1024
 
 interface ContextSizeControlProps {
+  threadId?: string
   messages?: ThreadMessage[]
   additionalTokens?: number
   uploadedFiles?: Array<{
@@ -37,12 +35,6 @@ interface ContextSizeControlProps {
     base64: string
     dataUrl: string
   }>
-}
-
-type NumericControllerProps = ControllerProps & {
-  min?: number
-  max?: number
-  step?: number
 }
 
 function formatTokenCount(value: number): string {
@@ -63,12 +55,13 @@ type LatestTokenUsage = {
   totalTokens: number
 }
 
-function getLatestTokenUsage(messages: ThreadMessage[]): LatestTokenUsage {
+function getLatestTokenUsage(messages: ThreadMessage[], modelId?: string): LatestTokenUsage {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (message.role !== 'assistant') continue
 
     const metadata = message.metadata as Record<string, unknown> | undefined
+    if (metadata?.modelId && metadata.modelId !== modelId) continue
     const usage = metadata?.usage as
       | {
           inputTokens?: unknown
@@ -105,32 +98,43 @@ function getLatestTokenUsage(messages: ThreadMessage[]): LatestTokenUsage {
 }
 
 export function ContextSizeControl({
+  threadId,
   messages = [],
   additionalTokens = 0,
   uploadedFiles = [],
 }: ContextSizeControlProps) {
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
   const selectedModel = useModelProvider((state) => state.selectedModel)
-  const updateProvider = useModelProvider((state) => state.updateProvider)
-  const getProviderByName = useModelProvider(
-    (state) => state.getProviderByName
-  )
-  const serviceHub = useServiceHub()
   const tokenData = useTokensCount(messages, uploadedFiles)
-  const latestUsage = getLatestTokenUsage(messages)
-  const measuredTokens = tokenData.tokenCount + additionalTokens
-  const totalTokens =
-    measuredTokens > 0
-      ? measuredTokens
-      : latestUsage.totalTokens + additionalTokens
-  const completionTokens = Math.min(
-    totalTokens,
-    latestUsage.outputTokens
+  const latestUsage = getLatestTokenUsage(messages, selectedModel?.id)
+  const liveUsage = useContextUsage((state) =>
+    threadId ? state.requests[threadId] : undefined
   )
+  const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant')
+  const savedUsage = lastAssistant?.metadata?.contextUsage as RequestContextUsage | undefined
+  const candidate = liveUsage ?? savedUsage
+  const requestUsage = candidate?.modelId === selectedModel?.id ? candidate : undefined
+  const hasReportedUsage = latestUsage.totalTokens > 0
+  const totalTokens = requestUsage
+    ? requestUsage.inputTokens + requestUsage.outputTokens
+    : Math.max(tokenData.tokenCount, latestUsage.totalTokens) + additionalTokens
+  const completionTokens = Math.min(totalTokens, requestUsage?.outputTokens ?? latestUsage.outputTokens)
   const promptTokens = Math.max(0, totalTokens - completionTokens)
-  const percentage = tokenData.maxTokens
-    ? (totalTokens / tokenData.maxTokens) * 100
-    : 0
+  const [loadedContext, setLoadedContext] = useState<number>()
+  useEffect(() => {
+    setLoadedContext(undefined)
+    if (selectedProvider !== LOCAL_GINFER_PROVIDER || !selectedModel) return
+    let cancelled = false
+    const engine = EngineManager.instance().get(selectedProvider) as
+      | (AIEngine & { getLoadedContext?: (id: string) => Promise<number | undefined> })
+      | undefined
+    void engine?.getLoadedContext?.(selectedModel.id).then((value) => {
+      if (!cancelled) setLoadedContext(value)
+    }).catch(() => { /* No running instance; show the selected profile capacity. */ })
+    return () => { cancelled = true }
+  }, [selectedModel, selectedProvider])
+  const capacity = requestUsage?.contextTokens ?? loadedContext ?? tokenData.maxTokens
+  const percentage = capacity ? (totalTokens / capacity) * 100 : 0
   const isOverLimit = percentage > 100
   const progressTone =
     percentage >= 90
@@ -138,191 +142,12 @@ export function ContextSizeControl({
       : percentage >= 70
         ? 'bg-orange-500'
         : 'bg-emerald-500'
-  const contextValue = Number(
-    selectedModel?.settings?.ctx_len?.controller_props?.value
-  )
-  const selectedContextProps = selectedModel?.settings?.ctx_len
-    ?.controller_props as NumericControllerProps | undefined
-  const configuredMax = Number(
-    selectedContextProps?.max
-  )
-  const fallbackMaxContext =
-    configuredMax > 0 ? configuredMax : FALLBACK_MAX_CONTEXT
-  const configuredMin = Math.max(
-    1,
-    Number(selectedContextProps?.min) || 1024
-  )
-  const configuredContext =
-    Number.isFinite(contextValue) && contextValue >= configuredMin
-      ? Math.min(contextValue, fallbackMaxContext)
-      : fallbackMaxContext
-  const [maxContext, setMaxContext] = useState(fallbackMaxContext)
-  const [draftContext, setDraftContext] = useState(configuredContext)
-  const [loadedContext, setLoadedContext] = useState<number | undefined>()
-  const [isActive, setIsActive] = useState(false)
-  const [isRestarting, setIsRestarting] = useState(false)
-
-  const restartModel = useMemo(
-    () =>
-      debounce(
-        async (modelId: string, providerName: string, context: number) => {
-          setIsRestarting(true)
-          try {
-            await restartLocalModel(serviceHub, providerName, modelId)
-            setLoadedContext(context)
-          } catch (error) {
-            console.error(
-              'Failed to restart model after context size change:',
-              error
-            )
-          } finally {
-            setIsRestarting(false)
-          }
-        },
-        500
-      ),
-    [serviceHub]
-  )
-
-  useEffect(() => () => restartModel.cancel(), [restartModel])
-
-  useEffect(() => {
-    const currentValue = Number(
-      selectedModel?.settings?.ctx_len?.controller_props?.value
-    )
-    const hasConfiguredContext =
-      Number.isFinite(currentValue) && currentValue >= configuredMin
-    setDraftContext(
-      hasConfiguredContext
-        ? Math.min(currentValue, fallbackMaxContext)
-        : fallbackMaxContext
-    )
-    setMaxContext(fallbackMaxContext)
-    setLoadedContext(undefined)
-    setIsActive(false)
-
-    if (!selectedProvider || !selectedModel) return
-
-    let cancelled = false
-    const resolveMaxContext = async () => {
-      let resolvedMax = fallbackMaxContext
-      try {
-        const engine = EngineManager.instance().get(selectedProvider) as
-          | (AIEngine & {
-              getMaxCtxTrain?: (id: string) => Promise<number | undefined>
-              getLoadedContext?: (id: string) => Promise<number | undefined>
-            })
-          | undefined
-        if (engine && typeof engine.getMaxCtxTrain === 'function') {
-          const modelMax = await engine.getMaxCtxTrain(selectedModel.id)
-          if (typeof modelMax === 'number' && modelMax > 0) {
-            resolvedMax = modelMax
-          }
-        }
-        const activeModels = await serviceHub
-          .models()
-          .getActiveModels(selectedProvider)
-        const active = activeModels.includes(selectedModel.id)
-        if (!cancelled && active) setIsActive(true)
-        if (
-          active &&
-          engine &&
-          typeof engine.getLoadedContext === 'function'
-        ) {
-          const actual = await engine.getLoadedContext(selectedModel.id)
-          if (!cancelled) setLoadedContext(actual)
-        }
-      } catch (error) {
-        console.warn(
-          `Failed to resolve maximum context for ${selectedProvider}/${selectedModel?.id}:`,
-          error
-        )
-      }
-      if (!cancelled) {
-        if (resolvedMax !== fallbackMaxContext) {
-          setMaxContext(resolvedMax)
-        }
-        if (!hasConfiguredContext) {
-          setDraftContext(resolvedMax)
-        }
-      }
-    }
-
-    void resolveMaxContext()
-    return () => {
-      cancelled = true
-    }
-  }, [
-    configuredMax,
-    configuredMin,
-    fallbackMaxContext,
-    selectedModel,
-    selectedProvider,
-    serviceHub,
-  ])
-
   if (
     !selectedProvider ||
     !LOCAL_CONTEXT_PROVIDERS.has(selectedProvider) ||
     !selectedModel
   ) {
     return null
-  }
-
-  const provider = getProviderByName(selectedProvider)
-  const contextSetting = selectedModel.settings?.ctx_len as
-    | ProviderSetting
-    | undefined
-
-  if (!provider || !contextSetting) return null
-
-  const contextControllerProps =
-    contextSetting.controller_props as NumericControllerProps
-  const sliderMin = configuredMin
-  const sliderMax = Math.max(sliderMin, maxContext || 0)
-  const sliderStep = Math.max(1, Number(contextControllerProps.step) || 1024)
-
-  const handleContextChange = (value: string | boolean | number) => {
-    const modelIndex = provider.models.findIndex(
-      (model) => model.id === selectedModel.id
-    )
-    if (modelIndex === -1) return
-
-    const numericValue = Number(value)
-    if (!Number.isFinite(numericValue)) return
-    const clampedValue = Math.min(Math.max(numericValue, sliderMin), sliderMax)
-    setDraftContext(clampedValue)
-
-    const updatedModels = [...provider.models]
-    updatedModels[modelIndex] = {
-      ...selectedModel,
-      settings: {
-        ...selectedModel.settings,
-        ctx_len: {
-          ...contextSetting,
-          controller_props: {
-            ...contextSetting.controller_props,
-            value: clampedValue,
-          },
-        },
-      },
-    } as Model
-
-    updateProvider(provider.provider, { models: updatedModels })
-
-    serviceHub
-      .models()
-      .getActiveModels(provider.provider)
-      .then((activeModels) => {
-        const active = activeModels.includes(selectedModel.id)
-        setIsActive(active)
-        if (active) {
-          restartModel(selectedModel.id, provider.provider, clampedValue)
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to check active models:', error)
-      })
   }
 
   const percentageLabel = `${percentage.toFixed(1)}%`
@@ -383,7 +208,7 @@ export function ContextSizeControl({
             </span>
             <span className="font-mono text-sm text-muted-foreground">
               {formatTokenCount(totalTokens)} /{' '}
-              {formatTokenCount(tokenData.maxTokens || 0)}
+              {formatTokenCount(capacity || 0)}
             </span>
           </div>
           <Progress
@@ -393,7 +218,18 @@ export function ContextSizeControl({
             indicatorClassName={progressTone}
           />
         </div>
+        <p className="text-xs text-muted-foreground">
+          {requestUsage || hasReportedUsage
+            ? 'Latest request · includes instructions and tools. Draft edits apply on send.'
+            : 'Draft text estimate · instructions and tools are counted on send.'}
+        </p>
         <div className="space-y-2">
+          {requestUsage && (
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Reserved for response</span>
+              <span>{formatTokenCount(requestUsage.reservedOutputTokens)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
               <IconArrowUp className="size-3.5" stroke={1.75} />
@@ -413,42 +249,9 @@ export function ContextSizeControl({
             </span>
           </div>
         </div>
-        <div className="space-y-3 border-t border-border pt-3">
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs font-medium">{contextSetting.title}</div>
-              <div className="font-mono text-xs tabular-nums">
-                {formatContextSize(draftContext)}
-              </div>
-            </div>
-            {contextSetting.description && (
-              <div className="text-xs text-muted-foreground">
-                {contextSetting.description}
-              </div>
-            )}
-            <div className="mt-1 text-[11px] text-muted-foreground">
-              {isRestarting
-                ? 'Reloading GInfer…'
-                : isActive && loadedContext
-                  ? `Loaded at ${formatContextSize(loadedContext)}`
-                  : 'Applies when the model starts'}
-            </div>
-          </div>
-          <Slider
-            aria-label={contextSetting.title}
-            className="w-full"
-            value={[Math.min(Math.max(draftContext, sliderMin), sliderMax)]}
-            min={sliderMin}
-            max={sliderMax}
-            step={sliderStep}
-            disabled={isRestarting}
-            onValueChange={([value]) => setDraftContext(value)}
-            onValueCommit={([value]) => handleContextChange(value)}
-          />
-          <div className="flex justify-between font-mono text-[10px] text-muted-foreground">
-            <span>{formatContextSize(sliderMin)}</span>
-            <span>{formatContextSize(sliderMax)}</span>
-          </div>
+        <div className="space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+          <p>Profile context: {formatContextSize(capacity || FALLBACK_MAX_CONTEXT)}</p>
+          <p>Change capacity with the model profile selector or GInfer Hosts. Chat compacts within the running profile and does not restart it.</p>
         </div>
       </PopoverContent>
     </Popover>

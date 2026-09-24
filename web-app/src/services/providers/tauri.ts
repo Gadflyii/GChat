@@ -30,11 +30,10 @@ function settingsForRuntimeModel(
         : GINFER_SERVER_CONTEXT_FALLBACK
 
     return {
-      auto_increase_ctx_len: structuredClone(modelSettings.auto_increase_ctx_len),
       ctx_len: {
         ...structuredClone(modelSettings.ctx_len),
         description:
-          'Per-request context limit. GInfer reloads the model when this startup-fixed value changes.',
+          'Startup-fixed context limit selected by the GInfer host launch profile. Change it by choosing a different profile in Engines.',
         controller_props: {
           ...modelSettings.ctx_len.controller_props,
           value: nativeContext,

@@ -4,6 +4,7 @@ import { EngineManager, type ThreadMessage } from '@gchat/core'
 
 import { ContextSizeControl } from '@/containers/ContextSizeControl'
 import { useModelProvider } from '@/hooks/useModelProvider'
+import { useContextUsage } from '@/hooks/useContextUsage'
 import type { ModelsService } from '@/services/models/types'
 import { seedServiceHub } from '@/test/service-hub'
 
@@ -70,45 +71,10 @@ function setSelectedModel(providerName: string) {
   })
 }
 
-function setSelectedModelWithContext(
-  providerName: string,
-  value: unknown,
-  max: number
-) {
-  const model = {
-    id: 'muse_glimmer_30b_nvfp4_dflash2',
-    name: 'Muse Glimmer 30B',
-    settings: {
-      ctx_len: {
-        key: 'ctx_len',
-        title: 'Context Size',
-        description: 'Size of the prompt context.',
-        controller_type: 'input',
-        controller_props: {
-          type: 'number',
-          value,
-          min: 1024,
-          max,
-          step: 1024,
-        },
-      },
-    },
-  } as Model
-  const provider = {
-    provider: providerName,
-    models: [model],
-  } as ModelProvider
-
-  useModelProvider.setState({
-    providers: [provider],
-    selectedProvider: providerName,
-    selectedModel: model,
-  })
-}
-
 describe('ContextSizeControl', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useContextUsage.setState({ requests: {} })
     tokenCountState.value = 164
     getActiveModels.mockResolvedValue([])
     seedServiceHub({
@@ -127,6 +93,51 @@ describe('ContextSizeControl', () => {
     expect(
       screen.getByRole('button', { name: 'Context usage: 1.0%' })
     ).toBeInTheDocument()
+  })
+
+  it('shows full request usage including tools and tracks compaction live', () => {
+    setSelectedModel('ginfer')
+    const usage = {
+      modelId: 'test-model', inputTokens: 42158, outputTokens: 234,
+      contextTokens: 131072, reservedOutputTokens: 8192,
+    }
+    useContextUsage.getState().record('thread-a', usage)
+    render(<ContextSizeControl threadId="thread-a" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Context usage: 32.3%' }))
+    expect(screen.getByText('42.4K / 131.1K')).toBeInTheDocument()
+    expect(screen.getByText(/Latest request · includes instructions and tools/)).toBeInTheDocument()
+    expect(screen.getByText('Reserved for response')).toBeInTheDocument()
+    act(() => useContextUsage.getState().record('thread-a', {
+      ...usage, inputTokens: 160000, outputTokens: 0,
+    }))
+    expect(screen.getByRole('button', { name: 'Context usage: 122.1%' })).toBeInTheDocument()
+    act(() => useContextUsage.getState().record('thread-a', {
+      ...usage, inputTokens: 30000, outputTokens: 0,
+    }))
+    expect(screen.getByRole('button', { name: 'Context usage: 22.9%' })).toBeInTheDocument()
+  })
+
+  it('restores full request accounting on reopen and isolates other threads', () => {
+    setSelectedModel('ginfer')
+    useContextUsage.getState().record('other-thread', {
+      modelId: 'test-model', inputTokens: 90000, outputTokens: 0,
+      contextTokens: 131072, reservedOutputTokens: 8192,
+    })
+    const messages = [{ role: 'assistant', metadata: { contextUsage: {
+      modelId: 'test-model', inputTokens: 42158, outputTokens: 234,
+      contextTokens: 131072, reservedOutputTokens: 8192,
+    } } }] as ThreadMessage[]
+    render(<ContextSizeControl threadId="reopened-thread" messages={messages} />)
+    expect(screen.getByRole('button', { name: 'Context usage: 32.3%' })).toBeInTheDocument()
+  })
+
+  it('does not let text-only counting hide server-reported tool usage', () => {
+    setSelectedModel('ginfer')
+    const messages = [{ role: 'assistant', metadata: {
+      usage: { inputTokens: 8000, outputTokens: 192, totalTokens: 8192 },
+    } }] as ThreadMessage[]
+    render(<ContextSizeControl messages={messages} />)
+    expect(screen.getByRole('button', { name: 'Context usage: 50.0%' })).toBeInTheDocument()
   })
 
   it('is hidden for non-local providers', () => {
@@ -163,10 +174,7 @@ describe('ContextSizeControl', () => {
     expect(screen.getByRole('progressbar').firstElementChild).toHaveClass(
       'bg-emerald-500'
     )
-    expect(screen.getByRole('slider')).toHaveAttribute(
-      'aria-valuemax',
-      '65536'
-    )
+
   })
 
   it('falls back to response usage when a new chat has not been tokenized', () => {
@@ -212,83 +220,19 @@ describe('ContextSizeControl', () => {
     }
   )
 
-  it('does not allow the context slider past the configured model maximum', () => {
-    setSelectedModel('ginfer')
-    render(<ContextSizeControl />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Context usage: 1.0%' }))
-    const slider = screen.getByRole('slider')
-    fireEvent.keyDown(slider, { key: 'End' })
-    fireEvent.keyUp(slider, { key: 'End' })
-
-    expect(
-      useModelProvider.getState().selectedModel?.settings?.ctx_len
-        ?.controller_props.value
-    ).toBe(65536)
-  })
-
-  it('uses the model training limit when the engine provides one', async () => {
-    const getMaxCtxTrain = vi.fn().mockResolvedValue(131072)
-    const engineManager = vi
-      .spyOn(EngineManager, 'instance')
-      .mockReturnValue({
-        get: () => ({ getMaxCtxTrain }),
-      } as unknown as EngineManager)
-    setSelectedModel('ginfer')
-    render(<ContextSizeControl />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Context usage:/ }))
-
-    await waitFor(() =>
-      expect(screen.getByRole('slider')).toHaveAttribute(
-        'aria-valuemax',
-        '131072'
-      )
-    )
-    expect(getMaxCtxTrain).toHaveBeenCalledWith('test-model')
-    engineManager.mockRestore()
-  })
-
-  it('uses the declared Glimmer context when the stored value is unset', () => {
-    setSelectedModelWithContext('ginfer', 0, 131072)
-    render(<ContextSizeControl />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Context usage:/ }))
-
-    expect(screen.getAllByText('128.0K')).toHaveLength(2)
-    expect(screen.getByRole('slider')).toHaveAttribute(
-      'aria-valuenow',
-      '131072'
-    )
-  })
-
-  it('restarts a running model after the context size changes', async () => {
-    vi.useFakeTimers()
-    getActiveModels.mockResolvedValue(['test-model'])
-    setSelectedModel('ginfer')
-    render(<ContextSizeControl />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Context usage: 1.0%' }))
-    const slider = screen.getByRole('slider')
-    fireEvent.keyDown(slider, { key: 'End' })
-    fireEvent.keyUp(slider, { key: 'End' })
-
-    await act(async () => {
-      await Promise.resolve()
-    })
-    await act(async () => {
-      vi.advanceTimersByTime(500)
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(stopModel).toHaveBeenCalledWith('test-model', 'ginfer')
-    expect(startModel).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: 'ginfer' }),
-      'test-model',
-      true
-    )
-    expect(syncActiveModelsFromEngines).toHaveBeenCalled()
-    vi.useRealTimers()
+  it('shows the loaded profile capacity without a control that restarts it', async () => {
+    const engineManager = vi.spyOn(EngineManager, 'instance').mockReturnValue({
+      get: () => ({ getLoadedContext: async () => 131072 }),
+    } as unknown as EngineManager)
+    try {
+      setSelectedModel('ginfer')
+      render(<ContextSizeControl />)
+      fireEvent.click(screen.getByRole('button', { name: /Context usage:/ }))
+      await waitFor(() => expect(screen.getByText('Profile context: 128.0K')).toBeInTheDocument())
+      expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+      expect(screen.getByText(/does not restart it/)).toBeInTheDocument()
+      expect(stopModel).not.toHaveBeenCalled()
+      expect(startModel).not.toHaveBeenCalled()
+    } finally { engineManager.mockRestore() }
   })
 })
