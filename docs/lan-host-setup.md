@@ -60,7 +60,11 @@ For a combined Windows distribution, add
 `ginfer-bundle-<version>-windows-x86_64.zip` containing the host and the complete
 manifest-selected engine runtime under `runtime/`. The packager verifies every
 listed size and SHA256 and requires both `ginfer.exe` and `ginfer-serve.exe`.
-Unlisted files, models and private host state are excluded. Packaging does not
+Unlisted files, models and private host state are excluded. The engine's license
+files may be nested (for example `licenses/llguidance-crates/<crate>/LICENSE*`,
+carried since GInfer's `llguidance` moved to a Rust build); the packager accepts
+anything under `licenses/` regardless of depth or extension, not only top-level
+`.txt` files. Packaging does not
 install or start anything. Extract the combined archive to a local directory and
 run `setup.cmd`: setup displays editable binary and model/state locations, accepts
 Enter for the defaults, then asks for confirmation. It installs for the current
