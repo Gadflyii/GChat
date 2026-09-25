@@ -47,7 +47,7 @@ def runtime_entries(directory, target):
                 (path.parent == Path('bin') and path.suffix.lower() in ('.exe', '.dll')) or
                 (not windows and name in ('bin/ginfer', 'bin/ginfer-serve')) or
                 (not windows and path.parent == Path('lib') and '.so.' in path.name) or
-                (path.parent == Path('licenses') and path.suffix == '.txt')):
+                (path.parts and path.parts[0] == 'licenses')):
             raise ValueError('unexpected or duplicate runtime member')
         seen.add(name)
         source = directory / path
