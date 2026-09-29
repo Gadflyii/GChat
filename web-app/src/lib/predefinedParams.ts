@@ -154,6 +154,27 @@ export function isGemma4Qat(modelId: string): boolean {
 }
 
 /**
+ * GInfer serves every model with its card-recommended sampling for the request's mode (Qwen3.8:
+ * thinking temperature 1.0 / top_p 0.95 / top_k 20; non-thinking 0.7 / 0.8 / 20 with presence
+ * penalty 1.5). Unless the user tuned the assistant's sampling, send none of these keys so the server
+ * decides per mode; the built-in assistant bag (0.7 / 0.8 / 20 / repeat 1.12) is a non-thinking
+ * preset that made thinking models near-greedy and repetitive.
+ */
+export function withServerSampling(
+  providerId: string | undefined,
+  params: Record<string, unknown>,
+  userOverridden: boolean
+): Record<string, unknown> {
+  if (userOverridden || providerId?.toLowerCase() !== 'ginfer') return params
+  const penalties = paramGroups.penalties
+  return Object.fromEntries(
+    Object.entries(params).filter(
+      ([key]) => !paramGroups.sampling.includes(key) && !penalties.includes(key)
+    )
+  )
+}
+
+/**
  * Layer the model-family recommended sampler over the given params. Pure and
  * non-destructive: returns the input unchanged unless the model is Gemma 4 QAT
  * and the user has not tuned sampling themselves. Only the recommended keys

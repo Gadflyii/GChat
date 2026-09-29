@@ -44,9 +44,13 @@ pub struct CompletionRequest {
     pub output_limit_override: Option<u32>,
     pub reasoning_effort: Option<AgentReasoningEffort>,
     pub max_tokens: u32,
-    pub temperature: f32,
-    pub top_p: f32,
-    pub top_k: i32,
+    /// Sampling overrides. `None` (the default) sends nothing, so GInfer applies the served model's
+    /// recommended sampling for the request's mode (Qwen3.8: thinking temperature 1.0 / top_p 0.95 /
+    /// top_k 20; non-thinking 0.7 / 0.8 / 20 with presence penalty 1.5). Near-greedy values caused
+    /// endless repetition with thinking models.
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub top_k: Option<i32>,
     pub stop: Vec<String>,
 }
 
@@ -63,9 +67,9 @@ impl CompletionRequest {
             output_limit_override: None,
             reasoning_effort,
             max_tokens: 8_192,
-            temperature: 0.2,
-            top_p: 0.95,
-            top_k: 40,
+            temperature: None,
+            top_p: None,
+            top_k: None,
             stop: Vec::new(),
         }
     }
@@ -79,9 +83,9 @@ impl CompletionRequest {
             output_limit_override: None,
             reasoning_effort: Some(AgentReasoningEffort::None),
             max_tokens: 3_072,
-            temperature: 0.0,
-            top_p: 1.0,
-            top_k: 1,
+            temperature: None,
+            top_p: None,
+            top_k: None,
             stop: Vec::new(),
         }
     }
@@ -463,11 +467,17 @@ fn completion_request_payload(model_id: &str, request: &CompletionRequest) -> Va
         "model": model_id,
         "messages": messages,
         "stream": false,
-        "max_tokens": request.max_tokens,
-        "temperature": request.temperature,
-        "top_p": request.top_p,
-        "top_k": request.top_k
+        "max_tokens": request.max_tokens
     });
+    if let Some(temperature) = request.temperature {
+        payload["temperature"] = serde_json::json!(temperature);
+    }
+    if let Some(top_p) = request.top_p {
+        payload["top_p"] = serde_json::json!(top_p);
+    }
+    if let Some(top_k) = request.top_k {
+        payload["top_k"] = serde_json::json!(top_k);
+    }
     if request.require_tools {
         payload["tools"] = serde_json::json!(tools);
         payload["tool_choice"] = Value::String(if request.authoring { "auto" } else { "required" }.into());
@@ -563,8 +573,7 @@ fn vision_request_payload(
         "model": model_id,
         "messages": [{"role": "user", "content": content}],
         "stream": false,
-        "max_tokens": 1024,
-        "temperature": 0.2
+        "max_tokens": 1024
     });
     if let Some(effort) = reasoning_effort {
         payload["reasoning_effort"] = Value::String(effort.as_str().into());
@@ -1134,6 +1143,26 @@ mod tests {
 
     use super::*;
     use crate::core::agent::test_support::{ScriptedGinferServer, ScriptedResponse};
+
+    #[test]
+    fn requests_leave_sampling_to_the_server_unless_overridden() {
+        for request in [
+            CompletionRequest::tool_call("prompt", Some(AgentReasoningEffort::High)),
+            CompletionRequest::checkpoint("older turns"),
+        ] {
+            let payload = completion_request_payload("m", &request);
+            for key in ["temperature", "top_p", "top_k"] {
+                assert!(payload.get(key).is_none(), "{key} must be left to the served model's defaults");
+            }
+        }
+        let mut tuned = CompletionRequest::tool_call("prompt", None);
+        tuned.temperature = Some(0.6);
+        tuned.top_k = Some(20);
+        let payload = completion_request_payload("m", &tuned);
+        assert!((payload["temperature"].as_f64().unwrap() - 0.6).abs() < 1e-6);
+        assert_eq!(payload["top_k"], 20);
+        assert!(payload.get("top_p").is_none());
+    }
 
     #[test]
     fn normal_completion_uses_atomic_agent_limit() {

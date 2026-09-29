@@ -2776,6 +2776,24 @@ async fn fetch_opencode_model_context(
     opencode_model_context(&models, model)
 }
 
+/// The OpenCode model entry for GChat. `temperature: false` stops OpenCode from sending a temperature
+/// (it otherwise sends the agent's value or its own per-model default, 0.5 for Qwen ids), so the served
+/// model's recommended sampling applies per mode: GInfer serves Qwen3.8 with thinking temperature 1.0 /
+/// top_p 0.95 / top_k 20 and non-thinking 0.7 / 0.8 / 20 (presence penalty 1.5).
+pub(crate) fn opencode_model_config(model: &str, context: Option<u32>) -> serde_json::Value {
+    let mut model_config = serde_json::json!({ "name": model, "temperature": false });
+    if let Some(context) = context {
+        model_config.as_object_mut().unwrap().insert(
+            "limit".into(),
+            serde_json::json!({
+                "context": context,
+                "output": context.min(65_536),
+            }),
+        );
+    }
+    model_config
+}
+
 #[tauri::command]
 pub async fn configure_opencode(
     api_url: String,
@@ -2812,16 +2830,7 @@ pub async fn configure_opencode(
         .filter(|k| !k.is_empty())
         .unwrap_or("gchat");
     let context = fetch_opencode_model_context(&api_url, &model, api_key.as_deref()).await;
-    let mut model_config = serde_json::json!({ "name": model });
-    if let Some(context) = context {
-        model_config.as_object_mut().unwrap().insert(
-            "limit".into(),
-            serde_json::json!({
-                "context": context,
-                "output": context.min(65_536),
-            }),
-        );
-    }
+    let model_config = opencode_model_config(&model, context);
     let mut models = serde_json::Map::new();
     models.insert(model.clone(), model_config);
 
@@ -4770,6 +4779,15 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn opencode_model_entry_leaves_sampling_to_the_served_model() {
+        let entry = super::opencode_model_config("qwen3.8-27b-ka", Some(262_144));
+        assert_eq!(entry["temperature"], serde_json::json!(false));
+        assert_eq!(entry["limit"]["output"], serde_json::json!(65_536));
+        let bare = super::opencode_model_config("m", None);
+        assert_eq!(bare, serde_json::json!({ "name": "m", "temperature": false }));
+    }
     use super::*;
 
     #[test]

@@ -49,7 +49,7 @@ import { ModelFactory } from './model-factory'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useContextUsage } from '@/hooks/useContextUsage'
 import { getSamplingParamsForThread } from '@/lib/samplingParams'
-import { withRecommendedSampling } from '@/lib/predefinedParams'
+import { withRecommendedSampling, withServerSampling } from '@/lib/predefinedParams'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useThreads } from '@/hooks/useThreads'
 import { useAttachments } from '@/hooks/useAttachments'
@@ -431,9 +431,9 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         // top_k 64) is layered on at request time unless the user has tuned
         // that assistant's sampling — non-destructive, follows the active model.
         const sampling = getSamplingParamsForThread(this.threadId)
-        const inferenceParams = withRecommendedSampling(
-          modelId,
-          sampling.params,
+        const inferenceParams = withServerSampling(
+          providerId,
+          withRecommendedSampling(modelId, sampling.params, sampling.overridden),
           sampling.overridden
         )
 
