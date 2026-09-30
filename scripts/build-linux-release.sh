@@ -67,8 +67,8 @@ mkdir -p out/linux
 "$python" - <<'PY'
 import json,shutil
 from pathlib import Path
-appdir=Path('src-tauri/target/release/bundle/appimage/GChat.AppDir')
-if appdir.exists(): shutil.rmtree(appdir)
+staging=Path('src-tauri/target/release/bundle/appimage_deb')
+if staging.exists(): shutil.rmtree(staging)
 config=json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
 resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/') and p not in ('resources/bin/bun', 'resources/bin/uv')]
 Path('out/linux/appimage-config.json').write_text(json.dumps({'bundle':{'resources':resources}}))

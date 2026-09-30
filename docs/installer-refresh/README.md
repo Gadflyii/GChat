@@ -57,9 +57,10 @@ container build. External root dependencies remain locked. Debian assembly now s
 AppImage build container has no FUSE device, so linuxdeploy runs explicitly in
 extract-and-run mode. Its dependency scan also rejects the static Bun executable;
 Bun and uv now join the engine payload in the post-linuxdeploy injection step.
-The bundler also retained excluded files in its prior AppDir; assembly now removes
-that owned staging directory before bundling, so stale static binaries cannot be
-rescanned. Build core dumps are disabled and disposable crash dumps removed.
+Tauri retains its intermediate `bundle/appimage_deb` directory after failure,
+which repopulated fresh AppDirs with excluded Bun files. Clearing AppDir alone
+did not fix this. Assembly now removes the owned `appimage_deb` staging directory
+before bundling, so excluded static binaries cannot be reintroduced. Build core dumps are disabled and disposable crash dumps removed.
 Each bundle starts from an unpatched desktop executable because Tauri modifies
 the binary with bundle-type metadata. This prevents cross-format metadata reuse.
 The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
