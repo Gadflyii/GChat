@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run in the Ubuntu 24.04 build environment; final packages need no build tools.
 set -euo pipefail
+ulimit -c 0
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 runtime_set=${GINFER_RUNTIME_SET:-}
@@ -64,14 +65,16 @@ cp out/linux/gchat-unbundled src-tauri/target/release/gchat
 # Linuxdeploy must not rewrite checksummed engine ELF files or absorb driver libraries.
 mkdir -p out/linux
 "$python" - <<'PY'
-import json
+import json,shutil
 from pathlib import Path
+appdir=Path('src-tauri/target/release/bundle/appimage/GChat.AppDir')
+if appdir.exists(): shutil.rmtree(appdir)
 config=json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
 resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/') and p not in ('resources/bin/bun', 'resources/bin/uv')]
 Path('out/linux/appimage-config.json').write_text(json.dumps({'bundle':{'resources':resources}}))
 PY
 NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 ./src-tauri/build-utils/shim-linuxdeploy.sh yarn tauri bundle \
-  --bundles appimage --config out/linux/appimage-config.json
+  --verbose --bundles appimage --config out/linux/appimage-config.json
 ./src-tauri/build-utils/buildAppImage.sh
 "$python" - <<'PY'
 import hashlib,json,shutil

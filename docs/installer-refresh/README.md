@@ -57,6 +57,9 @@ container build. External root dependencies remain locked. Debian assembly now s
 AppImage build container has no FUSE device, so linuxdeploy runs explicitly in
 extract-and-run mode. Its dependency scan also rejects the static Bun executable;
 Bun and uv now join the engine payload in the post-linuxdeploy injection step.
+The bundler also retained excluded files in its prior AppDir; assembly now removes
+that owned staging directory before bundling, so stale static binaries cannot be
+rescanned. Build core dumps are disabled and disposable crash dumps removed.
 Each bundle starts from an unpatched desktop executable because Tauri modifies
 the binary with bundle-type metadata. This prevents cross-format metadata reuse.
 The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
@@ -70,6 +73,24 @@ Runtime resource contract: `resources/ginfer/linux/runtime-set.json`, schema
 `ginfer-linux-runtime-set-v1`, platform `linux-x64`, source_commit, and runtimes
 mapping `8.0: sm80`, `8.6: sm86`, `8.9: sm89`, `12.0: sm120a`. Each directory
 contains a `ginfer-linux-runtime-v1` manifest and `bin`, `lib`, `licenses` payloads.
+
+## Physical installation smoke
+
+A bounded CLI startup/generation smoke passed using the packaged SM80 image on
+Server 2's free GPU `GPU-66aef410-f168-29c3-7d92-fd750e6ec833` (CMP 170HX,
+64 GiB, driver 610.43.03). Rechecked idle at 14 MiB; GPU 2's unrelated model
+process remains untouched. The existing Muse artifact is
+`/mnt/data/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/muse_glimmer_30b_autoround_dflash2.ginfer`.
+Used the shipped `cmp170hx-muse-groupwise-int-dflash-q4-tp1-c1-128k-int8`
+profile's context, arena, precision and speculation settings, one text prompt and
+64 output-token ceiling (matching its recorded smoke workload). This verifies
+packaged CUDA execution, not numerical quality or performance qualification.
+Temporary extracted engine/logs were placed under
+`/home/ron/.local/state/gchat-linux-installer-check-20260930`; no desktop install,
+model copy or host registration occurs. Retain concise output locally, then remove
+that owned temporary directory after the process ends. Completed: exit 0, response
+`READY`, native DFlash execution. GPU memory returned to 14 MiB. The temporary
+directory was removed after preserving `out/linux/sm80-smoke/` locally.
 
 ## Inventory
 
