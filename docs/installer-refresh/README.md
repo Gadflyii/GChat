@@ -1,117 +1,97 @@
 # GChat installer refresh
 
-## Current deliverable — complete Linux installer
+## Accepted Linux installers — September 30, 2026
 
-Owner: coordinator, Linux engine packaging agent, Linux runtime integration agent.
-User requires a complete ready-to-install Linux GChat package. The earlier AppImage
-and separate native runtime archive did not satisfy this: the AppImage omitted the
-engine, and the native archive was not validated on the desktop deployment baseline.
-The previous claim that glibc 2.43 was a minimum was invalid; it was only the build
-machine's version. Those artifacts are superseded as Linux release candidates.
+The complete Linux release is ready for an Ubuntu 24.04+ x86-64 desktop with a
+compatible NVIDIA driver. Both packages contain GChat, its persistent host and
+CLI, Bun/uv, launch profiles, and separate SM80, SM86, SM89 and SM120a GInfer
+engines with private FFmpeg/CUDA/library dependencies. No separate engine or CUDA
+toolkit installation is required. Model weights remain normal app downloads.
 
-Target: Ubuntu 24.04+ x86_64 with an installed compatible NVIDIA driver. Deliver a
-standard `.deb` installer plus AppImage, each carrying separate SM80, SM86, SM89
-and SM120a engines and their private dependencies. GPU routing is automatic,
-including mixed architectures. Model weights remain normal user downloads.
+- Recommended: [GChat_2.0.42_amd64.deb](../../out/linux/GChat_2.0.42_amd64.deb)
+- Portable: [GChat_2.0.42_amd64.AppImage](../../out/linux/GChat_2.0.42_amd64.AppImage)
+- Both files have adjacent `.sha256` checksums; the retained release copies pass.
 
-## Acceptance and exclusions
+```sh
+sudo apt install ./GChat_2.0.42_amd64.deb
+```
 
-- Build engine and desktop against the Ubuntu 24.04 baseline; verify actual ELF
-  dependencies and each packaged executable in a clean target environment.
-- Install the `.deb` in a disposable clean environment, start the desktop and its
-  owned host, verify persisted engine routing and bundled runtime integrity.
-- Exercise fresh installation and update while preserving model/state files;
-  do not override an independently registered standalone host.
-- Keep Server 2 uninstalled and the working Windows installation unchanged.
-- This is installer/startup/inference smoke acceptance, not a new model-quality,
-  performance or per-GPU qualification campaign. Do not claim untested hardware.
-- Run GChat `make verify`, affected packaging/setup tests and actual artifact
-  checks. Review, commit, merge and push authorized changes, then retire owned
-  candidate worktrees and disposable staging while retaining final artifacts.
+For AppImage, make the file executable and launch it. Systems without FUSE can use
+`APPIMAGE_EXTRACT_AND_RUN=1 ./GChat_2.0.42_amd64.AppImage`.
 
-## Plan and next decision
+## Verification and limits
 
-1. Engine agent builds four separate CUDA images in Ubuntu 24.04 with the exact
-   private FFmpeg dependency and stages checksummed self-contained runtime dirs.
-2. Runtime agent adds Linux bundled-runtime installation and explicit GPU routing
-   through existing local-host ownership. Coordinator adds repeatable Linux release
-   assembly and Debian packaging.
-3. Coordinator builds and verifies final packages, performs clean install/startup
-   acceptance, updates this account and removes superseded task-owned artifacts.
+- Both exact packages passed engine integrity verification, all eight engine
+  executable `--help` checks, and bundled host/CLI/Bun/uv startup checks.
+- Debian installed through apt in clean Ubuntu 24.04. Its X11 desktop initialized,
+  installed all four persistent runtimes, and started its persistent host. The host
+  inventoried the real RTX 5090; no model was loaded on that occupied GPU.
+- AppImage passed the same desktop, runtime and host checks in Ubuntu 24.04 with
+  Xvfb and normal desktop Wayland/EGL/font libraries. It ran in extract-and-run
+  mode because the container has no FUSE device. FUSE mounting was not tested.
+- Every engine image also passes startup in plain Ubuntu 24.04 without optional
+  apt packages, with only NVIDIA driver libraries mounted. Each manifest has
+  167 verified payload files and exact architecture cubins; maximum GLIBC is 2.39.
+- Frontend verification passed 2,029 tests and 15 extension tests, lint, typecheck
+  and coverage gates. After correcting two old-path assertions, all platform Rust
+  suites passed via `make test-rust`; desktop Clippy passed. Installer tests cover
+  fresh install, no-op, corrupt-upgrade rejection, successful upgrade and model
+  preservation. Registry and routing tests cover owner retention and exact GPU
+  architecture selection.
+- The packaged SM80 engine loaded the existing Muse artifact on Server 2's idle
+  64-GiB CMP 170HX, driver 610.43.03. It used the shipped
+  `cmp170hx-muse-groupwise-int-dflash-q4-tp1-c1-128k-int8` profile settings and a
+  bounded 64-token text smoke. Native DFlash ran, the response was `READY`, and the
+  process exited 0. GPU memory returned to 14 MiB. This is startup/generation
+  evidence, not numerical, performance, media or all-GPU qualification.
 
-Current unresolved action: finish the four-image runtime set, assemble both packages
-and verify a clean desktop install. Ubuntu 24.04 SM80 and SM86 compilation passed;
-All four architecture builds now pass. Engine packaging is adding the complete
-non-system library closure so AppImage engines do not depend on separately
-installed curl/dav1d libraries. Runtime install/upgrade,
-model preservation, registry ownership and exact architecture routing tests pass.
-Frontend verification passed 2,029 tests and 15 extension tests; corrected old-path
-assertions pass with all 523 desktop Rust tests. Desktop Clippy passed. Remaining
-Rust subcrate suites also pass; packaged acceptance remains. The first assembly
-attempt exposed Ubuntu's Node 18 being too old for the existing bundler syntax.
-The build image now pins Node 22.22.1 (matching the verified development major)
-and includes npm for extension packaging; this changes only build tooling.
-Extension installation refreshes its existing local core-tarball lock entry after
-packing core; requiring that generated checksum to remain immutable blocked the
-container build. External root dependencies remain locked. Debian assembly now succeeds. The
-AppImage build container has no FUSE device, so linuxdeploy runs explicitly in
-extract-and-run mode. Its dependency scan also rejects the static Bun executable;
-Bun and uv now join the engine payload in the post-linuxdeploy injection step.
-Tauri retains its intermediate `bundle/appimage_deb` directory after failure,
-which repopulated fresh AppDirs with excluded Bun files. Clearing AppDir alone
-did not fix this. Assembly now removes the owned `appimage_deb` staging directory
-before bundling, so excluded static binaries cannot be reintroduced.
-The unpatched executable is restored on exit, including failed assembly, for
-repeatable subsequent builds. Build core dumps are disabled and disposable crash dumps removed.
-Each bundle starts from an unpatched desktop executable because Tauri modifies
-the binary with bundle-type metadata. This prevents cross-format metadata reuse.
-The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
-owned by the GChat candidate and do not mutate the main checkout.
-
-Linuxdeploy must not rewrite the checksummed engine files. The Debian package
-includes them directly; AppImage assembly injects the verified set after linuxdeploy.
-Bun and uv live in app-private resources, avoiding global executable conflicts.
-
-Runtime resource contract: `resources/ginfer/linux/runtime-set.json`, schema
-`ginfer-linux-runtime-set-v1`, platform `linux-x64`, source_commit, and runtimes
-mapping `8.0: sm80`, `8.6: sm86`, `8.9: sm89`, `12.0: sm120a`. Each directory
-contains a `ginfer-linux-runtime-v1` manifest and `bin`, `lib`, `licenses` payloads.
-
-## Physical installation smoke
-
-A bounded CLI startup/generation smoke passed using the packaged SM80 image on
-Server 2's free GPU `GPU-66aef410-f168-29c3-7d92-fd750e6ec833` (CMP 170HX,
-64 GiB, driver 610.43.03). Rechecked idle at 14 MiB; GPU 2's unrelated model
-process remains untouched. The existing Muse artifact is
+The real-GPU check used
 `/mnt/data/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/muse_glimmer_30b_autoround_dflash2.ginfer`.
-Used the shipped `cmp170hx-muse-groupwise-int-dflash-q4-tp1-c1-128k-int8`
-profile's context, arena, precision and speculation settings, one text prompt and
-64 output-token ceiling (matching its recorded smoke workload). This verifies
-packaged CUDA execution, not numerical quality or performance qualification.
-Temporary extracted engine/logs were placed under
-`/home/ron/.local/state/gchat-linux-installer-check-20260930`; no desktop install,
-model copy or host registration occurs. Retain concise output locally, then remove
-that owned temporary directory after the process ends. Completed: exit 0, response
-`READY`, native DFlash execution. GPU memory returned to 14 MiB. The temporary
-directory was removed after preserving `out/linux/sm80-smoke/` locally.
+Its temporary `/home/ron/.local/state/gchat-linux-installer-check-20260930` engine
+and logs were removed after evidence was retained locally. Server 2 remains
+uninstalled; its independent RTX 3090 process and model files were untouched.
+The Windows installation was unchanged.
 
-## Inventory
+## Packaging decisions and reproduction
 
-| Owner/host | Exact path | Role/status |
+Use [the Linux release script](../../scripts/build-linux-release.sh) inside
+[the Ubuntu 24.04 / Node 22 build image](../../scripts/linux-release.Dockerfile),
+with the explicit runtime set and profile catalog directory; see
+[DEVELOP.md](../../DEVELOP.md#complete-linux-release).
+
+The extension install refreshes its generated local core-tarball reference while
+root external dependencies remain locked. Engine manifests are verified before
+staging. Linuxdeploy runs in extract mode, without engine or static Bun/uv files;
+those files are injected afterward so their bytes and private RPATHs stay intact.
+Failed Tauri runs retain `bundle/appimage_deb`, so assembly removes that owned
+intermediate before each AppImage build. Each format starts from the unpatched
+desktop executable, which is restored on exit. These address the observed Node
+syntax, generated-tarball lock, static-ELF scan, stale-staging and bundle-metadata
+failures without changing inference behavior.
+
+See [the runtime-install ADR](../decisions/2026-09-30-bundle-linux-ginfer-runtimes-by-gpu-architecture.md).
+An already-running older single-engine host must restart to acquire the new
+routing map. Independently registered standalone hosts retain ownership.
+
+## Retained inventory and status
+
+| Owner/host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| Coordinator / Ron-9950X3D2 | `/ai/gchat` at `7c3cba57c` | Main baseline; installed Windows build remains unchanged |
-| Coordinator/runtime agent | `/ai/gchat-worktrees/linux-installer` branch `feat/linux-installer` | Linux installer candidate |
-| Engine agent | `/ai/ginfer-worktrees/linux-installer` branch `build/linux-installer`, baseline `85d1a617` | Portable engine build and packaging candidate |
-| Coordinator / owned outputs | `/ai/gchat-worktrees/linux-installer/out/linux/` | Build scripts/logs, disposable acceptance image recipe, final packages pending |
-| Coordinator / Docker | `gchat-linux-installer-build:ubuntu24`, `gchat-linux-installer-acceptance:ubuntu24` | Owned build and clean-install environments |
-| Engine baseline | `/ai/ginfer/build` | Existing local engine; not a portable-release input |
-| Existing desktop build cache | `/ai/gchat/src-tauri/target`, Docker `gchat-linux-build:ubuntu24` | Reusable cache; candidate artifacts must be verified |
-| Superseded Linux artifacts | `/ai/gchat/out/linux/GChat_2.0.42_amd64.AppImage`, `/ai/gchat/out/installer-refresh-20260930/ginfer-bundle-0.1.0-linux-x86_64.tar.gz` | Incomplete release; replace/retire after complete installer accepted |
-| Server 2 | `AIS-1-2950X-L02`, `192.168.1.111` | Remains uninstalled; no persistent installation authorized by this task |
+| GChat / Ron-9950X3D2 | `/ai/gchat/out/linux/GChat_2.0.42_amd64.{deb,AppImage}` | Accepted installers and adjacent checksums |
+| GChat | `/ai/gchat/out/linux/acceptance-20260930/` | Build/check logs, package acceptance and SM80 smoke evidence |
+| GInfer | `/ai/ginfer/out/linux-installer-20260930/runtime-set/` | Accepted engine baseline, source `05a286ba574114e2ef4dfb00b4015e07ab8c26a5` |
+| GInfer | `/ai/ginfer/out/linux-installer-20260930/` | Concise engine/FFmpeg build evidence |
+| GChat | `/ai/gchat/src-tauri/target`, `/ai/gchat/src-tauri/ginfer-host/target` | Existing caches with accepted desktop/host builds retained |
+| Build environments | `gchat-linux-installer-build:ubuntu24`, `ginfer-linux-release-build:ubuntu24` | Reusable accepted toolchains |
 
-Local host/GPU verified at start: Ron-9950X3D2, RTX 5090, driver 610.88, about
-24 GiB occupied. Do not run inference on that occupied GPU. Builds need no GPU.
-Engine/runtime agents maintain bounded logs and coordinate exact output paths.
+The runtime code was built from GChat `82b855870`; subsequent changes correct
+packaging/reproduction and record acceptance. Implementation and final packaging
+changes are merged to main for handoff. Task candidate worktrees, their private
+build/dependency copies, disposable acceptance containers/images and unpacked
+bundle staging are retired during final handoff. The prior host-only AppImage is
+replaced and the separate glibc-2.43 runtime archive is superseded and removed.
+Unrelated worktrees, model files, Windows builds and other sessions' jobs remain.
+No Linux installer work remains after the documented commit/push and cleanup.
 
 ## Completed Windows update and Server 2 removal
 
