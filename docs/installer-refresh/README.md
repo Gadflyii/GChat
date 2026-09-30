@@ -55,7 +55,10 @@ Extension installation refreshes its existing local core-tarball lock entry afte
 packing core; requiring that generated checksum to remain immutable blocked the
 container build. External root dependencies remain locked. Debian assembly now succeeds. The
 AppImage build container has no FUSE device, so linuxdeploy runs explicitly in
-extract-and-run mode; final package assembly resumes from the accepted binaries.
+extract-and-run mode. Its dependency scan also rejects the static Bun executable;
+Bun and uv now join the engine payload in the post-linuxdeploy injection step.
+Each bundle starts from an unpatched desktop executable because Tauri modifies
+the binary with bundle-type metadata. This prevents cross-format metadata reuse.
 The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
 owned by the GChat candidate and do not mutate the main checkout.
 

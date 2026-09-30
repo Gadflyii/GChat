@@ -31,6 +31,9 @@ if [ ! -d "${APP_DIR}" ]; then
   exit 1
 fi
 
+install -m755 src-tauri/resources/bin/bun "${RESOURCE_DIR}/bin/bun"
+install -m755 src-tauri/resources/bin/uv "${RESOURCE_DIR}/bin/uv"
+
 # Add the engines after linuxdeploy; their private libraries/RPATHs are already verified.
 "${PYTHON:-python3}" scripts/stage-linux-runtime-set.py \
   --source src-tauri/resources/ginfer/linux \

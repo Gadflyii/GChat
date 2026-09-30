@@ -55,7 +55,11 @@ for binary in bun uv uv-x86_64-unknown-linux-gnu sqlite-vec.so; do
   }
 done
 make build-cli
-NO_STRIP=1 yarn tauri build --bundles deb
+NO_STRIP=1 yarn tauri build --no-bundle
+mkdir -p out/linux
+cp src-tauri/target/release/gchat out/linux/gchat-unbundled
+NO_STRIP=1 yarn tauri bundle --bundles deb
+cp out/linux/gchat-unbundled src-tauri/target/release/gchat
 
 # Linuxdeploy must not rewrite checksummed engine ELF files or absorb driver libraries.
 mkdir -p out/linux
@@ -63,7 +67,7 @@ mkdir -p out/linux
 import json
 from pathlib import Path
 config=json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
-resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/')]
+resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/') and p not in ('resources/bin/bun', 'resources/bin/uv')]
 Path('out/linux/appimage-config.json').write_text(json.dumps({'bundle':{'resources':resources}}))
 PY
 NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 ./src-tauri/build-utils/shim-linuxdeploy.sh yarn tauri bundle \
