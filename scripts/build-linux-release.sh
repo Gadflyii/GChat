@@ -66,7 +66,7 @@ config=json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
 resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/')]
 Path('out/linux/appimage-config.json').write_text(json.dumps({'bundle':{'resources':resources}}))
 PY
-NO_STRIP=1 ./src-tauri/build-utils/shim-linuxdeploy.sh yarn tauri bundle \
+NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 ./src-tauri/build-utils/shim-linuxdeploy.sh yarn tauri bundle \
   --bundles appimage --config out/linux/appimage-config.json
 ./src-tauri/build-utils/buildAppImage.sh
 "$python" - <<'PY'
