@@ -1,102 +1,103 @@
-# Installer refresh — 2026-09-30
+# GChat installer refresh
 
-## Outcome
+## Current deliverable — complete Linux installer
 
-Windows GChat 2.0.42 was rebuilt and updated in place with the current engine.
-The NSIS installer exited successfully; the installed app and host are running.
-Server 2's GChat installation was removed while preserving its data and models.
-Windows NSIS/MSI and Linux AppImage artifacts are retained locally. This is
-release assembly and startup verification, not model/performance qualification.
+Owner: coordinator, Linux engine packaging agent, Linux runtime integration agent.
+User requires a complete ready-to-install Linux GChat package. The earlier AppImage
+and separate native runtime archive did not satisfy this: the AppImage omitted the
+engine, and the native archive was not validated on the desktop deployment baseline.
+The previous claim that glibc 2.43 was a minimum was invalid; it was only the build
+machine's version. Those artifacts are superseded as Linux release candidates.
 
-## Accepted sources and artifacts
+Target: Ubuntu 24.04+ x86_64 with an installed compatible NVIDIA driver. Deliver a
+standard `.deb` installer plus AppImage, each carrying separate SM80, SM86, SM89
+and SM120a engines and their private dependencies. GPU routing is automatic,
+including mixed architectures. Model weights remain normal user downloads.
 
-GChat source: `bf7cde6f7bdb975713deb0f401458a9faf3f23d6`.
-Windows engine: `74780ea1415ac8d3bb440d58442ac4f81a5dfde3`, clean manifest.
-Linux engine: existing clean `15659f3e4c3c8b4c539a4726e625cda51528c648` build.
-The subsequent Windows fixes do not change Linux execution semantics.
+## Acceptance and exclusions
 
-| Artifact | Location |
-| --- | --- |
-| Windows setup EXE | `/ai/gchat/out/windows/GChat_2.0.42_x64-setup.exe` |
-| Windows MSI | `/ai/gchat/out/windows/GChat_2.0.42_x64_en-US.msi` |
-| Linux AppImage | `/ai/gchat/out/linux/GChat_2.0.42_amd64.AppImage` |
-| Linux host/engine bundle | `/ai/gchat/out/installer-refresh-20260930/ginfer-bundle-0.1.0-linux-x86_64.tar.gz` |
-| Windows engine archive | `/ai/ginfer/out/windows/ginfer-windows-x64-sm120a.zip` |
+- Build engine and desktop against the Ubuntu 24.04 baseline; verify actual ELF
+  dependencies and each packaged executable in a clean target environment.
+- Install the `.deb` in a disposable clean environment, start the desktop and its
+  owned host, verify persisted engine routing and bundled runtime integrity.
+- Exercise fresh installation and update while preserving model/state files;
+  do not override an independently registered standalone host.
+- Keep Server 2 uninstalled and the working Windows installation unchanged.
+- This is installer/startup/inference smoke acceptance, not a new model-quality,
+  performance or per-GPU qualification campaign. Do not claim untested hardware.
+- Run GChat `make verify`, affected packaging/setup tests and actual artifact
+  checks. Review, commit, merge and push authorized changes, then retire owned
+  candidate worktrees and disposable staging while retaining final artifacts.
 
-Native Windows installer copies are in `%LOCALAPPDATA%/GChat/release-output`.
-The Linux desktop retains its separate-engine contract. The Linux runtime bundle
-is SM120a, built on glibc 2.43, with 72 RTX 5090 profiles; it does not establish
-Ubuntu 24.04 engine compatibility. The AppImage itself is built on Ubuntu 24.04.
+## Plan and next decision
 
-## Verification
+1. Engine agent builds four separate CUDA images in Ubuntu 24.04 with the exact
+   private FFmpeg dependency and stages checksummed self-contained runtime dirs.
+2. Runtime agent adds Linux bundled-runtime installation and explicit GPU routing
+   through existing local-host ownership. Coordinator adds repeatable Linux release
+   assembly and Debian packaging.
+3. Coordinator builds and verifies final packages, performs clean install/startup
+   acceptance, updates this account and removes superseded task-owned artifacts.
 
-- Windows native engine compilation and both executable `--help` checks passed.
-  The native `ginfer_http_bind_test` rejects duplicate binds and allows rebind
-  after closing the owner. All 120 Windows runtime manifest entries passed
-  independent size/hash verification. Engine fixes were reviewed, merged and pushed.
-- NSIS installation returned 0. The installed `GChat.exe` presents a responsive
-  GChat window and starts the packaged `ginfer-host.exe`. The active runtime at
-  `%APPDATA%/GChat/data/ginfer` reports clean revision `74780ea1`; all 120 active
-  runtime file hashes and sizes match the package manifest. No model was started for qualification.
-- Windows assembly selected 103 profiles from 14 catalogs. The local model cache
-  contains two `.ginfer` artifacts totaling 44,808,326,400 bytes plus configuration
-  files. Before/after inventory matches: four files, 44,808,326,736 bytes total.
-  Application state and models are preserved.
-- Linux AppImage's 174 profile IDs match the selected source catalogs. Packaged
-  host code and build ID match the fresh build; linuxdeploy adds `$ORIGIN` RUNPATH,
-  so whole-file hashes differ. The packaged host `--help` runs successfully.
-  All 110 engine members inside the Linux runtime archive match its manifest.
-- `make verify` passed: lint, type checks, quality checks, 2,028 frontend tests,
-  14 extension tests, coverage floors and all supported native suites. Existing
-  frontend bundle-size advisories remain. No new Linux desktop walkthrough was
-  performed because Server 2 was explicitly uninstalled.
+Current unresolved action: finish the four-image runtime set, assemble both packages
+and verify a clean desktop install. Ubuntu 24.04 SM80 and SM86 compilation passed;
+All four architecture builds now pass. Engine packaging is adding the complete
+non-system library closure so AppImage engines do not depend on separately
+installed curl/dav1d libraries. Runtime install/upgrade,
+model preservation, registry ownership and exact architecture routing tests pass.
+Frontend verification passed 2,029 tests and 15 extension tests; corrected old-path
+assertions pass with all 523 desktop Rust tests. Desktop Clippy passed. Remaining
+Rust subcrate suites and packaged acceptance are in progress.
+The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
+owned by the GChat candidate and do not mutate the main checkout.
 
-Copied-source Windows engine builds report `1.0.0.0-unknown` in `--version`, per
-the engine's versioning contract. The runtime manifest records the exact revision.
+Linuxdeploy must not rewrite the checksummed engine files. The Debian package
+includes them directly; AppImage assembly injects the verified set after linuxdeploy.
+Bun and uv live in app-private resources, avoiding global executable conflicts.
 
-## Server 2 removal
+Runtime resource contract: `resources/ginfer/linux/runtime-set.json`, schema
+`ginfer-linux-runtime-set-v1`, platform `linux-x64`, source_commit, and runtimes
+mapping `8.0: sm80`, `8.6: sm86`, `8.9: sm89`, `12.0: sm120a`. Each directory
+contains a `ginfer-linux-runtime-v1` manifest and `bin`, `lib`, `licenses` payloads.
 
-Verified host: `AIS-1-2950X-L02` at `192.168.1.111`, two NVIDIA Graphics Device
-GPUs and one RTX 3090. Stopped its sole GChat-managed host; no model or desktop
-process was running. Removed active AppImages, app host files, GChat CLI, desktop
-entry and GChat-owned host locator. Coordinator independently checked active
-installation paths absent and data/model paths present.
+## Inventory
 
-The removed files are recoverable in
-`/home/ron/.local/state/gchat-uninstall-2026-09-30` (561 MiB). Preserve
-`~/.local/share/GChat/data` (66 MiB), model storage (36 GiB), standalone
-`~/.local/bin/ginfer-host` and launcher files, and `/ai/ginfer/build-80` and
-`build-86`. No unrelated engine, model or user data was deleted.
+| Owner/host | Exact path | Role/status |
+| --- | --- | --- |
+| Coordinator / Ron-9950X3D2 | `/ai/gchat` at `7c3cba57c` | Main baseline; installed Windows build remains unchanged |
+| Coordinator/runtime agent | `/ai/gchat-worktrees/linux-installer` branch `feat/linux-installer` | Linux installer candidate |
+| Engine agent | `/ai/ginfer-worktrees/linux-installer` branch `build/linux-installer`, baseline `85d1a617` | Portable engine build and packaging candidate |
+| Coordinator / owned outputs | `/ai/gchat-worktrees/linux-installer/out/linux/` | Build scripts/logs, disposable acceptance image recipe, final packages pending |
+| Coordinator / Docker | `gchat-linux-installer-build:ubuntu24`, `gchat-linux-installer-acceptance:ubuntu24` | Owned build and clean-install environments |
+| Engine baseline | `/ai/ginfer/build` | Existing local engine; not a portable-release input |
+| Existing desktop build cache | `/ai/gchat/src-tauri/target`, Docker `gchat-linux-build:ubuntu24` | Reusable cache; candidate artifacts must be verified |
+| Superseded Linux artifacts | `/ai/gchat/out/linux/GChat_2.0.42_amd64.AppImage`, `/ai/gchat/out/installer-refresh-20260930/ginfer-bundle-0.1.0-linux-x86_64.tar.gz` | Incomplete release; replace/retire after complete installer accepted |
+| Server 2 | `AIS-1-2950X-L02`, `192.168.1.111` | Remains uninstalled; no persistent installation authorized by this task |
 
-## Owned inventory and evidence
+Local host/GPU verified at start: Ron-9950X3D2, RTX 5090, driver 610.88, about
+24 GiB occupied. Do not run inference on that occupied GPU. Builds need no GPU.
+Engine/runtime agents maintain bounded logs and coordinate exact output paths.
 
-Final archives and existing incremental build caches are retained. Windows caches
-are `%LOCALAPPDATA%/GInfer/windows-build` and `%LOCALAPPDATA%/GChat/windows-build`.
-Linux app cache is `/ai/gchat/src-tauri/target`; its source engine baseline remains
-`/ai/ginfer/build`. Disposable Linux runtime staging (447 MiB), temporary patchelf
-and the redundant engine candidate archive were removed after verification.
-Temporary documentation worktrees are retired after reviewed integration.
+## Completed Windows update and Server 2 removal
 
-Evidence paths:
+The September 30 Windows NSIS/MSI update used GChat `bf7cde6f7` and clean engine
+`74780ea1`. NSIS exited 0, the desktop and host run, and all 120 active runtime
+members match the manifest. Model cache preserved: two `.ginfer` artifacts plus
+two config files, 44,808,326,736 bytes total. `make verify` passed. Windows engine
+compile/socket/provenance corrections were merged and pushed. See GInfer's
+`docs/installer-refresh/README.md` for that accepted build's evidence.
 
-- `/ai/gchat/out/windows/build-gchat-bf7cde6f-engine74780ea1.log`
-- `/ai/gchat/out/windows/install-nsis-74780ea1.log`
-- `/ai/gchat/out/installer-refresh-20260930/linux-build.log`
-- `/ai/gchat/out/installer-refresh-20260930/verify.log`
-- `/ai/ginfer/out/windows/build-sm120a-74780ea1.log`
-- `/ai/ginfer/out/windows/check-http-bind-74780ea1.log`
+Windows installers remain under `/ai/gchat/out/windows` and native copies under
+`%LOCALAPPDATA%/GChat/release-output`. No Windows rebuild/reinstall is requested.
 
-The Linux wrapper returned 127 after successful AppImage assembly because the
-wrapper was edited while Bash was reading it. Direct artifact checks established
-completion; no compilation was repeated. Keep running wrappers immutable. The
-corrected wrapper is retained beside its log. Windows source provenance initially
-misread WSL executable bits as source changes; the packager now ignores only that
-mode drift and the accepted archive reports clean.
+Server 2's GChat app, host and desktop registration were removed recoverably into
+`/home/ron/.local/state/gchat-uninstall-2026-09-30` (561 MiB). User data, models,
+standalone host and independent engine builds remain. Its prior installation does
+not validate the new Linux package.
 
 ## References
 
 - [Development and platform paths](../../DEVELOP.md)
 - [Host setup](../lan-host-setup.md)
-- [Remaining release acceptance](../open-work.md)
-- GInfer `docs/installer-refresh/README.md`, `packaging/windows/README.md` and
-  `tools/stage_linux_runtime.py`
+- [Open work](../open-work.md)
+- GInfer `docs/installer-refresh/README.md`, `tools/stage_linux_runtime.py`

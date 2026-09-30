@@ -97,7 +97,8 @@ on Windows, or `$XDG_CONFIG_HOME/ginfer/local-host.json` on Linux (default
 `~/.config/ginfer/local-host.json`). It points to the first registered host's
 existing state, engine and model storage; it contains no credentials and moves
 no data. A neighboring `local-host.lock` serializes first registration. Changing
-installations does not overwrite this owner or switch its engine automatically.
+installations does not overwrite an independently registered owner. Linux GChat
+updates refresh engine and host paths only for the same desktop data folder.
 Explicit host commands with `--data-dir` do not change the shared registration.
 
 Fresh standalone setup defaults to `%LOCALAPPDATA%\GInfer` for Windows binaries
@@ -137,3 +138,28 @@ If the key is lost the update chain is unrecoverable — regenerate with
 `yarn tauri signer generate -w ~/.tauri/gchat.key --ci` and replace the
 pubkey in `src-tauri/tauri.conf.json`. The update endpoint is
 `https://github.com/SectileLabs/gchat/releases/latest/download/latest.json`.
+
+### Complete Linux release
+
+Build with `scripts/linux-release.Dockerfile` (Ubuntu 24.04), an explicit Rust
+toolchain and Yarn 4.5.3. Mount the toolchain at `/opt/cargo` and `/opt/rustup`,
+and the Yarn distribution at `/opt/yarn`. Inside that environment run:
+
+```sh
+./scripts/build-linux-release.sh \
+  --runtime-set /path/to/ginfer-runtime-set \
+  --profile-catalog-directory /path/to/ginfer/config/launch-profiles
+```
+
+The runtime set must contain the four verified Ubuntu 24.04 images produced by
+GInfer's Linux release tooling. The script rejects incomplete or altered payloads,
+builds the CLI, host, extensions and desktop, then writes `.deb`, AppImage and
+SHA256 files under `out/linux`. Existing signing configuration applies to the
+release build. Bun, uv and sqlite-vec must be staged with the repository's normal
+binary download commands before assembly.
+
+Linux first launch installs engines into `<data>/ginfer/linux/{sm80,sm86,sm89,sm120a}`
+and the host into `<data>/ginfer/bin`. Model storage remains `<data>/ginfer/models`.
+The host selects the engine matching the selected GPU's compute capability.
+AppImage engine files are inserted after linuxdeploy so its ELF rewriting cannot
+invalidate their manifests or pull NVIDIA driver libraries into the package.

@@ -9,12 +9,16 @@ const SUPPORTED_OS = ['linux', 'windows']
 
 /**
  * Compute capabilities (SM) the bundled ginfer kernels target:
- *   8.6  — Ampere   (RTX 30 / A100)
+ *   8.0  — Ampere   (A100 / CMP 170HX; Linux)
+ *   8.6  — Ampere   (RTX 30)
  *   8.9  — Ada      (RTX 40)
  *   12.0 — Blackwell (RTX 50, "SM 120a")
  * `nvidia_info.compute_capability` is the NVML major.minor string (e.g. "8.6").
  */
-const SUPPORTED_COMPUTE_CAPABILITIES = ['8.6', '8.9', '12.0']
+const SUPPORTED_COMPUTE_CAPABILITIES = {
+  linux: ['8.0', '8.6', '8.9', '12.0'],
+  windows: ['8.6', '8.9', '12.0'],
+} as const
 
 export interface GinferHardwareCheck {
   ok: boolean
@@ -58,10 +62,13 @@ export function evaluateGinferHardware(info: SystemInfo): GinferHardwareCheck {
 
   // Only reject on a *known* unsupported SM. An unknown capability is not
   // proof of incompatibility (NVML can be unavailable on valid GPUs).
-  if (reported.length > 0 && !reported.some((cc) => SUPPORTED_COMPUTE_CAPABILITIES.includes(cc))) {
+  const supported = info.os_type === 'linux'
+    ? SUPPORTED_COMPUTE_CAPABILITIES.linux
+    : SUPPORTED_COMPUTE_CAPABILITIES.windows
+  if (reported.length > 0 && !reported.some((cc) => supported.some((target) => target === cc))) {
     return {
       ok: false,
-      reason: `Ginference targets NVIDIA compute capability ${SUPPORTED_COMPUTE_CAPABILITIES.join(', ')} (SM 86 / 89 / 120a); this GPU reports ${reported.join(', ')}.`,
+      reason: `Ginference targets NVIDIA compute capability ${supported.join(', ')}; this GPU reports ${reported.join(', ')}.`,
     }
   }
 

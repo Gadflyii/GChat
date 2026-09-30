@@ -1,7 +1,10 @@
 import type { HardwareData } from '@/hooks/useHardware'
 
 const SUPPORTED_OS = new Set(['linux', 'windows'])
-const SUPPORTED_COMPUTE_CAPABILITIES = new Set(['8.6', '8.9', '12.0'])
+const SUPPORTED_COMPUTE_CAPABILITIES = {
+  linux: new Set(['8.0', '8.6', '8.9', '12.0']),
+  windows: new Set(['8.6', '8.9', '12.0']),
+}
 
 export type CodeHardwareReadiness =
   | { supported: true }
@@ -35,13 +38,16 @@ export function evaluateCodeHardware(
   const reported = nvidia
     .map((gpu) => gpu.nvidia_info?.compute_capability)
     .filter((value): value is string => Boolean(value))
+  const supported = hardware.os_type.toLowerCase() === 'linux'
+    ? SUPPORTED_COMPUTE_CAPABILITIES.linux
+    : SUPPORTED_COMPUTE_CAPABILITIES.windows
   if (
     reported.length > 0 &&
-    !reported.some((value) => SUPPORTED_COMPUTE_CAPABILITIES.has(value))
+    !reported.some((value) => supported.has(value))
   ) {
     return {
       supported: false,
-      reason: `Code requires NVIDIA compute capability 8.6, 8.9, or 12.0; this system reports ${reported.join(', ')}.`,
+      reason: `Code requires NVIDIA compute capability ${Array.from(supported).join(', ')}; this system reports ${reported.join(', ')}.`,
     }
   }
 

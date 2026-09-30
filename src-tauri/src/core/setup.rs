@@ -29,6 +29,132 @@ const GINFER_RUNTIME_RESOURCE_DIR: &str = "resources/ginfer";
 const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
 const BUNDLED_EXTENSIONS_FINGERPRINT: &str = ".bundled-extensions.sha256";
 
+#[cfg(target_os = "linux")]
+const LINUX_RUNTIME_ARCHITECTURES: [(&str, &str, &str); 4] = [
+    ("8.0", "sm80", "sm_80"),
+    ("8.6", "sm86", "sm_86"),
+    ("8.9", "sm89", "sm_89"),
+    ("12.0", "sm120a", "sm_120a"),
+];
+
+#[cfg(target_os = "linux")]
+fn linux_runtime_set(root: &Path) -> std::io::Result<std::collections::BTreeMap<String, PathBuf>> {
+    use std::io::{Error, ErrorKind};
+    let invalid = |message: String| Error::new(ErrorKind::InvalidData, message);
+    let set: serde_json::Value = serde_json::from_slice(&fs::read(root.join("runtime-set.json"))?)
+        .map_err(|e| invalid(format!("invalid runtime set JSON: {e}")))?;
+    if set["schema"] != "ginfer-linux-runtime-set-v1" || set["platform"] != "linux-x64" {
+        return Err(invalid("invalid Linux GInfer runtime set".into()));
+    }
+    let revision = set["source_commit"].as_str().filter(|s| !s.is_empty())
+        .ok_or_else(|| invalid("runtime set has no source commit".into()))?;
+    let declared = set["runtimes"].as_object().ok_or_else(|| invalid("runtime map is missing".into()))?;
+    if declared.len() != LINUX_RUNTIME_ARCHITECTURES.len() {
+        return Err(invalid("runtime set must contain exactly four architectures".into()));
+    }
+    let mut runtimes = std::collections::BTreeMap::new();
+    for (capability, directory, cuda_architecture) in LINUX_RUNTIME_ARCHITECTURES {
+        if declared.get(capability).and_then(|v| v.as_str()) != Some(directory) {
+            return Err(invalid(format!("runtime set has an invalid {capability} assignment")));
+        }
+        let image = root.join(directory);
+        let manifest: serde_json::Value = serde_json::from_slice(&fs::read(image.join("runtime-manifest.json"))?)
+            .map_err(|e| invalid(format!("invalid {directory} runtime JSON: {e}")))?;
+        if manifest["schema"] != "ginfer-linux-runtime-v1"
+            || manifest["source_commit"] != revision
+            || manifest["cuda_architecture"] != cuda_architecture
+            || manifest["source_dirty"] != false
+        {
+            return Err(invalid(format!("invalid {directory} runtime manifest")));
+        }
+        let files = manifest["files"].as_array().ok_or_else(|| invalid(format!("{directory} has no file inventory")))?;
+        let mut seen = std::collections::HashSet::new();
+        for entry in files {
+            let relative = entry["path"].as_str().ok_or_else(|| invalid("runtime file path is missing".into()))?;
+            let path = Path::new(relative);
+            if !path.components().all(|part| matches!(part, std::path::Component::Normal(_)))
+                || !seen.insert(relative) {
+                return Err(invalid(format!("invalid or duplicate runtime file path: {relative}")));
+            }
+            let expected_size = entry["bytes"].as_u64().ok_or_else(|| invalid(format!("missing size for {relative}")))?;
+            let expected_hash = entry["sha256"].as_str().ok_or_else(|| invalid(format!("missing hash for {relative}")))?;
+            let mut file = File::open(image.join(path))?;
+            if file.metadata()?.len() != expected_size {
+                return Err(invalid(format!("runtime file size mismatch: {relative}")));
+            }
+            let mut digest = Sha256::new();
+            let mut buffer = [0u8; 65536];
+            loop {
+                let count = file.read(&mut buffer)?;
+                if count == 0 { break; }
+                digest.update(&buffer[..count]);
+            }
+            if format!("{:x}", digest.finalize()) != expected_hash {
+                return Err(invalid(format!("runtime file hash mismatch: {relative}")));
+            }
+        }
+        if !seen.contains("bin/ginfer-serve") {
+            return Err(invalid(format!("{directory} has no ginfer-serve")));
+        }
+        let server = image.join("bin/ginfer-serve");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if fs::metadata(&server)?.permissions().mode() & 0o111 == 0 {
+                return Err(invalid(format!("{directory} ginfer-serve is not executable")));
+            }
+        }
+        runtimes.insert(capability.into(), server);
+    }
+    Ok(runtimes)
+}
+
+#[cfg(target_os = "linux")]
+fn install_linux_runtimes_from(source: &Path, data_folder: &Path) -> std::io::Result<bool> {
+    linux_runtime_set(source)?;
+    let provider = data_folder.join("ginfer");
+    let destination = provider.join("linux");
+    if fs::read(source.join("runtime-set.json")).ok()
+        == fs::read(destination.join("runtime-set.json")).ok()
+        && linux_runtime_set(&destination).is_ok() {
+        return Ok(false);
+    }
+    fs::create_dir_all(&provider)?;
+    let staging = provider.join(".linux-installing");
+    let previous = provider.join(".linux-previous");
+    remove_directory_if_present(&staging)?;
+    remove_directory_if_present(&previous)?;
+    copy_directory(source, &staging)?;
+    linux_runtime_set(&staging)?;
+    let had_previous = destination.exists();
+    if had_previous { fs::rename(&destination, &previous)?; }
+    if let Err(error) = fs::rename(&staging, &destination) {
+        if had_previous { let _ = fs::rename(&previous, &destination); }
+        return Err(error);
+    }
+    remove_directory_if_present(&previous)?;
+    Ok(true)
+}
+
+#[cfg(target_os = "linux")]
+pub fn install_bundled_ginfer_linux<R: Runtime>(app: tauri::AppHandle<R>) -> Result<bool, Box<dyn std::error::Error>> {
+    let source = app.path().resource_dir()?.join("resources/ginfer/linux");
+    let data_folder = get_jan_data_folder_path(app.clone());
+    let changed = install_linux_runtimes_from(&source, &data_folder)?;
+    let host_source = app.path().resource_dir()?.join("resources/bin/ginfer-host");
+    let host_directory = data_folder.join("ginfer/bin");
+    fs::create_dir_all(&host_directory)?;
+    let host = host_directory.join("ginfer-host");
+    if fs::read(&host).ok() != Some(fs::read(&host_source)?) {
+        let temporary = host_directory.join(".ginfer-host-installing");
+        fs::copy(host_source, &temporary)?;
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&temporary, fs::Permissions::from_mode(0o755))?;
+        fs::rename(temporary, host)?;
+    }
+    Ok(changed)
+}
+
 fn bundled_extensions_fingerprint(pre_install_path: &Path) -> Result<String, String> {
     let mut packages = fs::read_dir(pre_install_path)
         .map_err(|error| error.to_string())?
@@ -53,7 +179,7 @@ fn bundled_extensions_fingerprint(pre_install_path: &Path) -> Result<String, Str
     Ok(format!("{:x}", digest.finalize()))
 }
 
-#[cfg(any(target_os = "windows", test))]
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
 fn remove_directory_if_present(path: &Path) -> std::io::Result<()> {
     match fs::remove_dir_all(path) {
         Ok(()) => Ok(()),
@@ -62,7 +188,7 @@ fn remove_directory_if_present(path: &Path) -> std::io::Result<()> {
     }
 }
 
-#[cfg(any(target_os = "windows", test))]
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
 fn copy_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
     fs::create_dir_all(destination)?;
     for entry in fs::read_dir(source)? {
@@ -909,5 +1035,52 @@ mod tests {
             initial,
             bundled_extensions_fingerprint(root.path()).unwrap()
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_runtime_install_keeps_all_architectures_and_models_across_upgrade() {
+        let root = tempdir().unwrap();
+        let source = root.path().join("bundle");
+        let data = root.path().join("data");
+        let model = data.join("ginfer/models/model.ginfer");
+        fs::create_dir_all(model.parent().unwrap()).unwrap();
+        fs::write(&model, "model").unwrap();
+        let create_bundle = |version: &str| {
+            fs::create_dir_all(&source).unwrap();
+            fs::write(source.join("runtime-set.json"), serde_json::to_vec(&serde_json::json!({
+                "schema":"ginfer-linux-runtime-set-v1", "platform":"linux-x64",
+                "source_commit":version,
+                "runtimes":{"8.0":"sm80","8.6":"sm86","8.9":"sm89","12.0":"sm120a"}
+            })).unwrap()).unwrap();
+            for (_, directory, architecture) in LINUX_RUNTIME_ARCHITECTURES {
+                let image = source.join(directory);
+                fs::create_dir_all(image.join("bin")).unwrap();
+                let server = image.join("bin/ginfer-serve");
+                let bytes = format!("{directory}-{version}");
+                fs::write(&server, &bytes).unwrap();
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&server, fs::Permissions::from_mode(0o755)).unwrap();
+                fs::write(image.join("runtime-manifest.json"), serde_json::to_vec(&serde_json::json!({
+                    "schema":"ginfer-linux-runtime-v1", "source_commit":version,
+                    "source_dirty":false, "cuda_architecture":architecture,
+                    "files":[{"path":"bin/ginfer-serve","bytes":bytes.len(),
+                        "sha256":format!("{:x}", Sha256::digest(bytes.as_bytes()))}]
+                })).unwrap()).unwrap();
+            }
+        };
+        create_bundle("version-one");
+        assert!(install_linux_runtimes_from(&source, &data).unwrap());
+        assert!(!install_linux_runtimes_from(&source, &data).unwrap());
+        create_bundle("version-two");
+        fs::write(source.join("sm86/bin/ginfer-serve"), "corrupt").unwrap();
+        assert!(install_linux_runtimes_from(&source, &data).is_err());
+        assert_eq!(fs::read_to_string(data.join("ginfer/linux/sm86/bin/ginfer-serve")).unwrap(), "sm86-version-one");
+        create_bundle("version-two");
+        assert!(install_linux_runtimes_from(&source, &data).unwrap());
+        for (_, directory, _) in LINUX_RUNTIME_ARCHITECTURES {
+            assert_eq!(fs::read_to_string(data.join("ginfer/linux").join(directory).join("bin/ginfer-serve")).unwrap(), format!("{directory}-version-two"));
+        }
+        assert_eq!(fs::read_to_string(model).unwrap(), "model");
     }
 }

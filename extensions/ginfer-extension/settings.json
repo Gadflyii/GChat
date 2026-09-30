@@ -9,7 +9,7 @@
   {
     "key": "binary_path",
     "title": "ginfer-serve Binary",
-    "description": "Path to the ginfer-serve executable. Leave empty to use the default location (<data>/ginfer/bin/ginfer-serve).",
+    "description": "Path to the ginfer-serve executable. Leave empty to use the bundled runtime (Linux: <data>/ginfer/linux/sm120a/bin/ginfer-serve; Windows: <data>/ginfer/bin/ginfer-serve.exe). The host selects the matching GPU image on Linux.",
     "controllerType": "input",
     "controllerProps": { "value": "", "placeholder": "e.g /path/to/ginfer-serve" }
   },

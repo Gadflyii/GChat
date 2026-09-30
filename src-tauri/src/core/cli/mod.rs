@@ -4,9 +4,8 @@
 //!
 //! The CLI targets the app's single inference provider: `ginfer`. Models are
 //! stored in `<data>/ginfer/models/<model_id>/` as a `.ginfer` artifact plus a
-//! `model.yml`, and the backend binary lives at `<data>/ginfer/bin/`. Models
-//! the user downloads in the app therefore show up here without any extra
-//! wiring.
+//! `model.yml`. Engines live under `<data>/ginfer/linux/<architecture>/bin` on
+//! Linux and `<data>/ginfer/bin` on Windows. App downloads are available here.
 
 pub mod integrations;
 
@@ -163,7 +162,8 @@ pub fn resolve_model_by_id_in(data_folder: &Path, model_id: &str) -> Result<Path
 /// Find the ginfer-serve binary inside the GChat data folder.
 ///
 /// The ginfer extension downloads it to
-/// `<data_folder>/ginfer/bin/ginfer-serve[.exe]`.
+/// Linux: `<data_folder>/ginfer/linux/sm120a/bin/ginfer-serve`.
+/// Windows: `<data_folder>/ginfer/bin/ginfer-serve.exe`.
 pub fn discover_ginfer_binary() -> Option<PathBuf> {
     discover_ginfer_binary_in(&resolve_jan_data_folder())
 }
@@ -175,6 +175,9 @@ pub fn discover_ginfer_binary_in(data_folder: &Path) -> Option<PathBuf> {
     } else {
         "ginfer-serve"
     };
+    #[cfg(target_os = "linux")]
+    let candidate = data_folder.join(LOCAL_PROVIDER).join("linux/sm120a/bin").join(exe);
+    #[cfg(not(target_os = "linux"))]
     let candidate = data_folder.join(LOCAL_PROVIDER).join("bin").join(exe);
     candidate.is_file().then_some(candidate)
 }
@@ -477,12 +480,15 @@ mod tests {
         } else {
             "ginfer-serve"
         };
+        #[cfg(target_os = "linux")]
+        let bin_dir = data.join(LOCAL_PROVIDER).join("linux/sm120a/bin");
+        #[cfg(not(target_os = "linux"))]
         let bin_dir = data.join(LOCAL_PROVIDER).join("bin");
         std::fs::create_dir_all(&bin_dir).unwrap();
         std::fs::write(bin_dir.join(exe), b"stub").unwrap();
 
         let found = discover_ginfer_binary_in(&data).expect("binary discovered");
-        assert_eq!(found, data.join(LOCAL_PROVIDER).join("bin").join(exe));
+        assert_eq!(found, bin_dir.join(exe));
 
         let _ = std::fs::remove_dir_all(&data);
     }

@@ -36,7 +36,7 @@
     "build:gchat-cli:debug": "cd src-tauri && cargo build --features cli --bin gchat-cli",
     "build:tauri:darwin:debug": "yarn download:bin && yarn build:gchat-cli:debug && yarn build:web && yarn build:icon && yarn copy:assets:tauri && yarn tauri build --debug",
     "build:tauri:win32": "yarn download:bin && yarn build:cli && yarn tauri build",
-    "build:tauri:linux": "yarn download:bin && yarn build:cli && NO_STRIP=1 ./src-tauri/build-utils/shim-linuxdeploy.sh yarn tauri build && ./src-tauri/build-utils/buildAppImage.sh",
+    "build:tauri:linux": "./scripts/build-linux-release.sh",
     "build:tauri:darwin": "yarn download:bin && yarn build:cli && yarn tauri build --target universal-apple-darwin",
     "build:tauri:darwin:native": "yarn download:bin && cd src-tauri && cargo build --release --features cli --bin gchat-cli && cp target/release/gchat-cli resources/bin/gchat-cli && chmod +x resources/bin/gchat-cli && cd .. && yarn tauri build",
     "build:tauri": "yarn build:icon && yarn copy:assets:tauri && run-script-os",

@@ -5,7 +5,9 @@ export async function defaultBinaryPath(
   dataFolderPath: string
 ): Promise<string> {
   const exe = IS_WINDOWS ? 'ginfer-serve.exe' : 'ginfer-serve'
-  return joinPath([dataFolderPath, 'ginfer', 'bin', exe])
+  return joinPath(IS_LINUX
+    ? [dataFolderPath, 'ginfer', 'linux', 'sm120a', 'bin', exe]
+    : [dataFolderPath, 'ginfer', 'bin', exe])
 }
 
 export async function resolveBinaryPath(

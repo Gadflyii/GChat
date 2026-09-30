@@ -21,7 +21,13 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "windowEffects": {
-          "effects": ["fullScreenUI", "mica", "tabbed", "blur", "acrylic"],
+          "effects": [
+            "fullScreenUI",
+            "mica",
+            "tabbed",
+            "blur",
+            "acrylic"
+          ],
           "state": "active"
         },
         "dragDropEnabled": true
@@ -29,7 +35,10 @@
     ]
   },
   "bundle": {
-    "targets": ["appimage"],
+    "targets": [
+      "deb",
+      "appimage"
+    ],
     "resources": [
       "resources/pre-install/**/*",
       "resources/LICENSE",
@@ -37,13 +46,36 @@
       "resources/bin/gchat-cli",
       "resources/bin/ginfer-host",
       "resources/bin/launch-profiles.json",
-      "resources/bin/sqlite-vec.so"
+      "resources/bin/sqlite-vec.so",
+      "resources/bin/bun",
+      "resources/bin/uv",
+      "resources/ginfer/linux/**/*"
     ],
-    "externalBin": ["resources/bin/uv"],
+    "externalBin": [],
     "linux": {
       "appimage": {
         "bundleMediaFramework": false,
         "files": {}
+      },
+      "deb": {
+        "depends": [
+          "libc6 (>= 2.39)",
+          "libstdc++6",
+          "libgcc-s1",
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0t64",
+          "libayatana-appindicator3-1",
+          "librsvg2-2",
+          "libxdo3",
+          "libssl3t64",
+          "libcurl4t64",
+          "ca-certificates",
+          "libdav1d7",
+          "zlib1g"
+        ],
+        "recommends": [
+          "gnome-keyring"
+        ]
       }
     }
   }

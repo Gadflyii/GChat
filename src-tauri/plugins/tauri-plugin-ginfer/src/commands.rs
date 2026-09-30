@@ -113,7 +113,7 @@ pub async fn load_ginfer_model<R: Runtime>(
     timeout: u64,
 ) -> Result<SessionInfo, String> {
     let state: State<GinferState> = app_handle.state();
-    let host_binary = app_handle
+    let bundled_host = app_handle
         .path()
         .resource_dir()
         .map_err(|e| e.to_string())?
@@ -123,6 +123,13 @@ pub async fn load_ginfer_model<R: Runtime>(
         } else {
             "ginfer-host"
         });
+    #[cfg(target_os = "linux")]
+    let host_binary = Path::new(&host_directory).parent().ok_or("GChat host has no provider directory")?
+        .join("bin/ginfer-host");
+    #[cfg(not(target_os = "linux"))]
+    let host_binary = bundled_host;
+    #[cfg(target_os = "linux")]
+    let _ = bundled_host;
     crate::managed::load(
         state.ginfer_process.clone(),
         host_binary,

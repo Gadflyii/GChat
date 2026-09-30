@@ -10,7 +10,6 @@ use rmcp::{
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    env,
     process::Stdio,
     sync::Arc,
     time::Duration,
@@ -406,11 +405,14 @@ async fn schedule_mcp_start_task<R: Runtime>(
     start_generation: u64,
 ) -> Result<(), String> {
     let app_path = get_jan_data_folder_path(app.clone());
-    let exe_path = env::current_exe().expect("Failed to get current exe path");
-    let exe_parent_path = exe_path
+    #[cfg(target_os = "linux")]
+    let bin_path = app.path().resource_dir().map_err(|error| error.to_string())?.join("resources/bin");
+    #[cfg(not(target_os = "linux"))]
+    let bin_path = std::env::current_exe()
+        .map_err(|error| error.to_string())?
         .parent()
-        .expect("Executable must have a parent directory");
-    let bin_path = exe_parent_path.to_path_buf();
+        .ok_or("Executable must have a parent directory")?
+        .to_path_buf();
 
     let config_params = extract_command_args(&config)
         .ok_or_else(|| format!("Failed to extract command args from config for {name}"))?;

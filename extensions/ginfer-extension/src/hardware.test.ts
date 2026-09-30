@@ -25,9 +25,15 @@ const evaluate = (os_type: string, gpus: SystemInfo['gpus']) =>
 
 describe('evaluateGinferHardware', () => {
   it('accepts a supported OS with an NVIDIA GPU of a target SM', () => {
+    expect(evaluate('linux', [nvidiaGpu('8.0')])).toEqual({ ok: true })
     expect(evaluate('linux', [nvidiaGpu('8.6')])).toEqual({ ok: true })
     expect(evaluate('windows', [nvidiaGpu('8.9')])).toEqual({ ok: true })
     expect(evaluate('linux', [nvidiaGpu('12.0')])).toEqual({ ok: true })
+  })
+
+  it('keeps SM80 Linux-only while accepting mixed Linux GPU inventories', () => {
+    expect(evaluate('windows', [nvidiaGpu('8.0')]).ok).toBe(false)
+    expect(evaluate('linux', [nvidiaGpu('8.0'), nvidiaGpu('8.6')])).toEqual({ ok: true })
   })
 
   it('accepts an NVIDIA GPU whose compute capability is not readable', () => {

@@ -479,6 +479,15 @@ pub fn run() {
                 }
             }
 
+            #[cfg(target_os = "linux")]
+            {
+                if setup::install_bundled_ginfer_linux(app.handle().clone())? {
+                    log::info!("Installed the bundled GInfer Linux runtimes");
+                } else {
+                    log::info!("Bundled GInfer Linux runtimes are already current");
+                }
+            }
+
             #[cfg(target_os = "windows")]
             {
                 if let Err(e) =

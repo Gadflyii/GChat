@@ -34,6 +34,14 @@ describe('evaluateCodeHardware', () => {
     expect(evaluateCodeHardware(hardware())).toEqual({ supported: true })
   })
 
+  it('accepts SM80 on Linux and preserves Windows eligibility', () => {
+    const sm80 = hardware().gpus[0]
+    sm80.nvidia_info = { index: 0, compute_capability: '8.0' }
+    expect(evaluateCodeHardware(hardware({ gpus: [sm80] }))).toEqual({ supported: true })
+    expect(evaluateCodeHardware(hardware({ os_type: 'windows', gpus: [sm80] })).supported).toBe(false)
+    expect(evaluateCodeHardware(hardware({ gpus: [sm80, hardware().gpus[0]] }))).toEqual({ supported: true })
+  })
+
   it('rejects unsupported operating systems and GPUs', () => {
     expect(evaluateCodeHardware(hardware({ os_type: 'macos' })).supported).toBe(false)
     expect(evaluateCodeHardware(hardware({ gpus: [] })).supported).toBe(false)

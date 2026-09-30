@@ -730,10 +730,14 @@ pub async fn check_jan_cli_installed() -> CliInstallStatus {
 fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::path::Path) -> Result<(), String> {
     use std::io::Write;
     let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
+    #[cfg(target_os = "linux")]
+    let engine = provider.join("linux/sm120a/bin").join(executable);
+    #[cfg(not(target_os = "linux"))]
+    let engine = provider.join("bin").join(executable);
     let configuration = serde_json::json!({
         "data_dir": provider.join("host"),
         "host_url": "https://127.0.0.1:7443",
-        "desktop": { "provider": provider, "engine": provider.join("bin").join(executable) },
+        "desktop": { "provider": provider, "engine": engine },
     });
     let temporary = directory.join(format!(".ginfer-launch-{}", uuid::Uuid::new_v4()));
     let result = (|| -> Result<(), String> {
@@ -4804,7 +4808,11 @@ mod tests {
         let desktop = config.desktop.unwrap();
         assert_eq!(desktop.provider, replacement);
         let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
-        assert_eq!(desktop.engine, replacement.join("bin").join(executable));
+        #[cfg(target_os = "linux")]
+        let expected = replacement.join("linux/sm120a/bin").join(executable);
+        #[cfg(not(target_os = "linux"))]
+        let expected = replacement.join("bin").join(executable);
+        assert_eq!(desktop.engine, expected);
     }
 
     /// A file in a throwaway directory that is removed when the guard drops,

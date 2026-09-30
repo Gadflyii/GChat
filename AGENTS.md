@@ -22,8 +22,8 @@ facade: `ginfer`.
 
 [ginfer]: https://github.com/SectileLabs/ginfer
 
-Targets: Linux x86_64 (AppImage) with an NVIDIA GPU (CUDA 13.1, SM 86/89/120a).
-Windows x86_64 is also a release target; see README.md for current release status.
+Targets: Linux x86_64 (DEB/AppImage) with an NVIDIA GPU (CUDA 13.1, SM 80/86/89/120a).
+Windows x86_64 supports SM 86/89/120a; see README.md for current release status.
 Other platforms are unsupported.
 
 **Product name is GChat.** Clean-slate fork of Atomic Chat (itself a hard fork
@@ -71,7 +71,7 @@ Hugging Face organization.
 - Model identity comes from the `.ginfer` artifact itself (closed registered
   set); unsupported identities fail at server start. Downloadable catalog
   entries must track published artifacts 1:1.
-- Hardware gate: **Linux x86_64 + NVIDIA, CUDA 13.1 driver, SM 86/89/120a.**
+- Hardware gate: **Linux x86_64 + NVIDIA, CUDA 13.1 driver, SM 80/86/89/120a; Windows x86_64 + NVIDIA, SM 86/89/120a.**
   The gate must surface a clear "unsupported" state everywhere the UI assumes
   a local engine — never let an unsupported host fall through to loading.
   Windows x86_64 uses the same GInfer-only product contract.

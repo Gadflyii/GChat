@@ -73,7 +73,12 @@ fn read(path: &Path) -> Result<Option<Owner>, String> {
 }
 
 fn select(path: &Path, seed: Option<Owner>) -> Result<Owner, String> {
+    #[cfg(not(target_os = "linux"))]
     if let Some(owner) = read(path)? { return Ok(owner); }
+    #[cfg(target_os = "linux")]
+    if !matches!(&seed, Some(Owner::Desktop(_))) {
+        if let Some(owner) = read(path)? { return Ok(owner); }
+    }
     let seed = seed.ok_or("No local host is registered; install GInfer or enable the local engine in GChat first")?;
     seed.validate()?;
     let parent = path.parent().ok_or("local host locator has no parent")?;
@@ -88,7 +93,27 @@ fn select(path: &Path, seed: Option<Owner>) -> Result<Owner, String> {
     { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
     let lock = options.open(parent.join("local-host.lock")).map_err(|error| error.to_string())?;
     lock.lock().map_err(|error| error.to_string())?;
-    if let Some(owner) = read(path)? { return Ok(owner); }
+    if let Some(owner) = read(path)? {
+        #[cfg(target_os = "linux")]
+        if let (Owner::Desktop(current), Owner::Desktop(updated)) = (&owner, &seed) {
+            if current.desktop_provider == updated.desktop_provider && current.directory == updated.directory {
+                let mut merged = current.clone();
+                merged.binary = updated.binary.clone();
+                merged.engine = updated.engine.clone();
+                merged.engine_runtimes = updated.engine_runtimes.clone();
+                if merged.binary != current.binary || merged.engine != current.engine
+                    || merged.engine_runtimes != current.engine_runtimes {
+                    let refreshed = Owner::Desktop(merged);
+                    let bytes = serde_json::to_vec_pretty(&Locator {
+                        schema: "ginfer-local-host-v1".into(), owner: refreshed.clone(),
+                    }).map_err(|error| error.to_string())?;
+                    crate::service::write_private(path, &bytes)?;
+                    return Ok(refreshed);
+                }
+            }
+        }
+        return Ok(owner);
+    }
     let bytes = serde_json::to_vec_pretty(&Locator {
         schema: "ginfer-local-host-v1".into(), owner: seed.clone(),
     }).map_err(|error| error.to_string())?;
@@ -109,6 +134,34 @@ pub async fn registered() -> Result<Option<Owner>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn refreshes_only_the_same_desktop_owner() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config/local-host.json");
+        let provider = root.path().join("provider");
+        let executable = root.path().join("ginfer-serve");
+        std::fs::write(&executable, "engine").unwrap();
+        let host = root.path().join("ginfer-host");
+        std::fs::write(&host, "host").unwrap();
+        let mut local = LocalHost {
+            binary: host.clone(), engine: executable.clone(), engine_runtimes: Default::default(),
+            directory: provider.join("host"), desktop_provider: Some(provider.clone()),
+            models: vec![], artifact_sets: vec![], name: "computer".into(),
+            nvidia_smi: "nvidia-smi".into(), listen: "127.0.0.1:7443".parse().unwrap(),
+        };
+        select(&path, Some(Owner::Desktop(local.clone()))).unwrap();
+        local.engine_runtimes.insert("8.6".into(), executable.clone());
+        let refreshed = select(&path, Some(Owner::Desktop(local.clone()))).unwrap();
+        assert_eq!(serde_json::to_value(refreshed).unwrap()["engine_runtimes"]["8.6"], executable.to_string_lossy().as_ref());
+        let other = root.path().join("other");
+        local.desktop_provider = Some(other.clone());
+        local.directory = other.join("host");
+        select(&path, Some(Owner::Desktop(local))).unwrap();
+        let retained = select(&path, None).unwrap();
+        assert_eq!(serde_json::to_value(retained).unwrap()["directory"], provider.join("host").to_string_lossy().as_ref());
+    }
 
     #[test]
     fn concurrent_clients_keep_first_owner_and_storage() {

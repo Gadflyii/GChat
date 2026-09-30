@@ -270,14 +270,19 @@ The first Sectile distribution is being prepared as a matched set:
 | Channel | Release deliverable |
 | --- | --- |
 | **Windows** | Native Windows 10/11 x64 installer with GChat, GInfer, local server, CLI, and model manager |
-| **Linux** | Native x86-64 AppImage with the same managed engine and application surfaces |
+| **Linux** | Ubuntu 24.04+ x86-64 `.deb` and AppImage, with bundled SM80/86/89/120a engines |
 | **GInfer packages** | Architecture-specific engine builds matched to the supported NVIDIA SM families |
 | **Model packages** | Version-3 `.ginfer` artifacts distributed separately from the application |
 
 The native Windows GInfer runtime and its packaged lifecycle now build together locally. Public
-Windows release links remain gated on signing and the complete release matrix. A Linux 2.0.42
-AppImage built against Ubuntu 24.04 has been installed and visually checked on Server 2 under X11.
+Windows release links remain gated on signing and the complete release matrix. The complete
+Linux installer is tracked in [installer acceptance](docs/installer-refresh/README.md).
 These local packages are not published release assets.
+
+Linux installation requires a compatible NVIDIA driver; no separate CUDA toolkit or engine
+installation is needed. Install the `.deb` with `sudo apt install ./GChat_2.0.42_amd64.deb`,
+then open GChat from the desktop menu. Alternatively, make the AppImage executable and open it.
+Model weights are downloaded separately inside GChat.
 
 ## Data and security
 

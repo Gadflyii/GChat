@@ -107,7 +107,12 @@ pub async fn load(
         LocalHost {
             binary: host_binary,
             engine: engine.clone(),
-            engine_runtimes: Default::default(),
+            engine_runtimes: {
+                #[cfg(target_os = "linux")]
+                { ginfer_host::local_host::desktop_runtimes(directory.parent().ok_or("GChat host has no provider directory")?)? }
+                #[cfg(not(target_os = "linux"))]
+                { Default::default() }
+            },
             desktop_provider: directory.parent().map(std::path::Path::to_path_buf),
             directory,
             models: vec![],

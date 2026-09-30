@@ -239,6 +239,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     args: Value,
 ) -> Result<Value, String> {
     if action.starts_with("local_model_") {
+        #[cfg(not(target_os = "linux"))]
         use tauri::Manager;
         let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
         if action == "local_model_adopt" {
@@ -247,12 +248,24 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             return serde_json::to_value(report).map_err(|e| e.to_string());
         }
         let provider = root.join("ginfer");
+        #[cfg(target_os = "linux")]
+        let engine_runtimes = ginfer_host::local_host::desktop_runtimes(&provider)?;
+        #[cfg(not(target_os = "linux"))]
+        let engine_runtimes = Default::default();
+        #[cfg(target_os = "linux")]
+        let binary = provider.join("bin/ginfer-host");
+        #[cfg(not(target_os = "linux"))]
+        let binary = app.path().resource_dir().map_err(|e| e.to_string())?.join("resources/bin")
+            .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" });
+        #[cfg(target_os = "linux")]
+        let engine = provider.join("linux/sm120a/bin/ginfer-serve");
+        #[cfg(not(target_os = "linux"))]
+        let engine = provider.join("bin").join(if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" });
         let control = ginfer_host::local_host::LocalHost {
-            binary: app.path().resource_dir().map_err(|e| e.to_string())?.join("resources/bin")
-                .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" }),
-            engine: provider.join("bin").join(if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" }),
+            binary,
+            engine,
             directory: provider.join("host"), desktop_provider: Some(provider),
-            engine_runtimes: Default::default(),
+            engine_runtimes,
             models: vec![], artifact_sets: vec![], name:ginfer_host::local_host::computer_name()?,
             nvidia_smi:"nvidia-smi".into(), listen:"127.0.0.1:7443".parse().unwrap(),
         }.ensure_shared_running().await?;

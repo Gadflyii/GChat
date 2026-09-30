@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Bundle Linux GInfer runtimes by GPU architecture](2026-09-30-bundle-linux-ginfer-runtimes-by-gpu-architecture.md)
+
 - [Count and compact GInfer chat requests without reloading profiles](2026-09-24-count-and-compact-ginfer-chat-requests.md)
 
 - [Separate Chat view selection from Agent execution](2026-09-23-separate-chat-view-from-agent-execution.md)
