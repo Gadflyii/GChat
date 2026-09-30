@@ -1,6 +1,6 @@
 # Open work
 
-Updated 2026-09-24. This is the active GChat release-acceptance list. Completed
+Updated 2026-09-30. This is the active GChat release-acceptance list. Completed
 implementation and historical measurements are not pending tasks.
 
 - **Installed Windows acceptance:** exercise the selected release in its actual
@@ -20,9 +20,12 @@ implementation and historical measurements are not pending tasks.
 - **Release assembly:** confirm the selected engine runtime and accepted catalogs
   in final platform bundles, then validate the installed result. Local Windows
   2.0.42 installers exist; their presence does not qualify subsequent source edits.
-  The Linux 2.0.42 AppImage now builds against Ubuntu 24.04 and has been installed
-  and visually checked on Server 2 under X11. This establishes desktop startup,
-  not a new engine/model qualification matrix.
+  Windows 2.0.42 was rebuilt and installed on September 30 with clean engine
+  revision `74780ea1`; startup and active-runtime identity were checked.
+  The Linux 2.0.42 AppImage was rebuilt on September 30 against Ubuntu 24.04;
+  its bundled host and profile catalog were checked. Server 2 was uninstalled at
+  the user's request, preserving data and models. The prior X11 startup check
+  does not qualify this new build. See [installer refresh](installer-refresh/README.md).
   Per-SKU model and TP qualification requires exact artifacts and available hardware;
   see [profile evidence](model-profile-evidence.md). Do not relabel older measurements
   as qualification of a new engine.
