@@ -43,7 +43,8 @@ PY
 )
 yarn install --immutable
 yarn build:core
-(cd extensions && yarn install --immutable)
+# The extension project consumes the core tarball produced by this build.
+(cd extensions && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install)
 yarn build:extensions:linux
 yarn copy:assets:tauri
 yarn build:icon

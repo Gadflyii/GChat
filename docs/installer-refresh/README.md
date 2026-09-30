@@ -51,6 +51,9 @@ Rust subcrate suites also pass; packaged acceptance remains. The first assembly
 attempt exposed Ubuntu's Node 18 being too old for the existing bundler syntax.
 The build image now pins Node 22.22.1 (matching the verified development major)
 and includes npm for extension packaging; this changes only build tooling.
+Extension installation refreshes its existing local core-tarball lock entry after
+packing core; requiring that generated checksum to remain immutable blocked the
+container build. External root dependencies remain locked.
 The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
 owned by the GChat candidate and do not mutate the main checkout.
 
