@@ -59,6 +59,7 @@ make build-cli
 NO_STRIP=1 yarn tauri build --no-bundle
 mkdir -p out/linux
 cp src-tauri/target/release/gchat out/linux/gchat-unbundled
+trap 'cp out/linux/gchat-unbundled src-tauri/target/release/gchat' EXIT
 NO_STRIP=1 yarn tauri bundle --bundles deb
 cp out/linux/gchat-unbundled src-tauri/target/release/gchat
 

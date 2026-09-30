@@ -279,7 +279,7 @@ Windows release links remain gated on signing and the complete release matrix. T
 Linux installer is tracked in [installer acceptance](docs/installer-refresh/README.md).
 These local packages are not published release assets.
 
-Linux installation requires a compatible NVIDIA driver; no separate CUDA toolkit or engine
+Linux installation targets an Ubuntu 24.04+ desktop and requires a compatible NVIDIA driver; no separate CUDA toolkit or engine
 installation is needed. Install the `.deb` with `sudo apt install ./GChat_2.0.42_amd64.deb`,
 then open GChat from the desktop menu. Alternatively, make the AppImage executable and open it.
 Model weights are downloaded separately inside GChat.

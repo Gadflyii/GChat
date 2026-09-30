@@ -60,7 +60,9 @@ Bun and uv now join the engine payload in the post-linuxdeploy injection step.
 Tauri retains its intermediate `bundle/appimage_deb` directory after failure,
 which repopulated fresh AppDirs with excluded Bun files. Clearing AppDir alone
 did not fix this. Assembly now removes the owned `appimage_deb` staging directory
-before bundling, so excluded static binaries cannot be reintroduced. Build core dumps are disabled and disposable crash dumps removed.
+before bundling, so excluded static binaries cannot be reintroduced.
+The unpatched executable is restored on exit, including failed assembly, for
+repeatable subsequent builds. Build core dumps are disabled and disposable crash dumps removed.
 Each bundle starts from an unpatched desktop executable because Tauri modifies
 the binary with bundle-type metadata. This prevents cross-format metadata reuse.
 The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
