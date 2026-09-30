@@ -141,7 +141,7 @@ pubkey in `src-tauri/tauri.conf.json`. The update endpoint is
 
 ### Complete Linux release
 
-Build with `scripts/linux-release.Dockerfile` (Ubuntu 24.04), an explicit Rust
+Build with `scripts/linux-release.Dockerfile` (Ubuntu 24.04 and Node 22), an explicit Rust
 toolchain and Yarn 4.5.3. Mount the toolchain at `/opt/cargo` and `/opt/rustup`,
 and the Yarn distribution at `/opt/yarn`. Inside that environment run:
 

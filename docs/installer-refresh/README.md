@@ -47,7 +47,10 @@ installed curl/dav1d libraries. Runtime install/upgrade,
 model preservation, registry ownership and exact architecture routing tests pass.
 Frontend verification passed 2,029 tests and 15 extension tests; corrected old-path
 assertions pass with all 523 desktop Rust tests. Desktop Clippy passed. Remaining
-Rust subcrate suites and packaged acceptance are in progress.
+Rust subcrate suites also pass; packaged acceptance remains. The first assembly
+attempt exposed Ubuntu's Node 18 being too old for the existing bundler syntax.
+The build image now pins Node 22.22.1 (matching the verified development major)
+and includes npm for extension packaging; this changes only build tooling.
 The release build uses an owned Ubuntu 24.04 Docker image; dependency copies are
 owned by the GChat candidate and do not mutate the main checkout.
 

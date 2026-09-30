@@ -19,6 +19,7 @@ if [[ $ID != ubuntu || $VERSION_ID != 24.04 ]]; then
   echo 'Build Linux releases in Ubuntu 24.04 to preserve the deployment ABI.' >&2
   exit 1
 fi
+node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Linux release assembly requires Node.js 22 or newer"); process.exit(1); }'
 python=${PYTHON:-python3}
 "$python" scripts/stage-linux-runtime-set.py --source "$runtime_set" \
   --destination src-tauri/resources/ginfer/linux
