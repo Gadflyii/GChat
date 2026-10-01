@@ -1,5 +1,35 @@
 # GChat installer refresh
 
+## Windows update — October 1, 2026
+
+The user authorized building and installing the Windows update, including
+restarting GChat and its host. Deliver NSIS/MSI installers with the agent/chat
+fixes from `9540ac7e1` and correct the sidebar Stop server shortcut: Start loads
+the active model and starts the API, so Stop must stop the API and unload that
+active model. API-specific settings retain their independent control.
+
+Acceptance: reviewed source and full verification, successful native assembly
+with the accepted Windows engine `74780ea1415ac8d3bb440d58442ac4f81a5dfde3`,
+NSIS update exit 0, installed executable matching the new build, desktop/host
+startup, runtime integrity and preserved models/history/agent definitions.
+The user will replay the agent/chat incident. Step budgets and overall Agent
+Finished reporting are excluded from this installer update. Server 2 remains
+uninstalled. The sidebar stop action and four focused component regressions
+pass; it also offers Stop model when the API is already stopped. Independent
+review and full `make verify` passed: 2,042 frontend tests, 15 extension tests,
+critical coverage floors and supported Rust suites. The 103 selected Windows
+profiles exactly match the installed catalog. Next: launch native assembly.
+
+| Owner / host | Exact path | Purpose / retention |
+| --- | --- | --- |
+| GChat / workstation | `/ai/gchat`, `9540ac7e1` | Reviewed source baseline; September 30 installers retained until update acceptance |
+| Windows refresh | `/ai/gchat-worktrees/windows-refresh`, `fix/windows-refresh-20261001` | Owned implementation/docs candidate; retire after integration |
+| Windows refresh | Candidate `out/windows/acceptance-20261001/` | Native build/install evidence; retain concise results |
+| Windows build / Ron-9950X3D2 | `%LOCALAPPDATA%/GChat/windows-build/source` | Existing native mirror and compiler caches; verified idle before reuse |
+| Windows refresh | `%LOCALAPPDATA%/GChat/windows-build/acceptance-20261001/` | Prepared durable native runner and exit/log files; no build launched yet |
+| GInfer | `/ai/ginfer/out/windows/ginfer-windows-x64-sm120a.zip` | Accepted 120-member runtime, unchanged engine |
+| Windows baseline | `/ai/gchat/out/windows/GChat_2.0.42_x64-setup.exe`, `GChat_2.0.42_x64_en-US.msi` | Preserve until the candidate is installed and checked |
+
 ## Accepted Linux installers — September 30, 2026
 
 The complete Linux release is ready for an Ubuntu 24.04+ x86-64 desktop with a
@@ -103,7 +133,8 @@ compile/socket/provenance corrections were merged and pushed. See GInfer's
 `docs/installer-refresh/README.md` for that accepted build's evidence.
 
 Windows installers remain under `/ai/gchat/out/windows` and native copies under
-`%LOCALAPPDATA%/GChat/release-output`. No Windows rebuild/reinstall is requested.
+`%LOCALAPPDATA%/GChat/release-output`. The October 1 refresh above supersedes
+the September 30 Windows installer after acceptance.
 
 Server 2's GChat app, host and desktop registration were removed recoverably into
 `/home/ron/.local/state/gchat-uninstall-2026-09-30` (561 MiB). User data, models,

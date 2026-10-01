@@ -17,6 +17,10 @@ implementation and historical measurements are not pending tasks.
   and unnecessary access prompts for agents' own handoff files. Fixes and
   verification are tracked in [agent runtime](agent-runtime/README.md). The earlier
   context/format warnings did not recur; their cause remains unconfirmed.
+  Coordinator run status currently follows synthesis, so a Finished run can
+  contain workers that exhausted their budgets; loop-breaker fallback replies
+  also appear finished. Correct terminal reporting separately from the current
+  installer refresh. Raising step budgets alone does not address repeated work.
 - **Physical worker pools:** exercise queueing, cancellation, disconnection, and
   concurrent workers across real paired hosts. Baseline two-host discovery,
   pairing, inference/lifecycle, native Windows vault, and platform service checks

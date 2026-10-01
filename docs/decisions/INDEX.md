@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Pair sidebar server Stop with scoped model unload](2026-10-01-pair-sidebar-server-stop-with-model-unload.md)
+
 - [Own chat tool lifecycle per session](2026-10-01-own-chat-tool-lifecycle-per-session.md)
 
 - [Bundle Linux GInfer runtimes by GPU architecture](2026-09-30-bundle-linux-ginfer-runtimes-by-gpu-architecture.md)

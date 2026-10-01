@@ -30,11 +30,17 @@ import {
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 import { ensureModelForServer } from '@/utils/ensureModelForServer'
 import { restartLocalModel } from '@/utils/restartLocalModel'
+import { isLocalProvider } from '@/utils/registerRemoteProvider'
 
 export function ServerQuickActions() {
   const serviceHub = useServiceHub()
   const serverStatus = useAppState((state) => state.serverStatus)
   const activeModel = useAppState((state) => state.activeModels[0])
+  const activeProvider = useModelProvider((state) =>
+    state.providers.find((candidate) =>
+      candidate.models?.some((model) => model.id === activeModel)
+    )
+  )
   const [busy, setBusy] = useState(false)
 
   const start = async () => {
@@ -88,20 +94,81 @@ export function ServerQuickActions() {
   }
 
   const stop = async () => {
+    const apiWasRunning = serverStatus === 'running'
     setBusy(true)
     useAppState.getState().setServerStatus('pending')
-    try {
-      await window.core?.api?.stopServer()
-      useAppState.getState().setServerStatus('stopped')
-      toast.success('Local API Server stopped')
-    } catch (error) {
-      useAppState.getState().setServerStatus('running')
-      toast.error('Could not stop Local API Server', {
-        description: String(error),
-      })
-    } finally {
-      setBusy(false)
+    if (apiWasRunning) {
+      try {
+        const stopServer = window.core?.api?.stopServer()
+        if (!stopServer) throw new Error('The native server controller is unavailable.')
+        await stopServer
+      } catch (error) {
+        useAppState.getState().setServerStatus('running')
+        toast.error('Could not stop Local API Server', {
+          description: String(error),
+        })
+        setBusy(false)
+        return
+      }
     }
+    useAppState.getState().setServerStatus('stopped')
+
+    let unloadError: unknown
+    let unloadedModel = false
+    if (activeModel) {
+      const provider = useModelProvider
+        .getState()
+        .providers.find((candidate) =>
+          candidate.models?.some((model) => model.id === activeModel)
+        )
+      if (!provider) {
+        unloadError = new Error(`Could not find the provider for '${activeModel}'.`)
+      } else if (isLocalProvider(provider.provider)) {
+        try {
+          const result = await serviceHub.models().stopModel(
+            activeModel,
+            provider.provider
+          )
+          if (!result?.success) {
+            throw new Error(
+              result?.error || `Could not confirm that '${activeModel}' unloaded.`
+            )
+          }
+          unloadedModel = true
+        } catch (error) {
+          unloadError = error
+        }
+      }
+    }
+
+    let refreshError: unknown
+    try {
+      const models = await serviceHub.models().getActiveModels()
+      syncActiveModelsFromEngines(models ?? [])
+    } catch (error) {
+      refreshError = error
+    }
+
+    if (unloadError) {
+      toast.error(apiWasRunning
+        ? 'Local API Server stopped, but the model could not be unloaded'
+        : 'Could not unload model', {
+        description: refreshError
+          ? `${String(unloadError)} Loaded models could not be refreshed: ${String(refreshError)}`
+          : String(unloadError),
+      })
+    } else if (refreshError) {
+      toast.error(apiWasRunning
+        ? 'Local API Server stopped, but loaded models could not be refreshed'
+        : 'Model stopped, but loaded models could not be refreshed', {
+        description: String(refreshError),
+      })
+    } else {
+      toast.success(unloadedModel
+        ? apiWasRunning ? 'Local API Server and model stopped' : 'Model stopped'
+        : 'Local API Server stopped')
+    }
+    setBusy(false)
   }
 
   const reload = async () => {
@@ -130,6 +197,9 @@ export function ServerQuickActions() {
   }
 
   const running = serverStatus === 'running'
+  const modelLoaded = Boolean(
+    activeModel && (!activeProvider || isLocalProvider(activeProvider.provider))
+  )
 
   return (
     <SidebarMenuItem>
@@ -141,7 +211,7 @@ export function ServerQuickActions() {
             ) : (
               <IconServer className="size-4 text-foreground/70" />
             )}
-            <span>{running ? 'Server running' : 'Server stopped'}</span>
+            <span>{running ? 'Server running' : modelLoaded ? 'Model loaded' : 'Server stopped'}</span>
             <span
               className={`ml-auto size-1.5 rounded-full ${
                 running ? 'bg-emerald-500' : 'bg-muted-foreground/40'
@@ -150,19 +220,20 @@ export function ServerQuickActions() {
           </SidebarMenuButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="end">
-          {running ? (
+          {!running && (
+            <DropdownMenuItem onSelect={() => void start()}>
+              <IconPlayerPlay /> Start server
+            </DropdownMenuItem>
+          )}
+          {(running || modelLoaded) && (
             <>
               <DropdownMenuItem onSelect={() => void reload()}>
                 <IconRefresh /> Reload model
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void stop()}>
-                <IconSquare /> Stop server
+                <IconSquare /> {running ? 'Stop server' : 'Stop model'}
               </DropdownMenuItem>
             </>
-          ) : (
-            <DropdownMenuItem onSelect={() => void start()}>
-              <IconPlayerPlay /> Start server
-            </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

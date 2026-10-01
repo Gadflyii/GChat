@@ -7,7 +7,9 @@ agent reaches its step limit, later chat reports full context on a small request
 and model output arrives while the client remains Working. Acceptance requires
 an incomplete terminal run, released request state, accurate capacity errors,
 and a subsequent ordinary chat that finishes without deleting history or
-restarting the server. Preserve user data and the running model. This is request
+restarting the server. Preserve user data. The running model was preserved
+during diagnosis; the user now authorizes a Windows installer update and restart
+to test the fixes. This is request
 lifecycle verification, not model quality or performance qualification.
 
 ## Evidence and live question
@@ -48,9 +50,8 @@ call with a final text response, reaches ready and stays idle when the cached
 session is reused. Fourteen focused tests, TypeScript and source ESLint passed.
 Full verification and independent review passed. This change delivers the
 reviewed source fixes; retained evidence lives under `out/agent-recovery-20261001/`.
-Next: rebuild the installers and replay the continued conversation in the
-installed Windows app to establish the user-visible fix. That update must be
-scheduled around the user's running model.
+Next: complete the authorized [Windows installer update](../installer-refresh/README.md)
+and let the user replay the continued conversation in the installed app.
 No engine failure or leaked request has been shown.
 The earlier context warning's exact diagnostic is unavailable and has not
 reproduced; do not claim its cause has been established.
@@ -78,8 +79,16 @@ The user launched directly from Chat. The persisted approval mode for thread
 Coordinator without the Agent Builder authoring skill. The reported prompt is
 Allow folder access. That gate is independent of ordinary tool auto-approval.
 The continued run `eeaff6d8-0e7f-46d3-bb0c-a9695d7c9f8b` finished with a reply
-after 45 steps. The ordinary-chat Working state later reproduced as described
-above; the context warning did not.
+after 45 steps. Critic and Practitioner still exhausted their 12-round budgets;
+the run was marked finished because synthesis returned a reply. In the earlier
+repeat, Practitioner's apparent reply was the no-progress loop breaker's
+fallback. Original stages exhausted 8 planning / 12 per worker / 25 synthesis
+rounds. Transcripts show repeated file operations, missing `plan` paths and
+access denials consuming those rounds. These are deliberate terminal budget or
+loop exits, not demonstrated engine crashes. Overall status follows synthesis
+and can obscure incomplete workers; correcting that reporting is still open.
+Step budgets and saved definitions are unchanged. The ordinary-chat Working
+state later reproduced as described above; the context warning did not.
 
 Its transcript records unnecessary folder requests when synthesis reads its own
 workers' `result.txt` files, plus reads of the nonexistent `plan/result.txt`.
@@ -120,12 +129,12 @@ rebuilt or replaced.
 | Owner / host | Path or process | Purpose / retention |
 | --- | --- | --- |
 | GChat / Ron-9950X3D2 | `/ai/gchat` | Main integrates these reviewed fixes; source baseline before this change was `8135380a2` |
-| Agent recovery | `/ai/gchat-worktrees/agent-recovery`, `fix/agent-recovery` | Temporary candidate; retirement after integration, no retained build |
+| Agent recovery | `/ai/gchat-worktrees/agent-recovery`, `fix/agent-recovery` | Retired after integration; no retained build |
 | Agent recovery | `/ai/gchat/out/agent-recovery-20261001/` | Retain two sanitized incidents and final Linux/native Windows verification logs |
 | Agent recovery / Windows | `%LOCALAPPDATA%/GChat/agent-recovery-20261001/` | Native regression passed; temporary source/harness released after review |
 | GChat / Windows | `%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` | Existing debug cache reused by regression; preserve accepted release build |
 | Installed Windows | `%APPDATA%/GChat/data/logs`, `ginfer/host/host.log`, `agent-runs.json` | Existing read-only incident evidence; preserve original files |
-| Installed Windows | GChat PID 22580, host 42428, engine 41536 | User's live reproduction; do not restart or unload |
+| Installed Windows | Original GChat PID 22580, host 42428, engine 41536 | Incident provenance; restart/update now authorized, live inventory in installer record |
 
 The accepted Linux/Windows installers remain under `out/linux` and `out/windows`.
 Server 2 remains uninstalled. No release artifact or model is replaced by this
