@@ -18,7 +18,15 @@ uninstalled. The sidebar stop action and four focused component regressions
 pass; it also offers Stop model when the API is already stopped. Independent
 review and full `make verify` passed: 2,042 frontend tests, 15 extension tests,
 critical coverage floors and supported Rust suites. The 103 selected Windows
-profiles exactly match the installed catalog. Next: launch native assembly.
+profiles exactly match the installed catalog. Native assembly from source
+`8c81f53da9315faa092c8edcb6959fc856bc3dfd` stopped during source staging:
+Windows exposes the verification worktree's Linux `node_modules` links as files,
+so directory exclusions did not protect native dependency directories. The
+mirror now excludes that name as both a directory and a file. A native mirror
+regression preserved a dependency sentinel, copied current source and removed
+obsolete source. Only verified zero-byte placeholders from the failed staging
+were removed. Next: retry assembly with the corrected mirror. Compiler caches
+and the installed app remain intact.
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
@@ -26,7 +34,7 @@ profiles exactly match the installed catalog. Next: launch native assembly.
 | Windows refresh | `/ai/gchat-worktrees/windows-refresh`, `fix/windows-refresh-20261001` | Owned implementation/docs candidate; retire after integration |
 | Windows refresh | Candidate `out/windows/acceptance-20261001/` | Native build/install evidence; retain concise results |
 | Windows build / Ron-9950X3D2 | `%LOCALAPPDATA%/GChat/windows-build/source` | Existing native mirror and compiler caches; verified idle before reuse |
-| Windows refresh | `%LOCALAPPDATA%/GChat/windows-build/acceptance-20261001/` | Prepared durable native runner and exit/log files; no build launched yet |
+| Windows refresh | `%LOCALAPPDATA%/GChat/windows-build/acceptance-20261001/` | Failed staging log and prepared durable runner; no live build |
 | GInfer | `/ai/ginfer/out/windows/ginfer-windows-x64-sm120a.zip` | Accepted 120-member runtime, unchanged engine |
 | Windows baseline | `/ai/gchat/out/windows/GChat_2.0.42_x64-setup.exe`, `GChat_2.0.42_x64_en-US.msi` | Preserve until the candidate is installed and checked |
 

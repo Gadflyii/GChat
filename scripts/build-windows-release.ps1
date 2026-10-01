@@ -103,6 +103,7 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
         (Join-Path $projectRoot 'src-tauri\resources\bin'),
         (Join-Path $projectRoot 'src-tauri\resources\pre-install')
     )
+    # WSL dependency links can appear as files; exclude both filesystem kinds.
     $robocopyArgs = @(
         $projectRoot,
         $nativeSourceRoot,
@@ -117,7 +118,7 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
         '/NJH',
         '/NJS',
         '/XD'
-    ) + $excludedDirectories
+    ) + $excludedDirectories + @('/XF', 'node_modules')
 
     & robocopy.exe @robocopyArgs
     $robocopyExit = $LASTEXITCODE
