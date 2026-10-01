@@ -1,5 +1,26 @@
 # GChat installer refresh
 
+## Shared capabilities Windows update — active
+
+The user authorized an updated local Windows app for the shared Chat/Agent
+capabilities and the sidebar Stop autoreload regression. Source candidate:
+`/ai/gchat-worktrees/shared-chat-capabilities`, branch
+`fix/shared-chat-capabilities`, baseline `b86b87168`. The active implementation
+and acceptance are tracked in [agent-runtime](../agent-runtime/README.md).
+Rebuild NSIS/MSI with the accepted unchanged Windows engine
+`74780ea1415ac8d3bb440d58442ac4f81a5dfde3` and the explicit 14 catalog paths
+recorded in `out/windows/acceptance-20261001/inputs.json` (103 profiles).
+
+Reuse `%LOCALAPPDATA%/GChat/windows-build/source` release/dependency caches.
+Retain this task's evidence in candidate `out/shared-capabilities-20261001/`
+and native `%LOCALAPPDATA%/GChat/windows-build/shared-capabilities-20261001/`;
+retire the native task directory after copying accepted evidence. Current native
+inspection confirms Ron-9950X3D2 / RTX 5090 / driver 610.88, host PID 16816,
+no GChat desktop or owned ginfer-serve process. Inspect again before updating;
+other GPU users remain outside scope. Preserve models, threads, runs and
+saved definitions. Full source verification passed. Next: native build, in-place installation,
+visible startup and runtime/data verification. Server 2 remains uninstalled.
+
 ## Accepted Windows update — October 1, 2026
 
 The Windows NSIS/MSI installers include the agent/chat fixes from `9540ac7e1`

@@ -23,7 +23,6 @@ import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { twMerge } from 'tailwind-merge'
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { useToolApproval } from '@/hooks/useToolApproval'
 import { toast } from 'sonner'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useAppState } from '@/hooks/useAppState'
@@ -110,8 +109,6 @@ function MCPServersDesktop() {
     setSettings,
     updateSettings,
   } = useMCPServers()
-  const { allowAllMCPPermissions, setAllowAllMCPPermissions } =
-    useToolApproval()
 
   const [open, setOpen] = useState(false)
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -496,18 +493,6 @@ function MCPServersDesktop() {
                   </div>
                 }
               >
-                <CardItem
-                  title={t('mcp-servers:allowPermissions')}
-                  description={t('mcp-servers:allowPermissionsDesc')}
-                  actions={
-                    <div className="shrink-0 ml-4">
-                      <Switch
-                        checked={allowAllMCPPermissions}
-                        onCheckedChange={setAllowAllMCPPermissions}
-                      />
-                    </div>
-                  }
-                />
                 <CardItem
                   title={t('mcp-servers:runtimeSettings.toolCallTimeout')}
                   description={t(

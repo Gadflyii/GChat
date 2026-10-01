@@ -18,10 +18,10 @@ const refreshSubscribers = new Set<(snapshot: ToolSnapshot) => void>()
 
 async function fetchToolSnapshot() {
   const [response, ragToolNames] = await Promise.all([
-    getServiceHub().mcp().getToolsWithStatus(),
+    getServiceHub().capabilities().getCatalog(),
     getServiceHub().rag().getToolNames?.() ?? Promise.resolve([]),
   ])
-  return { mcpTools: response.tools, ragToolNames }
+  return { catalog: response, ragToolNames }
 }
 
 function getToolSnapshot() {
@@ -55,7 +55,7 @@ function ensureRefreshLoop() {
         const snapshot = await getToolSnapshot()
         refreshSubscribers.forEach((subscriber) => subscriber(snapshot))
       } catch (error) {
-        console.error('Failed to fetch MCP tools:', error)
+        console.error('Failed to fetch capabilities:', error)
       }
       processedRefreshVersion = targetVersion
     }
@@ -110,7 +110,7 @@ function subscribeToMcpUpdates(refresh: (snapshot: ToolSnapshot) => void) {
 export const useTools = () => {
   const updateTools = useAppState((state) => state.updateTools)
   const updateRagToolNames = useAppState((state) => state.updateRagToolNames)
-  const updateMcpToolNames = useAppState((state) => state.updateMcpToolNames)
+  const updateCapabilityToolNames = useAppState((state) => state.updateCapabilityToolNames)
   const { isDefaultsInitialized, setDefaultDisabledTools, markDefaultsAsInitialized } = useToolAvailable()
 
   useEffect(() => {
@@ -121,17 +121,16 @@ export const useTools = () => {
           ExtensionTypeEnum.MCP
         )
 
-        const { mcpTools, ragToolNames } = snapshot
+        const { catalog, ragToolNames } = snapshot
 
-        // Update MCP tools
-        updateTools(mcpTools)
+        updateTools(catalog.tools)
 
         // Update cached tool names for fast synchronous access
-        updateMcpToolNames(mcpTools.map((t) => t.name))
+        updateCapabilityToolNames(catalog.tools.map((tool) => tool.name))
         updateRagToolNames(ragToolNames)
 
         // Initialize default disabled tools for new users (only once)
-        if (!isDefaultsInitialized() && mcpTools.length > 0 && mcpExtension?.getDefaultDisabledTools) {
+        if (!isDefaultsInitialized() && catalog.tools.some((tool) => tool.origin === 'mcp') && mcpExtension?.getDefaultDisabledTools) {
           const defaultDisabled = await mcpExtension.getDefaultDisabledTools()
           if (defaultDisabled.length > 0) {
             setDefaultDisabledTools(defaultDisabled)
@@ -139,13 +138,13 @@ export const useTools = () => {
           }
         }
       } catch (error) {
-        console.error('Failed to fetch MCP tools:', error)
+        console.error('Failed to fetch capabilities:', error)
       }
     }
     void getToolSnapshot()
       .then(setTools)
       .catch((error) => {
-        console.error('Failed to fetch MCP tools:', error)
+        console.error('Failed to fetch capabilities:', error)
       })
     return subscribeToMcpUpdates((snapshot) => {
       void setTools(snapshot)

@@ -71,17 +71,17 @@ function setLastUsedModel(provider: string, model: string) {
   }
 }
 
-// Tail of the switch queue. Every `switchToModel` chains onto this so switches
-// run strictly one-at-a-time. Crucially this is a real queue, NOT a
+// Tail of the model lifecycle queue. Switches and explicit sidebar Stop chain
+// onto this so they run strictly one-at-a-time. Crucially this is a real queue, NOT a
 // `while (activeSwitchPromise) await` spin: the spin let *every* waiter wake and
 // fall through the moment the in-flight promise resolved, so two switches could
 // then run `doSwitchToModel` concurrently — one engine spins up while the other
 // `stopAllModels()`-es it away, producing the "turboquant switch briefly
 // launched an MLX server, dropped it, failed, then worked on retry" race.
 let activeSwitchPromise: Promise<void> | null = null
-// Monotonic id of the most recently *enqueued* switch. A queued switch compares
-// its own id against this right before doing work; if a newer switch has since
-// been enqueued it supersedes this one, so we skip the stale load entirely
+// Monotonic id of the most recently enqueued user intent. A queued switch compares
+// its own id against this right before doing work; if a newer switch or Stop has
+// since been enqueued it supersedes this one, so we skip the stale load entirely
 // (e.g. an auto-start of the previous model that the user's manual pick already
 // replaced — no more wasted engine spawn + teardown).
 let switchSeq = 0
@@ -117,19 +117,24 @@ function autoStartKey(providerName: string, modelId: string): string {
   return `${providerName}::${modelId}`
 }
 
+function isIntentionallyStopped(providerName: string, modelId: string): boolean {
+  const state = useAppState.getState()
+  return state.pendingModelStops > 0 || state.intentionallyStoppedModels.has(autoStartKey(providerName, modelId))
+}
+
 // A user-initiated switch (dropdown pick / send) already drives the engines to
 // the requested target, and it changes the selection the moment it starts. The
 // ChatInput auto-start effect reacts to that same change, so without this marker
 // it re-probes every engine and enqueues a second switch for the identical
 // target — which, being enqueued later, supersedes the explicit one and
 // downgrades its error reporting to the silent auto-start path.
-let pendingExplicitSwitch: string | null = null
+let pendingExplicitSwitch: { key: string; seq: number } | null = null
 
 export function isExplicitSwitchPending(
   providerName: string,
   modelId: string
 ): boolean {
-  return pendingExplicitSwitch === autoStartKey(providerName, modelId)
+  return pendingExplicitSwitch?.key === autoStartKey(providerName, modelId)
 }
 
 function clearAutoStartFailure(providerName: string, modelId: string): void {
@@ -159,11 +164,32 @@ export function shouldAttemptAutoStart(
   providerName: string,
   modelId: string
 ): boolean {
+  if (isIntentionallyStopped(providerName, modelId)) return false
   if (isExplicitSwitchPending(providerName, modelId)) return false
   const prev = autoStartFailures.get(autoStartKey(providerName, modelId))
   if (!prev) return true
   if (prev.terminal) return false
   return Date.now() - prev.ts >= AUTO_START_BACKOFF_MS
+}
+
+function enqueueModelOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const prior = activeSwitchPromise ?? Promise.resolve()
+  const result = prior.then(operation, operation)
+  const tail = result.then(() => undefined, () => undefined)
+  activeSwitchPromise = tail
+  void tail.finally(() => {
+    if (activeSwitchPromise === tail) activeSwitchPromise = null
+  })
+  return result
+}
+
+/** Reserve Stop before awaiting prior switches; later explicit starts run after it. */
+export function runModelStop<T>(stop: () => Promise<T>): Promise<T> {
+  useAppState.getState().reserveModelStop()
+  ++switchSeq
+  return enqueueModelOperation(stop).finally(() => {
+    useAppState.getState().releaseModelStop()
+  })
 }
 
 /**
@@ -270,18 +296,19 @@ export async function switchToModel(params: {
   serviceHub: ServiceHub
   isAutoStart?: boolean
 }): Promise<void> {
+  if (params.isAutoStart && isIntentionallyStopped(params.providerName, params.modelId)) return
   // Claim a slot in the queue. `mySeq` lets us detect if a newer switch was
   // enqueued behind us while we waited for earlier ones to finish.
   const mySeq = ++switchSeq
-  const prior = activeSwitchPromise
 
   const isExplicit = !params.isAutoStart
   const explicitKey = autoStartKey(params.providerName, params.modelId)
   if (isExplicit) {
-    pendingExplicitSwitch = explicitKey
+    pendingExplicitSwitch = { key: explicitKey, seq: mySeq }
   }
 
   const run = async (): Promise<void> => {
+    if (params.isAutoStart && isIntentionallyStopped(params.providerName, params.modelId)) return
     // Supersession: another switch was requested after this one while we were
     // waiting our turn. That later request is the user's real intent, so drop
     // this stale load instead of spinning up an engine the next switch would
@@ -294,6 +321,10 @@ export async function switchToModel(params: {
         params.providerName
       )
       return
+    }
+
+    if (isExplicit) {
+      useAppState.getState().setIntentionalModelStop(params.providerName, params.modelId, false)
     }
 
     if (await isTargetModelAlreadyServing(params)) {
@@ -326,18 +357,12 @@ export async function switchToModel(params: {
 
   // Chain strictly after any in-flight/queued switch. A prior failure must not
   // break the chain, so swallow it and still run ours.
-  const chained = (prior ?? Promise.resolve()).then(run, run)
-  activeSwitchPromise = chained
+  const chained = enqueueModelOperation(run)
   try {
     await chained
   } finally {
-    // Only clear the tail if nobody chained after us; otherwise the later
-    // switch owns the tail and must keep the queue intact.
-    if (activeSwitchPromise === chained) {
-      activeSwitchPromise = null
-    }
     // A newer explicit switch owns the marker from here on.
-    if (isExplicit && pendingExplicitSwitch === explicitKey) {
+    if (isExplicit && pendingExplicitSwitch?.seq === mySeq) {
       pendingExplicitSwitch = null
     }
   }

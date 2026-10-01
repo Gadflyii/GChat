@@ -54,6 +54,10 @@ pub fn initialize_skills(
 }
 
 pub fn load_registry(data_folder: &Path) -> Result<SkillRegistry, String> {
+    load_registry_with_tools(data_folder, &available_tool_names())
+}
+
+pub fn load_registry_with_tools(data_folder: &Path, available_tools: &BTreeSet<String>) -> Result<SkillRegistry, String> {
     let root = ensure_global_skills_dir(data_folder)?;
     let reserved_path = root.join(BUNDLED_SKILLS_STATE_FILE);
     let reserved = if reserved_path.exists() {
@@ -64,5 +68,5 @@ pub fn load_registry(data_folder: &Path) -> Result<SkillRegistry, String> {
     } else {
         BTreeSet::new()
     };
-    SkillRegistry::load(root, &reserved, &available_tool_names())
+    SkillRegistry::load(root, &reserved, available_tools)
 }

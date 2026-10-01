@@ -1,3 +1,4 @@
+import { toolDisplayName } from './display-name'
 import type { ToolPresentation } from './types'
 import { presentWebFetchExa } from './presenters/web-fetch-exa'
 import { presentWebSearchExa } from './presenters/web-search-exa'
@@ -19,7 +20,7 @@ const presenters: Record<string, ToolPresenter> = {
 }
 
 export function presentTool(args: PresenterArgs): ToolPresentation {
-  const presenter = presenters[args.toolName]
+  const presenter = presenters[toolDisplayName(args.toolName)]
   if (presenter) return presenter(args)
   return presentGenericTool(args)
 }

@@ -46,7 +46,7 @@ export function useChat(
   const updateStatus = useChatSessions((state) => state.updateStatus)
 
   // Get serviceHub and model metadata from app state
-  const mcpToolNames = useAppState((state) => state.mcpToolNames)
+  const capabilityToolNames = useAppState((state) => state.capabilityToolNames)
   const ragToolNames = useAppState((state) => state.ragToolNames)
 
   const existingSessionTransport = sessionId
@@ -131,7 +131,7 @@ export function useChat(
       transportRef.current.invalidateToolsCache()
       void transportRef.current.refreshTools(true)
     }
-  }, [mcpToolNames, ragToolNames])
+  }, [capabilityToolNames, ragToolNames])
 
   // The Rust proxy emits these unconditionally; collecting them is what makes
   // the proxy/backend split of TTFT visible in `chat_response_received`.

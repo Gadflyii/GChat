@@ -89,7 +89,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { LinkifiedText } from '@/components/LinkifiedText'
 import { IconAlertCircle, IconRefresh } from '@tabler/icons-react'
-import { useToolApproval } from '@/hooks/useToolApproval'
+import { executeChatCapability, chatCapabilityRun } from '@/lib/execute-chat-capability'
 import DropdownModelProvider from '@/containers/DropdownModelProvider'
 import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ExtensionManager } from '@/lib/extension'
@@ -358,10 +358,10 @@ function ThreadDetail() {
         const contentParts = extractContentPartsFromUIMessage(message)
 
         if (contentParts.length > 0) {
-          const messageMetadata = (message.metadata || {}) as Record<
-            string,
-            unknown
-          >
+          const messageMetadata: Record<string, unknown> = {
+            ...((message.metadata || {}) as Record<string, unknown>),
+            ...(chatCapabilityRun(message) ? { agent_run: chatCapabilityRun(message) } : {}),
+          }
 
           const assistantMessage: ThreadMessage = {
             type: 'text',
@@ -399,20 +399,22 @@ function ThreadDetail() {
 
       // Get cached tool names from store (initialized in useTools hook)
       const ragToolNames = useAppState.getState().ragToolNames
-      const mcpToolNames = useAppState.getState().mcpToolNames
+      const capabilityToolNames = useAppState.getState().capabilityToolNames
 
       // Process tool calls sequentially, requesting approval for each if needed
       void executeClaimedChatToolBatch({
         signal,
         threadId,
         ragToolNames,
-        mcpToolNames,
-        approve: (toolName, currentThreadId, input) =>
-          useToolApproval
-            .getState()
-            .showApprovalModal(toolName, currentThreadId, input),
+        capabilityToolNames,
         callRagTool: (args) => serviceHub.rag().callTool(args),
-        callMcpTool: (args) => serviceHub.mcp().callTool(args),
+        callCapability: (args) => executeChatCapability({
+          ...args,
+          service: serviceHub.capabilities(),
+          threadId,
+          modelId: useChatSessions.getState().sessions[threadId]?.transport.requestModelId,
+          signal,
+        }),
         // Resolve project scope from the live route-keyed thread record.
         getProjectId: () =>
           useThreads.getState().threads[threadId]?.metadata?.project?.id,
@@ -762,6 +764,7 @@ function ThreadDetail() {
             })),
             auto_approve:
               useAgentMode.getState().getApprovalMode(threadId) === 'skip',
+            disabled_tools: useToolAvailable.getState().getDisabledToolsForThread(threadId),
           },
           applyAgentEvent
         )
@@ -809,12 +812,8 @@ function ThreadDetail() {
       agentSkillName?: string,
       agentDefinitionId?: string
     ) => {
-      if (
-        agentSkillName || useAgentMode.getState().activeSkills[threadId] || resolveMessageExecutionRoute(
-          useAgentMode.getState().usesAgentTools(threadId)
-        ) === 'agent-ipc'
-      ) {
-        if (agentSkillName) useAgentMode.getState().setActiveSkill(threadId, agentSkillName)
+      if (agentSkillName) useAgentMode.getState().setActiveSkill(threadId, agentSkillName)
+      if (useAgentMode.getState().isAgentMode(threadId)) {
         await processAndRunAgent(
           text,
           files,
@@ -1071,7 +1070,7 @@ function ThreadDetail() {
         try {
           const isAgentThread = useAgentMode
             .getState()
-            .usesAgentTools(threadId)
+            .isAgentMode(threadId)
           if (isAgentThread) {
             if (!selectedModel?.id) {
               throw new Error('Load a GInfer model before compacting context.')
@@ -1149,7 +1148,7 @@ function ThreadDetail() {
       const currentLocalMessages = useMessages.getState().getMessages(threadId)
       const isAgentThread =
         resolveMessageExecutionRoute(
-          useAgentMode.getState().usesAgentTools(threadId)
+          useAgentMode.getState().isAgentMode(threadId)
         ) === 'agent-ipc'
 
       if (isAgentThread) {
@@ -1270,7 +1269,7 @@ function ThreadDetail() {
       const originalMessage = currentLocalMessages[messageIndex]
       const isAgentThread =
         resolveMessageExecutionRoute(
-          useAgentMode.getState().usesAgentTools(threadId)
+          useAgentMode.getState().isAgentMode(threadId)
         ) === 'agent-ipc'
 
       // Update the message content. Attachments are kept for every thread, not
@@ -1399,7 +1398,7 @@ function ThreadDetail() {
     [searchThreadModel, thread]
   )
   const isAgentRunning =
-    agentRun?.status === 'running' || agentRun?.status === 'awaiting_approval'
+    agentRun?.status === 'running' || agentRun?.status === 'awaiting_approval' || agentRun?.status === 'awaiting_folder_access'
   const handleStop = useCallback(() => {
     if (!agentModeActive || !isAgentRunning || !agentRun?.runId) {
       useChatSessions.getState().abortToolCalls(threadId)
@@ -1491,7 +1490,9 @@ function ThreadDetail() {
                     return (
                       <MessageItem
                         key={message.id}
-                        message={message}
+                        message={chatCapabilityRun(message)
+                          ? { ...message, metadata: { ...((message.metadata ?? {}) as Record<string, unknown>), agent_run: chatCapabilityRun(message) } }
+                          : message}
                         isFirstMessage={isFirstMessage}
                         isLastMessage={isLastMessage}
                         status={inputStatus}
@@ -1508,6 +1509,19 @@ function ThreadDetail() {
                       />
                     )
                   })}
+                  {!agentModeActive && isAgentRunning && agentRun &&
+                    (agentRun.trace.definition || agentRun.trace.stages.length > 0) && (
+                      <MessageItem
+                        key={agentRun.runId}
+                        message={buildAgentUIMessage(agentRun)}
+                        isFirstMessage={false}
+                        isLastMessage
+                        status={CHAT_STATUS.SUBMITTED}
+                        requestActive
+                        reasoningContainerRef={reasoningContainerRef}
+                        hideActions
+                      />
+                    )}
                   {pendingInitialUserMessage && (
                     <>
                       <MessageItem

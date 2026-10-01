@@ -1,3 +1,4 @@
+import { toolDisplayName } from '../display-name'
 import type { ToolPresentation } from '../types'
 
 type ActionLabel = {
@@ -165,7 +166,7 @@ const ACTION_LABELS: Record<string, ActionLabel> = {
 }
 
 function humanizeToolName(toolName: string): string {
-  const name = toolName.split('.').at(-1) ?? toolName
+  const name = toolDisplayName(toolName).split('.').at(-1) ?? toolName
   return name
     .replaceAll('_', ' ')
     .replaceAll('-', ' ')
@@ -196,7 +197,7 @@ export function presentGenericTool(args: {
     args.state === 'input-streaming' || args.state === 'input-available'
   const hasError =
     args.state === 'output-error' || args.state === 'output-denied'
-  const action = ACTION_LABELS[args.toolName]
+  const action = ACTION_LABELS[args.toolName] ?? Object.entries(ACTION_LABELS).find(([name]) => name.replaceAll('.', '_') === args.toolName)?.[1]
   const fallbackName = humanizeToolName(args.toolName)
 
   return {

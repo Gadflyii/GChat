@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServiceHub } from '@/services'
 import {
   isExplicitSwitchPending,
+  runModelStop,
   shouldAttemptAutoStart,
   splitModelLoadError,
   switchToModel,
@@ -12,9 +13,18 @@ const { appState, localApiState, modelProviderState, startServer, stopServer } =
     appState: {
       serverStatus: 'running' as 'running' | 'stopped' | 'pending',
       activeModels: [] as string[],
+      intentionallyStoppedModels: new Set<string>(),
+      pendingModelStops: 0,
+      reserveModelStop: vi.fn(() => { appState.pendingModelStops += 1 }),
+      releaseModelStop: vi.fn(() => { appState.pendingModelStops -= 1 }),
       setServerStatus: vi.fn(),
       setActiveModels: vi.fn(),
       updateLoadingModel: vi.fn(),
+      setIntentionalModelStop: vi.fn((provider: string, model: string, stopped: boolean) => {
+        const key = `${provider}::${model}`
+        if (stopped) appState.intentionallyStoppedModels.add(key)
+        else appState.intentionallyStoppedModels.delete(key)
+      }),
     },
     localApiState: {
       enableOnStartup: false,
@@ -100,6 +110,8 @@ describe('switchToModel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     appState.serverStatus = 'running'
+    appState.intentionallyStoppedModels.clear()
+    appState.pendingModelStops = 0
     startServer.mockResolvedValue(1337)
     stopServer.mockResolvedValue(undefined)
     window.core = {
@@ -177,6 +189,65 @@ describe('switchToModel', () => {
 
     expect(isExplicitSwitchPending('ginfer', 'ready-model')).toBe(false)
     expect(shouldAttemptAutoStart('ginfer', 'ready-model')).toBe(true)
+  })
+
+  it('keeps an intentionally stopped model out of the automatic switch queue', async () => {
+    appState.setIntentionalModelStop('ginfer', 'ready-model', true)
+    const models = {
+      getActiveModels: vi.fn().mockResolvedValue([]),
+      stopAllModels: vi.fn(),
+      startModel: vi.fn(),
+    }
+    const serviceHub = {
+      app: () => ({ getServerStatus: vi.fn().mockResolvedValue(true) }),
+      models: () => models,
+    } as unknown as ServiceHub
+
+    expect(shouldAttemptAutoStart('ginfer', 'ready-model')).toBe(false)
+    await switchToModel({
+      modelId: 'ready-model', providerName: 'ginfer', serviceHub, isAutoStart: true,
+    })
+    expect(models.stopAllModels).not.toHaveBeenCalled()
+    expect(models.startModel).not.toHaveBeenCalled()
+    expect(shouldAttemptAutoStart('ginfer', 'other-model')).toBe(true)
+
+    models.getActiveModels.mockResolvedValue(['ready-model'])
+    await switchToModel({ modelId: 'ready-model', providerName: 'ginfer', serviceHub })
+    expect(appState.intentionallyStoppedModels.has('ginfer::ready-model')).toBe(false)
+    expect(shouldAttemptAutoStart('ginfer', 'ready-model')).toBe(true)
+  })
+
+  it('reserves Stop behind an in-flight start and suppresses automatic starts', async () => {
+    let releaseStart = () => {}
+    const models = {
+      getActiveModels: vi.fn().mockResolvedValue(['ready-model']),
+      stopAllModels: vi.fn().mockResolvedValue(undefined),
+      startModel: vi.fn(() => new Promise<void>((resolve) => { releaseStart = resolve })),
+    }
+    const serviceHub = {
+      app: () => ({ getServerStatus: vi.fn().mockResolvedValue(false) }),
+      models: () => models,
+    } as unknown as ServiceHub
+    const start = switchToModel({
+      modelId: 'ready-model', providerName: 'ginfer', serviceHub, isAutoStart: true,
+    })
+    await vi.waitFor(() => expect(models.startModel).toHaveBeenCalledOnce())
+    const stopCanProceed = vi.fn()
+    const waiting = runModelStop(async () => {
+      stopCanProceed()
+      appState.setIntentionalModelStop('ginfer', 'ready-model', true)
+    })
+    expect(stopCanProceed).not.toHaveBeenCalled()
+    expect(shouldAttemptAutoStart('ginfer', 'ready-model')).toBe(false)
+    await switchToModel({
+      modelId: 'ready-model', providerName: 'ginfer', serviceHub, isAutoStart: true,
+    })
+    expect(models.startModel).toHaveBeenCalledOnce()
+
+    releaseStart()
+    await Promise.all([start, waiting])
+    expect(stopCanProceed).toHaveBeenCalledOnce()
+    expect(shouldAttemptAutoStart('ginfer', 'ready-model')).toBe(false)
   })
 
   it('stops waiting once the engine reports the freshly started model', async () => {

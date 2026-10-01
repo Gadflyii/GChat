@@ -76,6 +76,14 @@ pub trait DesktopServices: Send + Sync {
     }
     async fn write_clipboard(&self, text: String) -> Result<(), String>;
     async fn notify(&self, title: String, body: String) -> Result<(), String>;
+    async fn mcp(&self, _wire_name: &str, _args: Value, _cancellation: &CancellationToken) -> Result<Value, String> {
+        Err("MCP capabilities are unavailable in this environment".into())
+    }
+    async fn mcp_functions(&self) -> Result<Vec<Value>, String> { Ok(Vec::new()) }
+    fn disabled_tools(&self) -> std::collections::BTreeSet<String> { Default::default() }
+    async fn mcp_identity(&self, _wire_name: &str) -> Result<(String, String), String> {
+        Err("MCP capability is unavailable".into())
+    }
 }
 
 pub struct ToolContext<'a> {
@@ -202,6 +210,12 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
         "skill.run_script" => skill_run_script::execute(&call.args, context).await,
         "skill.view" => skill_view::execute(&call.args, context).await,
         "tool.view" => tool_view::execute(&call.args, context.loaded_tools).await,
+        tool if tool.starts_with("mcp_") => context.desktop.mcp(tool, call.args.clone(), context.cancellation)
+            .await.map(|value| {
+                let mut outcome = ToolOutcome::ok(value.to_string());
+                outcome.details = Some(value);
+                outcome
+            }).map_err(ToolOutcome::error),
         "reply" => required_string(&call.args, "text")
             .map(ToolOutcome::ok)
             .map_err(ToolOutcome::error),
@@ -319,6 +333,12 @@ async fn authorize_call(
 
     let mut resources = prepared.resources;
     resources.extend(non_path_resources(&prepared.call));
+    if prepared.call.tool.starts_with("mcp_") {
+        let (server, tool) = context.desktop.mcp_identity(&prepared.call.tool).await
+            .map_err(ToolOutcome::error)?;
+        resources.push(ApprovalResource { kind: "mcp".into(),
+            value: format!("{server}::{tool}"), operation: "call".into() });
+    }
     if let Some(invocation) = skill_invocation {
         resources.push(ApprovalResource {
             kind: "skill".into(),

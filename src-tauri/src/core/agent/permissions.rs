@@ -36,6 +36,7 @@ fn capability(tool: &str) -> Option<Capability> {
         "os.shell.run" => Shell,
         "skill.run_script" => Scripts,
         "os.http.request" | "os.web.search" | "os.web.fetch" => Network,
+        name if name.starts_with("mcp_") => Network,
         "os.clipboard.read" | "os.clipboard.write" => Clipboard,
         "vision.describe" => FileRead,
         "studio.manage" | "memory.save" | "memory.delete" | "os.proc.kill" | "os.notify" => {
@@ -57,15 +58,50 @@ pub struct DefinitionApproval<'a> {
     pub inner: &'a dyn ApprovalHook,
 }
 
+pub struct DisabledApproval<'a> {
+    pub disabled: &'a std::collections::BTreeSet<String>,
+    pub catalog: &'a super::capabilities::CapabilityCatalog,
+    pub inner: &'a dyn ApprovalHook,
+}
+
+#[async_trait]
+impl ApprovalHook for DisabledApproval<'_> {
+    fn permission(&self, tool: &str) -> Permission {
+        let wire = if tool.starts_with("mcp_") {
+            tool.to_owned()
+        } else {
+            super::ginfer_client::wire_tool_name(tool)
+        };
+        if self.catalog.disabled(self.disabled, &wire) {
+            Permission::Deny
+        } else {
+            self.inner.permission(tool)
+        }
+    }
+    fn permission_summary(&self) -> Option<String> {
+        self.inner.permission_summary()
+    }
+    async fn is_allowed(&self, fingerprint: &str) -> bool {
+        self.inner.is_allowed(fingerprint).await
+    }
+    async fn request(&self, request: ApprovalRequest) -> Result<ApprovalDecision, String> {
+        self.inner.request(request).await
+    }
+}
+
 #[async_trait]
 impl ApprovalHook for DefinitionApproval<'_> {
     fn permission_summary(&self) -> Option<String> {
         Some(format!("Enforced agent permissions: {}. Denied capabilities must not be bypassed using another tool. Shell commands and skill scripts are not filesystem or network sandboxes.", serde_json::to_string(self.permissions).unwrap_or_default()))
     }
     fn permission(&self, tool: &str) -> Permission {
+        let inherited = self.inner.permission(tool);
+        if inherited == Permission::Deny {
+            return Permission::Deny;
+        }
         capability(tool)
             .and_then(|key| self.permissions.get(&key).copied())
-            .unwrap_or_default()
+            .unwrap_or(inherited)
     }
     async fn is_allowed(&self, fingerprint: &str) -> bool {
         self.inner.is_allowed(fingerprint).await

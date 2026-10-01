@@ -8,6 +8,21 @@ import { filterSidebarHistoryThreads } from '@/lib/sidebar-thread-mode'
 describe('useAgentMode', () => {
   beforeEach(() => {
     useAgentMode.getState().clearAll()
+    useAgentMode.getState().setDefaultApprovalMode('manual')
+  })
+
+  it('shares the default approval mode across ordinary Chat and Agent threads while preserving overrides', async () => {
+    useAgentMode.getState().setDefaultApprovalMode('skip')
+    expect(useAgentMode.getState().getApprovalMode('chat-thread')).toBe('skip')
+    expect(useAgentMode.getState().getApprovalMode('agent-thread')).toBe('skip')
+
+    useAgentMode.getState().setApprovalMode('chat-thread', 'manual')
+    expect(useAgentMode.getState().getApprovalMode('chat-thread')).toBe('manual')
+    expect(useAgentMode.getState().getApprovalMode('agent-thread')).toBe('skip')
+
+    await useAgentMode.persist.rehydrate()
+    expect(useAgentMode.getState().defaultApprovalMode).toBe('skip')
+    expect(useAgentMode.getState().getApprovalMode('chat-thread')).toBe('manual')
   })
 
   it('keeps a main-chat skill and workspace through creation, reopening, and exit', async () => {
@@ -57,6 +72,26 @@ describe('useAgentMode', () => {
     expect(useAgentMode.getState().approvalModes['skill-thread']).toBe('manual')
     expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
     expect(useAgentMode.getState().usesAgentTools('skill-thread')).toBe(true)
+  })
+
+  it('keeps ordinary Chat approval and connected folders when creating its thread', () => {
+    useAgentMode.getState().setDefaultApprovalMode('manual')
+    useAgentMode.getState().setApprovalMode(TEMPORARY_CHAT_ID, 'skip')
+    useAgentMode.getState().setWorkingDir(TEMPORARY_CHAT_ID, '/workspace')
+    useAgentMode.getState().addExternalRoot(TEMPORARY_CHAT_ID, {
+      rootId: 'notes', path: '/notes', name: 'notes', canEdit: false,
+    })
+
+    useAgentMode.getState().transferAgentMode(TEMPORARY_CHAT_ID, 'chat-thread')
+
+    expect(useAgentMode.getState().isAgentMode('chat-thread')).toBe(false)
+    expect(useAgentMode.getState().approvalModes['chat-thread']).toBe('skip')
+    expect(useAgentMode.getState().getWorkspace('chat-thread')).toEqual({
+      primaryRoot: {
+        rootId: 'legacy:/workspace', path: '/workspace', name: 'workspace', canEdit: true,
+      },
+      externalRoots: [{ rootId: 'notes', path: '/notes', name: 'notes', canEdit: false }],
+    })
   })
 
   it('moves the Home selection to the created thread', () => {

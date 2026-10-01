@@ -221,7 +221,7 @@ const ChatInput = memo(function ChatInput({
   )
   const setAgentMode = useAgentMode((state) => state.setAgentMode)
   const approvalMode = useAgentMode(
-    (state) => state.approvalModes[agentModeKey] ?? 'manual'
+    (state) => state.approvalModes[agentModeKey] ?? state.defaultApprovalMode
   )
   const setApprovalMode = useAgentMode((state) => state.setApprovalMode)
 
@@ -313,6 +313,11 @@ const ChatInput = memo(function ChatInput({
   const [isPreparingDocumentAttachments, setIsPreparingDocumentAttachments] =
     useState(false)
   const activeModels = useAppState(useShallow((state) => state.activeModels))
+  const selectedModelIntentionallyStopped = useAppState((state) =>
+    selectedModel?.id
+      ? state.intentionallyStoppedModels.has(`${selectedProvider}::${selectedModel.id}`)
+      : false
+  )
 
   const isModelActive = selectedModel?.id
     ? activeModels.includes(selectedModel.id)
@@ -423,7 +428,7 @@ const ChatInput = memo(function ChatInput({
     modelLoadErrorModelId === selectedModel?.id
 
   const blockSendUntilModelReady =
-    (isLocalModelNotReady && !!onSubmit) || selectedModelLoadFailed
+    (isLocalModelNotReady && !!onSubmit && !selectedModelIntentionallyStopped) || selectedModelLoadFailed
 
   const selectedAssistant = useAssistant((state) => state.pendingAssistant)
   const setSelectedAssistant = useAssistant(
@@ -644,6 +649,22 @@ const ChatInput = memo(function ChatInput({
     ) {
       toast.error(t('chat:agentErrors.visionModelRequired'))
       return
+    }
+
+    if (selectedModelIntentionallyStopped && isGinferProvider(selectedProvider)) {
+      try {
+        const { switchToModel } = await import('@/utils/switchModel')
+        await switchToModel({
+          modelId: selectedModel.id,
+          providerName: selectedProvider,
+          serviceHub,
+        })
+      } catch (error) {
+        toast.error('Could not start model for this message', {
+          description: String(error),
+        })
+        return
+      }
     }
 
     setMessage('')
@@ -2591,49 +2612,43 @@ const ChatInput = memo(function ChatInput({
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  {effectiveAgentMode && (
-                    <>
-                      {agentDefinitions.length > 0 && (
-                        <label className="mb-1 flex h-8 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
-                          <IconSparkles className="size-3.5 shrink-0 text-primary" />
-                          <select
-                            aria-label="Agent definition"
-                            className="min-w-0 flex-1 bg-transparent outline-none"
-                            value={selectedAgentDefinitionId}
-                            onChange={(event) =>
-                              setSelectedAgentDefinitionId(event.target.value)
-                            }
-                          >
-                            <option value="general">Default agent (no workflow)</option>
-                            {agentDefinitions.map((definition) => (
-                              <option key={definition.id} value={definition.id}>
-                                {definition.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                      <AgentExternalFolderButton workspaceKey={agentModeKey} />
-                      <AgentApprovalModeSelect
-                        mode={approvalMode}
-                        onChange={handleApprovalModeChange}
-                        manualSelectedLabel={t(
-                          'chat:agentApprovals.manualSelected'
-                        )}
-                        manualLabel={t('chat:agentApprovals.manual')}
-                        manualDescription={t(
-                          'chat:agentApprovals.manualDescription'
-                        )}
-                        skipSelectedLabel={t(
-                          'chat:agentApprovals.skipSelected'
-                        )}
-                        skipLabel={t('chat:agentApprovals.skip')}
-                        skipDescription={t(
-                          'chat:agentApprovals.skipDescription'
-                        )}
-                      />
-                    </>
+                  {effectiveAgentMode && agentDefinitions.length > 0 && (
+                    <label className="mb-1 flex h-8 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
+                      <IconSparkles className="size-3.5 shrink-0 text-primary" />
+                      <select
+                        aria-label="Agent definition"
+                        className="min-w-0 flex-1 bg-transparent outline-none"
+                        value={selectedAgentDefinitionId}
+                        onChange={(event) =>
+                          setSelectedAgentDefinitionId(event.target.value)
+                        }
+                      >
+                        <option value="general">Default agent (no workflow)</option>
+                        {agentDefinitions.map((definition) => (
+                          <option key={definition.id} value={definition.id}>
+                            {definition.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   )}
+                  <AgentExternalFolderButton workspaceKey={agentModeKey} />
+                  <AgentApprovalModeSelect
+                    mode={approvalMode}
+                    onChange={handleApprovalModeChange}
+                    manualSelectedLabel={t(
+                      'chat:agentApprovals.manualSelected'
+                    )}
+                    manualLabel={t('chat:agentApprovals.manual')}
+                    manualDescription={t(
+                      'chat:agentApprovals.manualDescription'
+                    )}
+                    skipSelectedLabel={t(
+                      'chat:agentApprovals.skipSelected'
+                    )}
+                    skipLabel={t('chat:agentApprovals.skip')}
+                    skipDescription={t('chat:agentApprovals.skipDescription')}
+                  />
                   {/* //! Кнопка Browse (Chrome) — временно скрыта
                 {!effectiveAgentMode && hasGChatBrowserMCPConfig && modelSupportsBrowser && (
                   <Tooltip>

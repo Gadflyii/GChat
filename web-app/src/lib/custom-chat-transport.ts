@@ -2,6 +2,7 @@ import { type UIMessage } from '@ai-sdk/react'
 import {
   convertToModelMessages,
   streamText,
+  jsonSchema,
   NoSuchToolError,
   type ChatRequestOptions,
   type ChatTransport,
@@ -54,6 +55,7 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useThreads } from '@/hooks/useThreads'
 import { useAttachments } from '@/hooks/useAttachments'
 import { useAppState } from '@/hooks/useAppState'
+import { useAgentMode } from '@/hooks/useAgentMode'
 import { ExtensionManager } from '@/lib/extension'
 import { EngineManager, ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ttftMark } from '@/lib/ttft-timing'
@@ -68,20 +70,6 @@ import {
   type ManualContextCompactionResult,
 } from '@/lib/smart-context'
 
-/// Local inference backends (ginfer) get special handling at the
-/// `streamText` boundary:
-///   * when tools are also active, the assistant system prompt is not passed
-///     as a `system` message — gemma-4 and similar local models reliably
-///     auto-emit a chain-of-thought block whenever the rendered prompt
-///     contains BOTH a system message and tools, even with
-///     `chat_template_kwargs.enable_thinking=false`. To avoid silently losing
-///     the user's instructions they are instead folded into the first user
-///     message (see foldSystemIntoFirstUserMessage). When no tools are active
-///     there is no CoT risk, so the system prompt is sent normally.
-/// Tool inclusion is **independent of the reasoning toggle** for all
-/// providers: tools are forwarded whenever the tools on/off setting has
-/// them enabled and the model supports tool calling.
-/// Remote providers (OpenAI, Anthropic, …) are unaffected.
 const LOCAL_INFERENCE_PROVIDERS = new Set<string>(['ginfer'])
 
 /// Whether a part may travel to the model as-is.
@@ -117,39 +105,6 @@ export function stripUnsupportedFileParts(messages: UIMessage[]): UIMessage[] {
   })
 }
 
-/// Fold the assistant system prompt into the first user message.
-///
-/// Local backends (gemma-4 et al.) reliably emit a spurious chain-of-thought
-/// block when the rendered prompt contains BOTH a `system` message and tools,
-/// so we cannot pass `system` alongside tools. Dropping it entirely, however,
-/// means the user's assistant instructions are silently ignored whenever an
-/// MCP/RAG tool is active. Instead we prepend the instructions to the first
-/// user turn — the same position a system prompt occupies once gemma's chat
-/// template merges it — so the model still honors them without the CoT trigger.
-export function foldSystemIntoFirstUserMessage<
-  T extends { role: string; content: unknown },
->(messages: T[], system: string): T[] {
-  const idx = messages.findIndex((m) => m.role === 'user')
-  if (idx === -1) {
-    return [{ role: 'user', content: system } as unknown as T, ...messages]
-  }
-
-  const target = messages[idx]
-  const content = target.content
-  let newContent: unknown
-  if (typeof content === 'string') {
-    newContent = `${system}\n\n${content}`
-  } else if (Array.isArray(content)) {
-    newContent = [{ type: 'text', text: `${system}\n\n` }, ...content]
-  } else {
-    newContent = system
-  }
-
-  const copy = [...messages]
-  copy[idx] = { ...target, content: newContent } as T
-  return copy
-}
-
 export type TokenUsageCallback = (
   usage: LanguageModelUsage,
   messageId: string
@@ -168,6 +123,7 @@ export type OnToolCallCallback = (params: {
 
 export class CustomChatTransport implements ChatTransport<UIMessage> {
   public model: LanguageModel | null = null
+  public requestModelId?: string
   private tools: Record<string, Tool> = {}
   private onTokenUsage?: TokenUsageCallback
   private hasDocuments = false
@@ -235,7 +191,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     ragFeatureAvailable: boolean,
     modelSupportsTools: boolean
   ): string {
-    const mcp = [...useAppState.getState().mcpToolNames].sort().join(',')
+    const mcp = [...useAppState.getState().capabilityToolNames].sort().join(',')
     const rag = [...useAppState.getState().ragToolNames].sort().join(',')
     return [
       this.threadId ?? '',
@@ -287,7 +243,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     }
 
     let ragTools: MCPTool[] = []
-    let mcpTools: MCPTool[] = []
+    let capabilityTools: MCPTool[] = []
 
     if (modelSupportsTools) {
       if (!hasDocuments && this.threadId) {
@@ -330,21 +286,20 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         }
       }
 
-      // Read MCP tools from the global store (populated once at app
-      // startup by useTools and refreshed on MCP_UPDATE events). Avoids a
-      // cold ~1.8s round-trip into the MCP service on every new thread's
+      // Use the shared catalog snapshot refreshed on capability changes.
+      // Avoid a desktop round-trip on every request's
       // first sendMessages call.
       try {
         const availableMcpTools = useAppState.getState().tools
         if (Array.isArray(availableMcpTools)) {
-          mcpTools = availableMcpTools
+          capabilityTools = availableMcpTools
         }
       } catch (error) {
         console.warn('Failed to load MCP tools:', error)
       }
     }
 
-    this.tools = buildToolsRecord(ragTools, mcpTools, disabledToolKeys)
+    this.tools = buildToolsRecord(ragTools, capabilityTools, disabledToolKeys)
     this.toolsCacheKey = cacheKey
     this.toolsCacheValid = true
   }
@@ -419,6 +374,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     const providerId = useModelProvider.getState().selectedProvider
     const effectiveProviderName = providerId
     const provider = useModelProvider.getState().getProviderByName(providerId)
+    this.requestModelId = providerId === 'ginfer' || providerId === 'ginfer-lan' ? modelId : undefined
     if (this.serviceHub && modelId && provider) {
       try {
         const updatedProvider = useModelProvider
@@ -580,18 +536,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
     const modelMessages = baseMessages
 
-    // Local providers (ginfer):
-    // when tools are also active we don't pass a `system` message (gemma-4 and
-    // similar local models reliably auto-emit a chain-of-thought block whenever
-    // the rendered prompt contains BOTH a system message and tools). Instead of
-    // discarding the user's assistant instructions, they are folded into the
-    // first user message below so the model still honors them. Without tools
-    // there is no CoT risk, so the system prompt is forwarded normally.
-    // See LOCAL_INFERENCE_PROVIDERS for rationale. Tool inclusion is
-    // independent of the reasoning toggle and governed solely by the tools
-    // on/off setting (via refreshTools -> useToolAvailable).
-    const isLocalProvider = LOCAL_INFERENCE_PROVIDERS.has(effectiveProviderName)
-
     const hasTools = Object.keys(this.tools).length > 0
     const selectedModel = useModelProvider.getState().selectedModel
     const modelSupportsTools =
@@ -601,20 +545,29 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     const memory = supportsGChatMemory(effectiveProviderName)
       ? await chatMemoryContext(options.messages, this.threadId)
       : ''
-    const systemMessage = [this.systemMessage, memory].filter(Boolean).join('\n\n') || undefined
-    const dropSystemForTools =
-      isLocalProvider && shouldEnableTools && !!systemMessage
-    const effectiveSystemMessage = dropSystemForTools
-      ? undefined
-      : systemMessage
-
-    // When we drop the `system` field for the gemma+tools CoT workaround, fold
-    // the instructions into the first user message so they still reach the
-    // model instead of being silently lost.
-    const finalModelMessages =
-      dropSystemForTools && systemMessage
-        ? foldSystemIntoFirstUserMessage(modelMessages, systemMessage)
-        : modelMessages
+    const selectedSkill = useAgentMode.getState().activeSkills[this.threadId ?? options.chatId]
+    const invokeSkill = Boolean(selectedSkill && options.messages.at(-1)?.role === 'user')
+    if (invokeSkill && (!shouldEnableTools || !this.tools.skill_invoke)) {
+      throw new Error('Enable skill_invoke and choose a model with tool support to use the selected skill.')
+    }
+    const capabilityGuidance = shouldEnableTools
+      ? [
+          this.tools.skill_list && 'GChat skills are available through skill_list. Read instructions with skill_view and apply a skill using skill_invoke.',
+          this.tools.agent_list && 'Discover saved agents and worker pools with agent_list; dispatch them using agent_run. Native tools and MCP tools use the conversation permissions and connected folders.',
+          invokeSkill && `Apply the selected skill ${JSON.stringify(selectedSkill)} to the current user request using skill_invoke.`,
+        ].filter(Boolean).join('\n')
+      : ''
+    const systemMessage = [this.systemMessage, memory, capabilityGuidance].filter(Boolean).join('\n\n') || undefined
+    const requestTools = invokeSkill
+      ? { ...this.tools, skill_invoke: {
+          ...this.tools.skill_invoke,
+          inputSchema: jsonSchema({
+            type: 'object',
+            properties: { name: { type: 'string', enum: [selectedSkill] }, task: { type: 'string' } },
+            required: ['name', 'task'], additionalProperties: false,
+          }),
+        } }
+      : this.tools
 
     // Track stream timing and token count for token speed calculation.
     // We start the clock on the *first generated delta* (text or reasoning),
@@ -629,11 +582,11 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
     const result = streamText({
       model: this.model,
-      messages: finalModelMessages,
+      messages: modelMessages,
       abortSignal: options.abortSignal,
-      tools: shouldEnableTools ? this.tools : undefined,
-      toolChoice: shouldEnableTools ? 'auto' : undefined,
-      system: effectiveSystemMessage,
+      tools: shouldEnableTools ? requestTools : undefined,
+      toolChoice: invokeSkill ? { type: 'tool', toolName: 'skill_invoke' } : shouldEnableTools ? 'auto' : undefined,
+      system: systemMessage,
       maxOutputTokens,
       experimental_transform: stripSpecialTokensTransform,
       experimental_repairToolCall: async ({ toolCall, error }) => {

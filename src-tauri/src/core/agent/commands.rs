@@ -22,7 +22,6 @@ use super::path_policy::{canonical_directory, expand_home, lexical_normalize, Ed
 use super::prompt::{CapabilitiesSummary, SkillDescriptor};
 use super::runs::{now_ms, record_run, AgentRunRecord};
 use super::session::{load_session, reset_session, save_session, validate_session_id};
-use super::skills::load_registry;
 use super::tools::DesktopServices;
 use super::types::{
     AgentApprovalDecision, AgentEvent, AgentFolderAccessDecision, AgentTurnRequest,
@@ -212,14 +211,34 @@ pub async fn agent_workspace_root<R: Runtime>(
     })
 }
 
-struct AgentDesktopServices<R: Runtime> {
-    app_handle: AppHandle<R>,
-    memory_workspace: PathBuf,
-    memory_source: String,
+pub(crate) struct AgentDesktopServices<R: Runtime> {
+    pub(crate) app_handle: AppHandle<R>,
+    pub(crate) memory_workspace: PathBuf,
+    pub(crate) memory_source: String,
+    pub(crate) disabled_tools: std::collections::BTreeSet<String>,
 }
 
 #[async_trait]
 impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
+    async fn mcp(&self, wire_name: &str, args: serde_json::Value, cancellation: &CancellationToken) -> Result<serde_json::Value, String> {
+        let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
+        if catalog.disabled(&self.disabled_tools, wire_name) {
+            return Err(format!("MCP capability `{wire_name}` is disabled"));
+        }
+        super::capabilities::execute_mcp_wire(self.app_handle.clone(), wire_name, args, cancellation).await
+    }
+    async fn mcp_functions(&self) -> Result<Vec<serde_json::Value>, String> {
+        let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
+        Ok(catalog.agent_mcp_functions(&self.disabled_tools))
+    }
+    fn disabled_tools(&self) -> std::collections::BTreeSet<String> { self.disabled_tools.clone() }
+    async fn mcp_identity(&self, wire_name: &str) -> Result<(String, String), String> {
+        let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
+        match catalog.target(wire_name) {
+            Some(super::capabilities::CapabilityTarget::Mcp { server, tool }) => Ok((server.clone(), tool.clone())),
+            _ => Err(format!("MCP capability `{wire_name}` is unavailable")),
+        }
+    }
     async fn memory(
         &self,
         action: &str,
@@ -502,16 +521,8 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         .await
         .load_for_data_folder(&data_folder)?;
     let working_dir = resolve_working_dir(request.working_dir.as_deref(), &data_folder).await?;
-    let mut editable_external_roots = Vec::new();
-    let mut read_only_external_roots = Vec::new();
-    for root in &request.external_roots {
-        let expanded = expand_home(&root.path)?;
-        if root.can_edit {
-            editable_external_roots.push(expanded);
-        } else {
-            read_only_external_roots.push(canonical_directory(&expanded).await?);
-        }
-    }
+    let (editable_external_roots, read_only_external_roots) =
+        resolve_external_roots(&request.external_roots).await?;
     let editable_roots = EditableRoots::new(&working_dir, &editable_external_roots).await?;
     let has_images = request
         .attachments
@@ -548,7 +559,10 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
     if let Some(attachment_root) = staged.trusted_root.as_ref() {
         trusted_read_roots.push(attachment_root.clone());
     }
-    let skill_registry = load_registry(&data_folder)?;
+    let catalog = super::capabilities::load_catalog(app_handle.clone()).await?;
+    let disabled_tools = request.disabled_tools.iter().cloned().collect::<std::collections::BTreeSet<_>>();
+    let skill_registry = super::skills::load_registry_with_tools(
+        &data_folder, &catalog.available_agent_tool_names(&disabled_tools))?;
     let bundled_script_runtime = resolve_bundled_script_runtime(&app_handle);
     let (cancel_tx, cancel_rx) = oneshot::channel();
     {
@@ -597,6 +611,11 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         Arc::new(move |event| approval_events(event)),
         cancellation.clone(),
     );
+    let approval = super::permissions::DisabledApproval {
+        disabled: &disabled_tools,
+        catalog: &catalog,
+        inner: &approval,
+    };
     let folder_access_events = emit.clone();
     let folder_access = FolderAccessGate::new(
         request.run_id.clone(),
@@ -608,6 +627,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         app_handle: app_handle.clone(),
         memory_workspace: working_dir.clone(),
         memory_source: format!("agent:{}", request.run_id),
+        disabled_tools: request.disabled_tools.iter().cloned().collect(),
     };
     let session_lock = get_session_lock(&state.agent_session_locks, &request.session_id).await;
     let result = {
@@ -692,6 +712,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
                     id: &storage_id,
                     run_id: &request.run_id,
                     session_id: &request.session_id,
+                    origin_session_id: request.origin_session_id.as_deref(),
                     user_message: &user_message,
                     definition: &definition,
                     started_at_ms,
@@ -727,7 +748,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
     result
 }
 
-fn resolve_bundled_script_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
+pub(crate) fn resolve_bundled_script_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
     let executable = if cfg!(windows) { "bun.exe" } else { "bun" };
     app_handle
         .path()
@@ -735,6 +756,19 @@ fn resolve_bundled_script_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Opti
         .ok()
         .map(|root| root.join("resources/bin").join(executable))
         .filter(|path| path.is_file())
+}
+
+pub(crate) async fn resolve_external_roots(
+    roots: &[super::types::AgentExternalRoot],
+) -> Result<(Vec<PathBuf>, Vec<PathBuf>), String> {
+    let mut editable = Vec::new();
+    let mut read_only = Vec::new();
+    for root in roots {
+        let expanded = expand_home(&root.path)?;
+        if root.can_edit { editable.push(expanded); }
+        else { read_only.push(canonical_directory(&expanded).await?); }
+    }
+    Ok((editable, read_only))
 }
 
 #[tauri::command]
@@ -807,7 +841,7 @@ pub async fn agent_resolve_folder_access(
         .map_err(|_| format!("Folder access '{}' is no longer active", decision.access_id))
 }
 
-async fn clear_pending_approvals_for_run(state: &AppState, run_id: &str) {
+pub(crate) async fn clear_pending_approvals_for_run(state: &AppState, run_id: &str) {
     let mut pending = state.agent_pending_approvals.lock().await;
     let approval_ids = pending
         .iter()
@@ -821,7 +855,7 @@ async fn clear_pending_approvals_for_run(state: &AppState, run_id: &str) {
     }
 }
 
-async fn clear_pending_folder_access_for_run(state: &AppState, run_id: &str) {
+pub(crate) async fn clear_pending_folder_access_for_run(state: &AppState, run_id: &str) {
     let mut pending = state.agent_pending_folder_access.lock().await;
     let access_ids = pending
         .iter()
@@ -860,7 +894,7 @@ async fn get_session_lock(
         .clone()
 }
 
-async fn resolve_working_dir(value: Option<&str>, data_folder: &Path) -> Result<PathBuf, String> {
+pub(crate) async fn resolve_working_dir(value: Option<&str>, data_folder: &Path) -> Result<PathBuf, String> {
     let path = match value {
         Some(value) if !value.trim().is_empty() => expand_home(value)?,
         _ => {

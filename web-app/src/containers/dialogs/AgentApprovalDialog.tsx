@@ -98,7 +98,7 @@ export default function AgentApprovalDialog() {
         <DialogHeader>
           <DialogTitle>{definitionPreview ? 'Review your agent' : t('agentApproval.title')}</DialogTitle>
           <DialogDescription>
-            {definitionPreview ? 'Create this reusable definition. It will not run until you choose Run in Agent Studio.' : t('agentApproval.description', { tool: approval.tool })}
+            {definitionPreview ? 'Create this reusable definition. It runs only when you request it from Chat or Agent Studio.' : t('agentApproval.description', { tool: approval.tool })}
           </DialogDescription>
         </DialogHeader>
 

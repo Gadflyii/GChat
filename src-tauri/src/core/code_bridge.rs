@@ -1,7 +1,7 @@
 //! Scoped, local MCP access to the existing Agent Studio runtime for Code.
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::Infallible,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
     path::{Path, PathBuf},
@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use super::{
     agent::{
-        commands, definitions, runs, skills,
+        capabilities, commands, definitions, runs, skills,
         types::{AgentEvent, AgentTurnRequest},
     },
     app::commands::get_jan_data_folder_path,
@@ -306,16 +306,26 @@ async fn call_tool<R: Runtime>(
         .unwrap_or_else(|| json!({}));
     let data = get_jan_data_folder_path(app.clone());
     let result = match name {
-        "gchat_list_skills" => json!(skills::load_registry(&data)?
+        "gchat_list_skills" => {
+            let catalog = capabilities::load_catalog(app.clone()).await?;
+            json!(skills::load_registry_with_tools(
+                &data,
+                &catalog.available_agent_tool_names(&Default::default())
+            )?
             .list_all()
             .into_iter()
             .filter(|entry| entry.enabled
                 && entry.compatible
                 && entry.unavailable_reasons.is_empty())
-            .collect::<Vec<_>>()),
+            .collect::<Vec<_>>())
+        }
         "gchat_read_skill" => {
             let name = arg(&args, "name")?;
-            let registry = skills::load_registry(&data)?;
+            let catalog = capabilities::load_catalog(app.clone()).await?;
+            let registry = skills::load_registry_with_tools(
+                &data,
+                &catalog.available_agent_tool_names(&Default::default()),
+            )?;
             let record = registry
                 .get_enabled(name)
                 .ok_or_else(|| format!("Skill `{name}` is not enabled or available"))?;
@@ -362,7 +372,7 @@ fn ensure_run_project(project: &Path, run_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-async fn select_model<R: Runtime>(
+pub(crate) async fn select_model<R: Runtime>(
     app: &AppHandle<R>,
     definition: &definitions::AgentDefinition,
     data: &Path,
@@ -371,6 +381,11 @@ async fn select_model<R: Runtime>(
     if let Some(id) = definition.model_instance_id.as_ref() {
         return Ok(id.clone());
     }
+    let instances = commands::agent_list_model_instances(app.state()).await?;
+    let ready = instances
+        .iter()
+        .map(|instance| instance.id.as_str())
+        .collect::<HashSet<_>>();
     let roles = definitions::placement_roles(definition);
     let fully_assigned = roles.iter().all(|(role, _)| {
         matches!(
@@ -382,25 +397,8 @@ async fn select_model<R: Runtime>(
         )
     });
     if fully_assigned {
-        for assignment in definition.role_assignments.values() {
-            match &assignment.target {
-                super::agent::worker_pools::WorkerTarget::Instance { id } => return Ok(id.clone()),
-                super::agent::worker_pools::WorkerTarget::Pool { id } => {
-                    if let Some(pool) = super::agent::worker_pools::list(data)?
-                        .into_iter()
-                        .find(|pool| &pool.id == id)
-                    {
-                        if let Some(member) = pool.members.first() {
-                            return Ok(member.instance_id.clone());
-                        }
-                    }
-                }
-                super::agent::worker_pools::WorkerTarget::Current => {}
-            }
-        }
-        return Err("An assigned worker pool has no model instances".into());
+        return select_ready_assigned_model(definition, data, &ready);
     }
-    let instances = commands::agent_list_model_instances(app.state()).await?;
     if let Some(id) = selected_model {
         if let Some(instance) = instances.iter().find(|instance| instance.id == id) {
             return Ok(instance.id.clone());
@@ -415,6 +413,37 @@ async fn select_model<R: Runtime>(
         return Ok(instances[0].id.clone());
     }
     Err("No unambiguous model is selected for this agent. Choose a GChat model in Code or assign every role to an instance or worker pool.".into())
+}
+
+fn select_ready_assigned_model(
+    definition: &definitions::AgentDefinition,
+    data: &Path,
+    ready: &HashSet<&str>,
+) -> Result<String, String> {
+    let pools = super::agent::worker_pools::list(data)?;
+    for assignment in definition.role_assignments.values() {
+        match &assignment.target {
+            super::agent::worker_pools::WorkerTarget::Instance { id }
+                if ready.contains(id.as_str()) =>
+            {
+                return Ok(id.clone());
+            }
+            super::agent::worker_pools::WorkerTarget::Pool { id } => {
+                if let Some(member) = pools.iter().find(|pool| &pool.id == id).and_then(|pool| {
+                    pool.members
+                        .iter()
+                        .find(|member| ready.contains(member.instance_id.as_str()))
+                }) {
+                    return Ok(member.instance_id.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    Err(
+        "No ready model instance is available in the saved agent's assigned roles or worker pools"
+            .into(),
+    )
 }
 
 async fn start_run<R: Runtime>(
@@ -436,7 +465,14 @@ async fn start_run<R: Runtime>(
     let data = get_jan_data_folder_path(app.clone());
     let definition = definitions::get_definition(&data, definition_id)?;
     if let Some(name) = skill_name {
-        if skills::load_registry(&data)?.get_enabled(name).is_none() {
+        let catalog = capabilities::load_catalog(app.clone()).await?;
+        if skills::load_registry_with_tools(
+            &data,
+            &catalog.available_agent_tool_names(&Default::default()),
+        )?
+        .get_enabled(name)
+        .is_none()
+        {
             return Err(format!("Skill `{name}` is not enabled or available"));
         }
     }
@@ -485,6 +521,8 @@ async fn start_run<R: Runtime>(
         external_roots: vec![],
         max_steps: None,
         auto_approve: false,
+        disabled_tools: vec![],
+        origin_session_id: None,
     };
     let run_id_for_task = run_id.clone();
     let app_for_task = app.clone();
@@ -780,13 +818,19 @@ pub struct BridgeStatus {
 }
 #[tauri::command]
 pub async fn opencode_bridge_status<R: Runtime>(app: AppHandle<R>) -> Result<BridgeStatus, String> {
-    let data = get_jan_data_folder_path(app);
+    let data = get_jan_data_folder_path(app.clone());
+    let catalog = capabilities::load_catalog(app).await?;
     Ok(BridgeStatus {
         connected: lock_registry()?
             .sessions
             .values()
             .any(|session| session.connected),
-        skill_count: skills::load_registry(&data)?.enabled().count(),
+        skill_count: skills::load_registry_with_tools(
+            &data,
+            &catalog.available_agent_tool_names(&Default::default()),
+        )?
+        .enabled()
+        .count(),
         agent_count: definitions::list_definitions(&data)?.len(),
         detail: None,
     })
@@ -979,21 +1023,24 @@ mod tests {
         close_session(&connection.session_id);
     }
 
-    #[tokio::test]
-    async fn fully_pool_assigned_agent_keeps_its_saved_placement_without_a_code_model() {
-        let app = mock_builder()
-            .build(mock_context(noop_assets()))
-            .expect("mock GChat");
+    #[test]
+    fn fully_pool_assigned_agent_selects_a_ready_member_without_a_code_model() {
         let data = tempfile::tempdir().expect("data");
         let pool = super::super::agent::worker_pools::save(
             data.path(),
             WorkerPool {
                 id: String::new(),
                 name: "Review workers".into(),
-                members: vec![PoolMember {
-                    instance_id: "ginfer/remote/review".into(),
-                    worker_limit: 1,
-                }],
+                members: vec![
+                    PoolMember {
+                        instance_id: "ginfer/remote/offline".into(),
+                        worker_limit: 1,
+                    },
+                    PoolMember {
+                        instance_id: "ginfer/remote/ready".into(),
+                        worker_limit: 1,
+                    },
+                ],
             },
         )
         .expect("pool");
@@ -1005,10 +1052,13 @@ mod tests {
                 ..Default::default()
             },
         );
-        let selected = select_model(app.handle(), &definition, data.path(), None)
-            .await
-            .expect("pool model");
-        assert_eq!(selected, "ginfer/remote/review");
+        let ready = HashSet::from(["ginfer/remote/ready"]);
+        assert_eq!(
+            select_ready_assigned_model(&definition, data.path(), &ready)
+                .expect("ready pool member"),
+            "ginfer/remote/ready"
+        );
+        assert!(select_ready_assigned_model(&definition, data.path(), &HashSet::new()).is_err());
     }
 
     #[test]

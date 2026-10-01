@@ -52,6 +52,9 @@ pub struct CompletionRequest {
     pub top_p: Option<f32>,
     pub top_k: Option<i32>,
     pub stop: Vec<String>,
+    /// Dynamic exact MCP tools from the shared capability catalog.
+    pub dynamic_tools: Vec<Value>,
+    pub disabled_tools: std::collections::BTreeSet<String>,
 }
 
 impl CompletionRequest {
@@ -71,6 +74,8 @@ impl CompletionRequest {
             top_p: None,
             top_k: None,
             stop: Vec::new(),
+            dynamic_tools: Vec::new(),
+            disabled_tools: Default::default(),
         }
     }
 
@@ -87,6 +92,8 @@ impl CompletionRequest {
             top_p: None,
             top_k: None,
             stop: Vec::new(),
+            dynamic_tools: Vec::new(),
+            disabled_tools: Default::default(),
         }
     }
 }
@@ -407,7 +414,7 @@ impl GinferClient {
                 result.map_err(|error| GinferClientError::InvalidResponse(error.to_string()))?
             }
         };
-        normalize_completion(payload)
+        normalize_completion_with_tools(payload, &request.dynamic_tools)
     }
 
     async fn send(
@@ -443,9 +450,10 @@ impl GinferClient {
 }
 
 fn completion_request_payload(model_id: &str, request: &CompletionRequest) -> Value {
-    let tools = ITERATION_ONE_TOOLS
+    let mut tools = ITERATION_ONE_TOOLS
         .iter()
         .filter(|tool| !request.authoring || matches!(tool.name, "studio.inspect" | "studio.manage" | "tool.view" | "reply" | "finish"))
+        .filter(|tool| !request.disabled_tools.contains(&format!("gchat-native::{}", wire_tool_name(tool.name))))
         .map(|descriptor| {
             serde_json::json!({
                 "type": "function",
@@ -458,6 +466,7 @@ fn completion_request_payload(model_id: &str, request: &CompletionRequest) -> Va
             })
         })
         .collect::<Vec<_>>();
+    tools.extend(request.dynamic_tools.iter().cloned());
     let mut messages = Vec::new();
     if let Some(system_prompt) = &request.system_prompt {
         messages.push(serde_json::json!({"role": "system", "content": system_prompt}));
@@ -491,7 +500,7 @@ fn completion_request_payload(model_id: &str, request: &CompletionRequest) -> Va
     payload
 }
 
-fn wire_tool_name(agent_name: &str) -> String {
+pub(crate) fn wire_tool_name(agent_name: &str) -> String {
     agent_name
         .chars()
         .map(|character| {
@@ -504,7 +513,7 @@ fn wire_tool_name(agent_name: &str) -> String {
         .collect()
 }
 
-fn tool_parameters(name: &str, authoring: bool) -> Value {
+pub(crate) fn tool_parameters(name: &str, authoring: bool) -> Value {
     use serde_json::json;
     match name {
         "os.shell.run" => json!({"type":"object","properties":{
@@ -1047,6 +1056,13 @@ fn extract_json_root(raw: &str) -> Result<&str, GinferClientError> {
 fn normalize_completion(
     payload: CompletionEnvelope,
 ) -> Result<CompletionResult, GinferClientError> {
+    normalize_completion_with_tools(payload, &[])
+}
+
+fn normalize_completion_with_tools(
+    payload: CompletionEnvelope,
+    dynamic_tools: &[Value],
+) -> Result<CompletionResult, GinferClientError> {
     let choice = payload.choices.into_iter().next().ok_or_else(|| {
         GinferClientError::InvalidResponse("chat completion contained no choices".into())
     })?;
@@ -1057,7 +1073,10 @@ fn normalize_completion(
             .tool_calls
             .into_iter()
             .map(|call| {
-                let name = agent_tool_name(&call.function.name).ok_or_else(|| {
+                let name = agent_tool_name(&call.function.name).map(str::to_owned).or_else(|| {
+                    dynamic_tools.iter().find(|tool| tool["function"]["name"] == call.function.name)
+                        .map(|_| call.function.name.clone())
+                }).ok_or_else(|| {
                     GinferClientError::ToolCallParse(format!(
                         "GInfer returned unknown tool `{}`",
                         call.function.name
@@ -1364,6 +1383,30 @@ mod tests {
         assert_eq!(result.timing.predicted_ms, 20.0);
         assert_eq!(result.cache_hit_tokens, 40.0);
         assert_eq!(result.finish_reason, "stop_token");
+    }
+
+    #[test]
+    fn advertises_and_normalizes_only_registered_dynamic_mcp_functions() {
+        let mut request = CompletionRequest::tool_call("call a tool", None);
+        request.dynamic_tools = vec![serde_json::json!({"type":"function","function":{
+            "name":"mcp_0123456789abcdef0123456789abcdef",
+            "parameters":{"type":"object","properties":{"query":{"type":"string"}}}
+        }})];
+        request.disabled_tools.insert("gchat-native::os_fs_read".into());
+        let payload = completion_request_payload("model", &request);
+        let advertised = payload["tools"].as_array().unwrap();
+        assert!(advertised.iter().any(|tool| tool["function"]["name"] == "mcp_0123456789abcdef0123456789abcdef"));
+        assert!(!advertised.iter().any(|tool| tool["function"]["name"] == "os_fs_read"));
+        let response: CompletionEnvelope = serde_json::from_value(serde_json::json!({
+            "choices":[{"message":{"tool_calls":[{"function":{
+                "name":"mcp_0123456789abcdef0123456789abcdef",
+                "arguments":"{\"query\":\"weather\"}"
+            }}]}}],
+            "usage":{},"x_ginfer":{"finish_reason":"stop_token"}
+        })).unwrap();
+        let normalized = normalize_completion_with_tools(response, &request.dynamic_tools).unwrap();
+        assert!(normalized.content.contains("mcp_0123456789abcdef0123456789abcdef"));
+        assert!(normalized.content.contains("weather"));
     }
 
     #[tokio::test]

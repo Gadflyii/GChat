@@ -31,6 +31,7 @@ import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 import { ensureModelForServer } from '@/utils/ensureModelForServer'
 import { restartLocalModel } from '@/utils/restartLocalModel'
 import { isLocalProvider } from '@/utils/registerRemoteProvider'
+import { runModelStop } from '@/utils/switchModel'
 
 export function ServerQuickActions() {
   const serviceHub = useServiceHub()
@@ -81,6 +82,11 @@ export function ServerQuickActions() {
         'Timed out waiting for the Local API Server to start.'
       )
       if (port && port !== settings.serverPort) settings.setServerPort(port)
+      useAppState.getState().setIntentionalModelStop(
+        result.providerName,
+        result.modelId,
+        false
+      )
       useAppState.getState().setServerStatus('running')
       toast.success('Local API Server started')
     } catch (error) {
@@ -94,81 +100,97 @@ export function ServerQuickActions() {
   }
 
   const stop = async () => {
-    const apiWasRunning = serverStatus === 'running'
     setBusy(true)
-    useAppState.getState().setServerStatus('pending')
-    if (apiWasRunning) {
-      try {
-        const stopServer = window.core?.api?.stopServer()
-        if (!stopServer) throw new Error('The native server controller is unavailable.')
-        await stopServer
-      } catch (error) {
-        useAppState.getState().setServerStatus('running')
-        toast.error('Could not stop Local API Server', {
-          description: String(error),
-        })
-        setBusy(false)
-        return
-      }
-    }
-    useAppState.getState().setServerStatus('stopped')
-
-    let unloadError: unknown
-    let unloadedModel = false
-    if (activeModel) {
-      const provider = useModelProvider
-        .getState()
-        .providers.find((candidate) =>
-          candidate.models?.some((model) => model.id === activeModel)
-        )
-      if (!provider) {
-        unloadError = new Error(`Could not find the provider for '${activeModel}'.`)
-      } else if (isLocalProvider(provider.provider)) {
-        try {
-          const result = await serviceHub.models().stopModel(
-            activeModel,
-            provider.provider
-          )
-          if (!result?.success) {
-            throw new Error(
-              result?.error || `Could not confirm that '${activeModel}' unloaded.`
-            )
-          }
-          unloadedModel = true
-        } catch (error) {
-          unloadError = error
-        }
-      }
-    }
-
-    let refreshError: unknown
     try {
-      const models = await serviceHub.models().getActiveModels()
-      syncActiveModelsFromEngines(models ?? [])
-    } catch (error) {
-      refreshError = error
-    }
+      await runModelStop(async () => {
+        // Resolve the target after any earlier model switch has published its
+        // final selection. The reservation above already suppresses auto-start.
+        const appState = useAppState.getState()
+        const apiWasRunning = appState.serverStatus === 'running'
+        const loadedModel = appState.activeModels[0]
+        const modelState = useModelProvider.getState()
+        const provider = loadedModel
+          ? modelState.providers.find((candidate) =>
+              candidate.models?.some((model) => model.id === loadedModel)
+            )
+          : undefined
+        const selectedModel = modelState.selectedModel?.id
+        const selectedProvider = modelState.selectedProvider
+        appState.setServerStatus('pending')
 
-    if (unloadError) {
-      toast.error(apiWasRunning
-        ? 'Local API Server stopped, but the model could not be unloaded'
-        : 'Could not unload model', {
-        description: refreshError
-          ? `${String(unloadError)} Loaded models could not be refreshed: ${String(refreshError)}`
-          : String(unloadError),
+        if (apiWasRunning) {
+          try {
+            const stopServer = window.core?.api?.stopServer()
+            if (!stopServer) throw new Error('The native server controller is unavailable.')
+            await stopServer
+          } catch (error) {
+            useAppState.getState().setServerStatus('running')
+            toast.error('Could not stop Local API Server', {
+              description: String(error),
+            })
+            return
+          }
+        }
+        useAppState.getState().setServerStatus('stopped')
+        if (selectedModel && isLocalProvider(selectedProvider)) {
+          useAppState.getState().setIntentionalModelStop(selectedProvider, selectedModel, true)
+        }
+        if (loadedModel && provider && isLocalProvider(provider.provider)) {
+          useAppState.getState().setIntentionalModelStop(provider.provider, loadedModel, true)
+        }
+
+        let unloadError: unknown
+        let unloadedModel = false
+        if (loadedModel && !provider) {
+          unloadError = new Error(`Could not find the provider for '${loadedModel}'.`)
+        } else if (loadedModel && provider && isLocalProvider(provider.provider)) {
+          try {
+            const result = await serviceHub.models().stopModel(
+              loadedModel,
+              provider.provider
+            )
+            if (!result?.success) {
+              throw new Error(
+                result?.error || `Could not confirm that '${loadedModel}' unloaded.`
+              )
+            }
+            unloadedModel = true
+          } catch (error) {
+            unloadError = error
+          }
+        }
+
+        let refreshError: unknown
+        try {
+          const models = await serviceHub.models().getActiveModels()
+          syncActiveModelsFromEngines(models ?? [])
+        } catch (error) {
+          refreshError = error
+        }
+
+        if (unloadError) {
+          toast.error(apiWasRunning
+            ? 'Local API Server stopped, but the model could not be unloaded'
+            : 'Could not unload model', {
+            description: refreshError
+              ? `${String(unloadError)} Loaded models could not be refreshed: ${String(refreshError)}`
+              : String(unloadError),
+          })
+        } else if (refreshError) {
+          toast.error(apiWasRunning
+            ? 'Local API Server stopped, but loaded models could not be refreshed'
+            : 'Model stopped, but loaded models could not be refreshed', {
+            description: String(refreshError),
+          })
+        } else {
+          toast.success(unloadedModel
+            ? apiWasRunning ? 'Local API Server and model stopped' : 'Model stopped'
+            : 'Local API Server stopped')
+        }
       })
-    } else if (refreshError) {
-      toast.error(apiWasRunning
-        ? 'Local API Server stopped, but loaded models could not be refreshed'
-        : 'Model stopped, but loaded models could not be refreshed', {
-        description: String(refreshError),
-      })
-    } else {
-      toast.success(unloadedModel
-        ? apiWasRunning ? 'Local API Server and model stopped' : 'Model stopped'
-        : 'Local API Server stopped')
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const reload = async () => {
@@ -188,6 +210,7 @@ export function ServerQuickActions() {
     setBusy(true)
     try {
       await restartLocalModel(serviceHub, provider.provider, activeModel)
+      useAppState.getState().setIntentionalModelStop(provider.provider, activeModel, false)
       toast.success('Model reloaded')
     } catch (error) {
       toast.error('Could not reload model', { description: String(error) })

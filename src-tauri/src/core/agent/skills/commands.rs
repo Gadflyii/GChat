@@ -8,9 +8,20 @@ use super::{
         create_custom_skill, export_skill_archive, import_custom_skill, update_custom_skill,
         CreateAgentSkillRequest, UpdateAgentSkillRequest,
     },
-    global_skills_dir, load_registry, SkillListEntry,
+    global_skills_dir, load_registry, load_registry_with_tools, SkillListEntry,
 };
 use crate::core::app::commands::get_jan_data_folder_path;
+
+async fn load_desktop_registry<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    data_folder: &Path,
+) -> Result<super::SkillRegistry, String> {
+    let catalog = crate::core::agent::capabilities::load_catalog(app_handle.clone()).await?;
+    load_registry_with_tools(
+        data_folder,
+        &catalog.available_agent_tool_names(&Default::default()),
+    )
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,8 +35,10 @@ pub struct AgentSkillDetail {
 pub async fn agent_list_skills<R: Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<Vec<SkillListEntry>, String> {
-    let data_folder = get_jan_data_folder_path(app_handle);
-    Ok(load_registry(&data_folder)?.list_all())
+    let data_folder = get_jan_data_folder_path(app_handle.clone());
+    Ok(load_desktop_registry(&app_handle, &data_folder)
+        .await?
+        .list_all())
 }
 
 #[tauri::command]
@@ -33,8 +46,8 @@ pub async fn agent_get_skill<R: Runtime>(
     app_handle: AppHandle<R>,
     name: String,
 ) -> Result<AgentSkillDetail, String> {
-    let data_folder = get_jan_data_folder_path(app_handle);
-    let registry = load_registry(&data_folder)?;
+    let data_folder = get_jan_data_folder_path(app_handle.clone());
+    let registry = load_desktop_registry(&app_handle, &data_folder).await?;
     let entry = registry
         .list_all()
         .into_iter()

@@ -165,6 +165,13 @@ pub struct AgentTurnRequest {
     /// actions wait for an explicit approval decision.
     #[serde(default)]
     pub auto_approve: bool,
+    /// Chat-owned tool availability; a delegated run cannot regain tools
+    /// disabled in its originating conversation.
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
+    /// Owning ordinary Chat thread for delegated runs; absent for Studio/Code.
+    #[serde(default)]
+    pub origin_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

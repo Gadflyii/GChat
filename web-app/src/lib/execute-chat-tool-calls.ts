@@ -31,12 +31,7 @@ type ExecuteChatToolCallsOptions = {
   signal: AbortSignal
   threadId: string
   ragToolNames: ReadonlySet<string>
-  mcpToolNames: ReadonlySet<string>
-  approve: (
-    toolName: string,
-    threadId: string,
-    input: object
-  ) => Promise<boolean>
+  capabilityToolNames: ReadonlySet<string>
   callRagTool: (args: {
     toolName: string
     arguments: object
@@ -44,7 +39,7 @@ type ExecuteChatToolCallsOptions = {
     projectId?: string
     scope: 'project' | 'thread'
   }) => Promise<ToolResult>
-  callMcpTool: (args: {
+  callCapability: (args: {
     toolName: string
     arguments: object
   }) => Promise<ToolResult>
@@ -72,10 +67,9 @@ export async function executeChatToolCalls({
   signal,
   threadId,
   ragToolNames,
-  mcpToolNames,
-  approve,
+  capabilityToolNames,
   callRagTool,
-  callMcpTool,
+  callCapability,
   getProjectId,
   processOutput,
   addToolOutput,
@@ -86,58 +80,42 @@ export async function executeChatToolCalls({
 
     let output: ChatToolOutput
     try {
-      const approved = await approve(
-        toolCall.toolName,
-        threadId,
-        toolCall.input
-      )
+      let result: ToolResult
+      if (ragToolNames.has(toolCall.toolName)) {
+        const projectId = getProjectId()
+        result = await callRagTool({
+          toolName: toolCall.toolName,
+          arguments: toolCall.input,
+          threadId,
+          projectId,
+          scope: projectId ? 'project' : 'thread',
+        })
+      } else if (capabilityToolNames.has(toolCall.toolName)) {
+        result = await callCapability({
+          toolName: toolCall.toolName,
+          arguments: toolCall.input,
+        })
+      } else {
+        result = {
+          error: `Tool '${toolCall.toolName}' not found in any service`,
+        }
+      }
       if (signal.aborted) break
 
-      if (!approved) {
+      if (result.error) {
         output = {
           state: 'output-error',
           tool: toolCall.toolName,
           toolCallId: toolCall.toolCallId,
-          errorText: 'Tool execution denied by user',
+          errorText: `Error: ${result.error}`,
         }
       } else {
-        let result: ToolResult
-        if (ragToolNames.has(toolCall.toolName)) {
-          const projectId = getProjectId()
-          result = await callRagTool({
-            toolName: toolCall.toolName,
-            arguments: toolCall.input,
-            threadId,
-            projectId,
-            scope: projectId ? 'project' : 'thread',
-          })
-        } else if (mcpToolNames.has(toolCall.toolName)) {
-          result = await callMcpTool({
-            toolName: toolCall.toolName,
-            arguments: toolCall.input,
-          })
-        } else {
-          result = {
-            error: `Tool '${toolCall.toolName}' not found in any service`,
-          }
-        }
+        const content = await processOutput(result.content)
         if (signal.aborted) break
-
-        if (result.error) {
-          output = {
-            state: 'output-error',
-            tool: toolCall.toolName,
-            toolCallId: toolCall.toolCallId,
-            errorText: `Error: ${result.error}`,
-          }
-        } else {
-          const content = await processOutput(result.content)
-          if (signal.aborted) break
-          output = {
-            tool: toolCall.toolName,
-            toolCallId: toolCall.toolCallId,
-            output: content,
-          }
+        output = {
+          tool: toolCall.toolName,
+          toolCallId: toolCall.toolCallId,
+          output: content,
         }
       }
     } catch (error) {
@@ -147,7 +125,7 @@ export async function executeChatToolCalls({
         state: 'output-error',
         tool: toolCall.toolName,
         toolCallId: toolCall.toolCallId,
-        errorText: `Error: ${JSON.stringify(error)}`,
+        errorText: `Error: ${error instanceof Error ? error.message : String(error)}`,
       }
     }
 

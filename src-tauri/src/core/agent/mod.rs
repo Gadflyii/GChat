@@ -4,6 +4,7 @@
 
 pub mod approval;
 pub mod approval_allowlist;
+pub mod capabilities;
 pub mod attachments;
 mod batch_executor;
 pub mod commands;

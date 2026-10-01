@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardItem } from '@/containers/Card'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
-import { useToolApproval } from '@/hooks/useToolApproval'
+import { useAgentMode } from '@/hooks/useAgentMode'
 import { useThreadNotifications } from '@/hooks/useThreadNotifications'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { useEffect, useState, useCallback } from 'react'
@@ -52,11 +52,11 @@ function General() {
     preloadModelOnStartup,
     setPreloadModelOnStartup,
   } = useGeneralSetting()
-  const allowAllMCPPermissions = useToolApproval(
-    (state) => state.allowAllMCPPermissions
+  const defaultApprovalMode = useAgentMode(
+    (state) => state.defaultApprovalMode
   )
-  const setAllowAllMCPPermissions = useToolApproval(
-    (state) => state.setAllowAllMCPPermissions
+  const setDefaultApprovalMode = useAgentMode(
+    (state) => state.setDefaultApprovalMode
   )
   const notificationsGloballyEnabled = useThreadNotifications(
     (state) => state.globallyEnabled !== false
@@ -385,8 +385,10 @@ function General() {
                 description={t('settings:chatBehavior.autoApproveToolsDesc')}
                 actions={
                   <Switch
-                    checked={allowAllMCPPermissions}
-                    onCheckedChange={setAllowAllMCPPermissions}
+                    checked={defaultApprovalMode === 'skip'}
+                    onCheckedChange={(checked) =>
+                      setDefaultApprovalMode(checked ? 'skip' : 'manual')
+                    }
                   />
                 }
               />

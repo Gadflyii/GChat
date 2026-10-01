@@ -36,4 +36,9 @@ describe('presentGenericTool', () => {
       }).title
     ).toBe('Called Search Documents')
   })
+  it('shows shared catalog tool labels without wire identity hashes', () => {
+    expect(presentGenericTool({ toolName: 'mcp_search_exa_tool_0123456789abcdef0123456789abcdef', state: 'output-available' }).title).toBe('Called Search Exa Tool')
+    expect(presentGenericTool({ toolName: 'os_fs_mkdir', state: 'output-available' }).title).toBe('Created folder')
+  })
+
 })

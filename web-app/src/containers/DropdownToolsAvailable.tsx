@@ -1,3 +1,4 @@
+import { toolDisplayName } from '@/lib/tools/display-name'
 import { useEffect, useState, memo } from 'react'
 
 import {
@@ -242,9 +243,9 @@ export default memo(function DropdownToolsAvailable({
                             <div className="overflow-hidden flex flex-col items-start w-full">
                               <span
                                 className="text-sm font-medium truncate block w-full"
-                                title={tool.name}
+                                title={toolDisplayName(tool.name)}
                               >
-                                {tool.name}
+                                {toolDisplayName(tool.name)}
                               </span>
 
                               {tool.description && (

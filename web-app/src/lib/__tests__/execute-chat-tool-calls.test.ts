@@ -20,8 +20,7 @@ const calls: ChatToolCall[] = [
 const baseOptions = () => ({
   threadId: 'thread-1',
   ragToolNames: new Set<string>(),
-  mcpToolNames: new Set(['search']),
-  approve: vi.fn().mockResolvedValue(true),
+  capabilityToolNames: new Set(['search']),
   callRagTool: vi.fn(),
   getProjectId: vi.fn(),
   processOutput: vi.fn(async (content) => content),
@@ -29,9 +28,9 @@ const baseOptions = () => ({
 })
 
 describe('executeChatToolCalls', () => {
-  it('executes MCP calls in order and adds output for continuation', async () => {
+  it('executes shared capability calls in order and adds output for continuation', async () => {
     const events: string[] = []
-    const callMcpTool = vi.fn(async ({ arguments: input }) => {
+    const callCapability = vi.fn(async ({ arguments: input }) => {
       events.push(`call:${(input as { query: string }).query}`)
       return { content: [{ type: 'text', text: 'result' }] }
     })
@@ -45,7 +44,7 @@ describe('executeChatToolCalls', () => {
       ...baseOptions(),
       toolCalls: calls,
       signal: new AbortController().signal,
-      callMcpTool,
+      callCapability,
       addToolOutput,
     })
 
@@ -72,7 +71,7 @@ describe('executeChatToolCalls', () => {
   it('stops before the next tool when aborted after adding output', async () => {
     const controller = new AbortController()
     const completedToolCalls: string[] = []
-    const callMcpTool = vi
+    const callCapability = vi
       .fn()
       .mockResolvedValue({ content: [{ type: 'text', text: 'result' }] })
     const addToolOutput = vi.fn((output: ChatToolOutput) => {
@@ -84,7 +83,7 @@ describe('executeChatToolCalls', () => {
       ...baseOptions(),
       toolCalls: calls,
       signal: controller.signal,
-      callMcpTool,
+      callCapability,
       addToolOutput,
     })
 
@@ -93,8 +92,7 @@ describe('executeChatToolCalls', () => {
 
   it('reports denial without calling a service', async () => {
     const options = baseOptions()
-    options.approve.mockResolvedValue(false)
-    const callMcpTool = vi.fn()
+    const callCapability = vi.fn().mockResolvedValue({ error: 'Tool execution denied by user' })
     const outputs: ChatToolOutput[] = []
     const addToolOutput = vi.fn((output: ChatToolOutput) =>
       outputs.push(output)
@@ -104,17 +102,17 @@ describe('executeChatToolCalls', () => {
       ...options,
       toolCalls: [calls[0]],
       signal: new AbortController().signal,
-      callMcpTool,
+      callCapability,
       addToolOutput,
     })
 
-    expect(callMcpTool).not.toHaveBeenCalled()
+    expect(callCapability).toHaveBeenCalledOnce()
     expect(outputs).toEqual([
       {
         state: 'output-error',
         tool: 'search',
         toolCallId: 'call-1',
-        errorText: 'Tool execution denied by user',
+        errorText: 'Error: Tool execution denied by user',
       },
     ])
   })
@@ -138,7 +136,7 @@ describe('claimed chat tool batches', () => {
     const options = {
       ...baseOptions(),
       signal: new AbortController().signal,
-      callMcpTool: vi.fn().mockResolvedValue({ content: 'result' }),
+      callCapability: vi.fn().mockResolvedValue({ content: 'result' }),
       addToolOutput: vi.fn(() => {
         // addToolOutput can launch the follow-up before this batch's finally runs.
         useChatSessions.getState().updateStatus('thread-1', 'ready')
@@ -169,7 +167,7 @@ describe('claimed chat tool batches', () => {
     const options = {
       ...baseOptions(),
       signal: new AbortController().signal,
-      callMcpTool: vi.fn().mockResolvedValue({ content: 'result' }),
+      callCapability: vi.fn().mockResolvedValue({ content: 'result' }),
       addToolOutput: vi.fn(() => admission),
     }
 
@@ -193,7 +191,7 @@ describe('claimed chat tool batches', () => {
     const options = {
       ...baseOptions(),
       signal: new AbortController().signal,
-      callMcpTool: vi.fn().mockResolvedValue({ content: 'result' }),
+      callCapability: vi.fn().mockResolvedValue({ content: 'result' }),
       addToolOutput: vi.fn().mockRejectedValue(new Error('admission failed')),
     }
 
@@ -266,7 +264,7 @@ describe('claimed chat tool batches', () => {
         void executeClaimedChatToolBatch({
           ...baseOptions(),
           signal,
-          callMcpTool: vi.fn().mockResolvedValue({ content: 'Clear skies' }),
+          callCapability: vi.fn().mockResolvedValue({ content: 'Clear skies' }),
           addToolOutput: (output) => chat.addToolOutput(output),
         })
       },

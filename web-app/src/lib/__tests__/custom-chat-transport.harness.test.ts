@@ -4,6 +4,7 @@ import type { UIMessage } from '@ai-sdk/react'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useAgentMode } from '@/hooks/useAgentMode'
 import { useAppState } from '@/hooks/useAppState'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -70,13 +71,14 @@ async function readChunks(
 
 describe('CustomChatTransport production harness', () => {
   beforeEach(() => {
+    useAgentMode.getState().clearAll()
     seedServiceHub({
       rag: { getTools: vi.fn().mockResolvedValue([]) } as never,
     })
     useAppState.setState({
       tools: [],
       ragToolNames: new Set(),
-      mcpToolNames: new Set(),
+      capabilityToolNames: new Set(),
     })
     useToolAvailable.setState({
       disabledTools: {},
@@ -170,6 +172,40 @@ describe('CustomChatTransport production harness', () => {
     ).toEqual(['Hello ', ' ', 'world'])
   })
 
+  it('advertises native skills with the real system instructions and keeps the owning model', async () => {
+    useAppState.setState({
+      tools: [{ name: 'skill_list', server: 'gchat-native', description: 'List skills', inputSchema: { type: 'object' } }],
+      capabilityToolNames: new Set(['skill_list']),
+    })
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel, capabilities: ['tools'] } as never }))
+    const model = fakeStreamingModel([{ type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }])
+    vi.spyOn(ModelFactory, 'createModel').mockResolvedValue(model)
+    const transport = new CustomChatTransport('Use my assistant instructions.', 'chat-a')
+    await readChunks(await transport.sendMessages({ chatId: 'chat-a', messages: [userMessage], trigger: 'submit-message', messageId: undefined, abortSignal: undefined }) as ReadableStream<Record<string, unknown>>)
+    const request = vi.mocked(model.doStream).mock.calls[0][0]
+    expect(request.tools).toContainEqual(expect.objectContaining({ name: 'skill_list' }))
+    expect(request.prompt[0]).toMatchObject({ role: 'system', content: expect.stringContaining('Use my assistant instructions.') })
+    expect(request.prompt[0]).toMatchObject({ content: expect.stringContaining('skill_list') })
+    useModelProvider.setState({ selectedModel: { id: 'other-model' } as never })
+    expect(transport.requestModelId).toBe('fixture-model')
+  })
+
+  it('uses the selected skill shortcut once then allows a normal streaming follow-up', async () => {
+    useAppState.setState({ tools: [{ name: 'skill_invoke', server: 'gchat-native', description: 'Invoke skill', inputSchema: { type: 'object' } }], capabilityToolNames: new Set(['skill_invoke']) })
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel, capabilities: ['tools'] } as never }))
+    useAgentMode.getState().setActiveSkill('chat-a', 'agent-builder')
+    const model = fakeStreamingModel([{ type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }])
+    vi.spyOn(ModelFactory, 'createModel').mockResolvedValue(model)
+    const transport = new CustomChatTransport(undefined, 'chat-a')
+    const options = { chatId: 'chat-a', trigger: 'submit-message' as const, messageId: undefined, abortSignal: undefined }
+    await readChunks(await transport.sendMessages({ ...options, messages: [userMessage] }) as ReadableStream<Record<string, unknown>>)
+    expect(vi.mocked(model.doStream).mock.calls[0][0].toolChoice).toEqual({ type: 'tool', toolName: 'skill_invoke' })
+    const assistant: UIMessage = { id: 'tool-reply', role: 'assistant', parts: [{ type: 'tool-skill_invoke', toolCallId: 'call', state: 'output-available', input: { name: 'agent-builder', task: 'Build' }, output: 'Saved definition' }] }
+    await readChunks(await transport.sendMessages({ ...options, messages: [userMessage, assistant] }) as ReadableStream<Record<string, unknown>>)
+    expect(vi.mocked(model.doStream).mock.calls[1][0].toolChoice).toEqual({ type: 'auto' })
+    expect(useAgentMode.getState().isAgentMode('chat-a')).toBe(false)
+  })
+
   it('repairs malformed streamed tool input through the production boundary', async () => {
     useAppState.setState({
       tools: [
@@ -184,7 +220,7 @@ describe('CustomChatTransport production harness', () => {
           },
         },
       ],
-      mcpToolNames: new Set(['search']),
+      capabilityToolNames: new Set(['search']),
     })
     useModelProvider.setState((state) => ({
       selectedModel: {

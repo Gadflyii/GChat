@@ -41,6 +41,7 @@ export function createMockServiceHub(
       overrides.projects ?? (emptyService as ServiceInstances['projects']),
     rag: overrides.rag ?? (emptyService as ServiceInstances['rag']),
     uploads: overrides.uploads ?? (emptyService as ServiceInstances['uploads']),
+    capabilities: overrides.capabilities ?? (emptyService as ServiceInstances['capabilities']),
   }
 
   return {
@@ -64,6 +65,7 @@ export function createMockServiceHub(
     projects: () => services.projects,
     rag: () => services.rag,
     uploads: () => services.uploads,
+    capabilities: () => services.capabilities,
   }
 }
 

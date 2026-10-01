@@ -55,6 +55,7 @@ pub fn resource_class_for(tool_name: &str) -> ResourceClass {
         | "os.http.request"
         | "skill.run_script" => ResourceClass::ApprovalGated,
         "reply" | "finish" => ResourceClass::Terminal,
+        name if name.starts_with("mcp_") => ResourceClass::ApprovalGated,
         _ => ResourceClass::Unknown,
     }
 }

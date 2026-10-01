@@ -121,6 +121,8 @@ async fn run_turn_inner(
     let reasoning_effort = Some(input.reasoning_effort.unwrap_or(AgentReasoningEffort::High));
     let authoring = input.selected_skill == Some("agent-builder")
         || options.additional_skills.iter().any(|name| name == "agent-builder");
+    // Authoring intentionally keeps its narrow Studio-only function set.
+    let dynamic_tools = if authoring { Vec::new() } else { input.desktop.mcp_functions().await? };
     context
         .record(
             serde_json::json!({"type":"start", "goal":input.user_message,
@@ -217,6 +219,8 @@ async fn run_turn_inner(
                 Some(&workspace), &conversation, notice.as_deref(),
             ), reasoning_effort);
             request.authoring = authoring;
+            request.dynamic_tools = dynamic_tools.clone();
+            request.disabled_tools = input.desktop.disabled_tools();
             request.output_limit_override = options.max_output_tokens;
             if authoring {
                 request.system_prompt = Some(AUTHORING_PROMPT.into());

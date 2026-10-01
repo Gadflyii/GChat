@@ -21,6 +21,7 @@ type AgentModeState = {
   activeSkills: Record<string, string>
   setActiveSkill: (threadId: string, skill?: string) => void
   approvalModes: Record<string, AgentApprovalMode>
+  defaultApprovalMode: AgentApprovalMode
   workspaces: Record<string, AgentWorkspace>
   sidebarMode: SidebarMode
 
@@ -41,6 +42,7 @@ type AgentModeState = {
   toggleAgentMode: (threadId: string) => void
   setAgentMode: (threadId: string, enabled: boolean) => void
   setApprovalMode: (threadId: string, mode: AgentApprovalMode) => void
+  setDefaultApprovalMode: (mode: AgentApprovalMode) => void
   setWorkingDir: (threadId: string, workingDir: string) => void
   transferAgentMode: (fromThreadId: string, toThreadId: string) => void
   removeThread: (threadId: string) => void
@@ -60,6 +62,7 @@ export const useAgentMode = create<AgentModeState>()(
         return { activeSkills }
       }),
       approvalModes: {},
+      defaultApprovalMode: 'manual',
       workspaces: {},
       sidebarMode: 'chat',
 
@@ -69,7 +72,7 @@ export const useAgentMode = create<AgentModeState>()(
       usesAgentTools: (threadId) => get().agentThreads[threadId] === true || !!get().activeSkills[threadId],
 
       getApprovalMode: (threadId) => {
-        return get().approvalModes[threadId] ?? 'manual'
+        return get().approvalModes[threadId] ?? get().defaultApprovalMode
       },
 
       getWorkingDir: (threadId) => {
@@ -187,6 +190,8 @@ export const useAgentMode = create<AgentModeState>()(
         }))
       },
 
+      setDefaultApprovalMode: (mode) => set({ defaultApprovalMode: mode }),
+
       setWorkingDir: (threadId, workingDir) => {
         set((state) => ({
           workspaces: {
@@ -235,7 +240,7 @@ export const useAgentMode = create<AgentModeState>()(
               ? { ...remainingApprovalModes, [toThreadId]: approvalMode }
               : remainingApprovalModes,
             workspaces:
-              (isAgentMode || skill) && workspace
+              workspace
                 ? { ...remainingWorkspaces, [toThreadId]: workspace }
                 : remainingWorkspaces,
           }

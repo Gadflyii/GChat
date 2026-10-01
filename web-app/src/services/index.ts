@@ -30,6 +30,8 @@ import { DefaultRAGService } from './rag/default'
 import type { RAGService } from './rag/types'
 import { DefaultUploadsService } from './uploads/default'
 import type { UploadsService } from './uploads/types'
+import { DefaultCapabilitiesService } from './capabilities/default'
+import type { CapabilitiesService } from './capabilities/types'
 
 // Import service types
 import type { ThemeService } from './theme/types'
@@ -73,6 +75,7 @@ export interface ServiceHub {
   projects(): ProjectsService
   rag(): RAGService
   uploads(): UploadsService
+  capabilities(): CapabilitiesService
 }
 
 class PlatformServiceHub implements ServiceHub {
@@ -96,6 +99,7 @@ class PlatformServiceHub implements ServiceHub {
   private projectsService: ProjectsService = new DefaultProjectsService()
   private ragService: RAGService = new DefaultRAGService()
   private uploadsService: UploadsService = new DefaultUploadsService()
+  private capabilitiesService: CapabilitiesService = new DefaultCapabilitiesService()
   private initialized = false
 
   /**
@@ -128,6 +132,7 @@ class PlatformServiceHub implements ServiceHub {
           pathModule,
           coreModule,
           deepLinkModule,
+          capabilitiesModule,
         ] = await Promise.all([
           import('./theme/tauri'),
           import('./window/tauri'),
@@ -142,6 +147,7 @@ class PlatformServiceHub implements ServiceHub {
           import('./path/tauri'),
           import('./core/tauri'),
           import('./deeplink/tauri'),
+          import('./capabilities/tauri'),
         ])
 
         this.themeService = new themeModule.TauriThemeService()
@@ -157,6 +163,7 @@ class PlatformServiceHub implements ServiceHub {
         this.pathService = new pathModule.TauriPathService()
         this.coreService = new coreModule.TauriCoreService()
         this.deepLinkService = new deepLinkModule.TauriDeepLinkService()
+        this.capabilitiesService = new capabilitiesModule.TauriCapabilitiesService()
       } else if (isPlatformIOS() || isPlatformAndroid()) {
         const [
           themeModule,
@@ -249,6 +256,11 @@ class PlatformServiceHub implements ServiceHub {
   mcp(): MCPService {
     this.ensureInitialized()
     return this.mcpService
+  }
+
+  capabilities(): CapabilitiesService {
+    this.ensureInitialized()
+    return this.capabilitiesService
   }
 
   threads(): ThreadsService {

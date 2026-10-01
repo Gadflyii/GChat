@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { Route as GeneralRoute } from '../general'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
+import { useAgentMode } from '@/hooks/useAgentMode'
 
 // Mock all the dependencies
 vi.mock('@/containers/SettingsMenu', () => ({
@@ -283,6 +284,7 @@ Object.assign(navigator, {
 describe('General Settings Route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAgentMode.getState().setDefaultApprovalMode('manual')
     seedServiceHub({
       app: {
         factoryReset: vi.fn(),
@@ -365,6 +367,25 @@ describe('General Settings Route', () => {
       fireEvent.click(switches[0])
     })
     expect(switches[0]).toBeInTheDocument()
+  })
+
+  it('sets the approval default shared by Chat and Agent from General settings', async () => {
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+
+    const approvalItem = screen.getAllByTestId('card-item').find(
+      (item) => item.getAttribute('data-title') === 'settings:chatBehavior.autoApproveTools'
+    )
+    const toggle = approvalItem?.querySelector<HTMLInputElement>('[data-testid="switch"]')
+    expect(toggle).toBeTruthy()
+    expect(toggle).not.toBeChecked()
+
+    await act(async () => {
+      fireEvent.click(toggle!)
+    })
+    expect(useAgentMode.getState().getApprovalMode('ordinary-chat')).toBe('skip')
   })
 
   it('renders the model preload toggle off, next to the startup settings', async () => {

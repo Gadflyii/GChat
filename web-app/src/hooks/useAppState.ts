@@ -20,7 +20,7 @@ type AppState = {
   loadingModel?: boolean
   tools: MCPTool[]
   ragToolNames: Set<string>
-  mcpToolNames: Set<string>
+  capabilityToolNames: Set<string>
   serverStatus: 'running' | 'stopped' | 'pending'
   abortControllers: Record<string, AbortController>
   tokenSpeed?: TokenSpeed
@@ -28,13 +28,15 @@ type AppState = {
   errorMessage?: AppErrorMessage
   promptProgress?: PromptProgress
   activeModels: string[]
+  intentionallyStoppedModels: Set<string>
+  pendingModelStops: number
   cancelToolCall?: () => void
   setServerStatus: (value: 'running' | 'stopped' | 'pending') => void
   updateStreamingContent: (content: ThreadMessage | undefined) => void
   updateLoadingModel: (loading: boolean) => void
   updateTools: (tools: MCPTool[]) => void
   updateRagToolNames: (names: string[]) => void
-  updateMcpToolNames: (names: string[]) => void
+  updateCapabilityToolNames: (names: string[]) => void
   setAbortController: (threadId: string, controller: AbortController) => void
   updateTokenSpeed: (message: ThreadMessage, increment?: number) => void
   setTokenSpeed: (
@@ -49,6 +51,9 @@ type AppState = {
   setErrorMessage: (error: AppErrorMessage | undefined) => void
   updatePromptProgress: (progress: PromptProgress | undefined) => void
   setActiveModels: (models: string[]) => void
+  setIntentionalModelStop: (providerName: string, modelId: string, stopped: boolean) => void
+  reserveModelStop: () => void
+  releaseModelStop: () => void
 }
 
 export const useAppState = create<AppState>()((set) => ({
@@ -56,7 +61,7 @@ export const useAppState = create<AppState>()((set) => ({
   loadingModel: false,
   tools: [],
   ragToolNames: new Set<string>(),
-  mcpToolNames: new Set<string>(),
+  capabilityToolNames: new Set<string>(),
   serverStatus: 'stopped',
   abortControllers: {},
   tokenSpeed: undefined,
@@ -64,6 +69,8 @@ export const useAppState = create<AppState>()((set) => ({
   promptProgress: undefined,
   cancelToolCall: undefined,
   activeModels: [],
+  intentionallyStoppedModels: new Set(),
+  pendingModelStops: 0,
   updateStreamingContent: (content: ThreadMessage | undefined) => {
     set(() => ({
       streamingContent: content
@@ -83,8 +90,8 @@ export const useAppState = create<AppState>()((set) => ({
   updateRagToolNames: (names) => {
     set({ ragToolNames: new Set(names) })
   },
-  updateMcpToolNames: (names) => {
-    set({ mcpToolNames: new Set(names) })
+  updateCapabilityToolNames: (names) => {
+    set({ capabilityToolNames: new Set(names) })
   },
   setServerStatus: (value) => set({ serverStatus: value }),
   setAbortController: (threadId, controller) => {
@@ -173,4 +180,15 @@ export const useAppState = create<AppState>()((set) => ({
       activeModels: models,
     }))
   },
+  setIntentionalModelStop: (providerName, modelId, stopped) => {
+    set((state) => {
+      const key = `${providerName}::${modelId}`
+      const next = new Set(state.intentionallyStoppedModels)
+      if (stopped) next.add(key)
+      else next.delete(key)
+      return { intentionallyStoppedModels: next }
+    })
+  },
+  reserveModelStop: () => set((state) => ({ pendingModelStops: state.pendingModelStops + 1 })),
+  releaseModelStop: () => set((state) => ({ pendingModelStops: Math.max(0, state.pendingModelStops - 1) })),
 }))

@@ -14,7 +14,6 @@ import { useOnboardingModelReminder } from '@/hooks/useOnboardingModelReminder'
 import { PromptOnboardingModel } from '@/containers/PromptOnboardingModel'
 import { useLeftPanel } from '@/hooks/useLeftPanel'
 import { useTrayStatusSync } from '@/hooks/useTrayStatusSync'
-import ToolApproval from '@/containers/dialogs/ToolApproval'
 import AgentApprovalDialog from '@/containers/dialogs/AgentApprovalDialog'
 import AgentFolderAccessDialog from '@/containers/dialogs/AgentFolderAccessDialog'
 import { TranslationProvider } from '@/i18n/TranslationContext'
@@ -147,7 +146,6 @@ function RootLayout() {
             {IS_LOGS_ROUTE ? <LogsLayout /> : <AppLayout />}
           </ExtensionProvider>
           {/* <TanStackRouterDevtools position="bottom-right" /> */}
-          <ToolApproval />
           <AgentApprovalDialog />
           <AgentFolderAccessDialog />
           <AttachmentIngestionDialog />

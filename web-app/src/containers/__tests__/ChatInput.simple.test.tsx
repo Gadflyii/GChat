@@ -9,6 +9,8 @@ import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import type { AgentDefinition } from '@/types/agent'
 import type { AgentSkill } from '@/services/agent/skills'
 import { useAppState } from '@/hooks/useAppState'
+import type { ModelsService } from '@/services/models/types'
+import * as switchModel from '@/utils/switchModel'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -24,6 +26,7 @@ const agentModeState = vi.hoisted(() => ({
   activeSkills: {} as Record<string, string>,
   setActiveSkill: vi.fn(),
   approvalModes: {} as Record<string, 'manual' | 'skip'>,
+  defaultApprovalMode: 'manual' as 'manual' | 'skip',
   setAgentMode: vi.fn(),
   setApprovalMode: vi.fn(),
 }))
@@ -115,11 +118,13 @@ vi.mock('@/containers/dialogs/GChatBrowserExtensionDialog', () => ({
 }))
 
 vi.mock('@/containers/AgentApprovalModeSelect', () => ({
-  AgentApprovalModeSelect: () => null,
+  AgentApprovalModeSelect: ({ mode }: { mode: 'manual' | 'skip' }) => (
+    <div data-testid="approval-mode-control" data-mode={mode} />
+  ),
 }))
 
 vi.mock('@/containers/AgentExternalFolderButton', () => ({
-  AgentExternalFolderButton: () => null,
+  AgentExternalFolderButton: () => <div data-testid="external-folder-control" />,
 }))
 
 vi.mock('@/components/TokenCounter', () => ({
@@ -147,6 +152,7 @@ describe('ChatInput', () => {
     agentModeState.agentThreads = {}
     agentModeState.activeSkills = {}
     agentModeState.approvalModes = {}
+    agentModeState.defaultApprovalMode = 'manual'
     agentModeState.setAgentMode.mockReset()
     agentModeState.setApprovalMode.mockReset()
 
@@ -181,6 +187,16 @@ describe('ChatInput', () => {
     unmount()
   })
 
+  it('shows shared approval and folder controls in ordinary Chat without an agent definition picker', () => {
+    agentModeState.defaultApprovalMode = 'skip'
+    agentDefinitions.value = [{ id: 'workflow-1', name: 'Workflow' } as AgentDefinition]
+    render(<ChatInput />)
+
+    expect(screen.getByTestId('approval-mode-control')).toHaveAttribute('data-mode', 'skip')
+    expect(screen.getByTestId('external-folder-control')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Agent definition' })).not.toBeInTheDocument()
+  })
+
   it('submits entered text and clears the controlled prompt', async () => {
     const onSubmit = vi.fn()
     const { unmount } = render(<ChatInput onSubmit={onSubmit} />)
@@ -202,6 +218,49 @@ describe('ChatInput', () => {
     )
     await waitFor(() => expect(input).toHaveValue(''))
     unmount()
+  })
+
+  it('lets an explicit Send start a model after the sidebar stopped it', async () => {
+    const model = { id: 'test-model', capabilities: [], settings: {} } as Model
+    useModelProvider.setState({
+      providers: [{ provider: 'ginfer', active: true, models: [model], settings: [] } as ModelProvider],
+      selectedProvider: 'ginfer',
+      selectedModel: model,
+    })
+    useAppState.setState({ activeModels: [], intentionallyStoppedModels: new Set(['ginfer::test-model']) })
+    const getActiveModels = vi.fn().mockResolvedValue([])
+    seedServiceHub({
+      models: { getActiveModels } as unknown as ModelsService,
+    })
+    const switchSpy = vi.spyOn(switchModel, 'switchToModel').mockImplementation(async (params) => {
+      useAppState.getState().setIntentionalModelStop(params.providerName, params.modelId, false)
+      useAppState.setState({ activeModels: [params.modelId] })
+    })
+    try {
+      const onSubmit = vi.fn()
+      const firstView = render(<ChatInput onSubmit={onSubmit} />)
+      await waitFor(() => expect(getActiveModels).toHaveBeenCalledTimes(2))
+      expect(switchSpy).not.toHaveBeenCalled()
+      firstView.unmount()
+
+      const view = render(<ChatInput onSubmit={onSubmit} />)
+      await waitFor(() => expect(getActiveModels).toHaveBeenCalledTimes(4))
+      expect(switchSpy).not.toHaveBeenCalled()
+      fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Continue' } })
+      const sendButton = document.querySelector('[data-test-id="send-message-button"]')!
+      expect(sendButton).toBeEnabled()
+      fireEvent.click(sendButton)
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('Continue', undefined, undefined))
+      expect(switchSpy.mock.calls.some(([params]) =>
+        params.modelId === 'test-model' &&
+        params.providerName === 'ginfer' &&
+        !params.isAutoStart
+      )).toBe(true)
+      view.unmount()
+    } finally {
+      switchSpy.mockRestore()
+    }
   })
 
   it('keeps skill invocation on the default agent unless a saved workflow is explicitly selected', () => {

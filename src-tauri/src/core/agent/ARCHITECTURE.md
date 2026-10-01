@@ -7,10 +7,28 @@ run-observability contracts change. Product-wide decisions belong in
 
 ## Product boundary
 
-Agent mode is isolated from ordinary Chat conversations and the Vercel AI SDK
-path. It composes one bounded Rust executor as a Standard Agent, evaluator-led
-Goal Loop, Coordinator Team, or acyclic Workflow. Definitions, runs, reusable
-skills, scoped workspaces, attachments, approvals, and monitoring are durable.
+Chat, Agent Studio and Code use one Rust capability catalog and tool policy.
+Ordinary replies stream through the AI SDK; native/MCP tool calls execute through
+`capability_execute`. Skills and saved agents delegate to the same bounded Rust
+executor used by Studio: Standard Agent, evaluator-led Goal Loop, Coordinator
+Team, or acyclic Workflow. Definitions, runs, skills, scoped workspaces,
+attachments, approvals and monitoring are durable.
+
+`capability_list` exposes wire-safe names, exact identities and argument schemas.
+Native names map to registered dotted identities; MCP names derive from the exact
+server/tool pair, so equal names on different servers remain distinct. Disabled
+conversation tools are filtered from requests and denied at execution, including
+inside delegated runs. Chat uses the same approval mode and connected folders as
+Studio. Builder saves always require their existing readable confirmation.
+
+Each Chat tool invocation has its own cancellable run ID. Delegated continuation
+uses a stable session per Chat thread and definition/skill; run records retain
+that originating thread. Progress stays in Chat and terminal activity is retained
+with the SDK tool output. A selected skill invokes `skill_invoke` on the first
+request of a user turn; the SDK follow-up can then stream a normal answer. The
+explicit Agent view remains a presentation choice. Remote-provider Chat retains
+streaming and can delegate tasks to an assigned ready GInfer instance or the sole
+ready native instance.
 
 The hidden General Agent is only the runtime fallback and source for a new
 editable draft. It does not appear in the Agent Studio library or task picker.
@@ -34,9 +52,9 @@ editable draft. It does not appear in the Agent Studio library or task picker.
   `high`, `xhigh`, and `max`. A role override wins over the definition default;
   an omitted default leaves policy to the loaded artifact. The resolved value
   is sent on main, repair, evaluator, synthesis, and Vision completions.
-- A context-capacity response may invoke the existing GInfer session-expansion
-  hook, after which the client revalidates the same model identity and retries
-  once against the replacement session.
+- Context capacity is fixed by the launched GInfer instance. Compaction reduces
+  represented history; capacity errors preserve the instance and do not reload
+  a different profile.
 - Agent mode bypasses the port-1337 proxy. It has no llama.cpp `/props`,
   `/completion`, GBNF, slot, or model-profile compatibility path.
 

@@ -4,6 +4,7 @@ use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 
 use super::{
     constants::{
@@ -23,6 +24,42 @@ use std::{collections::BTreeSet, fs, time::Duration};
 
 async fn tool_call_timeout(state: &State<'_, AppState>) -> Duration {
     state.mcp_settings.lock().await.tool_call_timeout_duration()
+}
+
+/// Exact-server dispatch for the shared capability runtime. Clone the peer before
+/// any network I/O; cancellation belongs to the owning Agent/Chat run rather
+/// than the legacy name-only MCP cancellation-token table.
+pub async fn call_tool_exact(
+    state: &AppState,
+    server: &str,
+    tool: &str,
+    arguments: Map<String, Value>,
+    cancellation: &CancellationToken,
+) -> Result<CallToolResult, String> {
+    let peer = state
+        .mcp_servers
+        .lock()
+        .await
+        .get(server)
+        .map(|service| service.peer())
+        .ok_or_else(|| format!("MCP server `{server}` is not connected"))?;
+    let deadline = state.mcp_settings.lock().await.tool_call_timeout_duration();
+    let call = async {
+        let tools = peer.list_all_tools().await.map_err(|error| error.to_string())?;
+        if !tools.iter().any(|candidate| candidate.name == tool) {
+            return Err(format!("MCP tool `{tool}` is unavailable on `{server}`"));
+        }
+        peer.call_tool(CallToolRequestParam {
+            name: tool.to_owned().into(),
+            arguments: Some(arguments),
+        })
+        .await
+        .map_err(|error| error.to_string())
+    };
+    tokio::select! {
+        _ = cancellation.cancelled() => Err("MCP tool call cancelled".into()),
+        result = timeout(deadline, call) => result.map_err(|_| format!("MCP tool `{tool}` timed out after {} seconds", deadline.as_secs()))?,
+    }
 }
 
 #[tauri::command]

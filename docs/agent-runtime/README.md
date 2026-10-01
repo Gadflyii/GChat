@@ -1,4 +1,54 @@
-# Agent failure and chat recovery
+# Chat and Agent runtime
+
+## Shared Chat and agent capabilities — active
+
+The user approved one capability system for Chat and Agent Studio: a shared
+native/MCP catalog and skill registry, common workspace/permission/cancellation
+rules, and natural invocation of skills, saved agents and worker pools from Chat.
+Normal replies retain streaming; tasks use the existing native orchestrator and
+show progress in Chat. Slash commands remain optional shortcuts. Preserve model
+selection, history, existing definition limits and remote-provider Chat support.
+
+The October 1 Stop regression comes from ChatInput's automatic startup effect:
+unloading changes active-model state and the effect starts the selected model
+again. The candidate tracks intentional Stop and suppresses idle restart until
+explicit Start, model selection or Send. Review identified a concurrent switch
+race; Stop now reserves the shared model lifecycle queue and resolves its unload
+target after prior switches finish. The A → B → Stop → C regression confirms
+B unloads before the later deliberate C start.
+
+The shared catalog and Rust execution IPC are implemented. Streaming Chat uses
+the same native ToolContext and MCP identities. Skills and saved agents delegate
+to the existing orchestrator with per-thread permissions, folders and cancellation.
+A saved pool chooses a ready member rather than rejecting an offline first member.
+Disabled native tools remain denied even when a saved definition allows their
+capability. Builder save confirmation and authoring restrictions are preserved.
+See the [capability decision](../decisions/2026-10-01-share-chat-and-agent-capabilities.md).
+Acceptance covers skill discovery/read, builder invocation/save confirmation,
+saved agent/pool dispatch, permission propagation, cancellation/continuation,
+real Chat tool follow-up completion, a stable manual Stop and the full `make verify`
+gate. Update the local Windows app after verification for continued user testing.
+Numerical/performance qualification and changed task budgets are excluded.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| GChat / workstation | `/ai/gchat`, `b86b87168` | Clean main/source baseline; accepted Windows app includes runtime code `69cfa8114` |
+| Shared capabilities | `/ai/gchat-worktrees/shared-chat-capabilities`, `fix/shared-chat-capabilities` | Reviewed implementation candidate; full verification passed; Windows build next |
+| Shared capabilities | Candidate `out/shared-capabilities-20261001/` | Retain focused/full verification and Windows-update evidence |
+| Existing caches | `/ai/gchat/src-tauri/target` and native `%LOCALAPPDATA%/GChat/windows-build/source` | Reuse valid compiler/dependency caches; preserve accepted Windows release |
+| Installed Windows | `%LOCALAPPDATA%/GChat`, `%APPDATA%/GChat/data` | User is testing; preserve history/models and inspect live processes before any update |
+
+Focused evidence: shared Chat SDK tests pass, including selected skill followed
+by a normal streamed reply, retained system instructions, cancellation during
+registration and settled IPC failures. Rust agent, Code bridge and IPC checks
+passed; independent review findings are being resolved. Evidence lives in the
+candidate output folder above. Independent review findings are resolved. Final
+`make verify` passed: 2,027 frontend tests (6 skipped), 15 extension tests,
+coverage floors and supported Rust suites, including 529 desktop tests
+(7 ignored). Backend Clippy passed with warnings denied. Delayed terminal Channel
+events use the authoritative result, preserving incomplete/failed summaries;
+failed task outcomes remain structured SDK tool outputs. Next: rebuild and update
+Windows with the accepted engine, then verify startup and preserved data.
 
 ## Current outcome and acceptance
 

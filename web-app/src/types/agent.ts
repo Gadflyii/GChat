@@ -33,6 +33,7 @@ export type AgentTurnRequest = {
   external_roots?: Array<{ path: string; can_edit: boolean }>
   max_steps?: number
   auto_approve: boolean
+  disabled_tools?: string[]
 }
 
 export type AgentStrategyKind =
