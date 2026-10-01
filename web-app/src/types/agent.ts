@@ -294,12 +294,7 @@ export type AgentEvent =
       model_instance_id: string
       model_id: string
       reasoning_effort: AgentReasoningEffort | null
-      inference: {
-        prompt_tokens: number
-        generated_tokens: number
-        prompt_ms: number
-        generation_ms: number
-      }
+      inference: AgentInferenceMetrics
     }
   | { type: 'handoff'; from: string; to: string; summary: string }
   | { type: 'step_started'; step_index: number }

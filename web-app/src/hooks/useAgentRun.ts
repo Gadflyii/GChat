@@ -176,12 +176,7 @@ export function reduceAgentRunState(
                   ...(event.reasoning_effort === null
                     ? {}
                     : { reasoningEffort: event.reasoning_effort }),
-                  inference: {
-                    promptTokens: event.inference.prompt_tokens,
-                    generatedTokens: event.inference.generated_tokens,
-                    promptMs: event.inference.prompt_ms,
-                    generationMs: event.inference.generation_ms,
-                  },
+                  inference: event.inference,
                 }
               : stage
           ),

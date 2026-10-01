@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Own chat tool lifecycle per session](2026-10-01-own-chat-tool-lifecycle-per-session.md)
+
 - [Bundle Linux GInfer runtimes by GPU architecture](2026-09-30-bundle-linux-ginfer-runtimes-by-gpu-architecture.md)
 
 - [Count and compact GInfer chat requests without reloading profiles](2026-09-24-count-and-compact-ginfer-chat-requests.md)

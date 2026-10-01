@@ -209,7 +209,7 @@ export const useAgentMode = create<AgentModeState>()(
       transferAgentMode: (fromThreadId, toThreadId) => {
         set((state) => {
           const isAgentMode = state.agentThreads[fromThreadId] === true
-          const approvalMode = state.approvalModes[fromThreadId] ?? 'manual'
+          const approvalMode = state.approvalModes[fromThreadId]
           const workspace = state.workspaces[fromThreadId]
           const remainingThreads = { ...state.agentThreads }
           const activeSkills = { ...state.activeSkills }
@@ -231,7 +231,7 @@ export const useAgentMode = create<AgentModeState>()(
             agentThreads: isAgentMode
               ? { ...remainingThreads, [toThreadId]: true }
               : remainingThreads,
-            approvalModes: isAgentMode
+            approvalModes: approvalMode !== undefined
               ? { ...remainingApprovalModes, [toThreadId]: approvalMode }
               : remainingApprovalModes,
             workspaces:

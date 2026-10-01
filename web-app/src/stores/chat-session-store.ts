@@ -10,6 +10,8 @@ import i18n from "@/i18n/setup";
 
 export type SessionData = {
   tools: any[];
+  pendingToolBatches: Set<symbol>;
+  toolCallAbortController: AbortController | null;
   messages: UIMessage[];
   idMap: Map<string, string>;
 };
@@ -35,6 +37,11 @@ interface ChatSessionState {
     title?: string,
   ) => Chat<UIMessage>;
   getSessionData: (sessionId: string) => SessionData;
+  claimToolBatch: (sessionId: string) => { id: symbol; calls: SessionData["tools"] } | null;
+  endToolBatch: (sessionId: string, batchId: symbol) => void;
+  clearToolBatches: (sessionId: string) => void;
+  getToolCallController: (sessionId: string) => AbortController;
+  abortToolCalls: (sessionId: string) => void;
   upsertMessage: (sessionId: string, message: UIMessage) => void;
   updateStatus: (sessionId: string, status: ChatStatus) => void;
   setSessionTitle: (sessionId: string, title?: string) => void;
@@ -49,11 +56,14 @@ const STREAMING_STATUSES: ChatStatus[] = [
 
 // Pure helper function for checking if a session is busy (for reactive use in components)
 export function isSessionBusy(session: ChatSession | undefined): boolean {
-  return session?.isStreaming || (session?.data?.tools?.length ?? 0) > 0;
+  return session?.isStreaming || (session?.data?.tools?.length ?? 0) > 0 ||
+    (session?.data?.pendingToolBatches.size ?? 0) > 0;
 }
 
 const createSessionData = (): SessionData => ({
   tools: [],
+  pendingToolBatches: new Set(),
+  toolCallAbortController: null,
   messages: [],
   idMap: new Map<string, string>(),
 });
@@ -133,6 +143,47 @@ export const useChatSessions = create<ChatSessionState>((set, get) => ({
     }
     return standaloneData[sessionId];
   },
+  claimToolBatch: (sessionId) => {
+    let batch: { id: symbol; calls: SessionData["tools"] } | null = null;
+    set((state) => {
+      const session = state.sessions[sessionId];
+      if (!session) return state;
+      const calls = session.data.tools.splice(0);
+      if (calls.length === 0) return state;
+      const id = Symbol('chat-tool-batch');
+      batch = { id, calls };
+      session.data.pendingToolBatches.add(id);
+      return { sessions: { ...state.sessions, [sessionId]: { ...session } } };
+    });
+    return batch;
+  },
+  endToolBatch: (sessionId, batchId) => {
+    set((state) => {
+      const session = state.sessions[sessionId];
+      if (!session || !session.data.pendingToolBatches.delete(batchId)) return state;
+      return { sessions: { ...state.sessions, [sessionId]: { ...session } } };
+    });
+  },
+  clearToolBatches: (sessionId) => {
+    set((state) => {
+      const session = state.sessions[sessionId];
+      if (!session || session.data.pendingToolBatches.size === 0) return state;
+      session.data.pendingToolBatches.clear();
+      return { sessions: { ...state.sessions, [sessionId]: { ...session } } };
+    });
+  },
+  getToolCallController: (sessionId) => {
+    const data = get().getSessionData(sessionId);
+    if (!data.toolCallAbortController) {
+      data.toolCallAbortController = new AbortController();
+    }
+    return data.toolCallAbortController;
+  },
+  abortToolCalls: (sessionId) => {
+    const data = get().getSessionData(sessionId);
+    data.toolCallAbortController?.abort();
+    data.toolCallAbortController = null;
+  },
   upsertMessage: (sessionId, message) => {
     const existing = get().sessions[sessionId];
     if (!existing) return;
@@ -161,7 +212,8 @@ export const useChatSessions = create<ChatSessionState>((set, get) => ({
       const justFinished = wasStreaming && !isStreaming;
       if (justFinished) {
         const hasMessages = existing.chat.messages.length > 0;
-        const hasPendingTools = existing.data.tools.length > 0;
+        const hasPendingTools = existing.data.tools.length > 0 ||
+          existing.data.pendingToolBatches.size > 0;
         const hasDocument = typeof document !== "undefined";
         const isVisible = hasDocument
           ? document.visibilityState === "visible"
@@ -253,6 +305,9 @@ export const useChatSessions = create<ChatSessionState>((set, get) => ({
     });
 
     // Then cleanup (existing is a copy, safe to use after removal)
+    existing.data.toolCallAbortController?.abort();
+    existing.data.toolCallAbortController = null;
+    existing.data.pendingToolBatches.clear();
     existing.unsubscribers.forEach((unsubscribe) => {
       try {
         unsubscribe();
@@ -271,6 +326,9 @@ export const useChatSessions = create<ChatSessionState>((set, get) => ({
   clearSessions: () => {
     const sessions = get().sessions;
     Object.values(sessions).forEach((session) => {
+      session.data.toolCallAbortController?.abort();
+      session.data.toolCallAbortController = null;
+      session.data.pendingToolBatches.clear();
       session.unsubscribers.forEach((unsubscribe) => {
         try {
           unsubscribe();

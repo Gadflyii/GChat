@@ -1,12 +1,16 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   executeChatToolCalls,
+  executeClaimedChatToolBatch,
   shouldSendToolFollowUp,
   type ChatToolCall,
   type ChatToolOutput,
 } from '../execute-chat-tool-calls'
-import type { UIMessage } from '@ai-sdk/react'
+import { Chat, type UIMessage } from '@ai-sdk/react'
+import type { ChatTransport, UIMessageChunk } from 'ai'
+import type { CustomChatTransport } from '@/lib/custom-chat-transport'
+import { isSessionBusy, useChatSessions } from '@/stores/chat-session-store'
 
 const calls: ChatToolCall[] = [
   { toolCallId: 'call-1', toolName: 'search', input: { query: 'alpha' } },
@@ -113,6 +117,186 @@ describe('executeChatToolCalls', () => {
         errorText: 'Tool execution denied by user',
       },
     ])
+  })
+})
+
+describe('claimed chat tool batches', () => {
+  beforeEach(() => {
+    useChatSessions.getState().clearSessions()
+  })
+
+  it('keeps a final answer busy until the preceding tool batch settles', async () => {
+    const chat = { messages: [], status: 'ready', stop: vi.fn() } as unknown as Chat<UIMessage>
+    useChatSessions.getState().ensureSession(
+      'thread-1',
+      {} as CustomChatTransport,
+      () => chat
+    )
+    const sessionData = useChatSessions.getState().getSessionData('thread-1')
+    sessionData.tools.push(calls[0])
+    useChatSessions.getState().updateStatus('thread-1', 'streaming')
+    const options = {
+      ...baseOptions(),
+      signal: new AbortController().signal,
+      callMcpTool: vi.fn().mockResolvedValue({ content: 'result' }),
+      addToolOutput: vi.fn(() => {
+        // addToolOutput can launch the follow-up before this batch's finally runs.
+        useChatSessions.getState().updateStatus('thread-1', 'ready')
+        expect(executeClaimedChatToolBatch(options)).toBeUndefined()
+        expect(isSessionBusy(useChatSessions.getState().sessions['thread-1'])).toBe(true)
+      }),
+    }
+
+    const execution = executeClaimedChatToolBatch(options)
+    expect(execution).toBeDefined()
+    expect(sessionData.tools).toEqual([])
+    await execution
+
+    expect(options.addToolOutput).toHaveBeenCalledOnce()
+    expect(isSessionBusy(useChatSessions.getState().sessions['thread-1'])).toBe(false)
+  })
+
+  it('waits for SDK output admission before ending the batch', async () => {
+    const chat = { messages: [], status: 'ready', stop: vi.fn() } as unknown as Chat<UIMessage>
+    useChatSessions.getState().ensureSession(
+      'thread-1',
+      {} as CustomChatTransport,
+      () => chat
+    )
+    useChatSessions.getState().getSessionData('thread-1').tools.push(calls[0])
+    let admitOutput!: () => void
+    const admission = new Promise<void>((resolve) => { admitOutput = resolve })
+    const options = {
+      ...baseOptions(),
+      signal: new AbortController().signal,
+      callMcpTool: vi.fn().mockResolvedValue({ content: 'result' }),
+      addToolOutput: vi.fn(() => admission),
+    }
+
+    const execution = executeClaimedChatToolBatch(options)!
+    await vi.waitFor(() => expect(options.addToolOutput).toHaveBeenCalledOnce())
+    expect(isSessionBusy(useChatSessions.getState().sessions['thread-1'])).toBe(true)
+
+    admitOutput()
+    await execution
+    expect(isSessionBusy(useChatSessions.getState().sessions['thread-1'])).toBe(false)
+  })
+
+  it('settles after SDK rejects tool output admission', async () => {
+    const chat = { messages: [], status: 'ready', stop: vi.fn() } as unknown as Chat<UIMessage>
+    useChatSessions.getState().ensureSession(
+      'thread-1',
+      {} as CustomChatTransport,
+      () => chat
+    )
+    useChatSessions.getState().getSessionData('thread-1').tools.push(calls[0])
+    const options = {
+      ...baseOptions(),
+      signal: new AbortController().signal,
+      callMcpTool: vi.fn().mockResolvedValue({ content: 'result' }),
+      addToolOutput: vi.fn().mockRejectedValue(new Error('admission failed')),
+    }
+
+    await executeClaimedChatToolBatch(options)
+
+    expect(options.addToolOutput).toHaveBeenCalledOnce()
+    expect(options.onError).toHaveBeenCalledOnce()
+    expect(isSessionBusy(useChatSessions.getState().sessions['thread-1'])).toBe(false)
+  })
+
+  it('keeps cancellation scoped to each cached session', () => {
+    const chat = () => ({ messages: [], status: 'ready', stop: vi.fn() }) as unknown as Chat<UIMessage>
+    const transport = {} as CustomChatTransport
+    useChatSessions.getState().ensureSession('thread-a', transport, chat)
+    useChatSessions.getState().ensureSession('thread-b', transport, chat)
+    const sessionA = useChatSessions.getState().getSessionData('thread-a')
+    const sessionB = useChatSessions.getState().getSessionData('thread-b')
+    const controllerA = useChatSessions.getState().getToolCallController('thread-a')
+    const controllerB = useChatSessions.getState().getToolCallController('thread-b')
+
+    useChatSessions.getState().abortToolCalls('thread-b')
+
+    expect(controllerA.signal.aborted).toBe(false)
+    expect(controllerB.signal.aborted).toBe(true)
+    expect(sessionA.toolCallAbortController.signal.aborted).toBe(false)
+    expect(sessionB.toolCallAbortController).toBeNull()
+  })
+
+  it('finishes a cached SDK Chat after a tool call and final text response', async () => {
+    const threadId = 'thread-1'
+    const sessionData = useChatSessions.getState().getSessionData(threadId)
+    let requests = 0
+    const chunks: UIMessageChunk[][] = [
+      [
+        { type: 'start' },
+        { type: 'start-step' },
+        { type: 'tool-input-available', toolCallId: 'call-1', toolName: 'search', input: { query: 'weather' }, dynamic: true },
+        { type: 'finish-step' },
+        { type: 'finish', finishReason: 'tool-calls' },
+      ],
+      [
+        { type: 'start' },
+        { type: 'start-step' },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: 'Tomorrow is clear.' },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish-step' },
+        { type: 'finish', finishReason: 'stop' },
+      ],
+    ]
+    const transport = {
+      sendMessages: vi.fn(async () => {
+        const response = chunks[requests++]
+        if (!response) throw new Error('unexpected SDK request')
+        return new ReadableStream<UIMessageChunk>({
+          start(controller) {
+            response.forEach((chunk) => controller.enqueue(chunk))
+            controller.close()
+          },
+        })
+      }),
+    } as unknown as ChatTransport<UIMessage>
+    let chat!: Chat<UIMessage>
+    chat = new Chat<UIMessage>({
+      transport,
+      onToolCall: ({ toolCall }) => { sessionData.tools.push(toolCall) },
+      onFinish: () => {
+        if (sessionData.tools.length === 0) return
+        const signal = useChatSessions.getState().getToolCallController(threadId).signal
+        void executeClaimedChatToolBatch({
+          ...baseOptions(),
+          signal,
+          callMcpTool: vi.fn().mockResolvedValue({ content: 'Clear skies' }),
+          addToolOutput: (output) => chat.addToolOutput(output),
+        })
+      },
+      sendAutomaticallyWhen: ({ messages }) =>
+        shouldSendToolFollowUp(messages, sessionData.toolCallAbortController),
+    })
+    useChatSessions.getState().ensureSession(
+      threadId,
+      transport as CustomChatTransport,
+      () => chat
+    )
+
+    await chat.sendMessage({ text: 'What about tomorrow?' })
+    await vi.waitFor(() => {
+      expect(requests).toBe(2)
+      expect(chat.status).toBe('ready')
+      expect(chat.messages.at(-1)?.parts).toContainEqual(
+        expect.objectContaining({ type: 'text', text: 'Tomorrow is clear.' })
+      )
+      expect(isSessionBusy(useChatSessions.getState().sessions[threadId])).toBe(false)
+    })
+
+    const createAnotherChat = vi.fn()
+    expect(useChatSessions.getState().ensureSession(
+      threadId,
+      transport as CustomChatTransport,
+      createAnotherChat
+    )).toBe(chat)
+    expect(createAnotherChat).not.toHaveBeenCalled()
+    expect(isSessionBusy(useChatSessions.getState().sessions[threadId])).toBe(false)
   })
 })
 

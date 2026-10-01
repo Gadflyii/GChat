@@ -65,7 +65,7 @@ import {
 import { processAttachmentsForSend } from '@/lib/attachmentProcessing'
 import { downscaleToolResultContent } from '@/lib/toolResultImages'
 import {
-  executeChatToolCalls,
+  executeClaimedChatToolBatch,
   shouldSendToolFollowUp,
 } from '@/lib/execute-chat-tool-calls'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -250,15 +250,12 @@ function ThreadDetail() {
   const getSessionData = useChatSessions((state) => state.getSessionData)
   const sessionData = getSessionData(threadId)
 
-  // AbortController for cancelling tool calls
-  const toolCallAbortController = useRef<AbortController | null>(null)
-
   // Check if we should follow up with tool calls (respects abort signal)
   const followUpMessage = useCallback(
     ({ messages }: { messages: UIMessage[] }) => {
-      return shouldSendToolFollowUp(messages, toolCallAbortController.current)
+      return shouldSendToolFollowUp(messages, sessionData.toolCallAbortController)
     },
-    []
+    [sessionData]
   )
 
   // Subscribe directly to the thread data to ensure updates when model changes
@@ -290,7 +287,9 @@ function ThreadDetail() {
     : undefined
 
   const [contextLimitError, setContextLimitError] = useState<Error | null>(null)
-  const [isChatRequestActive, setIsChatRequestActive] = useState(false)
+  const pendingToolBatches = useChatSessions(
+    (state) => state.sessions[threadId]?.data.pendingToolBatches.size ?? 0
+  )
 
   // Optimistic user message shown while the home → new thread initial-message
   // path indexes attachments. Lives in a shared Zustand store published by
@@ -328,7 +327,9 @@ function ThreadDetail() {
         | undefined
 
       if (isAbort) {
-        setIsChatRequestActive(false)
+        sessionData.tools.length = 0
+        useChatSessions.getState().clearToolBatches(threadId)
+        useChatSessions.getState().abortToolCalls(threadId)
       }
 
       // A startup-fixed GInfer context belongs to the selected host profile.
@@ -350,11 +351,6 @@ function ThreadDetail() {
         if (isContextLimit) {
           setContextLimitError(new Error(OUT_OF_CONTEXT_SIZE))
         }
-        setIsChatRequestActive(false)
-      }
-
-      if (!isAbort && sessionData.tools.length === 0) {
-        setIsChatRequestActive(false)
       }
 
       // Preserve partial answers when a request reaches a limit.
@@ -394,49 +390,42 @@ function ThreadDetail() {
         }
       }
 
-      // Create a new AbortController for tool calls
-      toolCallAbortController.current = new AbortController()
-      const signal = toolCallAbortController.current.signal
+      // Claim this completion's calls before addToolOutput can start another
+      // model request. The next onFinish must not see calls from this batch.
+      if (isAbort || sessionData.tools.length === 0) return
+
+      const controller = useChatSessions.getState().getToolCallController(threadId)
+      const signal = controller.signal
 
       // Get cached tool names from store (initialized in useTools hook)
       const ragToolNames = useAppState.getState().ragToolNames
       const mcpToolNames = useAppState.getState().mcpToolNames
 
       // Process tool calls sequentially, requesting approval for each if needed
-      ;(async () => {
-        await executeChatToolCalls({
-          toolCalls: sessionData.tools,
-          signal,
-          threadId,
-          ragToolNames,
-          mcpToolNames,
-          approve: (toolName, currentThreadId, input) =>
-            useToolApproval
-              .getState()
-              .showApprovalModal(toolName, currentThreadId, input),
-          callRagTool: (args) => serviceHub.rag().callTool(args),
-          callMcpTool: (args) => serviceHub.mcp().callTool(args),
-          // Resolve project scope from the live route-keyed thread record.
-          getProjectId: () =>
-            useThreads.getState().threads[threadId]?.metadata?.project?.id,
-          processOutput: (content) =>
-            downscaleToolResultContent(
-              content,
-              useGeneralSetting.getState().maxImageSizePx
-            ),
-          addToolOutput,
-        })
-
-        // Clear tools after processing all
-        sessionData.tools = []
-        toolCallAbortController.current = null
-      })().catch((error) => {
-        // Ignore abort errors
-        if (error.name !== 'AbortError') {
+      void executeClaimedChatToolBatch({
+        signal,
+        threadId,
+        ragToolNames,
+        mcpToolNames,
+        approve: (toolName, currentThreadId, input) =>
+          useToolApproval
+            .getState()
+            .showApprovalModal(toolName, currentThreadId, input),
+        callRagTool: (args) => serviceHub.rag().callTool(args),
+        callMcpTool: (args) => serviceHub.mcp().callTool(args),
+        // Resolve project scope from the live route-keyed thread record.
+        getProjectId: () =>
+          useThreads.getState().threads[threadId]?.metadata?.project?.id,
+        processOutput: (content) =>
+          downscaleToolResultContent(
+            content,
+            useGeneralSetting.getState().maxImageSizePx
+          ),
+        addToolOutput,
+      })?.catch((error) => {
+        if ((error as Error).name !== 'AbortError') {
           console.error('Tool call error:', error)
         }
-        sessionData.tools = []
-        toolCallAbortController.current = null
       })
     },
     onToolCall: ({ toolCall }) => {
@@ -990,7 +979,6 @@ function ThreadDetail() {
       // sendMessage so React 18 batches both updates and the user sees the
       // real bubble appear in the same position without a flicker.
       useOptimisticUserMessage.getState().clear(threadId)
-      setIsChatRequestActive(true)
       sendMessage({
         parts,
         id: messageId,
@@ -1069,7 +1057,7 @@ function ThreadDetail() {
         }
         const activeAgentRun = useAgentRun.getState().getRun(threadId)
         if (
-          isChatRequestActive ||
+          pendingToolBatches > 0 ||
           status === CHAT_STATUS.STREAMING ||
           status === CHAT_STATUS.SUBMITTED ||
           activeAgentRun.status === 'running' ||
@@ -1145,7 +1133,7 @@ function ThreadDetail() {
     },
     [
       compactContext,
-      isChatRequestActive,
+      pendingToolBatches,
       processAndSendMessage,
       selectedModel?.id,
       status,
@@ -1258,7 +1246,6 @@ function ThreadDetail() {
 
       // Call the AI SDK regenerate function - it will handle truncating the UI messages
       // and generating a new response from the selected message
-      setIsChatRequestActive(true)
       regenerate(messageId ? { messageId } : undefined)
     },
     [
@@ -1329,7 +1316,6 @@ function ThreadDetail() {
       })
 
       // Regenerate from the edited message
-      setIsChatRequestActive(true)
       regenerate({ messageId })
     },
     [
@@ -1402,9 +1388,11 @@ function ThreadDetail() {
       setContextLimitError(null)
     }
     if (status === 'error') {
-      setIsChatRequestActive(false)
+      useChatSessions.getState().abortToolCalls(threadId)
+      sessionData.tools.length = 0
+      useChatSessions.getState().clearToolBatches(threadId)
     }
-  }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [status, threadId, sessionData])
 
   const threadModel = useMemo(
     () => searchThreadModel ?? thread?.model,
@@ -1414,10 +1402,9 @@ function ThreadDetail() {
     agentRun?.status === 'running' || agentRun?.status === 'awaiting_approval'
   const handleStop = useCallback(() => {
     if (!agentModeActive || !isAgentRunning || !agentRun?.runId) {
-      toolCallAbortController.current?.abort()
-      toolCallAbortController.current = null
+      useChatSessions.getState().abortToolCalls(threadId)
       sessionData.tools = []
-      setIsChatRequestActive(false)
+      useChatSessions.getState().clearToolBatches(threadId)
       stop()
       return
     }
@@ -1440,7 +1427,11 @@ function ThreadDetail() {
     threadId,
   ])
   const requestActive =
-    isAgentRunning || (!agentModeActive && isChatRequestActive)
+    isAgentRunning ||
+    (!agentModeActive &&
+      (status === CHAT_STATUS.SUBMITTED ||
+        status === CHAT_STATUS.STREAMING ||
+        pendingToolBatches > 0))
   const inputStatus = requestActive ? CHAT_STATUS.SUBMITTED : status
   const lastChatMessage = chatMessages[chatMessages.length - 1]
   const hasActiveAssistantMessage = lastChatMessage?.role === 'assistant'

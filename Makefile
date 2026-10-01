@@ -284,13 +284,15 @@ else ifeq ($(shell uname -s),Darwin)
 	@[ -e src-tauri/resources/bin/uv-aarch64-apple-darwin ] || touch src-tauri/resources/bin/uv-aarch64-apple-darwin
 	@[ -e src-tauri/resources/bin/uv-x86_64-apple-darwin ] || touch src-tauri/resources/bin/uv-x86_64-apple-darwin
 else
-	@mkdir -p src-tauri/resources/bin src-tauri/resources/pre-install
+	@mkdir -p src-tauri/resources/bin src-tauri/resources/pre-install src-tauri/resources/ginfer/linux
 	@[ -e src-tauri/resources/LICENSE ] || touch src-tauri/resources/LICENSE
 	@[ -e src-tauri/resources/pre-install/test-placeholder ] || touch src-tauri/resources/pre-install/test-placeholder
 	@[ -e src-tauri/resources/bin/gchat-cli ] || touch src-tauri/resources/bin/gchat-cli
 	@[ -e src-tauri/resources/bin/sqlite-vec.so ] || touch src-tauri/resources/bin/sqlite-vec.so
 	@[ -e src-tauri/resources/bin/ginfer-host ] || touch src-tauri/resources/bin/ginfer-host
-	@[ -e src-tauri/resources/bin/uv-x86_64-unknown-linux-gnu ] || touch src-tauri/resources/bin/uv-x86_64-unknown-linux-gnu
+	@[ -e src-tauri/resources/bin/bun ] || touch src-tauri/resources/bin/bun
+	@[ -e src-tauri/resources/bin/uv ] || touch src-tauri/resources/bin/uv
+	@[ -e src-tauri/resources/ginfer/linux/test-placeholder ] || touch src-tauri/resources/ginfer/linux/test-placeholder
 endif
 
 test-rust: export TAURI_CONFIG := {"bundle":{"icon":["icons/icon.png"]}}

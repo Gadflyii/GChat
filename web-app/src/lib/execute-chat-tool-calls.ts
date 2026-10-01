@@ -1,5 +1,6 @@
 import type { UIMessage } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithToolCalls } from 'ai'
+import { useChatSessions } from '@/stores/chat-session-store'
 
 export type ChatToolCall = {
   toolCallId: string
@@ -49,8 +50,21 @@ type ExecuteChatToolCallsOptions = {
   }) => Promise<ToolResult>
   getProjectId: () => string | undefined
   processOutput: (content: unknown) => Promise<unknown>
-  addToolOutput: (output: ChatToolOutput) => void
+  addToolOutput: (output: ChatToolOutput) => void | Promise<void>
   onError?: (error: unknown) => void
+}
+
+// Claim the completed response's calls before tool output can trigger the next
+// response. A batch identity keeps an older completion from settling a newer turn.
+export function executeClaimedChatToolBatch(
+  options: Omit<ExecuteChatToolCallsOptions, 'toolCalls'>
+): Promise<void> | undefined {
+  const batch = useChatSessions.getState().claimToolBatch(options.threadId)
+  if (!batch) return undefined
+
+  return executeChatToolCalls({ ...options, toolCalls: batch.calls }).finally(
+    () => useChatSessions.getState().endToolBatch(options.threadId, batch.id)
+  )
 }
 
 export async function executeChatToolCalls({
@@ -70,68 +84,78 @@ export async function executeChatToolCalls({
   for (const toolCall of toolCalls) {
     if (signal.aborted) break
 
+    let output: ChatToolOutput
     try {
       const approved = await approve(
         toolCall.toolName,
         threadId,
         toolCall.input
       )
+      if (signal.aborted) break
 
       if (!approved) {
-        addToolOutput({
+        output = {
           state: 'output-error',
           tool: toolCall.toolName,
           toolCallId: toolCall.toolCallId,
           errorText: 'Tool execution denied by user',
-        })
-        continue
-      }
-
-      let result: ToolResult
-      if (ragToolNames.has(toolCall.toolName)) {
-        const projectId = getProjectId()
-        result = await callRagTool({
-          toolName: toolCall.toolName,
-          arguments: toolCall.input,
-          threadId,
-          projectId,
-          scope: projectId ? 'project' : 'thread',
-        })
-      } else if (mcpToolNames.has(toolCall.toolName)) {
-        result = await callMcpTool({
-          toolName: toolCall.toolName,
-          arguments: toolCall.input,
-        })
+        }
       } else {
-        result = {
-          error: `Tool '${toolCall.toolName}' not found in any service`,
+        let result: ToolResult
+        if (ragToolNames.has(toolCall.toolName)) {
+          const projectId = getProjectId()
+          result = await callRagTool({
+            toolName: toolCall.toolName,
+            arguments: toolCall.input,
+            threadId,
+            projectId,
+            scope: projectId ? 'project' : 'thread',
+          })
+        } else if (mcpToolNames.has(toolCall.toolName)) {
+          result = await callMcpTool({
+            toolName: toolCall.toolName,
+            arguments: toolCall.input,
+          })
+        } else {
+          result = {
+            error: `Tool '${toolCall.toolName}' not found in any service`,
+          }
+        }
+        if (signal.aborted) break
+
+        if (result.error) {
+          output = {
+            state: 'output-error',
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            errorText: `Error: ${result.error}`,
+          }
+        } else {
+          const content = await processOutput(result.content)
+          if (signal.aborted) break
+          output = {
+            tool: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            output: content,
+          }
         }
       }
-
-      if (result.error) {
-        addToolOutput({
-          state: 'output-error',
-          tool: toolCall.toolName,
-          toolCallId: toolCall.toolCallId,
-          errorText: `Error: ${result.error}`,
-        })
-      } else {
-        addToolOutput({
-          tool: toolCall.toolName,
-          toolCallId: toolCall.toolCallId,
-          output: await processOutput(result.content),
-        })
-      }
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
-        onError(error)
-        addToolOutput({
-          state: 'output-error',
-          tool: toolCall.toolName,
-          toolCallId: toolCall.toolCallId,
-          errorText: `Error: ${JSON.stringify(error)}`,
-        })
+      if (signal.aborted || (error as Error).name === 'AbortError') break
+      onError(error)
+      output = {
+        state: 'output-error',
+        tool: toolCall.toolName,
+        toolCallId: toolCall.toolCallId,
+        errorText: `Error: ${JSON.stringify(error)}`,
       }
+    }
+
+    try {
+      await addToolOutput(output)
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') onError(error)
+      break
     }
   }
 }

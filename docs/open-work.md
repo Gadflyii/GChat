@@ -1,6 +1,6 @@
 # Open work
 
-Updated 2026-09-30. This is the active GChat release-acceptance list. Completed
+Updated 2026-10-01. This is the active GChat release-acceptance list. Completed
 implementation and historical measurements are not pending tasks.
 
 - **Installed Windows acceptance:** exercise the selected release in its actual
@@ -12,7 +12,11 @@ implementation and historical measurements are not pending tasks.
   automatic process reload. Also check older-turn/manual compaction, agent
   tool-boundary checkpoints, approvals, workspace/history continuation, and
   interactive Hermes launch. Source edits and automated coverage do not establish
-  the installed walkthrough.
+  the installed walkthrough. October 1 testing reproduced a completed ordinary
+  tool-follow-up answer that remained Working, plus lost terminal-stage throughput
+  and unnecessary access prompts for agents' own handoff files. Fixes and
+  verification are tracked in [agent runtime](agent-runtime/README.md). The earlier
+  context/format warnings did not recur; their cause remains unconfirmed.
 - **Physical worker pools:** exercise queueing, cancellation, disconnection, and
   concurrent workers across real paired hosts. Baseline two-host discovery,
   pairing, inference/lifecycle, native Windows vault, and platform service checks

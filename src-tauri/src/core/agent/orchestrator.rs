@@ -229,11 +229,14 @@ async fn run_definition_inner(
         .into(),
     })?;
 
-    let run_root = input.data_folder.join("agent-runs").join(input.storage_id);
+    let mut run_root = input.data_folder.join("agent-runs").join(input.storage_id);
     if !matches!(input.definition.strategy, AgentStrategy::Standard) {
         tokio::fs::create_dir_all(&run_root)
             .await
             .map_err(|error| format!("Failed to create Agent run workspace: {error}"))?;
+        run_root = tokio::fs::canonicalize(&run_root)
+            .await
+            .map_err(|error| format!("Failed to resolve Agent run workspace: {error}"))?;
     }
     let default_model_instance_id = resolved_model_instance_id(
         input.definition.model_instance_id.as_deref(),
@@ -647,7 +650,7 @@ async fn run_coordinator(
             workspace: StageWorkspace::Isolated,
             message: format!(
                 "Goal:\n{goal}\n\nCoordinator plan:\n{}\n\nComplete the part of the plan assigned to your role. The source workspace is available read-only; put any produced artifacts in your isolated run workspace.",
-                handoff(context.run_root, "plan", &plan_text)
+                handoff(context.run_root, "coordinate", &plan_text)
             ),
             cycle: None,
             model_instance_id: resolved_model_instance_id(
@@ -720,7 +723,7 @@ async fn run_coordinator(
         workspace: StageWorkspace::Shared,
         message: format!(
             "Goal:\n{goal}\n\nCoordinator plan:\n{}\n\nSpecialist reports:\n{}",
-            handoff(context.run_root, "plan", &plan_text),
+            handoff(context.run_root, "coordinate", &plan_text),
             reports
                 .iter()
                 .map(|(name, report)| format!("## {name}\n{report}"))
@@ -1181,11 +1184,12 @@ fn handoff(root: &Path, stage: &str, text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::agent::definitions::general_agent;
+    use crate::core::agent::definitions::{general_agent, AgentRole};
     use crate::core::agent::test_support::{
         RecordingApproval, RecordingDesktop, RecordingFolderAccess, ScriptedGinferServer,
         ScriptedResponse, TestWorkspace,
     };
+    use crate::core::agent::types::ToolStatus;
     use tokio_util::sync::CancellationToken;
 
     #[test]
@@ -1207,6 +1211,153 @@ mod tests {
             merge_skill_lists(&shared, &["research".into(), "review".into()]),
             vec!["code", "research", "review"]
         );
+    }
+
+    #[tokio::test]
+    async fn coordinator_handoffs_are_readable_without_external_folder_access() {
+        let workspace = TestWorkspace::new();
+        let run_root = workspace.path().join("agent-runs").join("coordinator-test");
+        let canonical_run_root = tokio::fs::canonicalize(workspace.path())
+            .await
+            .unwrap()
+            .join("agent-runs")
+            .join("coordinator-test");
+        let plan_result = canonical_run_root.join("coordinate/result.txt");
+        let worker_result = canonical_run_root.join("worker-research/result.txt");
+        let tool_call = |path: &Path| {
+            ScriptedResponse::completion(
+                serde_json::json!([{"tool":"os.fs.read","args":{"path":path}}]).to_string(),
+            )
+        };
+        let reply = |text: &str| {
+            ScriptedResponse::completion(
+                serde_json::json!([{"tool":"reply","args":{"text":text}}]).to_string(),
+            )
+        };
+        let server = ScriptedGinferServer::start(vec![
+            reply("research the answer"),
+            tool_call(&plan_result),
+            reply("worker report"),
+            tool_call(&worker_result),
+            reply("final answer"),
+        ])
+        .await;
+        let routes = AgentModelRoutes::new(vec![AgentModelRoute {
+            instance_id: "active".into(),
+            model_id: "active".into(),
+            client: server.client(),
+        }])
+        .unwrap();
+        let mut definition = general_agent();
+        definition.max_steps = 3;
+        definition.strategy = AgentStrategy::Coordinator {
+            max_parallel: 1,
+            coordinator_instructions: "Plan the work".into(),
+            synthesis_instructions: "Combine the work".into(),
+            synthesis_model_instance_id: None,
+            synthesis_reasoning_effort: None,
+            workers: vec![AgentRole {
+                id: "research".into(),
+                name: "Researcher".into(),
+                instructions: "Read the plan".into(),
+                skills: Vec::new(),
+                max_steps: 3,
+                model_instance_id: None,
+                reasoning_effort: None,
+            }],
+        };
+        let editable_roots = EditableRoots::new(workspace.path(), &[]).await.unwrap();
+        let capabilities = CapabilitiesSummary {
+            platform: std::env::consts::OS.into(),
+            arch: std::env::consts::ARCH.into(),
+            browser_channel: "none".into(),
+            working_dir: workspace.path().display().to_string(),
+            has_clipboard: false,
+            has_wmctrl: false,
+            has_notifications: false,
+        };
+        let approval = RecordingApproval::deny();
+        let folder_access = RecordingFolderAccess::deny();
+        let desktop = RecordingDesktop::default();
+        let cancellation = CancellationToken::new();
+        let skill_registry = workspace.skill_registry();
+        let mut session = AgentSessionState::new("coordinator-session");
+        let mut events = Vec::new();
+
+        let outcome = run_definition(
+            OrchestrationInput {
+                run_id: "coordinator-test",
+                storage_id: "coordinator-test",
+                session_id: "coordinator-session",
+                user_message: "Answer the question",
+                selected_skill: None,
+                definition: &definition,
+                capabilities: &capabilities,
+                skill_descriptors: &[],
+                active_model_instance_id: "active",
+                working_dir: workspace.path(),
+                editable_roots: &editable_roots,
+                external_read_only_roots: &[],
+                trusted_read_roots: &[],
+                max_steps_override: None,
+                model_routes: &routes,
+                approval: &approval,
+                folder_access: &folder_access,
+                desktop: &desktop,
+                cancellation: &cancellation,
+                session: &mut session,
+                skill_registry: &skill_registry,
+                bundled_script_runtime: None,
+                data_folder: workspace.path(),
+            },
+            |event| {
+                events.push(event);
+                Ok(())
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.reply.as_deref(), Some("final answer"));
+        assert_eq!(
+            workspace.read("agent-runs/coordinator-test/coordinate/result.txt"),
+            b"research the answer"
+        );
+        assert_eq!(
+            workspace.read("agent-runs/coordinator-test/worker-research/result.txt"),
+            b"worker report"
+        );
+        assert!(run_root.exists());
+        assert!(folder_access.requests().is_empty());
+        let reads = events
+            .iter()
+            .filter_map(|event| match event {
+                AgentEvent::StageActivity { stage_id, event } => match event.as_ref() {
+                    AgentEvent::ToolCallExecuted { result } if result.call.tool == "os.fs.read" => {
+                        Some((stage_id.as_str(), result.outcome.status))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            reads,
+            vec![
+                ("worker-research", ToolStatus::Ok),
+                ("synthesize", ToolStatus::Ok)
+            ]
+        );
+
+        let requests = server.requests();
+        let prompt = |index: usize| {
+            requests[index]["messages"][0]["content"]
+                .as_str()
+                .expect("coordinator stage prompt")
+        };
+        assert!(prompt(1).contains(&plan_result.to_string_lossy().to_string()));
+        assert!(prompt(3).contains(&plan_result.to_string_lossy().to_string()));
+        assert!(prompt(3).contains(&worker_result.to_string_lossy().to_string()));
     }
 
     async fn run_test_goal_loop(

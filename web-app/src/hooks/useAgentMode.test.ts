@@ -12,14 +12,17 @@ describe('useAgentMode', () => {
 
   it('keeps a main-chat skill and workspace through creation, reopening, and exit', async () => {
     useAgentMode.getState().setActiveSkill(TEMPORARY_CHAT_ID, 'agent-builder')
+    useAgentMode.getState().setApprovalMode(TEMPORARY_CHAT_ID, 'skip')
     useAgentMode.getState().setWorkingDir(TEMPORARY_CHAT_ID, '/workspace')
     useAgentMode.getState().transferAgentMode(TEMPORARY_CHAT_ID, 'skill-thread')
 
     expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
     expect(useAgentMode.getState().usesAgentTools('skill-thread')).toBe(true)
     expect(useAgentMode.getState().activeSkills['skill-thread']).toBe('agent-builder')
+    expect(useAgentMode.getState().getApprovalMode('skill-thread')).toBe('skip')
     expect(useAgentMode.getState().getWorkingDir('skill-thread')).toBe('/workspace')
     expect(useAgentMode.getState().activeSkills[TEMPORARY_CHAT_ID]).toBeUndefined()
+    expect(useAgentMode.getState().approvalModes[TEMPORARY_CHAT_ID]).toBeUndefined()
     expect(
       filterSidebarHistoryThreads(
         [{ id: 'skill-thread' }],
@@ -36,11 +39,24 @@ describe('useAgentMode', () => {
     await useAgentMode.persist.rehydrate()
     expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
     expect(useAgentMode.getState().activeSkills['skill-thread']).toBe('agent-builder')
+    expect(useAgentMode.getState().getApprovalMode('skill-thread')).toBe('skip')
     expect(useAgentMode.getState().getWorkingDir('skill-thread')).toBe('/workspace')
 
     useAgentMode.getState().setActiveSkill('skill-thread')
     expect(useAgentMode.getState().usesAgentTools('skill-thread')).toBe(false)
     expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
+  })
+
+  it('transfers an explicit manual choice for a Chat skill without enabling Agent view', () => {
+    useAgentMode.getState().setActiveSkill(TEMPORARY_CHAT_ID, 'agent-builder')
+    useAgentMode.getState().setApprovalMode(TEMPORARY_CHAT_ID, 'manual')
+    useAgentMode.getState().setApprovalMode('skill-thread', 'skip')
+
+    useAgentMode.getState().transferAgentMode(TEMPORARY_CHAT_ID, 'skill-thread')
+
+    expect(useAgentMode.getState().approvalModes['skill-thread']).toBe('manual')
+    expect(useAgentMode.getState().isAgentMode('skill-thread')).toBe(false)
+    expect(useAgentMode.getState().usesAgentTools('skill-thread')).toBe(true)
   })
 
   it('moves the Home selection to the created thread', () => {

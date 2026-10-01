@@ -7,6 +7,8 @@ import {
 } from '@/hooks/useAgentRun'
 import type { AgentEvent } from '@/types/agent'
 import { runAgentTurn } from '@/services/agent/tauri'
+import { aggregateAgentMetrics, tokensPerSecond } from '@/lib/agent-metrics'
+import { buildAgentRunSummary } from '@/lib/agent-run-message'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -111,7 +113,22 @@ describe('useAgentRun', () => {
     expect(running.trace.stages[0].modelInstanceId).toBe('research-model')
     expect(running.trace.stages[0].reasoningEffort).toBe('high')
 
-    const finished = reduceAgentRunState(running, {
+    const measured = reduceAgentRunState(running, {
+      type: 'stage_activity',
+      stage_id: 'researcher',
+      event: {
+        type: 'inference_measured',
+        inference: {
+          promptTokens: 120,
+          generatedTokens: 60,
+          promptMs: 12,
+          generationMs: 150,
+        },
+      },
+    })
+    expect(measured.trace.stages[0].inference?.generatedTokens).toBe(60)
+
+    const finished = reduceAgentRunState(measured, {
       type: 'stage_finished',
       stage_id: 'researcher',
       name: 'Researcher',
@@ -123,13 +140,21 @@ describe('useAgentRun', () => {
       model_id: 'qwen',
       reasoning_effort: 'high',
       inference: {
-        prompt_tokens: 200,
-        generated_tokens: 100,
-        prompt_ms: 20,
-        generation_ms: 250,
+        promptTokens: 200,
+        generatedTokens: 100,
+        promptMs: 20,
+        generationMs: 250,
       },
     })
     expect(finished.trace.stages[0].inference?.generatedTokens).toBe(100)
+    const metrics = aggregateAgentMetrics(finished.trace.stages)
+    expect(tokensPerSecond(metrics[0].generatedTokens, metrics[0].generationMs)).toBe(400)
+    expect(buildAgentRunSummary(finished).stages[0].inference).toEqual({
+      prompt_tokens: 200,
+      generated_tokens: 100,
+      prompt_ms: 20,
+      generation_ms: 250,
+    })
   })
 
   it('clears a pending approval on execution, error, and terminal events', () => {
