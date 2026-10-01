@@ -1,6 +1,6 @@
 # Chat and Agent runtime
 
-## Shared Chat and agent capabilities — active
+## Shared Chat and agent capabilities — accepted Windows update
 
 The user approved one capability system for Chat and Agent Studio: a shared
 native/MCP catalog and skill registry, common workspace/permission/cancellation
@@ -9,21 +9,22 @@ Normal replies retain streaming; tasks use the existing native orchestrator and
 show progress in Chat. Slash commands remain optional shortcuts. Preserve model
 selection, history, existing definition limits and remote-provider Chat support.
 
-The October 1 Stop regression comes from ChatInput's automatic startup effect:
-unloading changes active-model state and the effect starts the selected model
-again. The candidate tracks intentional Stop and suppresses idle restart until
-explicit Start, model selection or Send. Review identified a concurrent switch
-race; Stop now reserves the shared model lifecycle queue and resolves its unload
-target after prior switches finish. The A → B → Stop → C regression confirms
-B unloads before the later deliberate C start.
+The October 1 Stop regression came from ChatInput's automatic startup effect:
+unloading changed active-model state and the effect started the selected model
+again. Stop now suppresses idle restart until explicit Start, model selection or
+Send. It reserves the shared model lifecycle queue and resolves its unload target
+after prior switches finish. The A → B → Stop → C regression confirms B unloads
+before a later deliberate C start. Selection remains available after Stop.
 
-The shared catalog and Rust execution IPC are implemented. Streaming Chat uses
-the same native ToolContext and MCP identities. Skills and saved agents delegate
-to the existing orchestrator with per-thread permissions, folders and cancellation.
-A saved pool chooses a ready member rather than rejecting an offline first member.
-Disabled native tools remain denied even when a saved definition allows their
-capability. Builder save confirmation and authoring restrictions are preserved.
-See the [capability decision](../decisions/2026-10-01-share-chat-and-agent-capabilities.md).
+Streaming Chat now uses the same Rust native/MCP catalog and ToolContext as the
+Agent runtime. Skills and saved agents delegate to the existing orchestrator
+with per-thread permissions, folders and cancellation. A saved pool chooses a
+ready member rather than rejecting an offline first member. Disabled native
+tools remain denied when a saved definition allows their capability. Builder
+save confirmation and authoring restrictions are preserved. Failed and incomplete
+task outcomes retain their inline summary; delayed terminal Channel events use
+the authoritative result. See the
+[capability decision](../decisions/2026-10-01-share-chat-and-agent-capabilities.md).
 Acceptance covers skill discovery/read, builder invocation/save confirmation,
 saved agent/pool dispatch, permission propagation, cancellation/continuation,
 real Chat tool follow-up completion, a stable manual Stop and the full `make verify`
@@ -32,23 +33,32 @@ Numerical/performance qualification and changed task budgets are excluded.
 
 | Owner / host | Exact path | Purpose / status |
 | --- | --- | --- |
-| GChat / workstation | `/ai/gchat`, `b86b87168` | Clean main/source baseline; accepted Windows app includes runtime code `69cfa8114` |
-| Shared capabilities | `/ai/gchat-worktrees/shared-chat-capabilities`, `fix/shared-chat-capabilities` | Reviewed implementation candidate; full verification passed; Windows build next |
+| GChat / workstation | `/ai/gchat`, `b86b87168` | Main source; pre-change baseline; accepted update source `f39cee7ed` |
+| Shared capabilities | `/ai/gchat-worktrees/shared-chat-capabilities`, `fix/shared-chat-capabilities` | Reviewed implementation candidate; released after main integration and evidence retention |
 | Shared capabilities | Candidate `out/shared-capabilities-20261001/` | Retain focused/full verification and Windows-update evidence |
 | Existing caches | `/ai/gchat/src-tauri/target` and native `%LOCALAPPDATA%/GChat/windows-build/source` | Reuse valid compiler/dependency caches; preserve accepted Windows release |
-| Installed Windows | `%LOCALAPPDATA%/GChat`, `%APPDATA%/GChat/data` | User is testing; preserve history/models and inspect live processes before any update |
+| Installed Windows | `%LOCALAPPDATA%/GChat`, `%APPDATA%/GChat/data` | Accepted app PID 38412 / host 28832 at startup verification; user history/models preserved |
 
-Focused evidence: shared Chat SDK tests pass, including selected skill followed
-by a normal streamed reply, retained system instructions, cancellation during
-registration and settled IPC failures. Rust agent, Code bridge and IPC checks
-passed; independent review findings are being resolved. Evidence lives in the
-candidate output folder above. Independent review findings are resolved. Final
-`make verify` passed: 2,027 frontend tests (6 skipped), 15 extension tests,
-coverage floors and supported Rust suites, including 529 desktop tests
-(7 ignored). Backend Clippy passed with warnings denied. Delayed terminal Channel
-events use the authoritative result, preserving incomplete/failed summaries;
-failed task outcomes remain structured SDK tool outputs. Next: rebuild and update
-Windows with the accepted engine, then verify startup and preserved data.
+Verification passed: final `make verify` includes 2,027 frontend tests
+(6 skipped), 15 extension tests, coverage floors and supported Rust suites,
+including 529 desktop tests (7 ignored). Backend Clippy passed with warnings
+denied. Independent review findings were corrected and covered by focused
+behavioral regressions. Native NSIS/MSI assembly from `f39cee7ed` and the
+in-place Windows update both exited 0. The native mirror matches all 41 changed
+production files and both deleted approval-path files. Installed executables,
+120-member bundled/active engine runtimes and unchanged 103 profiles passed
+verification; four model files totaling 44,808,326,736 bytes, eight conversations,
+seven runs and saved definitions are preserved. The visible desktop and host's
+local HTTPS identity endpoint passed startup verification.
+
+Evidence is retained in main `out/shared-capabilities-20261001/`; accepted
+installers and checksums are in `out/windows/`. The temporary candidate/native
+task directories are released at handoff; accepted compiler caches remain.
+Next user check: replay sidebar Stop/Start/Send and ask ordinary Chat about Agent
+Builder, then invoke a skill or saved pool. These interactive real-model checks
+remain distinct from the passing scripted/IPC verification. Numerical quality,
+throughput qualification, task-budget changes and overall Coordinator status
+reporting are excluded; Server 2 remains uninstalled.
 
 ## Current outcome and acceptance
 

@@ -1,25 +1,32 @@
 # GChat installer refresh
 
-## Shared capabilities Windows update — active
+## Shared capabilities Windows update — October 1, 2026
 
-The user authorized an updated local Windows app for the shared Chat/Agent
-capabilities and the sidebar Stop autoreload regression. Source candidate:
-`/ai/gchat-worktrees/shared-chat-capabilities`, branch
-`fix/shared-chat-capabilities`, baseline `b86b87168`. The active implementation
-and acceptance are tracked in [agent-runtime](../agent-runtime/README.md).
-Rebuild NSIS/MSI with the accepted unchanged Windows engine
-`74780ea1415ac8d3bb440d58442ac4f81a5dfde3` and the explicit 14 catalog paths
-recorded in `out/windows/acceptance-20261001/inputs.json` (103 profiles).
+The local Windows app is updated and open with source `f39cee7ed`. Streaming
+Chat now discovers native skills/saved agents and MCP tools through the shared
+capability runtime; per-thread permissions/folders and cancellation propagate
+to native tasks. Sidebar Stop suppresses idle model restart and serializes with
+model switches. Full source verification and independent review passed;
+implementation/evidence are tracked in [agent-runtime](../agent-runtime/README.md).
 
-Reuse `%LOCALAPPDATA%/GChat/windows-build/source` release/dependency caches.
-Retain this task's evidence in candidate `out/shared-capabilities-20261001/`
-and native `%LOCALAPPDATA%/GChat/windows-build/shared-capabilities-20261001/`;
-retire the native task directory after copying accepted evidence. Current native
-inspection confirms Ron-9950X3D2 / RTX 5090 / driver 610.88, host PID 16816,
-no GChat desktop or owned ginfer-serve process. Inspect again before updating;
-other GPU users remain outside scope. Preserve models, threads, runs and
-saved definitions. Full source verification passed. Next: native build, in-place installation,
-visible startup and runtime/data verification. Server 2 remains uninstalled.
+Both NSIS/MSI assembly and the in-place update exited 0. The unchanged accepted
+engine is `74780ea1415ac8d3bb440d58442ac4f81a5dfde3`; all 120 members of both
+bundled and active runtimes verified, along with the unchanged 103 profiles
+from 14 explicit catalogs. Installed desktop matches the build except Tauri's
+three-byte NSIS bundle tag; CLI and host match their payloads. Visible desktop
+PID 38412 / host PID 28832 and local HTTPS protocol version 1 passed startup
+checks. Four models (44,808,326,736 bytes), eight conversations, seven runs and
+saved agent definitions are preserved. Live Stop/skill replay remains the user's
+acceptance check. Server 2 remains uninstalled.
+
+Retain `out/shared-capabilities-20261001/` evidence and the current
+`out/windows/GChat_2.0.42_x64-setup.exe` / `GChat_2.0.42_x64_en-US.msi` with
+adjacent checksums. These replace the earlier October 1 installers. Reuse
+`%LOCALAPPDATA%/GChat/windows-build/source` accepted release/dependency caches;
+release the owned candidate and native `windows-build/shared-capabilities-20261001`
+task directory after evidence is copied. Existing Vite large-chunk warnings
+remain; native Rust emitted no compiler warnings. No engine qualification was
+performed or claimed by this app update.
 
 ## Accepted Windows update — October 1, 2026
 
