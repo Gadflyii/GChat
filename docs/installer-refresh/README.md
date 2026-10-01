@@ -1,42 +1,55 @@
 # GChat installer refresh
 
-## Windows update — October 1, 2026
+## Accepted Windows update — October 1, 2026
 
-The user authorized building and installing the Windows update, including
-restarting GChat and its host. Deliver NSIS/MSI installers with the agent/chat
-fixes from `9540ac7e1` and correct the sidebar Stop server shortcut: Start loads
-the active model and starts the API, so Stop must stop the API and unload that
-active model. API-specific settings retain their independent control.
+The Windows NSIS/MSI installers include the agent/chat fixes from `9540ac7e1`
+and the sidebar Stop server fix. The shortcut now stops the API and unloads the
+active local model; when the API is already stopped, Stop model remains available.
+API-specific settings retain their independent control. Step budgets and overall
+Agent Finished reporting are unchanged. Server 2 remains uninstalled.
 
-Acceptance: reviewed source and full verification, successful native assembly
-with the accepted Windows engine `74780ea1415ac8d3bb440d58442ac4f81a5dfde3`,
-NSIS update exit 0, installed executable matching the new build, desktop/host
-startup, runtime integrity and preserved models/history/agent definitions.
-The user will replay the agent/chat incident. Step budgets and overall Agent
-Finished reporting are excluded from this installer update. Server 2 remains
-uninstalled. The sidebar stop action and four focused component regressions
-pass; it also offers Stop model when the API is already stopped. Independent
-review and full `make verify` passed: 2,042 frontend tests, 15 extension tests,
-critical coverage floors and supported Rust suites. The 103 selected Windows
-profiles exactly match the installed catalog. Native assembly from source
-`8c81f53da9315faa092c8edcb6959fc856bc3dfd` stopped during source staging:
-Windows exposes the verification worktree's Linux `node_modules` links as files,
-so directory exclusions did not protect native dependency directories. The
-mirror now excludes that name as both a directory and a file. A native mirror
-regression preserved a dependency sentinel, copied current source and removed
-obsolete source. Only verified zero-byte placeholders from the failed staging
-were removed. Next: retry assembly with the corrected mirror. Compiler caches
-and the installed app remain intact.
+Native assembly from `69cfa81146ffadbd972bf6872754f4e16f3b3aa7` exited 0 with
+accepted engine `74780ea1415ac8d3bb440d58442ac4f81a5dfde3` and the unchanged
+103 Windows profiles. Independent review and full `make verify` passed: 2,042
+frontend tests, 15 extension tests, coverage floors and supported Rust suites.
+The native mirror matches all 27 changed production files. Four sidebar regressions
+cover scoped unload, an unload failure, an already-stopped API and an API stop failure.
+
+The authorized in-place NSIS update exited 0 on Ron-9950X3D2. The installed desktop
+matches the accepted build except for Tauri's three-byte NSIS bundle tag; installed
+CLI and host binaries match their build payloads. Both bundled and active engine
+runtimes have all 120 manifest members verified. The visible GChat desktop started
+with its host, whose local HTTPS identity endpoint responds with protocol version 1.
+Models are unchanged: four files totaling 44,808,326,736 bytes. All seven thread IDs,
+seven saved run IDs and the unchanged agent definition file remain.
+
+Acceptance evidence is retained under `out/windows/acceptance-20261001/`, including
+build/install results, runtime/data verification and the final full verification log.
+The installed app is ready for the user's continued-chat replay, throughput check
+and real sidebar stop/unload check; those interactive checks remain open.
+
+The initial source mirror failed because Windows exposed WSL dependency links as
+files. The builder now excludes `node_modules` as both a directory and a file.
+A native mirror regression preserved dependency contents while updating/removing
+source files. Only verified zero-byte failed-staging placeholders were removed;
+the corrected retry passed. Retain the concise failure summary and regression
+result. The superseded staging log, temporary mirror fixture and duplicate native
+acceptance directory are retired at handoff. The unused native debug caches
+(about 11.1 GiB) were removed after confirming no compiler/debug job uses them;
+the accepted release builds remain. The owned candidate is retired after integration;
+unrelated worktrees and user data remain untouched.
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| GChat / workstation | `/ai/gchat`, `9540ac7e1` | Reviewed source baseline; September 30 installers retained until update acceptance |
-| Windows refresh | `/ai/gchat-worktrees/windows-refresh`, `fix/windows-refresh-20261001` | Owned implementation/docs candidate; retire after integration |
-| Windows refresh | Candidate `out/windows/acceptance-20261001/` | Native build/install evidence; retain concise results |
-| Windows build / Ron-9950X3D2 | `%LOCALAPPDATA%/GChat/windows-build/source` | Existing native mirror and compiler caches; verified idle before reuse |
-| Windows refresh | `%LOCALAPPDATA%/GChat/windows-build/acceptance-20261001/` | Failed staging log and prepared durable runner; no live build |
-| GInfer | `/ai/ginfer/out/windows/ginfer-windows-x64-sm120a.zip` | Accepted 120-member runtime, unchanged engine |
-| Windows baseline | `/ai/gchat/out/windows/GChat_2.0.42_x64-setup.exe`, `GChat_2.0.42_x64_en-US.msi` | Preserve until the candidate is installed and checked |
+| GChat / workstation | `/ai/gchat` | Reviewed source integration; accepted Windows runtime code `69cfa8114` |
+| Windows refresh | `/ai/gchat-worktrees/windows-refresh`, `fix/windows-refresh-20261001` | Retired during final integration; evidence retained in main output directory |
+| Windows release | `/ai/gchat/out/windows/GChat_2.0.42_x64-setup.exe`, `GChat_2.0.42_x64_en-US.msi` | Accepted installers and adjacent checksums; supersede September 30 copies |
+| Windows acceptance | `/ai/gchat/out/windows/acceptance-20261001/` | Retain concise verification, installation and startup evidence |
+| Windows build / Ron-9950X3D2 | `%LOCALAPPDATA%/GChat/windows-build/source` | Accepted release builds and native dependencies retained; idle debug caches removed; no live build |
+| Windows refresh | `%LOCALAPPDATA%/GChat/windows-build/acceptance-20261001/` | Retired at handoff after evidence retained in main; no live job |
+| Windows release / Ron-9950X3D2 | `%LOCALAPPDATA%/GChat/release-output` | Accepted native installer copies |
+| Installed Windows / Ron-9950X3D2 | `%LOCALAPPDATA%/GChat`; app PID 39788, host PID 41000 at acceptance | Updated visible desktop and persistent host; no model loaded by acceptance checks |
+| GInfer | `/ai/ginfer/out/windows/ginfer-windows-x64-sm120a.zip` | Accepted unchanged 120-member engine runtime |
 
 ## Accepted Linux installers — September 30, 2026
 

@@ -8,8 +8,8 @@ and model output arrives while the client remains Working. Acceptance requires
 an incomplete terminal run, released request state, accurate capacity errors,
 and a subsequent ordinary chat that finishes without deleting history or
 restarting the server. Preserve user data. The running model was preserved
-during diagnosis; the user now authorizes a Windows installer update and restart
-to test the fixes. This is request
+during diagnosis; the authorized Windows update is installed and reopened for
+the user to test. This is request
 lifecycle verification, not model quality or performance qualification.
 
 ## Evidence and live question
@@ -40,7 +40,7 @@ The route keeps a separate busy flag, while its Chat instance and terminal
 callbacks survive route remounts. Clearing an old callback's route-local flag
 does not clear the remounted view's flag. Another possible ordering problem is
 the terminal callback inspecting previous tool calls before batch cleanup; the
-live trace does not distinguish these frontend mechanisms. The candidate
+live trace does not distinguish these frontend mechanisms. The fix
 removes the independent flag and derives Working from SDK request status plus
 session-owned tool batches. Batch identities prevent late cancellation cleanup
 from settling a later turn, and controllers belong to the same session as the
@@ -50,13 +50,14 @@ call with a final text response, reaches ready and stays idle when the cached
 session is reused. Fourteen focused tests, TypeScript and source ESLint passed.
 Full verification and independent review passed. This change delivers the
 reviewed source fixes; retained evidence lives under `out/agent-recovery-20261001/`.
-Next: complete the authorized [Windows installer update](../installer-refresh/README.md)
-and let the user replay the continued conversation in the installed app.
+The authorized [Windows installer update](../installer-refresh/README.md) is installed
+and reopened. Runtime integrity, source identity and preserved user data passed.
+Next: the user replays the continued conversation in the updated app.
 No engine failure or leaked request has been shown.
 The earlier context warning's exact diagnostic is unavailable and has not
 reproduced; do not claim its cause has been established.
 
-## Confirmed throughput defect and candidate
+## Confirmed throughput defect and fix
 
 Rust serializes `stage_finished.inference` as camelCase. The frontend expected
 snake_case and replaced all four valid live counters with undefined values at
@@ -64,7 +65,7 @@ stage completion. The repeated run's native history has valid counters, while
 its chat summary contains empty inference objects. This directly explains blank
 finished/incomplete stage rates and a blank aggregate in the live panel.
 
-The candidate uses the existing `AgentInferenceMetrics` IPC shape and preserves
+The fix uses the existing `AgentInferenceMetrics` IPC shape and preserves
 it in the reducer. Intentional snake_case thread-message metadata is unchanged.
 A regression covers measured-to-finished transition, model-instance aggregation
 and numeric message metadata. Focused tests (8), TypeScript and source ESLint
@@ -94,7 +95,7 @@ Its transcript records unnecessary folder requests when synthesis reads its own
 workers' `result.txt` files, plus reads of the nonexistent `plan/result.txt`.
 The actual planning stage is `coordinate`; two handoff references use `plan`.
 The run root is intended as trusted read access, but it lacked the canonical
-Windows prefix used by the tool's resolved path. The candidate canonicalizes
+Windows prefix used by the tool's resolved path. The fix canonicalizes
 the existing root once and references `coordinate/result.txt` in both handoffs.
 A scripted Coordinator regression reads planning and worker results while
 external folder approvals are denied. The regression passed on Linux and native
@@ -102,7 +103,7 @@ Windows. Reading unrelated folders remains a distinct permission decision.
 
 Source review also found a separate transfer defect: creating a Chat skill
 thread copies its skill and workspace but drops its approval mode because the
-copy is conditional on Agent workspace view. The candidate preserves the
+copy is conditional on Agent workspace view. The fix preserves the
 chosen execution approval mode without changing the selected sidebar view.
 
 ## Verification environment correction
@@ -121,8 +122,8 @@ native Windows Coordinator regression and backend Clippy also passed. The native
 Windows source-only harness omitted the generated Windows icon and three
 compile-time proxy fixtures. It now includes the required fixtures and reuses
 the existing installer build's icon before compilation. Future native source
-captures must include these inputs before building. No release binaries are
-rebuilt or replaced.
+captures must include these inputs before building. That source-only regression
+did not replace release binaries.
 
 ## Owned inventory
 
@@ -132,13 +133,14 @@ rebuilt or replaced.
 | Agent recovery | `/ai/gchat-worktrees/agent-recovery`, `fix/agent-recovery` | Retired after integration; no retained build |
 | Agent recovery | `/ai/gchat/out/agent-recovery-20261001/` | Retain two sanitized incidents and final Linux/native Windows verification logs |
 | Agent recovery / Windows | `%LOCALAPPDATA%/GChat/agent-recovery-20261001/` | Native regression passed; temporary source/harness released after review |
-| GChat / Windows | `%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` | Existing debug cache reused by regression; preserve accepted release build |
+| GChat / Windows | `%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` | Regression debug cache retired after evidence retained; accepted release build preserved |
 | Installed Windows | `%APPDATA%/GChat/data/logs`, `ginfer/host/host.log`, `agent-runs.json` | Existing read-only incident evidence; preserve original files |
-| Installed Windows | Original GChat PID 22580, host 42428, engine 41536 | Incident provenance; restart/update now authorized, live inventory in installer record |
+| Installed Windows | Original GChat PID 22580, host 42428, engine 41536 | Incident provenance; updated app/host live inventory in installer record |
 
 The accepted Linux/Windows installers remain under `out/linux` and `out/windows`.
-Server 2 remains uninstalled. No release artifact or model is replaced by this
-investigation. Existing contracts are in [Agent architecture](../../src-tauri/src/core/agent/ARCHITECTURE.md),
+The October 1 Windows installers now include these fixes and the sidebar model-stop
+fix, and the local app is updated. Models and user data are preserved. Server 2
+remains uninstalled. Existing contracts are in [Agent architecture](../../src-tauri/src/core/agent/ARCHITECTURE.md),
 [chat lifecycle ownership](../decisions/2026-10-01-own-chat-tool-lifecycle-per-session.md),
 [context admission](../decisions/2026-09-24-count-and-compact-ginfer-chat-requests.md),
 and [open acceptance](../open-work.md).

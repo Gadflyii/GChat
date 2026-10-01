@@ -28,8 +28,9 @@ implementation and historical measurements are not pending tasks.
 - **Release assembly:** confirm the selected engine runtime and accepted catalogs
   in final platform bundles, then validate the installed result. Local Windows
   2.0.42 installers exist; their presence does not qualify subsequent source edits.
-  Windows 2.0.42 was rebuilt and installed on September 30 with clean engine
-  revision `74780ea1`; startup and active-runtime identity were checked.
+  Windows 2.0.42 was rebuilt and installed on October 1 with clean engine
+  revision `74780ea1`, chat/agent recovery and sidebar model-stop fixes; startup,
+  runtime identity and preserved data passed. User replay remains open.
   The Linux 2.0.42 AppImage was rebuilt on September 30 against Ubuntu 24.04;
   its bundled host and profile catalog were checked. Server 2 was uninstalled at
   the user's request, preserving data and models. The prior X11 startup check
