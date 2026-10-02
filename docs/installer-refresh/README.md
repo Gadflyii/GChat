@@ -1,5 +1,27 @@
 # GChat installer refresh
 
+## Offline host status Windows update — accepted October 1, 2026
+
+The local Windows app is updated and open with source `d3199048d`. Offline host
+cards show muted **GInfer offline** without the raw red connection error; cached
+inventory and disabled loading remain. The 12 host-page tests and full `make verify`
+pass. See [host UI evidence](../host-ui/README.md).
+
+NSIS/MSI assembly and the authorized update exited 0 on RON-9950X3D2. Installed
+desktop matches the build except Tauri's three-byte NSIS tag; CLI and host match.
+Both 120-file runtimes verify against unchanged engine
+`74780ea1415ac8d3bb440d58442ac4f81a5dfde3`, with the unchanged 103 profiles.
+Four models (44,808,326,736 bytes), eight conversations, nine saved runs and agent
+definitions are preserved. Visible desktop PID 40660 / host PID 37580 and local
+HTTPS identity pass startup verification. Server 2 remains uninstalled.
+
+Retain `out/offline-host-status-20261001/` and current
+`out/windows/GChat_2.0.42_x64-setup.exe` / `GChat_2.0.42_x64_en-US.msi` with
+adjacent checksums. The owned native task directory is removed; accepted build
+caches remain. Candidate retirement is recorded in the handoff receipt. Native
+Rust emitted no compiler warnings; existing Vite large-chunk warnings remain.
+The offline host card is the next interactive check.
+
 ## Agent follow-up Windows update — accepted October 1, 2026
 
 The local Windows app is updated and open with source `a5d2e35f7`. Delegated agent
