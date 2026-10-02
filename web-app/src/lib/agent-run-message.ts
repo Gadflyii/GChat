@@ -37,39 +37,51 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
   return {
     run_id: state.runId ?? '',
     status: state.status,
-    definition: state.trace.definition
+    ...(state.trace.definition
       ? {
-          id: state.trace.definition.id,
-          name: state.trace.definition.name,
-          kind: state.trace.definition.kind,
-          model_instance_id: state.trace.definition.modelInstanceId,
+          definition: {
+            id: state.trace.definition.id,
+            name: state.trace.definition.name,
+            kind: state.trace.definition.kind,
+            model_instance_id: state.trace.definition.modelInstanceId,
+          },
         }
-      : undefined,
+      : {}),
     stages: state.trace.stages.map((stage) => ({
       id: stage.id,
       name: stage.name,
       role: stage.role,
       status: stage.status,
-      step_count: stage.stepCount,
-      duration_ms: stage.durationMs,
+      ...(stage.stepCount !== undefined ? { step_count: stage.stepCount } : {}),
+      ...(stage.durationMs !== undefined
+        ? { duration_ms: stage.durationMs }
+        : {}),
       model_instance_id: stage.modelInstanceId,
-      model_id: stage.modelId,
-      reasoning_effort: stage.reasoningEffort,
-      inference: stage.inference
+      ...(stage.modelId !== undefined ? { model_id: stage.modelId } : {}),
+      ...(stage.reasoningEffort !== undefined
+        ? { reasoning_effort: stage.reasoningEffort }
+        : {}),
+      ...(stage.inference
         ? {
-            prompt_tokens: stage.inference.promptTokens,
-            generated_tokens: stage.inference.generatedTokens,
-            prompt_ms: stage.inference.promptMs,
-            generation_ms: stage.inference.generationMs,
+            inference: {
+              prompt_tokens: stage.inference.promptTokens,
+              generated_tokens: stage.inference.generatedTokens,
+              prompt_ms: stage.inference.promptMs,
+              generation_ms: stage.inference.generationMs,
+            },
           }
-        : undefined,
+        : {}),
     })),
-    finish_reason: state.trace.finishReason,
-    step_count: state.trace.stepCount,
-    duration_ms: durationMs,
+    ...(state.trace.finishReason !== undefined
+      ? { finish_reason: state.trace.finishReason }
+      : {}),
+    ...(state.trace.stepCount !== undefined
+      ? { step_count: state.trace.stepCount }
+      : {}),
+    ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
     tools: state.trace.tools.map((tool) => ({
       tool: tool.call.tool,
-      status: tool.outcome?.status,
+      ...(tool.outcome ? { status: tool.outcome.status } : {}),
       batch_index: tool.batchIndex,
       batch_size: tool.batchSize,
     })),
@@ -77,12 +89,14 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
       ...loop,
       message: bounded(loop.message, LOOP_MESSAGE_LIMIT),
     })),
-    error: state.trace.error
+    ...(state.trace.error
       ? {
-          ...state.trace.error,
-          message: bounded(state.trace.error.message, ERROR_MESSAGE_LIMIT),
+          error: {
+            ...state.trace.error,
+            message: bounded(state.trace.error.message, ERROR_MESSAGE_LIMIT),
+          },
         }
-      : undefined,
+      : {}),
   }
 }
 

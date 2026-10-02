@@ -1,10 +1,11 @@
-import { EngineManager } from '@gchat/core'
+import { EngineManager, MessageStatus, type ThreadMessage } from '@gchat/core'
 import { useContextUsage } from '@/hooks/useContextUsage'
 import type { UIMessage } from '@ai-sdk/react'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAgentMode } from '@/hooks/useAgentMode'
+import { useAgentRun } from '@/hooks/useAgentRun'
 import { useAppState } from '@/hooks/useAppState'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -12,7 +13,13 @@ import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { seedServiceHub } from '@/test/service-hub'
 import { CustomChatTransport } from '../custom-chat-transport'
 import { ModelFactory } from '../model-factory'
+import { Chat } from '@ai-sdk/react'
+import { executeChatCapability, chatCapabilityRun } from '../execute-chat-capability'
+import { executeClaimedChatToolBatch, shouldSendToolFollowUp } from '../execute-chat-tool-calls'
+import { isSessionBusy, useChatSessions } from '@/stores/chat-session-store'
+import { convertThreadMessageToUIMessage, extractContentPartsFromUIMessage } from '../messages'
 import type { GInferContextState } from '../smart-context'
+import type { CapabilitiesService } from '@/services/capabilities/types'
 
 type ModelStreamPart =
   | { type: 'stream-start'; warnings: [] }
@@ -72,6 +79,8 @@ async function readChunks(
 describe('CustomChatTransport production harness', () => {
   beforeEach(() => {
     useAgentMode.getState().clearAll()
+    useAgentRun.getState().clearAll()
+    useChatSessions.getState().clearSessions()
     seedServiceHub({
       rag: { getTools: vi.fn().mockResolvedValue([]) } as never,
     })
@@ -103,6 +112,258 @@ describe('CustomChatTransport production harness', () => {
       ] as never,
     })
   })
+
+  it.each([
+    { status: 'finished', reason: 'reply', error: undefined },
+    { status: 'incomplete', reason: 'max_steps', error: undefined },
+    { status: 'failed', reason: 'failed', error: 'Worker failed' },
+  ] as const)(
+    'continues streaming Chat after a $status delegated run and reopens its history',
+    async (outcome) => {
+      const threadId = 'delegated-chat'
+      const service = seedServiceHub({
+        rag: { getTools: vi.fn().mockResolvedValue([]) } as never,
+        capabilities: {
+          getCatalog: vi.fn(),
+          cancel: vi.fn(),
+          execute: vi.fn<CapabilitiesService['execute']>(
+            async (request, event) => {
+              event({
+                type: 'turn_started',
+                run_id: request.run_id,
+                session_id: threadId,
+              })
+              event({
+                type: 'orchestration_started',
+                definition_id: 'team',
+                definition_name: 'Team',
+                kind: 'coordinator',
+                default_model_instance_id: 'fixture-model',
+              })
+              for (const stageId of ['researcher', 'critic']) {
+                event({
+                  type: 'stage_started',
+                  stage_id: stageId,
+                  name: stageId,
+                  role: 'worker',
+                  cycle: null,
+                  model_instance_id: 'fixture-model',
+                  reasoning_effort: null,
+                })
+                event({
+                  type: 'stage_finished',
+                  stage_id: stageId,
+                  name: stageId,
+                  status: 'max_steps',
+                  summary: 'Reached step limit',
+                  step_count: 12,
+                  duration_ms: 0,
+                  model_instance_id: 'fixture-model',
+                  model_id: 'fixture-model',
+                  reasoning_effort: null,
+                  inference: {
+                    promptTokens: 0,
+                    generatedTokens: 0,
+                    promptMs: 0,
+                    generationMs: 0,
+                  },
+                })
+              }
+              if (outcome.error)
+                event({
+                  type: 'step_error',
+                  category: 'orchestration',
+                  message: outcome.error,
+                })
+              event({
+                type: 'turn_finished',
+                reason: outcome.reason,
+                step_count: 25,
+              })
+              return {
+                content: { status: outcome.status, result: 'Task result' },
+                ...(outcome.error ? { error: outcome.error } : {}),
+                run: {
+                  runId: request.run_id,
+                  status: outcome.status,
+                  reason: outcome.reason,
+                  stepCount: 25,
+                },
+              }
+            }
+          ),
+        },
+      }).capabilities()
+      useAppState.setState({
+        tools: [
+          {
+            name: 'agent_run',
+            server: 'gchat-native',
+            description: 'Run agent',
+            inputSchema: { type: 'object' },
+          },
+        ],
+        capabilityToolNames: new Set(['agent_run']),
+      })
+      useModelProvider.setState((state) => ({
+        selectedModel: {
+          ...state.selectedModel,
+          capabilities: ['tools'],
+        } as never,
+      }))
+      const firstModel = fakeStreamingModel([
+        { type: 'stream-start', warnings: [] },
+        {
+          type: 'tool-call',
+          toolCallId: 'agent-call',
+          toolName: 'agent_run',
+          input: '{"definitionId":"team","task":"Work"}',
+        },
+        {
+          type: 'finish',
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      ])
+      const model = fakeStreamingModel([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'answer' },
+        {
+          type: 'text-delta',
+          id: 'answer',
+          delta: 'Two workers reached their limits.',
+        },
+        { type: 'text-end', id: 'answer' },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      ])
+      vi.mocked(model.doStream).mockImplementationOnce(
+        vi.mocked(firstModel.doStream)
+      )
+      vi.spyOn(ModelFactory, 'createModel').mockResolvedValue(model)
+      const transport = new CustomChatTransport(undefined, threadId)
+      const sessionData = useChatSessions.getState().getSessionData(threadId)
+      const onError = vi.fn()
+      let chat!: Chat<UIMessage>
+      chat = new Chat<UIMessage>({
+        id: threadId,
+        transport,
+        onError,
+        onToolCall: ({ toolCall }) => {
+          sessionData.tools.push(toolCall)
+        },
+        onFinish: () => {
+          if (!sessionData.tools.length) return
+          const signal = useChatSessions
+            .getState()
+            .getToolCallController(threadId).signal
+          void executeClaimedChatToolBatch({
+            threadId,
+            signal,
+            ragToolNames: new Set(),
+            capabilityToolNames: new Set(['agent_run']),
+            callRagTool: vi.fn(),
+            getProjectId: () => undefined,
+            processOutput: async (content) => content,
+            callCapability: (call) =>
+              executeChatCapability({ service, threadId, signal, ...call }),
+            addToolOutput: (output) => chat.addToolOutput(output),
+            onError,
+          })
+        },
+        sendAutomaticallyWhen: ({ messages }) =>
+          shouldSendToolFollowUp(messages, sessionData.toolCallAbortController),
+      })
+      useChatSessions.getState().ensureSession(threadId, transport, () => chat)
+
+      await chat.sendMessage({ text: 'Run the team' })
+      await vi.waitFor(() => {
+        expect(chat.status).toBe('ready')
+        expect(chat.messages.at(-1)?.parts).toContainEqual(
+          expect.objectContaining({
+            type: 'text',
+            text: 'Two workers reached their limits.',
+          })
+        )
+        expect(
+          isSessionBusy(useChatSessions.getState().sessions[threadId])
+        ).toBe(false)
+      })
+      expect(onError).not.toHaveBeenCalled()
+      expect(model.doStream).toHaveBeenCalledTimes(2)
+      const summary = chatCapabilityRun(chat.messages.at(-1)!)!
+      expect(summary).toMatchObject({
+        status: outcome.status,
+        finish_reason: outcome.reason,
+        step_count: 25,
+        stages: [
+          { id: 'researcher', status: 'incomplete', duration_ms: 0 },
+          { id: 'critic', status: 'incomplete', duration_ms: 0 },
+        ],
+      })
+      expect(summary.stages[0].inference).toEqual({
+        prompt_tokens: 0,
+        generated_tokens: 0,
+        prompt_ms: 0,
+        generation_ms: 0,
+      })
+      expect(summary.error).toEqual(
+        outcome.error
+          ? { category: 'orchestration', message: outcome.error }
+          : undefined
+      )
+      const toolPrompt = vi
+        .mocked(model.doStream)
+        .mock.calls[1][0].prompt.find((message) => message.role === 'tool')!
+      expect(toolPrompt.content).toContainEqual(
+        expect.objectContaining({
+          output: {
+            type: 'json',
+            value: expect.objectContaining({
+              agent_run: summary,
+              ...(outcome.error ? { error: outcome.error } : {}),
+            }),
+          },
+        })
+      )
+      expect(summary).toStrictEqual(JSON.parse(JSON.stringify(summary)))
+      const saved: ThreadMessage[] = chat.messages.map((message) => ({
+        id: message.id,
+        thread_id: threadId,
+        object: 'thread.message',
+        type: 'text',
+        role: message.role as ThreadMessage['role'],
+        status: MessageStatus.Ready,
+        content: extractContentPartsFromUIMessage(message),
+        created_at: 0,
+        completed_at: 0,
+        metadata: { agent_run: chatCapabilityRun(message) },
+      }))
+      const history = (
+        JSON.parse(JSON.stringify(saved)) as ThreadMessage[]
+      ).map(convertThreadMessageToUIMessage)
+      expect(chatCapabilityRun(history.at(-1)!)).toEqual(summary)
+      const reopened = new Chat<UIMessage>({
+        id: threadId,
+        transport: new CustomChatTransport(undefined, threadId),
+        messages: history,
+        onError,
+      })
+      await reopened.sendMessage({ text: 'Explain the result' })
+      expect(reopened.status).toBe('ready')
+      expect(reopened.messages.at(-1)?.parts).toContainEqual(
+        expect.objectContaining({
+          type: 'text',
+          text: 'Two workers reached their limits.',
+        })
+      )
+      expect(onError).not.toHaveBeenCalled()
+      expect(model.doStream).toHaveBeenCalledTimes(3)
+    }
+  )
 
   it('uses loaded capacity and publishes exact request usage through finish metadata', async () => {
     const engine = vi.spyOn(EngineManager, 'instance').mockReturnValue({

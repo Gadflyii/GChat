@@ -1,5 +1,55 @@
 # Chat and Agent runtime
 
+## Agent result prompt failure — current work
+
+The user confirms sidebar Stop works in the accepted Windows update. A replayed
+agent loop had two incomplete phases, then ordinary Chat rejected its follow-up:
+`Invalid prompt: The messages must be a ModelMessage[]`. The transport already
+converts UI messages. The live question is whether the new delegated tool output
+contains values outside the SDK's JSON prompt contract. Preserve stage outcomes,
+task budgets, history and model selection.
+
+Deliverable: valid delegated result admission and a streaming Chat follow-up
+that reaches ready, including incomplete/failed stages and reopened history.
+Verify the real SDK boundary, run `make verify`, review, commit/push the accepted
+change, then rebuild/update local Windows GChat. Engine changes, budget changes,
+model qualification and overall Coordinator status reporting are excluded.
+
+| Owner / host | Exact path / revision | Purpose / status |
+| --- | --- | --- |
+| GChat / workstation | `/ai/gchat`, `9cdc7bebd` | Clean accepted main baseline |
+| Agent follow-up | `/ai/gchat-worktrees/agent-followup-json`, `fix/agent-followup-json` | Owned implementation candidate |
+| Agent follow-up | Candidate `out/agent-followup-20261001/` | Verification and Windows-update evidence |
+| Compiler caches | `/ai/gchat/src-tauri/target`, native `%LOCALAPPDATA%/GChat/windows-build/source` | Reuse accepted dependencies/builds |
+| Windows / RON-9950X3D2 | Installed app PID 42288, host 28832, engine 6380 at recovery | RTX 5090 verified; preserve live model during diagnosis |
+
+SDK reproduction rejects explicit `undefined` inside JSON tool output even after
+`convertToModelMessages`. The frontend adds absent `content.error` and optional
+summary fields; persisted JSON drops them, explaining why saved history can look
+valid while the live handoff fails. The installed run
+`b1f6572b-5429-4920-92eb-be9a9516a5d9` ends `max_steps`; its Researcher, Critic
+and synthesis stages hit their existing limits. This is separate from the SDK
+failure, which occurs before the next inference request.
+
+Implementation: omit absent optional fields when constructing the shared compact
+summary and delegated result. Keep zero counters, actual errors and incomplete
+outcomes. Prevent recurrence with a production transport/SDK Chat regression
+using the real capability output and retained history, rather than a string
+fixture that bypasses prompt validation.
+
+The production SDK regression failed for all three outcomes on baseline with the
+reported validation error. After the fix, 31 focused tests pass, including the
+actual ThreadMessage save/reload conversion and a subsequent streaming reply.
+TypeScript and source ESLint pass. Independent SOL review found no blocking
+issues. Full `make verify` passed: 2,031 frontend tests (6 skipped), 15 extension
+tests, critical coverage floors and supported Rust suites, including 529 desktop
+tests (7 ignored).
+
+Next: commit the reviewed source, build NSIS/MSI from that revision, then update
+Windows and verify runtime/data preservation. Access was
+briefly read-only; `/tmp/gchat-agent-followup-20261001` is a disposable source
+snapshot, now superseded by the owned candidate and removed after access was restored.
+
 ## Shared Chat and agent capabilities — accepted Windows update
 
 The user approved one capability system for Chat and Agent Studio: a shared

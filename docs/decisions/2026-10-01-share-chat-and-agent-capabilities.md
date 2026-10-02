@@ -23,6 +23,8 @@ title: "Share Chat and Agent capabilities"
   Each Chat invocation owns a cancellable run ID; delegated continuation uses a
   stable session per conversation and definition/skill. Task output retains
   inline activity while normal Chat replies continue through the streaming SDK.
+  Compact run summaries are JSON tool output; optional fields are omitted when
+  absent so live handoff and persisted history use the same valid representation.
   GInfer receives actual system messages, removing the obsolete Gemma-specific
   instruction fold. Engine context capacity and task step budgets are unchanged.
 - **Owner:** team.

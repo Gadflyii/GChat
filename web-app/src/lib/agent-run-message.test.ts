@@ -5,6 +5,7 @@ import {
   claimAgentRunPersistence,
 } from '@/lib/agent-run-message'
 import type { AgentRunState } from '@/types/agent'
+import { createAgentRunState } from '@/hooks/useAgentRun'
 
 function finishedRun(): AgentRunState {
   return {
@@ -51,6 +52,38 @@ function finishedRun(): AgentRunState {
 }
 
 describe('agent run message projection', () => {
+  it('omits absent fields from JSON summaries while retaining zero counters', () => {
+    const state = createAgentRunState()
+    state.runId = 'run-0'
+    state.startedAtMs = 0
+    state.finishedAtMs = 0
+    state.trace.stepCount = 0
+    state.trace.stages = [
+      {
+        id: 'queued',
+        name: 'Queued',
+        role: 'worker',
+        status: 'queued',
+        modelInstanceId: '',
+        stepCount: 0,
+        durationMs: 0,
+      },
+    ]
+    state.trace.tools = [
+      { call: { tool: 'os.fs.read', args: {} }, batchIndex: 0, batchSize: 1 },
+    ]
+
+    const summary = buildAgentRunSummary(state)
+
+    expect(summary).toStrictEqual(JSON.parse(JSON.stringify(summary)))
+    expect(summary).toMatchObject({
+      step_count: 0,
+      duration_ms: 0,
+      stages: [{ step_count: 0, duration_ms: 0 }],
+      tools: [{ tool: 'os.fs.read', batch_index: 0 }],
+    })
+  })
+
   it('persists only the compact terminal summary in metadata', () => {
     const state = finishedRun()
     state.pendingApproval = {

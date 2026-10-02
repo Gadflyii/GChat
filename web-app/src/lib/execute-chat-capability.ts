@@ -60,9 +60,14 @@ export async function executeChatCapability({
     return {
       ...result,
       error: result.run ? undefined : result.error,
-      content: result.run && ownsRun()
-        ? { result: result.content, error: result.error, agent_run: buildAgentRunSummary(run) }
-        : result.content,
+      content:
+        result.run && ownsRun()
+          ? {
+              result: result.content,
+              ...(result.error !== undefined ? { error: result.error } : {}),
+              agent_run: buildAgentRunSummary(run),
+            }
+          : result.content,
     }
   } finally {
     signal.removeEventListener('abort', cancel)
