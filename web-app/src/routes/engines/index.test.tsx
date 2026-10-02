@@ -212,13 +212,15 @@ describe('Engines host intake and launch controls', () => {
   })
 
   it('retains unavailable host inventory without permitting a new load', () => {
-    mocks.error = 'Connection refused'
+    mocks.error = 'error sending request for url (https://192.168.1.111:7444/host/v1/snapshot): tcp connect error: connection refused (os error 10061)'
     renderExpandedPage()
     fireEvent.click(screen.getByText('Custom server settings'))
     fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
     fireEvent.click(screen.getByLabelText('GPU 1: RTX 5090'))
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('last known')
+    expect(screen.getByText(/GInfer offline/)).toHaveClass('text-muted-foreground')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/error sending request/)).not.toBeInTheDocument()
     expect(mocks.command).not.toHaveBeenCalledWith('launch', expect.anything())
   })
   it('blocks pairing when storage is unavailable even after skipping setup', async () => {

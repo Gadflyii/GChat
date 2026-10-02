@@ -52,7 +52,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   }
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Unavailable' : snapshot ? 'Connected' : 'Connecting'}</p></div>
+      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'GInfer offline' : snapshot ? 'Connected' : 'Connecting'}</p></div>
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
         {snapshot.instances.length > 1 ? <label className="min-w-0 text-xs font-medium">Server instance
@@ -73,7 +73,6 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       }}>Forget</Button>}
     </div>
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} />}
-    {error && <p role="alert" className="text-sm text-destructive">{error}. Saved models below are last known; reconnect before using them.</p>}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
       <summary className="cursor-pointer font-medium">Launch Server Instance</summary>
       <EngineProfilePicker hideHeading key={active?.instance_id ?? 'additional'} instanceId={active?.instance_id ?? ''} labelPrefix={host.name}

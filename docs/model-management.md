@@ -3,7 +3,8 @@
 Open **Models**, select **This computer** or a paired host, then choose
 **Installed**, **Recommended**, or **Downloads**. The same host lifecycle controls
 are available in Engines. Offline inventories are last-known information; their
-mutation controls are disabled. Downloading does not interrupt inference.
+mutation controls are disabled. Unreachable host cards show the muted
+**GInfer offline** status without raw transport errors. Downloading does not interrupt inference.
 
 Recommendations require actual NVIDIA compute capability, enough memory on every
 participating GPU, and a release-declared homogeneous TP1/TP2/TP4 group. GPU names

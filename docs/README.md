@@ -11,6 +11,7 @@ Start with the root [README](../README.md) for product scope and releases, or
 | Verification and its limits | [Critical flows](testing-critical-flows.md) |
 | Model/profile ownership and launcher | [Model management](model-management.md) |
 | Recorded profile qualification | [Profile evidence](model-profile-evidence.md) |
+| GInfer host UI state | [Host UI](host-ui/README.md) |
 | Network host installation and pairing | [Host setup](lan-host-setup.md) |
 | Native worker pools and compaction | [Worker pools](agent-worker-pools-design.md) |
 | Personal/workspace memory | [Memory](memory.md) |
