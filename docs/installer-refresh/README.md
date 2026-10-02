@@ -1,5 +1,35 @@
 # GChat installer refresh
 
+## Agent follow-up Windows update — accepted October 1, 2026
+
+The local Windows app is updated and open with source `a5d2e35f7`. Delegated agent
+results now omit absent JSON fields so streaming Chat can continue after finished,
+incomplete or failed runs. The production SDK and ThreadMessage reload regression,
+full `make verify` and independent review pass. The user confirms Stop works;
+task budgets are unchanged. See [runtime evidence](../agent-runtime/README.md).
+
+NSIS/MSI assembly and the authorized update exited 0 on RON-9950X3D2. Installed
+desktop matches the accepted build except Tauri's three-byte NSIS tag; CLI and
+host match their payloads. All 120 members of bundled/active runtimes and the
+unchanged 103 profiles from 14 explicit catalogs verify. Engine source remains
+`74780ea1415ac8d3bb440d58442ac4f81a5dfde3`. Four model files (44,808,326,736 bytes),
+eight conversations, eight saved runs and agent definitions are preserved.
+Visible desktop PID 2900 / host PID 21120 and local HTTPS identity passed startup
+verification. No model was started by these checks. Server 2 remains uninstalled.
+
+An elevated old host survived the first non-elevated update. Payload verification
+caught it; after the user's UAC approval, the elevated retry replaced the host.
+The retained updater now refuses an inaccessible host before NSIS and checks
+termination. Installer exit 0 alone is insufficient acceptance.
+
+Retain `out/agent-followup-20261001/` and current
+`out/windows/GChat_2.0.42_x64-setup.exe` / `GChat_2.0.42_x64_en-US.msi` with adjacent
+checksums. The owned native task directory is released; compiler/dependency
+caches remain in `%LOCALAPPDATA%/GChat/windows-build/source`. Candidate cleanup
+is recorded at handoff. Native Rust emitted no compiler warnings; existing Vite
+large-chunk warnings remain. User replay of the same agent/continued conversation
+is the next interactive check.
+
 ## Shared capabilities Windows update — October 1, 2026
 
 The local Windows app is updated and open with source `f39cee7ed`. Streaming

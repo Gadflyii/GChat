@@ -1,54 +1,65 @@
 # Chat and Agent runtime
 
-## Agent result prompt failure — current work
+## Agent result prompt failure — accepted Windows fix
 
-The user confirms sidebar Stop works in the accepted Windows update. A replayed
-agent loop had two incomplete phases, then ordinary Chat rejected its follow-up:
-`Invalid prompt: The messages must be a ModelMessage[]`. The transport already
-converts UI messages. The live question is whether the new delegated tool output
-contains values outside the SDK's JSON prompt contract. Preserve stage outcomes,
-task budgets, history and model selection.
+The user confirms sidebar Stop works. The subsequent delegated run exposed a
+separate Chat handoff defect: the SDK rejected optional `undefined` values in
+JSON tool output after `convertToModelMessages`, before calling the model.
+Persisted JSON had dropped those values, so saved history looked valid while
+live continuation failed with `Invalid prompt: The messages must be a ModelMessage[]`.
 
-Deliverable: valid delegated result admission and a streaming Chat follow-up
-that reaches ready, including incomplete/failed stages and reopened history.
-Verify the real SDK boundary, run `make verify`, review, commit/push the accepted
-change, then rebuild/update local Windows GChat. Engine changes, budget changes,
-model qualification and overall Coordinator status reporting are excluded.
+Shared compact summaries and delegated results now omit absent fields. Zero
+counters, errors and incomplete stage outcomes are retained. Normal Chat streams
+its follow-up and reaches ready; the production ThreadMessage save/reload path
+supports a later reply. Task budgets, model selection, permissions and history
+are unchanged. The recorded run `b1f6572b-5429-4920-92eb-be9a9516a5d9` separately
+ends `max_steps`: Researcher, Critic and synthesis reach their existing limits.
+Engine changes, numerical/performance qualification and overall Coordinator
+status reporting remain excluded.
 
-| Owner / host | Exact path / revision | Purpose / status |
+The regression failed on baseline for finished, incomplete and failed results
+with the reported SDK error. All 31 focused tests now pass, including actual
+capability execution, SDK Chat/production transport, serialized history reload,
+zero counters and retained errors. TypeScript and source ESLint pass; independent
+SOL review found no blocking issues. Full `make verify` passed: 2,031 frontend
+tests (6 skipped), 15 extension tests, critical coverage floors and supported
+Rust suites, including 529 desktop tests (7 ignored). The preventive test uses
+the actual structured result, replacing the earlier string-fixture evidence
+that bypassed prompt validation.
+
+Native NSIS/MSI assembly and the authorized Windows update from `a5d2e35f7`
+exited 0. Both changed production files match the native mirror. Desktop matches
+the build except Tauri's three-byte NSIS tag; CLI/host and all 120 members of each
+bundled/active engine runtime verify. The unchanged engine is
+`74780ea1415ac8d3bb440d58442ac4f81a5dfde3`; all 103 profiles from 14 explicit
+catalogs are unchanged. Four models (44,808,326,736 bytes), eight conversations,
+eight saved runs and agent definitions are preserved. Visible desktop PID 2900,
+host PID 21120 and local HTTPS protocol version 1 passed startup verification.
+No model was started by these checks.
+
+The initial non-elevated update left the old elevated host running and failed
+host binary verification despite NSIS exit 0. Recorded ownership and listener
+identity identified that host; the user approved UAC and the elevated retry
+replaced it. The retained updater now rejects an inaccessible host before NSIS
+and checks termination. Installation success requires payload/startup verification.
+
+| Owner / host | Exact path / revision | Purpose / retention |
 | --- | --- | --- |
-| GChat / workstation | `/ai/gchat`, `9cdc7bebd` | Clean accepted main baseline |
-| Agent follow-up | `/ai/gchat-worktrees/agent-followup-json`, `fix/agent-followup-json` | Owned implementation candidate |
-| Agent follow-up | Candidate `out/agent-followup-20261001/` | Verification and Windows-update evidence |
-| Compiler caches | `/ai/gchat/src-tauri/target`, native `%LOCALAPPDATA%/GChat/windows-build/source` | Reuse accepted dependencies/builds |
-| Windows / RON-9950X3D2 | Installed app PID 42288, host 28832, engine 6380 at recovery | RTX 5090 verified; preserve live model during diagnosis |
+| GChat / workstation | `/ai/gchat`, accepted source `a5d2e35f7` | Reviewed implementation integrated and pushed to main |
+| Agent follow-up | `/ai/gchat-worktrees/agent-followup-json`, `fix/agent-followup-json` | Accepted candidate released at handoff; see retained handoff receipt |
+| Agent follow-up | `/ai/gchat/out/agent-followup-20261001/` | Retain focused/full verification, build/update receipts and cleanup evidence |
+| Windows build / RON-9950X3D2 | `%LOCALAPPDATA%/GChat/windows-build/agent-followup-20261001` | Released after evidence retention; no live job |
+| Accepted installers | `/ai/gchat/out/windows/`, native `%LOCALAPPDATA%/GChat/release-output` | NSIS/MSI and adjacent checksums |
+| Compiler caches | `/ai/gchat/src-tauri/target`, native `%LOCALAPPDATA%/GChat/windows-build/source` | Preserve accepted builds/dependencies |
+| Installed Windows | `%LOCALAPPDATA%/GChat`, `%APPDATA%/GChat/data` | Updated desktop/host; preserve user data |
 
-SDK reproduction rejects explicit `undefined` inside JSON tool output even after
-`convertToModelMessages`. The frontend adds absent `content.error` and optional
-summary fields; persisted JSON drops them, explaining why saved history can look
-valid while the live handoff fails. The installed run
-`b1f6572b-5429-4920-92eb-be9a9516a5d9` ends `max_steps`; its Researcher, Critic
-and synthesis stages hit their existing limits. This is separate from the SDK
-failure, which occurs before the next inference request.
-
-Implementation: omit absent optional fields when constructing the shared compact
-summary and delegated result. Keep zero counters, actual errors and incomplete
-outcomes. Prevent recurrence with a production transport/SDK Chat regression
-using the real capability output and retained history, rather than a string
-fixture that bypasses prompt validation.
-
-The production SDK regression failed for all three outcomes on baseline with the
-reported validation error. After the fix, 31 focused tests pass, including the
-actual ThreadMessage save/reload conversion and a subsequent streaming reply.
-TypeScript and source ESLint pass. Independent SOL review found no blocking
-issues. Full `make verify` passed: 2,031 frontend tests (6 skipped), 15 extension
-tests, critical coverage floors and supported Rust suites, including 529 desktop
-tests (7 ignored).
-
-Next: commit the reviewed source, build NSIS/MSI from that revision, then update
-Windows and verify runtime/data preservation. Access was
-briefly read-only; `/tmp/gchat-agent-followup-20261001` is a disposable source
-snapshot, now superseded by the owned candidate and removed after access was restored.
+The interrupted `/tmp/gchat-agent-followup-20261001` snapshot is removed.
+Unrelated telemetry worktree and Server 2 are outside this cleanup; Server 2
+remains uninstalled. Next user check: replay the saved agent in the existing
+conversation, then send an ordinary message. Real-model replay remains distinct
+from scripted verification. Ask Chat to list saved agents, or type
+“Run my <agent name> on: <task>”; progress stays inline and inherits the chat's
+folders/permissions, subject to saved-definition restrictions.
 
 ## Shared Chat and agent capabilities — accepted Windows update
 
@@ -104,13 +115,13 @@ local HTTPS identity endpoint passed startup verification.
 Evidence is retained in main `out/shared-capabilities-20261001/`; accepted
 installers and checksums are in `out/windows/`. The temporary candidate/native
 task directories are released at handoff; accepted compiler caches remain.
-Next user check: replay sidebar Stop/Start/Send and ask ordinary Chat about Agent
-Builder, then invoke a skill or saved pool. These interactive real-model checks
-remain distinct from the passing scripted/IPC verification. Numerical quality,
+The user now confirms sidebar Stop works. The subsequent delegated run exposed
+the SDK prompt-validation regression tracked above. Agent Builder discovery and
+other interactive checks remain distinct from scripted/IPC verification. Numerical quality,
 throughput qualification, task-budget changes and overall Coordinator status
 reporting are excluded; Server 2 remains uninstalled.
 
-## Current outcome and acceptance
+## Earlier October 1 recovery acceptance
 
 Investigate and fix the October 1 installed Windows incident: a builder-created
 agent reaches its step limit, later chat reports full context on a small request,
@@ -122,7 +133,7 @@ during diagnosis; the authorized Windows update is installed and reopened for
 the user to test. This is request
 lifecycle verification, not model quality or performance qualification.
 
-## Evidence and live question
+## Earlier recovery evidence
 
 The user deleted conversations during recovery; automatic history deletion is
 not reported. The preserved run `825d15f2-c4d0-49d2-adc1-60cab312adaa` is a
