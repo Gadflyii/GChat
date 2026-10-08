@@ -4,7 +4,7 @@ import type { UIMessage } from '@ai-sdk/react'
 import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useAgentRun } from '@/hooks/useAgentRun'
 import { useAppState } from '@/hooks/useAppState'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -21,6 +21,9 @@ import { convertThreadMessageToUIMessage, extractContentPartsFromUIMessage } fro
 import type { GInferContextState } from '../smart-context'
 import type { CapabilitiesService } from '@/services/capabilities/types'
 import * as agentDefinitions from '@/services/agent/definitions'
+import { conversationDocumentAccess, processAttachmentsForSend } from '../attachmentProcessing'
+import { newUserThreadContent } from '../completion'
+import { createDocumentAttachment } from '@/types/attachment'
 
 type ModelStreamPart =
   | { type: 'stream-start'; warnings: [] }
@@ -79,7 +82,7 @@ async function readChunks(
 
 describe('CustomChatTransport production harness', () => {
   beforeEach(() => {
-    useAgentMode.getState().clearAll()
+    useConversationPolicy.getState().clearAll()
     useAgentRun.getState().clearAll()
     useChatSessions.getState().clearSessions()
     seedServiceHub({
@@ -456,7 +459,7 @@ describe('CustomChatTransport production harness', () => {
   it('uses the selected skill shortcut once then allows a normal streaming follow-up', async () => {
     useAppState.setState({ tools: [{ name: 'skill_invoke', server: 'gchat-native', description: 'Invoke skill', inputSchema: { type: 'object' } }], capabilityToolNames: new Set(['skill_invoke']) })
     useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel, capabilities: ['tools'] } as never }))
-    useAgentMode.getState().setActiveSkill('chat-a', 'agent-builder')
+    useConversationPolicy.getState().setActiveSkill('chat-a', 'agent-builder')
     const model = fakeStreamingModel([{ type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }])
     vi.spyOn(ModelFactory, 'createModel').mockResolvedValue(model)
     const transport = new CustomChatTransport(undefined, 'chat-a')
@@ -466,7 +469,117 @@ describe('CustomChatTransport production harness', () => {
     const assistant: UIMessage = { id: 'tool-reply', role: 'assistant', parts: [{ type: 'tool-skill_invoke', toolCallId: 'call', state: 'output-available', input: { name: 'agent-builder', task: 'Build' }, output: 'Saved definition' }] }
     await readChunks(await transport.sendMessages({ ...options, messages: [userMessage, assistant] }) as ReadableStream<Record<string, unknown>>)
     expect(vi.mocked(model.doStream).mock.calls[1][0].toolChoice).toEqual({ type: 'auto' })
-    expect(useAgentMode.getState().isAgentMode('chat-a')).toBe(false)
+  })
+
+  it('dispatches the explicitly selected saved agent through shared capabilities and continues normally', async () => {
+    useAppState.setState({ tools: [{ name: 'agent_run', server: 'gchat-native', description: 'Invoke saved agent', inputSchema: { type: 'object' } }], capabilityToolNames: new Set(['agent_run']) })
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel, capabilities: ['tools'] } as never }))
+    useConversationPolicy.getState().setActiveDefinition('chat-agent', 'researcher')
+    const model = fakeStreamingModel([{ type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }])
+    vi.spyOn(ModelFactory, 'createModel').mockResolvedValue(model)
+    const transport = new CustomChatTransport(undefined, 'chat-agent')
+    const options = { chatId: 'chat-agent', trigger: 'submit-message' as const, messageId: undefined, abortSignal: undefined }
+    await readChunks(await transport.sendMessages({ ...options, messages: [userMessage] }) as ReadableStream<Record<string, unknown>>)
+    const request = vi.mocked(model.doStream).mock.calls[0][0]
+    expect(request.toolChoice).toEqual({ type: 'tool', toolName: 'agent_run' })
+    expect(request.tools).toContainEqual(expect.objectContaining({ name: 'agent_run', inputSchema: expect.objectContaining({ properties: expect.objectContaining({ definitionId: { type: 'string', enum: ['researcher'] } }) }) }))
+    const output: UIMessage = { id: 'delegate', role: 'assistant', parts: [{ type: 'tool-agent_run', toolCallId: 'run', state: 'output-available', input: { definitionId: 'researcher', task: 'Work' }, output: 'Report' }] }
+    await readChunks(await transport.sendMessages({ ...options, messages: [userMessage, output] }) as ReadableStream<Record<string, unknown>>)
+    expect(vi.mocked(model.doStream).mock.calls[1][0].toolChoice).toEqual({ type: 'auto' })
+    useConversationPolicy.getState().setActiveDefinition('chat-agent')
+    await readChunks(await transport.sendMessages({ ...options, messages: [userMessage, output, { ...userMessage, id: 'next' }] }) as ReadableStream<Record<string, unknown>>)
+    expect(vi.mocked(model.doStream).mock.calls[2][0].toolChoice).toEqual({ type: 'auto' })
+  })
+
+  it('receives Excel document text and metadata through ordinary streaming Chat and completes its SDK follow-up', async () => {
+    const threadId = 'ordinary-excel-chat'
+    const toolName = 'os_fs_read_document'
+    const path = 'C:\\Users\\Ron\\Desktop\\Quarterly budget.xlsx'
+    // Matches the native executor's independently verified real-XLSX result.
+    const documentOutput = { summary: 'Sheet: Budget\nRevenue\t42000\nExpenses\t12000', details: { path, originalChars: 54, truncated: false } }
+    const execute = vi.fn<CapabilitiesService['execute']>(async (request, event) => {
+      event({ type: 'turn_started', run_id: request.run_id, session_id: request.session_id })
+      event({ type: 'turn_finished', reason: 'reply', step_count: 1 })
+      return { content: documentOutput }
+    })
+    const ingestFileAttachment = vi.fn().mockRejectedValue(new Error('GInfer embeddings unavailable'))
+    const parseDocumentMock = vi.fn().mockRejectedValue(new Error('Native folder approval owns reading'))
+    const serviceHub = seedServiceHub({
+      capabilities: { getCatalog: vi.fn(), execute, cancel: vi.fn() },
+      uploads: { ingestFileAttachment } as never, rag: { parseDocument: parseDocumentMock } as never,
+    })
+    const service = serviceHub.capabilities()
+    useConversationPolicy.getState().setApprovalMode(threadId, 'manual')
+    useConversationPolicy.getState().addExternalRoot(threadId, { rootId: 'desktop', path: 'C:\\Users\\Ron\\Desktop', name: 'Desktop', canEdit: false })
+    useAppState.setState({ tools: [{ name: toolName, server: 'gchat-native', description: 'Extract Excel document content', inputSchema: { type: 'object' } }], capabilityToolNames: new Set([toolName]) })
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel, capabilities: ['tools'] } as never }))
+    const prepared = await processAttachmentsForSend({
+      attachments: [createDocumentAttachment({ name: 'Quarterly budget.xlsx', path, fileType: 'xlsx', parseMode: 'auto' })],
+      threadId, serviceHub, parsePreference: 'auto',
+      documentAccess: conversationDocumentAccess(true, useAppState.getState().tools, [], undefined),
+    })
+    const savedUser = newUserThreadContent(threadId, 'Summarize the attached budget.', prepared.processedAttachments)
+    const attachmentMessage = convertThreadMessageToUIMessage(JSON.parse(JSON.stringify(savedUser)))
+    expect(ingestFileAttachment).not.toHaveBeenCalled()
+    expect(parseDocumentMock).not.toHaveBeenCalled()
+    expect(prepared.hasEmbeddedDocuments).toBe(false)
+    const first = fakeStreamingModel([
+      { type: 'stream-start', warnings: [] },
+      { type: 'tool-call', toolCallId: 'excel-read', toolName, input: JSON.stringify({ path }) },
+      { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    ])
+    const model = fakeStreamingModel([
+      { type: 'stream-start', warnings: [] }, { type: 'text-start', id: 'answer' },
+      { type: 'text-delta', id: 'answer', delta: 'The budget lists revenue of 42000 and expenses of 12000.' },
+      { type: 'text-end', id: 'answer' },
+      { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    ])
+    vi.mocked(model.doStream).mockImplementationOnce(vi.mocked(first.doStream))
+    vi.spyOn(ModelFactory, 'createModel').mockResolvedValue(model)
+    const transport = new CustomChatTransport(undefined, threadId)
+    const session = useChatSessions.getState().getSessionData(threadId)
+    const onError = vi.fn()
+    let chat!: Chat<UIMessage>
+    chat = new Chat<UIMessage>({
+      id: threadId, transport, onError,
+      onToolCall: ({ toolCall }) => { session.tools.push(toolCall) },
+      onFinish: () => {
+        if (!session.tools.length) return
+        const signal = useChatSessions.getState().getToolCallController(threadId).signal
+        void executeClaimedChatToolBatch({ threadId, signal,
+          ragToolNames: new Set(), capabilityToolNames: new Set([toolName]),
+          callRagTool: vi.fn(), getProjectId: () => undefined, processOutput: async (content) => content,
+          callCapability: (call) => executeChatCapability({ service, threadId, signal, ...call }),
+          addToolOutput: (output) => chat.addToolOutput(output), onError,
+        })
+      },
+      sendAutomaticallyWhen: ({ messages }) => shouldSendToolFollowUp(messages, session.toolCallAbortController),
+    })
+    useChatSessions.getState().ensureSession(threadId, transport, () => chat)
+    await chat.sendMessage({ id: attachmentMessage.id, parts: attachmentMessage.parts, metadata: attachmentMessage.metadata })
+    await vi.waitFor(() => {
+      expect(chat.status).toBe('ready')
+      expect(chat.messages.at(-1)?.parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'The budget lists revenue of 42000 and expenses of 12000.' }))
+      expect(isSessionBusy(useChatSessions.getState().sessions[threadId])).toBe(false)
+    })
+    expect(onError).not.toHaveBeenCalled()
+    expect(execute.mock.calls[0][0]).toMatchObject({ tool_name: toolName, auto_approve: false, external_roots: [{ path: 'C:\\Users\\Ron\\Desktop', can_edit: false }] })
+    const request = vi.mocked(model.doStream).mock.calls[1][0]
+    expect(JSON.stringify(request.prompt)).toContain('Revenue')
+    expect(JSON.stringify(request.prompt)).toContain('42000')
+    expect(JSON.stringify(request.prompt)).toContain('12000')
+    expect(request.prompt[0]).toMatchObject({ role: 'system', content: expect.stringContaining('os_fs_read_document') })
+    expect(request.prompt[0]).toMatchObject({ role: 'system', content: expect.stringContaining(JSON.stringify(path)) })
+    expect(useConversationPolicy.getState().legacyAgentThreads[threadId]).toBeUndefined()
+    const savedHistory = JSON.parse(JSON.stringify(chat.messages)) as UIMessage[]
+    const reopened = new Chat<UIMessage>({ id: threadId, transport: new CustomChatTransport(undefined, threadId), messages: savedHistory, onError })
+    await reopened.sendMessage({ text: 'Where was that attachment stored?' })
+    expect(reopened.status).toBe('ready')
+    const continuedPrompt = vi.mocked(model.doStream).mock.calls[2][0].prompt
+    expect(continuedPrompt).toContainEqual(expect.objectContaining({ role: 'user', content: expect.arrayContaining([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining(JSON.stringify(path)) }),
+    ]) }))
+    expect(chat.messages[0].parts[0]).toMatchObject({ type: 'text', text: expect.not.stringContaining('Attached local document references:') })
   })
 
   it('repairs malformed streamed tool input through the production boundary', async () => {

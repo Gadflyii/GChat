@@ -84,6 +84,10 @@ export const newUserThreadContent = (
     }))
 
   const metadata: Record<string, unknown> = {}
+  const imageNames = images.filter((image) => image.base64 && image.mimeType).map((image) => image.name)
+  if (imageNames.length > 0) {
+    metadata.image_attachment_names = imageNames
+  }
   if (inlineDocuments.length > 0) {
     metadata.inline_file_contents = inlineDocuments.map((doc) => ({
       name: doc.name,
@@ -97,6 +101,7 @@ export const newUserThreadContent = (
       mediaType: doc.mimeType,
       size: doc.size,
       fileType: doc.fileType,
+      ...(doc.nativeDocumentReference ? { native_reference: true } : {}),
     }))
   }
   if (audioMeta.length > 0) {

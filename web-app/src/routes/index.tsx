@@ -13,13 +13,13 @@ import { isOnboardingPending } from '@/lib/onboarding'
 import { useCallback, useEffect, useState } from 'react'
 import { useThreads } from '@/hooks/useThreads'
 import DropdownModelProvider from '@/containers/DropdownModelProvider'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { usePrompt } from '@/hooks/usePrompt'
 import { AgentTaskSuggestions } from '@/containers/AgentTaskSuggestions'
 import { AgentWorkspaceLayout } from '@/containers/AgentWorkspaceLayout'
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { resolveAgentWorkspaceRoot } from '@/services/agent/tauri'
+import { resolveConversationWorkspaceRoot } from '@/services/agent/tauri'
 
 type ThreadModel = {
   id: string
@@ -58,12 +58,7 @@ function Index() {
   const agentSkill = search.agentSkill
   const agentDefinition = search.agentDefinition
   const { setCurrentThreadId } = useThreads()
-  const isAgentMode = useAgentMode(
-    (state) => state.agentThreads[TEMPORARY_CHAT_ID] === true
-  )
-  const sidebarMode = useAgentMode((state) => state.sidebarMode)
-  const setAgentMode = useAgentMode((state) => state.setAgentMode)
-  const agentWorkspace = useAgentMode(
+  const agentWorkspace = useConversationPolicy(
     (state) => state.workspaces[TEMPORARY_CHAT_ID]
   )
   const setPrompt = usePrompt((state) => state.setPrompt)
@@ -86,8 +81,8 @@ function Index() {
     })
     if (typeof selected !== 'string') return
 
-    const root = await resolveAgentWorkspaceRoot(selected)
-    useAgentMode.getState().addExternalRoot(TEMPORARY_CHAT_ID, {
+    const root = await resolveConversationWorkspaceRoot(selected)
+    useConversationPolicy.getState().addExternalRoot(TEMPORARY_CHAT_ID, {
       ...root,
       canEdit: true,
     })
@@ -106,10 +101,6 @@ function Index() {
     setCurrentThreadId(undefined)
   }, [setCurrentThreadId])
 
-  useEffect(() => {
-    setAgentMode(TEMPORARY_CHAT_ID, sidebarMode === 'agent')
-  }, [setAgentMode, sidebarMode])
-
   if (onboardingPending) {
     return <SetupScreen onSkipped={() => setSetupSkippedThisSession(true)} />
   }
@@ -117,7 +108,6 @@ function Index() {
   return (
     <AgentWorkspaceLayout
       threadId={TEMPORARY_CHAT_ID}
-      agentModeActive={isAgentMode}
       workspace={agentWorkspace ?? { externalRoots: [] }}
       onAddExternal={() => void addExternalAgentRoot()}
       refreshKey={0}
@@ -125,7 +115,7 @@ function Index() {
       <div className="flex h-full w-full min-w-0 flex-col justify-center">
         <HeaderPage>
           <div className="flex items-center gap-2 w-full">
-            <DropdownModelProvider showSampler={!isAgentMode} />
+            <DropdownModelProvider showSampler />
           </div>
         </HeaderPage>
         <div
@@ -152,7 +142,7 @@ function Index() {
             </div>
             <div className="absolute inset-x-0 top-full mx-auto w-full max-w-3xl">
               <AgentTaskSuggestions
-                visible={isAgentMode}
+                visible
                 onSelect={handleSelectAgentTask}
               />
             </div>

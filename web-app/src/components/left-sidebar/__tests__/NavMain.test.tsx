@@ -1,17 +1,21 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocation } from '@tanstack/react-router'
 import { NavMain } from '../NavMain'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
+import { useAgentRun } from '@/hooks/useAgentRun'
+import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 
 const codeState = vi.hoisted(() => ({ enabled: true }))
 const hermesState = vi.hoisted(() => ({ enabled: true }))
+const actions = vi.hoisted(() => ({ navigate: vi.fn(), resetAgentSession: vi.fn() }))
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
   useLocation: vi.fn(),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => actions.navigate,
 }))
 
 vi.mock('@/components/ui/sidebar', () => ({
@@ -24,10 +28,12 @@ vi.mock('@/components/ui/sidebar', () => ({
   SidebarMenuButton: ({
     children,
     isActive,
+    onClick,
   }: {
     children: React.ReactNode
     isActive: boolean
-  }) => <div data-active={String(isActive)}>{children}</div>,
+    onClick?: () => void
+  }) => <div data-active={String(isActive)} onClick={onClick}>{children}</div>,
 }))
 
 vi.mock('@/components/animated-icon/plug', () => ({
@@ -35,9 +41,12 @@ vi.mock('@/components/animated-icon/plug', () => ({
 }))
 
 vi.mock('@/containers/dialogs/SearchDialog', () => ({
-  SearchDialog: ({ mode }: { mode: string }) => (
-    <div data-testid="search-mode">{mode}</div>
-  ),
+  SearchDialog: () => <div data-testid="history-search" />,
+}))
+
+vi.mock('@/services/agent/tauri', () => ({
+  resetAgentSession: actions.resetAgentSession,
+  cancelAgentTurn: vi.fn(),
 }))
 
 vi.mock('@/containers/dialogs/AddProjectDialog', () => ({
@@ -80,129 +89,68 @@ describe('NavMain', () => {
   beforeEach(() => {
     codeState.enabled = true
     hermesState.enabled = true
+    useConversationPolicy.getState().clearAll()
+    useAgentRun.getState().clearAll()
+    actions.navigate.mockReset()
+    actions.resetAgentSession.mockReset()
     vi.mocked(useLocation).mockReturnValue({ pathname: '/' } as never)
   })
 
-  it('shows Integrations only in Chat mode', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
-
+  it('shows one New Chat action with projects, integrations and history search', () => {
+    render(<NavMain />)
+    expect(screen.getByText('common:newChat')).toBeInTheDocument()
     expect(screen.getByText('common:launch')).toBeInTheDocument()
-
-    rerender(<NavMain mode="agent" />)
-
-    expect(screen.queryByText('common:launch')).not.toBeInTheDocument()
-  })
-
-  it('shows New Project only in Chat mode', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
-
     expect(screen.getByText('common:projects.new')).toBeInTheDocument()
-
-    rerender(<NavMain mode="agent" />)
-
-    expect(screen.queryByText('common:projects.new')).not.toBeInTheDocument()
+    expect(screen.getByText('common:models')).toBeInTheDocument()
+    expect(screen.getByTestId('history-search')).toBeInTheDocument()
   })
 
-  it('shows Models in both modes', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
-
-    expect(screen.getByText('common:models')).toBeInTheDocument()
-
-    rerender(<NavMain mode="agent" />)
-
-    expect(screen.getByText('common:models')).toBeInTheDocument()
+  it('starts ordinary Chat and resets selections without requiring a native task reset', async () => {
+    useConversationPolicy.getState().setActiveSkill(TEMPORARY_CHAT_ID, 'agent-builder')
+    render(<NavMain />)
+    fireEvent.click(screen.getByText('common:newChat'))
+    await waitFor(() => expect(actions.navigate).toHaveBeenCalledWith({ to: '/', search: {} }))
+    expect(useConversationPolicy.getState().activeSkills[TEMPORARY_CHAT_ID]).toBeUndefined()
+    expect(actions.resetAgentSession).not.toHaveBeenCalled()
   })
 
-  it('shows Benchmark in both modes and highlights its route', () => {
+  it('highlights the benchmark route', () => {
     vi.mocked(useLocation).mockReturnValue({ pathname: '/benchmark/' } as never)
-    const { rerender } = render(<NavMain mode="chat" />)
-
-    expect(screen.getByText('Benchmark')).toBeInTheDocument()
-    expect(
-      screen.getByText('Benchmark').closest('[data-active]')
-    ).toHaveAttribute('data-active', 'true')
-
-    rerender(<NavMain mode="agent" />)
-    expect(screen.getByText('Benchmark')).toBeInTheDocument()
-  })
-
-  it('shows Code in both modes', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
-
-    expect(screen.getByText('common:code')).toBeInTheDocument()
-
-    rerender(<NavMain mode="agent" />)
-
-    expect(screen.getByText('common:code')).toBeInTheDocument()
+    render(<NavMain />)
+    expect(screen.getByText('Benchmark').closest('[data-active]')).toHaveAttribute('data-active', 'true')
   })
 
   it('hides Code when its integration is disabled', () => {
     codeState.enabled = false
-    render(<NavMain mode="chat" />)
-
+    render(<NavMain />)
     expect(screen.queryByText('common:code')).not.toBeInTheDocument()
   })
 
   it('highlights Code on the code route', () => {
     vi.mocked(useLocation).mockReturnValue({ pathname: '/code/' } as never)
-
-    render(<NavMain mode="chat" />)
-
-    expect(
-      screen.getByText('common:code').closest('[data-active]')
-    ).toHaveAttribute('data-active', 'true')
+    render(<NavMain />)
+    expect(screen.getByText('common:code').closest('[data-active]')).toHaveAttribute('data-active', 'true')
   })
 
-  it('shows Agent Studio directly after Code in both modes', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
-
+  it('shows Agent Studio directly after Code', () => {
+    render(<NavMain />)
     const codeLink = screen.getByText('common:code').closest('li')
     const studioLink = screen.getByText('Agent Studio').closest('li')
     expect(studioLink).toBeInTheDocument()
     expect(codeLink?.nextElementSibling).toBe(studioLink)
-
-    rerender(<NavMain mode="agent" />)
-
-    expect(screen.getByText('Agent Studio')).toBeInTheDocument()
   })
 
   it('hides Hermes only after its integration is disabled', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
+    const { rerender } = render(<NavMain />)
     expect(screen.getByText('Hermes')).toBeInTheDocument()
-
     hermesState.enabled = false
-    rerender(<NavMain mode="chat" />)
+    rerender(<NavMain />)
     expect(screen.queryByText('Hermes')).not.toBeInTheDocument()
-  })
-
-  it('labels the new conversation action for the active mode', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
-
-    expect(screen.getByText('common:newChat')).toBeInTheDocument()
-
-    rerender(<NavMain mode="agent" />)
-
-    expect(screen.getByText('common:newTask')).toBeInTheDocument()
-    expect(screen.queryByText('common:newChat')).not.toBeInTheDocument()
-  })
-
-  it('passes the active mode to search', () => {
-    const { rerender } = render(<NavMain mode="chat" />)
-
-    expect(screen.getByTestId('search-mode')).toHaveTextContent('chat')
-
-    rerender(<NavMain mode="agent" />)
-
-    expect(screen.getByTestId('search-mode')).toHaveTextContent('agent')
   })
 
   it('highlights Integrations on the launch route', () => {
     vi.mocked(useLocation).mockReturnValue({ pathname: '/launch/' } as never)
-
-    render(<NavMain mode="chat" />)
-
-    expect(
-      screen.getByText('common:launch').closest('[data-active]')
-    ).toHaveAttribute('data-active', 'true')
+    render(<NavMain />)
+    expect(screen.getByText('common:launch').closest('[data-active]')).toHaveAttribute('data-active', 'true')
   })
 })

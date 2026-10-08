@@ -16,22 +16,20 @@ import { IconTrash } from '@tabler/icons-react'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import { route } from '@/constants/routes'
-import type { SidebarMode } from '@/hooks/useAgentMode'
 
 interface DeleteAllThreadsDialogProps {
-  onDeleteAll: () => void
+  onDeleteAll: () => void | Promise<void>
   onDropdownClose?: () => void
-  mode?: SidebarMode
 }
 
 export function DeleteAllThreadsDialog({
   onDeleteAll,
   onDropdownClose,
-  mode = 'chat',
 }: DeleteAllThreadsDialogProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const deleteButtonRef = useRef<HTMLButtonElement>(null)
 
   const handleOpenChange = (open: boolean) => {
@@ -41,24 +39,22 @@ export function DeleteAllThreadsDialog({
     }
   }
 
-  const handleDeleteAll = () => {
-    onDeleteAll()
-    setIsOpen(false)
-    if (onDropdownClose) onDropdownClose()
-    const translationScope =
-      mode === 'agent' ? 'deleteAllAgentThreads' : 'deleteAllThreads'
-    toast.success(t(`common:toast.${translationScope}.title`), {
-      id: 'delete-all-threads',
-      description: t(`common:toast.${translationScope}.description`),
-    })
-    setTimeout(() => {
-      navigate({ to: route.home })
-    }, 0)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleDeleteAll()
+  const handleDeleteAll = async () => {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      await onDeleteAll()
+      setIsOpen(false)
+      if (onDropdownClose) onDropdownClose()
+      toast.success(t('common:toast.deleteAllThreads.title'), {
+        id: 'delete-all-threads',
+        description: t('common:toast.deleteAllThreads.description'),
+      })
+      setTimeout(() => { navigate({ to: route.home }) }, 0)
+    } catch (error) {
+      toast.error('Could not delete conversations.', { description: String(error) })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -81,18 +77,10 @@ export function DeleteAllThreadsDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {t(
-              `common:dialogs.${
-                mode === 'agent' ? 'deleteAllAgentThreads' : 'deleteAllThreads'
-              }.title`
-            )}
+            {t('common:dialogs.deleteAllThreads.title')}
           </DialogTitle>
           <DialogDescription>
-            {t(
-              `common:dialogs.${
-                mode === 'agent' ? 'deleteAllAgentThreads' : 'deleteAllThreads'
-              }.description`
-            )}
+            {t('common:dialogs.deleteAllThreads.description')}
           </DialogDescription>
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <DialogClose asChild>
@@ -104,7 +92,7 @@ export function DeleteAllThreadsDialog({
               ref={deleteButtonRef}
               variant="destructive"
               onClick={handleDeleteAll}
-              onKeyDown={handleKeyDown}
+              disabled={deleting}
               size="sm"
               className="w-full sm:w-auto"
               aria-label={t('common:deleteAll')}

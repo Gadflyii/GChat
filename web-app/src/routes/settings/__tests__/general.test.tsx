@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { Route as GeneralRoute } from '../general'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 
 // Mock all the dependencies
 vi.mock('@/containers/SettingsMenu', () => ({
@@ -284,7 +284,7 @@ Object.assign(navigator, {
 describe('General Settings Route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useAgentMode.getState().setDefaultApprovalMode('manual')
+    useConversationPolicy.getState().setDefaultApprovalMode('manual')
     seedServiceHub({
       app: {
         factoryReset: vi.fn(),
@@ -385,7 +385,7 @@ describe('General Settings Route', () => {
     await act(async () => {
       fireEvent.click(toggle!)
     })
-    expect(useAgentMode.getState().getApprovalMode('ordinary-chat')).toBe('skip')
+    expect(useConversationPolicy.getState().getApprovalMode('ordinary-chat')).toBe('skip')
   })
 
   it('renders the model preload toggle off, next to the startup settings', async () => {

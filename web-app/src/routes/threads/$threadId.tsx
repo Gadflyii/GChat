@@ -2,7 +2,7 @@ import { compactConversation, isCompactCommand } from '@/lib/conversation-comman
 import { studioCommand } from '@/services/agent/studio'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute, useParams, useSearch } from '@tanstack/react-router'
-import { cn, isGinferProvider } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 import HeaderPage from '@/containers/HeaderPage'
 import { useThreads } from '@/hooks/useThreads'
@@ -16,7 +16,6 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useAssistant } from '@/hooks/useAssistant'
 import { useTools } from '@/hooks/useTools'
 import { useAppState } from '@/hooks/useAppState'
-import { listAgentModelInstances } from '@/services/agent/definitions'
 import {
   InitialMessageFile,
   useInitialMessage,
@@ -38,6 +37,7 @@ import { useChatSessions } from '@/stores/chat-session-store'
 import { useThreadReadStatus } from '@/stores/thread-read-store'
 import {
   convertThreadMessagesToUIMessages,
+  convertThreadMessageToUIMessage,
   extractContentPartsFromUIMessage,
 } from '@/lib/messages'
 import { newUserThreadContent } from '@/lib/completion'
@@ -52,7 +52,6 @@ import {
   ThreadMessage,
   MessageStatus,
   ChatCompletionRole,
-  ContentType,
 } from '@gchat/core'
 import { toast } from 'sonner'
 import {
@@ -64,7 +63,7 @@ import {
   useChatAttachments,
   NEW_THREAD_ATTACHMENT_KEY,
 } from '@/hooks/useChatAttachments'
-import { processAttachmentsForSend } from '@/lib/attachmentProcessing'
+import { conversationDocumentAccess, processAttachmentsForSend } from '@/lib/attachmentProcessing'
 import { downscaleToolResultContent } from '@/lib/toolResultImages'
 import {
   executeClaimedChatToolBatch,
@@ -91,38 +90,28 @@ import {
 import { Button } from '@/components/ui/button'
 import { LinkifiedText } from '@/components/LinkifiedText'
 import { IconAlertCircle, IconRefresh } from '@tabler/icons-react'
+import { importConversationContext, isImportedConversationContext } from '@/lib/import-conversation-context'
 import { executeChatCapability, chatCapabilityRun } from '@/lib/execute-chat-capability'
 import DropdownModelProvider from '@/containers/DropdownModelProvider'
 import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ExtensionManager } from '@/lib/extension'
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { AgentWorkspaceLayout } from '@/containers/AgentWorkspaceLayout'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useAgentRun } from '@/hooks/useAgentRun'
-import {
-  readAgentDefinitionId,
-  readAgentSkillName,
-} from '@/lib/agent-skill-selection'
-import {
-  buildAgentUIMessage,
-  claimAgentRunPersistence,
-} from '@/lib/agent-run-message'
-import { resolveMessageExecutionRoute } from '@/lib/agent-route'
+import { buildAgentUIMessage } from '@/lib/agent-run-message'
 import {
   extractAgentAttachmentReferences,
   type AgentFileReference,
 } from '@/lib/agent-file-links'
 import {
   cancelAgentTurn,
-  resolveAgentWorkspaceRoot,
-  runAgentTurn,
+  resolveConversationWorkspaceRoot,
+  loadAgentConversationContext,
 } from '@/services/agent/tauri'
-import type {
-  AgentAttachment as AgentIpcAttachment,
-  AgentEvent,
-  AgentRunState,
-} from '@/types/agent'
+import AgentApprovalDialog from '@/containers/dialogs/AgentApprovalDialog'
+import AgentFolderAccessDialog from '@/containers/dialogs/AgentFolderAccessDialog'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 
 const CHAT_STATUS = {
@@ -133,79 +122,6 @@ const CHAT_STATUS = {
 type ThreadModel = {
   id: string
   provider: string
-}
-
-const agentAttachmentsFromMessage = (
-  message: ThreadMessage
-): {
-  text: string
-  files: InitialMessageFile[]
-  documents: Attachment[]
-  agentSkillName?: string
-  agentDefinitionId?: string
-} => {
-  const metadata = (message.metadata ?? {}) as Record<string, unknown>
-  const storedText = metadata.agent_input_text
-  const text =
-    typeof storedText === 'string'
-      ? storedText
-      : message.content
-          .filter((content) => content.type === ContentType.Text)
-          .map((content) => content.text?.value ?? '')
-          .join('')
-
-  const imageNames = Array.isArray(metadata.image_attachment_names)
-    ? metadata.image_attachment_names
-    : []
-  let imageIndex = 0
-  const files = message.content.flatMap((content) => {
-    if (content.type !== ContentType.Image || !content.image_url?.url) return []
-    const url = content.image_url.url
-    const mediaType = /^data:([^;,]+)[;,]/.exec(url)?.[1] ?? 'image/jpeg'
-    const storedName = imageNames[imageIndex]
-    const name =
-      typeof storedName === 'string' && storedName
-        ? storedName
-        : `image-${imageIndex + 1}`
-    imageIndex += 1
-    return [{ type: 'file', name, mediaType, url }]
-  })
-
-  const storedFiles = Array.isArray(metadata.file_attachments)
-    ? metadata.file_attachments
-    : []
-  const documents = storedFiles.flatMap((value) => {
-    if (
-      typeof value !== 'object' ||
-      value === null ||
-      typeof (value as { name?: unknown }).name !== 'string' ||
-      typeof (value as { path?: unknown }).path !== 'string'
-    ) {
-      return []
-    }
-    const file = value as {
-      name: string
-      path: string
-      mediaType?: string
-      size?: number
-      fileType?: string
-    }
-    return [
-      {
-        type: 'document' as const,
-        name: file.name,
-        path: file.path,
-        mimeType: file.mediaType,
-        size: file.size,
-        fileType: file.fileType,
-      },
-    ]
-  })
-
-  const agentSkillName = readAgentSkillName(metadata)
-  const agentDefinitionId = readAgentDefinitionId(metadata)
-
-  return { text, files, documents, agentSkillName, agentDefinitionId }
 }
 
 type SearchParams = {
@@ -229,7 +145,6 @@ function ThreadDetail() {
   const search = useSearch({ from: Route.id })
   const searchThreadModel = search.threadModel
   const setCurrentThreadId = useThreads((state) => state.setCurrentThreadId)
-  const setSidebarMode = useAgentMode((state) => state.setSidebarMode)
   const setCurrentAssistant = useAssistant((state) => state.setCurrentAssistant)
   const assistants = useAssistant((state) => state.assistants)
   const setMessages = useMessages((state) => state.setMessages)
@@ -237,6 +152,11 @@ function ThreadDetail() {
   const updateMessage = useMessages((state) => state.updateMessage)
   const deleteMessage = useMessages((state) => state.deleteMessage)
   const currentThread = useRef<string | undefined>(undefined)
+  const [readyThreadId, setReadyThreadId] = useState<string>()
+  const historyReady = readyThreadId === threadId
+  const [restoreFailure, setRestoreFailure] = useState<{ threadId: string; message: string }>()
+  const [restoreAttempt, setRestoreAttempt] = useState(0)
+  const historyRestoreError = restoreFailure?.threadId === threadId ? restoreFailure.message : undefined
 
   useTools()
 
@@ -266,7 +186,6 @@ function ThreadDetail() {
   const selectedModel = useModelProvider((state) => state.selectedModel)
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
   const agentRun = useAgentRun((state) => state.runs[threadId])
-  const persistedAgentRunsRef = useRef(new Set<string>())
   const chatMessagesRef = useRef<UIMessage[]>([])
 
   // Get system message from the thread's assigned assistant instructions.
@@ -505,16 +424,13 @@ function ThreadDetail() {
 
   useEffect(() => {
     setCurrentThreadId(threadId)
-    setSidebarMode(
-      useAgentMode.getState().isAgentMode(threadId) ? 'agent' : 'chat'
-    )
     useThreadReadStatus.getState().markRead(threadId)
     const assistant = assistants.find(
       (assistant) => assistant.id === thread?.assistants?.[0]?.id
     )
     if (assistant) setCurrentAssistant(assistant)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId, assistants, setSidebarMode])
+  }, [threadId, assistants])
 
   // Load messages on first mount
   useEffect(() => {
@@ -525,13 +441,21 @@ function ThreadDetail() {
       existingSession?.isStreaming ||
       currentThread.current === threadId
     ) {
+      setReadyThreadId(threadId)
       return
     }
 
+    let cancelled = false
+    setRestoreFailure(undefined)
     serviceHub
       .messages()
       .fetchMessages(threadId)
-      .then((fetchedMessages) => {
+      .then(async (fetchedMessages) => {
+        const historicalAgent = useConversationPolicy.getState().legacyAgentThreads[threadId] || fetchedMessages.some((message) => message.metadata?.agent_run)
+        if (historicalAgent) {
+          fetchedMessages = await importConversationContext(threadId, fetchedMessages, serviceHub.messages(), loadAgentConversationContext)
+        }
+        if (cancelled) return
         if (fetchedMessages && fetchedMessages.length > 0) {
           const currentLocalMessages = useMessages
             .getState()
@@ -561,9 +485,13 @@ function ThreadDetail() {
           setChatMessages(uiMessages)
           currentThread.current = threadId
         }
+        setReadyThreadId(threadId)
+      }).catch((loadError) => {
+        if (!cancelled) setRestoreFailure({ threadId, message: extractModelErrorMessage(loadError) })
       })
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadId, serviceHub])
+  }, [threadId, serviceHub, restoreAttempt])
 
   useEffect(() => {
     return () => {
@@ -581,229 +509,6 @@ function ThreadDetail() {
     return () => close()
   }, [threadId])
 
-  const persistAgentRun = useCallback(
-    (run: AgentRunState) => {
-      if (!claimAgentRunPersistence(persistedAgentRunsRef.current, run.runId)) {
-        return
-      }
-      const uiMessage = buildAgentUIMessage(run)
-      const assistantMessage: ThreadMessage = {
-        type: 'text',
-        role: ChatCompletionRole.Assistant,
-        content: extractContentPartsFromUIMessage(uiMessage),
-        id: uiMessage.id,
-        object: 'thread.message',
-        thread_id: threadId,
-        status:
-          run.status === 'cancelled'
-            ? MessageStatus.Stopped
-            : run.status === 'failed'
-              ? MessageStatus.Error
-              : MessageStatus.Ready,
-        created_at: Date.now(),
-        completed_at: Date.now(),
-        metadata: uiMessage.metadata as Record<string, unknown>,
-      }
-      addMessage(assistantMessage)
-      useChatSessions.getState().upsertMessage(threadId, uiMessage)
-    },
-    [addMessage, threadId]
-  )
-
-  const applyAgentEvent = useCallback(
-    (event: AgentEvent) => {
-      useAgentRun.getState().applyEvent(threadId, event)
-      const run = useAgentRun.getState().getRun(threadId)
-      if (event.type === 'turn_finished') {
-        persistAgentRun(run)
-
-        return
-      }
-      if (!run.runId) return
-      const uiMessage = buildAgentUIMessage(run)
-      useChatSessions.getState().upsertMessage(threadId, uiMessage)
-    },
-    [persistAgentRun, threadId]
-  )
-
-  const processAndRunAgent = useCallback(
-    async (
-      text: string,
-      files?: InitialMessageFile[],
-      documentsFromPayload?: Attachment[],
-      agentSkillName?: string,
-      agentDefinitionId?: string,
-      persistUserMessage = true
-    ) => {
-      if (!isGinferProvider(selectedProvider) && selectedProvider !== 'ginfer-lan') {
-        toast.error(t('chat:agentErrors.providerUnavailableTitle'), {
-          description: t('chat:agentErrors.providerUnavailableDescription'),
-        })
-        return
-      }
-      const documentAttachments =
-        documentsFromPayload ??
-        getAttachments(attachmentsKey).filter(
-          (attachment) => attachment.type === 'document'
-        )
-      if (files?.some((file) => file.mediaType.startsWith('audio/'))) {
-        toast.error(t('chat:agentErrors.audioUnsupported'))
-        return
-      }
-      if (
-        documentAttachments.some(
-          (attachment) => !attachment.path || !attachment.name
-        )
-      ) {
-        toast.error(t('chat:agentErrors.invalidAttachment'))
-        return
-      }
-      const mediaAttachments =
-        files?.map((file) => {
-          const base64 = file.url.split(',')[1] || ''
-          return createImageAttachment({
-            name: file.name,
-            mimeType: file.mediaType,
-            dataUrl: file.url,
-            base64,
-            size: Math.ceil((base64.length * 3) / 4),
-          })
-        }) ?? []
-      const combinedAttachments = [...mediaAttachments, ...documentAttachments]
-      const ipcAttachments: AgentIpcAttachment[] = [
-        ...mediaAttachments.map((attachment) => ({
-          kind: 'image' as const,
-          name: attachment.name,
-          media_type: attachment.mimeType,
-          data_url: attachment.dataUrl,
-        })),
-        ...documentAttachments.map((attachment) => ({
-          kind: 'file' as const,
-          name: attachment.name,
-          media_type: attachment.mimeType,
-          path: attachment.path,
-        })),
-      ]
-      const workspace = useAgentMode.getState().getWorkspace(threadId)
-      const workingDir = workspace.primaryRoot?.path
-      const providerSupportsAgent = isGinferProvider(selectedProvider) || selectedProvider === 'ginfer-lan'
-      const providerActiveModels = selectedProvider === 'ginfer-lan'
-        ? await listAgentModelInstances().then((instances) => instances.map((instance) => instance.id)).catch(() => [])
-        : providerSupportsAgent
-        ? await serviceHub
-            .models()
-            .getActiveModels(selectedProvider)
-            .catch(() => [])
-        : []
-      if (
-        !selectedModel ||
-        !providerSupportsAgent ||
-        !providerActiveModels.includes(selectedModel.id)
-      ) {
-        toast.error(t('chat:agentErrors.localLlamacppRequired'))
-        return
-      }
-      const currentRun = useAgentRun.getState().getRun(threadId)
-      if (
-        currentRun.status === 'running' ||
-        currentRun.status === 'awaiting_approval' ||
-        currentRun.status === 'awaiting_folder_access'
-      ) {
-        return
-      }
-
-      await useThreads.getState().awaitThreadPersistence(threadId)
-      if (persistUserMessage) {
-        const messageId =
-          useOptimisticUserMessage.getState().byThread[threadId]?.id ??
-          generateId()
-        const userMessage = newUserThreadContent(
-          threadId,
-          text,
-          combinedAttachments,
-          messageId
-        )
-        userMessage.metadata = {
-          ...(userMessage.metadata ?? {}),
-          agent_input_text: text,
-          ...(agentSkillName ? { agent_skill_name: agentSkillName } : {}),
-          ...(agentDefinitionId
-            ? { agent_definition_id: agentDefinitionId }
-            : {}),
-          image_attachment_names: mediaAttachments.map(
-            (attachment) => attachment.name
-          ),
-        }
-        addMessage(userMessage)
-        const userUiMessage = convertThreadMessagesToUIMessages([
-          userMessage,
-        ])[0]
-        const messages = [...chatMessagesRef.current, userUiMessage]
-        chatMessagesRef.current = messages
-        setChatMessages(messages)
-        useOptimisticUserMessage.getState().clear(threadId)
-        clearAttachmentsForThread(attachmentsKey)
-      }
-
-      const runId = generateId()
-      useAgentRun.getState().startRun(threadId, runId)
-
-      try {
-        await runAgentTurn(
-          {
-            run_id: runId,
-            session_id: threadId,
-            model_id: selectedModel.id,
-            user_message: text,
-            definition_id: agentDefinitionId,
-            selected_skill: agentSkillName,
-            attachments: ipcAttachments,
-            working_dir: workingDir,
-            external_roots: workspace.externalRoots.map((root) => ({
-              path: root.path,
-              can_edit: root.canEdit,
-            })),
-            auto_approve:
-              useAgentMode.getState().getApprovalMode(threadId) === 'skip',
-            disabled_tools: useToolAvailable.getState().getDisabledToolsForThread(threadId),
-          },
-          applyAgentEvent
-        )
-      } catch (error) {
-        if (persistedAgentRunsRef.current.has(runId)) return
-        applyAgentEvent({
-          type: 'step_error',
-          category: 'ipc',
-          message: String(error),
-        })
-        applyAgentEvent({
-          type: 'turn_finished',
-          reason: 'failed',
-          step_count: 0,
-        })
-        const message = String(error)
-        if (message.includes('AGENT_VISION_MODEL_REQUIRED')) {
-          toast.error(t('chat:agentErrors.visionModelRequired'))
-        } else {
-          toast.error(t('chat:agentErrors.runFailed'))
-        }
-      }
-    },
-    [
-      addMessage,
-      applyAgentEvent,
-      attachmentsKey,
-      clearAttachmentsForThread,
-      getAttachments,
-      selectedModel,
-      selectedProvider,
-      serviceHub,
-      setChatMessages,
-      t,
-      threadId,
-    ]
-  )
-
   // Consolidated function to process and send a message
   const processAndSendMessage = useCallback(
     async (
@@ -813,17 +518,8 @@ function ThreadDetail() {
       agentSkillName?: string,
       agentDefinitionId?: string
     ) => {
-      if (agentSkillName) useAgentMode.getState().setActiveSkill(threadId, agentSkillName)
-      if (useAgentMode.getState().isAgentMode(threadId)) {
-        await processAndRunAgent(
-          text,
-          files,
-          documentsFromPayload,
-          agentSkillName ?? useAgentMode.getState().activeSkills[threadId],
-          agentDefinitionId
-        )
-        return
-      }
+      if (agentSkillName) useConversationPolicy.getState().setActiveSkill(threadId, agentSkillName)
+      useConversationPolicy.getState().setActiveDefinition(threadId, agentDefinitionId)
       ttftBegin()
       const persistReady = useThreads
         .getState()
@@ -917,6 +613,12 @@ function ThreadDetail() {
             serviceHub,
             selectedProvider,
             parsePreference,
+            documentAccess: conversationDocumentAccess(
+              Boolean(useModelProvider.getState().selectedModel?.capabilities?.includes('tools')),
+              useAppState.getState().tools,
+              useToolAvailable.getState().getDisabledToolsForThread(threadId),
+              agentSkillName ? 'skill_invoke' : agentDefinitionId ? 'agent_run' : undefined
+            ),
           })
           processedAttachments = result.processedAttachments
 
@@ -948,26 +650,16 @@ function ThreadDetail() {
       )
       addMessage(userMessage)
 
-      // Build parts for AI SDK (only images are sent as file parts)
-      const parts: Array<
-        | { type: 'text'; text: string }
-        | { type: 'file'; mediaType: string; url: string }
-      > = [
+      // Use the persisted media representation for both live sends and reloads.
+      const parts: UIMessage['parts'] = [
         {
           type: 'text',
           text: userMessage.content[0].text?.value ?? text,
         },
       ]
 
-      if (files) {
-        files.forEach((file) => {
-          parts.push({
-            type: 'file',
-            mediaType: file.mediaType,
-            url: file.url,
-          })
-        })
-      }
+      parts.push(...convertThreadMessageToUIMessage(userMessage).parts.filter((part) =>
+        part.type === 'file' && /^(image|audio)\//.test(part.mediaType)))
 
       console.log(
         '[processAndSendMessage] Calling sendMessage with parts:',
@@ -991,7 +683,6 @@ function ThreadDetail() {
     },
     [
       sendMessage,
-      processAndRunAgent,
       threadId,
       thread,
       addMessage,
@@ -1018,7 +709,7 @@ function ThreadDetail() {
       alreadySent: initialMessageSentRef.current,
     })
     // #endregion
-    if (initialMessageSentRef.current) return
+    if (!historyReady || initialMessageSentRef.current) return
 
     const message = useInitialMessage.getState().consume(threadId)
     if (!message) return
@@ -1044,7 +735,7 @@ function ThreadDetail() {
         console.error('[ThreadPage] Failed to process initial message:', error)
       }
     })()
-  }, [threadId, processAndSendMessage])
+  }, [threadId, historyReady, processAndSendMessage])
 
   // Handle submit from ChatInput
   const handleSubmit = useCallback(
@@ -1054,6 +745,11 @@ function ThreadDetail() {
       agentSkillName?: string,
       agentDefinitionId?: string
     ) => {
+      if (!historyReady) {
+        if (historyRestoreError) toast.error('Could not restore conversation context.', { description: historyRestoreError })
+        else toast.info('Wait for conversation context to restore.')
+        return
+      }
       if (isCompactCommand(text)) {
         if (files?.length) {
           toast.error('Remove attachments before running /compact.')
@@ -1113,6 +809,8 @@ function ThreadDetail() {
     },
     [
       compactContext,
+      historyReady,
+      historyRestoreError,
       pendingToolBatches,
       processAndSendMessage,
       status,
@@ -1126,67 +824,6 @@ function ThreadDetail() {
   const handleRegenerate = useCallback(
     async (messageId?: string) => {
       const currentLocalMessages = useMessages.getState().getMessages(threadId)
-      const isAgentThread =
-        resolveMessageExecutionRoute(
-          useAgentMode.getState().isAgentMode(threadId)
-        ) === 'agent-ipc'
-
-      if (isAgentThread) {
-        let userMessageIndex = messageId
-          ? currentLocalMessages.findIndex(
-              (message) => message.id === messageId
-            )
-          : currentLocalMessages.findLastIndex(
-              (message) => message.role === 'user'
-            )
-
-        if (
-          userMessageIndex >= 0 &&
-          currentLocalMessages[userMessageIndex].role === 'assistant'
-        ) {
-          userMessageIndex = currentLocalMessages
-            .slice(0, userMessageIndex)
-            .findLastIndex((message) => message.role === 'user')
-        }
-        if (
-          userMessageIndex < 0 ||
-          currentLocalMessages[userMessageIndex].role !== 'user'
-        ) {
-          return
-        }
-
-        const userMessage = currentLocalMessages[userMessageIndex]
-        const {
-          text,
-          files: agentFiles,
-          documents: agentDocuments,
-          agentSkillName,
-          agentDefinitionId,
-        } = agentAttachmentsFromMessage(userMessage)
-        const retainedMessages = currentLocalMessages.slice(
-          0,
-          userMessageIndex + 1
-        )
-
-        currentLocalMessages
-          .slice(userMessageIndex + 1)
-          .forEach((message) => deleteMessage(threadId, message.id))
-
-        const retainedUiMessages =
-          convertThreadMessagesToUIMessages(retainedMessages)
-        chatMessagesRef.current = retainedUiMessages
-        setChatMessages(retainedUiMessages)
-        await processAndRunAgent(
-          text,
-          agentFiles,
-          agentDocuments,
-          agentSkillName,
-          agentDefinitionId,
-          false
-        )
-        return
-      }
-
       // If regenerating from a specific message, delete all messages after it
       if (messageId) {
         // Find the message in the current chat messages
@@ -1229,9 +866,7 @@ function ThreadDetail() {
     },
     [
       deleteMessage,
-      processAndRunAgent,
       regenerate,
-      setChatMessages,
       threadId,
     ]
   )
@@ -1247,11 +882,6 @@ function ThreadDetail() {
       if (messageIndex === -1) return
 
       const originalMessage = currentLocalMessages[messageIndex]
-      const isAgentThread =
-        resolveMessageExecutionRoute(
-          useAgentMode.getState().isAgentMode(threadId)
-        ) === 'agent-ipc'
-
       // Update the message content. Attachments are kept for every thread, not
       // just Agent ones: images live only in `content`, so dropping them here
       // destroys them permanently (audio and documents survive in `metadata`,
@@ -1259,12 +889,7 @@ function ThreadDetail() {
       const updatedMessage = {
         ...originalMessage,
         content: rebuildEditedContent(originalMessage.content, newText),
-        metadata: isAgentThread
-          ? {
-              ...(originalMessage.metadata ?? {}),
-              agent_input_text: newText,
-            }
-          : originalMessage.metadata,
+        metadata: originalMessage.metadata,
       }
       updateMessage(updatedMessage)
 
@@ -1283,11 +908,6 @@ function ThreadDetail() {
       // Only regenerate if the edited message is from the user
       if (updatedMessage.role === 'assistant') return
 
-      if (isAgentThread) {
-        await handleRegenerate(messageId)
-        return
-      }
-
       // Delete all messages after this one and regenerate
       const messagesToDelete = currentLocalMessages.slice(messageIndex + 1)
       messagesToDelete.forEach((msg) => {
@@ -1302,7 +922,6 @@ function ThreadDetail() {
       updateMessage,
       deleteMessage,
       chatMessages,
-      handleRegenerate,
       setChatMessages,
       regenerate,
     ]
@@ -1322,19 +941,16 @@ function ThreadDetail() {
     [threadId, deleteMessage, chatMessages, setChatMessages]
   )
 
-  // Agent mode has its own context handling.
-  const agentModeActive = useAgentMode((s) => s.agentThreads[threadId] === true)
-  const agentWorkspace = useAgentMode((s) => s.workspaces[threadId])
+  const agentWorkspace = useConversationPolicy((s) => s.workspaces[threadId])
   useEffect(() => {
     const currentRoot = agentWorkspace?.primaryRoot
     if (
-      !agentModeActive ||
       (currentRoot && !currentRoot.rootId.startsWith('legacy:'))
     )
       return
-    void resolveAgentWorkspaceRoot(currentRoot?.path)
+    void resolveConversationWorkspaceRoot(currentRoot?.path)
       .then((root) => {
-        useAgentMode.getState().setPrimaryRoot(threadId, {
+        useConversationPolicy.getState().setPrimaryRoot(threadId, {
           ...root,
           canEdit: true,
         })
@@ -1345,7 +961,7 @@ function ThreadDetail() {
           resolveError
         )
       })
-  }, [agentModeActive, agentWorkspace?.primaryRoot, threadId])
+  }, [agentWorkspace?.primaryRoot, threadId])
 
   const addExternalAgentRoot = useCallback(async () => {
     const selected = await serviceHub.dialog().open({
@@ -1353,8 +969,8 @@ function ThreadDetail() {
       directory: true,
     })
     if (typeof selected !== 'string') return
-    const root = await resolveAgentWorkspaceRoot(selected)
-    useAgentMode.getState().addExternalRoot(threadId, {
+    const root = await resolveConversationWorkspaceRoot(selected)
+    useConversationPolicy.getState().addExternalRoot(threadId, {
       ...root,
       canEdit: true,
     })
@@ -1380,39 +996,21 @@ function ThreadDetail() {
   const isAgentRunning =
     agentRun?.status === 'running' || agentRun?.status === 'awaiting_approval' || agentRun?.status === 'awaiting_folder_access'
   const handleStop = useCallback(() => {
-    if (!agentModeActive || !isAgentRunning || !agentRun?.runId) {
-      useChatSessions.getState().abortToolCalls(threadId)
-      sessionData.tools = []
-      useChatSessions.getState().clearToolBatches(threadId)
-      stop()
-      return
+    useChatSessions.getState().abortToolCalls(threadId)
+    sessionData.tools = []
+    useChatSessions.getState().clearToolBatches(threadId)
+    stop()
+    if (isAgentRunning && agentRun?.runId) {
+      if (agentRun.pendingApproval) {
+        useAgentRun.getState().clearPendingApproval(threadId, agentRun.pendingApproval.approval_id)
+      }
+      void cancelAgentTurn(agentRun.runId).catch(() => toast.error(t('chat:agentErrors.cancelFailed')))
     }
-    if (agentRun.pendingApproval) {
-      useAgentRun
-        .getState()
-        .clearPendingApproval(threadId, agentRun.pendingApproval.approval_id)
-    }
-    void cancelAgentTurn(agentRun.runId).catch(() => {
-      toast.error(t('chat:agentErrors.cancelFailed'))
-    })
-  }, [
-    agentModeActive,
-    agentRun?.pendingApproval,
-    agentRun?.runId,
-    isAgentRunning,
-    sessionData,
-    stop,
-    t,
-    threadId,
-  ])
-  const requestActive =
-    isAgentRunning ||
-    (!agentModeActive &&
-      (status === CHAT_STATUS.SUBMITTED ||
-        status === CHAT_STATUS.STREAMING ||
-        pendingToolBatches > 0))
+  }, [agentRun?.pendingApproval, agentRun?.runId, isAgentRunning, sessionData, stop, t, threadId])
+  const requestActive = (!historyReady && !historyRestoreError) || isAgentRunning || status === CHAT_STATUS.SUBMITTED || status === CHAT_STATUS.STREAMING || pendingToolBatches > 0
   const inputStatus = requestActive ? CHAT_STATUS.SUBMITTED : status
-  const lastChatMessage = chatMessages[chatMessages.length - 1]
+  const visibleMessages = useMemo(() => chatMessages.filter((message) => !isImportedConversationContext(message)), [chatMessages])
+  const lastChatMessage = visibleMessages[visibleMessages.length - 1]
   const hasActiveAssistantMessage = lastChatMessage?.role === 'assistant'
   const latestUserMessageId = useMemo(() => {
     for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
@@ -1443,7 +1041,6 @@ function ThreadDetail() {
   return (
     <AgentWorkspaceLayout
       threadId={threadId}
-      agentModeActive={agentModeActive}
       workspace={agentWorkspace ?? { externalRoots: [] }}
       onAddExternal={() => void addExternalAgentRoot()}
       refreshKey={agentRun?.finishedAtMs ?? 0}
@@ -1452,7 +1049,7 @@ function ThreadDetail() {
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <HeaderPage>
           <div className="flex items-center justify-between w-full pr-2">
-            <DropdownModelProvider showSampler={!agentModeActive} />
+            <DropdownModelProvider showSampler />
             <MemoryContext threadId={threadId} />
           </div>
         </HeaderPage>
@@ -1464,8 +1061,8 @@ function ThreadDetail() {
                 <ConversationContent
                   className={cn('mx-auto w-full max-w-3xl md:w-4/5 xl:w-4/6')}
                 >
-                  {chatMessages.map((message, index) => {
-                    const isLastMessage = index === chatMessages.length - 1
+                  {visibleMessages.map((message, index) => {
+                    const isLastMessage = index === visibleMessages.length - 1
                     const isFirstMessage = index === 0
                     return (
                       <MessageItem
@@ -1479,9 +1076,9 @@ function ThreadDetail() {
                         requestActive={requestActive}
                         reasoningContainerRef={reasoningContainerRef}
                         onRegenerate={handleRegenerate}
-                        onEdit={agentModeActive ? undefined : handleEditMessage}
+                        onEdit={handleEditMessage}
                         onDelete={
-                          agentModeActive ? undefined : handleDeleteMessage
+                          handleDeleteMessage
                         }
                         agentAttachmentReferences={agentAttachmentReferencesByMessageId.get(
                           message.id
@@ -1489,7 +1086,7 @@ function ThreadDetail() {
                       />
                     )
                   })}
-                  {!agentModeActive && isAgentRunning && agentRun &&
+                  {isAgentRunning && agentRun &&
                     (agentRun.trace.definition || agentRun.trace.stages.length > 0) && (
                       <MessageItem
                         key={agentRun.runId}
@@ -1502,19 +1099,27 @@ function ThreadDetail() {
                         hideActions
                       />
                     )}
+                  <AgentApprovalDialog threadId={threadId} />
+                  <AgentFolderAccessDialog threadId={threadId} />
+                  {historyRestoreError && (
+                    <div role="alert" className="my-3 space-y-2 rounded-xl border p-4 text-sm">
+                      <p>Could not restore conversation context: {historyRestoreError}</p>
+                      <Button variant="outline" size="sm" onClick={() => setRestoreAttempt((attempt) => attempt + 1)}>Retry</Button>
+                    </div>
+                  )}
                   {pendingInitialUserMessage && (
                     <>
                       <MessageItem
                         key={`pending-user-${pendingInitialUserMessage.id}`}
                         message={pendingInitialUserMessage}
-                        isFirstMessage={chatMessages.length === 0}
+                        isFirstMessage={visibleMessages.length === 0}
                         isLastMessage={true}
                         status={status}
                         reasoningContainerRef={reasoningContainerRef}
                         onRegenerate={handleRegenerate}
-                        onEdit={agentModeActive ? undefined : handleEditMessage}
+                        onEdit={handleEditMessage}
                         onDelete={
-                          agentModeActive ? undefined : handleDeleteMessage
+                          handleDeleteMessage
                         }
                         hideActions
                         isAnimating={false}
@@ -1526,8 +1131,7 @@ function ThreadDetail() {
                   )}
                   {inputStatus === CHAT_STATUS.SUBMITTED && (
                     <div className="flex flex-row items-center gap-2">
-                      {!agentModeActive &&
-                        !hasActiveAssistantMessage && <PromptProgress />}
+                      {!hasActiveAssistantMessage && <PromptProgress />}
                     </div>
                   )}
                   {(error || contextLimitError) &&

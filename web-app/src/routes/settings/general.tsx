@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardItem } from '@/containers/Card'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useThreadNotifications } from '@/hooks/useThreadNotifications'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { useEffect, useState, useCallback } from 'react'
@@ -52,10 +52,10 @@ function General() {
     preloadModelOnStartup,
     setPreloadModelOnStartup,
   } = useGeneralSetting()
-  const defaultApprovalMode = useAgentMode(
+  const defaultApprovalMode = useConversationPolicy(
     (state) => state.defaultApprovalMode
   )
-  const setDefaultApprovalMode = useAgentMode(
+  const setDefaultApprovalMode = useConversationPolicy(
     (state) => state.setDefaultApprovalMode
   )
   const notificationsGloballyEnabled = useThreadNotifications(

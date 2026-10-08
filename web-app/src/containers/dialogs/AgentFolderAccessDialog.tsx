@@ -9,22 +9,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useAgentRun } from '@/hooks/useAgentRun'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import {
   isStaleAgentFolderAccessError,
   resolveAgentFolderAccess,
-  resolveAgentWorkspaceRoot,
+  resolveConversationWorkspaceRoot,
 } from '@/services/agent/tauri'
 
-export default function AgentFolderAccessDialog() {
+export default function AgentFolderAccessDialog({ threadId: owningThreadId, inlineThreadId }: { threadId?: string; inlineThreadId?: string } = {}) {
+  const inline = owningThreadId !== undefined
   const { t } = useTranslation('chat')
   const resolvingIdRef = useRef<string | undefined>(undefined)
   const threadId = useAgentRun((state) =>
-    Object.keys(state.runs).find(
-      (candidate) => state.runs[candidate].pendingFolderAccess !== undefined
-    )
+    owningThreadId
+      ? state.runs[owningThreadId]?.pendingFolderAccess ? owningThreadId : undefined
+      : Object.keys(state.runs).find(
+        (candidate) => candidate !== inlineThreadId && state.runs[candidate].pendingFolderAccess !== undefined
+      )
   )
   const run = useAgentRun((state) =>
     threadId ? state.runs[threadId] : undefined
@@ -44,8 +47,8 @@ export default function AgentFolderAccessDialog() {
     useAgentRun.getState().setFolderAccessResolving(threadId, true)
     try {
       if (allow) {
-        const root = await resolveAgentWorkspaceRoot(request.path)
-        useAgentMode.getState().addExternalRoot(threadId, {
+        const root = await resolveConversationWorkspaceRoot(request.path)
+        useConversationPolicy.getState().addExternalRoot(threadId, {
           ...root,
           canEdit: true,
         })
@@ -71,19 +74,15 @@ export default function AgentFolderAccessDialog() {
     }
   }
 
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) void resolve(false)
-      }}
-    >
-      <DialogContent showCloseButton={false}>
+  const Title = inline ? 'h3' : DialogTitle
+  const Description = inline ? 'p' : DialogDescription
+  const content = (
+    <>
         <DialogHeader>
-          <DialogTitle>{t('agentFolderAccess.title')}</DialogTitle>
-          <DialogDescription>
+          <Title className="font-medium">{t('agentFolderAccess.title')}</Title>
+          <Description className="text-sm text-muted-foreground">
             {t('agentFolderAccess.description', { tool: request.tool })}
-          </DialogDescription>
+          </Description>
         </DialogHeader>
         <div className="rounded-md border bg-secondary p-3 text-sm break-all">
           {request.path}
@@ -109,7 +108,12 @@ export default function AgentFolderAccessDialog() {
             {t('agentFolderAccess.allow')}
           </Button>
         </DialogFooter>
-      </DialogContent>
+    </>
+  )
+  if (inline) return <section role="region" aria-label={t('agentFolderAccess.title')} className="my-3 space-y-3 rounded-xl border bg-background p-4">{content}</section>
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) void resolve(false) }}>
+      <DialogContent showCloseButton={false}>{content}</DialogContent>
     </Dialog>
   )
 }

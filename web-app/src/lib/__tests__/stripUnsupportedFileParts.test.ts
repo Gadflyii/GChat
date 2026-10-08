@@ -36,7 +36,7 @@ describe('stripUnsupportedFileParts', () => {
     // `@ai-sdk/openai-compatible` throws `UnsupportedFunctionalityError` on any
     // non-image file part, and Anthropic — which does accept application/pdf —
     // would take the local path as the document body. The document itself
-    // reaches the model as text, folded in by mapUserInlineAttachments.
+    // reaches the model as text, folded in by mapUserAttachmentContext.
     const stripped = stripUnsupportedFileParts([
       message([
         { type: 'text', text: 'summarise this' },

@@ -138,6 +138,22 @@ pub async fn agent_list_model_instances(
 }
 
 #[tauri::command]
+pub async fn agent_conversation_context<R: Runtime>(
+    app_handle: AppHandle<R>,
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<Option<String>, String> {
+    validate_session_id(&session_id)?;
+    let session_lock = get_session_lock(&state.agent_session_locks, &session_id).await;
+    let _guard = session_lock.lock().await;
+    Ok(
+        load_session(&get_jan_data_folder_path(app_handle), &session_id)
+            .await?
+            .conversation_context(),
+    )
+}
+
+#[tauri::command]
 pub async fn agent_reset_session<R: Runtime>(
     app_handle: AppHandle<R>,
     state: State<'_, AppState>,

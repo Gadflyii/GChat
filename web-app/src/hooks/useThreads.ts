@@ -3,7 +3,7 @@ import { ulid } from 'ulidx'
 import { getServiceHub } from '@/hooks/useServiceHub'
 import { Fzf } from 'fzf'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { ExtensionManager } from '@/lib/extension'
 import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { useThreadReadStatus } from '@/stores/thread-read-store'
@@ -175,8 +175,8 @@ export const useThreads = create<ThreadState>()((set, get) => ({
       const { [threadId]: _, ...remainingThreads } = state.threads
 
       useThreadReadStatus.getState().removeThread(threadId)
-      // Clean up agent mode state
-      useAgentMode.getState().removeThread(threadId)
+      // Clean up the conversation policy
+      useConversationPolicy.getState().removeThread(threadId)
       // Clean up vector DB collection
       cleanupVectorDB(threadId)
       getServiceHub().threads().deleteThread(threadId)
@@ -233,7 +233,7 @@ export const useThreads = create<ThreadState>()((set, get) => ({
 
       // Delete all threads and clean up their vector DB collections
       allThreadIds.forEach((threadId) => {
-        useAgentMode.getState().removeThread(threadId)
+        useConversationPolicy.getState().removeThread(threadId)
         useThreadReadStatus.getState().removeThread(threadId)
         cleanupVectorDB(threadId)
         getServiceHub().threads().deleteThread(threadId)

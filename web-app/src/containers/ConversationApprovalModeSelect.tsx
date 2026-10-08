@@ -6,11 +6,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import type { AgentApprovalMode } from '@/hooks/useAgentMode'
+import type { ConversationApprovalMode } from '@/hooks/useConversationPolicy'
 
-type AgentApprovalModeSelectProps = {
-  mode: AgentApprovalMode
-  onChange: (mode: AgentApprovalMode) => void
+type ConversationApprovalModeSelectProps = {
+  mode: ConversationApprovalMode
+  onChange: (mode: ConversationApprovalMode) => void
   manualSelectedLabel: string
   manualLabel: string
   manualDescription: string
@@ -19,7 +19,7 @@ type AgentApprovalModeSelectProps = {
   skipDescription: string
 }
 
-export function AgentApprovalModeSelect({
+export function ConversationApprovalModeSelect({
   mode,
   onChange,
   manualSelectedLabel,
@@ -28,7 +28,7 @@ export function AgentApprovalModeSelect({
   skipSelectedLabel,
   skipLabel,
   skipDescription,
-}: AgentApprovalModeSelectProps) {
+}: ConversationApprovalModeSelectProps) {
   const selectedLabel =
     mode === 'manual' ? manualSelectedLabel : skipSelectedLabel
 

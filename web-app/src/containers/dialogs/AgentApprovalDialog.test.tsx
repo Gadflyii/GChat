@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentApprovalDialog from '@/containers/dialogs/AgentApprovalDialog'
 import { useAgentRun } from '@/hooks/useAgentRun'
+import { useThreads } from '@/hooks/useThreads'
 
 const { resolveAgentApproval } = vi.hoisted(() => ({
   resolveAgentApproval: vi.fn(),
@@ -33,9 +34,28 @@ function openApproval(canRemember = true): void {
 describe('AgentApprovalDialog', () => {
   beforeEach(() => {
     useAgentRun.getState().clearAll()
+    useThreads.getState().setCurrentThreadId(undefined)
     resolveAgentApproval.mockReset()
     resolveAgentApproval.mockResolvedValue(undefined)
     openApproval()
+  })
+
+  it('keeps the active conversation approval inline and out of the global dialog', async () => {
+    useThreads.getState().setCurrentThreadId('thread-1')
+    render(<><AgentApprovalDialog inlineThreadId="thread-1" /><AgentApprovalDialog threadId="thread-1" /></>)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('region')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /approveOnce/i })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /approveOnce/i }))
+    await waitFor(() => expect(resolveAgentApproval).toHaveBeenCalledWith({ approval_id: 'approval-1', decision: 'allow_once' }))
+    expect(useAgentRun.getState().getRun('thread-1').pendingApproval).toBeUndefined()
+  })
+
+  it('keeps a background Studio approval actionable when no inline conversation is visible', () => {
+    useThreads.getState().setCurrentThreadId('thread-1')
+    render(<AgentApprovalDialog />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /approveOnce/i })).toBeEnabled()
   })
 
   it('renders approval controls without warning icon styling', () => {

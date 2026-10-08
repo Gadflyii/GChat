@@ -18,10 +18,10 @@ import {
   resolveAgentWorkspacePath,
 } from '@/services/agent/tauri'
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useWorkspacePreviewStore } from '@/stores/workspace-preview-store'
 import type { AgentWorkspaceEntry } from '@/types/agent'
-import type { AgentWorkspace, AgentWorkspaceRoot } from '@/hooks/useAgentMode'
+import type { ConversationWorkspace, ConversationWorkspaceRoot } from '@/hooks/useConversationPolicy'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { cn } from '@/lib/utils'
 import {
@@ -34,7 +34,7 @@ import {
 
 type AgentWorkspaceFilesProps = {
   threadId: string
-  workspace: AgentWorkspace
+  workspace: ConversationWorkspace
   refreshKey: number
   isGenerating: boolean
   onClose: () => void
@@ -49,21 +49,21 @@ type DirectoryState = {
 
 type WorkspaceSectionProps = {
   title: string
-  roots: AgentWorkspaceRoot[]
+  roots: ConversationWorkspaceRoot[]
   expanded: Set<string>
   directories: Record<string, DirectoryState>
   entryKey: (rootId: string, path: string) => string
-  onToggle: (root: AgentWorkspaceRoot, path: string) => Promise<void>
+  onToggle: (root: ConversationWorkspaceRoot, path: string) => Promise<void>
   renderEntries: (
-    root: AgentWorkspaceRoot,
+    root: ConversationWorkspaceRoot,
     path: string,
     depth: number
   ) => ReactNode
   permissionLabels?: { canEdit: string; viewOnly: string }
   rootActions?: {
     disabled: boolean
-    setPermission: (root: AgentWorkspaceRoot, canEdit: boolean) => void
-    remove: (root: AgentWorkspaceRoot) => void
+    setPermission: (root: ConversationWorkspaceRoot, canEdit: boolean) => void
+    remove: (root: ConversationWorkspaceRoot) => void
     canEditLabel: string
     viewOnlyLabel: string
     removeLabel: string
@@ -184,10 +184,10 @@ export function AgentWorkspaceFiles({
   const { t } = useTranslation('chat')
   const serviceHub = useServiceHub()
   const openFile = useWorkspacePreviewStore((state) => state.openFile)
-  const setExternalRootPermission = useAgentMode(
+  const setExternalRootPermission = useConversationPolicy(
     (state) => state.setExternalRootPermission
   )
-  const removeExternalRoot = useAgentMode((state) => state.removeExternalRoot)
+  const removeExternalRoot = useConversationPolicy((state) => state.removeExternalRoot)
   const [directories, setDirectories] = useState<
     Record<string, DirectoryState>
   >({})
@@ -196,7 +196,7 @@ export function AgentWorkspaceFiles({
   const roots = useMemo(
     () =>
       [workspace.primaryRoot, ...workspace.externalRoots].filter(
-        (root): root is AgentWorkspaceRoot => Boolean(root)
+        (root): root is ConversationWorkspaceRoot => Boolean(root)
       ),
     [workspace.externalRoots, workspace.primaryRoot]
   )
@@ -208,7 +208,7 @@ export function AgentWorkspaceFiles({
 
   const loadDirectory = useCallback(
     async (
-      root: AgentWorkspaceRoot,
+      root: ConversationWorkspaceRoot,
       path: string
     ): Promise<AgentWorkspaceEntry[] | undefined> => {
       const key = entryKey(root.rootId, path)
@@ -263,7 +263,7 @@ export function AgentWorkspaceFiles({
   }, [entryKey, loadDirectory, refreshKey, roots])
 
   const toggleDirectory = useCallback(
-    async (root: AgentWorkspaceRoot, path: string) => {
+    async (root: ConversationWorkspaceRoot, path: string) => {
       const key = entryKey(root.rootId, path)
       if (expanded.has(key)) {
         setExpanded((current) => {
@@ -305,7 +305,7 @@ export function AgentWorkspaceFiles({
   }, [directories, isRefreshing, loadDirectory, roots])
 
   const revealEntry = useCallback(
-    async (root: AgentWorkspaceRoot, path: string) => {
+    async (root: ConversationWorkspaceRoot, path: string) => {
       try {
         const absolutePath = await resolveAgentWorkspacePath({
           rootId: root.rootId,
@@ -322,7 +322,7 @@ export function AgentWorkspaceFiles({
   )
 
   const removeRoot = useCallback(
-    (root: AgentWorkspaceRoot) => {
+    (root: ConversationWorkspaceRoot) => {
       const previewState = useWorkspacePreviewStore.getState()
       previewState.tabs
         .filter((tab) => tab.kind === 'file' && tab.rootId === root.rootId)
@@ -333,7 +333,7 @@ export function AgentWorkspaceFiles({
   )
 
   const renderEntries = (
-    root: AgentWorkspaceRoot,
+    root: ConversationWorkspaceRoot,
     path: string,
     depth: number
   ): ReactNode => {

@@ -32,13 +32,16 @@ function boundedJson(value: unknown): string {
     : serialized
 }
 
-export default function AgentApprovalDialog() {
+export default function AgentApprovalDialog({ threadId: owningThreadId, inlineThreadId }: { threadId?: string; inlineThreadId?: string } = {}) {
+  const inline = owningThreadId !== undefined
   const { t } = useTranslation('chat')
   const resolvingApprovalIdRef = useRef<string | undefined>(undefined)
   const threadId = useAgentRun((state) =>
-    Object.keys(state.runs).find(
-      (candidate) => state.runs[candidate].pendingApproval !== undefined
-    )
+    owningThreadId
+      ? state.runs[owningThreadId]?.pendingApproval ? owningThreadId : undefined
+      : Object.keys(state.runs).find(
+        (candidate) => candidate !== inlineThreadId && state.runs[candidate].pendingApproval !== undefined
+      )
   )
   const run = useAgentRun((state) =>
     threadId ? state.runs[threadId] : undefined
@@ -87,19 +90,15 @@ export default function AgentApprovalDialog() {
     }
   }
 
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) void resolve('deny')
-      }}
-    >
-      <DialogContent showCloseButton={false}>
+  const Title = inline ? 'h3' : DialogTitle
+  const Description = inline ? 'p' : DialogDescription
+  const content = (
+    <>
         <DialogHeader>
-          <DialogTitle>{definitionPreview ? 'Review your agent' : t('agentApproval.title')}</DialogTitle>
-          <DialogDescription>
+          <Title className="font-medium">{definitionPreview ? 'Review your agent' : t('agentApproval.title')}</Title>
+          <Description className="text-sm text-muted-foreground">
             {definitionPreview ? 'Create this reusable definition. It runs only when you request it from Chat or Agent Studio.' : t('agentApproval.description', { tool: approval.tool })}
-          </DialogDescription>
+          </Description>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -185,7 +184,12 @@ export default function AgentApprovalDialog() {
             {definitionPreview ? 'Create agent' : t('agentApproval.approveOnce')}
           </Button>
         </DialogFooter>
-      </DialogContent>
+    </>
+  )
+  if (inline) return <section role="region" aria-label={t('agentApproval.title')} className="my-3 space-y-3 rounded-xl border bg-background p-4">{content}</section>
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) void resolve('deny') }}>
+      <DialogContent showCloseButton={false}>{content}</DialogContent>
     </Dialog>
   )
 }

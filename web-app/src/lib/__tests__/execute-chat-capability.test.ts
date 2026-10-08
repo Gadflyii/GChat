@@ -1,23 +1,96 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useAgentRun } from '@/hooks/useAgentRun'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
+import { useThreads } from '@/hooks/useThreads'
 import { seedServiceHub } from '@/test/service-hub'
-import { executeChatCapability, chatCapabilityRun } from '../execute-chat-capability'
+import { executeChatCapability, chatCapabilityRun, conversationAttachments } from '../execute-chat-capability'
 import type { CapabilitiesService } from '@/services/capabilities/types'
 import type { AgentEvent } from '@/types/agent'
+import { newUserThreadContent } from '../completion'
+import { convertThreadMessageToUIMessage } from '../messages'
+import { createImageAttachment, createDocumentAttachment } from '@/types/attachment'
+import { Chat } from '@ai-sdk/react'
+import { CustomChatTransport } from '../custom-chat-transport'
+import { useChatSessions } from '@/stores/chat-session-store'
+import { useInitialMessage } from '@/hooks/useInitialMessage'
+import { conversationDocumentAccess, processAttachmentsForSend } from '../attachmentProcessing'
 
 describe('Chat capability execution', () => {
   beforeEach(() => {
-    useAgentMode.getState().clearAll()
+    useConversationPolicy.getState().clearAll()
     useAgentRun.getState().clearAll()
+    useChatSessions.getState().clearSessions()
+    useThreads.setState({ threads: {} })
     useToolAvailable.setState({ disabledTools: {}, defaultDisabledTools: [] })
   })
 
+  it('forwards original image names and document paths from production saved history to the delegated stage', async () => {
+    const ingestFileAttachment = vi.fn().mockRejectedValue(new Error('GInfer embeddings unavailable'))
+    const parseDocumentMock = vi.fn().mockRejectedValue(new Error('A native read must own folder approval'))
+    const execute = vi.fn<CapabilitiesService['execute']>(async () => ({ content: 'Images staged' }))
+    const serviceHub = seedServiceHub({
+      uploads: { ingestImage: vi.fn().mockResolvedValue({ id: 'image-id' }), ingestFileAttachment } as never,
+      rag: { parseDocument: parseDocumentMock } as never,
+      capabilities: { execute, cancel: vi.fn(), getCatalog: vi.fn() },
+    })
+    useInitialMessage.getState().set('a', {
+      text: 'Compare before.png and after.png against Budget.xlsx', agentDefinitionId: 'reviewer',
+      files: ['before.png', 'after.png'].map((name) => ({ name, type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,CURRENT' })),
+      documents: [{ ...createDocumentAttachment({ name: 'Budget.xlsx', path: 'C:\\Users\\Ron\\Desktop\\Budget.xlsx', parseMode: 'auto' }), mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
+    })
+    const initial = useInitialMessage.getState().consume('a')!
+    const processed = await processAttachmentsForSend({
+      threadId: 'a', serviceHub, parsePreference: 'auto',
+      documentAccess: conversationDocumentAccess(true, [{ server: 'gchat-native', name: 'agent_run' }], [], 'agent_run'),
+      attachments: [...initial.files!.map((file) => createImageAttachment({ name: file.name, mimeType: file.mediaType, base64: file.url.split(',')[1], dataUrl: file.url, size: 5 })), ...initial.documents!],
+    })
+    const saved = newUserThreadContent('a', initial.text, processed.processedAttachments)
+    expect(ingestFileAttachment).not.toHaveBeenCalled()
+    expect(parseDocumentMock).not.toHaveBeenCalled()
+    expect(processed.hasEmbeddedDocuments).toBe(false)
+    const current = convertThreadMessageToUIMessage(JSON.parse(JSON.stringify(saved)))
+    expect(current.parts[0]).toMatchObject({ type: 'text', text: expect.stringContaining('before.png and after.png') })
+    const messages = [
+      { id: 'older', role: 'user', parts: [{ type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,OLD' }] },
+      current,
+      { id: 'call', role: 'assistant', parts: [] },
+    ] as typeof current[]
+    const expected = [
+      { kind: 'image', name: 'before.png', media_type: 'image/png', data_url: 'data:image/png;base64,CURRENT' },
+      { kind: 'image', name: 'after.png', media_type: 'image/png', data_url: 'data:image/png;base64,CURRENT' },
+      { kind: 'file', name: 'Budget.xlsx', path: 'C:\\Users\\Ron\\Desktop\\Budget.xlsx', media_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    ]
+    expect(conversationAttachments(messages)).toEqual(expected)
+    const transport = new CustomChatTransport(undefined, 'a')
+    useChatSessions.getState().ensureSession('a', transport, () => new Chat({ id: 'a', transport, messages }))
+    await executeChatCapability({ service: serviceHub.capabilities(), threadId: 'a', toolName: 'agent_run', arguments: { definitionId: initial.agentDefinitionId }, signal: new AbortController().signal })
+    expect(execute.mock.calls[0][0].attachments).toEqual(expected)
+  })
+
+  it('persists actual delegated activity on the saved conversation without marking native tools as agents', async () => {
+    const updateThread = vi.fn().mockResolvedValue(undefined)
+    const execute = vi.fn<CapabilitiesService['execute']>(async (request) => request.tool_name === 'agent_run'
+      ? { content: 'Report', run: { runId: request.run_id, status: 'finished', reason: 'reply', stepCount: 2 } }
+      : { content: 'Spreadsheet cells' })
+    const service = seedServiceHub({ threads: { updateThread } as never, capabilities: { execute, cancel: vi.fn(), getCatalog: vi.fn() } }).capabilities()
+    useThreads.setState({ threads: { saved: { id: 'saved', title: 'Budget', metadata: { project: { id: 'project', name: 'Work' } } } as Thread } })
+    const options = { service, threadId: 'saved', arguments: { definitionId: 'researcher' }, signal: new AbortController().signal }
+    await executeChatCapability({ ...options, toolName: 'os_fs_read_document' })
+    expect(useThreads.getState().threads.saved.metadata?.has_agent_activity).toBeUndefined()
+    useConversationPolicy.getState().setActiveDefinition('saved', 'researcher')
+    await executeChatCapability({ ...options, toolName: 'agent_run' })
+    expect(useConversationPolicy.getState().activeDefinitions.saved).toBeUndefined()
+    expect(updateThread).toHaveBeenCalledWith(expect.objectContaining({ metadata: { has_agent_activity: true, project: { id: 'project', name: 'Work' } } }))
+    const saved = JSON.parse(JSON.stringify(useThreads.getState().threads.saved)) as Thread
+    useThreads.getState().setThreads([saved])
+    expect(useThreads.getState().threads.saved.metadata?.has_agent_activity).toBe(true)
+  })
+
   it('passes owning conversation permissions and folders and retains delegated progress', async () => {
-    useAgentMode.getState().setApprovalMode('a', 'skip')
-    useAgentMode.getState().setWorkingDir('a', '/workspace')
-    useAgentMode.getState().addExternalRoot('a', { rootId: 'external', name: 'Reference', path: '/reference', canEdit: false })
+    useConversationPolicy.getState().setApprovalMode('a', 'skip')
+    useConversationPolicy.getState().setWorkingDir('a', '/workspace')
+    useConversationPolicy.getState().addExternalRoot('a', { rootId: 'external', name: 'Reference', path: '/reference', canEdit: false })
     useToolAvailable.getState().setToolDisabledForThread('a', 'tools', 'write', false)
     const execute = vi.fn<CapabilitiesService['execute']>(async (request, event) => {
       event({ type: 'turn_started', run_id: request.run_id, session_id: 'a' })

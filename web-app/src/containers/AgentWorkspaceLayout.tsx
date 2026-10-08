@@ -21,23 +21,15 @@ import { useDesktopScreen } from '@/hooks/useMediaQuery'
 import { listAgentWorkspace } from '@/services/agent/tauri'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useWorkspacePreviewStore } from '@/stores/workspace-preview-store'
-import type { AgentWorkspace, AgentWorkspaceRoot } from '@/hooks/useAgentMode'
+import type { ConversationWorkspace, ConversationWorkspaceRoot } from '@/hooks/useConversationPolicy'
 
 type AgentWorkspaceLayoutProps = {
   children: ReactNode
   threadId: string
-  agentModeActive: boolean
-  workspace: AgentWorkspace
+  workspace: ConversationWorkspace
   onAddExternal: () => void
   refreshKey: number
   isGenerating?: boolean
-}
-
-function shouldUseAgentWorkspaceLayout(
-  agentModeActive: boolean,
-  isDesktop: boolean
-): boolean {
-  return agentModeActive && isDesktop
 }
 
 function ResizeHandle({ hidden = false }: { hidden?: boolean }) {
@@ -70,7 +62,6 @@ function cssLengthToPixels(value: string): number | undefined {
 export function AgentWorkspaceLayout({
   children,
   threadId,
-  agentModeActive,
   workspace,
   onAddExternal,
   refreshKey,
@@ -88,7 +79,7 @@ export function AgentWorkspaceLayout({
   const previousWorkspaceHasEntriesRef = useRef<boolean | undefined>(undefined)
 
   useEffect(() => {
-    if (!agentModeActive || !isDesktop) {
+    if (!isDesktop) {
       useWorkspacePreviewStore.getState().removeArtifact()
       return
     }
@@ -97,7 +88,7 @@ export function AgentWorkspaceLayout({
     } else {
       useWorkspacePreviewStore.getState().removeArtifact()
     }
-  }, [agentModeActive, artifactOpen, artifactTitle, isDesktop])
+  }, [artifactOpen, artifactTitle, isDesktop])
 
   useEffect(() => {
     useWorkspacePreviewStore.getState().reset()
@@ -105,10 +96,10 @@ export function AgentWorkspaceLayout({
   }, [threadId, workspace.primaryRoot?.rootId])
 
   useEffect(() => {
-    if (!agentModeActive || !isDesktop) return
+    if (!isDesktop) return
 
     const roots = [workspace.primaryRoot, ...workspace.externalRoots].filter(
-      (root): root is AgentWorkspaceRoot => Boolean(root)
+      (root): root is ConversationWorkspaceRoot => Boolean(root)
     )
     const workspaceKey = `${threadId}\0${roots.map((root) => root.rootId).join('\0')}`
     if (workspaceKeyRef.current !== workspaceKey) {
@@ -151,7 +142,6 @@ export function AgentWorkspaceLayout({
       cancelled = true
     }
   }, [
-    agentModeActive,
     isDesktop,
     refreshKey,
     threadId,
@@ -174,7 +164,7 @@ export function AgentWorkspaceLayout({
   const initialChatSize = 100 - initialPreviewSize - initialFilesSize
 
   useLayoutEffect(() => {
-    if (!agentModeActive || !isDesktop) return
+    if (!isDesktop) return
 
     const previewSize = hasPreview ? 24 : 0
     const workspaceWidth = workspaceRef.current?.getBoundingClientRect().width
@@ -191,18 +181,9 @@ export function AgentWorkspaceLayout({
       previewSize,
       filesSize,
     ])
-  }, [agentModeActive, filesVisible, hasPreview, isDesktop])
+  }, [filesVisible, hasPreview, isDesktop])
 
-  if (!agentModeActive) {
-    return (
-      <main className="flex h-[calc(100dvh-(env(safe-area-inset-bottom)+env(safe-area-inset-top)))] w-full min-w-0 overflow-hidden">
-        {children}
-        <ArtifactPanel />
-      </main>
-    )
-  }
-
-  if (!shouldUseAgentWorkspaceLayout(agentModeActive, isDesktop)) {
+  if (!isDesktop) {
     return (
       <main className="flex h-[calc(100dvh-(env(safe-area-inset-bottom)+env(safe-area-inset-top)))] w-full min-w-0 overflow-hidden">
         {children}

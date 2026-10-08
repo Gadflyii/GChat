@@ -14,22 +14,15 @@ import { localStorageKey } from '@/constants/localStorage'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { cn } from '@/lib/utils'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
-import { useAgentMode, type SidebarMode } from '@/hooks/useAgentMode'
-import { TEMPORARY_CHAT_ID } from '@/constants/chat'
-import {
-  filterThreadsBySidebarMode,
-  isThreadInSidebarMode,
-} from '@/lib/sidebar-thread-mode'
 
 const MAX_RECENT_SEARCHES = 5
 
 interface SearchDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  mode: SidebarMode
 }
 
-export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
+export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
@@ -40,7 +33,6 @@ export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
 
   const threads = useThreads((state) => state.threads)
   const getFilteredThreads = useThreads((state) => state.getFilteredThreads)
-  const agentThreads = useAgentMode((state) => state.agentThreads)
 
   // Focus input when dialog opens
   useEffect(() => {
@@ -66,15 +58,14 @@ export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
         .map((id) => threads[id])
         .filter(
           (thread): thread is Thread =>
-            thread !== undefined &&
-            isThreadInSidebarMode(thread.id, mode, agentThreads)
+            thread !== undefined
         )
         .slice(0, MAX_RECENT_SEARCHES)
     } catch {
       return []
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentThreads, mode, open, threads, recentVersion])
+  }, [open, threads, recentVersion])
 
   const handleClearRecent = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -121,11 +112,7 @@ export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
   const searchResults = useMemo(() => {
     if (!searchQuery) return { withProject: [], withoutProject: [] }
 
-    const filteredThreads = filterThreadsBySidebarMode(
-      getFilteredThreads(searchQuery),
-      mode,
-      agentThreads
-    )
+    const filteredThreads = getFilteredThreads(searchQuery)
     const withProject: Array<{
       thread: Thread
       projectName: string
@@ -142,7 +129,7 @@ export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
     })
 
     return { withProject, withoutProject }
-  }, [agentThreads, getFilteredThreads, mode, searchQuery])
+  }, [getFilteredThreads, searchQuery])
 
   // Calculate all selectable items for keyboard navigation
   const allItems = useMemo(() => {
@@ -205,7 +192,6 @@ export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
   }
 
   const handleStartNewChat = () => {
-    useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, mode === 'agent')
     handleClose()
     navigate({ to: '/' })
   }
@@ -225,9 +211,7 @@ export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
         <VisuallyHidden>
           <DialogTitle>
             {t(
-              mode === 'agent'
-                ? 'common:searchAgentChats'
-                : 'common:searchChats'
+              'common:searchChats'
             )}
           </DialogTitle>
         </VisuallyHidden>
@@ -239,9 +223,7 @@ export function SearchDialog({ open, onOpenChange, mode }: SearchDialogProps) {
             ref={inputRef}
             type="text"
             placeholder={t(
-              mode === 'agent'
-                ? 'common:searchAgentChats'
-                : 'common:searchChats'
+              'common:searchChats'
             )}
             className="flex-1 h-12 px-3 bg-transparent placeholder:text-muted-foreground focus:outline-none"
             value={searchQuery}

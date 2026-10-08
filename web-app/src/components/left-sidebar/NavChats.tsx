@@ -15,42 +15,38 @@ import { useTranslation } from '@/i18n/react-i18next-compat'
 import { useThreads } from '@/hooks/useThreads'
 import ThreadList from '@/containers/ThreadList'
 import { DeleteAllThreadsDialog } from '@/containers/dialogs/DeleteAllThreadsDialog'
-import { useAgentMode, type SidebarMode } from '@/hooks/useAgentMode'
 import { useSearchDialog } from '@/hooks/useSearchDialog'
 import {
   filterDeletableSidebarHistoryThreads,
   filterSidebarHistoryThreads,
-} from '@/lib/sidebar-thread-mode'
+} from '@/lib/sidebar-history'
 import {
   SearchIcon,
   type SearchIconHandle,
 } from '@/components/animated-icon/search'
 
-export function NavChats({ mode }: { mode: SidebarMode }) {
+export function NavChats() {
   const { t } = useTranslation()
   const getFilteredThreads = useThreads((state) => state.getFilteredThreads)
   const threads = useThreads((state) => state.threads)
   const deleteThread = useThreads((state) => state.deleteThread)
-  const agentThreads = useAgentMode((state) => state.agentThreads)
   const setSearchOpen = useSearchDialog((state) => state.setOpen)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const searchIconRef = useRef<SearchIconHandle>(null)
 
   const threadsWithoutProject = useMemo(() => {
     return filterSidebarHistoryThreads(
-      getFilteredThreads(''),
-      mode,
-      agentThreads
+      getFilteredThreads('')
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentThreads, getFilteredThreads, mode, threads])
+  }, [getFilteredThreads, threads])
 
-  const deleteModeThreads = () => {
-    filterDeletableSidebarHistoryThreads(
-      threadsWithoutProject,
-      mode,
-      agentThreads
-    ).forEach((thread) => deleteThread(thread.id))
+  const deleteHistoryThreads = async () => {
+    const results = await Promise.allSettled(filterDeletableSidebarHistoryThreads(
+      threadsWithoutProject
+    ).map((thread) => deleteThread(thread.id)))
+    const failures = results.filter((result) => result.status === 'rejected').length
+    if (failures) throw new Error(`Could not delete ${failures} conversation${failures === 1 ? '' : 's'}.`)
   }
 
   if (threadsWithoutProject.length === 0) {
@@ -82,9 +78,8 @@ export function NavChats({ mode }: { mode: SidebarMode }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start">
           <DeleteAllThreadsDialog
-            onDeleteAll={deleteModeThreads}
+            onDeleteAll={deleteHistoryThreads}
             onDropdownClose={() => setDropdownOpen(false)}
-            mode={mode}
           />
         </DropdownMenuContent>
       </DropdownMenu>

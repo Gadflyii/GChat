@@ -23,7 +23,8 @@ use super::prompt::ITERATION_ONE_TOOLS;
 use super::skills::{self, loaded::LoadedSkills};
 use super::tools::{self, tool_view::LoadedTools, ToolContext};
 use super::types::{
-    AgentEvent, AgentExternalRoot, AgentTurnRequest, ToolCallPayload, ToolExecution, ToolStatus,
+    AgentAttachment, AgentEvent, AgentExternalRoot, AgentTurnRequest, ToolCallPayload,
+    ToolExecution, ToolStatus,
 };
 use crate::core::app::commands::get_jan_data_folder_path;
 use crate::core::mcp::{
@@ -290,6 +291,8 @@ pub struct CapabilityExecuteRequest {
     pub selected_skill: Option<String>,
     #[serde(default)]
     pub disabled_tools: Vec<String>,
+    #[serde(default)]
+    pub attachments: Vec<AgentAttachment>,
 }
 
 #[derive(Debug, Serialize)]
@@ -376,6 +379,7 @@ pub async fn execute_with_sink<R: Runtime>(
         CapabilityTarget::Native(name) => name.clone(),
         CapabilityTarget::Mcp { .. } => request.tool_name.clone(),
     };
+    let mcp_content = matches!(target, CapabilityTarget::Mcp { .. });
     match identity.as_str() {
         "skill.invoke" | "agent.run" => return run_delegated(app, request, &identity, emit).await,
         "skill.list" | "agent.list" | "agent.monitor" | "agent.cancel" => {
@@ -540,9 +544,11 @@ pub async fn execute_with_sink<R: Runtime>(
             step_count: 1,
         })?;
         Ok(CapabilityExecuteResult {
-            content: outcome
-                .details
-                .unwrap_or_else(|| Value::String(outcome.summary.clone())),
+            content: match outcome.details {
+                Some(details) if mcp_content => details,
+                Some(details) => json!({ "summary": outcome.summary, "details": details }),
+                None => Value::String(outcome.summary.clone()),
+            },
             error: (outcome.status != ToolStatus::Ok).then_some(outcome.summary),
             run: None,
         })
@@ -680,7 +686,7 @@ async fn run_delegated<R: Runtime>(
         definition_id: Some(definition_id),
         role_assignments: Default::default(),
         selected_skill,
-        attachments: vec![],
+        attachments: request.attachments,
         working_dir: request.working_dir,
         external_roots: request.external_roots,
         max_steps: None,
@@ -912,6 +918,7 @@ mod tests {
             auto_approve: false,
             selected_skill: None,
             disabled_tools: vec![],
+            attachments: vec![],
         };
         let result = execute_with_sink(
             app.handle().clone(),
@@ -924,15 +931,16 @@ mod tests {
         .await
         .unwrap();
         assert!(result.content.to_string().contains("visible result"));
-        let events = events.lock().unwrap();
-        assert!(matches!(
-            events.first(),
-            Some(AgentEvent::TurnStarted { .. })
-        ));
-        assert!(
-            matches!(events.last(), Some(AgentEvent::TurnFinished { reason, .. }) if reason == "reply")
-        );
-        drop(events);
+        {
+            let events = events.lock().unwrap();
+            assert!(matches!(
+                events.first(),
+                Some(AgentEvent::TurnStarted { .. })
+            ));
+            assert!(
+                matches!(events.last(), Some(AgentEvent::TurnFinished { reason, .. }) if reason == "reply")
+            );
+        }
         let disabled = CapabilityExecuteRequest {
             run_id: "test-capability-denied".into(),
             session_id: "test-thread".into(),
@@ -944,6 +952,7 @@ mod tests {
             auto_approve: false,
             selected_skill: None,
             disabled_tools: vec!["gchat-native::os_fs_read".into()],
+            attachments: vec![],
         };
         assert!(
             execute_with_sink(app.handle().clone(), disabled, Arc::new(|_| Ok(())))
@@ -951,6 +960,111 @@ mod tests {
                 .unwrap_err()
                 .contains("disabled")
         );
+    }
+
+    #[tokio::test]
+    async fn chat_excel_read_preserves_extracted_cells_after_external_folder_approval() {
+        use std::io::Write;
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        let desktop = root.path().join("Desktop");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&desktop).unwrap();
+        let workbook = desktop.join("Quarterly budget.xlsx");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&workbook).unwrap());
+        for (name, xml) in [
+            (
+                "[Content_Types].xml",
+                r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Budget" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:B2"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Revenue</t></is></c><c r="B1"><v>42000</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Expenses</t></is></c><c r="B2"><v>12000</v></c></row></sheetData></worksheet>"#,
+            ),
+        ] {
+            zip.start_file(name, zip::write::FileOptions::default())
+                .unwrap();
+            zip.write_all(xml.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(root.path().join("data")));
+        let pending = app.state::<AppState>().agent_pending_folder_access.clone();
+        let events = Arc::new(Mutex::new(Vec::<AgentEvent>::new()));
+        let sink_events = events.clone();
+        let request = CapabilityExecuteRequest {
+            run_id: "chat-excel-read".into(),
+            session_id: "ordinary-chat".into(),
+            model_id: None,
+            tool_name: "os_fs_read_document".into(),
+            arguments: json!({"path":workbook}),
+            working_dir: Some(workspace.to_string_lossy().into()),
+            external_roots: vec![],
+            auto_approve: false,
+            selected_skill: None,
+            disabled_tools: vec![],
+            attachments: vec![],
+        };
+        let result = execute_with_sink(
+            app.handle().clone(),
+            request,
+            Arc::new(move |event| {
+                if let AgentEvent::FolderAccessRequested { access_id, .. } = &event {
+                    let access_id = access_id.clone();
+                    let pending = pending.clone();
+                    tokio::spawn(async move {
+                        pending
+                            .lock()
+                            .await
+                            .remove(&access_id)
+                            .unwrap()
+                            .sender
+                            .send(true)
+                            .unwrap();
+                    });
+                }
+                sink_events.lock().unwrap().push(event);
+                Ok(())
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(result.error.is_none(), "{:?}", result.error);
+        let text = result.content["summary"]
+            .as_str()
+            .expect("Chat must receive parsed content, not only metadata");
+        for cell in ["Budget", "Revenue", "42000", "Expenses", "12000"] {
+            assert!(text.contains(cell), "Missing {cell}: {text}");
+        }
+        assert_eq!(result.content["details"]["truncated"], false);
+        {
+            let events = events.lock().unwrap();
+            assert!(events.iter().any(|event| matches!(event, AgentEvent::FolderAccessRequested { tool, .. } if tool == "os.fs.read_document")));
+            assert!(
+                matches!(events.last(), Some(AgentEvent::TurnFinished { reason, .. }) if reason == "reply")
+            );
+        }
+        assert!(app
+            .state::<AppState>()
+            .agent_pending_folder_access
+            .lock()
+            .await
+            .is_empty());
+        assert!(app
+            .state::<AppState>()
+            .tool_call_cancellations
+            .lock()
+            .await
+            .is_empty());
     }
 
     #[tokio::test]
@@ -971,6 +1085,7 @@ mod tests {
             auto_approve: false,
             selected_skill: None,
             disabled_tools: vec![],
+            attachments: vec![],
         };
         let error = execute_with_sink(app.handle().clone(), request, Arc::new(|_| Ok(())))
             .await

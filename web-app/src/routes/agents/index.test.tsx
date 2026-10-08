@@ -40,12 +40,7 @@ vi.mock('@/hooks/useAgentSkills', () => ({
   useAgentSkills: () => ({ skills: [] }),
 }))
 
-vi.mock('@/hooks/useAgentMode', () => {
-  const state = { setSidebarMode: vi.fn(), setAgentMode: vi.fn() }
-  const useAgentMode = () => state
-  useAgentMode.getState = () => state
-  return { useAgentMode }
-})
+
 
 vi.mock('@/services/agent/definitions', () => ({
   listAgentTemplates,

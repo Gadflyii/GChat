@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@/services/agent/tauri', () => ({
-  resolveAgentWorkspaceRoot: async (path?: string) => ({
+  resolveConversationWorkspaceRoot: async (path?: string) => ({
     path: path ?? '/default-workspace',
   }),
 }))

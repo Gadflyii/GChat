@@ -99,6 +99,8 @@ const LogsLayout = () => {
 }
 
 function RootLayout() {
+  const { pathname } = useLocation()
+  const inlineThreadId = pathname.match(/^\/threads\/([^/]+)\/?$/)?.[1]
   const getInitialLayoutType = () => {
     const pathname = window.location.pathname
     return (
@@ -146,8 +148,8 @@ function RootLayout() {
             {IS_LOGS_ROUTE ? <LogsLayout /> : <AppLayout />}
           </ExtensionProvider>
           {/* <TanStackRouterDevtools position="bottom-right" /> */}
-          <AgentApprovalDialog />
-          <AgentFolderAccessDialog />
+          <AgentApprovalDialog inlineThreadId={inlineThreadId} />
+          <AgentFolderAccessDialog inlineThreadId={inlineThreadId} />
           <AttachmentIngestionDialog />
           <OutOfContextPromiseModal />
         </TranslationProvider>

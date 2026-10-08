@@ -131,6 +131,31 @@ impl AgentSessionState {
         rendered.join("\n")
     }
 
+    /// Preserve operational state when an older task thread opens in shared Chat.
+    /// User/reply turns already belong to the conversation transcript.
+    pub fn conversation_context(&self) -> Option<String> {
+        let mut sections = Vec::new();
+        if let Some(checkpoint) = &self.checkpoint {
+            sections.push(format!("Prior task checkpoint:\n{checkpoint}"));
+        }
+        if !self.current_goal.is_empty() {
+            sections.push(format!("Prior task goal:\n{}", self.current_goal));
+        }
+        sections.extend(self.turns.iter().filter_map(|turn| match turn {
+            AgentSessionTurn::AssistantToolCall { .. } | AgentSessionTurn::ToolResult { .. } => {
+                Some(render_turn(turn))
+            }
+            _ => None,
+        }));
+        sections.extend(self.loaded_skills.iter().map(|skill| {
+            format!(
+                "Previously loaded skill {} ({}):\n{}",
+                skill.name, skill.version, skill.body
+            )
+        }));
+        (!sections.is_empty()).then(|| sections.join("\n\n"))
+    }
+
     fn push_turn(&mut self, turn: AgentSessionTurn) {
         self.turns.push(turn);
     }
@@ -625,6 +650,50 @@ mod tests {
         assert_eq!(second.turn_count, 0);
         assert!(second.turns.is_empty());
         assert!(!second.render_conversation().contains("only in a"));
+    }
+
+    #[tokio::test]
+    async fn shared_conversation_import_keeps_checkpoint_and_observations_without_mutating_source()
+    {
+        let fixture = SessionFixture::new(&["thread-a"]);
+        let mut state = AgentSessionState::new("thread-a");
+        state.checkpoint = Some("Prior report plan and decisions".into());
+        state.push_user("Read the budget");
+        state.turns.push(AgentSessionTurn::AssistantToolCall {
+            tool: "os.fs.read_document".into(),
+            args: Some(serde_json::json!({"path":"Budget.xlsx"})),
+        });
+        state.turns.push(AgentSessionTurn::ToolResult {
+            tool: "os.fs.read_document".into(),
+            status: ToolStatus::Ok,
+            summary: "Revenue 42000".into(),
+        });
+        state.push_reply("Budget reviewed");
+        save_session(&fixture.data_dir, &state).await.unwrap();
+        let before =
+            tokio::fs::read(get_thread_dir(&fixture.data_dir, "thread-a").join(SESSION_FILE_NAME))
+                .await
+                .unwrap();
+        let loaded = load_session(&fixture.data_dir, "thread-a").await.unwrap();
+        let context = loaded.conversation_context().unwrap();
+        for retained in [
+            "Prior report plan",
+            "Read the budget",
+            "Budget.xlsx",
+            "Revenue 42000",
+        ] {
+            assert!(context.contains(retained), "{context}");
+        }
+        assert!(!context.contains("Budget reviewed"));
+        assert_eq!(
+            before,
+            tokio::fs::read(get_thread_dir(&fixture.data_dir, "thread-a").join(SESSION_FILE_NAME))
+                .await
+                .unwrap()
+        );
+        assert!(AgentSessionState::new("empty")
+            .conversation_context()
+            .is_none());
     }
 
     #[tokio::test]

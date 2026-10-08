@@ -13,6 +13,7 @@ type AttachmentProcessingOptions = {
   contextThreshold?: number
   estimateTokens?: (text: string) => Promise<number | undefined>
   parsePreference: 'auto' | 'inline' | 'embeddings' | 'prompt'
+  documentAccess?: 'native' | 'delegated'
   autoFallbackMode?: 'inline' | 'embeddings'
   perFileChoices?: Map<string, 'inline' | 'embeddings'>
   updateAttachmentProcessing?: (
@@ -25,6 +26,30 @@ type AttachmentProcessingOptions = {
 export type AttachmentProcessingResult = {
   processedAttachments: Attachment[]
   hasEmbeddedDocuments: boolean
+}
+
+export function conversationDocumentAccess(
+  modelSupportsTools: boolean,
+  tools: Array<{ name: string; server: string; available?: boolean }>,
+  disabledTools: string[],
+  explicitInvocation?: 'agent_run' | 'skill_invoke'
+): 'native' | 'delegated' | undefined {
+  if (!modelSupportsTools) return undefined
+  const enabled = (name: string) => tools.some((tool) => tool.server === 'gchat-native' &&
+    tool.name === name && tool.available !== false && !disabledTools.includes(`${tool.server}::${tool.name}`))
+  if (explicitInvocation && enabled(explicitInvocation)) return 'delegated'
+  if (enabled('os_fs_read_document')) return 'native'
+  return undefined
+}
+
+export function usesNativeDocumentReference(
+  document: Attachment,
+  parsePreference: AttachmentProcessingOptions['parsePreference'],
+  documentAccess: AttachmentProcessingOptions['documentAccess']
+): boolean {
+  const preference = document.parseMode ?? parsePreference
+  return Boolean(document.path && (documentAccess === 'delegated' ||
+    (documentAccess === 'native' && (preference === 'auto' || preference === 'prompt'))))
 }
 
 const formatAttachmentError = (err: unknown): string => {
@@ -79,6 +104,7 @@ export const processAttachmentsForSend = async (
     contextThreshold,
     estimateTokens,
     parsePreference,
+    documentAccess,
     autoFallbackMode,
     perFileChoices,
     updateAttachmentProcessing,
@@ -143,6 +169,13 @@ export const processAttachmentsForSend = async (
   const documents = attachments.filter((a) => a.type === 'document')
   for (const doc of documents) {
     try {
+      // Reading a selected local file belongs to the capability executor and
+      // its folder policy. Keep references intact instead of requiring RAG.
+      if (usesNativeDocumentReference(doc, parsePreference, documentAccess)) {
+        processedAttachments.push({ ...doc, processing: false, nativeDocumentReference: true })
+        notifyUpdate(doc.name, 'done', { processing: false, nativeDocumentReference: true })
+        continue
+      }
       if (doc.processed && (doc.id || doc.injectionMode === 'inline')) {
         hasEmbeddedDocuments =
           hasEmbeddedDocuments || doc.injectionMode !== 'inline'
@@ -181,7 +214,7 @@ export const processAttachmentsForSend = async (
         // Project files always use embeddings
         const effectiveMode = projectId
           ? 'embeddings'
-          : (userChoice ?? autoFallbackMode ?? 'embeddings')
+          : (userChoice ?? autoFallbackMode ?? (parsedContent ? 'inline' : 'embeddings'))
         targetMode = effectiveMode
 
         // Only do auto-detection if no user choice was made and not project file
@@ -230,6 +263,7 @@ export const processAttachmentsForSend = async (
           processed: true,
           inlineContent: parsedContent,
           injectionMode: 'inline',
+          nativeDocumentReference: false,
         })
 
         notifyUpdate(doc.name, 'done', {
@@ -237,8 +271,12 @@ export const processAttachmentsForSend = async (
           processed: true,
           inlineContent: parsedContent,
           injectionMode: 'inline',
+          nativeDocumentReference: false,
         })
         continue
+      }
+      if (targetMode === 'inline') {
+        throw new Error(`Could not extract content from ${doc.name} for inline use.`)
       }
 
       // Default: ingest as embeddings
@@ -274,6 +312,7 @@ export const processAttachmentsForSend = async (
         processing: false,
         processed: true,
         injectionMode: 'embeddings',
+        nativeDocumentReference: false,
       })
       hasEmbeddedDocuments = true
 
@@ -284,6 +323,7 @@ export const processAttachmentsForSend = async (
         processing: false,
         processed: true,
         injectionMode: 'embeddings',
+        nativeDocumentReference: false,
       })
     } catch (err) {
       console.error(`Failed to ingest ${doc.name}:`, err)

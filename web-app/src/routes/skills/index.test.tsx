@@ -30,8 +30,6 @@ const hookState = vi.hoisted(() => ({
 }))
 const dialogOpen = vi.hoisted(() => vi.fn())
 const navigate = vi.hoisted(() => vi.fn())
-const setSidebarMode = vi.hoisted(() => vi.fn())
-const setAgentMode = vi.hoisted(() => vi.fn())
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (config: object) => config,
@@ -46,10 +44,7 @@ vi.mock('@/hooks/useAgentSkills', () => ({
   useAgentSkills: () => hookState.value,
 }))
 
-vi.mock('@/hooks/useAgentMode', () => ({
-  useAgentMode: (selector: (state: object) => unknown) =>
-    selector({ setSidebarMode, setAgentMode }),
-}))
+
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -121,8 +116,6 @@ describe('SkillsPage', () => {
   beforeEach(() => {
     dialogOpen.mockReset()
     navigate.mockReset()
-    setSidebarMode.mockReset()
-    setAgentMode.mockReset()
     seedServiceHub({
       dialog: {
         open: dialogOpen,
@@ -258,8 +251,6 @@ describe('SkillsPage', () => {
 
     fireEvent.click(screen.getAllByText('common:tryInChat')[0])
 
-    expect(setSidebarMode).toHaveBeenCalledWith('agent')
-    expect(setAgentMode).toHaveBeenCalledWith('temporary-chat', true)
     expect(navigate).toHaveBeenCalledWith({
       to: '/',
       search: { agentSkill: 'custom-skill' },

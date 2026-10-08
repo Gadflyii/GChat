@@ -27,6 +27,7 @@ export type Attachment = {
   id?: string
   injectionMode?: 'inline' | 'embeddings'
   inlineContent?: string
+  nativeDocumentReference?: boolean
 }
 
 /**

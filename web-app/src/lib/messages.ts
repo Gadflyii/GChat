@@ -191,6 +191,8 @@ export function convertThreadMessageToUIMessage(
   threadMessage: ThreadMessage
 ): UIMessage {
   const parts: any[] = []
+  const imageNames = threadMessage.metadata?.image_attachment_names
+  let imageIndex = 0
 
   // Process content array - preserve original order (including tool calls)
   for (const content of threadMessage.content || []) {
@@ -246,10 +248,13 @@ export function convertThreadMessageToUIMessage(
         })
       }
     } else if (content.type === 'image_url' && content.image_url?.url) {
+      const filename = Array.isArray(imageNames) ? imageNames[imageIndex] : undefined
+      imageIndex += 1
       parts.push({
         type: 'file',
         mediaType: mediaTypeFromImageUrl(content.image_url.url),
         url: content.image_url.url,
+        ...(typeof filename === 'string' ? { filename } : {}),
       })
     } else if (content.type === 'tool_call') {
       // Handle tool call content items - direct conversion from flat structure

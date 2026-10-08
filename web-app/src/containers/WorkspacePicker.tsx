@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { resolveAgentWorkspaceRoot } from '@/services/agent/tauri'
+import { resolveConversationWorkspaceRoot } from '@/services/agent/tauri'
 import { memoryCommand } from '@/lib/memory'
 
 const recentKey = 'gchat-recent-workspaces'
@@ -43,7 +43,7 @@ export function WorkspacePicker({
       return
     }
     const timer = setTimeout(() => {
-      void resolveAgentWorkspaceRoot(value.trim() || undefined)
+      void resolveConversationWorkspaceRoot(value.trim() || undefined)
         .then((root) => {
           if (!cancelled) {
             setResolved(root.path)
@@ -65,7 +65,7 @@ export function WorkspacePicker({
         options: { directory: true, multiple: false },
       })
       if (typeof path !== 'string') return
-      const root = await resolveAgentWorkspaceRoot(path)
+      const root = await resolveConversationWorkspaceRoot(path)
       const paths = [
         root.path,
         ...recentPaths().filter((p) => p !== root.path),

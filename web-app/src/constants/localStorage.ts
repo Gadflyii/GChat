@@ -34,8 +34,8 @@ export const localStorageKey = {
   // timeout) and cleared once the bottom-right reminder has been acted on or
   // dismissed. Survives a restart so the offer is not lost with the session.
   onboardingModelReminder: 'gchat-onboarding-model-reminder',
-  agentMode: 'agent-mode',
-  agentModeAttentionSeen: 'agent-mode-attention-seen-v1',
+  // Retain the established storage name while migrating conversation policy.
+  conversationPolicy: 'agent-mode',
   factoryResetPending: 'factory-reset-pending',
   lastSeenVersion: 'last-seen-version',
   threadNotifications: 'thread-notifications',

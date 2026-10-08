@@ -1,8 +1,8 @@
 import { IconFolderPlus } from '@tabler/icons-react'
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useTranslation } from '@/i18n/react-i18next-compat'
-import { resolveAgentWorkspaceRoot } from '@/services/agent/tauri'
+import { resolveConversationWorkspaceRoot } from '@/services/agent/tauri'
 
 type AgentExternalFolderButtonProps = {
   workspaceKey: string
@@ -23,8 +23,8 @@ export function AgentExternalFolderButton({
     })
     if (typeof selected !== 'string') return
 
-    const root = await resolveAgentWorkspaceRoot(selected)
-    useAgentMode.getState().addExternalRoot(workspaceKey, {
+    const root = await resolveConversationWorkspaceRoot(selected)
+    useConversationPolicy.getState().addExternalRoot(workspaceKey, {
       ...root,
       canEdit: true,
     })

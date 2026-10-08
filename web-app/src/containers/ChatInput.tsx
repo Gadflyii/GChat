@@ -78,7 +78,7 @@ import { ExtensionManager } from '@/lib/extension'
 import { useAttachments } from '@/hooks/useAttachments'
 import { toast } from 'sonner'
 import { isPlatformTauri } from '@/lib/platform/utils'
-import { processAttachmentsForSend } from '@/lib/attachmentProcessing'
+import { conversationDocumentAccess, processAttachmentsForSend, usesNativeDocumentReference } from '@/lib/attachmentProcessing'
 import { useAttachmentIngestionPrompt } from '@/hooks/useAttachmentIngestionPrompt'
 import {
   NEW_THREAD_ATTACHMENT_KEY,
@@ -108,13 +108,13 @@ import {
 } from '@/containers/chatInput/classifyDroppedPaths'
 import GChatBrowserExtensionDialog from '@/containers/dialogs/GChatBrowserExtensionDialog'
 import { useGChatBrowserExtension } from '@/hooks/useGChatBrowserExtension'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
+import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import ReasoningToggle from '@/containers/ReasoningToggle'
 import { ttftPreBegin } from '@/lib/ttft-timing'
 import { ModelFactory } from '@/lib/model-factory'
-import { canSelectChatAgentMode } from '@/lib/chat-agent-mode'
-import { AgentApprovalModeSelect } from '@/containers/AgentApprovalModeSelect'
+import { ConversationApprovalModeSelect } from '@/containers/ConversationApprovalModeSelect'
 import { AgentExternalFolderButton } from '@/containers/AgentExternalFolderButton'
 import { AgentSkillSlashMenu } from '@/containers/AgentSkillSlashMenu'
 import {
@@ -187,27 +187,15 @@ const ChatInput = memo(function ChatInput({
   const selectedModel = useModelProvider((state) => state.selectedModel)
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
 
-  const providers = useModelProvider((state) => state.providers)
-  const canSelectAgentMode = canSelectChatAgentMode(initialMessage, projectId)
-  const isAgentProviderSelected =
-    selectedProvider === 'ginfer-lan' || isGinferProvider(selectedProvider) ||
-    providers.some((p) => isGinferProvider(p.provider))
-  const agentModeKey = canSelectAgentMode
-    ? TEMPORARY_CHAT_ID
-    : (currentThreadId ?? TEMPORARY_CHAT_ID)
-  const isAgentMode = useAgentMode(
-    (state) => state.agentThreads[agentModeKey] === true
-  )
-  const effectiveAgentMode =
-    isAgentMode && !projectId && isAgentProviderSelected
-  const skillsAvailable = !projectId && isAgentProviderSelected
-  const activeSkill = useAgentMode((state) => state.activeSkills[agentModeKey])
+  const conversationKey = initialMessage ? TEMPORARY_CHAT_ID : (currentThreadId ?? TEMPORARY_CHAT_ID)
+  const activeSkill = useConversationPolicy((state) => state.activeSkills[conversationKey])
+  const activeDefinition = useConversationPolicy((state) => state.activeDefinitions[conversationKey])
   const { skills: agentSkills, loading: agentSkillsLoading } =
-    useAgentSkills(skillsAvailable)
+    useAgentSkills()
   const { definitions: agentDefinitions, loading: agentDefinitionsLoading } =
-    useAgentDefinitions(effectiveAgentMode)
+    useAgentDefinitions()
   const [selectedAgentDefinitionId, setSelectedAgentDefinitionId] = useState(
-    preselectedAgentDefinitionId ?? 'general'
+    preselectedAgentDefinitionId ?? activeDefinition ?? 'general'
   )
   const [selectedAgentSkill, setSelectedAgentSkill] =
     useState<AgentSkill | null>(null)
@@ -220,43 +208,27 @@ const ChatInput = memo(function ChatInput({
     () => filterAgentSkills(agentSkills, agentSkillSlashQuery?.query ?? ''),
     [agentSkillSlashQuery?.query, agentSkills]
   )
-  const setAgentMode = useAgentMode((state) => state.setAgentMode)
-  const approvalMode = useAgentMode(
-    (state) => state.approvalModes[agentModeKey] ?? state.defaultApprovalMode
+  const approvalMode = useConversationPolicy(
+    (state) => state.approvalModes[conversationKey] ?? state.defaultApprovalMode
   )
-  const setApprovalMode = useAgentMode((state) => state.setApprovalMode)
+  const setApprovalMode = useConversationPolicy((state) => state.setApprovalMode)
 
   useLayoutEffect(() => {
     setAgentSkillTokenWidth(agentSkillTokenRef.current?.offsetWidth ?? 0)
   }, [selectedAgentSkill])
 
   useEffect(() => {
-    if (!isAgentProviderSelected && isAgentMode) {
-      setAgentMode(agentModeKey, false)
-    }
-  }, [agentModeKey, isAgentProviderSelected, isAgentMode, setAgentMode])
+    setSelectedAgentDefinitionId(preselectedAgentDefinitionId ?? activeDefinition ?? 'general')
+  }, [conversationKey, preselectedAgentDefinitionId, activeDefinition])
 
   useEffect(() => {
-    if (skillsAvailable) return
-    setSelectedAgentSkill(null)
-    setSelectedAgentDefinitionId('general')
-    setAgentSkillSlashQuery(null)
-    setAgentSkillMenuOpen(false)
-  }, [skillsAvailable])
-
-  useEffect(() => {
-    if (preselectedAgentDefinitionId) setSelectedAgentDefinitionId(preselectedAgentDefinitionId)
-  }, [preselectedAgentDefinitionId])
-
-  useEffect(() => {
-    if (!effectiveAgentMode || agentDefinitionsLoading) return
+    if (agentDefinitionsLoading) return
     if (selectedAgentDefinitionId !== 'general' &&
       !agentDefinitions.some((definition) => definition.id === selectedAgentDefinitionId)) {
       setSelectedAgentDefinitionId('general')
     }
   }, [
     agentDefinitions,
-    effectiveAgentMode,
     agentDefinitionsLoading,
     selectedAgentDefinitionId,
   ])
@@ -267,7 +239,6 @@ const ChatInput = memo(function ChatInput({
       return
     }
     if (
-      !skillsAvailable ||
       agentSkillsLoading ||
       preselectedAgentSkillAppliedRef.current === preselectedAgentSkillName
     ) {
@@ -282,7 +253,6 @@ const ChatInput = memo(function ChatInput({
   }, [
     agentSkills,
     agentSkillsLoading,
-    skillsAvailable,
     preselectedAgentSkillName,
   ])
 
@@ -292,9 +262,9 @@ const ChatInput = memo(function ChatInput({
 
   const handleApprovalModeChange = useCallback(
     (mode: 'manual' | 'skip') => {
-      setApprovalMode(agentModeKey, mode)
+      setApprovalMode(conversationKey, mode)
     },
-    [agentModeKey, setApprovalMode]
+    [conversationKey, setApprovalMode]
   )
 
   // Get current thread messages for token counting
@@ -595,7 +565,6 @@ const ChatInput = memo(function ChatInput({
   const MCPToolComponent = mcpExtension?.getToolComponent?.()
 
   const updateAgentSkillSlashQuery = (value: string, cursor: number | null) => {
-    if (!skillsAvailable) return
     const nextQuery = isCompactCommand(value) ? null : findAgentSkillSlashQuery(value, cursor)
     setAgentSkillSlashQuery(nextQuery)
     setAgentSkillMenuOpen(nextQuery !== null)
@@ -625,11 +594,12 @@ const ChatInput = memo(function ChatInput({
       setPrompt('')
       return
     }
+    useConversationPolicy.getState().setActiveDefinition(conversationKey, selectedAgentDefinitionId)
     const explicitSkill = prompt.match(/^\/([a-z0-9-]+)(?:\s|$)/)?.[1]
     const skillName = selectedAgentSkill?.name ??
       (agentSkills.some((skill) => skill.name === explicitSkill) ? explicitSkill : undefined) ?? activeSkill
     if (skillName) {
-      useAgentMode.getState().setActiveSkill(agentModeKey, skillName)
+      useConversationPolicy.getState().setActiveSkill(conversationKey, skillName)
       if (explicitSkill === skillName) prompt = prompt.replace(/^\/[^\s]+\s*/, '')
     }
     if (!selectedModel) {
@@ -647,14 +617,14 @@ const ChatInput = memo(function ChatInput({
       return
     }
     if (
-      effectiveAgentMode &&
+      (skillName || selectedAgentDefinitionId !== 'general') &&
       attachments.some((attachment) => attachment.type === 'audio')
     ) {
       toast.error(t('chat:agentErrors.audioUnsupported'))
       return
     }
     if (
-      effectiveAgentMode &&
+      (skillName || selectedAgentDefinitionId !== 'general') &&
       !hasVision &&
       attachments.some((attachment) => attachment.type === 'image')
     ) {
@@ -697,16 +667,8 @@ const ChatInput = memo(function ChatInput({
         }))
 
       const submissionFiles = files.length > 0 ? files : undefined
-      if (effectiveAgentMode) {
-        onSubmit(
-          prompt,
-          submissionFiles,
-          skillName,
-          skillName === 'agent-builder' ? 'general' : selectedAgentDefinitionId
-        )
-      } else {
-        onSubmit(prompt, submissionFiles, skillName)
-      }
+      onSubmit(prompt, submissionFiles, skillName,
+        skillName === 'agent-builder' || selectedAgentDefinitionId === 'general' ? undefined : selectedAgentDefinitionId)
       setPrompt('')
       setSelectedAgentSkill(null)
       clearAttachmentsForThread(attachmentsKey)
@@ -743,9 +705,7 @@ const ChatInput = memo(function ChatInput({
         files: files.length > 0 ? files : [],
         documents: docsSnapshot.length > 0 ? docsSnapshot : undefined,
         agentSkillName: skillName,
-        agentDefinitionId: effectiveAgentMode
-          ? selectedAgentDefinitionId
-          : undefined,
+        agentDefinitionId: selectedAgentDefinitionId === 'general' ? undefined : selectedAgentDefinitionId,
       }
 
       // Clear input UI immediately so the chip and text disappear in the
@@ -803,10 +763,10 @@ const ChatInput = memo(function ChatInput({
         // image data URLs can exceed the per-origin quota and silently abort
         // navigation with QuotaExceededError.
         useInitialMessage.getState().set(TEMPORARY_CHAT_ID, messagePayload)
-        if (isAgentMode && agentModeKey !== TEMPORARY_CHAT_ID) {
-          useAgentMode
+        if (conversationKey !== TEMPORARY_CHAT_ID) {
+          useConversationPolicy
             .getState()
-            .transferAgentMode(agentModeKey, TEMPORARY_CHAT_ID)
+            .transferPolicy(conversationKey, TEMPORARY_CHAT_ID)
         }
         router.navigate({
           to: route.threadsDetail,
@@ -896,7 +856,7 @@ const ChatInput = memo(function ChatInput({
           )
         }
 
-        useAgentMode.getState().transferAgentMode(agentModeKey, newThread.id)
+        useConversationPolicy.getState().transferPolicy(conversationKey, newThread.id)
 
         useInitialMessage.getState().set(newThread.id, messagePayload)
 
@@ -1011,6 +971,14 @@ const ChatInput = memo(function ChatInput({
   const processNewDocumentAttachments = useCallback(
     async (docs: Attachment[]) => {
       if (!docs.length || !currentThreadId) return
+      const documentAccess = conversationDocumentAccess(
+        Boolean(selectedModel?.capabilities?.includes('tools')),
+        tools,
+        useToolAvailable.getState().getDisabledToolsForThread(currentThreadId),
+        selectedAgentSkill || activeSkill ? 'skill_invoke' : selectedAgentDefinitionId !== 'general' ? 'agent_run' : undefined
+      )
+      docs = docs.filter((doc) => !usesNativeDocumentReference(doc, parsePreference, documentAccess))
+      if (!docs.length) return
       setIsPreparingDocumentAttachments(true)
 
       try {
@@ -1163,6 +1131,7 @@ const ChatInput = memo(function ChatInput({
               contextThreshold,
               estimateTokens,
               parsePreference,
+              documentAccess,
               perFileChoices: docChoices.size > 0 ? docChoices : undefined,
               updateAttachmentProcessing,
             })
@@ -1195,12 +1164,17 @@ const ChatInput = memo(function ChatInput({
       attachmentsKey,
       autoInlineContextRatio,
       activeModels,
+      activeSkill,
       currentThreadId,
       parsePreference,
       selectedModel?.id,
+      selectedModel?.capabilities,
       selectedModel?.settings?.ctx_len?.controller_props?.value,
       selectedProvider,
       serviceHub,
+      selectedAgentDefinitionId,
+      selectedAgentSkill,
+      tools,
       setAttachmentsForThread,
       updateAttachmentProcessing,
     ]
@@ -2261,8 +2235,7 @@ const ChatInput = memo(function ChatInput({
       <div className="relative">
         <div
           className={cn(
-            'relative p-0.5 rounded-3xl',
-            skillsAvailable ? 'overflow-visible' : 'overflow-hidden',
+            'relative p-0.5 rounded-3xl overflow-visible',
             isStreaming && 'opacity-70'
           )}
         >
@@ -2399,21 +2372,19 @@ const ChatInput = memo(function ChatInput({
                   )}
                 </div>
               )}
-              {skillsAvailable && (
-                <AgentSkillSlashMenu
+              <AgentSkillSlashMenu
                   skills={eligibleAgentSkills}
                   activeIndex={agentSkillActiveIndex}
                   loading={agentSkillsLoading}
                   open={agentSkillMenuOpen}
                   onSelect={handleAgentSkillSelect}
                   onActiveIndexChange={setAgentSkillActiveIndex}
-                />
-              )}
+              />
               <div className="relative min-w-0 w-full px-4 pt-3">
                 {activeSkill && !selectedAgentSkill && (
                   <div className="mb-2 flex items-center gap-2 text-xs text-primary">
                     <span>Skill: /{activeSkill}</span>
-                    <button type="button" onClick={() => useAgentMode.getState().setActiveSkill(agentModeKey)}>Exit skill</button>
+                    <button type="button" onClick={() => useConversationPolicy.getState().setActiveSkill(conversationKey)}>Exit skill</button>
                   </div>
                 )}
                 {selectedAgentSkill && (
@@ -2514,9 +2485,7 @@ const ChatInput = memo(function ChatInput({
                   placeholder={
                     selectedAgentSkill
                       ? ''
-                      : effectiveAgentMode
-                        ? t('chat:agentMode.placeholder')
-                        : t('common:placeholder.chatInput')
+                      : t('common:placeholder.chatInput')
                   }
                   autoFocus
                   spellCheck={spellCheckChatInput}
@@ -2622,18 +2591,20 @@ const ChatInput = memo(function ChatInput({
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  {effectiveAgentMode && agentDefinitions.length > 0 && (
+                  {agentDefinitions.length > 0 && (
                     <label className="mb-1 flex h-8 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
                       <IconSparkles className="size-3.5 shrink-0 text-primary" />
                       <select
-                        aria-label="Agent definition"
+                        aria-label="Invoke saved agent"
                         className="min-w-0 flex-1 bg-transparent outline-none"
                         value={selectedAgentDefinitionId}
-                        onChange={(event) =>
+                        onChange={(event) => {
                           setSelectedAgentDefinitionId(event.target.value)
-                        }
+                          setSelectedAgentSkill(null)
+                          useConversationPolicy.getState().setActiveSkill(conversationKey)
+                        }}
                       >
-                        <option value="general">Default agent (no workflow)</option>
+                        <option value="general">Chat</option>
                         {agentDefinitions.map((definition) => (
                           <option key={definition.id} value={definition.id}>
                             {definition.name}
@@ -2642,8 +2613,8 @@ const ChatInput = memo(function ChatInput({
                       </select>
                     </label>
                   )}
-                  <AgentExternalFolderButton workspaceKey={agentModeKey} />
-                  <AgentApprovalModeSelect
+                  <AgentExternalFolderButton workspaceKey={conversationKey} />
+                  <ConversationApprovalModeSelect
                     mode={approvalMode}
                     onChange={handleApprovalModeChange}
                     manualSelectedLabel={t(
@@ -2660,7 +2631,7 @@ const ChatInput = memo(function ChatInput({
                     skipDescription={t('chat:agentApprovals.skipDescription')}
                   />
                   {/* //! Кнопка Browse (Chrome) — временно скрыта
-                {!effectiveAgentMode && hasGChatBrowserMCPConfig && modelSupportsBrowser && (
+                {hasGChatBrowserMCPConfig && modelSupportsBrowser && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -2703,8 +2674,7 @@ const ChatInput = memo(function ChatInput({
                 )}
                 */}
 
-                  {!effectiveAgentMode &&
-                    selectedModel?.capabilities?.includes('embeddings') && (
+                  {selectedModel?.capabilities?.includes('embeddings') && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button variant="ghost" size="icon-xs">
@@ -2720,8 +2690,7 @@ const ChatInput = memo(function ChatInput({
                       </Tooltip>
                     )}
 
-                  {!effectiveAgentMode &&
-                    selectedModel?.capabilities?.includes('tools') &&
+                  {selectedModel?.capabilities?.includes('tools') &&
                     hasActiveMCPServers &&
                     (MCPToolComponent ? (
                       // Use custom MCP component
@@ -2785,10 +2754,9 @@ const ChatInput = memo(function ChatInput({
                       </Tooltip>
                     ))}
 
-                  {!effectiveAgentMode && <ReasoningToggle />}
+                  <ReasoningToggle />
 
-                  {!effectiveAgentMode &&
-                    selectedModel?.capabilities?.includes('web_search') && (
+                  {selectedModel?.capabilities?.includes('web_search') && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button variant="ghost" size="icon-xs">

@@ -47,7 +47,7 @@ vi.mock('@/services/agent/studio', async (original) => ({
 vi.mock('@/services/agent/definitions', () => ({
   saveAgentDefinition: mocks.save,
 }))
-vi.mock('@/services/agent/tauri', () => ({ resolveAgentWorkspaceRoot: async () => ({ path: '/workspace', name: 'Workspace' }) }))
+vi.mock('@/services/agent/tauri', () => ({ resolveConversationWorkspaceRoot: async () => ({ path: '/workspace', name: 'Workspace' }) }))
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: (select: (s: unknown) => unknown) =>
     select({ selectedModel: mocks.current ? { id: mocks.current } : null }),

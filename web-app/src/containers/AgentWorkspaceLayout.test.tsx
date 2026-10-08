@@ -80,11 +80,10 @@ describe('AgentWorkspaceLayout', () => {
     useWorkspacePreviewStore.getState().reset()
   })
 
-  it('uses the workspace layout only for desktop Agent threads', async () => {
+  it('shares the workspace layout across desktop conversations', async () => {
     const agentLayout = render(
       <AgentWorkspaceLayout
         threadId="agent"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -104,7 +103,6 @@ describe('AgentWorkspaceLayout', () => {
     const chatLayout = render(
       <AgentWorkspaceLayout
         threadId="chat"
-        agentModeActive={false}
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -112,15 +110,14 @@ describe('AgentWorkspaceLayout', () => {
         <div>Chat</div>
       </AgentWorkspaceLayout>
     )
-    expect(screen.queryByText('Files')).not.toBeInTheDocument()
-    expect(screen.getByText('Artifact panel')).toBeInTheDocument()
+    expect(await screen.findByText('Files')).toBeInTheDocument()
+    expect(screen.queryByText('Artifact panel')).not.toBeInTheDocument()
     chatLayout.unmount()
 
     media.desktop = false
     render(
       <AgentWorkspaceLayout
         threadId="narrow"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -136,7 +133,6 @@ describe('AgentWorkspaceLayout', () => {
     render(
       <AgentWorkspaceLayout
         threadId="thread"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -160,7 +156,6 @@ describe('AgentWorkspaceLayout', () => {
     const { container } = render(
       <AgentWorkspaceLayout
         threadId="thread"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -184,7 +179,6 @@ describe('AgentWorkspaceLayout', () => {
     render(
       <AgentWorkspaceLayout
         threadId="thread"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -209,7 +203,6 @@ describe('AgentWorkspaceLayout', () => {
     const { rerender } = render(
       <AgentWorkspaceLayout
         threadId="thread"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -231,7 +224,6 @@ describe('AgentWorkspaceLayout', () => {
     rerender(
       <AgentWorkspaceLayout
         threadId="thread"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={1}
@@ -248,7 +240,6 @@ describe('AgentWorkspaceLayout', () => {
     render(
       <AgentWorkspaceLayout
         threadId="home"
-        agentModeActive
         workspace={{ externalRoots: [] }}
         onAddExternal={onAddExternal}
         refreshKey={0}
@@ -275,7 +266,6 @@ describe('AgentWorkspaceLayout', () => {
     render(
       <AgentWorkspaceLayout
         threadId="home"
-        agentModeActive
         workspace={{
           externalRoots: [
             {
@@ -300,7 +290,6 @@ describe('AgentWorkspaceLayout', () => {
     render(
       <AgentWorkspaceLayout
         threadId="thread"
-        agentModeActive
         workspace={agentWorkspace}
         onAddExternal={onAddExternal}
         refreshKey={0}

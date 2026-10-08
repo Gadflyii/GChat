@@ -7,7 +7,7 @@ import type {
   AgentWorkspaceEntry,
   AgentWorkspaceFile,
   AgentWorkspaceRequest,
-  AgentWorkspaceRoot,
+  ConversationWorkspaceRoot,
   AgentWorkspaceText,
 } from '@/types/agent'
 
@@ -58,10 +58,10 @@ export function resolveAgentFolderAccess(
   return invoke<void>('agent_resolve_folder_access', { decision })
 }
 
-export function resolveAgentWorkspaceRoot(
+export function resolveConversationWorkspaceRoot(
   path?: string
-): Promise<AgentWorkspaceRoot> {
-  return invoke<AgentWorkspaceRoot>('agent_workspace_root', {
+): Promise<ConversationWorkspaceRoot> {
+  return invoke<ConversationWorkspaceRoot>('agent_workspace_root', {
     request: { path },
   })
 }
@@ -106,4 +106,8 @@ export function isStaleAgentFolderAccessError(error: unknown): boolean {
     (message.includes('is not pending') ||
       message.includes('is no longer active'))
   )
+}
+
+export function loadAgentConversationContext(sessionId: string): Promise<string | null> {
+  return invoke<string | null>('agent_conversation_context', { sessionId })
 }

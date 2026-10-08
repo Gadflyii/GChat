@@ -2,58 +2,60 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { localStorageKey } from '@/constants/localStorage'
 
-export type AgentApprovalMode = 'manual' | 'skip'
-export type SidebarMode = 'chat' | 'agent'
-export type AgentWorkspaceRoot = {
+export type ConversationApprovalMode = 'manual' | 'skip'
+export type ConversationWorkspaceRoot = {
   rootId: string
   path: string
   name: string
   canEdit: boolean
 }
-export type AgentWorkspace = {
-  primaryRoot?: AgentWorkspaceRoot
-  externalRoots: AgentWorkspaceRoot[]
+export type ConversationWorkspace = {
+  primaryRoot?: ConversationWorkspaceRoot
+  externalRoots: ConversationWorkspaceRoot[]
 }
 
-type AgentModeState = {
-  /** Map of threadId → agent mode enabled */
-  agentThreads: Record<string, boolean>
+type ConversationPolicyState = {
+  /** Historical provenance only; never selects a view or execution route. */
+  legacyAgentThreads: Record<string, boolean>
+  activeDefinitions: Record<string, string>
+  setActiveDefinition: (threadId: string, definition?: string) => void
   activeSkills: Record<string, string>
   setActiveSkill: (threadId: string, skill?: string) => void
-  approvalModes: Record<string, AgentApprovalMode>
-  defaultApprovalMode: AgentApprovalMode
-  workspaces: Record<string, AgentWorkspace>
-  sidebarMode: SidebarMode
+  approvalModes: Record<string, ConversationApprovalMode>
+  defaultApprovalMode: ConversationApprovalMode
+  workspaces: Record<string, ConversationWorkspace>
 
-  isAgentMode: (threadId: string) => boolean
-  usesAgentTools: (threadId: string) => boolean
-  getApprovalMode: (threadId: string) => AgentApprovalMode
+  getApprovalMode: (threadId: string) => ConversationApprovalMode
   getWorkingDir: (threadId: string) => string | undefined
-  getWorkspace: (threadId: string) => AgentWorkspace
-  setPrimaryRoot: (threadId: string, root: AgentWorkspaceRoot) => void
-  addExternalRoot: (threadId: string, root: AgentWorkspaceRoot) => void
+  getWorkspace: (threadId: string) => ConversationWorkspace
+  setPrimaryRoot: (threadId: string, root: ConversationWorkspaceRoot) => void
+  addExternalRoot: (threadId: string, root: ConversationWorkspaceRoot) => void
   setExternalRootPermission: (
     threadId: string,
     rootId: string,
     canEdit: boolean
   ) => void
   removeExternalRoot: (threadId: string, rootId: string) => void
-  setSidebarMode: (mode: SidebarMode) => void
-  toggleAgentMode: (threadId: string) => void
-  setAgentMode: (threadId: string, enabled: boolean) => void
-  setApprovalMode: (threadId: string, mode: AgentApprovalMode) => void
-  setDefaultApprovalMode: (mode: AgentApprovalMode) => void
+  setApprovalMode: (threadId: string, mode: ConversationApprovalMode) => void
+  setDefaultApprovalMode: (mode: ConversationApprovalMode) => void
   setWorkingDir: (threadId: string, workingDir: string) => void
-  transferAgentMode: (fromThreadId: string, toThreadId: string) => void
+  transferPolicy: (fromThreadId: string, toThreadId: string) => void
   removeThread: (threadId: string) => void
-  /** Clear agent mode for all threads. */
+  /** Clear conversation permissions and selections. */
   clearAll: () => void
 }
 
-export const useAgentMode = create<AgentModeState>()(
+export const useConversationPolicy = create<ConversationPolicyState>()(
   persist(
     (set, get) => ({
-      agentThreads: {},
+      legacyAgentThreads: {},
+      activeDefinitions: {},
+      setActiveDefinition: (threadId, definition) => set((state) => {
+        const activeDefinitions = { ...state.activeDefinitions }
+        if (definition && definition !== 'general') activeDefinitions[threadId] = definition
+        else delete activeDefinitions[threadId]
+        return { activeDefinitions }
+      }),
       activeSkills: {},
       setActiveSkill: (threadId, skill) => set((state) => {
         const activeSkills = { ...state.activeSkills }
@@ -64,12 +66,6 @@ export const useAgentMode = create<AgentModeState>()(
       approvalModes: {},
       defaultApprovalMode: 'manual',
       workspaces: {},
-      sidebarMode: 'chat',
-
-      isAgentMode: (threadId) => {
-        return get().agentThreads[threadId] === true
-      },
-      usesAgentTools: (threadId) => get().agentThreads[threadId] === true || !!get().activeSkills[threadId],
 
       getApprovalMode: (threadId) => {
         return get().approvalModes[threadId] ?? get().defaultApprovalMode
@@ -155,32 +151,6 @@ export const useAgentMode = create<AgentModeState>()(
         })
       },
 
-      setSidebarMode: (mode) => {
-        // Opening a thread always re-asserts the mode. Without this guard every
-        // navigation notifies the whole sidebar tree for an unchanged value.
-        set((state) =>
-          state.sidebarMode === mode ? state : { sidebarMode: mode }
-        )
-      },
-
-      toggleAgentMode: (threadId) => {
-        set((state) => ({
-          agentThreads: {
-            ...state.agentThreads,
-            [threadId]: !state.agentThreads[threadId],
-          },
-        }))
-      },
-
-      setAgentMode: (threadId, enabled) => {
-        set((state) => ({
-          agentThreads: {
-            ...state.agentThreads,
-            [threadId]: enabled,
-          },
-        }))
-      },
-
       setApprovalMode: (threadId, mode) => {
         set((state) => ({
           approvalModes: {
@@ -211,12 +181,15 @@ export const useAgentMode = create<AgentModeState>()(
         }))
       },
 
-      transferAgentMode: (fromThreadId, toThreadId) => {
+      transferPolicy: (fromThreadId, toThreadId) => {
         set((state) => {
-          const isAgentMode = state.agentThreads[fromThreadId] === true
           const approvalMode = state.approvalModes[fromThreadId]
           const workspace = state.workspaces[fromThreadId]
-          const remainingThreads = { ...state.agentThreads }
+          const activeDefinitions = { ...state.activeDefinitions }
+          const definition = activeDefinitions[fromThreadId]
+          delete activeDefinitions[fromThreadId]
+          delete activeDefinitions[toThreadId]
+          if (definition) activeDefinitions[toThreadId] = definition
           const activeSkills = { ...state.activeSkills }
           const skill = activeSkills[fromThreadId]
           delete activeSkills[fromThreadId]
@@ -224,8 +197,6 @@ export const useAgentMode = create<AgentModeState>()(
           if (skill) activeSkills[toThreadId] = skill
           const remainingApprovalModes = { ...state.approvalModes }
           const remainingWorkspaces = { ...state.workspaces }
-          delete remainingThreads[fromThreadId]
-          delete remainingThreads[toThreadId]
           delete remainingApprovalModes[fromThreadId]
           delete remainingApprovalModes[toThreadId]
           delete remainingWorkspaces[fromThreadId]
@@ -233,9 +204,7 @@ export const useAgentMode = create<AgentModeState>()(
 
           return {
             activeSkills,
-            agentThreads: isAgentMode
-              ? { ...remainingThreads, [toThreadId]: true }
-              : remainingThreads,
+            activeDefinitions,
             approvalModes: approvalMode !== undefined
               ? { ...remainingApprovalModes, [toThreadId]: approvalMode }
               : remainingApprovalModes,
@@ -249,36 +218,38 @@ export const useAgentMode = create<AgentModeState>()(
 
       removeThread: (threadId) => {
         set((state) => {
-          const agentThreads = { ...state.agentThreads }
+          const legacyAgentThreads = { ...state.legacyAgentThreads }
+          const activeDefinitions = { ...state.activeDefinitions }
+          delete activeDefinitions[threadId]
           const activeSkills = { ...state.activeSkills }
           delete activeSkills[threadId]
           const approvalModes = { ...state.approvalModes }
           const workspaces = { ...state.workspaces }
-          delete agentThreads[threadId]
+          delete legacyAgentThreads[threadId]
           delete approvalModes[threadId]
           delete workspaces[threadId]
-          return { agentThreads, approvalModes, workspaces, activeSkills }
+          return { legacyAgentThreads, activeDefinitions, approvalModes, workspaces, activeSkills }
         })
       },
 
       clearAll: () => {
         set({
           activeSkills: {},
-          agentThreads: {},
+          legacyAgentThreads: {},
+          activeDefinitions: {},
           approvalModes: {},
           workspaces: {},
-          sidebarMode: 'chat',
         })
       },
     }),
     {
-      name: localStorageKey.agentMode,
+      name: localStorageKey.conversationPolicy,
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version) => {
         const state = (persistedState ?? {}) as Record<string, unknown>
         let workspaces = state.workspaces as
-          | Record<string, AgentWorkspace>
+          | Record<string, ConversationWorkspace>
           | undefined
         if (version < 1 && state.workingDirs) {
           const workingDirs = state.workingDirs as Record<string, string>
@@ -297,16 +268,19 @@ export const useAgentMode = create<AgentModeState>()(
             ])
           )
         }
-        if (!workspaces) return state
         return {
-          ...state,
+          legacyAgentThreads: state.legacyAgentThreads ?? state.agentThreads ?? {},
+          activeSkills: state.activeSkills ?? {},
+          activeDefinitions: state.activeDefinitions ?? {},
+          approvalModes: state.approvalModes ?? {},
+          defaultApprovalMode: state.defaultApprovalMode ?? 'manual',
           workspaces: Object.fromEntries(
-            Object.entries(workspaces).map(([threadId, workspace]) => [
+            Object.entries(workspaces ?? {}).map(([threadId, workspace]) => [
               threadId,
               {
                 ...workspace,
                 primaryRoot: workspace.primaryRoot
-                  ? { ...workspace.primaryRoot, canEdit: true }
+                  ? { ...workspace.primaryRoot, canEdit: workspace.primaryRoot.canEdit !== false }
                   : undefined,
                 externalRoots: workspace.externalRoots.map((root) => ({
                   ...root,

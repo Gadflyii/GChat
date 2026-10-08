@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTurnFinishReason } from '@/types/agent'
+import type { AgentAttachment, AgentEvent, AgentTurnFinishReason } from '@/types/agent'
 import type { AgentSkill } from '@/services/agent/skills'
 import type { MCPServerStatus } from '@/services/mcp/types'
 
@@ -28,6 +28,7 @@ export type CapabilityExecuteRequest = {
   auto_approve: boolean
   selected_skill?: string
   disabled_tools?: string[]
+  attachments?: AgentAttachment[]
 }
 
 export type CapabilityExecuteResult = {

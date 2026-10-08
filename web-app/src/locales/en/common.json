@@ -65,7 +65,7 @@
   "skillFileRequirements": "File requirements",
   "skillMarkdownRequirement": ".md file must contain skill name and description formatted in YAML",
   "skillArchiveRequirement": ".zip or .skill file must include a SKILL.md file",
-  "createSkillDescription": "Create a reusable workflow for Agent mode.",
+  "createSkillDescription": "Create a reusable workflow to invoke from a conversation.",
   "skillName": "Skill name",
   "skillNamePlaceholder": "weekly-status-report",
   "description": "Description",

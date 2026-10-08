@@ -7,7 +7,6 @@ import {
 } from '@/components/ui/sidebar'
 import { BlocksIcon } from '@/components/animated-icon/blocks'
 import { FolderPlusIcon } from '@/components/animated-icon/folder-plus'
-import { ListTodoIcon } from '@/components/animated-icon/list-todo'
 import { MessageCircleIcon } from '@/components/animated-icon/message-circle'
 import { PlugIcon, type PlugIconHandle } from '@/components/animated-icon/plug'
 import AddProjectDialog from '@/containers/dialogs/AddProjectDialog'
@@ -15,12 +14,11 @@ import { SearchDialog } from '@/containers/dialogs/SearchDialog'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { route } from '@/constants/routes'
 import { useTranslation } from '@/i18n/react-i18next-compat'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useProjectDialog } from '@/hooks/useProjectDialog'
 import { useSearchDialog } from '@/hooks/useSearchDialog'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
-import type { SidebarMode } from '@/hooks/useAgentMode'
 import { IconChartHistogram, IconSparkles, IconTerminal2, IconServer, IconBrain } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { useMessages } from '@/hooks/useMessages'
@@ -45,7 +43,7 @@ type AnimatedIconHandle = {
   stopAnimation: () => void
 }
 
-export function NavMain({ mode }: { mode: SidebarMode }) {
+export function NavMain() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -70,16 +68,11 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
     if (creatingConversation) return
     setCreatingConversation(true)
     try {
-      if (mode === 'agent') {
-        const run = useAgentRun.getState().getRun(TEMPORARY_CHAT_ID)
-        if (
-          run.runId &&
-          ['running', 'awaiting_approval', 'awaiting_folder_access'].includes(
-            run.status
-          )
-        ) {
-          await cancelAgentTurn(run.runId).catch(() => undefined)
-        }
+      const run = useAgentRun.getState().getRun(TEMPORARY_CHAT_ID)
+      if (run.runId && ['running', 'awaiting_approval', 'awaiting_folder_access'].includes(run.status)) {
+        await cancelAgentTurn(run.runId).catch(() => undefined)
+      }
+      if (run.runId || useConversationPolicy.getState().legacyAgentThreads[TEMPORARY_CHAT_ID]) {
         await resetAgentSession(TEMPORARY_CHAT_ID)
       }
       useMessages.getState().setMessages(TEMPORARY_CHAT_ID, [])
@@ -90,11 +83,11 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
         .clearAttachments(NEW_THREAD_ATTACHMENT_KEY)
       useChatAttachments.getState().clearAttachments(TEMPORARY_CHAT_ID)
       useAgentRun.getState().clearRun(TEMPORARY_CHAT_ID)
-      useAgentMode.getState().setAgentMode(TEMPORARY_CHAT_ID, mode === 'agent')
+      useConversationPolicy.getState().removeThread(TEMPORARY_CHAT_ID)
       navigate({ to: route.home, search: {} })
     } catch (error) {
       toast.error(
-        mode === 'agent' ? 'Could not create a new task' : 'Could not create a new chat',
+        'Could not create a new chat',
         { description: String(error) }
       )
     } finally {
@@ -125,22 +118,8 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             onMouseEnter={() => newChatIconRef.current?.startAnimation()}
             onMouseLeave={() => newChatIconRef.current?.stopAnimation()}
           >
-            {mode === 'agent' ? (
-              <ListTodoIcon
-                ref={newChatIconRef}
-                className="text-foreground/70"
-                size={16}
-              />
-            ) : (
-              <MessageCircleIcon
-                ref={newChatIconRef}
-                className="text-foreground/70"
-                size={16}
-              />
-            )}
-            <span>
-              {mode === 'agent' ? t('common:newTask') : t('common:newChat')}
-            </span>
+            <MessageCircleIcon ref={newChatIconRef} className="text-foreground/70" size={16} />
+            <span>{t('common:newChat')}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         {openCodeEnabled && (
@@ -218,8 +197,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        {mode === 'chat' && (
-          <>
+        <>
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={() => setProjectDialogOpen(true)}
@@ -261,8 +239,7 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          </>
-        )}
+        </>
         <li role="presentation" className="px-2 pt-3 pb-1 font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Diagnostics</li>
         <SidebarMenuItem>
           <SidebarMenuButton
@@ -286,7 +263,6 @@ export function NavMain({ mode }: { mode: SidebarMode }) {
       <SearchDialog
         open={searchOpen}
         onOpenChange={setSearchOpen}
-        mode={mode}
       />
     </>
   )

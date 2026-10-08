@@ -56,7 +56,7 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useThreads } from '@/hooks/useThreads'
 import { useAttachments } from '@/hooks/useAttachments'
 import { useAppState } from '@/hooks/useAppState'
-import { useAgentMode } from '@/hooks/useAgentMode'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { ExtensionManager } from '@/lib/extension'
 import { EngineManager, ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ttftMark } from '@/lib/ttft-timing'
@@ -81,7 +81,7 @@ const LOCAL_INFERENCE_PROVIDERS = new Set<string>(['ginfer'])
 /// does understand `application/pdf` — would receive our `url`, a local
 /// filesystem path the SDK cannot resolve, as the document body. Every other
 /// attachment kind reaches the model through its own channel: documents as
-/// text folded in by `mapUserInlineAttachments` or retrieved by the RAG
+/// text folded in by `mapUserAttachmentContext` or retrieved by the RAG
 /// tools. So a non-image file part is never information — only a way
 /// to break the request.
 function isModelSupportedPart(part: unknown): boolean {
@@ -534,10 +534,10 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
     // Convert UI messages to model messages. Non-image file parts are stripped
     // first — the converters accept `image/*` and nothing else. Order matters:
-    // `mapUserInlineAttachments` folds document text into the message before
+    // `mapUserAttachmentContext` folds document text into the message before
     // the strip runs, so neither loses anything.
     let preparedMessages = stripUnsupportedFileParts(
-      this.mapUserInlineAttachments(messagesToConvert)
+      this.mapUserAttachmentContext(messagesToConvert)
     )
     // Keep tool-image base64 out of text context; Vision receives image parts.
     if (LOCAL_INFERENCE_PROVIDERS.has(effectiveProviderName)) {
@@ -562,26 +562,40 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     const memory = supportsGChatMemory(effectiveProviderName)
       ? await chatMemoryContext(options.messages, this.threadId)
       : ''
-    const selectedSkill = useAgentMode.getState().activeSkills[this.threadId ?? options.chatId]
-    const invokeSkill = Boolean(selectedSkill && options.messages.at(-1)?.role === 'user')
-    if (invokeSkill && (!shouldEnableTools || !this.tools.skill_invoke)) {
-      throw new Error('Enable skill_invoke and choose a model with tool support to use the selected skill.')
+    const policy = useConversationPolicy.getState()
+    const conversationId = this.threadId ?? options.chatId
+    const selectedSkill = policy.activeSkills[conversationId]
+    const selectedDefinition = policy.activeDefinitions[conversationId]
+    const explicitInvocation = options.messages.at(-1)?.role === 'user'
+    const invocationTool = explicitInvocation ? selectedSkill ? 'skill_invoke' : selectedDefinition ? 'agent_run' : undefined : undefined
+    if (invocationTool && (!shouldEnableTools || !this.tools[invocationTool])) {
+      throw new Error(`Enable ${invocationTool} and choose a model with tool support to use the selected capability.`)
     }
+    const workspace = policy.getWorkspace(conversationId)
+    const attachedDocuments = (options.messages.findLast((message) => message.role === 'user')?.metadata as
+      { file_attachments?: Array<{ name?: string; path?: string; native_reference?: boolean }> } | undefined)?.file_attachments?.filter((file) => file.native_reference)
     const capabilityGuidance = shouldEnableTools
       ? [
           this.tools.skill_list && 'GChat skills are available through skill_list. Read instructions with skill_view and apply a skill using skill_invoke.',
           this.tools.agent_list && 'Discover saved agents and worker pools with agent_list; dispatch them using agent_run. Native tools and MCP tools use the conversation permissions and connected folders.',
-          invokeSkill && `Apply the selected skill ${JSON.stringify(selectedSkill)} to the current user request using skill_invoke.`,
+          this.tools.os_fs_read_document && 'Read Excel (.xls/.xlsx), Office documents (.docx/.pptx), PDFs and other supported documents with os_fs_read_document, which extracts their content. os_fs_read reads UTF-8 text only. When a tool reports an error or denied folder access, report that specific failure and request access through the inline approval.',
+          this.tools.os_fs_read_document && attachedDocuments?.length && `Attached local documents: ${JSON.stringify(attachedDocuments.map(({name, path}) => ({name, path})))}. Read their content with os_fs_read_document when needed; these references have not been indexed for retrieval.`,
+          workspace.primaryRoot && `Conversation workspace: ${JSON.stringify(workspace.primaryRoot.path)}.`,
+          workspace.externalRoots.length > 0 && `Connected folders: ${JSON.stringify(workspace.externalRoots.map(({path, canEdit}) => ({path, canEdit})))}.`,
+          invocationTool === 'skill_invoke' && `Apply the selected skill ${JSON.stringify(selectedSkill)} to the current user request using skill_invoke.`,
+          invocationTool === 'agent_run' && `Invoke saved agent ${JSON.stringify(selectedDefinition)} for the current request using agent_run.`,
         ].filter(Boolean).join('\n')
       : ''
     const systemMessage = [this.systemMessage, memory, capabilityGuidance].filter(Boolean).join('\n\n') || undefined
-    const requestTools = invokeSkill
-      ? { ...this.tools, skill_invoke: {
-          ...this.tools.skill_invoke,
+    const requestTools = invocationTool
+      ? { ...this.tools, [invocationTool]: {
+          ...this.tools[invocationTool],
           inputSchema: jsonSchema({
             type: 'object',
-            properties: { name: { type: 'string', enum: [selectedSkill] }, task: { type: 'string' } },
-            required: ['name', 'task'], additionalProperties: false,
+            properties: invocationTool === 'skill_invoke'
+              ? { name: { type: 'string', enum: [selectedSkill] }, task: { type: 'string' } }
+              : { definitionId: { type: 'string', enum: [selectedDefinition] }, task: { type: 'string' } },
+            required: [invocationTool === 'skill_invoke' ? 'name' : 'definitionId', 'task'], additionalProperties: false,
           }),
         } }
       : this.tools
@@ -602,7 +616,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       messages: modelMessages,
       abortSignal: options.abortSignal,
       tools: shouldEnableTools ? requestTools : undefined,
-      toolChoice: invokeSkill ? { type: 'tool', toolName: 'skill_invoke' } : shouldEnableTools ? 'auto' : undefined,
+      toolChoice: invocationTool ? { type: 'tool', toolName: invocationTool } : shouldEnableTools ? 'auto' : undefined,
       system: systemMessage,
       maxOutputTokens,
       experimental_transform: stripSpecialTokensTransform,
@@ -772,49 +786,32 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
    * @param messages
    * @returns
    */
-  mapUserInlineAttachments(messages: UIMessage[]): UIMessage[] {
+  mapUserAttachmentContext(messages: UIMessage[]): UIMessage[] {
     return messages.map((message) => {
-      if (message.role === 'user') {
-        const metadata = message.metadata as
-          | {
-              inline_file_contents?: Array<{ name?: string; content?: string }>
-            }
-          | undefined
-        const inlineFileContents = Array.isArray(metadata?.inline_file_contents)
-          ? metadata.inline_file_contents.filter((f) => f?.content)
-          : []
-        // Tool messages have content as array of ToolResultPart
-        if (inlineFileContents.length > 0) {
-          if (message.parts.length > 0) {
-            const inlineBlock = inlineFileContents
-              .map((f) => `File: ${f.name || 'attachment'}\n${f.content ?? ''}`)
-              .join('\n\n')
-            const lastTextIdx = message.parts.reduce(
-              (acc, part, index) => (part.type === 'text' ? index : acc),
-              -1
-            )
-            if (lastTextIdx >= 0) {
-              const parts = [...message.parts]
-              const part = parts[lastTextIdx]
-              if (part.type === 'text') {
-                const base = part.text ?? ''
-                parts[lastTextIdx] = {
-                  type: 'text' as const,
-                  text: base ? `${base}\n\n${inlineBlock}` : inlineBlock,
-                }
-              }
-              message.parts = parts
-            } else {
-              message.parts = [
-                ...message.parts,
-                { type: 'text' as const, text: inlineBlock },
-              ]
-            }
-          }
-        }
+      if (message.role !== 'user') return message
+      const metadata = message.metadata as {
+        inline_file_contents?: Array<{ name?: string; content?: string }>
+        file_attachments?: Array<{ name?: string; path?: string; native_reference?: boolean }>
+      } | undefined
+      const inlineContents = (metadata?.inline_file_contents ?? [])
+        .filter((file) => file.content)
+        .map((file) => `File: ${file.name || 'attachment'}\n${file.content}`)
+      const references = (metadata?.file_attachments ?? [])
+        .filter((file) => file.native_reference && file.path)
+        .map(({ name, path }) => ({ name, path }))
+      const blocks = [...inlineContents, ...(references.length
+        ? [`Attached local document references: ${JSON.stringify(references)}`] : [])]
+      if (!blocks.length) return message
+      const context = blocks.join('\n\n')
+      const parts = [...message.parts]
+      const lastTextIndex = parts.findLastIndex((part) => part.type === 'text')
+      const lastText = parts[lastTextIndex]
+      if (lastText?.type === 'text') {
+        parts[lastTextIndex] = { type: 'text', text: lastText.text ? `${lastText.text}\n\n${context}` : context }
+      } else {
+        parts.push({ type: 'text', text: context })
       }
-
-      return message
+      return { ...message, parts }
     })
   }
 }

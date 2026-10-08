@@ -195,7 +195,7 @@ export type AgentWorkspaceRequest = {
   maxBytes?: number
 }
 
-export type AgentWorkspaceRoot = {
+export type ConversationWorkspaceRoot = {
   rootId: string
   path: string
   name: string
