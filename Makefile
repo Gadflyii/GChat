@@ -243,7 +243,7 @@ lint: install-and-build
 # Testing
 .PHONY: test test-all test-local test-web test-extensions test-rust stub-resources \
 	typecheck verify-fast verify test-quality test-hardening-contracts \
-	test-coverage-critical capture-capabilities capture-hw-profile \
+	test-coverage-critical test-tauri-assets capture-capabilities capture-hw-profile \
 	sync-upstream-baseline gen-amd-rocm-pci-ids test-live test-live-cloud mutants
 
 test-web:
@@ -323,6 +323,9 @@ test-hardening-contracts:
 test-manager-ui:
 	node --test tests/ginfer-manager-ui.test.mjs
 
+test-tauri-assets:
+	node --test tests/tauri-assets.test.mjs
+
 test-coverage-critical:
 	yarn test:coverage
 	yarn --cwd extensions workspaces foreach -A \
@@ -342,6 +345,7 @@ verify-fast:
 	"$(MAKE)" test-quality
 	"$(MAKE)" test-hardening-contracts
 	"$(MAKE)" test-manager-ui
+	"$(MAKE)" test-tauri-assets
 	"$(MAKE)" test-coverage-critical
 
 verify: verify-fast test-rust

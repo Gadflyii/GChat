@@ -101,6 +101,7 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
         'docs', 'autoqa', 'tests',
         (Join-Path $projectRoot 'core\lib'),
         (Join-Path $projectRoot 'src-tauri\resources\bin'),
+        (Join-Path $nativeSourceRoot 'src-tauri\resources\bin'),
         (Join-Path $projectRoot 'src-tauri\resources\pre-install')
     )
     # WSL dependency links can appear as files; exclude both filesystem kinds.
