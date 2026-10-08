@@ -92,7 +92,12 @@ Review found that the removed native Agent submission path had retained original
 image filenames while ordinary Chat submission/reload did not. Shared delegation
 must preserve names through submission, persisted messages, restored UI parts and
 attachment staging; otherwise requests naming one of several images lose identity.
-The attachment correction is pending integrated verification.
+The source correction now preserves image names through the production message
+conversion and reload path. Review also found that default document intake from
+Home required feature-disabled embeddings before delegation. The shared intake
+must keep named local-file references for enabled native/delegated tools, with
+folder approval enforced by their executor. These corrections remain pending
+integrated verification.
 
 The user's operations-manual request is a separate concurrent GInfer deliverable:
 `/ai/ginfer-worktrees/operations-manual`, branch `docs/operations-manual`, based on
@@ -100,6 +105,19 @@ current release-development `cd9ecacf2`. Its `docs/operations/README.md` owns th
 source-backed switch audit, operator guide and Linux/Windows runtime inclusion.
 GInfer main is older; other owners' dirty release-development source and campaign
 trees are read-only. No engine qualification or GPU run is added.
+Its reviewed implementation `66f52a0e2` and handoff `ace9308b6` are committed and
+pushed on `origin/docs/operations-manual`. Linux staging and native Windows
+documentation/archive fixtures verify the six-member offline payload and hashes.
+Release-development integration remains explicit before the next runtime build;
+the separate owner's dirty `dev/next` index is preserved.
+
+All three Code capability commits are integrated, including caller isolation.
+Eleven native bridge regressions, Cargo check and warnings-denied Clippy passed;
+independent review verified actual stock OpenCode 1.18.21 hook export and injection
+timing against its public source. Saved-transcript restart and public selection
+screens passed with isolated stock storage and no inference. Their receipts/logs
+are retained in `/ai/gchat/out/unified-sessions-20261008/code-history/`; source
+history integration and the combined gate are still pending.
 
 Next: integrate the remaining bounded changes and verify their combined behavior.
 No GPU job is booked
