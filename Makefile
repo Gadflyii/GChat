@@ -444,12 +444,12 @@ else ifeq ($(OS),Windows_NT)
 	cd src-tauri && cargo build --release --features cli --bin gchat-cli
 	powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path 'src-tauri/resources/bin' | Out-Null; Copy-Item 'src-tauri/target/release/gchat-cli.exe' 'src-tauri/resources/bin/gchat-cli.exe' -Force"
 	cargo build --release --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
-	powershell -NoProfile -Command "Copy-Item 'src-tauri/ginfer-host/target/release/ginfer-host.exe' 'src-tauri/resources/bin/ginfer-host.exe' -Force"
+	powershell -NoProfile -Command "Copy-Item 'src-tauri/target/release/ginfer-host.exe' 'src-tauri/resources/bin/ginfer-host.exe' -Force"
 else
 	cd src-tauri && cargo build --release --features cli --bin gchat-cli
 	cp src-tauri/target/release/gchat-cli src-tauri/resources/bin/gchat-cli
 	cargo build --release --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
-	install -m755 src-tauri/ginfer-host/target/release/ginfer-host src-tauri/resources/bin/ginfer-host
+	install -m755 src-tauri/target/release/ginfer-host src-tauri/resources/bin/ginfer-host
 endif
 
 # Debug build for local dev (faster, native arch only)
@@ -458,13 +458,13 @@ ifeq ($(OS),Windows_NT)
 	cd src-tauri && cargo build --features cli --bin gchat-cli
 	powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path 'src-tauri/resources/bin' | Out-Null; Copy-Item 'src-tauri/target/debug/gchat-cli.exe' 'src-tauri/resources/bin/gchat-cli.exe' -Force"
 	cargo build --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
-	powershell -NoProfile -Command "Copy-Item 'src-tauri/ginfer-host/target/debug/ginfer-host.exe' 'src-tauri/resources/bin/ginfer-host.exe' -Force"
+	powershell -NoProfile -Command "Copy-Item 'src-tauri/target/debug/ginfer-host.exe' 'src-tauri/resources/bin/ginfer-host.exe' -Force"
 else
 	mkdir -p src-tauri/resources/bin
 	cd src-tauri && cargo build --features cli --bin gchat-cli
 	install -m755 src-tauri/target/debug/gchat-cli src-tauri/resources/bin/gchat-cli
 	cargo build --manifest-path src-tauri/ginfer-host/Cargo.toml --bin ginfer-host
-	install -m755 src-tauri/ginfer-host/target/debug/ginfer-host src-tauri/resources/bin/ginfer-host
+	install -m755 src-tauri/target/debug/ginfer-host src-tauri/resources/bin/ginfer-host
 endif
 
 # Build

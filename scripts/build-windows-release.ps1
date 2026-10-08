@@ -462,7 +462,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host 'cargo build ginfer-host failed' -ForegroundColor Red
     exit 1
 }
-Copy-Item -Path 'src-tauri/ginfer-host/target/release/ginfer-host.exe' -Destination 'src-tauri/resources/bin/ginfer-host.exe' -Force
+Copy-Item -Path 'src-tauri/target/release/ginfer-host.exe' -Destination 'src-tauri/resources/bin/ginfer-host.exe' -Force
 
 # ── Build Tauri app (NSIS + MSI, no code signing) ─────────────
 Write-Step 'Building Tauri app (release, unsigned)'
