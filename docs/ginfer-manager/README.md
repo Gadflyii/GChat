@@ -31,10 +31,12 @@ server processes and pairing. Existing `agent-worker-pools.json` is local to
 GChat; it cannot by itself satisfy the shared fleet-assignment requirement.
 Do not add a second host process controller or a manager-only pool store.
 
-Next: map actual host APIs, current local/client identities and pool consumers;
-choose one authoritative assignment store and its read/write protocol, write
-the design note, then start bounded implementation. No manager code, build,
-GPU allocation or live test has started.
+Read-only delegated mapping is complete. The design chooses a thin shared client,
+one selected host authority with durable revision/CAS, redacted client activity,
+canonical pool instances and explicit stale/offline behavior. It also identifies
+the bounded host-only Flash/MTP admission gap. The design note is written;
+next send its exact path to bubbs, then begin implementation while review proceeds.
+No manager code, build, GPU allocation or live test has started.
 
 ## Owned inventory
 
