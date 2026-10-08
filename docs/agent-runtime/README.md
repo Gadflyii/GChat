@@ -59,6 +59,11 @@ GChat history. Prior accepted evidence below remains valid for its recorded scop
 | Compaction / delegated SOL | `/ai/gchat-worktrees/compact-everywhere`, `fix/compact-everywhere` | Reserved command dispatch and contextual compaction |
 | Model names / delegated SOL | `/ai/gchat-worktrees/model-package-names`, `fix/model-package-names` | Current package matching and targeted fixtures/path update |
 | Existing build caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compilation; preserve accepted installer outputs |
+| Unified-session verification / coordinator | `/ai/gchat/out/unified-sessions-20261008/` | Owned integrated gate/review evidence; allocated, gate pending |
+
+The integration worktree has inert test-only resource placeholders and copies of
+the baseline icon/empty build-test profile catalog. These are compiler fixtures,
+not a rebuilt installer or changed installed runtime. The baseline is untouched.
 
 Compaction source is integrated for early command interception and safe-boundary
 worker requests. Its scoped checks passed 47 frontend tests, TypeScript, source
