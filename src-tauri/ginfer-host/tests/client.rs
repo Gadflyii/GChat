@@ -47,8 +47,15 @@ async fn tls_with_snapshot_gate(
     host: Arc<Host>,
     gate: Option<Arc<SnapshotGate>>,
 ) -> (String, tokio::task::JoinHandle<()>) {
+    tls_at(host, gate, "127.0.0.1:0").await
+}
+async fn tls_at(
+    host: Arc<Host>,
+    gate: Option<Arc<SnapshotGate>>,
+    address: &str,
+) -> (String, tokio::task::JoinHandle<()>) {
     let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(address).await.unwrap();
     let origin = format!("https://{}", listener.local_addr().unwrap());
     let job = tokio::spawn(async move {
         loop {
@@ -542,6 +549,7 @@ async fn delayed_snapshot_merges_other_apps_changes_and_rejects_replaced_or_forg
         .await
         .unwrap()
         .unwrap_err()
+        .to_string()
         .contains("registration changed"));
     assert_eq!(
         first
@@ -627,4 +635,236 @@ async fn manager_first_import_uses_registered_owners_configured_data_and_preserv
         "later manager launches must not resurrect forgotten grants"
     );
     assert_eq!(std::fs::read(source).unwrap(), bytes);
+}
+
+#[tokio::test]
+async fn typed_requests_distinguish_stopped_hosts_from_vault_auth_and_pin_problems() {
+    let root = tempfile::tempdir().unwrap();
+    let host = Host::open(
+        root.path().join("host"),
+        "Typed failures".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    let (origin, server) = tls(host.clone()).await;
+    host.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
+    let vault = Arc::new(Vault::default());
+    let client = Client::new(Some(root.path().join("registry.json")), vault.clone());
+    client
+        .pair(PairRequest {
+            host_id: None,
+            base_url: Some(origin),
+            client_name: "Typed fixture".into(),
+        })
+        .await
+        .unwrap();
+    let saved = client.registered().await.unwrap()[0].clone();
+    let token = vault.get(saved.client_id).await.unwrap();
+    assert!(client.snapshot(saved.host_id).await.is_ok());
+    vault.delete(saved.client_id).await.unwrap();
+    let missing = client.snapshot(saved.host_id).await.unwrap_err();
+    assert!(!missing.is_offline());
+    assert!(missing.to_string().contains("credential absent"));
+    vault.set(saved.client_id, "revoked token").await.unwrap();
+    let auth = client
+        .request_json(saved.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
+        .await
+        .unwrap_err();
+    assert!(!auth.is_offline());
+    assert!(auth.to_string().contains("401"));
+    assert!(!client
+        .snapshot(saved.host_id)
+        .await
+        .unwrap_err()
+        .is_offline());
+    assert!(client
+        .command("snapshot", json!({"host_id":saved.host_id}))
+        .await
+        .unwrap_err()
+        .contains("401"));
+    vault.set(saved.client_id, &token).await.unwrap();
+    let mut wrong_pin = saved.clone();
+    wrong_pin.certificate_sha256 = "00".repeat(32);
+    let legacy = root.path().join("bad-pin-legacy.json");
+    std::fs::write(&legacy, serde_json::to_vec(&vec![wrong_pin]).unwrap()).unwrap();
+    let bad_pin = Client::new(Some(root.path().join("bad-pin-registry.json")), vault);
+    bad_pin.import_legacy(&legacy).await.unwrap();
+    let pin = bad_pin.snapshot(saved.host_id).await.unwrap_err();
+    assert!(
+        !pin.is_offline(),
+        "A failed TLS pin must remain a problem: {pin}"
+    );
+    assert!(pin.to_string().contains("certificate has changed"));
+    assert!(!bad_pin
+        .request(saved.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
+        .await
+        .unwrap_err()
+        .is_offline());
+    assert!(!bad_pin
+        .request_json(saved.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
+        .await
+        .unwrap_err()
+        .is_offline());
+    server.abort();
+    let _ = server.await;
+    let offline = client.snapshot(saved.host_id).await.unwrap_err();
+    assert!(
+        offline.is_offline(),
+        "Stopped TLS fixture must report availability: {offline}"
+    );
+    assert!(!offline.to_string().is_empty());
+    assert!(client
+        .request(saved.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
+        .await
+        .unwrap_err()
+        .is_offline());
+    assert!(client
+        .request_json(saved.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
+        .await
+        .unwrap_err()
+        .is_offline());
+}
+
+#[tokio::test]
+async fn fleet_reports_exact_offline_hosts_and_recovers_without_electing_or_losing_cache() {
+    use ginfer_host::{
+        fleet::{AuthorityLocator, FleetMember, FleetOperation, FleetUpdate},
+        fleet_client::{FleetClient, FleetHostPhase},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let coordinator = Host::open(
+        root.path().join("coordinator"),
+        "Coordinator".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    let member = Host::open(
+        root.path().join("member"),
+        "Member".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    let (coordinator_origin, coordinator_server) = tls(coordinator.clone()).await;
+    let (member_origin, member_server) = tls(member.clone()).await;
+    coordinator.lan_sharing.lock().await.standalone = Some(
+        reqwest::Url::parse(&coordinator_origin)
+            .unwrap()
+            .port()
+            .unwrap(),
+    );
+    member.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&member_origin).unwrap().port().unwrap());
+    let vault = Arc::new(Vault::default());
+    let client = Arc::new(Client::new(
+        Some(root.path().join("registry.json")),
+        vault.clone(),
+    ));
+    for origin in [&coordinator_origin, &member_origin] {
+        client
+            .pair(PairRequest {
+                host_id: None,
+                base_url: Some(origin.clone()),
+                client_name: "Fleet fixture".into(),
+            })
+            .await
+            .unwrap();
+    }
+    let registrations = client.registered().await.unwrap();
+    let coordinator_id = coordinator.data.lock().await.host_id;
+    let member_id = member.data.lock().await.host_id;
+    let member_fingerprint = member.data.lock().await.certificate.fingerprint();
+    let authority = AuthorityLocator {
+        host_id: coordinator_id,
+        origins: vec![coordinator_origin],
+        certificate_sha256: coordinator.data.lock().await.certificate.fingerprint(),
+    };
+    let fleet = FleetClient::new(client.clone());
+    fleet
+        .configure(coordinator_id, authority.clone())
+        .await
+        .unwrap();
+    let initial = fleet.read().await.unwrap();
+    let enrolled = fleet
+        .update(FleetUpdate {
+            expected_revision: initial.snapshot.unwrap().revision,
+            operation: FleetOperation::EnrollMember {
+                member: FleetMember {
+                    host: AuthorityLocator {
+                        host_id: member_id,
+                        origins: vec![member_origin.clone()],
+                        certificate_sha256: member_fingerprint,
+                    },
+                    display_name: "Member".into(),
+                },
+            },
+        })
+        .await
+        .unwrap();
+    member_server.abort();
+    let _ = member_server.await;
+    let report = fleet.read().await.unwrap();
+    assert!(report.connected);
+    assert!(report.error.is_none());
+    assert_eq!(report.snapshot, Some(enrolled.clone()));
+    assert_eq!(report.host_issues.len(), 1);
+    assert_eq!(report.host_issues[0].host_id, member_id);
+    assert_eq!(report.host_issues[0].phase, FleetHostPhase::Membership);
+    assert!(report.host_issues[0].offline);
+    let issue = serde_json::to_value(&report.host_issues[0]).unwrap();
+    assert_eq!(issue["phase"], "membership");
+    let address = member_origin.trim_start_matches("https://");
+    let (_, member_server) = tls_at(member.clone(), None, address).await;
+    let recovered = fleet.read().await.unwrap();
+    assert!(recovered.connected);
+    assert!(recovered.host_issues.is_empty());
+    coordinator_server.abort();
+    let _ = coordinator_server.await;
+    let report = fleet.read().await.unwrap();
+    assert!(!report.connected);
+    assert!(report.error.is_none());
+    assert_eq!(report.authority, Some(authority.clone()));
+    assert_eq!(report.snapshot, Some(enrolled));
+    assert_eq!(report.host_issues.len(), 1);
+    assert_eq!(report.host_issues[0].host_id, coordinator_id);
+    assert_eq!(report.host_issues[0].phase, FleetHostPhase::Coordinator);
+    assert!(report.host_issues[0].offline);
+    // A new client discovers a member's published locator while retaining the
+    // independently failed coordinator probe as an issue for that exact host.
+    let legacy = root.path().join("discovery-legacy.json");
+    std::fs::write(&legacy, serde_json::to_vec(&registrations).unwrap()).unwrap();
+    let discovering = Arc::new(Client::new(
+        Some(root.path().join("discovery-registry.json")),
+        vault,
+    ));
+    discovering.import_legacy(&legacy).await.unwrap();
+    let report = FleetClient::new(discovering).read().await.unwrap();
+    assert!(!report.connected);
+    assert!(report.error.is_none());
+    assert_eq!(report.authority, Some(authority));
+    assert!(report
+        .host_issues
+        .iter()
+        .any(|issue| issue.host_id == coordinator_id
+            && issue.phase == FleetHostPhase::Discovery
+            && issue.offline));
+    assert!(report
+        .host_issues
+        .iter()
+        .any(|issue| issue.host_id == coordinator_id
+            && issue.phase == FleetHostPhase::Coordinator
+            && issue.offline));
+    member_server.abort();
 }

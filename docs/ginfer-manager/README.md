@@ -21,6 +21,35 @@ runs only through its queue.
 
 ## Current decision and next action
 
+Active fix: the user's work-pool panel shows an offline paired host's raw fleet
+request failure in red. Baseline is main `262d5563e`; candidate is
+`/ai/gchat-worktrees/manager-offline-status`, branch `fix/manager-offline-status`.
+Deliver per-host availability in the fleet panel, suppress offline transport
+text, preserve configuration/revision/pairing errors and read-only cached pools,
+and restore Online status on reconnection. Acceptance: focused UI/client
+regressions, required source gate, reviewed source, native Manager refresh and
+actual normal local window. Exclude engine/model runs, coordinator changes,
+GChat/Host restarts and Server 2 administration. Sixteen Manager UI checks and seven real Host client checks pass, along with
+seven desktop worker-pool checks. The initial required `make verify` passed (2,067 frontend tests, six skipped; 102 extension
+tests; sixteen Manager UI checks; 547 desktop tests, seven ignored; Host suites
+and all six coverage floors). Next: native Manager build/update with actual
+window verification. Only Manager restarts; the existing Host remains. Source review restored the
+original eight-second snapshot deadline, with secure-storage timeouts kept
+distinct from offline network requests; the final gate and separate GChat/Host/Manager Clippy checks with warnings denied
+pass on that source. Next: native Manager assembly and actual offline-panel replay.
+Client
+availability is classified before transport errors become text; authentication,
+certificate, schema and coordinator conflicts remain actionable. Discovery with
+an unknown/offline paired host must not authorize automatic legacy pool migration
+or a replacement local coordinator.
+Evidence will be retained in `/ai/gchat/out/manager-offline-status-20261008/`;
+reuse accepted dependency/compiler caches and retire only owned disposable outputs.
+Focused execution corrections: use the public test resource-stub target before
+direct Cargo checks; map typed errors at the GChat string IPC boundary; release
+a fixture data lock before awaiting live membership delivery. The corrected
+focused tests pass without changing timeouts or behavior.
+
+
 The implementation and native packages are accepted. Reviewed implementation
 `af5013730`, builder correction `bc9a369f5` and independently reviewed standalone
 LAN correction `2a6e21ff2` are integrated into main. Both packages use the final

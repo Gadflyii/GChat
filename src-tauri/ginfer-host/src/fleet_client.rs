@@ -1,6 +1,6 @@
 //! One fleet authority and read-only cached reports shared by desktop clients.
 use crate::{
-    client::Client,
+    client::{Client, ClientError},
     fleet::{AuthorityLocator, FleetOperation, FleetSnapshot, FleetUpdate, FleetView},
 };
 use serde::Serialize;
@@ -14,7 +14,33 @@ pub struct FleetCatalog {
     pub client_id: Option<Uuid>,
     pub connected: bool,
     pub error: Option<String>,
-    pub warnings: Vec<String>,
+    pub host_issues: Vec<FleetHostIssue>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FleetHostPhase {
+    Discovery,
+    Coordinator,
+    Membership,
+}
+
+#[derive(Clone, Serialize)]
+pub struct FleetHostIssue {
+    pub host_id: Uuid,
+    pub phase: FleetHostPhase,
+    pub offline: bool,
+    pub message: String,
+}
+impl FleetHostIssue {
+    fn new(host_id: Uuid, phase: FleetHostPhase, error: ClientError) -> Self {
+        Self {
+            host_id,
+            phase,
+            offline: error.is_offline(),
+            message: error.to_string(),
+        }
+    }
 }
 
 pub struct FleetClient {
@@ -32,13 +58,13 @@ impl FleetClient {
         method: reqwest::Method,
         path: &str,
         body: Option<&serde_json::Value>,
-    ) -> Result<serde_json::Value, String> {
+    ) -> Result<serde_json::Value, ClientError> {
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
             self.client.request_json(host_id, method, path, body),
         )
         .await
-        .map_err(|_| "Fleet coordinator did not respond".to_owned())?
+        .map_err(|_| ClientError::Offline("Fleet host did not respond".into()))?
     }
 
     /// Discover published locators only when no authority was already selected.
@@ -46,19 +72,24 @@ impl FleetClient {
     pub async fn read(&self) -> Result<FleetCatalog, String> {
         let mut registered = self.client.registered().await?;
         let mut authority = self.client.fleet_authority().await?;
-        let mut discovery_error = None;
+        let mut host_issues = Vec::new();
         if authority.is_none() {
             let views = futures_util::future::join_all(registered.iter().map(|host| {
                 self.request(host.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
             }))
             .await;
-            for view in views {
+            for (host, view) in registered.iter().zip(views) {
                 let view = match view.and_then(|value| {
-                    serde_json::from_value::<FleetView>(value).map_err(|error| error.to_string())
+                    serde_json::from_value::<FleetView>(value)
+                        .map_err(|error| ClientError::Problem(error.to_string()))
                 }) {
                     Ok(view) => view,
                     Err(error) => {
-                        discovery_error = Some(error);
+                        host_issues.push(FleetHostIssue::new(
+                            host.host_id,
+                            FleetHostPhase::Discovery,
+                            error,
+                        ));
                         continue;
                     }
                 };
@@ -128,10 +159,9 @@ impl FleetClient {
             client_id,
             connected: false,
             error: None,
-            warnings: Vec::new(),
+            host_issues,
         };
         let Some(locator) = &report.authority else {
-            report.error = discovery_error;
             return Ok(report);
         };
         if client_id.is_none() {
@@ -153,7 +183,7 @@ impl FleetClient {
             .await;
         let response = response.and_then(|value| {
             serde_json::from_value::<FleetView>(value)
-                .map_err(|error| format!("Invalid fleet response: {error}"))
+                .map_err(|error| ClientError::Problem(format!("Invalid fleet response: {error}")))
         });
         match response {
             Ok(FleetView::Coordinator { fleet }) if fleet.authority.host_id == locator.host_id
@@ -168,13 +198,13 @@ impl FleetClient {
                     }
                     report.authority = Some(fleet.authority.clone());
                     self.client.save_fleet_snapshot(fleet.clone()).await?;
-                    report.warnings=self.sync_membership(&fleet,&registered).await;
+                    report.host_issues.extend(self.sync_membership(&fleet,&registered).await);
                     report.snapshot = Some(fleet);
                     report.connected = true;
                 }
             }
             Ok(_) => report.error = Some("The selected host no longer publishes this fleet coordinator. Review the coordinator explicitly.".into()),
-            Err(error) => report.error = Some(error),
+            Err(error) => report.host_issues.push(FleetHostIssue::new(locator.host_id, FleetHostPhase::Coordinator, error)),
         }
         Ok(report)
     }
@@ -233,7 +263,7 @@ impl FleetClient {
         &self,
         member_host_id: Uuid,
         authority: &AuthorityLocator,
-    ) -> Result<(), String> {
+    ) -> Result<(), ClientError> {
         self.request(
             member_host_id,
             reqwest::Method::POST,
@@ -248,32 +278,37 @@ impl FleetClient {
         &self,
         fleet: &FleetSnapshot,
         registered: &[crate::client::SavedHost],
-    ) -> Vec<String> {
-        let mut warnings:Vec<_>=fleet.members.iter().filter(|member|member.host.host_id!=fleet.authority.host_id &&
-            !registered.iter().any(|host|host.host_id==member.host.host_id && host.certificate_sha256==member.host.certificate_sha256))
-            .map(|member|format!("{}: membership report pending; this host is not paired with these applications.",member.display_name)).collect();
-        warnings.extend(futures_util::future::join_all(registered.iter().filter(|host|host.host_id!=fleet.authority.host_id).map(|host|async move {
-            let result=async {
-                let published:FleetView=serde_json::from_value(self.request(host.host_id,reqwest::Method::GET,
-                    "/host/v1/fleet",None).await?).map_err(|error|error.to_string())?;
-                let enrolled=fleet.members.iter().any(|member|member.host.host_id==host.host_id);
+    ) -> Vec<FleetHostIssue> {
+        let mut issues: Vec<_> = fleet.members.iter()
+            .filter(|member| member.host.host_id != fleet.authority.host_id &&
+                !registered.iter().any(|host| host.host_id == member.host.host_id && host.certificate_sha256 == member.host.certificate_sha256))
+            .map(|member| FleetHostIssue::new(member.host.host_id, FleetHostPhase::Membership,
+                ClientError::Problem("Membership report pending; this host is not paired with these applications.".into())))
+            .collect();
+        issues.extend(futures_util::future::join_all(registered.iter()
+            .filter(|host| host.host_id != fleet.authority.host_id).map(|host| async move {
+            let result = async {
+                let published: FleetView = serde_json::from_value(self.request(host.host_id, reqwest::Method::GET,
+                    "/host/v1/fleet", None).await?).map_err(|error| ClientError::Problem(error.to_string()))?;
+                let enrolled = fleet.members.iter().any(|member| member.host.host_id == host.host_id);
                 match published {
-                    FleetView::Unconfigured if enrolled=>self.publish_member_locator(host.host_id,&fleet.authority).await?,
-                    view if view.authority().is_some_and(|known|known.host_id==fleet.authority.host_id && known.certificate_sha256==fleet.authority.certificate_sha256)=>{
+                    FleetView::Unconfigured if enrolled => self.publish_member_locator(host.host_id, &fleet.authority).await?,
+                    view if view.authority().is_some_and(|known| known.host_id == fleet.authority.host_id && known.certificate_sha256 == fleet.authority.certificate_sha256) => {
                         if view.authority() != Some(&fleet.authority) {
-                            self.publish_member_locator(host.host_id,&fleet.authority).await?;
+                            self.publish_member_locator(host.host_id, &fleet.authority).await?;
                         }
                     },
-                    _ if enrolled=>return Err("This enrolled host publishes a different coordinator; review its fleet membership explicitly.".into()),
-                    _=>return Ok::<(),String>(()),
+                    _ if enrolled => return Err("This enrolled host publishes a different coordinator; review its fleet membership explicitly.".into()),
+                    _ => return Ok::<(), ClientError>(()),
                 }
-                let body=serde_json::to_value(fleet.membership(host.host_id)?).map_err(|error|error.to_string())?;
-                self.request(host.host_id,reqwest::Method::POST,"/host/v1/fleet/membership",Some(&body)).await?;
+                let body = serde_json::to_value(fleet.membership(host.host_id)?)
+                    .map_err(|error| ClientError::Problem(error.to_string()))?;
+                self.request(host.host_id, reqwest::Method::POST, "/host/v1/fleet/membership", Some(&body)).await?;
                 Ok(())
             }.await;
-            result.err().map(|error|format!("{}: membership report is stale: {error}",host.name))
+            result.err().map(|error| FleetHostIssue::new(host.host_id, FleetHostPhase::Membership, error))
         })).await.into_iter().flatten());
-        warnings
+        issues
     }
 
     async fn send_update(
@@ -420,7 +455,7 @@ impl FleetClient {
             }
         };
         // Canonical success stands even when an offline member's derived report
-        // cannot be refreshed. The next read reports and retries these warnings.
+        // cannot be refreshed. The next read reports and retries these host issues.
         let _ = self
             .sync_membership(&fleet, &self.client.registered().await?)
             .await;

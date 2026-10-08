@@ -5,7 +5,7 @@ use ginfer_host::{
         AuthorityLocator, ClientAssignment, FleetMember, FleetOperation, FleetPool,
         FleetPoolMember, FleetUpdate,
     },
-    fleet_client::{FleetCatalog, FleetClient},
+    fleet_client::{FleetCatalog, FleetClient, FleetHostPhase},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -236,6 +236,37 @@ fn project_catalog(
     aliases: BTreeMap<String, String>,
     migration_issues: Vec<String>,
 ) -> Catalog {
+    let error = report.error.clone().or_else(|| {
+        report
+            .host_issues
+            .iter()
+            .find(|issue| issue.phase == FleetHostPhase::Coordinator)
+            .map(|issue| {
+                if issue.offline {
+                    "Fleet coordinator is offline. Reconnect before using shared work pools.".into()
+                } else {
+                    issue.message.clone()
+                }
+            })
+    });
+    let warnings = report
+        .host_issues
+        .iter()
+        .filter(|issue| issue.phase != FleetHostPhase::Coordinator)
+        .map(|issue| {
+            let name = report
+                .snapshot
+                .as_ref()
+                .and_then(|fleet| fleet.members.iter().find(|member| member.host.host_id == issue.host_id))
+                .map(|member| member.display_name.clone())
+                .unwrap_or_else(|| issue.host_id.to_string());
+            if issue.offline {
+                format!("{name}: Offline. Fleet information will refresh when this host reconnects.")
+            } else {
+                format!("{name}: {}", issue.message)
+            }
+        })
+        .collect();
     let assignment = report
         .snapshot
         .as_ref()
@@ -306,9 +337,9 @@ fn project_catalog(
             client_id: report.client_id,
             revision: report.snapshot.as_ref().map(|snapshot| snapshot.revision),
             connected: report.connected,
-            error: report.error,
+            error,
             migration_issues,
-            warnings: report.warnings,
+            warnings,
         },
     }
 }
@@ -358,8 +389,12 @@ pub async fn catalog<R: Runtime>(app: &AppHandle<R>, data: &Path) -> Result<Cata
         }
     }
     // Adopt a registered local owner only for an exact legacy migration and only
-    // after every reachable paired host reported no coordinator.
-    if !converted.is_empty() && report.authority.is_none() && report.error.is_none() {
+    // Only migrate after every paired host confirmed there is no coordinator.
+    if !converted.is_empty()
+        && report.authority.is_none()
+        && report.error.is_none()
+        && report.host_issues.is_empty()
+    {
         if let Some(local) = client.local_host().await? {
             if let Some(host) = client
                 .registered()
@@ -1073,6 +1108,65 @@ mod tests {
             .unwrap()
             .assignments
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn legacy_migration_waits_for_an_offline_paired_host_before_choosing_a_coordinator() {
+        use super::super::test_support::TestFleet;
+        use tauri_plugin_ginfer::state::{GinferSession, GinferState, SessionInfo, SessionOwner};
+        let local = TestFleet::unconfigured().await;
+        let remote = TestFleet::unconfigured().await;
+        local.register(&remote).await;
+        remote.stop();
+        tokio::task::yield_now().await;
+        let config = tempfile::tempdir().unwrap();
+        let key = if cfg!(windows) { "APPDATA" } else { "XDG_CONFIG_HOME" };
+        struct RestoreEnvironment(&'static str, Option<std::ffi::OsString>);
+        impl Drop for RestoreEnvironment {
+            fn drop(&mut self) {
+                match &self.1 {
+                    Some(value) => std::env::set_var(self.0, value),
+                    None => std::env::remove_var(self.0),
+                }
+            }
+        }
+        let _environment = RestoreEnvironment(key, std::env::var_os(key));
+        std::env::set_var(key, config.path());
+        let locator = ginfer_host::local_host_registry::locator_path().unwrap();
+        std::fs::create_dir_all(locator.parent().unwrap()).unwrap();
+        std::fs::write(&locator, serde_json::to_vec(&serde_json::json!({
+            "schema": "ginfer-local-host-v1",
+            "owner": { "mode": "service", "directory": local.directory.path().join("host"), "origin": local.origin }
+        })).unwrap()).unwrap();
+        let control = Arc::new(ginfer_host::launcher::LocalControl::open(
+            &local.directory.path().join("host"), &local.origin).unwrap());
+        let instance_id = Uuid::new_v4();
+        let ginfer = GinferState::default();
+        let info: SessionInfo = serde_json::from_value(serde_json::json!({
+            "pid": 1, "port": 10000, "model_id": "legacy-model", "model_path": "fixture.ginfer",
+            "is_embedding": false, "vision": false, "api_key": "", "max_concurrency": 1, "max_context": 8192
+        })).unwrap();
+        ginfer.ginfer_process.lock().await.insert(1, GinferSession {
+            info, endpoint: None,
+            owner: SessionOwner { control, connection: ginfer_host::launcher::LocalConnection {
+                instance_id, session_id: Uuid::new_v4(), model_id: "legacy-model".into(), port: 10000, api_key: String::new()
+            } }
+        });
+        let app = tauri::test::mock_builder().manage(ginfer).manage(local.client.clone())
+            .build(tauri::test::mock_context(tauri::test::noop_assets())).unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let legacy = vec![WorkerPool { id: Uuid::new_v4().to_string(), name: "coder".into(),
+            members: vec![PoolMember { instance_id: "legacy-model".into(), worker_limit: 1 }] }];
+        let original = serde_json::to_vec(&legacy).unwrap();
+        std::fs::write(data.path().join("agent-worker-pools.json"), &original).unwrap();
+        let catalog = catalog(app.handle(), data.path()).await.unwrap();
+        assert!(catalog.fleet.authority_id.is_none());
+        assert!(!catalog.fleet.connected);
+        assert!(catalog.pools.is_empty());
+        assert!(catalog.fleet.warnings.iter().any(|warning| warning.contains("Offline")));
+        assert!(local.host.data.lock().await.fleet.authority().is_none());
+        assert!(local.client.fleet_authority().await.unwrap().is_none());
+        assert_eq!(std::fs::read(data.path().join("agent-worker-pools.json")).unwrap(), original);
     }
 
     #[tokio::test]

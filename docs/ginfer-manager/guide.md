@@ -85,6 +85,10 @@ an online shared hosting computer under **Set coordinator…** and supply addres
 reachable by other fleet clients. This choice remains fixed when a host goes
 offline; Manager does not elect a replacement.
 
+Each saved host has an **Online** or **Offline** status in this panel. Offline
+connections do not show raw network errors. Authentication, certificate and
+configuration problems show **Needs attention** with their explanation.
+
 Create a pool such as **coder** with **New work pool**, choose exact host instances
 and set their per-client worker limits. Other GChat workstations connected to the
 same fleet see that same pool. Hosts report which of their instances belong to

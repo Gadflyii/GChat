@@ -94,7 +94,10 @@ pub async fn request(
     path: &str,
     body: Option<&Value>,
 ) -> Result<reqwest::Response, String> {
-    client().request(id, method, path, body).await
+    client()
+        .request(id, method, path, body)
+        .await
+        .map_err(String::from)
 }
 async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     let status = response.status();

@@ -457,6 +457,21 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const update = (operation) => run({ action: 'fleet_update', update: { expected_revision: fleet.revision, ...operation } }, 'Fleet updated')
     const coordinatorName = hostName(report.authority?.host_id)
     const coordinator = array(state.view.hosts).find((entry) => entry.host_id === report.authority?.host_id)
+    const hostIssues = array(report.host_issues)
+    const hostIds = new Set([...array(state.view.hosts).map((entry) => entry.host_id), ...hostIssues.map((issue) => issue.host_id)])
+    const hostStatuses = [...hostIds].map((id) => {
+      const entry = array(state.view.hosts).find((entry) => entry.host_id === id)
+      const issues = hostIssues.filter((issue) => issue.host_id === id)
+      const problems = issues.filter((issue) => !issue.offline).map((issue) => issue.message)
+      if (entry?.error && !entry.offline) problems.push(entry.error)
+      const offline = entry?.offline || issues.some((issue) => issue.offline)
+      const status = problems.length ? 'Needs attention' : offline ? 'Offline' : online(entry) ? 'Online' : 'Unavailable'
+      const name = entry?.name || array(fleet?.members).find((member) => member.host.host_id === id)?.display_name || hostName(id)
+      return h('div', { class: 'list-row fleet-host', 'data-fleet-host': id },
+        h('div', { class: 'row' }, h('div', { class: 'title' }, name),
+          h('span', { class: `badge ${problems.length ? 'failed' : status === 'Online' ? 'ready' : 'offline'}`, role: 'status' }, status)),
+        [...new Set(problems)].map((problem) => h('p', { class: 'section-error' }, problem)))
+    })
     const clientName = (id) => array(coordinator?.snapshot?.clients).find((client) => client.client_id === id)?.name || id
     const membership = host.snapshot?.fleet_membership?.membership
     const sameAuthority = membership?.authority?.host_id === report.authority?.host_id
@@ -494,7 +509,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         note(fleet ? `Revision ${fleet.revision} · ${writable ? 'Connected' : 'Stale · read only'}` : 'Choose the host that owns shared work pools.')),
         button('Set coordinator…', () => coordinatorDialog(host), !online(host))),
       report.error ? h('p', { class: 'section-error' }, report.error) : null,
-      array(report.warnings).map((warning) => h('p', { class: 'section-error' }, warning)),
+      h('div', { class: 'fleet-host-statuses', 'aria-label': 'Fleet host status' }, hostStatuses),
       report.authority ? h('p', { class: 'mono' }, array(report.authority.origins).join(', ')) : null,
       h('h3', {}, 'This host’s pool memberships'),
       membership ? [note(`${currentMembership ? 'Current' : 'Last known'} revision ${membership.revision} · ${hostName(membership.authority.host_id)}`),
@@ -525,7 +540,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const sidebar = h('aside', {}, h('div', { class: 'eyebrow' }, 'Hosts'), hosts.map((entry) => h('button', {
       type: 'button', class: `host-button ${state.selected === entry.host_id ? 'selected' : ''}`, onclick: () => {
         state.selected = entry.host_id; savePreference('host', state.selected); render()
-      } }, h('span', { class: 'name' }, entry.local ? 'This computer' : entry.name), h('small', {}, `${entry.local ? `${entry.name} · ` : ''}${online(entry) ? 'Online' : 'GInfer offline'}`))),
+      } }, h('span', { class: 'name' }, entry.local ? 'This computer' : entry.name), h('small', {}, `${entry.local ? `${entry.name} · ` : ''}${online(entry) ? 'Online' : entry.offline ? 'GInfer offline' : 'GInfer unavailable'}`))),
       h('div', { class: 'eyebrow sidebar-section' }, 'Nearby'), nearby.length ? nearby.map((entry) => h('div', { class: 'nearby' }, entry.name,
         h('div', { class: 'actions' }, button('Pair', () => pair(entry)), button('Ignore', () => {
           state.ignored.add(entry.host_id); savePreference('ignored', [...state.ignored]); render()
@@ -540,10 +555,10 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       state.view.local_error ? h('p', { class: 'section-error' }, state.view.local_error) : null)
     } else {
       append(main, h('div', { class: 'heading' }, h('div', {}, h('h1', {}, host.snapshot?.display_name || host.name),
-        h('div', { class: 'muted mono' }, host.base_url)), h('div', { class: 'actions' }, badge(online(host) ? 'ready' : 'offline'),
+        h('div', { class: 'muted mono' }, host.base_url)), h('div', { class: 'actions' }, badge(online(host) ? 'ready' : host.offline ? 'offline' : 'failed'),
         button('Start a model…', () => launchDialog(host), !online(host) || !array(host.snapshot?.models).length, 'primary'))),
-      !online(host) ? h('div', { class: 'empty' }, h('strong', {}, 'GInfer offline'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
-        host.error ? h('p', { class: 'section-error' }, host.error) : null) : null,
+      !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
+        host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,
       array(host.snapshot?.instances).length ? array(host.snapshot.instances).map((instance) => instanceCard(host, instance))
         : h('div', { class: 'empty' }, h('strong', {}, 'No instances'), 'Choose an installed model to start one. Models never start automatically.'),
       modelsSection(host), sharingSection(host), clientsSection(host), fleetSection(host))

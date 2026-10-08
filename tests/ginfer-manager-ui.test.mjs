@@ -48,7 +48,7 @@ function fixture() {
         certificate_sha256: 'cd'.repeat(32),
         snapshot: { ...structuredClone(snapshot), host_id: pairedId, display_name: 'GPU server', clients: [], instances: [] }, error: null },
     ], discovered: [], local_error: null,
-    fleet: { connected: true, authority, client_id: clientId, error: null, snapshot: {
+    fleet: { connected: true, authority, client_id: clientId, error: null, host_issues: [], snapshot: {
       schema: 'ginfer-fleet-v1', authority, revision: 11,
       members: [{ host: authority, display_name: 'This computer' }],
       pools: [{ id: poolId, name: 'Shared workers', members: [{ instance: { host_id: localId, instance_id: readyId }, worker_limit: 2 }] }],
@@ -166,9 +166,10 @@ test('Start, draining Stop and forced Reload use host session guards and exact s
 test('offline hosts preserve inventory and disable host mutations while a stale fleet stays read only', async (t) => {
   const view = fixture()
   view.hosts[0].online = false
+  view.hosts[0].offline = true
   view.hosts[0].error = 'Host unreachable'
   view.fleet.connected = false
-  view.fleet.error = 'Coordinator unreachable'
+  view.fleet.host_issues = [{ host_id: localId, phase: 'coordinator', offline: true, message: 'Coordinator unreachable' }]
   const app = await manager(t, view)
   const main = app.document.querySelector('main')
   assert.match(main.textContent, /GInfer offline.*Last-known inventory/s)
@@ -181,6 +182,85 @@ test('offline hosts preserve inventory and disable host mutations while a stale 
   assert.match(main.textContent, /Stale · read only/)
   assert.equal(main.querySelector('input[aria-label="Share this host"]').disabled, true)
   assert.equal(requests(app).length, 0)
+})
+
+test('an offline paired host has a neutral fleet status before coordinator selection and after reconnecting', async (t) => {
+  const view = fixture()
+  const failure = 'error sending request for url (https://192.168.1.111:7444/host/v1/fleet): tcp connect error: actively refused (os error 10061)'
+  view.hosts[1].online = false
+  view.hosts[1].offline = true
+  view.hosts[1].error = failure
+  view.fleet = { connected: false, authority: null, snapshot: null, error: null,
+    host_issues: [{ host_id: pairedId, phase: 'discovery', offline: true, message: failure }] }
+  const app = await manager(t, view)
+  const row = () => app.document.querySelector(`[data-fleet-host="${pairedId}"]`)
+  assert.equal(row().querySelector('[role="status"]').textContent, 'Offline')
+  assert.match(row().textContent, /GPU server/)
+  assert.equal(app.document.querySelector('[data-section="fleet"] .section-error'), null)
+  assert.doesNotMatch(app.document.body.textContent, /tcp connect error|os error 10061|error sending request/)
+  assert.equal(button(app.document, 'Set coordinator…').disabled, false)
+  app.document.querySelectorAll('.host-button')[1].click()
+  assert.match(app.document.querySelector('main').textContent, /GInfer offline/)
+  assert.doesNotMatch(app.document.querySelector('main').textContent, /tcp connect error|os error 10061/)
+  assert.equal(button(app.document, 'Start a model…').disabled, true)
+  const next = structuredClone(view)
+  next.hosts[1].online = true
+  next.hosts[1].offline = false
+  next.hosts[1].error = null
+  next.fleet.host_issues = []
+  await app.publish(next)
+  assert.equal(row().querySelector('[role="status"]').textContent, 'Online')
+  assert.equal(requests(app).length, 0)
+})
+
+test('offline coordinator preserves read-only pools while offline members leave a reachable coordinator editable', async (t) => {
+  const view = fixture()
+  view.hosts[0].online = false
+  view.hosts[0].offline = true
+  view.fleet.connected = false
+  view.fleet.host_issues = [{ host_id: localId, phase: 'coordinator', offline: true, message: 'Connection refused' }]
+  const app = await manager(t, view)
+  let section = app.document.querySelector('[data-section="fleet"]')
+  assert.match(section.textContent, /Shared workers/)
+  assert.match(section.textContent, /Stale · read only/)
+  assert.equal(section.querySelector(`[data-fleet-host="${localId}"] [role="status"]`).textContent, 'Offline')
+  assert.equal(button(section, 'Edit').disabled, true)
+  assert.equal(button(section, 'Assign client…').disabled, true)
+  const next = structuredClone(view)
+  next.hosts[0].online = true
+  next.hosts[0].offline = false
+  next.hosts[1].online = false
+  next.hosts[1].offline = true
+  next.fleet.connected = true
+  next.fleet.host_issues = [{ host_id: pairedId, phase: 'membership', offline: true, message: 'Connection refused' }]
+  await app.publish(next)
+  section = app.document.querySelector('[data-section="fleet"]')
+  assert.equal(button(section, 'Edit').disabled, false)
+  assert.equal(button(section, 'Assign client…').disabled, false)
+  assert.equal(section.querySelector(`[data-fleet-host="${pairedId}"] [role="status"]`).textContent, 'Offline')
+  assert.equal(section.querySelector('.section-error'), null)
+})
+
+test('authentication, certificate and schema problems stay visible alongside another offline host', async (t) => {
+  const view = fixture()
+  view.hosts[1].online = false
+  view.hosts[1].offline = true
+  const app = await manager(t, view)
+  for (const problem of ['host returned 401: revoked grant', 'certificate pin mismatch', 'Invalid fleet response: missing revision']) {
+    const next = structuredClone(view)
+    next.fleet.connected = false
+    next.fleet.host_issues = [{ host_id: localId, phase: 'coordinator', offline: false, message: problem },
+      { host_id: pairedId, phase: 'discovery', offline: true, message: 'Connection refused' }]
+    await app.publish(next)
+    const row = app.document.querySelector(`[data-fleet-host="${localId}"]`)
+    assert.equal(row.querySelector('[role="status"]').textContent, 'Needs attention')
+    assert.equal(row.querySelector('.section-error').textContent, problem)
+    assert.equal(app.document.querySelector(`[data-fleet-host="${pairedId}"] .section-error`), null)
+  }
+  const conflict = structuredClone(view)
+  conflict.fleet.error = 'Paired hosts publish different fleet coordinators.'
+  await app.publish(conflict)
+  assert.match(app.document.querySelector('[data-section="fleet"] .section-error').textContent, /different fleet coordinators/)
 })
 
 test('local sharing and client revoke invoke the same manager host authority', async (t) => {

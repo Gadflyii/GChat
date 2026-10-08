@@ -106,12 +106,14 @@ impl ManagerState {
             match self.client.snapshot(id).await {
                 Ok(snapshot) => {
                     host["online"] = true.into();
+                    host["offline"] = false.into();
                     host["snapshot"] = snapshot;
                     host["error"] = Value::Null;
                 }
                 Err(error) => {
                     host["online"] = false.into();
-                    host["error"] = error.into();
+                    host["offline"] = error.is_offline().into();
+                    host["error"] = error.to_string().into();
                     host["snapshot"] = previous["hosts"]
                         .as_array()
                         .into_iter()
@@ -179,7 +181,9 @@ impl ManagerState {
                 // Only management routes are exposed. Inference and credentials
                 // (including local-connection) stay outside the Manager UI.
                 let (method, path) = match operation {
-                    HostOperation::Snapshot => return self.client.snapshot(host_id).await,
+                    HostOperation::Snapshot => {
+                        return self.client.snapshot(host_id).await.map_err(String::from)
+                    }
                     HostOperation::Scan => (Method::POST, "/host/v1/scan".into()),
                     HostOperation::Clients => (Method::GET, "/host/v1/clients".into()),
                     HostOperation::Catalog => (Method::GET, "/host/v1/model-catalog".into()),
@@ -226,7 +230,10 @@ impl ManagerState {
                     }
                 };
                 let body = (method == Method::POST).then_some(&args);
-                self.client.request_json(host_id, method, &path, body).await
+                self.client
+                    .request_json(host_id, method, &path, body)
+                    .await
+                    .map_err(String::from)
             }
         }
     }

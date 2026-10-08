@@ -17,6 +17,70 @@ use std::{
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+/// Availability failures are separate from authentication, trust and configuration problems.
+#[derive(Debug)]
+pub enum ClientError {
+    Offline(String),
+    Problem(String),
+}
+impl ClientError {
+    pub fn is_offline(&self) -> bool {
+        matches!(self, Self::Offline(_))
+    }
+}
+impl std::fmt::Display for ClientError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Offline(message) | Self::Problem(message) => formatter.write_str(message),
+        }
+    }
+}
+impl std::error::Error for ClientError {}
+impl From<String> for ClientError {
+    fn from(message: String) -> Self {
+        Self::Problem(message)
+    }
+}
+impl From<&str> for ClientError {
+    fn from(message: &str) -> Self {
+        Self::Problem(message.into())
+    }
+}
+impl From<ClientError> for String {
+    fn from(error: ClientError) -> Self {
+        error.to_string()
+    }
+}
+impl From<reqwest::Error> for ClientError {
+    fn from(error: reqwest::Error) -> Self {
+        use std::error::Error;
+        let mut offline = error.is_timeout();
+        let mut message = error.to_string();
+        let mut source = error.source();
+        while let Some(cause) = source {
+            if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+                offline |= matches!(
+                    io.kind(),
+                    std::io::ErrorKind::ConnectionRefused
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::NotConnected
+                        | std::io::ErrorKind::TimedOut
+                );
+            }
+            let detail = cause.to_string();
+            if !message.contains(&detail) {
+                message.push_str(&format!(": {detail}"));
+            }
+            source = cause.source();
+        }
+        if offline {
+            Self::Offline(message)
+        } else {
+            Self::Problem(message)
+        }
+    }
+}
+
 pub const VAULT_SERVICE: &str = "app.gchat.ginfer-host";
 pub type CredentialFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, String>> + Send + 'a>>;
 pub trait CredentialStore: Send + Sync {
@@ -287,16 +351,42 @@ fn publish_local_owner(
     Ok(())
 }
 
-async fn response_json(response: reqwest::Response) -> Result<Value, String> {
+async fn response_json(response: reqwest::Response) -> Result<Value, ClientError> {
     let status = response.status();
-    let body = response.json::<Value>().await.map_err(|e| e.to_string())?;
+    let body = response.json::<Value>().await.map_err(ClientError::from)?;
     if !status.is_success() {
         return Err(format!(
             "host returned {status}: {}",
             body.get("error").unwrap_or(&body)
-        ));
+        )
+        .into());
     }
     Ok(body)
+}
+
+async fn snapshot_at(
+    origin: &str,
+    fingerprint: &str,
+    token: &str,
+    expected: Uuid,
+) -> Result<Value, ClientError> {
+    let origin = endpoint(origin)?;
+    let response = pinned_client(fingerprint)?
+        .get(format!("{origin}/host/v1/snapshot"))
+        .bearer_auth(token)
+        .timeout(std::time::Duration::from_secs(3))
+        .send()
+        .await
+        .map_err(ClientError::from)?;
+    let snapshot = response_json(response).await?;
+    let parsed: crate::engine_registry::HostSnapshot = serde_json::from_value(snapshot.clone())
+        .map_err(|error| ClientError::Problem(error.to_string()))?;
+    if parsed.host_id != expected
+        || parsed.protocol_version != crate::engine_registry::HOST_PROTOCOL_VERSION
+    {
+        return Err("endpoint identity or protocol does not match paired host".into());
+    }
+    Ok(snapshot)
 }
 
 impl Client {
@@ -490,8 +580,116 @@ impl Client {
         locator.validate()?;
         self.command("pair",json!({"host_id":locator.host_id,"origins":locator.origins,"expected_certificate_sha256":locator.certificate_sha256,"client_name":client_name})).await
     }
-    pub async fn snapshot(&self, id: Uuid) -> Result<Value, String> {
-        self.command("snapshot", json!({"host_id":id})).await
+    pub async fn snapshot(&self, id: Uuid) -> Result<Value, ClientError> {
+        self.refresh().await?;
+        let (connection, host, alternatives) = {
+            let mut state = self.state().lock().await;
+            let host = state
+                .saved
+                .get(&id)
+                .cloned()
+                .ok_or("host is not registered")?;
+            let alternatives = state
+                .discovery
+                .as_ref()
+                .map(|d| d.hosts())
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|h| h.host_id == id.to_string())
+                .flat_map(|h| h.urls)
+                .filter(|url| url != &host.base_url)
+                .collect::<std::collections::BTreeSet<_>>();
+            (state.registry.poll_connection(id)?, host, alternatives)
+        };
+        let mut network_started = false;
+        let result = tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            use futures_util::StreamExt;
+            let token = self.secret(host.client_id).await?;
+            network_started = true;
+            match snapshot_at(&host.base_url, &host.certificate_sha256, &token, id).await {
+                Ok(snapshot) => Ok((host.base_url.clone(), snapshot)),
+                Err(mut error) => {
+                    let mut probes =
+                        futures_util::stream::iter(alternatives.into_iter().map(|url| {
+                            let fingerprint = &host.certificate_sha256;
+                            let token = &token;
+                            async move {
+                                snapshot_at(&url, fingerprint, token, id)
+                                    .await
+                                    .map(|s| (url, s))
+                            }
+                        }))
+                        .buffer_unordered(4);
+                    let found = tokio::time::timeout(std::time::Duration::from_secs(7), async {
+                        while let Some(result) = probes.next().await {
+                            match result {
+                                Ok(found) => return Some(found),
+                                Err(problem) if error.is_offline() && !problem.is_offline() => {
+                                    error = problem
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        None
+                    })
+                    .await;
+                    match found {
+                        Ok(Some(found)) => Ok(found),
+                        _ => Err(error),
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|_| {
+            if network_started {
+                ClientError::Offline("host did not respond".into())
+            } else {
+                ClientError::Problem("Secure storage did not respond".into())
+            }
+        })
+        .and_then(|result| result);
+        match result {
+            Ok((origin, snapshot)) => {
+                // HTTP runs without the metadata lock. Merge into the latest
+                // disk document, never the pre-request copy held by this app.
+                let _operation = self.operation.lock().await;
+                let _lock = self.lock_registry().await?;
+                let mut state = self.state().lock().await;
+                reload(&mut state)?;
+                if state.saved.get(&id) != Some(&host) {
+                    state.registry.disconnect(connection);
+                    return Err("host registration changed while observing its snapshot".into());
+                }
+                let validated = serde_json::from_value(snapshot.clone())
+                    .map_err(|e| e.to_string())
+                    .and_then(|parsed| state.registry.reconcile(connection, parsed));
+                if let Err(error) = validated {
+                    state.registry.disconnect(connection);
+                    return Err(error.into());
+                }
+                let name = snapshot["display_name"]
+                    .as_str()
+                    .ok_or("host name missing")?;
+                if origin != host.base_url || name != host.name {
+                    let saved = state.saved.get_mut(&id).ok_or("host was forgotten")?;
+                    let previous = saved.clone();
+                    saved.base_url = origin;
+                    saved.name = name.into();
+                    if let Err(error) = persist(&state) {
+                        state.saved.insert(id, previous);
+                        state.registry.disconnect(connection);
+                        return Err(error.into());
+                    }
+                }
+                state.snapshots.insert(id, snapshot.clone());
+                Ok(snapshot)
+            }
+            Err(e) => {
+                self.state().lock().await.registry.disconnect(connection);
+                Err(e)
+            }
+        }
     }
     pub async fn forget(&self, id: Uuid) -> Result<Value, String> {
         self.command("forget", json!({"host_id":id})).await
@@ -508,7 +706,7 @@ impl Client {
         method: reqwest::Method,
         path: &str,
         body: Option<&Value>,
-    ) -> Result<reqwest::Response, String> {
+    ) -> Result<reqwest::Response, ClientError> {
         self.refresh().await?;
         self.request_current(host_id, method, path, body).await
     }
@@ -518,7 +716,7 @@ impl Client {
         method: reqwest::Method,
         path: &str,
         body: Option<&Value>,
-    ) -> Result<reqwest::Response, String> {
+    ) -> Result<reqwest::Response, ClientError> {
         let host = self
             .state
             .lock()
@@ -536,7 +734,7 @@ impl Client {
         if let Some(body) = body {
             req = req.json(body);
         }
-        req.send().await.map_err(|e| e.to_string())
+        req.send().await.map_err(ClientError::from)
     }
     pub async fn request_json(
         &self,
@@ -544,7 +742,7 @@ impl Client {
         method: reqwest::Method,
         path: &str,
         body: Option<&Value>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, ClientError> {
         response_json(self.request(id, method, path, body).await?).await
     }
     async fn rollback_pairing(
@@ -740,112 +938,10 @@ impl Client {
                 }
                 Ok(result)
             }
-            "snapshot" => {
-                let id = argument_id(&args, "host_id")?;
-                let (connection, host, alternatives) = {
-                    let mut state = self.state().lock().await;
-                    let host = state
-                        .saved
-                        .get(&id)
-                        .cloned()
-                        .ok_or("host is not registered")?;
-                    let alternatives = state
-                        .discovery
-                        .as_ref()
-                        .map(|d| d.hosts())
-                        .unwrap_or_default()
-                        .into_iter()
-                        .filter(|h| h.host_id == id.to_string())
-                        .flat_map(|h| h.urls)
-                        .filter(|url| url != &host.base_url)
-                        .collect::<std::collections::BTreeSet<_>>();
-                    (state.registry.poll_connection(id)?, host, alternatives)
-                };
-                let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-                    use futures_util::StreamExt;
-                    let token = self.secret(host.client_id).await?;
-                    let current = crate::transport::host_snapshot_at(
-                        &host.base_url,
-                        &host.certificate_sha256,
-                        &token,
-                        id,
-                    )
-                    .await;
-                    match current {
-                        Ok(snapshot) => Ok((host.base_url.clone(), snapshot)),
-                        Err(error) => {
-                            let mut probes =
-                                futures_util::stream::iter(alternatives.into_iter().map(|url| {
-                                    let fingerprint = &host.certificate_sha256;
-                                    let token = &token;
-                                    async move {
-                                        crate::transport::host_snapshot_at(
-                                            &url,
-                                            fingerprint,
-                                            token,
-                                            id,
-                                        )
-                                        .await
-                                        .map(|s| (url, s))
-                                    }
-                                }))
-                                .buffer_unordered(4);
-                            while let Some(result) = probes.next().await {
-                                if let Ok(found) = result {
-                                    return Ok(found);
-                                }
-                            }
-                            Err(error)
-                        }
-                    }
-                })
+            "snapshot" => self
+                .snapshot(argument_id(&args, "host_id")?)
                 .await
-                .map_err(|_| "host did not respond".to_string())
-                .and_then(|r| r);
-                match result {
-                    Ok((origin, snapshot)) => {
-                        // HTTP runs without the metadata lock. Merge into the latest
-                        // disk document, never the pre-request copy held by this app.
-                        let _operation = self.operation.lock().await;
-                        let _lock = self.lock_registry().await?;
-                        let mut state = self.state().lock().await;
-                        reload(&mut state)?;
-                        if state.saved.get(&id) != Some(&host) {
-                            state.registry.disconnect(connection);
-                            return Err(
-                                "host registration changed while observing its snapshot".into()
-                            );
-                        }
-                        let validated = serde_json::from_value(snapshot.clone())
-                            .map_err(|e| e.to_string())
-                            .and_then(|parsed| state.registry.reconcile(connection, parsed));
-                        if let Err(error) = validated {
-                            state.registry.disconnect(connection);
-                            return Err(error);
-                        }
-                        let name = snapshot["display_name"]
-                            .as_str()
-                            .ok_or("host name missing")?;
-                        if origin != host.base_url || name != host.name {
-                            let saved = state.saved.get_mut(&id).ok_or("host was forgotten")?;
-                            let previous = saved.clone();
-                            saved.base_url = origin;
-                            saved.name = name.into();
-                            if let Err(error) = persist(&state) {
-                                state.saved.insert(id, previous);
-                                state.registry.disconnect(connection);
-                                return Err(error);
-                            }
-                        }
-                        state.snapshots.insert(id, snapshot.clone());
-                        Ok(snapshot)
-                    }
-                    Err(e) => {
-                        self.state().lock().await.registry.disconnect(connection);
-                        Err(e)
-                    }
-                }
-            }
+                .map_err(String::from),
             "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action"
             | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
                 let id = argument_id(&args, "host_id")?;
@@ -874,6 +970,7 @@ impl Client {
                     .await?,
                 )
                 .await
+                .map_err(String::from)
             }
             "forget" => {
                 let id = argument_id(&args, "host_id")?;
