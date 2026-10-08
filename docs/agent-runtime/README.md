@@ -54,7 +54,7 @@ this batch. Unrelated owners and fleet machines were not cleaned.
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
 | GChat / Ron-9950X3D2 | `/ai/gchat` | Accepted stable source; later Manager integration tracked separately |
-| Unified sessions / coordinator | `/ai/gchat-worktrees/unified-sessions` | Clean accepted candidate at `6eacebfff`; retain tested source |
+| Unified sessions / coordinator | `/ai/gchat-worktrees/unified-sessions` | Superseded clean candidate retired at Manager handoff; source commits and external evidence retained |
 | Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compiler cache; preserve accepted installers |
 | Verification | `/ai/gchat/out/unified-sessions-20261008/` | Passing gate, corrected failure receipts and stock-session proof |
 

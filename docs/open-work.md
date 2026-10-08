@@ -1,6 +1,6 @@
 # Open work
 
-Updated 2026-10-01. This is the active GChat release-acceptance list. Completed
+Updated 2026-10-08. This is the active GChat release-acceptance list. Completed
 implementation and historical measurements are not pending tasks.
 
 - **Installed Windows acceptance:** exercise the selected release in its actual
@@ -28,6 +28,11 @@ implementation and historical measurements are not pending tasks.
 - **Release assembly:** confirm the selected engine runtime and accepted catalogs
   in final platform bundles, then validate the installed result. Local Windows
   2.0.42 installers exist; their presence does not qualify subsequent source edits.
+  October 8 shared sessions, Code capabilities, document access and compaction
+  fixes are accepted source and still need a GChat installer refresh. Standalone
+  Manager Linux/Windows packages and shared fleet state are accepted; real-fleet
+  click testing requires matching installed host versions. Linux native tray/vault
+  acceptance remains open on a desktop with those providers. See [Manager status](ginfer-manager/README.md).
   Windows 2.0.42 was rebuilt and installed on October 1 with clean engine
   revision `74780ea1`, chat/agent recovery and sidebar model-stop fixes; startup,
   runtime identity and preserved data passed. User replay remains open.

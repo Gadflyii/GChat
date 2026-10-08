@@ -1,150 +1,128 @@
 # GInfer Server Manager
 
-Repository: GChat. Owner: GChat coordinator. Candidate:
-`/ai/gchat-worktrees/ginfer-manager`, branch `feat/ginfer-manager`, based on the
-reviewed and pushed client source `6eacebfff`. Stable main is `/ai/gchat`.
+Repository: GChat. Owner: GChat coordinator. Accepted source is retained at
+`/ai/gchat-worktrees/ginfer-manager`, branch `feat/ginfer-manager`; stable main
+is `/ai/gchat`. The previous client baseline was `6eacebfff`.
 
 ## Outcome and acceptance
 
-Implement the user's standalone GInfer Server Manager from
-`/ai/faceless-video/tmp/briefs/ginfer-server-manager-gchat.md`. Ship a small
-Windows tray application and Linux X11 window with a tray when supported,
-independent of the GChat desktop process. Reuse `src-tauri/ginfer-host` for
-discovery, pairing, sharing, model inventory/downloads and instance lifecycle.
-Expose per-host start/stop/reload, model/GPU/port/client status, paired-client
-grants and host-wide worker-pool assignments shared with every paired client.
-Keep inference engine behavior and existing GChat conversation behavior intact.
+Implement the user's standalone Server Manager from
+`/ai/faceless-video/tmp/briefs/ginfer-server-manager-gchat.md`: Windows tray and
+Linux X11 window, independent of GChat, over the existing ginfer-host controller.
+Provide local/paired instance start/stop/reload, models/downloads, sharing, pairing,
+client grants and fleet worker-pool assignments visible to every paired client.
 
-Write [the design note](../ginfer-manager.md) and send its exact path to bubbs
-before building. Review the API/storage design while implementation proceeds.
-Acceptance requires the Linux X11 application plus local and paired-fleet host
-control evidence, native Windows tray assembly, relevant behavioral regressions,
-independent code review and `make verify`. No numerical/performance campaign,
-dependency upgrade, GPU power/driver/package change or GChat installer update is
-authorized by this task. Book any real-model test through the fleet protocol;
-Server 2 launches only through its queue.
+Acceptance requires the design note, independent source review, relevant behavioral
+regressions, `make verify`, Linux native assembly/control evidence and Windows
+native tray assembly. No engine tuning, numerical/performance qualification,
+dependency upgrade, GPU/driver changes, installed GChat update or fleet deployment
+belongs to this brief. Any subsequent model test must use fleet booking; Server 2
+runs only through its queue.
 
 ## Current decision and next action
 
-The standalone Manager, shared native client and fleet catalog are implemented.
-Reviewed source `af5013730` is pushed on `feat/ginfer-manager`; native builder
-correction `bc9a369f5` is committed. Main remains `6eacebfff` until final acceptance.
-The current candidate corrects a status defect found in the actual Windows UI:
-a standalone advertised host paired successfully but reported sharing inactive
-and port 7444 instead of its real port 53086. Replace its boolean marker with the
-actual optional advertised port; effective status includes that listener while
-managed start/stop remains independent. Snapshot enabled distinguishes managed
-requested preference from standalone effective availability. Pairing and local
-administrator restrictions remain intact. Eighteen focused Host checks pass;
-the final combined gate and changed Host/Manager Clippy passed before both
-package rebuilds and a focused native status/port check. No current native fixture or engine jobs remain.
+The implementation and native packages are accepted. Reviewed implementation
+`af5013730`, builder correction `bc9a369f5` and independently reviewed standalone
+LAN correction `2a6e21ff2` are integrated into main. Both packages use the final
+runtime source `2a6e21ff2`; documentation-only handoff changes do not rebuild them.
+The [design](../ginfer-manager.md), [decision](../decisions/2026-10-08-share-host-management-and-fleet-pools.md)
+and [operator guide](guide.md) describe the delivered behavior.
 
-The existing host owns launch, downloads, grants and sharing. Manager reuses that
-implementation and the same native credential vault/locked registry as GChat.
-Manager-first startup imports the actual registered owner's configured metadata.
-One chosen coordinator stores durable revision/CAS pools and client assignments;
-paired clients resolve its pinned locator through any member. Hosts receive
-read-only projections of their own pool/instance memberships. Studio browses the
-catalog; assignments constrain runnable placements. Each run freezes its validated
-catalog and exact instance/session affinity. Offline catalogs are read-only and
-cannot launch new pooled work. Exact import receipts prevent deleted legacy pools
-from returning; canonical physical identity preserves overlapping capacity limits.
+Manager shares GChat's locked registry and native credential vault. The host owns
+launch, downloads, grants and sharing; Manager does not start a model on opening
+or replace another owner's host. Closing/exiting Manager leaves hosts running.
+The requested default dark theme uses GChat's exact tokens and native preference.
 
-Independent source review accepted registry reconciliation, authority selection,
-origin propagation, zero-step cancellation history and canonical instance fixes.
-First coordinator setup publishes a reachable address. Thirteen production DOM
-checks and real TLS/client/fleet regressions cover these behaviors, with inert
-owned children rather than models or GPUs. The final standalone-status diff is independently accepted, including LAN → data
-lock ordering. Next: Linux build, guarded Windows rebuild/status proof, then
-reviewed main merge/push.
+One selected coordinator owns durable revision/CAS pools and client assignments.
+Every paired client resolves its pinned locator through fleet members. Hosts
+receive read-only projections of their own membership. Studio browses the full
+catalog; assignments constrain runnable placement. Each run freezes its validated
+catalog and instance/session affinity. Offline catalogs are read-only and cannot
+start new pooled work. Exact migration receipts prevent deleted pools returning;
+canonical physical identity preserves overlapping worker limits.
 
-## Evidence and execution corrections
+The desktop windows used for verification were isolated empty-host fixtures,
+not the installed GChat configuration or real fleet. They are closed and retired.
+Next product action is matching installed host/GChat versions and real-fleet click
+testing. The packages contain Manager, matching Host, guide and font license;
+they contain no inference engine or models. Current installed apps remain unchanged.
 
-The pre-status-fix full `make verify` passed: 2,067 frontend tests, 102 extension
+## Verification and limits
+
+Final `make verify` passed: 2,067 frontend tests (six skipped), 102 extension
 tests, thirteen Manager DOM tests, all six critical coverage floors and supported
-Rust suites (546 desktop tests, seven ignored, plus Host/plugin/utilities suites).
-Changed GChat, Host and Manager warnings-denied Clippy passed with `--no-deps`.
-Eight final worker regressions passed after the two equivalent MSRV/closure lint
-corrections. The final combined gate passed with the newly corrected Host (62 unit tests) and
-its GChat test seam; focused status evidence is candidate
-`out/ginfer-manager/lan-status-tests.log` (two sharing, five client, ten fleet and
-one TLS pairing test). Public snapshots cover undiscoverable off, standalone
-actual port/active/enabled despite an old disabled desktop preference, managed
-startup failures and independent managed stop while the standalone listener stays
-pairable. No engine numerical or performance claim follows from these checks.
+Rust suites, including 546 desktop tests (seven ignored), 62 Host units and real
+TLS/client/fleet regressions. Changed GChat, Host and Manager Clippy passed with
+warnings denied and `--no-deps`. Independent source review found no unresolved
+in-scope blocker.
 
-Actual Linux X11 display, Models Scan via native IPC and Manager exit while its
-empty host remains responsive passed. Default dark uses GChat's exact tokens
-and explicit native preference, proven in real screenshots while the desktop
-prefers light. Both ELF binaries require at most GLIBC 2.39, matching the freshly
-verified Server 2 (`AIS-1-2950X-L02`, `192.168.1.112`); this is an ABI screen, not
-remote installation. This desktop has no tray watcher or Secret Service provider,
-so native Linux window/local control is verified but tray/vault pairing is not.
-No plaintext fallback or package installation bypasses that limitation.
+Final standalone status evidence covers undiscoverable off, standalone
+enabled/active on its actual bound port despite an old disabled managed preference,
+managed startup failure, and managed stop preserving an independent standalone
+listener. Pairing uses effective activity, with consistent LAN → data lock order.
+Eighteen focused checks pass in candidate `out/ginfer-manager/lan-status-tests.log`.
 
-Actual native Windows pre-fix checks passed: Nearby one-click Pair, Credential
-Manager probe, paired Models Scan, tray close/Open/Refresh/Exit, saved pairing
-after restart, Forget deleting the credential, and no-tray Close. Both same empty
-Host processes survived Manager exit. Five owned processes, their credential and
-private fixture state were retired at 13:57:36 UTC; redacted screenshots, snapshots
-and receipts remain in native `out/native-smoke/`. These remain evidence for the
-recorded behaviors; the old package is held pending corrected sharing status.
-The post-fix check will use a fresh `native-smoke-status` fixture and compare the
-rendered/public port to the actual listener, then forget/exit/retire it.
+Linux package:
+`/ai/gchat/out/ginfer-manager/linux/ginfer-manager-linux-x64.tar.gz`.
+Final assembly took 1m23s. Actual final CLI/pinned HTTPS reports enabled/active
+on port 44851, matching its listener; Host exited zero and its private fixture
+was retired. Exact archive/guide/hash checks pass. Both ELFs require at most
+GLIBC 2.39; Server 2's matching ABI is a screen, not deployment. GTK3,
+WebKit2GTK 4.1 and Soup3 remain prerequisites.
 
-Concrete build failures and preventive changes:
+Earlier actual Linux X11 evidence covers default dark on a light desktop,
+Models Scan through native IPC, and window exit leaving its empty Host responsive.
+Its UI/client code is unchanged by the final Host correction; this is recorded
+earlier-build evidence, not a replay of the final ELF. This desktop has no tray
+watcher or Secret Service provider, so native Linux tray and vault pairing remain
+unqualified. Local window fallback is verified; no plaintext fallback was added.
 
-- Two full gates stopped at missing extension-project/package cache links. Reuse
-  the accepted links and verify the actual extension Vitest CLI before a gate;
-  the corrected full gate passed without installing/upgrading dependencies.
-- Native Jobs4 and Jobs1 compiles crossed the 4 GiB running floor at low starting
-  headroom; the guard terminated only their owned trees. After a quiet start with
-  10,583,470,080 bytes available, the unchanged one-job build succeeded. The heavy
-  Windows crate measured 2,406,203,392 bytes private peak, explaining the earlier
-  5.70 GB baseline failure. Retain the profile/floor and require fresh sufficient
-  starting headroom; no identical low-memory retry or global cache purge.
-- PowerShell 5.1 reported null Cargo exit status after completion. Actual exit0/7
-  reproduction confirms reading its owned Process handle preserves exact codes;
-  the corrected builder packaged successfully. A source mirror then removed a
-  generated Windows schema and caused a 56-second Manager rebuild. Exact source
-  and destination `Manager/gen` exclusions now preserve generated files while
-  copying tracked UI/config; an actual production-argument copy fixture verifies
-  this behavior. Rebuild only for the current Host source change, then retain the
-  tested binaries without another rebuild.
+Windows package:
+`/ai/gchat/out/ginfer-manager/windows/ginfer-manager-windows-x64.zip`.
+Final native Rust/MSVC build took 1m41s with one Cargo job. Actual current dark UI
+shows LAN port 53815, equal the paired Host's live TLS listener. Nearby one-click
+Pair and native Credential Manager storage pass; Forget removes the saved grant
+and credential. Tray Exit leaves both empty Hosts responsive. All three final
+fixture PIDs ended; private state and credentials are retired. Earlier native
+evidence also covers secure-storage probe, Models Scan, saved pairing after
+restart, tray close/Open/Refresh and no-tray Close. No real model/GPU was run.
 
-Initial Linux native assembly took 1m22s; its requested dark rebuild took 42.42s.
-The shared release cache was root-owned/unwritable and remains untouched. Its
-owned 1.68 GB replacement cache was retired at 13:36 UTC after accepted binaries
-were preserved. A new scoped release target is needed for the corrected Host.
-C1's finite model turn ended at 13:35:22 UTC. Current local5090 CPU booking is
-`gchat-manager-windows`, 13:36–14:06 UTC with a 14:06–14:36 continuation, preemptible
-CPUs 0–31, no GPUs. Linux checks/build and native Windows compilation are serial
-under the build lock; Windows clearance resumes WSL quiet and its ten-second
-memory guard. No installed GChat/host replacement, real model run or fleet
-mutation is authorized or claimed.
+## Execution corrections
+
+Missing extension dependency links caused two early gates to stop. Reusing the
+accepted cache links and checking the actual extension Vitest CLI corrected them;
+the final gate passed without dependency installation.
+
+Two low-headroom native compiles crossed the 4 GiB running floor; the guard stopped
+only their owned Cargo trees. The heavy Windows crate measured 2.41 GB private
+peak. Fresh sufficient headroom and a quiet WSL interval resolved the failures
+without changing profile/floor or purging global caches. Final build minimum
+available RAM was 9,372,327,936 bytes. Local CPU bookings were released at actual
+completion; no current task jobs or resource allocations remain.
+
+PowerShell 5.1 lost Cargo exit status after completion. Reading the owned Process
+handle fixes actual exit-zero/seven reproductions. The mirror also removed a
+generated schema; exact source/destination Manager/gen exclusions now preserve it
+while copying tracked UI/config. A production-argument copy fixture verifies that
+behavior. Accepted final binaries are preserved without another rebuild.
 
 ## Owned inventory
 
-| Owner / host | Path | Purpose and retention |
+| Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
-| Coordinator / Ron-9950X3D2 | `/ai/gchat-worktrees/ginfer-manager` | Active candidate; retain source and current design/evidence |
-| GChat | `/ai/gchat`, `6eacebfff` | Accepted stable source; no manager mutation |
-| Client fixes | `/ai/gchat-worktrees/unified-sessions` | Accepted client candidate; preserve passing evidence |
-| Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies and compiler cache |
-| Manager build/evidence | `/ai/gchat/out/ginfer-manager/linux/` | Default-dark archive and native evidence; held for corrected Host rebuild |
-| Manager compiler / Ron-9950X3D2 | `/ai/gchat/out/ginfer-manager/linux/cargo-target/` | Retired after accepted binaries/review retained; 1.68 GB released, receipt in Linux evidence folder |
-| Shared-client verification | Candidate `out/ginfer-manager/client-{check,tests,tests-final}.log` | Scoped host check, client/lease/pairing/fleet regression logs; consolidate at handoff |
-| GChat fleet verification | Candidate `out/ginfer-manager/gchat-fleet-tests.log` | Eight worker, two Code and fourteen frontend regressions, typecheck/lint |
-| Combined gate | `/ai/gchat/out/ginfer-manager/make-verify*.log` | Passing gate and both missing-cache-link failures; retain correction evidence |
-| Native Windows / RON-9950X3D2 | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager\{source,target,out}` | Owned NTFS cache/package/pre-fix proof; corrected Host rebuild pending, installed GChat preserved |
+| GChat / Ron-9950X3D2 | `/ai/gchat` | Stable main with reviewed Manager source |
+| Manager / coordinator | `/ai/gchat-worktrees/ginfer-manager` | Accepted source/build baseline; retain |
+| Prior client candidate | `/ai/gchat-worktrees/unified-sessions` | Clean superseded tree retired; source commits and external evidence retained |
+| Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Shared dependencies/compiler cache; preserve |
+| Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Archive, binaries, hashes, native screenshots and actual final CLI/TLS receipt |
+| Windows accepted package/proof | `/ai/gchat/out/ginfer-manager/windows/` | Final archive/current guide, hashes and selected public native evidence |
+| Windows native source/output | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager\{source,out}` | Accepted native binaries, package, public receipts/screenshots and guarded-build logs |
+| Manager compiler caches | Linux `linux/cargo-target/`, native Windows `target/` | Retired after acceptance; Linux final 1.68 GB and Windows 1.79 GB, receipts retained |
+| Focused verification | Candidate `out/ginfer-manager/` | Relevant client/fleet/worker and corrected status regression logs |
+| Combined verification | `/ai/gchat/out/ginfer-manager/make-verify*.log` | Passing final gate and concise correction evidence |
 
-Compile only one process at a time under `/tmp/ginfer-local-build.lock`, with
-`CARGO_BUILD_JOBS=6`, and not during a local model load. Native Windows work waits
-for Linux acceptance, verified memory/booking and a quiet WSL interval. The
-October 8 manager brief explicitly authorizes native Windows assembly after
-Linux and supersedes the older October 6 no-Windows-build instruction for this
-assembly only; it does not authorize a model run or GChat update.
-
-The five completed client subtask trees are retired. Unrelated GChat/GInfer
-worktrees, engine artifacts, installed apps and other owners' jobs are untouched.
-Only this coordinator host has been inspected; no fleet cleanup is claimed.
+The five earlier completed client subtask trees and superseded client baseline are
+retired. Unrelated worktrees, shared caches, installed apps, engine artifacts and
+other owners' jobs are untouched. Only this coordinator host was inspected;
+no fleet cleanup is claimed. GInfer's separately accepted operations manual
+handoff is tracked in [Agent runtime](../agent-runtime/README.md).
