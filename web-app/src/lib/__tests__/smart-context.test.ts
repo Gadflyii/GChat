@@ -236,6 +236,8 @@ describe('smart GInfer context', () => {
 
   it('manually compacts older turns even when the full prompt still fits', async () => {
     const fetcher = scriptedFetch()
+    const transcript = overflowingBody()
+    const savedTranscript = structuredClone(transcript)
     const state = {
       lastCompaction: null,
       manualCompactionRequested: true,
@@ -251,7 +253,7 @@ describe('smart GInfer context', () => {
 
     const first = await prepareGInferContextRequest(
       completionUrl,
-      overflowingBody(),
+      transcript,
       headers,
       fetcher,
       policy
@@ -266,12 +268,16 @@ describe('smart GInfer context', () => {
     expect(messageText(JSON.parse(first.body))).toContain(
       'GChat conversation checkpoint'
     )
+    expect(transcript).toEqual(savedTranscript)
 
     state.manualCompactionRequested = false
     state.manualCompactionResult = null
     const next = await prepareGInferContextRequest(
       completionUrl,
-      overflowingBody(),
+      {
+        ...transcript,
+        messages: [...(transcript.messages as object[]), { role: 'user', content: 'Next request: continue safely.' }],
+      },
       headers,
       fetcher,
       policy
@@ -280,6 +286,8 @@ describe('smart GInfer context', () => {
     expect(messageText(JSON.parse(next.body))).toContain(
       'GChat conversation checkpoint'
     )
+    expect(messageText(JSON.parse(next.body))).toContain('Next request: continue safely.')
+    expect(transcript).toEqual(savedTranscript)
   })
 
   it('reports when a manual compact has fewer than three user turns', async () => {

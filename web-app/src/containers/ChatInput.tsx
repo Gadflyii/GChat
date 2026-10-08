@@ -1,3 +1,4 @@
+import { isCompactCommand } from '@/lib/conversation-command'
 import { EMBEDDING_MODEL_ID } from '@/constants/models'
 import TextareaAutosize from 'react-textarea-autosize'
 import { cn, formatBytes, isGinferProvider } from '@/lib/utils'
@@ -595,7 +596,7 @@ const ChatInput = memo(function ChatInput({
 
   const updateAgentSkillSlashQuery = (value: string, cursor: number | null) => {
     if (!skillsAvailable) return
-    const nextQuery = findAgentSkillSlashQuery(value, cursor)
+    const nextQuery = isCompactCommand(value) ? null : findAgentSkillSlashQuery(value, cursor)
     setAgentSkillSlashQuery(nextQuery)
     setAgentSkillMenuOpen(nextQuery !== null)
   }
@@ -614,6 +615,16 @@ const ChatInput = memo(function ChatInput({
   }
 
   const handleSendMessage = async (prompt: string) => {
+    if (isCompactCommand(prompt)) {
+      if (attachments.length) {
+        toast.error('Remove attachments before running /compact.')
+        return
+      }
+      if (onSubmit) await onSubmit(prompt)
+      else toast.info('Nothing to compact yet.')
+      setPrompt('')
+      return
+    }
     const explicitSkill = prompt.match(/^\/([a-z0-9-]+)(?:\s|$)/)?.[1]
     const skillName = selectedAgentSkill?.name ??
       (agentSkills.some((skill) => skill.name === explicitSkill) ? explicitSkill : undefined) ?? activeSkill
@@ -2484,10 +2495,9 @@ const ChatInput = memo(function ChatInput({
                       // - The streaming content has finished
                       // - Prompt is not empty
                       if (
-                        !isStreaming &&
+                        (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
-                        !isAttachmentPipelineBusy &&
-                        !blockSendUntilModelReady
+                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady))
                       ) {
                         handleSendMessage(prompt)
                       }
@@ -2830,8 +2840,8 @@ const ChatInput = memo(function ChatInput({
                     size="icon-sm"
                     disabled={
                       !prompt.trim() ||
-                      isAttachmentPipelineBusy ||
-                      blockSendUntilModelReady
+                      (!isCompactCommand(prompt) &&
+                        (isAttachmentPipelineBusy || blockSendUntilModelReady))
                     }
                     data-test-id="send-message-button"
                     onClick={() => handleSendMessage(prompt)}

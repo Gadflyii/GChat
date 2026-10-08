@@ -320,8 +320,13 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     chatId: string,
     messages: UIMessage[]
   ): Promise<ManualContextCompactionResult> {
+    if (!messages.length) return { status: 'nothing_to_compact' }
     if (useModelProvider.getState().selectedProvider !== 'ginfer') {
       throw new Error('/compact is available only for a loaded GInfer model.')
+    }
+    const modelId = useModelProvider.getState().selectedModel?.id
+    if (modelId && useAppState.getState().intentionallyStoppedModels.has(`ginfer::${modelId}`)) {
+      throw new Error('Start the selected model before compacting context.')
     }
     if (this.contextState.manualCompactionRequested) {
       throw new Error('Context compaction is already running.')

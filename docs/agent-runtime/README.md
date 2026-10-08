@@ -60,8 +60,16 @@ GChat history. Prior accepted evidence below remains valid for its recorded scop
 | Model names / delegated SOL | `/ai/gchat-worktrees/model-package-names`, `fix/model-package-names` | Current package matching and targeted fixtures/path update |
 | Existing build caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compilation; preserve accepted installer outputs |
 
-Next: agree the session/policy interfaces between the delegated workers, implement
-the four bounded areas, and integrate their actual changes. No GPU job is booked
+Compaction source is integrated for early command interception and safe-boundary
+worker requests. Its scoped checks passed 47 frontend tests, TypeScript, source
+ESLint and the native worker-boundary regression; integrated acceptance remains
+pending. Code history uses typed references in the existing thread index and
+retains one stock runtime per canonical workspace. Direct Code tools use the
+shared executor and a frontend-owned session policy. The paired-host GInfer
+compaction route is being corrected to count against the matched live instance.
+
+Next: integrate the remaining bounded changes and verify their combined behavior.
+No GPU job is booked
 or running for this task; any required GPU check follows
 `/ai/coordination/gpu-booking-howto.md` and the fleet schedule authority.
 

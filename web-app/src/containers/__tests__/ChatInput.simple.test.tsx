@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatInput from '../ChatInput'
-import { useChatAttachments } from '@/hooks/useChatAttachments'
+import { NEW_THREAD_ATTACHMENT_KEY, useChatAttachments } from '@/hooks/useChatAttachments'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { usePrompt } from '@/hooks/usePrompt'
 import { seedServiceHub } from '@/test/service-hub'
@@ -11,6 +11,7 @@ import type { AgentSkill } from '@/services/agent/skills'
 import { useAppState } from '@/hooks/useAppState'
 import type { ModelsService } from '@/services/models/types'
 import * as switchModel from '@/utils/switchModel'
+import { toast } from 'sonner'
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -218,6 +219,58 @@ describe('ChatInput', () => {
     )
     await waitFor(() => expect(input).toHaveValue(''))
     unmount()
+  })
+
+  it('consumes /compact on the home input before model selection or thread creation', async () => {
+    useModelProvider.setState({ selectedModel: undefined })
+    const notice = vi.spyOn(toast, 'info')
+    const view = render(<ChatInput />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: ' /COMPACT ' } })
+    fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
+    await waitFor(() => expect(notice).toHaveBeenCalledWith('Nothing to compact yet.'))
+    expect(mocks.navigate).not.toHaveBeenCalled()
+    expect(screen.getByTestId('chat-input')).toHaveValue('')
+    view.unmount()
+    notice.mockRestore()
+  })
+
+  it('reserves /compact ahead of skills and never starts an intentionally stopped model', async () => {
+    const model = { id: 'test-model', capabilities: [], settings: {} } as Model
+    useModelProvider.setState({
+      providers: [{ provider: 'ginfer', active: true, models: [model], settings: [] } as ModelProvider],
+      selectedProvider: 'ginfer', selectedModel: model,
+    })
+    useAppState.setState({ activeModels: [], intentionallyStoppedModels: new Set(['ginfer::test-model']) })
+    seedServiceHub({ models: { getActiveModels: vi.fn().mockResolvedValue([]) } as unknown as ModelsService })
+    agentSkills.value = [{ name: 'compact' } as AgentSkill]
+    const start = vi.spyOn(switchModel, 'switchToModel').mockResolvedValue()
+    const onSubmit = vi.fn()
+    const view = render(<ChatInput onSubmit={onSubmit} chatStatus="streaming" />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: '/compact' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('/compact'))
+    expect(agentModeState.setActiveSkill).not.toHaveBeenCalled()
+    expect(start).not.toHaveBeenCalled()
+    view.unmount()
+    start.mockRestore()
+  })
+
+  it('rejects command attachments without submitting or clearing them', async () => {
+    useChatAttachments.setState({ attachmentsByThread: { [NEW_THREAD_ATTACHMENT_KEY]: [{
+      id: 'document', name: 'notes.txt', type: 'document', path: '/notes.txt', processed: true,
+    }] } })
+    const onSubmit = vi.fn()
+    const failure = vi.spyOn(toast, 'error')
+    const view = render(<ChatInput onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: '/compact' } })
+    fireEvent.keyDown(screen.getByTestId('chat-input'), { key: 'Enter' })
+    await waitFor(() => expect(failure).toHaveBeenCalledWith('Remove attachments before running /compact.'))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(useChatAttachments.getState().attachmentsByThread[NEW_THREAD_ATTACHMENT_KEY]).toHaveLength(1)
+    expect(screen.getByTestId('chat-input')).toHaveValue('/compact')
+    view.unmount()
+    failure.mockRestore()
   })
 
   it('lets an explicit Send start a model after the sidebar stopped it', async () => {

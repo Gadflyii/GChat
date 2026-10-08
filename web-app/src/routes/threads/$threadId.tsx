@@ -1,3 +1,5 @@
+import { compactConversation, isCompactCommand } from '@/lib/conversation-command'
+import { studioCommand } from '@/services/agent/studio'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createFileRoute, useParams, useSearch } from '@tanstack/react-router'
 import { cn, isGinferProvider } from '@/lib/utils'
@@ -113,7 +115,6 @@ import {
 } from '@/lib/agent-file-links'
 import {
   cancelAgentTurn,
-  compactAgentSession,
   resolveAgentWorkspaceRoot,
   runAgentTurn,
 } from '@/services/agent/tauri'
@@ -1028,6 +1029,10 @@ function ThreadDetail() {
     initialMessageSentRef.current = true
     ;(async () => {
       try {
+        if (isCompactCommand(message.text)) {
+          toast.info('Nothing to compact yet.')
+          return
+        }
         await processAndSendMessage(
           message.text,
           message.files,
@@ -1049,48 +1054,24 @@ function ThreadDetail() {
       agentSkillName?: string,
       agentDefinitionId?: string
     ) => {
-      if (text.trim().toLowerCase() === '/compact') {
+      if (isCompactCommand(text)) {
         if (files?.length) {
           toast.error('Remove attachments before running /compact.')
           return
         }
-        const activeAgentRun = useAgentRun.getState().getRun(threadId)
-        if (
-          pendingToolBatches > 0 ||
-          status === CHAT_STATUS.STREAMING ||
-          status === CHAT_STATUS.SUBMITTED ||
-          activeAgentRun.status === 'running' ||
-          activeAgentRun.status === 'awaiting_approval' ||
-          activeAgentRun.status === 'awaiting_folder_access'
-        ) {
-          toast.error('Wait for the current response or Agent run to finish.')
-          return
-        }
-        const toastId = toast.loading('Compacting older conversation turns…')
+        const toastId = toast.loading('Compacting conversation context…')
         try {
-          const isAgentThread = useAgentMode
-            .getState()
-            .isAgentMode(threadId)
-          if (isAgentThread) {
-            if (!selectedModel?.id) {
-              throw new Error('Load a GInfer model before compacting context.')
-            }
-            const result = await compactAgentSession(
-              threadId,
-              selectedModel.id
-            )
-            if (result.status === 'nothing_to_compact') {
-              toast.info('Nothing to compact yet.', { id: toastId })
-            } else {
-              toast.success(
-                `Context compacted: ${result.summarizedTurns} older entries checkpointed; ${result.retainedTurns} recent entries retained.`,
-                { id: toastId }
-              )
-            }
+          const result = await compactConversation({
+            messages: chatMessagesRef.current,
+            run: useAgentRun.getState().getRun(threadId),
+            busy: pendingToolBatches > 0 || status === CHAT_STATUS.STREAMING || status === CHAT_STATUS.SUBMITTED,
+            compactChat: compactContext,
+            queueWorker: (id) => studioCommand('compact_worker', { id }),
+          })
+          if (result.status === 'queued') {
+            toast.info(`Compaction requested for ${result.workers} active worker${result.workers === 1 ? '' : 's'}; it will run after the current tool batch.`, { id: toastId })
             return
           }
-
-          const result = await compactContext(chatMessagesRef.current)
           if (result.status === 'nothing_to_compact') {
             toast.info('Nothing to compact yet.', { id: toastId })
           } else if (result.status === 'not_beneficial') {
@@ -1134,7 +1115,6 @@ function ThreadDetail() {
       compactContext,
       pendingToolBatches,
       processAndSendMessage,
-      selectedModel?.id,
       status,
       threadId,
     ]

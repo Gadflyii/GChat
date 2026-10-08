@@ -86,6 +86,7 @@ describe('CustomChatTransport production harness', () => {
     })
     useAppState.setState({
       tools: [],
+      intentionallyStoppedModels: new Set(),
       ragToolNames: new Set(),
       capabilityToolNames: new Set(),
     })
@@ -629,5 +630,18 @@ describe('CustomChatTransport production harness', () => {
     await expect(
       transport.compactContext('chat-1', [userMessage])
     ).rejects.toThrow('/compact is available only for a loaded GInfer model.')
+  })
+
+  it('does not serialize a blank context or restart a stopped model for compaction', async () => {
+    const transport = new CustomChatTransport()
+    const send = vi.spyOn(transport, 'sendMessages')
+    useModelProvider.setState({ selectedProvider: 'openai' })
+    await expect(transport.compactContext('chat-1', [])).resolves.toEqual({ status: 'nothing_to_compact' })
+    expect(send).not.toHaveBeenCalled()
+    useModelProvider.setState({ selectedProvider: 'ginfer' })
+    const modelId = useModelProvider.getState().selectedModel!.id
+    useAppState.setState({ intentionallyStoppedModels: new Set([`ginfer::${modelId}`]) })
+    await expect(transport.compactContext('chat-1', [userMessage])).rejects.toThrow('Start the selected model')
+    expect(send).not.toHaveBeenCalled()
   })
 })
