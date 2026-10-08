@@ -24,7 +24,7 @@ vi.mock('@/services/agent/tauri', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.status.mockResolvedValue({ connected: true, skillCount: 3, agentCount: 5 })
+  mocks.status.mockResolvedValue({ connected: true, skillCount: 3, agentCount: 5, toolCount: 12 })
   mocks.runs.mockResolvedValue([])
   mocks.cancel.mockResolvedValue(undefined)
   mocks.approval.mockResolvedValue(undefined)
@@ -46,7 +46,7 @@ it('shows the bridge status and workspace runs without hiding Code', async () =>
   expect(await screen.findByText('GChat tools: Connected')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'GChat tools' }))
 
-  expect(screen.getByText('3 skills · 5 agents available in OpenCode')).toBeInTheDocument()
+  expect(screen.getByText('12 tools · 3 skills · 5 agents available in OpenCode')).toBeInTheDocument()
   expect(screen.getByText('Review agent')).toBeInTheDocument()
   expect(screen.getByText('Evaluator · Cycle 2 of 8')).toBeInTheDocument()
   expect(mocks.runs).toHaveBeenCalledWith('/project')
@@ -73,4 +73,17 @@ it('surfaces delegated tool and folder approvals for a human decision', async ()
   await waitFor(() => expect(mocks.approval).toHaveBeenCalledWith({ approval_id: 'a1', decision: 'allow_once' }))
   fireEvent.click(screen.getAllByRole('button', { name: 'Deny' })[1])
   await waitFor(() => expect(mocks.folder).toHaveBeenCalledWith({ run_id: 'run-2', access_id: 'a2', allow: false }))
+})
+
+it('shows direct native calls with approval and cancellation controls', async () => {
+  mocks.runs.mockResolvedValue([{
+    runId: 'code-tool-write', definitionName: 'os.fs.write', status: 'running', workspace: '/project',
+    approvals: [{ type: 'approval_requested', runId: 'code-tool-write', approvalId: 'write-approval', tool: 'os.fs.write', reason: 'Write document' }],
+  }])
+  render(<CodeBridgePanel visible workspace="/project" />)
+  fireEvent.click(await screen.findByRole('button', { name: 'GChat tools' }))
+  expect(await screen.findByText('os.fs.write')).toBeInTheDocument()
+  expect(screen.getByText('Write document')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith('code-tool-write'))
 })

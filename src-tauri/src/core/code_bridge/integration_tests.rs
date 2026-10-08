@@ -134,7 +134,8 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
     );
     definitions::save_definition(data.path(), definition).expect("saved pool agent");
 
-    let connection = prepare_session(app.handle(), project.path(), None).expect("Code bridge");
+    let connection = prepare_session(app.handle(), project.path(), None, BridgePolicy::default())
+        .expect("Code bridge");
     let client = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(10))
@@ -242,8 +243,8 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
         .expect("waiting run ID")
         .to_string();
     close_session(&connection.session_id);
-    let reconnected =
-        prepare_session(app.handle(), project.path(), None).expect("reconnected bridge");
+    let reconnected = prepare_session(app.handle(), project.path(), None, BridgePolicy::default())
+        .expect("reconnected bridge");
     let reconnect_status = client
         .post(&reconnected.url)
         .bearer_auth(&reconnected.token)
@@ -269,7 +270,13 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
         .any(|run| run["runId"] == waiting_id));
 
     let other_project = tempfile::tempdir().expect("other Code project");
-    let other = prepare_session(app.handle(), other_project.path(), None).expect("other bridge");
+    let other = prepare_session(
+        app.handle(),
+        other_project.path(),
+        None,
+        BridgePolicy::default(),
+    )
+    .expect("other bridge");
     let denied: Value = client
         .post(&other.url)
         .bearer_auth(&other.token)

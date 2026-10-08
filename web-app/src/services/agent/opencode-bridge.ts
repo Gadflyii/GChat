@@ -4,6 +4,7 @@ export type OpenCodeBridgeStatus = {
   connected: boolean
   skillCount: number
   agentCount: number
+  toolCount?: number
   detail?: string
 }
 

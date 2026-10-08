@@ -217,7 +217,7 @@ export function CodeBridgePanel({ visible, workspace }: { visible: boolean; work
       </Button>
       {open && (
         <aside
-          aria-label="GChat tools and delegated runs"
+          aria-label="GChat tools and runs"
           className="absolute right-3 top-14 z-30 flex max-h-[min(70vh,42rem)] w-[min(24rem,calc(100vw-1rem))] flex-col rounded-lg border bg-background shadow-xl"
         >
           <div className="flex items-start justify-between gap-3 border-b p-3">
@@ -225,7 +225,7 @@ export function CodeBridgePanel({ visible, workspace }: { visible: boolean; work
               <h2 className="font-medium">GChat tools</h2>
               <p className="text-xs text-muted-foreground">
                 {connected
-                  ? `${status?.skillCount ?? 0} skills · ${status?.agentCount ?? 0} agents available in OpenCode`
+                  ? `${status?.toolCount ?? 0} tools · ${status?.skillCount ?? 0} skills · ${status?.agentCount ?? 0} agents available in OpenCode`
                   : status?.detail || error || (status ? 'OpenCode is disconnected from GChat.' : 'Connecting to GChat…')}
               </p>
             </div>
@@ -234,9 +234,9 @@ export function CodeBridgePanel({ visible, workspace }: { visible: boolean; work
             </Button>
           </div>
           <div className="min-h-0 space-y-2 overflow-y-auto p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Delegated runs</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tools and delegated runs</p>
             {runs.length === 0 && (
-              <p className="text-sm text-muted-foreground">Ask OpenCode to use a GChat skill or agent. Runs will appear here and in Agent Studio.</p>
+              <p className="text-sm text-muted-foreground">Ask OpenCode to use a GChat tool, connector, skill or agent. Tool activity and approvals appear here.</p>
             )}
             {runs.map((run) => <BridgeRun key={run.runId} run={run} onChanged={refresh} />)}
           </div>
