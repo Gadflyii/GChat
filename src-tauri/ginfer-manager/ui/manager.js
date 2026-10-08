@@ -216,6 +216,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         h('div', { class: 'grid' }, specField, draftPolicy),
         h('div', { class: 'grid' }, widthField,
           select('KV cache', 'kv_dtype', [['auto', 'Automatic'], ['bf16', 'BF16'], ['int8', 'INT8'], ['nvfp4', 'NVFP4']], previous.kv_dtype || 'auto')),
+        field('GPU KV budget (bytes, blank = automatic)', 'kv_arena_bytes', previous.kv_arena_bytes ?? '', 'number', { min: 1, max: Number.MAX_SAFE_INTEGER }),
+        note('Automatic sizing uses available GPU memory after startup. Context and concurrent request settings stay as entered.'),
         note('Automatic speculation uses width 0. DFlash2 and MTP require a positive width. The host validates the exact model, GPU group and settings before starting or replacing an instance.'))
       const updateWidth = () => {
         const spec = specField.querySelector('select').value
@@ -252,8 +254,12 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
           model_id: fieldValue(form, 'model_id'), gpu_uuids: checkedValues(form, 'gpu'),
           max_context: Number(fieldValue(form, 'max_context')), concurrency: Number(fieldValue(form, 'concurrency')),
           vision: checked(form, 'vision'), spec: fieldValue(form, 'spec'), draft_policy: fieldValue(form, 'draft_policy'),
-          draft_tokens: Number(fieldValue(form, 'draft_tokens')), kv_dtype: fieldValue(form, 'kv_dtype') }
+          draft_tokens: Number(fieldValue(form, 'draft_tokens')), kv_dtype: fieldValue(form, 'kv_dtype'),
+          kv_arena_bytes: fieldValue(form, 'kv_arena_bytes') === '' ? null : Number(fieldValue(form, 'kv_arena_bytes')) }
         if (!configuration.gpu_uuids.length) throw new Error('Choose the exact GPU group')
+        if (configuration.kv_arena_bytes !== null && (!Number.isSafeInteger(configuration.kv_arena_bytes) || configuration.kv_arena_bytes < 1)) {
+          throw new Error('GPU KV budget must be a positive whole number of bytes, or blank for automatic sizing')
+        }
         const width = configuration.draft_tokens
         if (!Number.isInteger(width) || width < 0) throw new Error('Draft width must be a whole number')
         if (configuration.spec === 'dflash' && (width < 1 || width > 15)) throw new Error('DFlash2 requires a draft width from 1 to 15; the host checks the exact model limit')

@@ -184,6 +184,69 @@ test('offline hosts preserve inventory and disable host mutations while a stale 
   assert.equal(requests(app).length, 0)
 })
 
+test('custom reload can clear a failed profile\'s fixed KV pool without changing its workload or headroom', async (t) => {
+  const view = fixture()
+  const instance = view.hosts[0].snapshot.instances[0]
+  instance.status = 'failed'
+  instance.active_requests = 0
+  instance.profile = { ...instance.profile, max_context: 131072, concurrency: 1,
+    qualified_profile_id: 'muse-qualified', kv_arena_bytes: 12467568640, kv_arena_headroom_bytes: 314572800 }
+  const saved = structuredClone(instance.profile)
+  const app = await manager(t, view)
+  button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  pane.querySelector('input[name="launch_mode"][value="custom"]').click()
+  const budget = pane.querySelector('input[name="kv_arena_bytes"]')
+  assert.equal(budget.value, '12467568640')
+  assert.equal(requests(app).length, 0)
+  budget.value = ''
+  submit(app)
+  await completed(app, (calls) => calls.length === 1)
+  assert.deepEqual(requests(app)[0], { action: 'host', host_id: localId, operation: 'instance', args: {
+    instance_id: readyId, expected_session_id: sessionId, force: false, operation: 'reload',
+    configuration: { ...saved, qualified_profile_id: null, draft_policy: 'auto', kv_arena_bytes: null },
+  } })
+  assert.deepEqual(instance.profile, saved, 'editing a custom copy must not rewrite the saved qualification')
+})
+
+test('new custom launches choose automatic KV sizing unless an exact positive budget is entered', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.launch_profiles = []
+  const app = await manager(t, view)
+  for (const value of ['', '4294967296']) {
+    button(app.document, 'Start a model…').click()
+    const pane = app.document.querySelector('[role="dialog"]')
+    pane.querySelector('input[name="gpu"]').checked = true
+    pane.querySelector('input[name="max_context"]').value = '131072'
+    const budget = pane.querySelector('input[name="kv_arena_bytes"]')
+    assert.equal(budget.value, '')
+    budget.value = value
+    submit(app)
+    await completed(app, (calls) => calls.length === (value ? 2 : 1))
+    const configuration = requests(app).at(-1).args
+    assert.equal(configuration.kv_arena_bytes, value ? 4294967296 : null)
+    assert.equal(configuration.max_context, 131072)
+    assert.equal(configuration.concurrency, 1)
+    assert.equal(configuration.qualified_profile_id, null)
+  }
+})
+
+test('custom KV budgets reject zero, fractional and unsafe byte counts before contacting the host', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.launch_profiles = []
+  const app = await manager(t, view)
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  pane.querySelector('input[name="gpu"]').checked = true
+  pane.querySelector('input[name="max_context"]').value = '131072'
+  for (const value of ['0', '-1', '1.5', '9007199254740992']) {
+    pane.querySelector('input[name="kv_arena_bytes"]').value = value
+    submit(app)
+    await waitFor(() => /GPU KV budget must be a positive whole number/.test(pane.querySelector('[role="alert"]').textContent), 'invalid budgets must explain the accepted input')
+    assert.equal(requests(app).length, 0)
+  }
+})
+
 test('an offline paired host has a neutral fleet status before coordinator selection and after reconnecting', async (t) => {
   const view = fixture()
   const failure = 'error sending request for url (https://192.168.1.111:7444/host/v1/fleet): tcp connect error: actively refused (os error 10061)'

@@ -24,6 +24,32 @@ restarts and Server 2 administration are excluded.
 
 ## Current decision and next action
 
+Current candidate: `fix/manager-kv-budget` at
+`/ai/gchat-worktrees/manager-kv-budget`, based on `cd74457df`.
+Outcome: allow explicit automatic or fixed GPU KV sizing in Manager custom
+launch/reload, preserving context, concurrency and other saved options. Verify
+the submitted configuration, saved-profile path, required source gate and native
+installed control. No engine change, model run, profile requalification, silent
+settings change or Server 2 administration is authorized by this correction.
+
+The October 8 startup report is an explicit-arena fit failure. The pinned actual
+Windows Host snapshot shows the selected Muse native-NVFP4 text C1 / 131,072
+profile requests 12,467,568,640 arena bytes and 314,572,800 headroom bytes.
+That profile records engine `922e5a8`; installed engine `6138913f` rejects its
+exact arena after startup. The installed bundled catalog supplies these bytes;
+Host forwards them unchanged. Disk/NUMA profile warnings are nonfatal. No
+measurement establishes which startup allocation changed or current full-context
+capacity. Custom reload also inherits the fixed arena without exposing a control;
+this missing control is the bounded implementation defect. Saved qualified
+catalogs and their original evidence remain unchanged. The control and 19 Manager
+DOM tests pass independent review. Required source checks pass: lint/typecheck,
+contracts/assets, 2,067 frontend tests (six skipped), 102 extension tests, six
+coverage floors and supported Rust suites. The initial gate needed the existing
+extension dependency links restored in this new tree; remaining targets then
+passed without installing dependencies. Next: native Windows assembly and
+Manager-only update with unchanged Host/user state.
+Read-only diagnostic evidence: `/ai/gchat/out/manager-kv-startup-20261008/`.
+
 The fix is accepted and installed on RON-9950X3D2. The expanded Work pools and
 client assignments panel shows RON-9950X3D2 **Online** and saved AIS-1-2950X-L02
 **Offline**, in the default dark theme, with no raw connection error. Manager
@@ -129,6 +155,9 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
+| KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Active custom-budget correction; baseline `cd74457df` |
+| KV budget evidence | `/ai/gchat/out/manager-kv-startup-20261008/` | Pinned public snapshot/catalogs, review and source/native checks; no credentials or model copy |
+| KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Planned bounded native mirror/output; shared target cache preserved |
 | Offline source candidate | `/ai/gchat-worktrees/manager-offline-status` | Reviewed source retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | Windows accepted package/proof | `/ai/gchat/out/ginfer-manager/windows/` | Current archive/guide/hashes and earlier public native proof |
 | Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Retained `2a6e21ff2` archive and native evidence |

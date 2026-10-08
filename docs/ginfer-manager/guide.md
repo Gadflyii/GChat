@@ -59,6 +59,15 @@ group, or **Custom settings** to select an installed package, its GPU group,
 context window, concurrency, Vision, KV format and speculation. The host
 validates settings before launch. No model starts just by opening Manager.
 
+Custom settings exposes **GPU KV budget (bytes, blank = automatic)**. Leave it
+blank for the Engine to size the pool from available memory after startup, or
+enter an exact positive byte count. Reload shows the saved budget; clearing it
+explicitly switches to automatic sizing without changing context or concurrency.
+Saved profiles retain their own budget and evidence. If an old profile reports
+that its explicit KV arena exceeds post-startup memory, use **Reload → Custom
+settings**, clear this budget, review the other settings and submit **Reload**.
+Automatic sizing does not establish a full-context capacity qualification.
+
 Use **Start** to start a saved stopped instance, **Stop** to drain requests and
 unload it, and **Reload** to change its configuration. If requests are active,
 the form lets you explicitly interrupt them. The instance's displayed API
