@@ -185,7 +185,11 @@ async fn run(
         None
     };
     drop(data);
-    host.lan_sharing.lock().await.standalone = args.discoverable;
+    host.lan_sharing.lock().await.standalone = if args.discoverable {
+        Some(listener.local_addr().map_err(|e| e.to_string())?.port())
+    } else {
+        None
+    };
     if args.desktop_managed { host.initialize_lan_sharing().await; }
     let mut connections = tokio::task::JoinSet::new();
     ready()?;
@@ -236,7 +240,11 @@ async fn run(
     if let Some(advertisement) = advertisement {
         let _ = advertisement.shutdown();
     }
-    host.lan_sharing.lock().await.stop().await;
+    {
+        let mut sharing = host.lan_sharing.lock().await;
+        sharing.standalone = None;
+        sharing.stop().await;
+    }
     connections.abort_all();
     while connections.join_next().await.is_some() {}
     maintenance.abort_all();

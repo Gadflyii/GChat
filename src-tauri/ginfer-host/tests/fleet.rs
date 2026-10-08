@@ -205,7 +205,8 @@ async fn independent_paired_clients_observe_the_same_authoritative_catalog() {
         .0,
         StatusCode::OK
     );
-    host.lan_sharing.lock().await.standalone = true;
+    host.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
     let first = pinned_client(&authority.certificate_sha256).unwrap();
     let second = pinned_client(&authority.certificate_sha256).unwrap();
     let first_grant: Value = first

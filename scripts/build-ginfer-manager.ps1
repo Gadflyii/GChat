@@ -50,6 +50,8 @@ try {
         New-Item -ItemType Directory -Path $managerNativeSource -Force | Out-Null
         $managerExcluded = @('.git', '.yarn', '.cache', 'node_modules', 'target',
             'coverage', 'dist', 'build', 'out', 'pre-install', '__pycache__', 'autoqa',
+            (Join-Path $managerProjectRoot 'src-tauri\ginfer-manager\gen'),
+            (Join-Path $managerNativeSource 'src-tauri\ginfer-manager\gen'),
             (Join-Path $managerProjectRoot 'core\lib'),
             (Join-Path $managerProjectRoot 'src-tauri\resources\bin'),
             (Join-Path $managerProjectRoot 'src-tauri\resources\pre-install'))

@@ -554,10 +554,11 @@ impl Host {
     }
     pub async fn snapshot(&self) -> serde_json::Value {
         let sharing = self.lan_sharing.lock().await;
-        let network = serde_json::json!({"managed":sharing.managed,"active":sharing.active(),
-            "port":sharing.port,"error":sharing.error});
-        drop(sharing);
         let data = self.data.lock().await;
+        let network = serde_json::json!({"managed":sharing.managed,"active":sharing.active(),
+            "enabled":if sharing.managed { data.share_lan } else { sharing.standalone.is_some() },
+            "port":sharing.standalone.unwrap_or(sharing.port),"error":sharing.error});
+        drop(sharing);
         let processes = self.processes.lock().await;
         let reserved = processes.reserved_gpus(None);
         let mut available_profiles = vec![];
@@ -610,7 +611,7 @@ impl Host {
             }
         }
         serde_json::json!({"protocol_version":1,"host_id":data.host_id,"boot_id":self.boot_id,
-            "lan_sharing": {"enabled":data.share_lan,"managed":network["managed"],
+            "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
                 "active":network["active"],"port":network["port"],"error":network["error"]},
             "display_name":data.name,"revision":self.revision.load(Ordering::SeqCst),
             "fleet":data.fleet,
@@ -996,7 +997,7 @@ impl Host {
                 .filter(|s| !s.trim().is_empty())
                 .ok_or("client name is required")?;
             let sharing = self.lan_sharing.lock().await;
-            if !sharing.active() && !sharing.standalone {
+            if !sharing.active() {
                 return Ok(json(
                     StatusCode::FORBIDDEN,
                     serde_json::json!({"error":"Enable Share this host before pairing"}),

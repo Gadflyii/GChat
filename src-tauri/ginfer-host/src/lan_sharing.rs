@@ -8,14 +8,15 @@ pub const PORT: u16 = 7444;
 pub struct LanSharing {
     pub(crate) port: u16,
     pub managed: bool,
-    pub standalone: bool,
+    /// Bound port of the independently advertised standalone listener.
+    pub standalone: Option<u16>,
     pub error: Option<String>,
     running: Option<Listener>,
 }
 
 impl Default for LanSharing {
     fn default() -> Self {
-        Self { port: PORT, managed: false, standalone: false, error: None, running: None }
+        Self { port: PORT, managed: false, standalone: None, error: None, running: None }
     }
 }
 
@@ -40,6 +41,10 @@ impl Listener {
 
 impl LanSharing {
     pub fn active(&self) -> bool {
+        self.standalone.is_some() || self.managed_active()
+    }
+
+    fn managed_active(&self) -> bool {
         self.running.as_ref().is_some_and(|listener| !listener.task.is_finished())
     }
 
@@ -47,7 +52,7 @@ impl LanSharing {
         Box::pin(async move {
         if !self.managed { return Err("LAN sharing is managed by the standalone service configuration".into()); }
         self.error = None;
-        if enabled && !self.active() {
+        if enabled && !self.managed_active() {
             if let Some(previous) = self.running.take() { previous.stop().await; }
             let listener = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, self.port))
                 .await.map_err(|e| format!("Cannot open LAN port {}: {e}", self.port))?;
@@ -147,6 +152,55 @@ mod tests {
     use hyper::{Body, Request, StatusCode};
 
     #[tokio::test]
+    async fn standalone_listener_remains_independent_of_managed_sharing() {
+        let dir = tempfile::tempdir().unwrap();
+        let host = Host::open(dir.path().to_owned(), "Independent sharing".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let standalone_port = listener.local_addr().unwrap().port();
+        let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+        let serving = host.clone();
+        let server = tokio::spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                let acceptor = acceptor.clone();
+                let host = serving.clone();
+                tokio::spawn(async move {
+                    if let Ok(tls) = acceptor.accept(socket).await {
+                        let service = hyper::service::service_fn(move |req| host.clone().route(req));
+                        let _ = hyper::server::conn::Http::new().serve_connection(tls, service).await;
+                    }
+                });
+            }
+        });
+        let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let managed_port = probe.local_addr().unwrap().port();
+        drop(probe);
+        {
+            let mut sharing = host.lan_sharing.lock().await;
+            sharing.port = managed_port;
+            sharing.standalone = Some(standalone_port);
+        }
+        host.initialize_lan_sharing().await;
+        assert!(tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, managed_port)).await.is_ok(),
+            "A standalone listener must not suppress managed listener startup");
+        let local = crate::launcher::LocalControl::open(dir.path(), &format!("https://127.0.0.1:{standalone_port}")).unwrap();
+        let network = local.snapshot().await.unwrap()["lan_sharing"].clone();
+        assert_eq!(network["enabled"], true);
+        assert_eq!(network["active"], true);
+        assert_eq!(network["port"], standalone_port);
+        local.request("/host/v1/lan-sharing", Some(serde_json::json!({"enabled":false}))).await.unwrap();
+        assert!(tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, managed_port)).await.is_err());
+        let network = local.snapshot().await.unwrap()["lan_sharing"].clone();
+        assert_eq!(network["managed"], true);
+        assert_eq!(network["enabled"], false);
+        assert_eq!(network["active"], true);
+        assert_eq!(network["port"], standalone_port);
+        assert!(local.request("/host/v1/pair", Some(serde_json::json!({"client_name":"Independent client"}))).await.is_ok());
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn sharing_defaults_on_requires_admin_and_persists_opt_out() {
         let dir = tempfile::tempdir().unwrap();
         let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -207,17 +261,31 @@ mod tests {
         assert_eq!(host.snapshot().await["lan_sharing"]["enabled"], false);
         assert_eq!(host.snapshot().await["display_name"], "Lab workstation");
         assert!(!host.lan_sharing.lock().await.active());
+        assert_eq!(host.snapshot().await["lan_sharing"]["port"], port);
         let occupied = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port)).await.unwrap();
         assert!(host.set_lan_sharing(true).await.is_err());
         assert!(!host.data.lock().await.share_lan);
-        assert!(host.snapshot().await["lan_sharing"]["error"].is_string());
+        let network = host.snapshot().await["lan_sharing"].clone();
+        assert_eq!(network["enabled"], false);
+        assert_eq!(network["active"], false);
+        assert_eq!(network["managed"], true);
+        assert_eq!(network["port"], port);
+        assert!(network["error"].is_string());
         drop(occupied);
         host.set_lan_sharing(true).await.unwrap();
         assert!(host.lan_sharing.lock().await.active());
         host.lan_sharing.lock().await.stop().await;
         drop(host);
         let host = open().await.unwrap();
+        let occupied = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port)).await.unwrap();
         host.initialize_lan_sharing().await;
+        let network = host.snapshot().await["lan_sharing"].clone();
+        assert_eq!(network["enabled"], true, "Failed startup preserves the requested desktop preference");
+        assert_eq!(network["active"], false);
+        assert_eq!(network["port"], port);
+        assert!(network["error"].is_string());
+        drop(occupied);
+        host.set_lan_sharing(true).await.unwrap();
         assert!(host.lan_sharing.lock().await.active());
         host.lan_sharing.lock().await.stop().await;
     }

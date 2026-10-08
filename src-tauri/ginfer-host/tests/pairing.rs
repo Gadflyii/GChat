@@ -22,7 +22,8 @@ async fn tls_one_click_pairing_authentication_revocation_and_persistence() {
         )
     };
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("https://{}", listener.local_addr().unwrap());
+    let address = listener.local_addr().unwrap();
+    let base = format!("https://{address}");
     let server_host = Arc::clone(&host);
     let server = tokio::spawn(async move {
         loop {
@@ -52,6 +53,9 @@ async fn tls_one_click_pairing_authentication_revocation_and_persistence() {
     let launcher = ginfer_host::launcher::LocalControl::open(directory.path(), &base).unwrap();
     let local_snapshot = launcher.snapshot().await.unwrap();
     assert_eq!(local_snapshot["display_name"], "Test host");
+    assert_eq!(local_snapshot["lan_sharing"]["managed"], false);
+    assert_eq!(local_snapshot["lan_sharing"]["enabled"], false);
+    assert_eq!(local_snapshot["lan_sharing"]["active"], false);
     assert!(local_snapshot.get("pairing_admin_token").is_none());
     let scanned = launcher
         .request("/host/v1/scan", Some(serde_json::json!({})))
@@ -94,7 +98,9 @@ async fn tls_one_click_pairing_authentication_revocation_and_persistence() {
     let body = serde_json::json!({"client_name":"Test client"});
     assert_eq!(client.post(format!("{base}/host/v1/pair")).json(&body)
         .send().await.unwrap().status(), 403);
-    host.lan_sharing.lock().await.standalone = true;
+    // Standalone sharing follows the advertised listener, not the desktop preference.
+    host.data.lock().await.share_lan = false;
+    host.lan_sharing.lock().await.standalone = Some(address.port());
     let paired = client
         .post(format!("{base}/host/v1/pair"))
         .json(&body)
@@ -144,6 +150,12 @@ async fn tls_one_click_pairing_authentication_revocation_and_persistence() {
         .await
         .unwrap();
     assert_eq!(snapshot["display_name"], "Test host");
+    assert_eq!(snapshot["lan_sharing"]["managed"], false);
+    assert_eq!(snapshot["lan_sharing"]["enabled"], true);
+    assert_eq!(snapshot["lan_sharing"]["active"], true);
+    assert_eq!(snapshot["lan_sharing"]["port"], address.port());
+    assert!(host.set_lan_sharing(false).await.is_err());
+    assert!(host.set_name("Desktop rename").await.is_err());
     assert!(snapshot.get("certificate").is_none());
     let saved = std::fs::read_to_string(directory.path().join("host.json")).unwrap();
     assert!(!saved.contains(token));

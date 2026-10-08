@@ -102,7 +102,7 @@ impl TestFleet {
         host.data.lock().await.management_origin = Some(origin.clone());
         host.save().await.unwrap();
         // The fixture serves the standalone discoverable host's real pairing API.
-        host.lan_sharing.lock().await.standalone = true;
+        host.lan_sharing.lock().await.standalone = Some(listener.local_addr().unwrap().port());
         let (host_id, token, fingerprint, acceptor) = {
             let data = host.data.lock().await;
             (

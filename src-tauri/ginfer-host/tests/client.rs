@@ -100,8 +100,9 @@ async fn two_native_clients_share_enrollment_reload_forget_and_one_time_migratio
     )
     .await
     .unwrap();
-    host.lan_sharing.lock().await.standalone = true;
     let (origin, server) = tls(host.clone()).await;
+    host.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
     let vault = Arc::new(Vault::default());
     let registry = root.path().join("shared/hosts.json");
     let first = Client::new(Some(registry.clone()), vault.clone());
@@ -307,7 +308,9 @@ async fn inference_usage_releases_on_completion_cancellation_and_rejection() {
     )
     .await
     .unwrap();
-    host.lan_sharing.lock().await.standalone = true;
+    let (host_origin, host_server) = tls(host.clone()).await;
+    host.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&host_origin).unwrap().port().unwrap());
     let paired = host
         .clone()
         .route(
@@ -411,6 +414,7 @@ async fn inference_usage_releases_on_completion_cancellation_and_rejection() {
     );
     host.processes.lock().await.shutdown().await.unwrap();
     server.abort();
+    host_server.abort();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -427,9 +431,10 @@ async fn delayed_snapshot_merges_other_apps_changes_and_rejects_replaced_or_forg
     )
     .await
     .unwrap();
-    host.lan_sharing.lock().await.standalone = true;
     let gate = Arc::new(SnapshotGate::default());
     let (origin, server) = tls_with_snapshot_gate(host.clone(), Some(gate.clone())).await;
+    host.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
     let other = Host::open(
         root.path().join("host-b"),
         "Other".into(),
@@ -440,8 +445,9 @@ async fn delayed_snapshot_merges_other_apps_changes_and_rejects_replaced_or_forg
     )
     .await
     .unwrap();
-    other.lan_sharing.lock().await.standalone = true;
     let (other_origin, other_server) = tls(other.clone()).await;
+    other.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&other_origin).unwrap().port().unwrap());
     let vault = Arc::new(Vault::default());
     let path = root.path().join("shared/hosts.json");
     let first = Arc::new(Client::new(Some(path.clone()), vault.clone()));
