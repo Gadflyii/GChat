@@ -59,7 +59,7 @@ GChat history. Prior accepted evidence below remains valid for its recorded scop
 | Compaction / delegated SOL | `/ai/gchat-worktrees/compact-everywhere`, `fix/compact-everywhere` | Reserved command dispatch and contextual compaction |
 | Model names / delegated SOL | `/ai/gchat-worktrees/model-package-names`, `fix/model-package-names` | Current package matching and targeted fixtures/path update |
 | Existing build caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compilation; preserve accepted installer outputs |
-| Unified-session verification / coordinator | `/ai/gchat/out/unified-sessions-20261008/` | Owned integrated gate/review evidence; allocated, gate pending |
+| Unified-session verification / coordinator | `/ai/gchat/out/unified-sessions-20261008/` | Retain full passing gate, prior failure receipts and stock-session evidence |
 
 The integration worktree has inert test-only resource placeholders and copies of
 the baseline icon/empty build-test profile catalog. These are compiler fixtures,
@@ -105,7 +105,7 @@ current release-development `cd9ecacf2`. Its `docs/operations/README.md` owns th
 source-backed switch audit, operator guide and Linux/Windows runtime inclusion.
 GInfer main is older; other owners' dirty release-development source and campaign
 trees are read-only. No engine qualification or GPU run is added.
-Its reviewed implementation `66f52a0e2` and handoff `ace9308b6` are committed and
+Its reviewed implementation `66f52a0e2` and current handoff `8d0b1a4d1` are committed and
 pushed on `origin/docs/operations-manual`. Linux staging and native Windows
 documentation/archive fixtures verify the six-member offline payload and hashes.
 Release-development integration remains explicit before the next runtime build;
@@ -139,19 +139,26 @@ context restoration error. Submission now waits for successful restoration while
 the draft, selected skill and attachments remain editable. Send and Enter share
 that guard, including `/compact`; active-worker compaction still dispatches when
 restoration is ready. Thirteen focused input tests passed in the source candidate.
-Both corrections are integrated; the combined gate and final review are running.
+Both corrections are integrated.
 Final source review accepts both corrections without a remaining blocker. The
 next gate passed lint, TypeScript and test quality; 2,059 tests passed and one
 IPC contract fixture still expected the old desktop command set. Its explicit
 desktop-only set now includes the four newly registered Code commands. This is
-a fixture correction, not an added command exemption. Rerun the combined gate
-before acceptance.
-No main merge or installer update has occurred.
+a fixture correction, not an added command exemption.
 
-Next: run `make verify` and independently review the integrated source, correct
-any material failure, then perform the authorized GChat main integration and
-push. Installer rebuilding and live Windows replay are not acceptance claims
-for this source batch.
+Integrated acceptance passed at `d1821fa5c`: full `make verify` exits zero, with
+2,060 frontend tests (six skipped), 102 engine-extension tests, all six critical
+coverage floors and all supported Rust suites. Desktop has 543 passing tests
+(seven ignored); host has 53, plus its pairing and control integrations. The
+remaining plugin and utility suites pass. Final independent source review found
+no remaining blocker. Failure receipts are retained to explain the corrected
+test-quality and IPC-fixture issues. No GPU run, installer rebuild or live
+Windows replay is claimed for this source batch.
+
+Next: perform the authorized reviewed GChat main integration and push, retire
+the five completed delegated worktrees after verifying ownership and clean state,
+then begin the separate manager design note and implementation. Retain the
+integration candidate and shared compiler/dependency caches as accepted evidence.
 No GPU job is booked
 or running for this task; any required GPU check follows
 `/ai/coordination/gpu-booking-howto.md` and the fleet schedule authority.
