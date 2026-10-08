@@ -1,8 +1,8 @@
 # GInfer Server Manager
 
-Repository: GChat. Owner: GChat coordinator. Accepted source is retained at
-`/ai/gchat-worktrees/ginfer-manager`, branch `feat/ginfer-manager`; stable main
-is `/ai/gchat`. The previous client baseline was `6eacebfff`.
+Repository: GChat. Owner: GChat coordinator. Accepted source is integrated into
+stable main `/ai/gchat`; accepted packages and native evidence are retained in
+`/ai/gchat/out/ginfer-manager/`. The previous client baseline was `6eacebfff`.
 
 ## Outcome and acceptance
 
@@ -41,11 +41,19 @@ catalog and instance/session affinity. Offline catalogs are read-only and cannot
 start new pooled work. Exact migration receipts prevent deleted pools returning;
 canonical physical identity preserves overlapping worker limits.
 
-The desktop windows used for verification were isolated empty-host fixtures,
-not the installed GChat configuration or real fleet. They are closed and retired.
-Next product action is matching installed host/GChat versions and real-fleet click
-testing. The packages contain Manager, matching Host, guide and font license;
-they contain no inference engine or models. Current installed apps remain unchanged.
+The native package checks used isolated empty-host fixtures, now closed and
+retired. The subsequent authorized [October 8 local update](../installer-refresh/README.md)
+installed current GChat/Host and Manager on RON-9950X3D2 using normal user state.
+Both visible apps attach the original GChat-owned Host at local HTTPS port 7443;
+two installed models and the saved stopped instance are visible, with no model
+started. Original local identity, remote pairing credentials and user data pass
+preservation checks. The default dark theme is shown in the actual Manager window.
+
+Next: local click testing and real-fleet pool behavior after choosing a coordinator;
+the existing local fleet remains unconfigured. Server 2 was excluded from the update.
+The packages contain Manager, matching Host, guide and font license; they contain
+no inference engine or models. Normal installed acceptance receipts and screenshot
+are retained in `/ai/gchat/out/local-update-20261008/`.
 
 ## Verification and limits
 
@@ -60,7 +68,7 @@ Final standalone status evidence covers undiscoverable off, standalone
 enabled/active on its actual bound port despite an old disabled managed preference,
 managed startup failure, and managed stop preserving an independent standalone
 listener. Pairing uses effective activity, with consistent LAN → data lock order.
-Eighteen focused checks pass in candidate `out/ginfer-manager/lan-status-tests.log`.
+Eighteen focused checks pass in `/ai/gchat/out/ginfer-manager/focused/lan-status-tests.log`.
 
 Linux package:
 `/ai/gchat/out/ginfer-manager/linux/ginfer-manager-linux-x64.tar.gz`.
@@ -111,18 +119,19 @@ behavior. Accepted final binaries are preserved without another rebuild.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / Ron-9950X3D2 | `/ai/gchat` | Stable main with reviewed Manager source |
-| Manager / coordinator | `/ai/gchat-worktrees/ginfer-manager` | Accepted source/build baseline; retain |
+| Manager / coordinator | `/ai/gchat-worktrees/ginfer-manager` | Superseded clean baseline retired after source integration and focused-log preservation |
 | Prior client candidate | `/ai/gchat-worktrees/unified-sessions` | Clean superseded tree retired; source commits and external evidence retained |
 | Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Shared dependencies/compiler cache; preserve |
 | Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Archive, binaries, hashes, native screenshots and actual final CLI/TLS receipt |
 | Windows accepted package/proof | `/ai/gchat/out/ginfer-manager/windows/` | Final archive/current guide, hashes and selected public native evidence |
 | Windows native source/output | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager\{source,out}` | Accepted native binaries, package, public receipts/screenshots and guarded-build logs |
 | Manager compiler caches | Linux `linux/cargo-target/`, native Windows `target/` | Retired after acceptance; Linux final 1.68 GB and Windows 1.79 GB, receipts retained |
-| Focused verification | Candidate `out/ginfer-manager/` | Relevant client/fleet/worker and corrected status regression logs |
+| Focused verification | `/ai/gchat/out/ginfer-manager/focused/` | Six retained client/fleet/worker and corrected status regression logs |
 | Combined verification | `/ai/gchat/out/ginfer-manager/make-verify*.log` | Passing final gate and concise correction evidence |
 
 The five earlier completed client subtask trees and superseded client baseline are
-retired. Unrelated worktrees, shared caches, installed apps, engine artifacts and
-other owners' jobs are untouched. Only this coordinator host was inspected;
-no fleet cleanup is claimed. GInfer's separately accepted operations manual
-handoff is tracked in [Agent runtime](../agent-runtime/README.md).
+retired. Unrelated worktrees, shared caches, engine artifacts and other owners'
+jobs are untouched. Installed local apps were updated only by the subsequent
+authorized task. Only this coordinator host was inspected; no fleet cleanup is
+claimed. GInfer's separately accepted operations manual handoff is tracked in
+[Agent runtime](../agent-runtime/README.md).

@@ -1,115 +1,107 @@
 # GChat installer refresh
 
-## Local workstation update — October 8, 2026
+## Local workstation update — accepted October 8, 2026
 
-**Current state: source/resource checks passed; installation is pending memory.**
-At 17:23:47 UTC Windows had 9,104,134,144 bytes (8.48 GiB) available, below the
-remaining build's 12 GiB fresh-start requirement by 3.52 GiB. There is no owned
-build, host, app or model process and no build lock held. The installed app/data
-remain unchanged. The user was asked to close unused Windows applications.
-Resume only after fresh headroom passes and a new CPU booking is available.
-Reuse the prepared remaining-command/guard scripts in
-`/ai/gchat/out/local-update-20261008/`; do not repeat passed source/producer stages.
+GChat 2.0.42 and its owning Host are updated on RON-9950X3D2. The standalone
+GInfer Server Manager is installed and open using the normal shared registry,
+real user configuration and GChat-owned Host. The local host is online at
+`https://127.0.0.1:7443`; its original identity and managed data root are preserved.
+At acceptance, desktop PID 14424, Manager PID 3424 and Host PID 36616 are running;
+the saved instance is stopped, with zero requests and no engine process.
+Server 2 received no administration, deployment or test jobs.
 
-The user authorized updating the installed local workstation after Manager
-acceptance and explicitly excluded Server 2. This supersedes the earlier
-Manager-only packaging scope for this local update. Deliver current GChat and
-its owning host plus the standalone Manager using the normal shared registry.
-Preserve models, conversations, definitions, settings and existing pairings.
+The user authorized this local update after Manager acceptance. Deliver current
+GChat/Host and the accepted standalone Manager, preserve user state, and verify
+normal startup. Native packaging, installed bytes, shared-host attachment and
+preservation checks pass. Next: the user's local click testing of shared sessions,
+Code capabilities, document access, compaction and model lifecycle. Fleet pools
+remain unconfigured; select a coordinator before testing shared assignments.
+Real-model replay and remote-fleet behavior are not established by this update.
 
-Source baseline: accepted main `cca5168ef`; candidate
-`/ai/gchat-worktrees/local-update-20261008`, branch `fix/local-update-20261008`.
-Packaging correction `d41032c87` stages Host from the shared workspace output
-in the Windows builder and matching Make/CI recipes. Independent review,
-actual Cargo metadata and Windows/Linux recipe dry-runs pass. The old child
-target could have silently supplied a stale Host; native produced/staged hashes
-will verify the installed companion instead.
-The accepted baseline source gate, Clippy and independent review pass; the tested standalone
-Manager binaries at runtime source `2a6e21ff2` are reused. The GChat installer must
-be rebuilt for the October 8 client/host changes. Both actual bundled and active
-installed runtimes verify 120 payloads at clean source
+### Source, runtime and verification
+
+Accepted main baseline is `cca5168ef`; the owned candidate is
+`fix/local-update-20261008`. Native code is frozen at `de0edde34`.
+Packaging correction `d41032c87` uses the canonical shared workspace Host output
+in Windows, Make and CI recipes. Correction `de0edde34` preserves native Bun/uv
+during the source mirror and replaces generated extension assets with the exact
+current producer set. Both changes passed independent review. Actual native
+production-argument mirror and byte-level asset regressions pass.
+
+Required `make verify` passed at `de0edde34`: 2,067 frontend tests (six skipped),
+102 extension tests, thirteen Manager DOM tests, all six critical coverage floors
+and supported Rust suites, including 546 desktop tests (seven ignored), 62 Host
+units and real TLS/client/fleet regressions. Later changes are documentation only.
+The accepted Manager binaries at runtime source `2a6e21ff2` are reused.
+
+NSIS/MSI assembly exited zero at 19:02 UTC; the local NSIS update exited zero at
+19:06 UTC without elevation. Installed desktop matches the produced PE except
+Tauri's three-byte NSIS tag; CLI and Host match canonical produced/staged bytes.
+Both bundled and active engine runtimes verify all 120 payloads at clean source
 `6138913fcdca5891e072c6ca34d79ce7ffa30498`, Windows x64/SM120a/CUDA 13.3.
-Preserve that exact engine. The initial October 1 archive selection (`74780ea1`)
-was stale and would downgrade it; preflight caught this before any build or install.
-The explicit recovered input archive contains the verified installed bundled
-manifest and its 120 declared files with exact bytes/source. Closed 121-member
-archive membership and all payload hashes pass; `inputs.json` retains its SHA256. This
-is recovery of the current installed engine, not an engine rebuild or qualification.
-Fourteen explicit catalog paths from the October 1 input record still match all
-103 installed profiles. No engine build, model
-download, GPU inference, dependency upgrade or Server 2 administration is part of this update.
+The exact installed runtime was recovered into a closed 121-member input archive;
+this is neither an engine rebuild nor new qualification. All 103 profiles from
+fourteen explicit catalogs are unchanged. Six bundled archives, six active
+extension entrypoints and their fingerprint match. No dependency upgrade, model
+download, GPU inference or engine build was performed. Native Rust emitted no
+compiler warnings; the existing Vite large-chunk advisory remains.
 
-Acceptance: native NSIS/MSI assembly and source/payload verification; successful
-local installation with installed-byte/runtime/profile verification; retained
-user-data inventories; visible GChat and Manager using the same real registered
-local host. A model is not started by acceptance. Record any required native
-elevation rather than treating installer exit zero as successful replacement.
+Post-startup checks preserve two installed Muse models (four model/config files,
+44,808,326,736 bytes), all nine conversation IDs and nine saved run IDs, agent
+definitions, settings, MCP configuration and legacy pairing references. The remote
+host ID, client ID, certificate pin and readable native vault grant are preserved
+without exporting credentials. The local shared client now uses the Host's stable
+`local_client_id`; the original local administrator reference remains in the
+unchanged legacy registry. Original local Host identity and certificate pin remain.
 
-Native attempt 1 compiled current CLI/Host and the frontend but stopped before
-installation: the source-only Robocopy exclusion deleted cached Bun/uv helpers
-when their source directory was absent. A native fixture with the actual tracked
-resources parent reproduces deletion and verifies the matched destination exclusion
-preserves the helpers while mirroring source. An earlier fixture without that
-parent did not reproduce the real operation and is not evidence for acceptance.
-The desktop asset copy also retained obsolete ginfer-extension 0.1.0 beside 0.1.1.
-The stage now replaces the generated extension directory with the current producer
-archive set and license, preserving native helpers. Its byte-level regression passes.
-Independent review accepted both corrections at source `de0edde34`; the focused
-asset regression and diff check pass. Native attempt 2 must use that frozen source
-and pass its resource precheck. User data is untouched.
-The installed bundle also has the same obsolete 0.1.0 archive. If NSIS leaves it,
-remove only that proven superseded app resource after successful update and before
-startup, retaining its hash/size receipt. The installed current archive set must
-match the six producer archives exactly; user extension/data folders are excluded.
+### Execution corrections
 
-The actual installed GChat PE is captured by hash/size; its source revision is
-unknown rather than inherited from the stale October 1 input record. The native
-mirror matches 1,682 tracked build inputs; six regenerated local-core tarball
-hashes differ in the extension lockfile without dependency version/graph changes.
-Next: corrected native desktop/package assembly, local update and normal startup
-verification. With native start held below the recorded 8 GiB fresh-start floor,
-mandatory `make verify` ran first under the global build lock using the accepted
-shared WSL target (`CARGO_BUILD_JOBS=6`) and passed at `de0edde34`. It includes
-the new packaging regression, frontend/extension/Manager tests, six coverage floors
-and supported Rust suites. The lock is returned and WSL is quiet for native retry. Windows initially had
-only 0.9 GiB available after the gate despite no live compiler; retained WSL file
-cache was the observed pressure. During the quiet interval, Linux buff/cache fell
-to about 4 GiB without a task-issued global purge. Do not equate finished processes
-or Linux available memory with native headroom: require fresh Windows AvailableBytes
-before resuming the guarded native build; retain the on-disk compiler cache. Log:
-`/ai/gchat/out/local-update-20261008/make-verify.log`. The standalone Manager binaries are
-reused from the accepted package without rebuilding.
-Native attempt 2 preserved helpers and completed frontend/CLI/Host, then its
-owned guard stopped the desktop phase when Windows available memory fell below
-4 GiB. The 8 GiB fresh-start estimate was insufficient; no installer ran. The
-first guard lacked native compiler/vmmem attribution, so process vs cache peak is
-not claimed. Retain both attempt receipts. The continuation reuses verified native
-source, frontend, six archives, CLI/Host and runtime stage, then runs the exact
-remaining public-builder Tauri command on NTFS with default beforeBuild and the
-unchanged release profile. Its guard records owned native descendants, vmmem and
-commit/cache counters, requires 12 GiB fresh Windows headroom, and retains one
-Cargo job and the 4 GiB emergency floor. No identical whole-build retry, alternate
-optimization profile or repeated source gate is authorized by this resource plan.
+The initial archive selection was stale October 1 source `74780ea1`. Preflight
+caught the possible downgrade before building; delivery preserves installed `6138913f`.
+The first native attempt exposed Robocopy deleting cached helpers when their source
+directory was absent. Its actual parent-directory fixture and destination exclusion
+verify the correction. The obsolete ginfer-extension 0.1.0 archive left by NSIS
+was removed only after its exact old bytes and current 0.1.1 replacement were verified.
+User extension folders were not manually removed.
 
-File-scoped clean-page advice for the idle owned GChat WSL target completed under
-the global lock: all 62,696 regular files retained their size/mtime, no file bytes
-were deleted, and Linux cache fell from about 7.3 to 4.8 GiB. This keeps the on-disk
-compiler cache and avoids a global purge. Receipt: `out/local-update-20261008/wsl-cache-advice.json`.
-WSL stays quiet during native compilation; fresh native counters govern launch.
-The local CPU booking `gchat-local-update` used preemptible CPUs 0–31 with no GPU.
-Idle continuation 257 was released at 17:24 UTC while blocked; no active booking
-or job remains. Check conflicts and rebook before resuming the native continuation.
+The second attempt crossed the unchanged 4 GiB Windows running-memory floor and
+stopped only its owned compiler tree; no installer ran. The successful continuation
+reused completed stages with one Cargo job and the standard fat-LTO/codegen1 profile,
+requiring 12 GiB fresh Windows headroom and a quiet WSL interval. Sampled native
+private memory peaked at 7,234,605,056 bytes; minimum available Windows memory was
+7,237,103,616 bytes. File-scoped clean-page advice retained every owned cache file;
+no global cache purge or profile change was used. CPU booking and build lock are released.
+
+Normal startup rejected the old locator's retired `owner.hardware_profile` field.
+The exact local upgrade migration validated its prior hash, retained the original
+record and removed only that field, preserving every other value and the referenced
+hardware-profile file. No compatibility alias or source change was added. Disabled
+autostart leaves GChat Home's Host lazy; opening Manager or the supported Host/Models
+view attaches the existing owner and starts its controller, without loading a model.
+Pinned HTTPS and actual windows verify both apps resolve that same updated Host.
+
+### Owned inventory
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| GChat / Ron-9950X3D2 | `/ai/gchat` | Stable accepted main; no direct source edits |
-| Local update / coordinator | `/ai/gchat-worktrees/local-update-20261008` | Owned candidate for delivery fixes and current acceptance record |
-| Local update evidence | `/ai/gchat/out/local-update-20261008/` | Retain passed gate, exact inputs, two failed-attempt/resource receipts and prepared continuation/install helpers; install/startup receipts not yet produced |
-| Native shared build | `%LOCALAPPDATA%/GChat/windows-build/source` | Accepted release/dependency cache; preserve and reuse |
-| Native Manager output | `%LOCALAPPDATA%/GChat/windows-build/ginfer-manager/out` | Tested standalone binaries and archive; reuse without rebuilding |
-| Recovered engine input | `/ai/gchat/out/local-update-20261008/recovered-installed-runtime-6138913f.zip` | Exact manifest/120 installed payloads; retain as reproducible current-engine input |
-| Installed Windows | `%LOCALAPPDATA%/GChat`, configured GChat data directory | Authorized local update only; preserve user state |
-| Server 2 | Existing app/data/host state | No administration, deployment or test jobs; retain saved pairing metadata |
+| GChat / Ron-9950X3D2 | `/ai/gchat` | Reviewed source and current acceptance record integrated into stable main |
+| Local update / coordinator | `/ai/gchat-worktrees/local-update-20261008` | Accepted candidate; release at final handoff after reviewed merge/push, preserving source in Git |
+| Prior Manager candidate | `/ai/gchat-worktrees/ginfer-manager` | Superseded clean tree retired; six focused logs preserved in `out/ginfer-manager/focused/` |
+| Local update evidence | `/ai/gchat/out/local-update-20261008/` | Retain gate, input/payload proofs, resource-failure evidence, migration backup, install/startup receipts and final Manager image |
+| Accepted installers | `/ai/gchat/out/windows/`, native `%LOCALAPPDATA%/GChat/release-output` | Current NSIS/MSI and adjacent checksums; promoted bytes verified |
+| Native shared build | `%LOCALAPPDATA%/GChat/windows-build/source` | Accepted release/dependency cache; preserve |
+| Native task | `%LOCALAPPDATA%/GChat/windows-build/local-update-20261008` | Disposable wrappers/fixtures retired after evidence copy and live-use checks; 837,401 bytes released |
+| Recovered engine input | `/ai/gchat/out/local-update-20261008/recovered-installed-runtime-6138913f.zip` | Exact current manifest and 120 installed payloads; retain reproducible input |
+| Installed GChat | `%LOCALAPPDATA%/GChat`, `%APPDATA%/GChat/data` | Updated desktop/Host and retained normal user state |
+| Installed Manager | `%LOCALAPPDATA%/Programs/GInfer Server Manager` | Four accepted files and per-user Start Menu shortcut; shared real Host |
+| Shared caches and Manager packages | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target`, `/ai/gchat/out/ginfer-manager/` | Retain dependencies, compiler cache, accepted packages and evidence |
+| Server 2 and unrelated owners | Existing app/data/host state and other worktrees | Outside this update and cleanup |
+
+Concise acceptance and exact receipts: `/ai/gchat/out/local-update-20261008/HANDOFF.md`,
+`artifact-promotion.json`, `installed-verification.json`, `normal-state-verification.json`,
+`normal-local-host.json`, `normal-credential-preservation.json` and `manager-normal-window.png`.
+Cleanup receipts record actual retirement; normal installed apps remain open.
+The prior Manager worktree released 310,585,359 bytes; its focused logs remain.
 
 ## Offline host status Windows update — accepted October 1, 2026
 

@@ -29,15 +29,18 @@ implementation and historical measurements are not pending tasks.
   in final platform bundles, then validate the installed result. Local Windows
   2.0.42 installers exist; their presence does not qualify subsequent source edits.
   October 8 shared sessions, Code capabilities, document access and compaction
-  fixes are accepted source and still need a GChat installer refresh. Standalone
-  Manager Linux/Windows packages and shared fleet state are accepted; real-fleet
-  click testing requires matching installed host versions. Linux native tray/vault
-  acceptance remains open on a desktop with those providers. See [Manager status](ginfer-manager/README.md).
-  Windows 2.0.42 was rebuilt and installed on October 1 with clean engine
-  revision `74780ea1`, chat/agent recovery and sidebar model-stop fixes; startup,
-  runtime identity and preserved data passed. User replay remains open.
+  fixes are included in the rebuilt and installed local Windows release, with
+  current GChat/Host and the standalone Manager. Both actual windows attach the
+  original real Host; payload, startup and user-data preservation checks pass.
+  The exact existing clean engine `6138913f` and 103 profiles are retained.
+  Local click testing and real-model replay remain open. Standalone Manager
+  Linux/Windows packages and shared fleet state are accepted; real-fleet click
+  testing requires a chosen coordinator and matching remote host versions.
+  Server 2 received no update. Linux native tray/vault acceptance remains open
+  on a desktop with those providers. See [Manager status](ginfer-manager/README.md).
   The Linux 2.0.42 AppImage was rebuilt on September 30 against Ubuntu 24.04;
-  its bundled host and profile catalog were checked. Server 2 was uninstalled at
+  its bundled host and profile catalog were checked. It still needs the October 8
+  client/host source refresh. Server 2 was uninstalled at
   the user's request, preserving data and models. The prior X11 startup check
   does not qualify this new build. See [installer refresh](installer-refresh/README.md).
   Per-SKU model and TP qualification requires exact artifacts and available hardware;
@@ -64,8 +67,8 @@ reduce the request; GChat does not automatically grow and reload the process.
 Native agents checkpoint completed tool exchanges, including within a task, and
 preserve full transcript/artifact history. Manual `/compact` and the worker
 Compact control use their respective context managers. The Windows case above
-remains pending installed acceptance until the updated release is rebuilt and
-walked through.
+remains pending the user's real-model walkthrough of the installed October 8
+Windows update; assembly/startup checks do not establish that behavior.
 
 The website source lives separately in the Sectile Web `site/gbench` directory,
 outside this repository. Its deployment and private configuration are not covered

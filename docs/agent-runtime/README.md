@@ -62,6 +62,9 @@ The separately authorized standalone Server Manager and shared fleet pools are
 implemented under [their current subject record](../ginfer-manager/README.md).
 That record owns Linux/Windows assembly, review and any remaining native checks.
 Installer updates and real-model Windows replay remain outside this source batch.
+The subsequent authorized [October 8 local Windows update](../installer-refresh/README.md)
+now includes this source and current GChat/Host; normal startup and preserved user
+state pass. The user's real-model and shared-session walkthrough remains open.
 
 GInfer's current source-audited operations manual and six-entry offline release
 payload are accepted on `origin/docs/operations-manual`, implementation
