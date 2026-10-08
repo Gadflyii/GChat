@@ -2,6 +2,7 @@
 # will have compiled files and executables
 /target/
 /gen/schemas
+/ginfer-manager/gen/schemas
 /gen/android
 binaries
 !binaries/download.sh

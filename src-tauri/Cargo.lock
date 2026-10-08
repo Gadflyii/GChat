@@ -2442,10 +2442,28 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "tokio",
  "tokio-rustls 0.24.1",
  "uuid",
  "windows-service",
+]
+
+[[package]]
+name = "ginfer-manager"
+version = "0.1.0"
+dependencies = [
+ "ginfer-host",
+ "keyring",
+ "png 0.18.1",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-single-instance",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -3317,11 +3335,13 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "hmac",
+ "log",
  "rand 0.8.5",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "tokio",
  "tokio-util",
  "url",
@@ -7404,6 +7424,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "uuid",

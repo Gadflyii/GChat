@@ -10,6 +10,25 @@ export type StudioCatalog = {
   pools: AgentWorkerPool[]
   instances: AgentModelInstance[]
   usage: Record<string, number>
+  aliases: Record<string, string>
+  fleetTargets: string[]
+  fleetHosts: Array<{ id: string; name: string; origins?: string[] }>
+  availablePoolIds?: string[] | null
+  fleet: {
+    authorityId?: string | null
+    clientId?: string | null
+    revision?: number | null
+    connected: boolean
+    error?: string | null
+    migrationIssues: string[]
+    warnings?: string[]
+  }
+  assignment?: {
+    client_id: string
+    pool_ids: string[]
+    preferred_hosts: string[]
+    preferred_instances: Array<{ host_id: string; instance_id: string }>
+  } | null
 }
 export const studioCommand = <T>(action: string, args: unknown = {}) =>
   invoke<T>('agent_studio', { action, args })

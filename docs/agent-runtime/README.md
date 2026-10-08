@@ -2,166 +2,73 @@
 
 ## Unified sessions and Code capabilities — accepted October 8 source
 
-The user approved one conversation space for ordinary replies, local-machine
-tools and delegated agent work, with Agent Studio retained for authoring. Deliver
-saved Code sessions in the shared sidebar history; make `/compact` a consistent
-command in Chat, Agent and Code; trace and correct the local-document access
-failure; and expose Studio definitions, agent invocation, skills, native tools
-and configured connectors through the embedded Code bridge. Retain the stock
-OpenCode runtime and its transcript authority. Preserve existing conversations,
-models, saved definitions, worker-pool placement and explicit permission denials.
-The user's MODEL-RENAME instruction adds current fleet/NAS package stems to
-GChat model/profile matching and updates the 12 inventoried fixtures/path
-references in
-`/ai/faceless-video/evidence/benchmarks/model-rename-20261008-data/gchat-inventory.json`.
-That inventory's older report-only policy is superseded by this explicit edit
-instruction. Registered artifact identities and inference behavior remain unchanged.
+The user's shared conversation design is implemented: ordinary replies, native
+local-machine tools and delegated agents use one conversation runtime; Agent
+Studio remains for authoring. Saved Code sessions appear in the shared sidebar
+with typed icons, retain the stock OpenCode transcript authority and restore after
+restart. `/compact` is intercepted in Chat, workers and Code at the appropriate
+control boundary. Code exposes Studio definitions, invocation, shared skills,
+native tools and configured connectors through the shared executor.
 
-Acceptance requires session restoration after an app restart, correct session
-view/icons, ordinary Chat file access and inline delegation under the same
-workspace/approval policy, command handling without storing `/compact` as a
-prompt, and Code tool discovery/execution through the shared capability executor.
-Add focused behavioral regressions, review the integrated implementation, and
-pass `make verify` before authorized integration/commit/push. No inference engine,
-task-budget, numerical/performance, dependency or server-manager changes are in
-scope. The standalone tray/server-manager application follows this work under
-the user's October 8 brief at
-`/ai/faceless-video/tmp/briefs/ginfer-server-manager-gchat.md`: write and send
-`docs/ginfer-manager.md` first, build a new thin Tauri workspace member over
-`src-tauri/ginfer-host`, verify Linux X11 against local and paired hosts, then
-build Windows. Fleet worker-pool state must be owned once by the host crate and
-visible consistently to paired clients/managers. Keep its implementation separate
-from this client-fix acceptance; report manager milestones to bubbs as authorized.
+Permissions follow the actual stock OpenCode caller, including background child
+sessions. A public server plugin supplies caller identity; native code verifies
+the workspace/parent chain and applies the saved top-level conversation policy.
+Switching the visible session does not alter a background run's permissions.
+Discovery does not supply a permissive execution policy. Explicit denials remain.
 
-The baseline already shares Chat/Agent native and MCP capabilities. Code already
-lists/reads skills, lists definitions and starts/monitors/cancels delegated runs;
-direct native/MCP tool access is absent. The exact cause of the reported Chat
-document failure has not been established. The user clarified it was an Excel
-file on the Windows Desktop and no longer has the error. Native
-`os.fs.read_document` already supports `.xls`/`.xlsx`; verification must exercise
-an external-folder Excel read and its approval/continuation, rather than assume
-Office parsing is absent. Source inspection establishes a content-loss defect:
-shared native capability results choose `details` over `summary`, so document
-metadata suppresses extracted text. Correct that serialization and verify actual
-spreadsheet content reaches Chat; the exact user incident remains untraced.
-Chat and Agent already intercept
-`/compact` in existing threads; initial submission and command/control boundaries
-need verification. OpenCode session registration and restoration are absent from
-GChat history. Prior accepted evidence below remains valid for its recorded scope.
+The reported Windows Desktop file was Excel, but its original error is unavailable.
+Native document extraction already supports `.xls` and `.xlsx`. The demonstrated
+content-loss defect selected metadata `details` instead of extracted `summary`;
+the shared result now carries both. A real XLSX regression verifies content and
+folder approval/continuation. This establishes the corrected shared access path,
+not the exact cause of the user's unreproducible incident. Document intake retains
+local-file references without requiring feature-disabled embeddings. Image names
+remain available through submission, saved messages, reload and agent staging.
 
-| Owner / host | Exact path / revision | Purpose / retention |
+Current fleet/NAS model package stems are accepted by profile/model matching.
+The twelve inventoried fixtures and installer-refresh path references are updated;
+registered artifact identities and engine inference behavior remain unchanged.
+Flash has independent family/context facts instead of inheriting Qwen 27B facts.
+Paired-host compaction uses the exact ready instance's loaded capacity.
+
+The combined candidate passed `make verify` at `d1821fa5c`: 2,060 frontend tests
+(six skipped), 102 extension tests, all six critical coverage floors and supported
+Rust suites, including 543 desktop tests (seven ignored). Independent source
+review accepted the result. Stock OpenCode 1.18.21 public hook injection, transcript
+restart and session-selection screens passed with isolated storage and no model.
+Retained evidence is in `/ai/gchat/out/unified-sessions-20261008/`.
+
+Two concrete gate failures were corrected before acceptance: a mock-only Code
+assertion was replaced by retained output/state/navigation behavior, and an IPC
+fixture's explicit command set was updated for the four registered Code commands.
+Review also corrected draft loss: submission waits for successful restoration,
+while drafts, attachments and selected skills remain editable. Failure receipts
+explain these corrections; no quality exception was added.
+
+Accepted implementation/review record `217b88409` and cleanup record `6eacebfff`
+are pushed on main. Five clean completed delegated worktrees were removed after
+checking live use, releasing about 1.3 GiB. Their source commits remain in Git.
+No installer rebuild, installed Windows replay or GPU inference is claimed for
+this batch. Unrelated owners and fleet machines were not cleaned.
+
+| Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| GChat / Ron-9950X3D2 | `/ai/gchat`, `217b88409` | Reviewed accepted source, clean and pushed to remote main |
-| Unified sessions / coordinator | `/ai/gchat-worktrees/unified-sessions`, `fix/unified-sessions` | Integration candidate and current subject authority |
-| Existing build caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compilation; preserve accepted installer outputs |
-| Unified-session verification / coordinator | `/ai/gchat/out/unified-sessions-20261008/` | Retain full passing gate, prior failure receipts and stock-session evidence |
+| GChat / Ron-9950X3D2 | `/ai/gchat` | Accepted stable source; later Manager integration tracked separately |
+| Unified sessions / coordinator | `/ai/gchat-worktrees/unified-sessions` | Clean accepted candidate at `6eacebfff`; retain tested source |
+| Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compiler cache; preserve accepted installers |
+| Verification | `/ai/gchat/out/unified-sessions-20261008/` | Passing gate, corrected failure receipts and stock-session proof |
 
-The integration worktree has inert test-only resource placeholders and copies of
-the baseline icon/empty build-test profile catalog. These are compiler fixtures,
-not a rebuilt installer or changed installed runtime. The baseline is untouched.
-
-Compaction source is integrated for early command interception and safe-boundary
-worker requests. Its scoped checks passed 47 frontend tests, TypeScript, source
-ESLint and the native worker-boundary regression; integrated acceptance remains
-pending. Code history uses typed references in the existing thread index and
-retains one stock runtime per canonical workspace. Direct Code tools use the
-shared executor and a frontend-owned session policy. Paired-host GInfer
-compaction now counts against the exact selected ready alias's loaded capacity;
-39 focused tests cover routing, retained checkpoints and refusal without capacity
-or a running facade. New package matching is integrated: 102 extension and 59
-affected frontend tests, TypeScript and lint passed. Flash has its independently
-defined family/context, rather than inheriting Qwen 27B facts. The installer
-reference retains the historical smoke scope and gives the verified renamed
-Server 2 path. These scoped results do not replace the integrated acceptance gate.
-
-Code permissions must follow the actual stock OpenCode caller, including its
-background child sessions. A public server plugin supplies the authoritative
-caller ID; native code verifies the same-workspace parent chain and resolves the
-top-level saved conversation's current policy. Switching the visible session
-must not change a background run's permissions. Workspace-wide discovery has
-no caller identity, so execution enforces each caller's policy. There is no
-selected-session or permissive fallback. This replaces the initial selected-TUI
-policy design before acceptance.
-
-Review found that the removed native Agent submission path had retained original
-image filenames while ordinary Chat submission/reload did not. Shared delegation
-must preserve names through submission, persisted messages, restored UI parts and
-attachment staging; otherwise requests naming one of several images lose identity.
-The source correction now preserves image names through the production message
-conversion and reload path. Review also found that default document intake from
-Home required feature-disabled embeddings before delegation. The shared intake
-must keep named local-file references for enabled native/delegated tools, with
-folder approval enforced by their executor. These corrections remain pending
-integrated verification.
-
-The user's operations-manual request is a separate concurrent GInfer deliverable:
-`/ai/ginfer-worktrees/operations-manual`, branch `docs/operations-manual`, based on
-current release-development `cd9ecacf2`. Its `docs/operations/README.md` owns the
-source-backed switch audit, operator guide and Linux/Windows runtime inclusion.
-GInfer main is older; other owners' dirty release-development source and campaign
-trees are read-only. No engine qualification or GPU run is added.
-Its reviewed implementation `66f52a0e2` and current handoff `8d0b1a4d1` are committed and
-pushed on `origin/docs/operations-manual`. Linux staging and native Windows
-documentation/archive fixtures verify the six-member offline payload and hashes.
-Release-development integration remains explicit before the next runtime build;
-the separate owner's dirty `dev/next` index is preserved.
-
-All three Code capability commits are integrated, including caller isolation.
-Eleven native bridge regressions, Cargo check and warnings-denied Clippy passed;
-independent review verified actual stock OpenCode 1.18.21 hook export and injection
-timing against its public source. Saved-transcript restart and public selection
-screens passed with isolated stock storage and no inference. Their receipts/logs
-are retained in `/ai/gchat/out/unified-sessions-20261008/code-history/`. History
-is now integrated with the shared conversation changes. The four desktop
-history/policy commands are registered. Command conflict resolution preserves
-`/compact` interception, active-worker dispatch and the restoration guard before
-initial-message consumption and submission. Failed Code deletion retains its
-reference and saved policy; successful deletion removes both.
-
-The final conversation candidate passed 44 focused frontend tests, native XLSX
-extraction with a real folder gate, TypeScript, lint and quality guards. Code
-history passed 58 frontend, 10 stock-plugin and 20 native tests. Their individual
-compile checks used temporary peer dependencies excluded from commits; the
-combined source is now the only acceptance candidate.
-
-The first integrated gate passed lint and TypeScript but stopped at test quality:
-a new Code host test asserted only mock invocation. Its retained output is
-`make-verify-quality-failure.log`. The corrected tests send terminal output through
-the production event hook and verify retained rendered output, running status and
-foreground/background navigation. All ten focused tests and the quality guard pass;
-no exception was added. Integrated review also found draft loss after a historical
-context restoration error. Submission now waits for successful restoration while
-the draft, selected skill and attachments remain editable. Send and Enter share
-that guard, including `/compact`; active-worker compaction still dispatches when
-restoration is ready. Thirteen focused input tests passed in the source candidate.
-Both corrections are integrated.
-Final source review accepts both corrections without a remaining blocker. The
-next gate passed lint, TypeScript and test quality; 2,059 tests passed and one
-IPC contract fixture still expected the old desktop command set. Its explicit
-desktop-only set now includes the four newly registered Code commands. This is
-a fixture correction, not an added command exemption.
-
-Integrated acceptance passed at `d1821fa5c`: full `make verify` exits zero, with
-2,060 frontend tests (six skipped), 102 engine-extension tests, all six critical
-coverage floors and all supported Rust suites. Desktop has 543 passing tests
-(seven ignored); host has 53, plus its pairing and control integrations. The
-remaining plugin and utility suites pass. Final independent source review found
-no remaining blocker. Failure receipts are retained to explain the corrected
-test-quality and IPC-fixture issues. No GPU run, installer rebuild or live
-Windows replay is claimed for this source batch.
-
-The reviewed implementation is integrated and pushed to main as `217b88409`.
-The five completed delegated worktrees are removed after verifying clean state
-and no live process using them, releasing about 1.3 GiB on this host. Their source
-commits remain in Git. The integration worktree, shared caches and concise test
-evidence remain; unrelated worktrees and fleet machines are untouched. The clean
-operations candidate remains available for its separate release-branch handoff.
-
-Next: begin the separately authorized manager design note and implementation.
+The separately authorized standalone Server Manager and shared fleet pools are
+implemented under [their current subject record](../ginfer-manager/README.md).
+That record owns Linux/Windows assembly, review and any remaining native checks.
 Installer updates and real-model Windows replay remain outside this source batch.
-No GPU job is booked
-or running for this task; any required GPU check follows
-`/ai/coordination/gpu-booking-howto.md` and the fleet schedule authority.
+
+GInfer's current source-audited operations manual and six-entry offline release
+payload are accepted on `origin/docs/operations-manual`, implementation
+`66f52a0e2`, handoff `8d0b1a4d1`. Linux staging and native PowerShell archive/link/hash
+checks passed. The owning release-development line must integrate that branch
+before its next runtime assembly; its other owner's dirty index remains untouched.
+The separate authority is `/ai/ginfer-worktrees/operations-manual/docs/operations/README.md`.
 
 ## Agent result prompt failure — accepted Windows fix
 

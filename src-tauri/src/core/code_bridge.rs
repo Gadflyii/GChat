@@ -836,7 +836,7 @@ pub(crate) async fn select_model<R: Runtime>(
     if let Some(id) = definition.model_instance_id.as_ref() {
         return Ok(id.clone());
     }
-    let instances = commands::agent_list_model_instances(app.state()).await?;
+    let instances = commands::agent_list_model_instances(app.clone(), app.state()).await?;
     let ready = instances
         .iter()
         .map(|instance| instance.id.as_str())
@@ -848,17 +848,32 @@ pub(crate) async fn select_model<R: Runtime>(
             Some(
                 super::agent::worker_pools::WorkerTarget::Instance { .. }
                     | super::agent::worker_pools::WorkerTarget::Pool { .. }
+                    | super::agent::worker_pools::WorkerTarget::Fleet
             )
         )
     });
     if fully_assigned {
-        return select_ready_assigned_model(definition, data, &ready);
+        let catalog = if definition.role_assignments.values().any(|assignment| {
+            matches!(
+                assignment.target,
+                super::agent::worker_pools::WorkerTarget::Pool { .. }
+                    | super::agent::worker_pools::WorkerTarget::Fleet
+            )
+        }) {
+            super::agent::worker_pools::catalog(app, data).await?
+        } else {
+            super::agent::worker_pools::Catalog {
+                aliases: super::agent::worker_pools::exact_aliases(&instances),
+                ..Default::default()
+            }
+        };
+        return select_ready_assigned_model(definition, &catalog, &ready);
     }
     if let Some(id) = selected_model {
         if let Some(instance) = instances.iter().find(|instance| instance.id == id) {
             return Ok(instance.id.clone());
         }
-        return match instances.iter().filter(|instance|instance.model_id==id).collect::<Vec<_>>().as_slice(){
+        return match instances.iter().filter(|instance|instance.model_id==id || instance.aliases.contains(&id)).collect::<Vec<_>>().as_slice(){
             [instance]=>Ok(instance.id.clone()),
             []=>Err(format!("Configured Code model `{id}` is not a ready GChat instance")),
             _=>Err(format!("Configured Code model `{id}` matches multiple ready GChat instances; choose one exact instance ID")),
@@ -872,16 +887,17 @@ pub(crate) async fn select_model<R: Runtime>(
 
 fn select_ready_assigned_model(
     definition: &definitions::AgentDefinition,
-    data: &Path,
+    catalog: &super::agent::worker_pools::Catalog,
     ready: &HashSet<&str>,
 ) -> Result<String, String> {
-    let pools = super::agent::worker_pools::list(data)?;
+    catalog.validate_assignments(&definition.role_assignments)?;
+    let pools = &catalog.pools;
     for assignment in definition.role_assignments.values() {
         match &assignment.target {
             super::agent::worker_pools::WorkerTarget::Instance { id }
-                if ready.contains(id.as_str()) =>
+                if ready.contains(catalog.canonical(id).as_str()) =>
             {
-                return Ok(id.clone());
+                return Ok(catalog.canonical(id));
             }
             super::agent::worker_pools::WorkerTarget::Pool { id } => {
                 if let Some(member) = pools.iter().find(|pool| &pool.id == id).and_then(|pool| {
@@ -890,6 +906,15 @@ fn select_ready_assigned_model(
                         .find(|member| ready.contains(member.instance_id.as_str()))
                 }) {
                     return Ok(member.instance_id.clone());
+                }
+            }
+            super::agent::worker_pools::WorkerTarget::Fleet => {
+                if let Some(id) = catalog
+                    .fleet_targets
+                    .iter()
+                    .find(|id| ready.contains(id.as_str()))
+                {
+                    return Ok(id.clone());
                 }
             }
             _ => {}
@@ -2258,25 +2283,28 @@ mod tests {
 
     #[test]
     fn fully_pool_assigned_agent_selects_a_ready_member_without_a_code_model() {
-        let data = tempfile::tempdir().expect("data");
-        let pool = super::super::agent::worker_pools::save(
-            data.path(),
-            WorkerPool {
-                id: String::new(),
-                name: "Review workers".into(),
-                members: vec![
-                    PoolMember {
-                        instance_id: "ginfer/remote/offline".into(),
-                        worker_limit: 1,
-                    },
-                    PoolMember {
-                        instance_id: "ginfer/remote/ready".into(),
-                        worker_limit: 1,
-                    },
-                ],
+        let pool = WorkerPool {
+            id: Uuid::new_v4().to_string(),
+            name: "Review workers".into(),
+            members: vec![
+                PoolMember {
+                    instance_id: "ginfer/remote/offline".into(),
+                    worker_limit: 1,
+                },
+                PoolMember {
+                    instance_id: "ginfer/remote/ready".into(),
+                    worker_limit: 1,
+                },
+            ],
+        };
+        let catalog = super::super::agent::worker_pools::Catalog {
+            pools: vec![pool.clone()],
+            fleet: super::super::agent::worker_pools::FleetStatus {
+                connected: true,
+                ..Default::default()
             },
-        )
-        .expect("pool");
+            ..Default::default()
+        };
         let mut definition = definitions::general_agent();
         definition.role_assignments.insert(
             "agent".into(),
@@ -2287,11 +2315,10 @@ mod tests {
         );
         let ready = HashSet::from(["ginfer/remote/ready"]);
         assert_eq!(
-            select_ready_assigned_model(&definition, data.path(), &ready)
-                .expect("ready pool member"),
+            select_ready_assigned_model(&definition, &catalog, &ready).expect("ready pool member"),
             "ginfer/remote/ready"
         );
-        assert!(select_ready_assigned_model(&definition, data.path(), &HashSet::new()).is_err());
+        assert!(select_ready_assigned_model(&definition, &catalog, &HashSet::new()).is_err());
     }
 
     #[test]

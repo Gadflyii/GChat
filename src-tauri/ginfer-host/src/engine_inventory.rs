@@ -35,6 +35,17 @@ struct InventoryObject {
 
 impl Directory {
     fn nvfp4_kv_available(&self) -> bool {
+        if self.identity.model_id == "qwen3.8-flash-next" {
+            let tensor = |name: &str, rank: serde_json::Value| self.objects.iter()
+                .any(|object| object.kind == "tensor" && object.name == name && object.rank == rank);
+            return tensor("nvfp4_kv/profile_v2", "all".into())
+                && self.objects.iter().any(|object| object.kind == "resource" && object.name == "nvfp4_kv/provenance")
+                && (0..self.tp_size).all(|rank| {
+                    let placement: serde_json::Value = if self.tp_size == 1 { "all".into() } else { rank.into() };
+                    ["nvfp4_kv/body_inverse_global_scales", "nvfp4_kv/mtp_inverse_global_scales"]
+                        .iter().all(|name| tensor(name, placement.clone()))
+                });
+        }
         let suffixes: &[&str] = match self.identity.model_id.as_str() {
             "qwen3.8-27b" => &["profile_v1", "inverse_global_scales"],
             "muse-glimmer-30b" => &["profile_v2", "full_inverse_global_scales", "sliding_inverse_global_scales"],
@@ -260,6 +271,48 @@ mod tests {
         assert!(serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
         value["objects"][2]["rank"] = 0.into();
         assert!(!serde_json::from_value::<Directory>(value).unwrap().nvfp4_kv_available());
+    }
+
+    #[test]
+    fn flash_nvfp4_kv_requires_its_own_partition_and_provenance_for_every_rank() {
+        for tp in [1, 2, 4] {
+            let mut value = directory();
+            value["identity"]["model_id"] = "qwen3.8-flash-next".into();
+            value["tp_size"] = tp.into();
+            assert!(!serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
+            let mut objects = vec![
+                serde_json::json!({"kind":"tensor", "rank":"all", "name":"nvfp4_kv/profile_v2"}),
+                serde_json::json!({"kind":"resource", "name":"nvfp4_kv/provenance"}),
+            ];
+            for rank in 0..tp {
+                let placement = if tp == 1 { serde_json::json!("all") } else { serde_json::json!(rank) };
+                for suffix in ["body_inverse_global_scales", "mtp_inverse_global_scales"] {
+                    objects.push(serde_json::json!({"kind":"tensor", "rank":placement, "name":format!("nvfp4_kv/{suffix}")}));
+                }
+            }
+            value["objects"] = objects.into();
+            assert!(serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
+            for index in 0..value["objects"].as_array().unwrap().len() {
+                let mut missing = value.clone();
+                missing["objects"].as_array_mut().unwrap().remove(index);
+                assert!(!serde_json::from_value::<Directory>(missing).unwrap().nvfp4_kv_available());
+            }
+            for index in [0, 2] {
+                let mut misplaced = value.clone();
+                misplaced["objects"][index]["rank"] = if misplaced["objects"][index]["rank"] == "all" { 0.into() } else { "all".into() };
+                assert!(!serde_json::from_value::<Directory>(misplaced).unwrap().nvfp4_kv_available());
+            }
+            value["objects"][1]["kind"] = "tensor".into();
+            assert!(!serde_json::from_value::<Directory>(value).unwrap().nvfp4_kv_available());
+        }
+        let mut old_muse_partition = directory();
+        old_muse_partition["identity"]["model_id"] = "qwen3.8-flash-next".into();
+        old_muse_partition["objects"] = serde_json::json!([
+            {"kind":"tensor", "rank":"all", "name":"text/kv_cache/nvfp4_g16/profile_v2"},
+            {"kind":"tensor", "rank":"all", "name":"text/kv_cache/nvfp4_g16/full_inverse_global_scales"},
+            {"kind":"tensor", "rank":"all", "name":"text/kv_cache/nvfp4_g16/sliding_inverse_global_scales"}
+        ]);
+        assert!(!serde_json::from_value::<Directory>(old_muse_partition).unwrap().nvfp4_kv_available());
     }
 
     #[test]

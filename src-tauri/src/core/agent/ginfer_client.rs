@@ -8,7 +8,6 @@ use tauri_plugin_ginfer::state::GinferState;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
-
 use super::definitions::AgentReasoningEffort;
 use super::prompt::ITERATION_ONE_TOOLS;
 use super::types::ToolCallPayload;
@@ -489,7 +488,14 @@ fn completion_request_payload(model_id: &str, request: &CompletionRequest) -> Va
     }
     if request.require_tools {
         payload["tools"] = serde_json::json!(tools);
-        payload["tool_choice"] = Value::String(if request.authoring { "auto" } else { "required" }.into());
+        payload["tool_choice"] = Value::String(
+            if request.authoring {
+                "auto"
+            } else {
+                "required"
+            }
+            .into(),
+        );
     }
     if !request.stop.is_empty() {
         payload["stop"] = serde_json::json!(request.stop);
@@ -521,20 +527,38 @@ pub(crate) fn tool_parameters(name: &str, authoring: bool) -> Value {
             "args":{"type":"array","items":{"type":"string"},"description":"Literal arguments. For PowerShell put the complete script in one argument after -Command; no extra surrounding quotes."},
             "cwd":{"type":"string"},"timeoutMs":{"type":"integer","minimum":1000,"maximum":600000}
         },"required":["cmd"],"additionalProperties":false}),
-        "reply" | "finish" => json!({"type":"object","properties":{"text":{"type":"string","minLength":1}},"required":["text"],"additionalProperties":false}),
-        "tool.view" => json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}),
+        "reply" | "finish" => {
+            json!({"type":"object","properties":{"text":{"type":"string","minLength":1}},"required":["text"],"additionalProperties":false})
+        }
+        "tool.view" => {
+            json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false})
+        }
         "studio.inspect" | "studio.manage" => {
             let actions = match (name, authoring) {
-                ("studio.inspect", true) => vec!["catalog", "get_definition", "validate_definition"],
+                ("studio.inspect", true) => {
+                    vec!["catalog", "get_definition", "validate_definition"]
+                }
                 ("studio.manage", true) => vec!["save_definition"],
-                ("studio.inspect", false) => vec!["catalog", "capacity", "pools", "get_definition", "validate_definition", "runs", "monitor"],
+                ("studio.inspect", false) => vec![
+                    "catalog",
+                    "capacity",
+                    "pools",
+                    "get_definition",
+                    "validate_definition",
+                    "runs",
+                    "monitor",
+                ],
                 _ => vec!["save_definition", "save_pool", "delete_pool", "stop_run"],
             };
             let mut schema = json!({"type":"object","properties":{
                 "action":{"type":"string","enum":actions},
                 "args":{"type":"object","description":"Operation arguments as an object, never a JSON string. For validate_definition/save_definition pass the definition directly, without a definition wrapper."}
             },"required":["action"],"additionalProperties":false});
-            let definition_action = if name == "studio.inspect" { "validate_definition" } else { "save_definition" };
+            let definition_action = if name == "studio.inspect" {
+                "validate_definition"
+            } else {
+                "save_definition"
+            };
             schema["allOf"] = json!([{
                 "if":{"properties":{"action":{"const":definition_action}},"required":["action"]},
                 "then":{"required":["args"],"properties":{"args":super::definitions::definition_json_schema()}}
@@ -553,7 +577,8 @@ fn agent_tool_name(wire_name: &str) -> Option<&'static str> {
         .iter()
         .find(|descriptor| {
             let wire = wire_tool_name(descriptor.name);
-            descriptor.name == wire_name || wire == wire_name
+            descriptor.name == wire_name
+                || wire == wire_name
                 || format!("{wire}.{}", descriptor.name) == wire_name
                 || format!("{wire}.{wire}") == wire_name
         })
@@ -595,6 +620,17 @@ pub async fn find_session_by_model_id(
     ginfer: &GinferState,
 ) -> Result<GinferSessionTarget, GinferClientError> {
     if model_id.starts_with("ginfer/") {
+        let reference = crate::core::engine_hosts::parse_alias(model_id)
+            .map_err(GinferClientError::Transport)?;
+        if let Some(session) = ginfer.ginfer_process.lock().await.values().find(|session| {
+            session.owner.control.host_id() == reference.host_id
+                && session.owner.connection.instance_id == reference.instance_id
+        }) {
+            return Ok(local_session_target(
+                &session.owner.connection,
+                session.info.vision,
+            ));
+        }
         return crate::core::engine_hosts::agent_target(model_id)
             .await
             .map_err(GinferClientError::Transport);
@@ -637,8 +673,10 @@ fn read_context_window(model: &Value) -> Option<usize> {
 pub fn parse_tool_calls(raw: &str) -> Result<ParsedToolCalls, GinferClientError> {
     let (reasoning, body) = extract_reasoning(raw);
     // Select the outer envelope before looking inside parameter values for JSON.
-    let atem_start = ["atem:function_calls", "<atem:invoke"].iter()
-        .filter_map(|marker| body.find(marker)).min();
+    let atem_start = ["atem:function_calls", "<atem:invoke"]
+        .iter()
+        .filter_map(|marker| body.find(marker))
+        .min();
     let json_start = body.find(['{', '[']);
     if atem_start.is_some_and(|position| json_start.map_or(true, |json| position < json)) {
         return Ok(ParsedToolCalls {
@@ -651,7 +689,10 @@ pub fn parse_tool_calls(raw: &str) -> Result<ParsedToolCalls, GinferClientError>
         .map_err(|error| GinferClientError::ToolCallParse(error.to_string()))?;
     // A reply's bare argument object is display-only, never an inferred action.
     if parsed.as_object().is_some_and(|object| object.len() == 1)
-        && parsed.get("text").and_then(Value::as_str).is_some_and(|text| !text.trim().is_empty())
+        && parsed
+            .get("text")
+            .and_then(Value::as_str)
+            .is_some_and(|text| !text.trim().is_empty())
     {
         return Ok(ParsedToolCalls {
             calls: vec![ToolCallPayload {
@@ -886,7 +927,10 @@ fn normalize_payload(mut call: ToolCallPayload) -> ToolCallPayload {
         call.tool = name.to_owned();
     }
     if matches!(call.tool.as_str(), "studio.inspect" | "studio.manage")
-        && matches!(call.args["action"].as_str(), Some("validate_definition" | "save_definition"))
+        && matches!(
+            call.args["action"].as_str(),
+            Some("validate_definition" | "save_definition")
+        )
     {
         if let Some(args) = call.args.get_mut("args") {
             // Older engine responses serialized untyped ATEM object parameters as strings.
@@ -1073,15 +1117,20 @@ fn normalize_completion_with_tools(
             .tool_calls
             .into_iter()
             .map(|call| {
-                let name = agent_tool_name(&call.function.name).map(str::to_owned).or_else(|| {
-                    dynamic_tools.iter().find(|tool| tool["function"]["name"] == call.function.name)
-                        .map(|_| call.function.name.clone())
-                }).ok_or_else(|| {
-                    GinferClientError::ToolCallParse(format!(
-                        "GInfer returned unknown tool `{}`",
-                        call.function.name
-                    ))
-                })?;
+                let name = agent_tool_name(&call.function.name)
+                    .map(str::to_owned)
+                    .or_else(|| {
+                        dynamic_tools
+                            .iter()
+                            .find(|tool| tool["function"]["name"] == call.function.name)
+                            .map(|_| call.function.name.clone())
+                    })
+                    .ok_or_else(|| {
+                        GinferClientError::ToolCallParse(format!(
+                            "GInfer returned unknown tool `{}`",
+                            call.function.name
+                        ))
+                    })?;
                 let args: Value =
                     serde_json::from_str(&call.function.arguments).map_err(|error| {
                         GinferClientError::ToolCallParse(format!(
@@ -1171,7 +1220,10 @@ mod tests {
         ] {
             let payload = completion_request_payload("m", &request);
             for key in ["temperature", "top_p", "top_k"] {
-                assert!(payload.get(key).is_none(), "{key} must be left to the served model's defaults");
+                assert!(
+                    payload.get(key).is_none(),
+                    "{key} must be left to the served model's defaults"
+                );
             }
         }
         let mut tuned = CompletionRequest::tool_call("prompt", None);
@@ -1215,11 +1267,24 @@ mod tests {
         assert_eq!(payload["messages"][0]["content"], "inspect");
         assert_eq!(payload["tool_choice"], "required");
         assert_eq!(payload["reasoning_effort"], "xhigh");
-        let shell = payload["tools"].as_array().unwrap().iter()
-            .find(|tool| tool["function"]["name"] == "os_shell_run").unwrap();
-        assert_eq!(shell["function"]["parameters"]["properties"]["args"]["type"], "array");
-        assert_eq!(shell["function"]["parameters"]["properties"]["args"]["items"]["type"], "string");
-        assert_eq!(shell["function"]["parameters"]["required"], serde_json::json!(["cmd"]));
+        let shell = payload["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["function"]["name"] == "os_shell_run")
+            .unwrap();
+        assert_eq!(
+            shell["function"]["parameters"]["properties"]["args"]["type"],
+            "array"
+        );
+        assert_eq!(
+            shell["function"]["parameters"]["properties"]["args"]["items"]["type"],
+            "string"
+        );
+        assert_eq!(
+            shell["function"]["parameters"]["required"],
+            serde_json::json!(["cmd"])
+        );
         assert!(payload["tools"]
             .as_array()
             .is_some_and(|tools| !tools.is_empty()));
@@ -1254,19 +1319,36 @@ mod tests {
         assert_eq!(payload["tool_choice"], "auto");
         let tools = payload["tools"].as_array().unwrap();
         for name in ["studio_inspect", "studio_manage"] {
-            let tool = tools.iter().find(|tool| tool["function"]["name"] == name).unwrap();
-            assert_eq!(tool["function"]["parameters"]["properties"]["args"]["type"], "object");
-            assert_eq!(tool["function"]["parameters"]["properties"]["action"]["type"], "string");
-            assert_eq!(tool["function"]["parameters"]["allOf"][0]["then"]["properties"]["args"], super::super::definitions::definition_json_schema());
+            let tool = tools
+                .iter()
+                .find(|tool| tool["function"]["name"] == name)
+                .unwrap();
+            assert_eq!(
+                tool["function"]["parameters"]["properties"]["args"]["type"],
+                "object"
+            );
+            assert_eq!(
+                tool["function"]["parameters"]["properties"]["action"]["type"],
+                "string"
+            );
+            assert_eq!(
+                tool["function"]["parameters"]["allOf"][0]["then"]["properties"]["args"],
+                super::super::definitions::definition_json_schema()
+            );
         }
-        assert!(!tools.iter().any(|tool| tool["function"]["name"] == "os_shell_run"));
+        assert!(!tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == "os_shell_run"));
     }
 
     #[test]
     fn registered_namespace_mapping_is_exact_not_suffix_matching() {
         for descriptor in ITERATION_ONE_TOOLS {
             let wire = wire_tool_name(descriptor.name);
-            assert_eq!(agent_tool_name(&format!("{wire}.{wire}")), Some(descriptor.name));
+            assert_eq!(
+                agent_tool_name(&format!("{wire}.{wire}")),
+                Some(descriptor.name)
+            );
             assert_eq!(agent_tool_name(&format!("unregistered.{wire}")), None);
         }
         assert_eq!(agent_tool_name("studio_manage.save_definition"), None);
@@ -1313,7 +1395,10 @@ mod tests {
         };
         let client = GinferClient::new(&local_session_target(&connection, true)).unwrap();
         let cancellation = CancellationToken::new();
-        assert_eq!(client.fetch_model(&cancellation).await.unwrap()["id"], model_id);
+        assert_eq!(
+            client.fetch_model(&cancellation).await.unwrap()["id"],
+            model_id
+        );
         client
             .complete(&CompletionRequest::tool_call("hello", None), &cancellation)
             .await
@@ -1392,20 +1477,29 @@ mod tests {
             "name":"mcp_0123456789abcdef0123456789abcdef",
             "parameters":{"type":"object","properties":{"query":{"type":"string"}}}
         }})];
-        request.disabled_tools.insert("gchat-native::os_fs_read".into());
+        request
+            .disabled_tools
+            .insert("gchat-native::os_fs_read".into());
         let payload = completion_request_payload("model", &request);
         let advertised = payload["tools"].as_array().unwrap();
-        assert!(advertised.iter().any(|tool| tool["function"]["name"] == "mcp_0123456789abcdef0123456789abcdef"));
-        assert!(!advertised.iter().any(|tool| tool["function"]["name"] == "os_fs_read"));
+        assert!(advertised
+            .iter()
+            .any(|tool| tool["function"]["name"] == "mcp_0123456789abcdef0123456789abcdef"));
+        assert!(!advertised
+            .iter()
+            .any(|tool| tool["function"]["name"] == "os_fs_read"));
         let response: CompletionEnvelope = serde_json::from_value(serde_json::json!({
             "choices":[{"message":{"tool_calls":[{"function":{
                 "name":"mcp_0123456789abcdef0123456789abcdef",
                 "arguments":"{\"query\":\"weather\"}"
             }}]}}],
             "usage":{},"x_ginfer":{"finish_reason":"stop_token"}
-        })).unwrap();
+        }))
+        .unwrap();
         let normalized = normalize_completion_with_tools(response, &request.dynamic_tools).unwrap();
-        assert!(normalized.content.contains("mcp_0123456789abcdef0123456789abcdef"));
+        assert!(normalized
+            .content
+            .contains("mcp_0123456789abcdef0123456789abcdef"));
         assert!(normalized.content.contains("weather"));
     }
 
@@ -1414,13 +1508,17 @@ mod tests {
         let server = ScriptedGinferServer::start(vec![ScriptedResponse::http_error(
             StatusCode::BAD_REQUEST,
             "the request exceeds the available context size",
-        )]).await;
+        )])
+        .await;
         let client = server.client();
         let target = client.target();
-        let error = client.complete(
-            &CompletionRequest::tool_call("prompt", None),
-            &CancellationToken::new(),
-        ).await.unwrap_err();
+        let error = client
+            .complete(
+                &CompletionRequest::tool_call("prompt", None),
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap_err();
         assert!(matches!(error, GinferClientError::Http { status: 400, .. }));
         assert_eq!(client.target(), target);
         assert_eq!(server.requests().len(), 1);
@@ -1436,7 +1534,10 @@ mod tests {
         </atem:function_calls>"#).unwrap();
         assert_eq!(parsed.calls[0].tool, "studio.inspect");
         assert_eq!(parsed.calls[0].args["action"], "validate_definition");
-        assert_eq!(parsed.calls[0].args["args"]["defaultGoal"], "Inventory the ginfer models");
+        assert_eq!(
+            parsed.calls[0].args["args"]["defaultGoal"],
+            "Inventory the ginfer models"
+        );
         assert_eq!(parsed.calls[0].args["args"]["limits"]["steps"], 12);
         assert!(parsed.calls[0].args["args"].get("definition").is_none());
     }
@@ -1446,13 +1547,19 @@ mod tests {
         let raw = serde_json::json!([{"tool":"reply","args":{"text":"Example: <atem:invoke name=\"studio.inspect\">"}}]).to_string();
         let parsed = parse_tool_calls(&raw).unwrap();
         assert_eq!(parsed.calls[0].tool, "reply");
-        assert!(parsed.calls[0].args["text"].as_str().unwrap().contains("<atem:invoke"));
+        assert!(parsed.calls[0].args["text"]
+            .as_str()
+            .unwrap()
+            .contains("<atem:invoke"));
     }
 
     #[test]
     fn truncated_atem_cannot_execute_an_embedded_json_array() {
         let raw = r#"<atem:function_calls><atem:invoke name="studio.inspect"><atem:parameter name="args">[{"tool":"reply","args":{"text":"not a call"}}]"#;
-        assert!(parse_tool_calls(raw).unwrap_err().to_string().contains("closing tag"));
+        assert!(parse_tool_calls(raw)
+            .unwrap_err()
+            .to_string()
+            .contains("closing tag"));
     }
 
     #[test]
@@ -1531,7 +1638,10 @@ mod tests {
     #[test]
     fn bare_reply_object_preserves_clarification_and_reasoning() {
         let text = r#"Where are your .ginfer models? e.g. C:\Users\Ron\models. Example: {\"tool\":\"os.fs.list\"}"#;
-        let raw = format!("<think>Need a location</think>{}", serde_json::json!({"text": text}));
+        let raw = format!(
+            "<think>Need a location</think>{}",
+            serde_json::json!({"text": text})
+        );
         let parsed = parse_tool_calls(&raw).unwrap();
         assert_eq!(parsed.reasoning.as_deref(), Some("Need a location"));
         assert_eq!(parsed.calls.len(), 1);

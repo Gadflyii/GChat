@@ -82,12 +82,17 @@ Use `roleAssignments` keyed by the catalog's role IDs. Each entry contains:
 {"target":{"kind":"pool","id":"exact-pool-id"},"vision":true,"minimumContext":8192}
 ```
 
-Other targets are `{"kind":"current"}` and
+Other targets are `{"kind":"current"}`, `{"kind":"fleet"}` and
 `{"kind":"instance","id":"exact-registry-instance-id"}`. Do not derive IDs
 from a display name, URL, or model filename. Pool membership is explicit, never all
 discovered hosts. Refer only to existing pools; pool editing belongs in Studio.
-Pool args contain `id` (empty for new), `name`, and `members`, each with
-`instanceId` and `workerLimit`.
+The explicit `fleet` target uses this client's coordinator assignment: preferred
+instances, then preferred hosts, then assigned pools. It requires a connected
+coordinator and usable placement; it never replaces an existing Current or fixed
+target. Saved definitions remain local. Pool writes use `save_pool` args
+`{"pool":{"id":"","name":"...","members":[{"instanceId":"ginfer/host-uuid/instance-uuid","workerLimit":1}]},"expectedRevision":123}`.
+Use the catalog's current fleet revision. `delete_pool` requires `id` and
+`expectedRevision`; a revision conflict requires refresh and human review.
 
 For image/video analysis, require Vision for the roles that actually inspect
 media and explain how their inputs reach `vision.describe` through permitted

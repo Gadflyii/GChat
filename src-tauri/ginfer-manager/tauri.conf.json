@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GInfer Server Manager",
+  "version": "0.1.0",
+  "identifier": "app.gchat.ginfer-manager",
+  "build": {
+    "frontendDist": [
+      "ui",
+      "../icons/icon.png",
+      "../../web-app/public/fonts/geist/Geist-Variable.woff2",
+      "../../web-app/public/fonts/geist/GeistMono-Variable.woff2",
+      "../../web-app/public/fonts/geist/OFL.txt"
+    ]
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{
+      "label": "main",
+      "title": "GInfer Server Manager",
+      "theme": "dark",
+      "width": 1060,
+      "height": 760,
+      "minWidth": 720,
+      "minHeight": 520,
+      "visible": true,
+      "decorations": true
+    }],
+    "security": {
+      "capabilities": [{ "identifier": "manager-window", "windows": ["main"], "permissions": ["core:default"] }],
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "publisher": "Sectile Research Laboratories",
+    "icon": ["../icons/icon.png"]
+  }
+}

@@ -1,0 +1,26 @@
+[package]
+name = "ginfer-manager"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Standalone GInfer host and fleet manager"
+default-run = "ginfer-manager"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+ginfer-host = { path = "../ginfer-host" }
+tauri = { version = "=2.10.3", default-features = false, features = ["wry", "tray-icon", "image-png", "common-controls-v6", "x11"] }
+tauri-plugin-single-instance = "=2.4.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+keyring = { version = "3.6", features = ["windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
+
+[build-dependencies]
+tauri-build = { version = "=2.5.6", features = [] }
+png = "0.18"

@@ -1,0 +1,624 @@
+use ginfer_host::{
+    client::{Client, CredentialFuture, CredentialStore, PairRequest, SavedHost},
+    service::Host,
+};
+use serde_json::{json, Value};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
+use uuid::Uuid;
+#[derive(Default)]
+struct Vault(Mutex<BTreeMap<Uuid, String>>);
+impl CredentialStore for Vault {
+    fn get(&self, id: Uuid) -> CredentialFuture<'_, String> {
+        Box::pin(async move {
+            self.0
+                .lock()
+                .unwrap()
+                .get(&id)
+                .cloned()
+                .ok_or("credential absent".into())
+        })
+    }
+    fn set<'a>(&'a self, id: Uuid, token: &'a str) -> CredentialFuture<'a, ()> {
+        Box::pin(async move {
+            self.0.lock().unwrap().insert(id, token.into());
+            Ok(())
+        })
+    }
+    fn delete(&self, id: Uuid) -> CredentialFuture<'_, ()> {
+        Box::pin(async move {
+            self.0.lock().unwrap().remove(&id);
+            Ok(())
+        })
+    }
+}
+async fn tls(host: Arc<Host>) -> (String, tokio::task::JoinHandle<()>) {
+    tls_with_snapshot_gate(host, None).await
+}
+#[derive(Default)]
+struct SnapshotGate {
+    armed: std::sync::atomic::AtomicBool,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+async fn tls_with_snapshot_gate(
+    host: Arc<Host>,
+    gate: Option<Arc<SnapshotGate>>,
+) -> (String, tokio::task::JoinHandle<()>) {
+    let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("https://{}", listener.local_addr().unwrap());
+    let job = tokio::spawn(async move {
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+            let acceptor = acceptor.clone();
+            let host = host.clone();
+            let gate = gate.clone();
+            tokio::spawn(async move {
+                if let Ok(tls) = acceptor.accept(socket).await {
+                    let _ = hyper::server::conn::Http::new()
+                        .serve_connection(
+                            tls,
+                            hyper::service::service_fn(move |req: hyper::Request<hyper::Body>| {
+                                let host = host.clone();
+                                let gate = gate.clone();
+                                async move {
+                                    let snapshot = req.uri().path() == "/host/v1/snapshot";
+                                    let response = host.route(req).await?;
+                                    if let Some(gate) = gate.filter(|_| snapshot) {
+                                        if gate
+                                            .armed
+                                            .swap(false, std::sync::atomic::Ordering::SeqCst)
+                                        {
+                                            gate.entered.notify_one();
+                                            gate.release.notified().await;
+                                        }
+                                    }
+                                    Ok::<_, std::convert::Infallible>(response)
+                                }
+                            }),
+                        )
+                        .await;
+                }
+            });
+        }
+    });
+    (origin, job)
+}
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_native_clients_share_enrollment_reload_forget_and_one_time_migration() {
+    let root = tempfile::tempdir().unwrap();
+    let host = Host::open(
+        root.path().join("host"),
+        "Fixture host".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    host.lan_sharing.lock().await.standalone = true;
+    let (origin, server) = tls(host.clone()).await;
+    let vault = Arc::new(Vault::default());
+    let registry = root.path().join("shared/hosts.json");
+    let first = Client::new(Some(registry.clone()), vault.clone());
+    let second = Client::new(Some(registry.clone()), vault.clone());
+    let (installation_a, installation_b) =
+        tokio::join!(first.installation_id(), second.installation_id());
+    assert_eq!(installation_a.unwrap(), installation_b.unwrap());
+    let authority = {
+        let data = host.data.lock().await;
+        ginfer_host::fleet::AuthorityLocator {
+            host_id: data.host_id,
+            origins: vec![origin.clone()],
+            certificate_sha256: data.certificate.fingerprint(),
+        }
+    };
+    let wrong = ginfer_host::fleet::AuthorityLocator {
+        certificate_sha256: "00".repeat(32),
+        ..authority.clone()
+    };
+    assert!(first.pair_locator(&wrong, "Shared desktop").await.is_err());
+    assert!(
+        host.data.lock().await.clients.is_empty(),
+        "a wrong coordinator pin must reject before enrollment"
+    );
+    let request = || PairRequest {
+        host_id: None,
+        base_url: Some(origin.clone()),
+        client_name: "Shared desktop".into(),
+    };
+    let (a, b) = tokio::join!(
+        first.pair(request()),
+        second.pair_locator(&authority, "Shared desktop")
+    );
+    a.unwrap();
+    b.unwrap();
+    let saved = first.registered().await.unwrap();
+    assert_eq!(saved, second.registered().await.unwrap());
+    assert_eq!(saved.len(), 1);
+    let grant = saved[0].client_id;
+    let host_id = saved[0].host_id;
+    assert_eq!(
+        host.data.lock().await.clients.len(),
+        1,
+        "concurrent apps must retain one issued grant"
+    );
+    let token = vault.get(grant).await.unwrap();
+    assert!(!std::fs::read_to_string(&registry).unwrap().contains(&token));
+    assert_eq!(
+        first.snapshot(host_id).await.unwrap()["display_name"],
+        "Fixture host"
+    );
+    let clients = second
+        .request_json(host_id, reqwest::Method::GET, "/host/v1/clients", None)
+        .await
+        .unwrap();
+    assert_eq!(clients["clients"][0]["client_id"], grant.to_string());
+    assert!(clients["clients"][0]["last_seen_unix_ms"]
+        .as_u64()
+        .is_some());
+    assert!(!clients.to_string().contains(&token));
+    assert!(clients["clients"][0].get("token_verifier").is_none());
+    let legacy = root.path().join("old/hosts.json");
+    std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+    let imported = SavedHost {
+        host_id: Uuid::new_v4(),
+        name: "Old grant".into(),
+        base_url: "https://127.0.0.1:7443".into(),
+        certificate_sha256: "ab".repeat(32),
+        client_id: Uuid::new_v4(),
+    };
+    let bytes = serde_json::to_vec(&vec![saved[0].clone(), imported.clone()]).unwrap();
+    std::fs::write(&legacy, &bytes).unwrap();
+    first.import_legacy(&legacy).await.unwrap();
+    assert_eq!(second.registered().await.unwrap().len(), 2);
+    second.forget(imported.host_id).await.unwrap();
+    first.import_legacy(&legacy).await.unwrap();
+    assert_eq!(first.registered().await.unwrap(), saved);
+    assert_eq!(
+        std::fs::read(&legacy).unwrap(),
+        bytes,
+        "migration must preserve original metadata"
+    );
+    first
+        .request_json(
+            host_id,
+            reqwest::Method::DELETE,
+            &format!("/host/v1/clients/{grant}"),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(second.snapshot(host_id).await.is_err());
+    second.forget(host_id).await.unwrap();
+    assert!(first.registered().await.unwrap().is_empty());
+    assert!(vault.get(grant).await.is_err());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(registry).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+    server.abort();
+}
+#[tokio::test]
+async fn local_administrator_identity_needs_no_vault_and_survives_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let state = root.path().join("host");
+    let host = Host::open(
+        state.clone(),
+        "Local".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    let (origin, server) = tls(host.clone()).await;
+    let control = ginfer_host::launcher::LocalControl::open(&state, &origin).unwrap();
+    let first = control
+        .request("/host/v1/local-client", Some(json!({})))
+        .await
+        .unwrap();
+    assert_eq!(
+        first,
+        control
+            .request("/host/v1/local-client", Some(json!({})))
+            .await
+            .unwrap()
+    );
+    assert!(first.get("token").is_none());
+    let id = first["client_id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    assert_ne!(id, host.data.lock().await.host_id);
+    let snapshot = control.snapshot().await.unwrap();
+    assert_eq!(snapshot["clients"][0]["local"], true);
+    assert_eq!(snapshot["clients"][0]["client_id"], id.to_string());
+    assert!(snapshot["clients"][0].get("token_verifier").is_none());
+    let reloaded = Host::open(
+        state,
+        "Ignored".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    assert_eq!(reloaded.data.lock().await.local_client_id, Some(id));
+    let anonymous =
+        ginfer_host::transport::pinned_client(&host.data.lock().await.certificate.fingerprint())
+            .unwrap();
+    assert_eq!(
+        anonymous
+            .post(format!("{origin}/host/v1/local-client"))
+            .json(&json!({}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let admin = host.data.lock().await.pairing_admin_token.clone();
+    assert!(!snapshot.to_string().contains(&admin));
+    server.abort();
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn inference_usage_releases_on_completion_cancellation_and_rejection() {
+    use hyper::{Body, Request, Response};
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let engine = root.path().join("inert-engine");
+    std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let models = root.path().join("models");
+    std::fs::create_dir(&models).unwrap();
+    let directory=json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
+    let mut artifact = b"NINFER\0\x03".to_vec();
+    artifact.extend((directory.len() as u64).to_le_bytes());
+    artifact.extend(directory.as_bytes());
+    artifact.resize(4096, 0);
+    std::fs::write(models.join("model.ginfer"), artifact).unwrap();
+    let host = Host::open(
+        root.path().join("host"),
+        "Fixture".into(),
+        engine,
+        vec![models],
+        vec![],
+        vec![ginfer_host::service::Gpu {
+            uuid: "GPU-inert".into(),
+            name: "Inert".into(),
+            display_name: None,
+            memory_mib: 32768,
+            compute_capability: Some("12.0".into()),
+        }],
+    )
+    .await
+    .unwrap();
+    host.lan_sharing.lock().await.standalone = true;
+    let paired = host
+        .clone()
+        .route(
+            Request::post("/host/v1/pair")
+                .body(Body::from(
+                    json!({"client_name":"Usage fixture"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let paired: Value =
+        serde_json::from_slice(&hyper::body::to_bytes(paired.into_body()).await.unwrap()).unwrap();
+    let token = paired["token"].as_str().unwrap();
+    let request = ginfer_host::service::LaunchRequest {
+        instance_id: None,
+        qualified_profile_id: None,
+        model_id: host.inventory.read().await[0].id,
+        gpu_uuids: vec!["GPU-inert".into()],
+        max_context: 2048,
+        concurrency: 1,
+        options: ginfer_host::engine_host::LaunchOptions::default(),
+    };
+    let id = host.launch(request).await.unwrap();
+    let port = host
+        .processes
+        .lock()
+        .await
+        .instances()
+        .find(|i| i.instance_id == id)
+        .unwrap()
+        .launch
+        .port;
+    let pending = Arc::new(Mutex::new(None::<hyper::body::Sender>));
+    let capture = pending.clone();
+    let upstream = hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(
+        hyper::service::make_service_fn(move |_| {
+            let pending = capture.clone();
+            async move {
+                Ok::<_, std::convert::Infallible>(hyper::service::service_fn(
+                    move |req: Request<Body>| {
+                        let pending = pending.clone();
+                        async move {
+                            let body = match req.uri().path() {
+                                "/health" => Body::from("{}"),
+                                "/v1/models" => Body::from(
+                                    json!({"data":[{"id":"muse-glimmer-30b/nvfp4"}]}).to_string(),
+                                ),
+                                _ => {
+                                    let (tx, body) = Body::channel();
+                                    *pending.lock().unwrap() = Some(tx);
+                                    body
+                                }
+                            };
+                            Ok::<_, std::convert::Infallible>(Response::new(body))
+                        }
+                    },
+                ))
+            }
+        }),
+    );
+    let server = tokio::spawn(upstream);
+    host.processes.lock().await.refresh().await.unwrap();
+    let path = format!("/host/v1/instances/{id}/inference/v1/chat/completions");
+    let call = || {
+        Request::post(&path)
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap()
+    };
+    let response = host.clone().route(call()).await.unwrap();
+    assert_eq!(response.status(), 200);
+    let snapshot = host.snapshot().await;
+    assert_eq!(snapshot["instances"][0]["active_requests"], 1);
+    assert_eq!(snapshot["clients"][0]["active_requests"], 1);
+    drop(response);
+    assert_eq!(
+        host.snapshot().await["clients"][0]["active_requests"],
+        0,
+        "cancelling downstream releases its lease"
+    );
+    let response = host.clone().route(call()).await.unwrap();
+    let mut sender = pending.lock().unwrap().take().unwrap();
+    sender.send_data("done".into()).await.unwrap();
+    drop(sender);
+    assert_eq!(
+        hyper::body::to_bytes(response.into_body()).await.unwrap(),
+        "done"
+    );
+    assert_eq!(host.snapshot().await["clients"][0]["active_requests"], 0);
+    let mut rejected = call();
+    rejected.headers_mut().insert(
+        "x-ginfer-session-id",
+        Uuid::new_v4().to_string().parse().unwrap(),
+    );
+    assert_eq!(host.clone().route(rejected).await.unwrap().status(), 400);
+    assert_eq!(
+        host.snapshot().await["instances"][0]["active_requests"],
+        0,
+        "rejected session must release its lease"
+    );
+    host.processes.lock().await.shutdown().await.unwrap();
+    server.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn delayed_snapshot_merges_other_apps_changes_and_rejects_replaced_or_forgotten_hosts() {
+    use std::sync::atomic::Ordering;
+    let root = tempfile::tempdir().unwrap();
+    let host = Host::open(
+        root.path().join("host-a"),
+        "Before".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    host.lan_sharing.lock().await.standalone = true;
+    let gate = Arc::new(SnapshotGate::default());
+    let (origin, server) = tls_with_snapshot_gate(host.clone(), Some(gate.clone())).await;
+    let other = Host::open(
+        root.path().join("host-b"),
+        "Other".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    other.lan_sharing.lock().await.standalone = true;
+    let (other_origin, other_server) = tls(other.clone()).await;
+    let vault = Arc::new(Vault::default());
+    let path = root.path().join("shared/hosts.json");
+    let first = Arc::new(Client::new(Some(path.clone()), vault.clone()));
+    let second = Client::new(Some(path), vault);
+    first
+        .pair(PairRequest {
+            host_id: None,
+            base_url: Some(origin.clone()),
+            client_name: "Desktop".into(),
+        })
+        .await
+        .unwrap();
+    let original = first.registered().await.unwrap()[0].clone();
+    let forgotten = SavedHost {
+        host_id: Uuid::new_v4(),
+        name: "Forgotten".into(),
+        base_url: "https://127.0.0.1:7443".into(),
+        certificate_sha256: "ab".repeat(32),
+        client_id: Uuid::new_v4(),
+    };
+    let legacy = root.path().join("legacy.json");
+    std::fs::write(
+        &legacy,
+        serde_json::to_vec(&vec![forgotten.clone()]).unwrap(),
+    )
+    .unwrap();
+    first.import_legacy(&legacy).await.unwrap();
+    host.data.lock().await.name = "After".into();
+    host.save().await.unwrap();
+    gate.armed.store(true, Ordering::SeqCst);
+    let poll = {
+        let first = first.clone();
+        tokio::spawn(async move { first.snapshot(original.host_id).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(2), gate.entered.notified())
+        .await
+        .unwrap();
+    second
+        .pair(PairRequest {
+            host_id: None,
+            base_url: Some(other_origin),
+            client_name: "Desktop".into(),
+        })
+        .await
+        .unwrap();
+    second.forget(forgotten.host_id).await.unwrap();
+    let authority = ginfer_host::fleet::AuthorityLocator {
+        host_id: original.host_id,
+        origins: vec![origin.clone()],
+        certificate_sha256: original.certificate_sha256.clone(),
+    };
+    second.set_fleet_authority(authority.clone()).await.unwrap();
+    let cache:ginfer_host::fleet::FleetSnapshot=serde_json::from_value(json!({"schema":"ginfer-fleet-v1","authority":authority,"revision":1,"members":[{"host":authority,"display_name":"After"}],"pools":[],"assignments":[]})).unwrap();
+    second.save_fleet_snapshot(cache.clone()).await.unwrap();
+    gate.release.notify_one();
+    assert_eq!(poll.await.unwrap().unwrap()["display_name"], "After");
+    let current = first.registered().await.unwrap();
+    assert_eq!(current.len(), 2);
+    assert!(current.iter().all(|host| host.host_id != forgotten.host_id));
+    assert_eq!(first.fleet_authority().await.unwrap(), Some(authority));
+    assert_eq!(first.cached_fleet().await.unwrap(), Some(cache));
+    // The import receipt must also survive this metadata merge.
+    second.import_legacy(&legacy).await.unwrap();
+    assert_eq!(second.registered().await.unwrap().len(), 2);
+    gate.armed.store(true, Ordering::SeqCst);
+    let poll = {
+        let first = first.clone();
+        tokio::spawn(async move { first.snapshot(original.host_id).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(2), gate.entered.notified())
+        .await
+        .unwrap();
+    second.forget(original.host_id).await.unwrap();
+    second
+        .pair(PairRequest {
+            host_id: None,
+            base_url: Some(origin),
+            client_name: "Replacement".into(),
+        })
+        .await
+        .unwrap();
+    let replacement = second
+        .registered()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|host| host.host_id == original.host_id)
+        .unwrap();
+    assert_ne!(replacement.client_id, original.client_id);
+    gate.release.notify_one();
+    assert!(poll
+        .await
+        .unwrap()
+        .unwrap_err()
+        .contains("registration changed"));
+    assert_eq!(
+        first
+            .registered()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|host| host.host_id == original.host_id)
+            .unwrap(),
+        replacement
+    );
+    gate.armed.store(true, Ordering::SeqCst);
+    let poll = {
+        let first = first.clone();
+        tokio::spawn(async move { first.snapshot(original.host_id).await })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(2), gate.entered.notified())
+        .await
+        .unwrap();
+    second.forget(original.host_id).await.unwrap();
+    gate.release.notify_one();
+    assert!(poll.await.unwrap().is_err());
+    assert!(first
+        .registered()
+        .await
+        .unwrap()
+        .iter()
+        .all(|host| host.host_id != original.host_id));
+    server.abort();
+    other_server.abort();
+}
+
+#[tokio::test]
+async fn manager_first_import_uses_registered_owners_configured_data_and_preserves_grants_once() {
+    let root = tempfile::tempdir().unwrap();
+    let provider = root.path().join("custom-gchat-data/ginfer");
+    std::fs::create_dir_all(&provider).unwrap();
+    let host = SavedHost {
+        host_id: Uuid::new_v4(),
+        name: "Already paired".into(),
+        base_url: "https://127.0.0.1:7443".into(),
+        certificate_sha256: "ab".repeat(32),
+        client_id: Uuid::new_v4(),
+    };
+    let source = provider.join("hosts.json");
+    let bytes = serde_json::to_vec(&vec![host.clone()]).unwrap();
+    std::fs::write(&source, &bytes).unwrap();
+    let executable = std::env::current_exe().unwrap();
+    let owner =
+        ginfer_host::local_host_registry::Owner::Desktop(ginfer_host::local_host::LocalHost {
+            binary: executable.clone(),
+            engine: executable,
+            engine_runtimes: Default::default(),
+            directory: provider.join("host"),
+            desktop_provider: Some(provider),
+            models: vec![],
+            artifact_sets: vec![],
+            name: "Local".into(),
+            nvidia_smi: "nvidia-smi".into(),
+            listen: "127.0.0.1:7443".parse().unwrap(),
+        });
+    let vault = Arc::new(Vault::default());
+    vault
+        .set(host.client_id, "existing grant credential")
+        .await
+        .unwrap();
+    let manager = Client::new(Some(root.path().join("shared/hosts.json")), vault.clone());
+    manager.initialize_from_owner(&owner).await.unwrap();
+    assert_eq!(manager.registered().await.unwrap(), vec![host.clone()]);
+    assert_eq!(
+        manager.secret(host.client_id).await.unwrap(),
+        "existing grant credential"
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), bytes);
+    assert!(
+        !root.path().join("custom-gchat-data/ginfer/host").exists(),
+        "import must not start or create a local service"
+    );
+    manager.forget(host.host_id).await.unwrap();
+    manager.initialize_from_owner(&owner).await.unwrap();
+    assert!(
+        manager.registered().await.unwrap().is_empty(),
+        "later manager launches must not resurrect forgotten grants"
+    );
+    assert_eq!(std::fs::read(source).unwrap(), bytes);
+}

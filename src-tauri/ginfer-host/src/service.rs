@@ -62,7 +62,9 @@ fn consolidate_instances(data: &mut Persistent, directory: &Path) -> Result<(), 
             retired.insert(*id, profile.clone());
         }
     }
-    if retired.is_empty() { return Ok(()); }
+    if retired.is_empty() {
+        return Ok(());
+    }
     let archive = directory.join("retired-instance-records.json");
     let mut archived: BTreeMap<Uuid, LaunchRequest> = match std::fs::read(&archive) {
         Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| error.to_string())?,
@@ -70,7 +72,10 @@ fn consolidate_instances(data: &mut Persistent, directory: &Path) -> Result<(), 
         Err(error) => return Err(error.to_string()),
     };
     archived.extend(retired.clone());
-    write_private(&archive, &serde_json::to_vec(&archived).map_err(|error| error.to_string())?)?;
+    write_private(
+        &archive,
+        &serde_json::to_vec(&archived).map_err(|error| error.to_string())?,
+    )?;
     data.profiles.retain(|id, _| !retired.contains_key(id));
     Ok(())
 }
@@ -79,10 +84,20 @@ pub struct ClientGrant {
     pub name: String,
     pub token_verifier: String,
 }
-fn default_share_lan() -> bool { true }
+fn default_share_lan() -> bool {
+    true
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Persistent {
+    #[serde(default)]
+    pub fleet: crate::fleet::FleetState,
+    /// Keeps this host's catalog revisions monotonic across explicit ownership changes.
+    #[serde(default)]
+    pub fleet_revision: u64,
+    /// Last-known read-only projection from the configured authority, never a catalog.
+    #[serde(default)]
+    pub fleet_membership: Option<crate::fleet::HostMembershipProjection>,
     #[serde(default = "default_share_lan")]
     pub share_lan: bool,
     #[serde(default)]
@@ -93,6 +108,8 @@ pub struct Persistent {
     /// Local pairing/control credential; never issued to paired desktop clients.
     pub pairing_admin_token: String,
     pub clients: BTreeMap<Uuid, ClientGrant>,
+    #[serde(default)]
+    pub local_client_id: Option<Uuid>,
     pub models: BTreeMap<String, Uuid>,
     pub profiles: BTreeMap<Uuid, LaunchRequest>,
     #[serde(default)]
@@ -119,8 +136,30 @@ pub struct Host {
     pub artifact_sets: Vec<PathBuf>,
     lifecycle: Mutex<()>,
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
+    activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
+}
+/// An authenticated HTTP caller, not a persistent desktop connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Principal {
+    LocalAdministrator,
+    Client(Uuid),
+}
+#[derive(Default)]
+struct ClientActivity {
+    last_seen_unix_ms: Option<u64>,
+    instances: BTreeMap<Uuid, usize>,
+}
+fn now_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 struct RequestLease {
+    activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
+    principal: Principal,
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
     id: Uuid,
 }
@@ -136,7 +175,17 @@ impl Drop for DrainGuard {
 impl Drop for RequestLease {
     fn drop(&mut self) {
         if let Some((_, count)) = self.traffic.lock().unwrap().get_mut(&self.id) {
-            *count -= 1;
+            *count = count.saturating_sub(1);
+        }
+        let mut activity = self.activity.lock().unwrap();
+        if let Some(caller) = activity.get_mut(&self.principal) {
+            if let Some(count) = caller.instances.get_mut(&self.id) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    caller.instances.remove(&self.id);
+                }
+            }
+            caller.last_seen_unix_ms = Some(now_unix_ms());
         }
     }
 }
@@ -182,20 +231,43 @@ impl Host {
         artifact_sets: Vec<PathBuf>,
         gpus: Vec<Gpu>,
     ) -> Result<Arc<Self>, String> {
-        Self::open_with_model_storage(directory, name, engine, model_dirs, artifact_sets, gpus, None).await
+        Self::open_with_model_storage(
+            directory,
+            name,
+            engine,
+            model_dirs,
+            artifact_sets,
+            gpus,
+            None,
+        )
+        .await
     }
 
     pub async fn open_with_model_storage(
-        directory: PathBuf, name: String, engine: PathBuf, model_dirs: Vec<PathBuf>,
-        artifact_sets: Vec<PathBuf>, gpus: Vec<Gpu>, desktop_provider: Option<PathBuf>,
+        directory: PathBuf,
+        name: String,
+        engine: PathBuf,
+        model_dirs: Vec<PathBuf>,
+        artifact_sets: Vec<PathBuf>,
+        gpus: Vec<Gpu>,
+        desktop_provider: Option<PathBuf>,
     ) -> Result<Arc<Self>, String> {
-        if desktop_provider.as_ref().is_some_and(|provider| !provider.is_absolute() || directory != provider.join("host")) {
-            return Err("desktop provider storage must use its dedicated provider/host state directory".into());
+        if desktop_provider
+            .as_ref()
+            .is_some_and(|provider| !provider.is_absolute() || directory != provider.join("host"))
+        {
+            return Err(
+                "desktop provider storage must use its dedicated provider/host state directory"
+                    .into(),
+            );
         }
         let path = directory.join("host.json");
         let mut data = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice::<Persistent>(&bytes).map_err(|e| e.to_string())?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Persistent {
+                fleet: Default::default(),
+                fleet_revision: 0,
+                fleet_membership: None,
                 management_origin: None,
                 share_lan: true,
                 host_id: Uuid::new_v4(),
@@ -207,6 +279,7 @@ impl Host {
                     Uuid::new_v4().simple()
                 ),
                 clients: BTreeMap::new(),
+                local_client_id: None,
                 models: BTreeMap::new(),
                 profiles: BTreeMap::new(),
                 local_artifacts: vec![],
@@ -214,6 +287,25 @@ impl Host {
             },
             Err(e) => return Err(e.to_string()),
         };
+        data.fleet
+            .validate_owner(data.host_id, &data.certificate.fingerprint())?;
+        if let Some(membership) = &data.fleet_membership {
+            membership.validate()?;
+            if membership.host_id != data.host_id
+                || !matches!(data.fleet, crate::fleet::FleetView::Member { .. })
+                || data
+                    .fleet
+                    .authority()
+                    .is_none_or(|authority| !membership.matches_authority(authority))
+            {
+                return Err(
+                    "Stored membership does not match this host's configured coordinator".into(),
+                );
+            }
+        }
+        if let crate::fleet::FleetView::Coordinator { fleet } = &data.fleet {
+            data.fleet_revision = data.fleet_revision.max(fleet.revision);
+        }
         consolidate_instances(&mut data, &directory)?;
         write_private(
             &path,
@@ -226,9 +318,13 @@ impl Host {
         )?;
         let downloads = match desktop_provider {
             Some(provider) => crate::model_downloads::ModelDownloads::open_local(
-                provider.join("models"), provider.join("model-downloads.json"))?,
+                provider.join("models"),
+                provider.join("model-downloads.json"),
+            )?,
             None => crate::model_downloads::ModelDownloads::open(
-                directory.join("managed-models"), directory.join("model-downloads.json"))?,
+                directory.join("managed-models"),
+                directory.join("model-downloads.json"),
+            )?,
         };
         if let Some(root) = &data.managed_model_root {
             std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
@@ -257,6 +353,7 @@ impl Host {
             artifact_sets,
             lifecycle: Mutex::new(()),
             traffic: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+            activity: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
         });
         host.scan().await?;
         Ok(host)
@@ -269,11 +366,64 @@ impl Host {
         )
     }
 
+    // The caller holds data's lock through the durable write. Neither another
+    // request nor a snapshot can observe a candidate whose commit failed.
+    fn commit_fleet(
+        &self,
+        data: &mut Persistent,
+        next: crate::fleet::FleetState,
+    ) -> Result<(), String> {
+        let previous_revision = data.fleet_revision;
+        let previous_membership = data.fleet_membership.clone();
+        if !matches!(next, crate::fleet::FleetView::Member { .. })
+            || data.fleet_membership.as_ref().is_some_and(|membership| {
+                next.authority()
+                    .is_none_or(|authority| !membership.matches_authority(authority))
+            })
+        {
+            data.fleet_membership = None;
+        }
+        if let crate::fleet::FleetView::Coordinator { fleet } = &data.fleet {
+            data.fleet_revision = data.fleet_revision.max(fleet.revision);
+        }
+        if let crate::fleet::FleetView::Coordinator { fleet } = &next {
+            data.fleet_revision = data.fleet_revision.max(fleet.revision);
+        }
+        let previous = std::mem::replace(&mut data.fleet, next);
+        let saved = serde_json::to_vec(data)
+            .map_err(|error| error.to_string())
+            .and_then(|bytes| write_private(&self.directory.join("host.json"), &bytes));
+        if let Err(error) = saved {
+            data.fleet = previous;
+            data.fleet_revision = previous_revision;
+            data.fleet_membership = previous_membership;
+            return Err(format!("Could not persist fleet configuration: {error}"));
+        }
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn membership_view(data: &Persistent) -> Result<crate::fleet::MembershipView, String> {
+        let membership = match &data.fleet {
+            crate::fleet::FleetView::Coordinator { fleet } => Some(fleet.membership(data.host_id)?),
+            crate::fleet::FleetView::Member { .. } => data.fleet_membership.clone(),
+            crate::fleet::FleetView::Unconfigured => None,
+        };
+        Ok(crate::fleet::MembershipView {
+            authority: data.fleet.authority().cloned(),
+            membership,
+            coordinator: matches!(data.fleet, crate::fleet::FleetView::Coordinator { .. }),
+        })
+    }
+
     pub async fn scan(&self) -> Result<(), String> {
         let path = self.directory.join("launch-profiles.json");
         let catalog = tokio::task::spawn_blocking(move || {
             let executable = std::env::current_exe().map_err(|error| error.to_string())?;
-            let bundled = executable.parent().ok_or("host executable has no parent")?.join("launch-profiles.json");
+            let bundled = executable
+                .parent()
+                .ok_or("host executable has no parent")?
+                .join("launch-profiles.json");
             crate::launch_profiles::ProfileCatalog::read_installed(&path, &bundled)
         })
         .await
@@ -282,13 +432,21 @@ impl Host {
             (Ok(mut profiles), Ok(installed)) => {
                 let mut conflict = None;
                 for profile in installed {
-                    if let Some(existing) = profiles.iter().find(|existing| existing.id == profile.id) {
+                    if let Some(existing) =
+                        profiles.iter().find(|existing| existing.id == profile.id)
+                    {
                         if serde_json::to_value(existing).map_err(|e| e.to_string())?
-                            != serde_json::to_value(&profile).map_err(|e| e.to_string())? {
-                            conflict = Some(format!("conflicting installed launch profile: {}", profile.id));
+                            != serde_json::to_value(&profile).map_err(|e| e.to_string())?
+                        {
+                            conflict = Some(format!(
+                                "conflicting installed launch profile: {}",
+                                profile.id
+                            ));
                             break;
                         }
-                    } else { profiles.push(profile); }
+                    } else {
+                        profiles.push(profile);
+                    }
                 }
                 conflict.map_or(Ok(profiles), Err)
             }
@@ -307,7 +465,13 @@ impl Host {
         let mut roots = self.model_dirs.clone();
         roots.extend(self.data.lock().await.local_artifacts.iter().cloned());
         roots.push(self.downloads.root().to_path_buf());
-        roots.extend(self.downloads.list().await.into_iter().filter_map(|job| job.path));
+        roots.extend(
+            self.downloads
+                .list()
+                .await
+                .into_iter()
+                .filter_map(|job| job.path),
+        );
         let sets = self.artifact_sets.clone();
         let (entries, errors) = tokio::task::spawn_blocking(move || {
             let mut pending: Vec<_> = roots.into_iter().map(|p| (p, false)).chain(sets.into_iter().map(|p|(p,true))).collect();
@@ -425,10 +589,33 @@ impl Host {
                 }));
             }
         }
+        let usage = self.client_projection(&data);
+        let membership = match Self::membership_view(&data) {
+            Ok(view) => serde_json::json!(view),
+            Err(error) => serde_json::json!({"error":error}),
+        };
+        {
+            let traffic = self.traffic.lock().unwrap();
+            for instance in &mut instances {
+                if let Some(id) = instance["instance_id"]
+                    .as_str()
+                    .and_then(|id| id.parse::<Uuid>().ok())
+                {
+                    instance["active_requests"] = traffic
+                        .get(&id)
+                        .map(|(_, count)| *count)
+                        .unwrap_or(0)
+                        .into();
+                }
+            }
+        }
         serde_json::json!({"protocol_version":1,"host_id":data.host_id,"boot_id":self.boot_id,
             "lan_sharing": {"enabled":data.share_lan,"managed":network["managed"],
                 "active":network["active"],"port":network["port"],"error":network["error"]},
             "display_name":data.name,"revision":self.revision.load(Ordering::SeqCst),
+            "fleet":data.fleet,
+            "fleet_membership":membership,
+            "clients":usage["clients"],"local_administrator":usage["local_administrator"],
             "instances":instances,"gpus":self.gpus,"models":*self.inventory.read().await,
             "inventory_errors":*self.inventory_errors.read().await,
             "launch_profiles":available_profiles,"profile_error":*self.profile_error.read().await,
@@ -436,45 +623,53 @@ impl Host {
                 "managed_root":self.downloads.root(),"engine_presets_available":!available_profiles.is_empty()}})
     }
     pub async fn authenticated(&self, request: &Request<Body>) -> bool {
-        let Some(token) = request
+        self.principal(request).await.is_some()
+    }
+    pub async fn principal(&self, request: &Request<Body>) -> Option<Principal> {
+        let token = request
             .headers()
             .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-        else {
-            return false;
-        };
+            .and_then(|v| v.to_str().ok())?
+            .strip_prefix("Bearer ")?;
         let data = self.data.lock().await;
         let admin = verifier(&data.pairing_admin_token).finalize().into_bytes();
-        if verifier(token).verify_slice(&admin).is_ok() {
-            return true;
-        }
-        let Some((id, _)) = token.split_once('.') else {
-            return false;
+        let principal = if verifier(token).verify_slice(&admin).is_ok() {
+            Principal::LocalAdministrator
+        } else {
+            let (id, _) = token.split_once('.')?;
+            let id = Uuid::parse_str(id).ok()?;
+            let grant = data.clients.get(&id)?;
+            let digest = hex::decode(&grant.token_verifier).ok()?;
+            if verifier(token).verify_slice(&digest).is_err() {
+                return None;
+            }
+            Principal::Client(id)
         };
-        let Ok(id) = Uuid::parse_str(id) else {
-            return false;
-        };
-        let Some(grant) = data.clients.get(&id) else {
-            return false;
-        };
-        hex::decode(&grant.token_verifier)
-            .ok()
-            .is_some_and(|digest| verifier(token).verify_slice(&digest).is_ok())
+        drop(data);
+        self.activity
+            .lock()
+            .unwrap()
+            .entry(principal)
+            .or_default()
+            .last_seen_unix_ms = Some(now_unix_ms());
+        Some(principal)
+    }
+    fn client_projection(&self, data: &Persistent) -> serde_json::Value {
+        let activity = self.activity.lock().unwrap();
+        let clients:Vec<_>=data.clients.iter().map(|(id,grant)|{
+            let usage=activity.get(&Principal::Client(*id));
+            serde_json::json!({"client_id":id,"name":grant.name,"local":data.local_client_id==Some(*id),
+                "active_requests":usage.map(|u|u.instances.values().sum::<usize>()).unwrap_or(0),
+                "active_instances":usage.map(|u|&u.instances),"last_seen_unix_ms":usage.and_then(|u|u.last_seen_unix_ms)})
+        }).collect();
+        let administrator = activity.get(&Principal::LocalAdministrator);
+        serde_json::json!({"clients":clients,"local_administrator":{
+            "active_requests":administrator.map(|u|u.instances.values().sum::<usize>()).unwrap_or(0),
+            "active_instances":administrator.map(|u|&u.instances),"last_seen_unix_ms":administrator.and_then(|u|u.last_seen_unix_ms)}})
     }
 
     async fn local_administrator(&self, request: &Request<Body>) -> bool {
-        let Some(token) = request
-            .headers()
-            .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-        else {
-            return false;
-        };
-        let data = self.data.lock().await;
-        let expected = verifier(&data.pairing_admin_token).finalize().into_bytes();
-        verifier(token).verify_slice(&expected).is_ok()
+        self.principal(request).await == Some(Principal::LocalAdministrator)
     }
     async fn prepare_launch(&self, request: &LaunchRequest) -> Result<EngineLaunch, String> {
         let model = self
@@ -486,13 +681,21 @@ impl Host {
             .cloned()
             .ok_or("model is not installed")?;
         let group = gpu_group(&request.gpu_uuids);
-        let existing = self.data.lock().await.profiles.iter()
+        let existing = self
+            .data
+            .lock()
+            .await
+            .profiles
+            .iter()
             .find(|(_, saved)| gpu_group(&saved.gpu_uuids) == group)
             .map(|(id, _)| *id);
         if request.instance_id.is_some() && existing.is_some() && request.instance_id != existing {
             return Err("This GPU group already has a server instance; select that instance to change its model or profile".into());
         }
-        let id = request.instance_id.or(existing).unwrap_or_else(Uuid::new_v4);
+        let id = request
+            .instance_id
+            .or(existing)
+            .unwrap_or_else(Uuid::new_v4);
         let metadata = if model.artifact_set {
             inspect_artifact_set(&model.path)?
                 .into_iter()
@@ -544,24 +747,14 @@ impl Host {
                 .await
                 .map_err(|e| e.to_string())??;
         }
-        if request.options.draft_tp != 0 && request.options.draft_tp != metadata.draft_tp {
-            return Err("draft TP must match the producer-final artifact".into());
-        }
-        if request.options.spec == "dflash" && metadata.draft_tp == 0 {
-            return Err("artifact has no DFlash body".into());
-        }
+        let limit = request.options.validate_target(
+            &metadata.identity,
+            metadata.tp_size,
+            metadata.draft_tp,
+        )?;
         if request.options.kv_dtype == "nvfp4" && !metadata.nvfp4_kv_available {
             return Err("This artifact lacks complete NVFP4 KV calibration metadata. Install its calibrated NVFP4 KV artifact or explicitly select INT8/BF16 KV. NVFP4 model weights alone do not provide KV calibration.".into());
         }
-        let qwen = metadata.identity.model_id == "qwen3.8-27b";
-        if qwen && request.options.draft_tokens > 7 {
-            return Err("Qwen supports at most 7 draft tokens".into());
-        }
-        let limit = match metadata.identity.model_id.as_str() {
-            "qwen3.8-27b" => 262144,
-            "muse-glimmer-30b" => 131072,
-            _ => return Err("model is not a registered host launch target".into()),
-        };
         if request.max_context > limit {
             return Err(format!("context exceeds model maximum of {limit}"));
         }
@@ -672,6 +865,11 @@ impl Host {
         if !allowed || suffix.contains("..") {
             return Err("unsupported inference route".into());
         }
+        let principal = req
+            .extensions()
+            .get::<Principal>()
+            .copied()
+            .ok_or("missing authenticated inference principal")?;
         let lease = {
             let mut traffic = self.traffic.lock().unwrap();
             let (draining, count) = traffic.entry(id).or_default();
@@ -679,7 +877,13 @@ impl Host {
                 return Err("instance is draining".into());
             }
             *count += 1;
+            let mut activity = self.activity.lock().unwrap();
+            let caller = activity.entry(principal).or_default();
+            *caller.instances.entry(id).or_default() += 1;
+            caller.last_seen_unix_ms = Some(now_unix_ms());
             RequestLease {
+                activity: self.activity.clone(),
+                principal,
                 traffic: self.traffic.clone(),
                 id,
             }
@@ -695,7 +899,8 @@ impl Host {
             .query()
             .map(|q| format!("?{q}"))
             .unwrap_or_default();
-        let mut upstream = self.inference_client
+        let mut upstream = self
+            .inference_client
             .request(
                 req.method().clone(),
                 format!("http://127.0.0.1:{port}/{suffix}{query}"),
@@ -762,15 +967,23 @@ impl Host {
                 serde_json::json!({"protocol_version":1,"host_id":data.host_id,"display_name":data.name}),
             ));
         }
-        if req.method() == hyper::Method::POST && matches!(path.as_str(), "/host/v1/lan-sharing" | "/host/v1/name") {
+        if req.method() == hyper::Method::POST
+            && matches!(path.as_str(), "/host/v1/lan-sharing" | "/host/v1/name")
+        {
             if !self.local_administrator(req).await {
-                return Ok(json(StatusCode::UNAUTHORIZED, serde_json::json!({"error":"local administrator credential required"})));
+                return Ok(json(
+                    StatusCode::UNAUTHORIZED,
+                    serde_json::json!({"error":"local administrator credential required"}),
+                ));
             }
             let body = body_json(req).await?;
             if path == "/host/v1/name" {
-                self.set_name(body["name"].as_str().ok_or("name must be text")?).await?;
+                self.set_name(body["name"].as_str().ok_or("name must be text")?)
+                    .await?;
             } else {
-                let enabled = body["enabled"].as_bool().ok_or("enabled must be a boolean")?;
+                let enabled = body["enabled"]
+                    .as_bool()
+                    .ok_or("enabled must be a boolean")?;
                 self.set_lan_sharing(enabled).await?;
             }
             return Ok(json(StatusCode::OK, self.snapshot().await));
@@ -784,7 +997,10 @@ impl Host {
                 .ok_or("client name is required")?;
             let sharing = self.lan_sharing.lock().await;
             if !sharing.active() && !sharing.standalone {
-                return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"Enable Share this host before pairing"})));
+                return Ok(json(
+                    StatusCode::FORBIDDEN,
+                    serde_json::json!({"error":"Enable Share this host before pairing"}),
+                ));
             }
             let id = Uuid::new_v4();
             let token = format!(
@@ -801,18 +1017,195 @@ impl Host {
                 },
             );
             let host_id = data.host_id;
+            let fleet = data.fleet.clone();
+            if let Err(error) = write_private(
+                &self.directory.join("host.json"),
+                &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
+            ) {
+                data.clients.remove(&id);
+                return Err(error);
+            }
             drop(data);
-            self.save().await?;
+            self.revision.fetch_add(1, Ordering::SeqCst);
             drop(sharing);
             return Ok(json(
                 StatusCode::OK,
-                serde_json::json!({"host_id":host_id,"client_id":id,"token":token}),
+                serde_json::json!({"host_id":host_id,"client_id":id,"token":token,"fleet":fleet}),
             ));
         }
-        if !self.authenticated(req).await {
+        let Some(principal) = self.principal(req).await else {
             return Ok(json(
                 StatusCode::UNAUTHORIZED,
                 serde_json::json!({"error":"invalid host credential"}),
+            ));
+        };
+        req.extensions_mut().insert(principal);
+        if req.method() == hyper::Method::GET && path == "/host/v1/clients" {
+            return Ok(json(
+                StatusCode::OK,
+                self.client_projection(&*self.data.lock().await),
+            ));
+        }
+        if req.method() == hyper::Method::POST && path == "/host/v1/local-client" {
+            if principal != Principal::LocalAdministrator {
+                return Ok(json(
+                    StatusCode::FORBIDDEN,
+                    serde_json::json!({"error":"local administrator credential required"}),
+                ));
+            }
+            let mut data = self.data.lock().await;
+            if let Some(id) = data
+                .local_client_id
+                .filter(|id| data.clients.contains_key(id))
+            {
+                return Ok(json(StatusCode::OK, serde_json::json!({"client_id":id})));
+            }
+            let id = Uuid::new_v4();
+            data.clients.insert(
+                id,
+                ClientGrant {
+                    name: "Local applications".into(),
+                    token_verifier: String::new(),
+                },
+            );
+            let previous = data.local_client_id.replace(id);
+            if let Err(error) = write_private(
+                &self.directory.join("host.json"),
+                &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
+            ) {
+                data.clients.remove(&id);
+                data.local_client_id = previous;
+                return Err(error);
+            }
+            self.revision.fetch_add(1, Ordering::SeqCst);
+            return Ok(json(StatusCode::OK, serde_json::json!({"client_id":id})));
+        }
+        if path == "/host/v1/fleet" && req.method() == hyper::Method::GET {
+            let fleet = self.data.lock().await.fleet.clone();
+            return Ok(json(
+                StatusCode::OK,
+                serde_json::to_value(fleet).map_err(|error| error.to_string())?,
+            ));
+        }
+        if path == "/host/v1/fleet/membership" && req.method() == hyper::Method::GET {
+            let data = self.data.lock().await;
+            return Ok(json(
+                StatusCode::OK,
+                serde_json::to_value(Self::membership_view(&data)?)
+                    .map_err(|error| error.to_string())?,
+            ));
+        }
+        if path == "/host/v1/fleet/membership" && req.method() == hyper::Method::POST {
+            let membership: crate::fleet::HostMembershipProjection =
+                serde_json::from_value(body_json(req).await?).map_err(|error| error.to_string())?;
+            membership.validate()?;
+            let mut data = self.data.lock().await;
+            let crate::fleet::FleetView::Member { authority } = &data.fleet else {
+                return Ok(json(
+                    StatusCode::CONFLICT,
+                    serde_json::json!({"error":"Only a configured member accepts read-only membership projections"}),
+                ));
+            };
+            if membership.host_id != data.host_id || !membership.matches_authority(authority) {
+                return Ok(json(
+                    StatusCode::CONFLICT,
+                    serde_json::json!({"error":"Membership projection does not match this host and its configured coordinator"}),
+                ));
+            }
+            if let Some(current) = &data.fleet_membership {
+                if membership.revision < current.revision || membership == *current {
+                    return Ok(json(
+                        StatusCode::OK,
+                        serde_json::json!({"applied":false,"membership":current}),
+                    ));
+                }
+                if membership.revision == current.revision {
+                    return Ok(json(
+                        StatusCode::CONFLICT,
+                        serde_json::json!({"error":"Membership changed without a new coordinator revision", "current_revision":current.revision}),
+                    ));
+                }
+            }
+            let previous = data.fleet_membership.replace(membership.clone());
+            let saved = serde_json::to_vec(&*data)
+                .map_err(|error| error.to_string())
+                .and_then(|bytes| write_private(&self.directory.join("host.json"), &bytes));
+            if let Err(error) = saved {
+                data.fleet_membership = previous;
+                return Err(format!("Could not persist host membership: {error}"));
+            }
+            self.revision.fetch_add(1, Ordering::SeqCst);
+            return Ok(json(
+                StatusCode::OK,
+                serde_json::json!({"applied":true,"membership":membership}),
+            ));
+        }
+        if path == "/host/v1/fleet/authority" && req.method() == hyper::Method::POST {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct ConfigureAuthority {
+                authority: crate::fleet::AuthorityLocator,
+            }
+            let request: ConfigureAuthority =
+                serde_json::from_value(body_json(req).await?).map_err(|error| error.to_string())?;
+            let mut data = self.data.lock().await;
+            let mut next = data.fleet.configured(
+                request.authority,
+                data.host_id,
+                &data.name,
+                &data.certificate.fingerprint(),
+            )?;
+            if !matches!(data.fleet, crate::fleet::FleetView::Coordinator { .. }) {
+                if let crate::fleet::FleetView::Coordinator { fleet } = &mut next {
+                    fleet.revision = data
+                        .fleet_revision
+                        .checked_add(1)
+                        .ok_or("Fleet revision exhausted")?;
+                }
+            }
+            self.commit_fleet(&mut data, next)?;
+            return Ok(json(
+                StatusCode::OK,
+                serde_json::to_value(&data.fleet).map_err(|error| error.to_string())?,
+            ));
+        }
+        if path == "/host/v1/fleet/update" && req.method() == hyper::Method::POST {
+            let request: crate::fleet::FleetUpdate =
+                serde_json::from_value(body_json(req).await?).map_err(|error| error.to_string())?;
+            let mut data = self.data.lock().await;
+            let next = match data.fleet.updated(request.clone()) {
+                Ok(next) => next,
+                Err(crate::fleet::FleetError::Conflict { current_revision }) => {
+                    return Ok(json(
+                        StatusCode::CONFLICT,
+                        serde_json::json!({"error":"Fleet changed; refresh and review your edit", "current_revision":current_revision}),
+                    ));
+                }
+                Err(crate::fleet::FleetError::NotCoordinator) => {
+                    return Ok(json(
+                        StatusCode::CONFLICT,
+                        serde_json::json!({"error":"This host does not own the fleet catalog; connect to the configured coordinator", "fleet":data.fleet}),
+                    ));
+                }
+                Err(crate::fleet::FleetError::Invalid(error)) => return Err(error),
+            };
+            if let crate::fleet::FleetOperation::SetClientAssignment { assignment } =
+                request.operation
+            {
+                if !data.clients.contains_key(&assignment.client_id) {
+                    return Err(
+                        "Client placement requires a current coordinator-issued client grant"
+                            .into(),
+                    );
+                }
+            }
+            self.commit_fleet(&mut data, next)?;
+            let crate::fleet::FleetView::Coordinator { fleet } = &data.fleet else {
+                unreachable!();
+            };
+            return Ok(json(
+                StatusCode::OK,
+                serde_json::to_value(fleet).map_err(|error| error.to_string())?,
             ));
         }
         if let Some(tail) = path.strip_prefix("/host/v1/instances/") {
@@ -848,12 +1241,22 @@ impl Host {
                 }
                 if req.method() == hyper::Method::GET && operation == "benchmark-hardware" {
                     let (_, _, _, session_id) = self.processes.lock().await.endpoint(id)?;
-                    let profile = self.data.lock().await.profiles.get(&id).cloned().ok_or("instance profile missing")?;
+                    let profile = self
+                        .data
+                        .lock()
+                        .await
+                        .profiles
+                        .get(&id)
+                        .cloned()
+                        .ok_or("instance profile missing")?;
                     let gpus: Vec<_> = self.gpus.iter().filter(|gpu| profile.gpu_uuids.contains(&gpu.uuid))
                         .map(|gpu| serde_json::json!({"model":gpu.name,"vram_mib":gpu.memory_mib,"sm":gpu.compute_capability})).collect();
                     let mut hardware = crate::benchmark_hardware::collect().await;
                     hardware["gpus"] = serde_json::json!(gpus);
-                    return Ok(json(StatusCode::OK, serde_json::json!({"session_id":session_id,"hardware":hardware})));
+                    return Ok(json(
+                        StatusCode::OK,
+                        serde_json::json!({"session_id":session_id,"hardware":hardware}),
+                    ));
                 }
                 if req.method() == hyper::Method::POST
                     && matches!(operation, "start" | "stop" | "restart" | "reload")
@@ -863,12 +1266,18 @@ impl Host {
                     if let Some(expected) = body.get("expected_session_id") {
                         let expected: Option<Uuid> = serde_json::from_value(expected.clone())
                             .map_err(|e| format!("invalid expected session: {e}"))?;
-                        let current = self.processes.lock().await.instances()
+                        let current = self
+                            .processes
+                            .lock()
+                            .await
+                            .instances()
                             .find(|instance| instance.instance_id == id)
                             .map(|instance| instance.session_id);
                         if current != expected {
-                            return Ok(json(StatusCode::CONFLICT,
-                                serde_json::json!({"error":"assigned engine session has changed"})));
+                            return Ok(json(
+                                StatusCode::CONFLICT,
+                                serde_json::json!({"error":"assigned engine session has changed"}),
+                            ));
                         }
                     }
                     let force = body.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -922,20 +1331,52 @@ impl Host {
         if req.method() == hyper::Method::DELETE {
             if let Some(id) = path.strip_prefix("/host/v1/clients/") {
                 let id = Uuid::parse_str(id).map_err(|e| e.to_string())?;
-                self.data.lock().await.clients.remove(&id);
-                self.save().await?;
+                let mut data = self.data.lock().await;
+                if data.local_client_id == Some(id) {
+                    return Ok(json(
+                        StatusCode::FORBIDDEN,
+                        serde_json::json!({"error":"the local administrator identity is managed by this host"}),
+                    ));
+                }
+                let mut next_fleet = data.fleet.clone();
+                next_fleet.remove_client(id)?;
+                let previous_revision = data.fleet_revision;
+                if let crate::fleet::FleetState::Coordinator { fleet } = &next_fleet {
+                    data.fleet_revision = data.fleet_revision.max(fleet.revision);
+                }
+                let previous_fleet = std::mem::replace(&mut data.fleet, next_fleet);
+                let previous = data.clients.remove(&id);
+                if let Err(error) = write_private(
+                    &self.directory.join("host.json"),
+                    &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
+                ) {
+                    if let Some(previous) = previous {
+                        data.clients.insert(id, previous);
+                    }
+                    data.fleet = previous_fleet;
+                    data.fleet_revision = previous_revision;
+                    return Err(error);
+                }
+                self.revision.fetch_add(1, Ordering::SeqCst);
                 return Ok(json(StatusCode::OK, serde_json::json!({"revoked":id})));
             }
         }
         match (req.method().as_str(), path.as_str()) {
             ("POST", "/host/v1/local-engine") => {
                 if !self.local_administrator(req).await {
-                    return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"local administrator credential required"})));
+                    return Ok(json(
+                        StatusCode::FORBIDDEN,
+                        serde_json::json!({"error":"local administrator credential required"}),
+                    ));
                 }
                 let body = body_json(req).await?;
-                let executable: PathBuf = serde_json::from_value(body["path"].clone()).map_err(|e| e.to_string())?;
+                let executable: PathBuf =
+                    serde_json::from_value(body["path"].clone()).map_err(|e| e.to_string())?;
                 let _lifecycle = self.lifecycle.lock().await;
-                self.processes.lock().await.configure_executable(executable)?;
+                self.processes
+                    .lock()
+                    .await
+                    .configure_executable(executable)?;
                 Ok(json(StatusCode::OK, serde_json::json!({"ok":true})))
             }
             ("POST", "/host/v1/local-artifacts") => {
@@ -1016,12 +1457,18 @@ impl Host {
                 let _lifecycle = self.lifecycle.lock().await;
                 if let Some(id) = selection.instance_id {
                     if body.get("expected_session_id").is_some() {
-                        let current = self.processes.lock().await.instances()
+                        let current = self
+                            .processes
+                            .lock()
+                            .await
+                            .instances()
                             .find(|instance| instance.instance_id == id)
                             .map(|instance| instance.session_id);
                         if current != selection.expected_session_id {
-                            return Ok(json(StatusCode::CONFLICT,
-                                serde_json::json!({"error":"assigned engine session has changed"})));
+                            return Ok(json(
+                                StatusCode::CONFLICT,
+                                serde_json::json!({"error":"assigned engine session has changed"}),
+                            ));
                         }
                     }
                     if !self.data.lock().await.profiles.contains_key(&id) {
@@ -1103,34 +1550,59 @@ impl Host {
             }
             ("GET", "/host/v1/model-catalog") => {
                 let releases = crate::model_downloads::published_releases().await?;
-                let releases: Vec<_> = releases.into_iter().filter(|r| r.compatible_group(&self.gpus).is_some()).collect();
-                Ok(json(StatusCode::OK, serde_json::to_value(releases).map_err(|e| e.to_string())?))
+                let releases: Vec<_> = releases
+                    .into_iter()
+                    .filter(|r| r.compatible_group(&self.gpus).is_some())
+                    .collect();
+                Ok(json(
+                    StatusCode::OK,
+                    serde_json::to_value(releases).map_err(|e| e.to_string())?,
+                ))
             }
             ("GET", "/host/v1/model-storage") => {
                 let root = self.downloads.root();
                 let free = crate::model_downloads::available_bytes(root.clone()).await?;
-                Ok(json(StatusCode::OK, serde_json::json!({"path":root,"available_bytes":free})))
+                Ok(json(
+                    StatusCode::OK,
+                    serde_json::json!({"path":root,"available_bytes":free}),
+                ))
             }
             ("POST", "/host/v1/model-storage") => {
                 let body = body_json(req).await?;
                 let root = PathBuf::from(body["path"].as_str().ok_or("storage path required")?);
-                if !root.is_absolute() { return Err("model storage must be an absolute path".into()); }
-                tokio::fs::create_dir_all(&root).await.map_err(|e| e.to_string())?;
-                let root = tokio::fs::canonicalize(root).await.map_err(|e| e.to_string())?;
+                if !root.is_absolute() {
+                    return Err("model storage must be an absolute path".into());
+                }
+                tokio::fs::create_dir_all(&root)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let root = tokio::fs::canonicalize(root)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 let probe = root.join(format!(".ginfer-write-check-{}", Uuid::new_v4()));
-                tokio::fs::write(&probe, []).await.map_err(|e| format!("model storage is not writable: {e}"))?;
-                tokio::fs::remove_file(probe).await.map_err(|e| e.to_string())?;
+                tokio::fs::write(&probe, [])
+                    .await
+                    .map_err(|e| format!("model storage is not writable: {e}"))?;
+                tokio::fs::remove_file(probe)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 let _lifecycle = self.lifecycle.lock().await;
                 let mut data = self.data.lock().await;
                 let previous = data.managed_model_root.replace(root.clone());
-                if let Err(error) = write_private(&self.directory.join("host.json"), &serde_json::to_vec(&*data).map_err(|e| e.to_string())?) {
+                if let Err(error) = write_private(
+                    &self.directory.join("host.json"),
+                    &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
+                ) {
                     data.managed_model_root = previous;
                     return Err(error);
                 }
                 self.downloads.set_root(root.clone());
                 Ok(json(StatusCode::OK, serde_json::json!({"path":root})))
             }
-            ("GET", "/host/v1/downloads") => Ok(json(StatusCode::OK, serde_json::to_value(self.downloads.list().await).map_err(|e| e.to_string())?)),
+            ("GET", "/host/v1/downloads") => Ok(json(
+                StatusCode::OK,
+                serde_json::to_value(self.downloads.list().await).map_err(|e| e.to_string())?,
+            )),
             ("POST", "/host/v1/downloads") => {
                 let release: crate::model_downloads::Release =
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
@@ -1192,6 +1664,137 @@ async fn body_json(req: &mut Request<Body>) -> Result<serde_json::Value, String>
     serde_json::from_slice(&bounded_body(req, 1024 * 1024).await?).map_err(|e| e.to_string())
 }
 
+#[cfg(test)]
+mod target_launch_tests {
+    use super::*;
+
+    async fn installed_flash(
+        weights: &str,
+        calibrated: bool,
+    ) -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
+        let dir = tempfile::tempdir().unwrap();
+        let models = dir.path().join("models");
+        std::fs::create_dir(&models).unwrap();
+        let objects = if calibrated {
+            serde_json::json!([
+                {"kind":"tensor","rank":"all","name":"nvfp4_kv/profile_v2"},
+                {"kind":"tensor","rank":"all","name":"nvfp4_kv/body_inverse_global_scales"},
+                {"kind":"tensor","rank":"all","name":"nvfp4_kv/mtp_inverse_global_scales"},
+                {"kind":"resource","name":"nvfp4_kv/provenance"}
+            ])
+        } else {
+            serde_json::json!([{"kind":"tensor","rank":"all","name":"fixture"}])
+        };
+        let metadata = serde_json::json!({
+            "identity":{"model_id":"qwen3.8-flash-next","weights_id":weights},
+            "tp_size":1,"draft_tp":0,"objects":objects
+        })
+        .to_string();
+        let mut artifact = b"NINFER\0\x03".to_vec();
+        artifact.extend((metadata.len() as u64).to_le_bytes());
+        artifact.extend(metadata.as_bytes());
+        artifact.resize(4096, 0);
+        // Header-only fixture tests host admission; the Engine validates real payloads.
+        std::fs::write(models.join("flash.ginfer"), artifact).unwrap();
+        let host = Host::open(
+            dir.path().join("state"),
+            "Test".into(),
+            std::env::current_exe().unwrap(),
+            vec![models],
+            vec![],
+            vec![Gpu {
+                uuid: "GPU-test".into(),
+                name: "Test".into(),
+                display_name: None,
+                memory_mib: 32768,
+                compute_capability: Some("12.0".into()),
+            }],
+        )
+        .await
+        .unwrap();
+        let request = LaunchRequest {
+            instance_id: None,
+            qualified_profile_id: None,
+            model_id: host.inventory.read().await[0].id,
+            gpu_uuids: vec!["GPU-test".into()],
+            max_context: 262144,
+            concurrency: 1,
+            options: LaunchOptions::default(),
+        };
+        (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn prepare_flash_launch_preserves_auto_and_admits_mtp_above_dflash_limit() {
+        for weights in ["groupwise-int", "smol-q2g64", "nvfp4"] {
+            let (_dir, host, mut request) = installed_flash(weights, false).await;
+            let launch = host.prepare_launch(&request).await.unwrap();
+            assert_eq!(launch.model_id, format!("qwen3.8-flash-next/{weights}"));
+            assert_eq!(launch.options.spec, "auto");
+            assert_eq!(launch.options.draft_tokens, 0);
+            for vision in [false, true] {
+                request.options.vision = vision;
+                request.options.spec = "mtp".into();
+                request.options.draft_tokens = 16;
+                for policy in ["auto", "fixed"] {
+                    request.options.draft_policy = policy.into();
+                    let launch = host.prepare_launch(&request).await.unwrap();
+                    assert_eq!(launch.options.vision, vision);
+                    assert_eq!(launch.options.draft_tokens, 16);
+                }
+            }
+            request.max_context += 1;
+            assert!(host
+                .prepare_launch(&request)
+                .await
+                .unwrap_err()
+                .contains("context exceeds"));
+            request.max_context = 262144;
+            request.options.draft_policy = "adaptive".into();
+            assert!(host.prepare_launch(&request).await.is_err());
+            request.options.draft_policy = "auto".into();
+            for width in [0, u32::MAX] {
+                request.options.draft_tokens = width;
+                assert!(host.prepare_launch(&request).await.is_err());
+            }
+            request.options.spec = "dflash".into();
+            request.options.draft_tokens = 4;
+            assert!(host.prepare_launch(&request).await.is_err());
+            request.options.spec = "none".into();
+            request.options.draft_tokens = 0;
+            host.prepare_launch(&request).await.unwrap();
+            request.options.draft_tp = 1;
+            assert!(host.prepare_launch(&request).await.is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn prepare_flash_launch_requires_own_kv_metadata_and_exact_registered_weights() {
+        let (_dir, host, mut request) = installed_flash("nvfp4", false).await;
+        request.options.kv_dtype = "nvfp4".into();
+        assert!(host
+            .prepare_launch(&request)
+            .await
+            .unwrap_err()
+            .contains("calibration metadata"));
+        for dtype in ["auto", "bf16", "int8"] {
+            request.options.kv_dtype = dtype.into();
+            host.prepare_launch(&request).await.unwrap();
+        }
+        let (_dir, host, mut request) = installed_flash("nvfp4", true).await;
+        request.options.kv_dtype = "nvfp4".into();
+        host.prepare_launch(&request).await.unwrap();
+        for unregistered in ["nvfp4-mtp", "groupwise-int-dflash2-q4"] {
+            let (_dir, host, request) = installed_flash(unregistered, false).await;
+            assert!(host
+                .prepare_launch(&request)
+                .await
+                .unwrap_err()
+                .contains("registered weights"));
+        }
+    }
+}
+
 #[cfg(all(test, unix))]
 mod lifecycle_tests {
     use super::*;
@@ -1233,18 +1836,36 @@ mod lifecycle_tests {
         let dir = tempfile::tempdir().unwrap();
         let state = dir.path().join("state");
         let engine = std::env::current_exe().unwrap();
-        let host = Host::open(state.clone(), "Test".into(), engine.clone(), vec![], vec![], vec![]).await.unwrap();
+        let host = Host::open(
+            state.clone(),
+            "Test".into(),
+            engine.clone(),
+            vec![],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
         let root = dir.path().join("chosen-models");
         let token = host.data.lock().await.pairing_admin_token.clone();
         let request = Request::post("/host/v1/model-storage")
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::from(serde_json::json!({"path":root}).to_string())).unwrap();
-        assert_eq!(host.clone().route(request).await.unwrap().status(), StatusCode::OK);
+            .body(Body::from(serde_json::json!({"path":root}).to_string()))
+            .unwrap();
+        assert_eq!(
+            host.clone().route(request).await.unwrap().status(),
+            StatusCode::OK
+        );
         assert_eq!(host.downloads.root(), root.canonicalize().unwrap());
         drop(host);
-        let reopened = Host::open(state, "Test".into(), engine, vec![], vec![], vec![]).await.unwrap();
+        let reopened = Host::open(state, "Test".into(), engine, vec![], vec![], vec![])
+            .await
+            .unwrap();
         assert_eq!(reopened.downloads.root(), root.canonicalize().unwrap());
-        assert_eq!(reopened.snapshot().await["model_management"]["managed_root"], root.to_string_lossy().as_ref());
+        assert_eq!(
+            reopened.snapshot().await["model_management"]["managed_root"],
+            root.to_string_lossy().as_ref()
+        );
     }
 
     #[tokio::test]
@@ -1263,11 +1884,18 @@ mod lifecycle_tests {
         std::fs::write(models.join("model.ginfer"), artifact).unwrap();
         let mut gpus = vec![Gpu {
             uuid: "GPU-test".into(),
-            name: "Test".into(), display_name: None,
+            name: "Test".into(),
+            display_name: None,
             memory_mib: 32768,
             compute_capability: Some("12.0".into()),
         }];
-        gpus.push(Gpu { uuid: "GPU-second".into(), name: "Test".into(), display_name: None, memory_mib: 32768, compute_capability: Some("12.0".into()) });
+        gpus.push(Gpu {
+            uuid: "GPU-second".into(),
+            name: "Test".into(),
+            display_name: None,
+            memory_mib: 32768,
+            compute_capability: Some("12.0".into()),
+        });
         let host = Host::open(
             dir.path().join("state"),
             "Test".into(),
@@ -1341,9 +1969,13 @@ mod lifecycle_tests {
         for operation in ["stop", "restart", "reload"] {
             let request = Request::post(format!("/host/v1/instances/{id}/{operation}"))
                 .header("authorization", format!("Bearer {token}"))
-                .body(Body::from(serde_json::json!({
-                    "expected_session_id":before["instances"][0]["session_id"]
-                }).to_string())).unwrap();
+                .body(Body::from(
+                    serde_json::json!({
+                        "expected_session_id":before["instances"][0]["session_id"]
+                    })
+                    .to_string(),
+                ))
+                .unwrap();
             let response = host.clone().route(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::CONFLICT);
             let unchanged = host.snapshot().await;
@@ -1392,8 +2024,12 @@ mod lifecycle_tests {
         stale_selection["expected_session_id"] = before["instances"][0]["session_id"].clone();
         let stale = Request::post("/host/v1/profile-launch")
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::from(stale_selection.to_string())).unwrap();
-        assert_eq!(host.clone().route(stale).await.unwrap().status(), StatusCode::CONFLICT);
+            .body(Body::from(stale_selection.to_string()))
+            .unwrap();
+        assert_eq!(
+            host.clone().route(stale).await.unwrap().status(),
+            StatusCode::CONFLICT
+        );
         assert_eq!(host.snapshot().await["instances"][0]["session_id"], session);
         let switch = || {
             Request::post("/host/v1/profile-launch")
@@ -1416,14 +2052,21 @@ mod lifecycle_tests {
         );
         assert_ne!(snapshot["instances"][0]["session_id"], session);
         assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
-        let saved: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(dir.path().join("state/host.json")).unwrap(),
-        ).unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join("state/host.json")).unwrap())
+                .unwrap();
         assert!(saved["profiles"][id.to_string()]["kv_arena_bytes"].is_null());
         let restart = Request::post(format!("/host/v1/instances/{id}/restart"))
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::from("{}")).unwrap();
-        assert!(host.clone().route(restart).await.unwrap().status().is_success());
+            .body(Body::from("{}"))
+            .unwrap();
+        assert!(host
+            .clone()
+            .route(restart)
+            .await
+            .unwrap()
+            .status()
+            .is_success());
         let snapshot = host.snapshot().await;
         assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
         session = snapshot["instances"][0]["session_id"].clone();
@@ -1454,9 +2097,14 @@ mod lifecycle_tests {
                             let model = model.clone();
                             async move {
                                 if request.uri().path() == "/v1/ginfer/benchmark" {
-                                    let body = hyper::body::to_bytes(request.into_body()).await.unwrap();
-                                    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-                                    return Ok::<_, std::convert::Infallible>(json(StatusCode::OK, body));
+                                    let body =
+                                        hyper::body::to_bytes(request.into_body()).await.unwrap();
+                                    let body: serde_json::Value =
+                                        serde_json::from_slice(&body).unwrap();
+                                    return Ok::<_, std::convert::Infallible>(json(
+                                        StatusCode::OK,
+                                        body,
+                                    ));
                                 }
                                 Ok::<_, std::convert::Infallible>(json(
                                     StatusCode::OK,
@@ -1497,17 +2145,30 @@ mod lifecycle_tests {
         assert!(!host.snapshot().await.to_string().contains(api_key));
         let base = format!("http://127.0.0.1:{}", connection["port"]);
         let client = reqwest::Client::new();
-        let preflight = client.request(reqwest::Method::OPTIONS, format!("{base}/v1/models"))
+        let preflight = client
+            .request(reqwest::Method::OPTIONS, format!("{base}/v1/models"))
             .header("origin", "http://tauri.localhost")
             .header("access-control-request-method", "GET")
             .header("access-control-request-headers", "authorization")
-            .send().await.unwrap();
+            .send()
+            .await
+            .unwrap();
         assert_eq!(preflight.status(), 204);
-        assert_eq!(preflight.headers()["access-control-allow-origin"], "http://tauri.localhost");
-        let unauthorized = client.get(format!("{base}/v1/models"))
-            .header("origin", "http://tauri.localhost").send().await.unwrap();
+        assert_eq!(
+            preflight.headers()["access-control-allow-origin"],
+            "http://tauri.localhost"
+        );
+        let unauthorized = client
+            .get(format!("{base}/v1/models"))
+            .header("origin", "http://tauri.localhost")
+            .send()
+            .await
+            .unwrap();
         assert_eq!(unauthorized.status(), 401);
-        assert_eq!(unauthorized.headers()["access-control-allow-origin"], "http://tauri.localhost");
+        assert_eq!(
+            unauthorized.headers()["access-control-allow-origin"],
+            "http://tauri.localhost"
+        );
         assert_eq!(
             client
                 .get(format!("{base}/v1/models"))
@@ -1526,16 +2187,27 @@ mod lifecycle_tests {
             .await
             .unwrap();
         assert_eq!(result.status(), 200);
-        assert_eq!(result.headers()["access-control-allow-origin"], "http://tauri.localhost");
+        assert_eq!(
+            result.headers()["access-control-allow-origin"],
+            "http://tauri.localhost"
+        );
         assert_eq!(
             result.json::<serde_json::Value>().await.unwrap()["fixture"],
             "forwarded"
         );
         let benchmark_body = serde_json::json!({"prompt_tokens":2048,"output_tokens":500,"concurrency":4,"warmup_rounds":1,"measured_rounds":1});
-        let benchmark = client.post(format!("{base}/v1/ginfer/benchmark"))
-            .bearer_auth(api_key).json(&benchmark_body).send().await.unwrap();
+        let benchmark = client
+            .post(format!("{base}/v1/ginfer/benchmark"))
+            .bearer_auth(api_key)
+            .json(&benchmark_body)
+            .send()
+            .await
+            .unwrap();
         assert_eq!(benchmark.status(), 200);
-        assert_eq!(benchmark.json::<serde_json::Value>().await.unwrap(), benchmark_body);
+        assert_eq!(
+            benchmark.json::<serde_json::Value>().await.unwrap(),
+            benchmark_body
+        );
         host.processes.lock().await.shutdown().await.unwrap();
         assert_eq!(
             client
@@ -1572,8 +2244,9 @@ mod lifecycle_tests {
         assert_eq!(snapshot["instances"][0]["profile"]["max_context"], 8192);
         assert_eq!(snapshot["instances"].as_array().unwrap().len(), 1);
         let retired: BTreeMap<Uuid, LaunchRequest> = serde_json::from_slice(
-            &std::fs::read(dir.path().join("state/retired-instance-records.json")).unwrap()
-        ).unwrap();
+            &std::fs::read(dir.path().join("state/retired-instance-records.json")).unwrap(),
+        )
+        .unwrap();
         assert!(retired.contains_key(&duplicate_id));
         let mut replacement = profile.clone();
         replacement.concurrency = 2;

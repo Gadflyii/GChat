@@ -9,13 +9,27 @@ import type { AgentWorkerPool } from '@/types/agent'
 export function AgentWorkerPools() {
   const { catalog, error, refresh } = useStudioCatalog()
   const [draft, setDraft] = useState<AgentWorkerPool | null>(null)
+  const [draftRevision, setDraftRevision] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
+  const [coordinator, setCoordinator] = useState('')
+  const [coordinatorAddress, setCoordinatorAddress] = useState('')
+  const needsCoordinatorAddress =
+    !!coordinator &&
+    !catalog.fleetHosts?.find((host) => host.id === coordinator)?.origins
+      ?.length
   const save = async () => {
-    if (!draft) return
+    if (!draft || draftRevision === null || !catalog.fleet?.connected) return
     setBusy(true)
     try {
-      setDraft(await studioCommand<AgentWorkerPool>('save_pool', draft))
+      setDraft(
+        await studioCommand<AgentWorkerPool>('save_pool', {
+          pool: draft,
+          expectedRevision: draftRevision,
+        })
+      )
       await refresh()
+      setDraft(null)
+      setDraftRevision(null)
       toast.success('Worker pool saved')
     } catch (error) {
       toast.error(String(error))
@@ -39,15 +53,103 @@ export function AgentWorkerPools() {
           </Button>
         </p>
       )}
+      {catalog.fleet && !catalog.fleet.connected && (
+        <p role="alert" className="text-sm text-destructive">
+          {catalog.fleet.authorityId
+            ? 'Fleet coordinator offline. Last-known pools are read-only.'
+            : 'Choose a shared fleet coordinator to manage work pools.'}
+          {catalog.fleet.error && ` ${catalog.fleet.error}`}{' '}
+          <Button variant="outline" onClick={() => void refresh()}>
+            Retry
+          </Button>
+        </p>
+      )}
+      {!catalog.fleet?.authorityId && !!catalog.fleetHosts?.length && (
+        <div className="flex flex-wrap items-center gap-3">
+          <label>
+            Fleet coordinator{' '}
+            <select
+              aria-label="Fleet coordinator"
+              value={coordinator}
+              onChange={(event) => {
+                setCoordinator(event.target.value)
+                setCoordinatorAddress('')
+              }}
+              className="rounded border bg-background p-2"
+            >
+              <option value="">Choose a paired host</option>
+              {catalog.fleetHosts.map((host) => (
+                <option key={host.id} value={host.id}>
+                  {host.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {needsCoordinatorAddress && (
+            <label className="text-sm">
+              Coordinator address
+              <Input
+                value={coordinatorAddress}
+                onChange={(event) => setCoordinatorAddress(event.target.value)}
+                placeholder="https://192.168.1.10:7443"
+              />
+              <span className="block text-muted-foreground">
+                No shared address is advertised. Enter this host’s reachable
+                HTTPS address so other computers can join.
+              </span>
+            </label>
+          )}
+          <Button
+            disabled={
+              busy ||
+              !coordinator ||
+              (needsCoordinatorAddress && !coordinatorAddress.trim())
+            }
+            onClick={async () => {
+              setBusy(true)
+              try {
+                await studioCommand('fleet_authority', {
+                  hostId: coordinator,
+                  ...(needsCoordinatorAddress
+                    ? { origin: coordinatorAddress.trim() }
+                    : {}),
+                })
+                await refresh()
+              } catch (error) {
+                toast.error(String(error))
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            Use selected coordinator
+          </Button>
+        </div>
+      )}
+      {catalog.fleet?.migrationIssues.map((issue) => (
+        <p role="alert" className="text-sm text-destructive" key={issue}>
+          {issue}
+        </p>
+      ))}
+      {catalog.fleet?.warnings?.map((warning) => (
+        <p role="alert" className="text-sm text-muted-foreground" key={warning}>
+          {warning}
+        </p>
+      ))}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="font-studio text-lg font-semibold">Worker Pools</h2>
           <p className="text-sm text-muted-foreground">
-            Group inference capacity. Your tools and files stay on this
-            computer.
+            Shared fleet work pools. Your tools and files stay on this computer.
           </p>
         </div>
-        <Button onClick={() => setDraft({ id: '', name: '', members: [] })}>
+        <Button
+          disabled={!catalog.fleet?.connected}
+          onClick={() => {
+            setDraft({ id: '', name: '', members: [] })
+            setDraftRevision(catalog.fleet.revision ?? null)
+          }}
+        >
           Create pool
         </Button>
       </div>
@@ -64,9 +166,18 @@ export function AgentWorkerPools() {
               key={pool.id}
               variant={draft?.id === pool.id ? 'secondary' : 'outline'}
               className="w-full justify-between"
-              onClick={() => setDraft(structuredClone(pool))}
+              onClick={() => {
+                setDraft(structuredClone(pool))
+                setDraftRevision(catalog.fleet?.revision ?? null)
+              }}
             >
-              <span>{pool.name}</span>
+              <span>
+                {pool.name}
+                {catalog.availablePoolIds &&
+                !catalog.availablePoolIds.includes(pool.id)
+                  ? ' · not assigned to this client'
+                  : ''}
+              </span>
               <span>{pool.members.length} instances</span>
             </Button>
           ))}
@@ -89,8 +200,8 @@ export function AgentWorkerPools() {
             </p>
             {!ids.length && (
               <p>
-                No ready instances yet. Pair a host and load a model in GInfer Hosts
-                first.
+                No ready instances yet. Pair a host and load a model in GInfer
+                Hosts first.
               </p>
             )}
             {ids.map((id) => {
@@ -161,6 +272,8 @@ export function AgentWorkerPools() {
               <Button
                 disabled={
                   busy ||
+                  !catalog.fleet?.connected ||
+                  draftRevision === null ||
                   !draft.name.trim() ||
                   !draft.members.length ||
                   draft.members.some(
@@ -177,7 +290,9 @@ export function AgentWorkerPools() {
               {draft.id && (
                 <Button
                   variant="outline"
-                  disabled={busy}
+                  disabled={
+                    busy || !catalog.fleet?.connected || draftRevision === null
+                  }
                   onClick={async () => {
                     if (
                       !window.confirm(
@@ -186,7 +301,10 @@ export function AgentWorkerPools() {
                     )
                       return
                     try {
-                      await studioCommand('delete_pool', { id: draft.id })
+                      await studioCommand('delete_pool', {
+                        id: draft.id,
+                        expectedRevision: draftRevision,
+                      })
                       setDraft(null)
                       await refresh()
                     } catch (e) {

@@ -150,6 +150,7 @@ async fn forward_authenticated(
         "x-ginfer-session-id",
         session_id.to_string().parse().unwrap(),
     );
+    request.extensions_mut().insert(crate::service::Principal::LocalAdministrator);
     Ok(host
         .inference(instance_id, &suffix, &mut request)
         .await

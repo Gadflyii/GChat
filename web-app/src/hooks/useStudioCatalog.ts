@@ -2,7 +2,15 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { studioCommand, type StudioCatalog } from '@/services/agent/studio'
 
-const empty: StudioCatalog = { pools: [], instances: [], usage: {} }
+const empty: StudioCatalog = {
+  pools: [],
+  instances: [],
+  usage: {},
+  aliases: {},
+  fleetTargets: [],
+  fleetHosts: [],
+  fleet: { connected: false, migrationIssues: [] },
+}
 export const useStudioCatalogState = create<{
   catalog: StudioCatalog
   error?: string
@@ -17,6 +25,16 @@ export function refreshStudioCatalog(): Promise<void> {
   pending = studioCommand<StudioCatalog>('capacity')
     .then((catalog) => {
       const current = useStudioCatalogState.getState().catalog
+      if (
+        catalog.fleet?.authorityId === current.fleet?.authorityId &&
+        typeof catalog.fleet?.revision === 'number' &&
+        typeof current.fleet?.revision === 'number' &&
+        catalog.fleet.revision < current.fleet.revision
+      ) {
+        throw new Error(
+          'Fleet refresh returned an older revision; last-known data is retained.'
+        )
+      }
       const unchanged = JSON.stringify(current) === JSON.stringify(catalog)
       if (unchanged && !useStudioCatalogState.getState().error) return
       useStudioCatalogState.setState({

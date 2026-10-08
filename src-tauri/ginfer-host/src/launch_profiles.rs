@@ -165,26 +165,13 @@ impl LaunchProfile {
         if !evidence_valid || !measured_guard_valid {
             return Err(fail());
         }
-        let maximum = match self.identity.model_id.as_str() {
-            "qwen3.8-27b" => 262144,
-            "muse-glimmer-30b" => 131072,
-            _ => return Err(fail()),
-        };
+        let maximum = self.options.validate_target(&self.identity, self.tp, self.draft_tp)?;
         if self.max_context > maximum {
             return Err(fail());
         }
-        self.options.validate(self.tp)?;
         if (self.identity.weights_id.contains("nvfp4") || self.options.kv_dtype == "nvfp4")
             && self.compute_capability != "12.0"
         {
-            return Err(fail());
-        }
-        if (self.options.spec == "dflash" && self.draft_tp == 0)
-            || (self.identity.model_id == "qwen3.8-27b" && self.options.draft_tokens > 7)
-        {
-            return Err(fail());
-        }
-        if self.options.draft_tp != self.draft_tp && self.options.draft_tp != 0 {
             return Err(fail());
         }
         Ok(())
@@ -289,6 +276,64 @@ mod tests {
                 free_bytes_per_gpu: Some(HEADROOM_BYTES),
                 full_context_requests: 4,
             },
+        }
+    }
+
+    #[test]
+    fn flash_profiles_admit_exact_weights_context_and_mtp_without_dflash_tp() {
+        let mut p = profile();
+        p.identity.model_id = "qwen3.8-flash-next".into();
+        p.max_context = 262144;
+        for weights in ["groupwise-int", "smol-q2g64", "nvfp4"] {
+            p.identity.weights_id = weights.into();
+            for tp in [1, 2, 4] {
+                p.tp = tp;
+                for spec in ["auto", "none", "mtp"] {
+                    p.options.spec = spec.into();
+                    p.options.draft_tokens = if spec == "mtp" { 16 } else { 0 };
+                    for policy in ["auto", "fixed"] {
+                        p.options.draft_policy = policy.into();
+                        p.validate().unwrap();
+                    }
+                }
+            }
+        }
+        p.max_context += 1;
+        assert!(p.validate().is_err());
+        p.max_context = 262144;
+        p.options.draft_policy = "adaptive".into();
+        assert!(p.validate().is_err());
+        p.options.draft_policy = "auto".into();
+        p.options.spec = "dflash".into();
+        p.options.draft_tokens = 4;
+        assert!(p.validate().is_err());
+        p.options.spec = "auto".into();
+        p.options.draft_tokens = 0;
+        for obsolete in ["groupwise-int-mtp", "smol-q2g64-mtp", "nvfp4-mtp", "nvfp4-dflash2-q4"] {
+            p.identity.weights_id = obsolete.into();
+            assert!(p.validate().is_err());
+        }
+        p.identity.weights_id = "nvfp4".into();
+        p.draft_tp = 1;
+        assert!(p.validate().is_err());
+        p.draft_tp = 0;
+        p.options.draft_tp = 1;
+        assert!(p.validate().is_err());
+        p.options.draft_tp = 0;
+        p.compute_capability = "8.6".into();
+        assert!(p.validate().is_err());
+        p.identity.weights_id = "groupwise-int".into();
+        p.validate().unwrap();
+    }
+
+    #[test]
+    fn mtp_is_not_a_qwen_27b_or_muse_speculation_backend() {
+        let mut p = profile();
+        p.options.spec = "mtp".into();
+        p.options.draft_tokens = 3;
+        for model in ["qwen3.8-27b", "muse-glimmer-30b", "qwen3.8-flash", "unknown"] {
+            p.identity.model_id = model.into();
+            assert!(p.validate().is_err());
         }
     }
     #[test]

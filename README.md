@@ -106,6 +106,14 @@ The model pipeline is limited to curated `.ginfer` packages. GChat owns catalog 
 download progress, pause and resume, storage, installation state, and local lifecycle. GInfer owns
 artifact validation and execution; the desktop client does not quantize, split, or repack weights.
 
+### Standalone server management
+
+GInfer Server Manager is a separate native application for local and paired-host
+controls. It uses the same host registry and credentials as GChat, and leaves
+inference running when it exits. One selected host coordinates shared work pools
+and client placements across workstations. See the [operator guide](docs/ginfer-manager/guide.md)
+and [current build and verification status](docs/ginfer-manager/README.md).
+
 ### Chat and tools
 
 Regular conversations stream through the same local engine used by the API and agent surfaces.

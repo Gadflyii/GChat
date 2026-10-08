@@ -48,7 +48,10 @@ pub async fn operation<R: Runtime>(
 ) -> Result<Value, String> {
     let data = get_jan_data_folder_path(app.clone());
     if action == "compact_worker" {
-        let id = args.get("id").and_then(Value::as_str).ok_or("Worker context id is required")?;
+        let id = args
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or("Worker context id is required")?;
         super::context::request_compaction(id)?;
         return Ok(json!({"queued":true}));
     }
@@ -61,24 +64,69 @@ pub async fn operation<R: Runtime>(
         return Ok(json!({"stopped":true}));
     }
     let catalog = matches!(action, "catalog" | "capacity");
+    if action == "fleet_authority" {
+        worker_pools::configure(
+            &app,
+            args.get("hostId")
+                .and_then(Value::as_str)
+                .ok_or("hostId is required")?
+                .parse()
+                .map_err(|error: uuid::Error| error.to_string())?,
+            args.get("origin")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        )
+        .await?;
+        return Ok(json!({"configured":true}));
+    }
+    if action == "save_pool" || action == "delete_pool" {
+        let revision = args.get("expectedRevision").and_then(Value::as_u64).ok_or(
+            "Refresh the fleet catalog and provide expectedRevision before editing a pool",
+        )?;
+        return if action == "save_pool" {
+            Ok(json!(
+                worker_pools::save(
+                    &app,
+                    serde_json::from_value(args.get("pool").cloned().ok_or("pool is required")?)
+                        .map_err(|error| error.to_string())?,
+                    revision
+                )
+                .await?
+            ))
+        } else {
+            worker_pools::remove(
+                &app,
+                args.get("id")
+                    .and_then(Value::as_str)
+                    .ok_or("id is required")?,
+                revision,
+            )
+            .await?;
+            Ok(json!({"deleted":true}))
+        };
+    }
+    let pools = if catalog || action == "pools" {
+        Some(worker_pools::catalog(&app, &data).await?)
+    } else {
+        None
+    };
+    if action == "pools" {
+        return Ok(json!(pools));
+    }
     let action = action.to_owned();
     let mut result = tokio::task::spawn_blocking(move || {
     let id = || args.get("id").and_then(Value::as_str).ok_or_else(|| "id is required".to_string());
     match action.as_str() {
-        "capacity" => Ok(json!({"pools":worker_pools::list(&data)?,"usage":worker_pools::Allocator::shared().usage()})),
+        "capacity" => Ok(json!({"usage":worker_pools::Allocator::shared().usage()})),
         "catalog" => Ok(json!({
             "localModelDirectory": data.join("ginfer").join("models"),
             "definitionSchema": definitions::definition_json_schema(),
             "definitions": definitions::list_definitions(&data)?,
             "templates": definitions::built_in_templates(),
-            "pools": worker_pools::list(&data)?,
             "usage": worker_pools::Allocator::shared().usage(),
             "assignmentExample": {"target":{"kind":"pool","id":"pool UUID"},"vision":true,"minimumContext":8192},
             "roles": {"standard":["agent"],"goal_loop":["executor","evaluator"],"coordinator":["coordinator","synthesizer","worker:<worker id>"],"workflow":["workflow:<node id>"]},
         })),
-        "pools" => Ok(json!(worker_pools::list(&data)?)),
-        "save_pool" => Ok(json!(worker_pools::save(&data, serde_json::from_value(args).map_err(|e| e.to_string())?)?)),
-        "delete_pool" => { worker_pools::remove(&data, id()?)?; Ok(json!({"deleted":true})) },
         "get_definition" => Ok(json!(definitions::get_definition(&data, id()?)?)),
         "validate_definition" => {
             let definition: definitions::AgentDefinition = serde_json::from_value(args).map_err(|e| e.to_string())?;
@@ -92,8 +140,20 @@ pub async fn operation<R: Runtime>(
     }
     }).await.map_err(|e| e.to_string())??;
     if catalog {
+        if let Some(pools) = pools {
+            let fields = serde_json::to_value(pools).map_err(|error| error.to_string())?;
+            result
+                .as_object_mut()
+                .ok_or("Studio catalog must be an object")?
+                .extend(
+                    fields
+                        .as_object()
+                        .ok_or("Fleet catalog must be an object")?
+                        .clone(),
+                );
+        }
         result["instances"] =
-            json!(super::commands::agent_list_model_instances(app.state()).await?);
+            json!(super::commands::agent_list_model_instances(app.clone(), app.state()).await?);
     }
     Ok(result)
 }

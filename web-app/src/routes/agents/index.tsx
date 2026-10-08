@@ -71,7 +71,12 @@ type StudioView = Exclude<AgentStudioSection, 'skills'>
 type AgentStudioSearch = { view?: StudioView }
 
 function isStudioView(value: unknown): value is StudioView {
-  return value === 'definitions' || value === 'templates' || value === 'runs' || value === 'pools'
+  return (
+    value === 'definitions' ||
+    value === 'templates' ||
+    value === 'runs' ||
+    value === 'pools'
+  )
 }
 
 const KIND_META: Record<
@@ -104,7 +109,8 @@ const KIND_META: Record<
   },
   coordinator: {
     label: 'Coordinator Team',
-    description: 'Plan, dispatch bounded parallel specialists, then synthesize.',
+    description:
+      'Plan, dispatch bounded parallel specialists, then synthesize.',
     explainer:
       'Use a coordinator team when the task benefits from several distinct perspectives or independent workstreams. A planner assigns work, specialists run in parallel, and a synthesizer resolves their reports into one answer.',
     example:
@@ -205,8 +211,7 @@ function executionBudget(definition: AgentDefinition): {
       return {
         maxStages: definition.maxCycles * 2,
         maxModelSteps:
-          definition.maxCycles *
-          (definition.maxSteps + EVALUATOR_MAX_STEPS),
+          definition.maxCycles * (definition.maxSteps + EVALUATOR_MAX_STEPS),
         formula: `${definition.maxCycles} cycles × (${definition.maxSteps} executor + ${EVALUATOR_MAX_STEPS} evaluator)`,
       }
     case 'coordinator': {
@@ -374,7 +379,9 @@ export function AgentStudioPage() {
         setTemplates(nextTemplates)
         setRuns(nextRuns)
         setSelectedRunId((current) =>
-          nextRuns.some((run) => run.id === current) ? current : nextRuns[0]?.id ?? null
+          nextRuns.some((run) => run.id === current)
+            ? current
+            : (nextRuns[0]?.id ?? null)
         )
       })
       .catch((reason) => toast.error(String(reason)))
@@ -384,7 +391,9 @@ export function AgentStudioPage() {
     if (view !== 'definitions') return
     void listAgentModelInstances()
       .then(setModelInstances)
-      .catch((reason) => toast.error(`Could not refresh model instances: ${String(reason)}`))
+      .catch((reason) =>
+        toast.error(`Could not refresh model instances: ${String(reason)}`)
+      )
   }, [view])
 
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
@@ -424,7 +433,9 @@ export function AgentStudioPage() {
     selectView('definitions')
   }
 
-  const saveDraft = async (showToast = true): Promise<AgentDefinition | null> => {
+  const saveDraft = async (
+    showToast = true
+  ): Promise<AgentDefinition | null> => {
     if (!draft) return null
     const candidate = {
       ...draft,
@@ -467,7 +478,9 @@ export function AgentStudioPage() {
   const tryInChat = async (definition: AgentDefinition) => {
     const saved = definition === draft ? await saveDraft(false) : definition
     if (!saved) return
-    setRunTask(''); setRunWorkspace(''); setRunSetup(saved)
+    setRunTask('')
+    setRunWorkspace('')
+    setRunSetup(saved)
   }
 
   const rerun = async (run: AgentRunRecord, continueWork = false) => {
@@ -479,7 +492,10 @@ export function AgentStudioPage() {
       const definition = await getAgentDefinition(run.definitionId)
       setRunTask(continueWork ? continuationTask(run) : run.userMessage)
       setRunWorkspace(run.workspace ?? '')
-      setRunSetup({ ...definition, roleAssignments: run.roleAssignments ?? definition.roleAssignments })
+      setRunSetup({
+        ...definition,
+        roleAssignments: run.roleAssignments ?? definition.roleAssignments,
+      })
     } catch (reason) {
       toast.error(`Could not re-run task: ${String(reason)}`)
     }
@@ -491,7 +507,7 @@ export function AgentStudioPage() {
       const remaining = runs.filter((candidate) => candidate.id !== run.id)
       setRuns(remaining)
       setSelectedRunId((current) =>
-        current === run.id ? remaining[0]?.id ?? null : current
+        current === run.id ? (remaining[0]?.id ?? null) : current
       )
       toast.success('Run deleted')
     } catch (reason) {
@@ -513,7 +529,9 @@ export function AgentStudioPage() {
             void listAgentRuns()
               .then((nextRuns) => {
                 setRuns(nextRuns)
-                setSelectedRunId((current) => current ?? nextRuns[0]?.id ?? null)
+                setSelectedRunId(
+                  (current) => current ?? nextRuns[0]?.id ?? null
+                )
               })
               .catch((reason) =>
                 toast.error(`Could not refresh runs: ${String(reason)}`)
@@ -662,30 +680,44 @@ export function AgentStudioPage() {
         </div>
       )}
 
-      {runSetup && <AgentRunSetup definition={runSetup} initialTask={runTask} initialWorkspace={runWorkspace} onClose={() => setRunSetup(null)} onRun={() => { setRunSetup(null); selectView('runs') }} />}
-      {view === 'pools' && <AgentWorkerPools />}
-      {view === 'runs' && (
-        <div className="overflow-auto"><AgentLiveRuns />
-        <RunInspector
-          runs={runs}
-          selected={selectedRun}
-          onSelect={setSelectedRunId}
-          onRerun={(run) => void rerun(run)}
-          onContinue={(run) => void rerun(run, true)}
-          onDelete={(run) => void deleteRun(run)}
-          onRefresh={() => {
-            void listAgentRuns()
-              .then((nextRuns) => {
-                setRuns(nextRuns)
-                setSelectedRunId((current) =>
-                  nextRuns.some((run) => run.id === current)
-                    ? current
-                    : nextRuns[0]?.id ?? null
-                )
-              })
-              .catch((reason) => toast.error(`Could not refresh runs: ${String(reason)}`))
+      {runSetup && (
+        <AgentRunSetup
+          definition={runSetup}
+          initialTask={runTask}
+          initialWorkspace={runWorkspace}
+          onClose={() => setRunSetup(null)}
+          onRun={() => {
+            setRunSetup(null)
+            selectView('runs')
           }}
         />
+      )}
+      {view === 'pools' && <AgentWorkerPools />}
+      {view === 'runs' && (
+        <div className="overflow-auto">
+          <AgentLiveRuns />
+          <RunInspector
+            runs={runs}
+            selected={selectedRun}
+            onSelect={setSelectedRunId}
+            onRerun={(run) => void rerun(run)}
+            onContinue={(run) => void rerun(run, true)}
+            onDelete={(run) => void deleteRun(run)}
+            onRefresh={() => {
+              void listAgentRuns()
+                .then((nextRuns) => {
+                  setRuns(nextRuns)
+                  setSelectedRunId((current) =>
+                    nextRuns.some((run) => run.id === current)
+                      ? current
+                      : (nextRuns[0]?.id ?? null)
+                  )
+                })
+                .catch((reason) =>
+                  toast.error(`Could not refresh runs: ${String(reason)}`)
+                )
+            }}
+          />
         </div>
       )}
     </div>
@@ -800,7 +832,9 @@ function DefinitionEditor({
                     {selected.explainer}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Example:</span>{' '}
+                    <span className="font-medium text-foreground">
+                      Example:
+                    </span>{' '}
                     {selected.example}
                   </p>
                 </div>
@@ -847,11 +881,29 @@ function DefinitionEditor({
           />
         </Field>
         <details className="rounded-lg border border-border p-3">
-          <summary className="cursor-pointer text-sm font-medium">Advanced generation settings</summary>
+          <summary className="cursor-pointer text-sm font-medium">
+            Advanced generation settings
+          </summary>
           <div className="mt-3">
-            <Field label="Output budget per model call" help="Auto balances reasoning effort and available context. This includes thinking and the answer/tool call, not the number of tool steps. An explicit limit is never automatically increased.">
-              <Input type="number" min={256} max={262144} placeholder="Auto" value={draft.maxOutputTokens ?? ''}
-                onChange={(event) => common({ maxOutputTokens: event.target.value === '' ? null : Number(event.target.value) })} />
+            <Field
+              label="Output budget per model call"
+              help="Auto balances reasoning effort and available context. This includes thinking and the answer/tool call, not the number of tool steps. An explicit limit is never automatically increased."
+            >
+              <Input
+                type="number"
+                min={256}
+                max={262144}
+                placeholder="Auto"
+                value={draft.maxOutputTokens ?? ''}
+                onChange={(event) =>
+                  common({
+                    maxOutputTokens:
+                      event.target.value === ''
+                        ? null
+                        : Number(event.target.value),
+                  })
+                }
+              />
             </Field>
           </div>
         </details>
@@ -886,7 +938,9 @@ function DefinitionEditor({
               />
             </Field>
             <div className="rounded-xl border bg-muted/15 p-3 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">How the limit behaves</p>
+              <p className="font-medium text-foreground">
+                How the limit behaves
+              </p>
               <p className="mt-1">
                 Finishing normally requires the role to call Reply. If it uses
                 every step first, the run is preserved and marked incomplete so
@@ -902,25 +956,61 @@ function DefinitionEditor({
           </div>
         )}
         <details className="rounded-lg border border-border p-3">
-          <summary className="cursor-pointer text-sm font-medium">Permissions</summary>
-          <p className="mt-2 text-xs text-muted-foreground">Applies to every role and stage. Default keeps normal tool approvals. Allow runs without a tool confirmation; Ask requires approval each time; Block prevents the action. Folder access and hard safety blocks still apply.</p>
+          <summary className="cursor-pointer text-sm font-medium">
+            Permissions
+          </summary>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Applies to every role and stage. Default keeps normal tool
+            approvals. Allow runs without a tool confirmation; Ask requires
+            approval each time; Block prevents the action. Folder access and
+            hard safety blocks still apply.
+          </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {([
-              ['fileRead', 'Read files and Git history'], ['fileWrite', 'Write, edit, or delete files'],
-              ['shell', 'Run shell commands'], ['scripts', 'Run skill scripts'],
-              ['network', 'Web and HTTP requests'], ['management', 'Manage agents, memories, processes and notifications'],
-              ['clipboard', 'Read or write clipboard'],
-            ] as const).map(([key, label]) => (
+            {(
+              [
+                ['fileRead', 'Read files and Git history'],
+                ['fileWrite', 'Write, edit, or delete files'],
+                ['shell', 'Run shell commands'],
+                ['scripts', 'Run skill scripts'],
+                ['network', 'Web and HTTP requests'],
+                [
+                  'management',
+                  'Manage agents, memories, processes and notifications',
+                ],
+                ['clipboard', 'Read or write clipboard'],
+              ] as const
+            ).map(([key, label]) => (
               <Field key={key} label={label}>
-                <select aria-label={label} className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                <select
+                  aria-label={label}
+                  className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
                   value={draft.permissions?.[key] ?? 'default'}
-                  onChange={(event) => common({ permissions: { ...draft.permissions, [key]: event.target.value as 'default' | 'allow' | 'ask' | 'deny' } })}>
-                  <option value="default">Default</option><option value="allow">Allow</option><option value="ask">Ask every time</option><option value="deny">Block</option>
+                  onChange={(event) =>
+                    common({
+                      permissions: {
+                        ...draft.permissions,
+                        [key]: event.target.value as
+                          | 'default'
+                          | 'allow'
+                          | 'ask'
+                          | 'deny',
+                      },
+                    })
+                  }
+                >
+                  <option value="default">Default</option>
+                  <option value="allow">Allow</option>
+                  <option value="ask">Ask every time</option>
+                  <option value="deny">Block</option>
                 </select>
               </Field>
             ))}
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">Shell commands and scripts can also write files and access the network. Block both if you need those capabilities restricted; these controls are tool permissions, not an OS sandbox.</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Shell commands and scripts can also write files and access the
+            network. Block both if you need those capabilities restricted; these
+            controls are tool permissions, not an OS sandbox.
+          </p>
         </details>
         <Field label="Output contract" help={copy.outputHelp}>
           <Textarea
@@ -1117,9 +1207,9 @@ function GoalLoopEditor({
         />
       </Field>
       <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-        A step limit does not count as a result. The run stops as incomplete.
-        If every cycle returns a result but none passes evaluation, the last
-        result is preserved with a revision-limit status.
+        A step limit does not count as a result. The run stops as incomplete. If
+        every cycle returns a result but none passes evaluation, the last result
+        is preserved with a revision-limit status.
       </p>
     </section>
   )
@@ -1239,8 +1329,8 @@ function CoordinatorEditor({
           />
         </Field>
         <div className="rounded-xl border bg-background p-3 text-xs text-muted-foreground">
-          Set this to the number of specialists that may run concurrently, up
-          to the worker count. Parallel roles should use different loaded model
+          Set this to the number of specialists that may run concurrently, up to
+          the worker count. Parallel roles should use different loaded model
           instances when one server instance cannot service both at the desired
           concurrency.
         </div>
@@ -1265,7 +1355,9 @@ function CoordinatorEditor({
                   draft.maxParallel,
                   Math.max(1, draft.workers.length - 1)
                 ),
-                workers: draft.workers.filter((_, candidate) => candidate !== index),
+                workers: draft.workers.filter(
+                  (_, candidate) => candidate !== index
+                ),
               })
             }
           />
@@ -1357,7 +1449,10 @@ function WorkflowEditor({
             .map((edge) => edge.from)
             .join(', ')
           return (
-            <div key={`${node.id}-${index}`} className="rounded-xl border bg-background p-4">
+            <div
+              key={`${node.id}-${index}`}
+              className="rounded-xl border bg-background p-4"
+            >
               <RoleEditor
                 role={node}
                 roleKind="stage"
@@ -1367,7 +1462,9 @@ function WorkflowEditor({
                 onDelete={() =>
                   onChange({
                     ...draft,
-                    nodes: draft.nodes.filter((_, candidate) => candidate !== index),
+                    nodes: draft.nodes.filter(
+                      (_, candidate) => candidate !== index
+                    ),
                     edges: draft.edges.filter(
                       (edge) => edge.from !== node.id && edge.to !== node.id
                     ),
@@ -1391,7 +1488,10 @@ function WorkflowEditor({
                         ...draft,
                         edges: [
                           ...draft.edges.filter((edge) => edge.to !== node.id),
-                          ...from.map((source) => ({ from: source, to: node.id })),
+                          ...from.map((source) => ({
+                            from: source,
+                            to: node.id,
+                          })),
                         ],
                       })
                     }}
@@ -1412,7 +1512,9 @@ function WorkflowEditor({
                     }
                   >
                     <option value="isolated">Isolated (parallel-safe)</option>
-                    <option value="shared">Main workspace (single writer)</option>
+                    <option value="shared">
+                      Main workspace (single writer)
+                    </option>
                   </select>
                 </Field>
               </div>
@@ -1427,10 +1529,7 @@ function WorkflowEditor({
           const next = draft.nodes.length + 1
           onChange({
             ...draft,
-            nodes: [
-              ...draft.nodes,
-              newNode(`stage-${next}`, `Stage ${next}`),
-            ],
+            nodes: [...draft.nodes, newNode(`stage-${next}`, `Stage ${next}`)],
           })
         }}
       >
@@ -1470,7 +1569,9 @@ function RoleEditor({
           <Input
             value={role.id}
             placeholder={isSpecialist ? 'risk-reviewer' : 'analyze'}
-            onChange={(event) => onChange({ ...role, id: slug(event.target.value) })}
+            onChange={(event) =>
+              onChange({ ...role, id: slug(event.target.value) })
+            }
           />
         </Field>
         <Field
@@ -1480,7 +1581,9 @@ function RoleEditor({
           <Input
             value={role.name}
             placeholder={isSpecialist ? 'Risk Reviewer' : 'Analyze'}
-            onChange={(event) => onChange({ ...role, name: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...role, name: event.target.value })
+            }
           />
         </Field>
         <Button
@@ -1510,9 +1613,8 @@ function RoleEditor({
         </Field>
         <div className="rounded-xl border bg-muted/15 p-3 text-xs text-muted-foreground">
           Give a larger budget to roles that inspect many sources or perform
-          several tool actions. If this role reaches the limit repeatedly,
-          first check whether its instructions and ownership are specific
-          enough.
+          several tool actions. If this role reaches the limit repeatedly, first
+          check whether its instructions and ownership are specific enough.
         </div>
       </div>
       <Field
@@ -1532,7 +1634,9 @@ function RoleEditor({
               ? 'Example:\nOwn technical-risk analysis. Challenge unsupported assumptions, inspect relevant implementation evidence, and return prioritized risks with severity, evidence, and a concrete mitigation. Do not duplicate the market or product analysis.'
               : 'Example:\nInspect the goal and upstream analysis, implement the approved changes in the main workspace, and run focused verification. Return changed files, test results, and any unresolved issue for the next stage.'
           }
-          onChange={(event) => onChange({ ...role, instructions: event.target.value })}
+          onChange={(event) =>
+            onChange({ ...role, instructions: event.target.value })
+          }
         />
       </Field>
       <div className="grid gap-4 md:grid-cols-2">
@@ -1581,8 +1685,16 @@ function ModelInstanceSelect({
   inheritLabel: string
   onChange: (value: string | null) => void
 }) {
-  const selectedIsUnavailable =
-    value !== null && !instances.some((instance) => instance.id === value)
+  const resolved =
+    value === null
+      ? undefined
+      : instances.filter(
+          (instance) =>
+            instance.id === value || instance.aliases?.includes(value)
+        )
+  const legacySelected =
+    resolved?.length === 1 && resolved[0].id !== value ? resolved[0] : undefined
+  const selectedIsUnavailable = value !== null && resolved?.length !== 1
   return (
     <Field label={label} className="mt-3">
       <select
@@ -1595,9 +1707,15 @@ function ModelInstanceSelect({
         {selectedIsUnavailable && (
           <option value={value ?? ''}>{value} (not loaded)</option>
         )}
+        {legacySelected && (
+          <option value={value ?? ''}>
+            {legacySelected.modelId} · saved local instance
+          </option>
+        )}
         {instances.map((instance) => (
           <option key={instance.id} value={instance.id}>
-            {instance.modelId}{instance.port == null ? ' · LAN host' : ` · port ${instance.port}`}
+            {instance.modelId}
+            {instance.port == null ? ' · LAN host' : ` · port ${instance.port}`}
           </option>
         ))}
       </select>
@@ -1671,7 +1789,8 @@ function SkillPicker({
       <Label className="mb-2 block">Skills</Label>
       {available.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No enabled compatible skills. Author or enable them from the Skills tab.
+          No enabled compatible skills. Author or enable them from the Skills
+          tab.
         </p>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -1752,10 +1871,17 @@ function DefinitionInspector({
       <dl className="grid grid-cols-2 gap-3 text-sm">
         <Stat label="Maximum stages" value={String(budget.maxStages)} />
         <Stat label="Skills" value={String(draft.skills.length)} />
-        <Stat label="Maximum model steps" value={String(budget.maxModelSteps)} />
+        <Stat
+          label="Maximum model steps"
+          value={String(budget.maxModelSteps)}
+        />
         <Stat
           label="Model routing"
-          value={explicitModels.size === 0 ? 'Active model' : `${explicitModels.size} fixed`}
+          value={
+            explicitModels.size === 0
+              ? 'Active model'
+              : `${explicitModels.size} fixed`
+          }
         />
       </dl>
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
@@ -1865,8 +1991,8 @@ function RunInspector({
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  {new Date(run.startedAtMs).toLocaleString()} · {run.totalSteps}{' '}
-                  steps
+                  {new Date(run.startedAtMs).toLocaleString()} ·{' '}
+                  {run.totalSteps} steps
                 </div>
               </button>
               <DropdownMenu>
@@ -1887,7 +2013,14 @@ function RunInspector({
                   >
                     <IconRepeat /> Re-run
                   </DropdownMenuItem>
-                  {run.status !== 'finished' && <DropdownMenuItem disabled={!run.userMessage.trim()} onSelect={() => onContinue(run)}>Continue as new run…</DropdownMenuItem>}
+                  {run.status !== 'finished' && (
+                    <DropdownMenuItem
+                      disabled={!run.userMessage.trim()}
+                      onSelect={() => onContinue(run)}
+                    >
+                      Continue as new run…
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     onSelect={() => onDelete(run)}
@@ -1905,13 +2038,50 @@ function RunInspector({
           <div className="mx-auto max-w-4xl space-y-5">
             <section className="space-y-3 rounded-lg border bg-card p-4">
               <h2 className="font-medium">Result overview</h2>
-              <p className="whitespace-pre-wrap text-sm">{selected.finalReply ? selected.finalReply.slice(0, 600) + (selected.finalReply.length > 600 ? '…' : '') : 'No final answer was returned. Inspect the stage findings below.'}</p>
+              <p className="whitespace-pre-wrap text-sm">
+                {selected.finalReply
+                  ? selected.finalReply.slice(0, 600) +
+                    (selected.finalReply.length > 600 ? '…' : '')
+                  : 'No final answer was returned. Inspect the stage findings below.'}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {selected.status !== 'finished' && <Button variant="outline" onClick={() => onContinue(selected)}>Continue as new run…</Button>}
-                {selected.workspace && <Button variant="outline" onClick={() => void invoke('open_file_explorer', { path: selected.workspace }).catch((e) => toast.error(String(e)))}>Open workspace</Button>}
-                {selected.outputWorkspace && <Button variant="outline" onClick={() => void invoke('open_file_explorer', { path: selected.outputWorkspace }).catch((e) => toast.error(String(e)))}>Open run files</Button>}
+                {selected.status !== 'finished' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => onContinue(selected)}
+                  >
+                    Continue as new run…
+                  </Button>
+                )}
+                {selected.workspace && (
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      void invoke('open_file_explorer', {
+                        path: selected.workspace,
+                      }).catch((e) => toast.error(String(e)))
+                    }
+                  >
+                    Open workspace
+                  </Button>
+                )}
+                {selected.outputWorkspace && (
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      void invoke('open_file_explorer', {
+                        path: selected.outputWorkspace,
+                      }).catch((e) => toast.error(String(e)))
+                    }
+                  >
+                    Open run files
+                  </Button>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground">Continuation opens a new run setup with prior findings for review. It does not resume execution or replay tool calls.</p>
+              <p className="text-xs text-muted-foreground">
+                Continuation opens a new run setup with prior findings for
+                review. It does not resume execution or replay tool calls.
+              </p>
             </section>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
@@ -1939,7 +2109,8 @@ function RunInspector({
                 default: {selected.defaultModelInstanceId}
               </p>
             </div>
-            {(finishReason === 'max_steps' || finishReason === 'max_cycles') && (
+            {(finishReason === 'max_steps' ||
+              finishReason === 'max_cycles') && (
               <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
                 <div className="flex items-start gap-3">
                   <IconAlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-300" />
@@ -1962,11 +2133,17 @@ function RunInspector({
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
                 <Stat
                   label="Primary step limit"
-                  value={selected.maxSteps ? String(selected.maxSteps) : 'Legacy run'}
+                  value={
+                    selected.maxSteps ? String(selected.maxSteps) : 'Legacy run'
+                  }
                 />
                 <Stat
                   label="Cycle limit"
-                  value={selected.maxCycles ? String(selected.maxCycles) : 'Not applicable'}
+                  value={
+                    selected.maxCycles
+                      ? String(selected.maxCycles)
+                      : 'Not applicable'
+                  }
                 />
                 <Stat label="Steps used" value={String(selected.totalSteps)} />
               </dl>
@@ -1980,7 +2157,10 @@ function RunInspector({
                       key={metrics.modelInstanceId}
                       className="rounded-xl border bg-muted/10 p-4"
                     >
-                      <p className="truncate font-mono text-xs" title={metrics.modelInstanceId}>
+                      <p
+                        className="truncate font-mono text-xs"
+                        title={metrics.modelInstanceId}
+                      >
                         {metrics.modelInstanceId}
                       </p>
                       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -2009,8 +2189,8 @@ function RunInspector({
                   ))}
                 </div>
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                  Rates use GInfer engine timing and are aggregated by registered
-                  model instance.
+                  Rates use GInfer engine timing and are aggregated by
+                  registered model instance.
                 </p>
               </section>
             )}
@@ -2018,7 +2198,10 @@ function RunInspector({
               <section className="space-y-2">
                 <h3 className="font-medium">Stage trace</h3>
                 {selected.stages.map((stage) => (
-                  <article key={stage.stageId} className="rounded-xl border p-4">
+                  <article
+                    key={stage.stageId}
+                    className="rounded-xl border p-4"
+                  >
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{stage.name}</span>
                       <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">

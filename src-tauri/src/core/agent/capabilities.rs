@@ -586,7 +586,19 @@ async fn execute_control<R: Runtime>(
             .collect::<Vec<_>>())
         }
         "agent.list" => {
-            json!({"definitions": definitions::list_definitions(&data)?, "pools": super::worker_pools::list(&data)?})
+            let pools = super::worker_pools::catalog(&app, &data).await?;
+            let usable = pools
+                .pools
+                .iter()
+                .filter(|pool| {
+                    pools
+                        .available_pool_ids
+                        .as_ref()
+                        .map_or(true, |ids| ids.contains(&pool.id))
+                })
+                .collect::<Vec<_>>();
+            json!({"definitions": definitions::list_definitions(&data)?, "pools": usable,
+                "fleet":pools.fleet,"assignment":pools.assignment})
         }
         "agent.monitor" | "agent.cancel" => {
             let run_id = required(&request.arguments, "runId")?;

@@ -4,7 +4,20 @@ import { refreshStudioCatalog, useStudioCatalogState } from './useStudioCatalog'
 
 vi.mock('@/services/agent/studio', () => ({ studioCommand: vi.fn() }))
 it('shares in-flight capacity requests, retains unchanged state and reports stale data', async () => {
-  const catalog = { instances: [], pools: [], usage: { local: 1 } }
+  const catalog = {
+    instances: [],
+    pools: [],
+    usage: { local: 1 },
+    aliases: {},
+    fleetTargets: [],
+    fleetHosts: [],
+    fleet: {
+      connected: true,
+      authorityId: 'coordinator',
+      revision: 3,
+      migrationIssues: [],
+    },
+  }
   let complete!: (data: typeof catalog) => void
   vi.mocked(studioCommand).mockImplementationOnce(
     () =>
@@ -26,4 +39,11 @@ it('shares in-flight capacity requests, retains unchanged state and reports stal
   await refreshStudioCatalog()
   expect(useStudioCatalogState.getState().catalog).toBe(state.catalog)
   expect(useStudioCatalogState.getState().error).toContain('Host unavailable')
+  vi.mocked(studioCommand).mockResolvedValueOnce({
+    ...catalog,
+    fleet: { ...catalog.fleet, revision: 2 },
+  })
+  await refreshStudioCatalog()
+  expect(useStudioCatalogState.getState().catalog.fleet.revision).toBe(3)
+  expect(useStudioCatalogState.getState().error).toContain('older revision')
 })

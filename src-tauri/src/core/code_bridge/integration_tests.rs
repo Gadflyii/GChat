@@ -1,10 +1,8 @@
 use super::*;
 use crate::core::agent::{
     ginfer_client::GinferConnection,
-    test_support::{ScriptedGinferServer, ScriptedResponse},
-    worker_pools::{
-        self, Allocator, Candidate, PoolMember, RoleAssignment, WorkerPool, WorkerTarget,
-    },
+    test_support::{ScriptedGinferServer, ScriptedResponse, TestFleet},
+    worker_pools::{Allocator, Candidate, PoolMember, RoleAssignment, WorkerPool, WorkerTarget},
 };
 use crate::test_support::TestDataRoot;
 use tauri::test::{mock_builder, mock_context, noop_assets};
@@ -44,6 +42,163 @@ async fn mcp_tool(
 }
 
 #[tokio::test]
+#[cfg(unix)]
+async fn attached_local_instance_and_ready_host_snapshot_share_one_code_choice() {
+    use ginfer_host::engine_host::{EngineLaunch, HostProcesses, LaunchOptions};
+    use std::collections::BTreeSet;
+    use std::os::unix::fs::PermissionsExt;
+    const MODEL_ID: &str = "muse-glimmer-30b/nvfp4";
+    let scripted = ScriptedGinferServer::start_with_model(
+        Vec::new(),
+        json!({
+            "id":MODEL_ID,"object":"model","max_model_len":65536
+        }),
+    )
+    .await;
+    let GinferConnection::Local { port, .. } = scripted.client().target().connection else {
+        unreachable!()
+    };
+    let fleet = TestFleet::start().await;
+    let engine = fleet.directory.path().join("inert-engine");
+    std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+    std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let artifact = fleet.directory.path().join("fixture.ginfer");
+    std::fs::write(&artifact, b"inert process fixture").unwrap();
+    let instance_id = Uuid::new_v4();
+    let session_id = {
+        let mut processes = fleet.host.processes.lock().await;
+        *processes = HostProcesses::new(
+            engine,
+            BTreeSet::from(["GPU-inert".into()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
+        let session = processes
+            .launch(EngineLaunch {
+                instance_id,
+                artifact,
+                artifact_set: false,
+                model_id: MODEL_ID.into(),
+                gpu_uuids: vec!["GPU-inert".into()],
+                tp: 1,
+                port: port.try_into().unwrap(),
+                max_context: 65536,
+                concurrency: 2,
+                options: LaunchOptions::default(),
+            })
+            .unwrap();
+        processes.refresh().await.unwrap();
+        assert_eq!(
+            processes.instances().next().unwrap().status,
+            ginfer_host::engine_registry::InstanceStatus::Ready
+        );
+        session
+    };
+    let host_id = fleet.host.data.lock().await.host_id;
+    let snapshot = fleet.client.snapshot(host_id).await.unwrap();
+    assert_eq!(
+        snapshot["instances"][0]["session_id"],
+        session_id.to_string()
+    );
+    let ginfer = GinferState::default();
+    ginfer.ginfer_process.lock().await.insert(1,GinferSession{
+        owner:SessionOwner{
+            control:Arc::new(ginfer_host::launcher::LocalControl::open(&fleet.directory.path().join("host"),&fleet.origin).unwrap()),
+            connection:ginfer_host::launcher::LocalConnection{
+                instance_id,session_id,model_id:MODEL_ID.into(),port:port.try_into().unwrap(),api_key:String::new()
+            }
+        },
+        info:serde_json::from_value(json!({"pid":1,"port":port,"model_id":MODEL_ID,"model_path":"fixture.ginfer",
+            "is_embedding":false,"vision":false,"api_key":"","max_concurrency":1,"max_context":16384})).unwrap(),
+        endpoint:None
+    });
+    let data = tempfile::tempdir().unwrap();
+    let app = mock_builder()
+        .manage(ginfer)
+        .manage(fleet.client.clone())
+        .build(mock_context(noop_assets()))
+        .unwrap();
+    let reference = ginfer_host::engine_registry::InstanceRef {
+        host_id,
+        instance_id,
+    }
+    .model_alias();
+    let instances = commands::agent_list_model_instances(app.handle().clone(), app.state())
+        .await
+        .unwrap();
+    assert_eq!(
+        instances.len(),
+        1,
+        "a plugin attachment and its host snapshot are one physical instance"
+    );
+    assert_eq!(instances[0].id, reference);
+    assert_eq!(instances[0].session_id, session_id.to_string());
+    assert_eq!(instances[0].aliases, vec![MODEL_ID.to_owned()]);
+    assert!(
+        instances[0].vision,
+        "confirmed host capabilities take precedence for the same session"
+    );
+    assert_eq!(instances[0].concurrency, 2);
+    assert_eq!(instances[0].max_context, 65536);
+    assert_eq!(
+        select_model(
+            app.handle(),
+            &definitions::general_agent(),
+            data.path(),
+            None
+        )
+        .await
+        .unwrap(),
+        reference
+    );
+
+    let replacement = Uuid::new_v4();
+    app.state::<GinferState>()
+        .ginfer_process
+        .lock()
+        .await
+        .get_mut(&1)
+        .unwrap()
+        .owner
+        .connection
+        .session_id = replacement;
+    let instances = commands::agent_list_model_instances(app.handle().clone(), app.state())
+        .await
+        .unwrap();
+    assert_eq!(instances.len(), 1);
+    assert_eq!(instances[0].session_id, replacement.to_string());
+    assert_eq!(
+        instances[0].max_context, 16384,
+        "an older host incarnation cannot overwrite the attached connection"
+    );
+    app.state::<GinferState>()
+        .ginfer_process
+        .lock()
+        .await
+        .clear();
+    let instances = commands::agent_list_model_instances(app.handle().clone(), app.state())
+        .await
+        .unwrap();
+    assert_eq!(
+        instances.len(),
+        1,
+        "host-only local instances remain selectable"
+    );
+    assert_eq!(
+        select_model(
+            app.handle(),
+            &definitions::general_agent(),
+            data.path(),
+            None
+        )
+        .await
+        .unwrap(),
+        reference
+    );
+    fleet.host.processes.lock().await.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
     const MODEL_ID: &str = "code-bridge-scripted-model";
     let scripted = ScriptedGinferServer::start_with_model(
@@ -56,21 +211,14 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
     let GinferConnection::Local { port, .. } = scripted.client().target().connection else {
         unreachable!()
     };
-    let host_state = tempfile::tempdir().expect("host state");
-    let host = ginfer_host::service::Host::open(
-        host_state.path().into(),
-        "Fixture".into(),
-        std::env::current_exe().expect("test executable"),
-        vec![],
-        vec![],
-        vec![],
-    )
-    .await
-    .expect("fixture host");
+    let fleet = TestFleet::start().await;
     let owner = SessionOwner {
         control: Arc::new(
-            ginfer_host::launcher::LocalControl::open(host_state.path(), "https://127.0.0.1:1")
-                .expect("fixture host control"),
+            ginfer_host::launcher::LocalControl::open(
+                &fleet.directory.path().join("host"),
+                &fleet.origin,
+            )
+            .expect("fixture host control"),
         ),
         connection: ginfer_host::launcher::LocalConnection {
             instance_id: Uuid::new_v4(),
@@ -80,7 +228,11 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
             api_key: String::new(),
         },
     };
-    drop(host);
+    let canonical = ginfer_host::engine_registry::InstanceRef {
+        host_id: owner.control.host_id(),
+        instance_id: owner.connection.instance_id,
+    }
+    .model_alias();
     let info: SessionInfo = serde_json::from_value(json!({
         "pid": 1,
         "port": port,
@@ -108,21 +260,23 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
     let app = mock_builder()
         .manage(TestDataRoot(data.path().to_path_buf()))
         .manage(AppState::default())
+        .manage(fleet.client.clone())
         .manage(ginfer)
         .build(mock_context(noop_assets()))
         .expect("mock GChat");
-    let pool = worker_pools::save(
-        data.path(),
-        WorkerPool {
-            id: String::new(),
-            name: "Review workers".into(),
-            members: vec![PoolMember {
-                instance_id: MODEL_ID.into(),
-                worker_limit: 1,
-            }],
-        },
+    let pool = WorkerPool {
+        id: Uuid::new_v4().to_string(),
+        name: "Review workers".into(),
+        members: vec![PoolMember {
+            instance_id: MODEL_ID.into(),
+            worker_limit: 1,
+        }],
+    };
+    std::fs::write(
+        data.path().join("agent-worker-pools.json"),
+        serde_json::to_vec(&vec![pool.clone()]).unwrap(),
     )
-    .expect("saved worker pool");
+    .unwrap();
     let mut definition = definitions::editable_general_agent();
     definition.id = "bridge-pool-review".into();
     definition.name = "Pool Review".into();
@@ -228,7 +382,7 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
     let occupied = allocator
         .try_acquire(
             &[Candidate {
-                instance_id: MODEL_ID.into(),
+                instance_id: canonical.clone(),
                 session_id: "occupied-test-slot".into(),
                 concurrency: 1,
                 worker_limit: 1,
@@ -386,7 +540,8 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
         record.role_assignments["agent"].target,
         WorkerTarget::Pool { id: pool.id }
     );
-    assert_eq!(record.stages[0].model_instance_id, MODEL_ID);
+    assert_eq!(record.stages[0].model_instance_id, canonical);
+    assert!(record.fleet_revision.is_some());
     let cancelled_record = records
         .iter()
         .find(|record| record.run_id == waiting_id)

@@ -295,20 +295,21 @@ else
 	@[ -e src-tauri/resources/ginfer/linux/test-placeholder ] || touch src-tauri/resources/ginfer/linux/test-placeholder
 endif
 
-test-rust: export TAURI_CONFIG := {"bundle":{"icon":["icons/icon.png"]}}
+test-rust: export TAURI_CONFIG := {"bundle":{"icon":["$(CURDIR)/src-tauri/icons/icon.png"]}}
 test-rust: stub-resources
 	cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features test-tauri -- --test-threads=1
 	cargo test --manifest-path src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml
 	cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml
+	cargo test --manifest-path src-tauri/Cargo.toml -p ginfer-manager
 ifeq ($(OS),Windows_NT)
-	powershell -NoProfile -ExecutionPolicy Bypass -File tests/test_ginfer_host_install_windows.ps1 -HostBinary "$(CURDIR)/src-tauri/ginfer-host/target/debug/ginfer-host.exe"
+	powershell -NoProfile -ExecutionPolicy Bypass -File tests/test_ginfer_host_install_windows.ps1 -HostBinary "$(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),$(CURDIR)/src-tauri/target)/debug/ginfer-host.exe"
 endif
 	cargo test --manifest-path src-tauri/plugins/tauri-plugin-hardware/Cargo.toml
 	cargo test --manifest-path src-tauri/utils/Cargo.toml
 
 # Fast local suite: root Vitest, extension Vitest, and every test-bearing
 # Rust crate supported on the current platform.
-test-local: test-web test-extensions test-rust
+test-local: test-web test-extensions test-manager-ui test-rust
 
 # Deterministic local gate for agent-authored changes. Coverage replaces the
 # ordinary Vitest runs here, so the suites execute once while also producing
@@ -318,6 +319,9 @@ test-quality:
 
 test-hardening-contracts:
 	node --test tests/registry-contracts.test.mjs
+
+test-manager-ui:
+	node --test tests/ginfer-manager-ui.test.mjs
 
 test-coverage-critical:
 	yarn test:coverage
@@ -337,6 +341,7 @@ verify-fast:
 	"$(MAKE)" typecheck
 	"$(MAKE)" test-quality
 	"$(MAKE)" test-hardening-contracts
+	"$(MAKE)" test-manager-ui
 	"$(MAKE)" test-coverage-critical
 
 verify: verify-fast test-rust

@@ -38,6 +38,15 @@ const mocks = vi.hoisted(() => ({
       },
     ],
     usage: {},
+    aliases: {},
+    fleetTargets: ['lan-instance'],
+    fleetHosts: [],
+    fleet: {
+      connected: true,
+      revision: 1,
+      authorityId: 'host',
+      migrationIssues: [],
+    },
   },
 }))
 vi.mock('@/services/agent/studio', async (original) => ({
@@ -47,7 +56,12 @@ vi.mock('@/services/agent/studio', async (original) => ({
 vi.mock('@/services/agent/definitions', () => ({
   saveAgentDefinition: mocks.save,
 }))
-vi.mock('@/services/agent/tauri', () => ({ resolveConversationWorkspaceRoot: async () => ({ path: '/workspace', name: 'Workspace' }) }))
+vi.mock('@/services/agent/tauri', () => ({
+  resolveConversationWorkspaceRoot: async () => ({
+    path: '/workspace',
+    name: 'Workspace',
+  }),
+}))
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: (select: (s: unknown) => unknown) =>
     select({ selectedModel: mocks.current ? { id: mocks.current } : null }),
@@ -59,6 +73,7 @@ afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.current = 'local'
+  mocks.catalog.fleet.connected = true
 })
 const definition: AgentDefinition = {
   schemaVersion: 3,
@@ -81,28 +96,109 @@ const definition: AgentDefinition = {
 }
 
 describe('Agent Studio run setup', () => {
+  it('submits explicit client fleet placement without a current model or changing saved defaults', async () => {
+    mocks.current = ''
+    render(
+      <AgentRunSetup
+        definition={definition}
+        onClose={vi.fn()}
+        onRun={vi.fn()}
+      />
+    )
+    await screen.findAllByRole('option', {
+      name: 'Use client fleet assignment',
+    })
+    fireEvent.change(screen.getByLabelText('Task or goal'), {
+      target: { value: 'Use the assigned fleet workers' },
+    })
+    for (const name of ['Executor assignment', 'Evaluator assignment'])
+      fireEvent.change(screen.getByLabelText(name), {
+        target: { value: 'fleet' },
+      })
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Run', exact: true })
+      ).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+    await waitFor(() => expect(mocks.start).toHaveBeenCalledOnce())
+    expect(mocks.start.mock.calls[0][1].role_assignments).toMatchObject({
+      executor: { target: { kind: 'fleet' } },
+      evaluator: { target: { kind: 'fleet' } },
+    })
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+  it('keeps Current usable when the fleet coordinator is offline and blocks an explicit pooled role', async () => {
+    mocks.catalog.fleet.connected = false
+    render(
+      <AgentRunSetup
+        definition={definition}
+        onClose={vi.fn()}
+        onRun={vi.fn()}
+      />
+    )
+    fireEvent.change(screen.getByLabelText('Task or goal'), {
+      target: { value: 'Keep local work available' },
+    })
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Run', exact: true })
+      ).toBeEnabled()
+    )
+    fireEvent.change(screen.getByLabelText('Executor assignment'), {
+      target: { value: 'pool:coding' },
+    })
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeDisabled()
+    expect(
+      screen.getByText(/Connect before starting pooled work/)
+    ).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Executor assignment'), {
+      target: { value: 'current' },
+    })
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeEnabled()
+  })
   it('prefills the saved goal and submits edits only for this run', async () => {
-    const saved = { ...definition, defaultGoal: 'Run the workspace performance tests' }
-    render(<AgentRunSetup definition={saved} onClose={vi.fn()} onRun={vi.fn()} />)
+    const saved = {
+      ...definition,
+      defaultGoal: 'Run the workspace performance tests',
+    }
+    render(
+      <AgentRunSetup definition={saved} onClose={vi.fn()} onRun={vi.fn()} />
+    )
     expect(screen.getByLabelText('Task or goal')).toHaveValue(saved.defaultGoal)
     fireEvent.change(screen.getByLabelText('Task or goal'), {
       target: { value: 'Run only the startup test' },
     })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Run', exact: true })
+      ).toBeEnabled()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
     await waitFor(() => expect(mocks.start).toHaveBeenCalledOnce())
-    expect(mocks.start.mock.calls[0][1].user_message).toBe('Run only the startup test')
+    expect(mocks.start.mock.calls[0][1].user_message).toBe(
+      'Run only the startup test'
+    )
     expect(saved.defaultGoal).toBe('Run the workspace performance tests')
     expect(mocks.save).not.toHaveBeenCalled()
   })
 
   it('uses the previous run task instead of the default when rerunning', () => {
-    render(<AgentRunSetup
-      definition={{ ...definition, defaultGoal: 'Default goal' }}
-      initialTask="Previous run task"
-      onClose={vi.fn()} onRun={vi.fn()}
-    />)
-    expect(screen.getByLabelText('Task or goal')).toHaveValue('Previous run task')
+    render(
+      <AgentRunSetup
+        definition={{ ...definition, defaultGoal: 'Default goal' }}
+        initialTask="Previous run task"
+        onClose={vi.fn()}
+        onRun={vi.fn()}
+      />
+    )
+    expect(screen.getByLabelText('Task or goal')).toHaveValue(
+      'Previous run task'
+    )
   })
 
   it('assigns a pool to a Vision role and a fixed evaluator without mutating the definition', async () => {
@@ -123,9 +219,11 @@ describe('Agent Studio run setup', () => {
     fireEvent.change(screen.getByLabelText('Evaluator assignment'), {
       target: { value: 'instance:local' },
     })
-    await waitFor(() => expect(
-      screen.getByRole('button', { name: 'Run', exact: true })
-    ).toBeEnabled())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Run', exact: true })
+      ).toBeEnabled()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
     await waitFor(() => expect(onRun).toHaveBeenCalledOnce())
     expect(mocks.start.mock.calls[0][1].role_assignments).toMatchObject({

@@ -50,7 +50,7 @@ pub fn definition_json_schema() -> serde_json::Value {
         "modelInstanceId":model,"reasoningEffort":effort,"builtIn":{"type":"boolean","const":false},
         "roleAssignments":{"type":"object","additionalProperties":{"type":"object","properties":{
           "target":{"oneOf":[
-            {"type":"object","properties":{"kind":{"const":"current"}},"required":["kind"],"additionalProperties":false},
+            {"type":"object","properties":{"kind":{"enum":["current","fleet"]}},"required":["kind"],"additionalProperties":false},
             {"type":"object","properties":{"kind":{"enum":["instance","pool"]},"id":{"type":"string"}},"required":["kind","id"],"additionalProperties":false}
           ]},"vision":{"type":"boolean"},"minimumContext":{"type":"integer","minimum":0}
         },"additionalProperties":false}},
@@ -587,7 +587,7 @@ pub fn validate_role_assignments(
             return Err("Minimum context is out of range".into());
         }
         match &assignment.target {
-            super::worker_pools::WorkerTarget::Current => (),
+            super::worker_pools::WorkerTarget::Current | super::worker_pools::WorkerTarget::Fleet => (),
             super::worker_pools::WorkerTarget::Instance { id }
             | super::worker_pools::WorkerTarget::Pool { id } => {
                 if id.trim().is_empty() || id.len() > 256 {

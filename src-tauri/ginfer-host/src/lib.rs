@@ -3,6 +3,8 @@ pub mod benchmark_hardware;
 pub mod engine_host;
 pub mod engine_inventory;
 pub mod engine_registry;
+pub mod fleet;
+pub mod fleet_client;
 pub mod facade;
 pub mod launch_profiles;
 pub mod launcher;
@@ -15,3 +17,5 @@ pub mod service;
 pub mod service_owner;
 pub mod transport;
 pub mod lan_sharing;
+
+pub mod client;

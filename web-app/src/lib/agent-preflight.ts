@@ -17,6 +17,10 @@ export function roleReadiness(
     instances: AgentModelInstance[]
     pools: AgentWorkerPool[]
     usage: Record<string, number>
+    aliases?: Record<string, string>
+    fleetTargets?: string[]
+    availablePoolIds?: string[] | null
+    fleet?: { connected: boolean; error?: string | null }
   }
 ): RoleReadiness {
   if (
@@ -30,6 +34,36 @@ export function roleReadiness(
       canStart: false,
     }
   const target = assignment.target
+  if (
+    target.kind === 'pool' &&
+    catalog.availablePoolIds &&
+    !catalog.availablePoolIds.includes(target.id)
+  )
+    return {
+      status: 'offline',
+      message:
+        'This pool is not assigned to this client. Review client placement in GInfer Server Manager.',
+      canStart: false,
+    }
+  if (
+    (target.kind === 'pool' || target.kind === 'fleet') &&
+    catalog.fleet &&
+    !catalog.fleet.connected
+  )
+    return {
+      status: 'offline',
+      message:
+        'Fleet coordinator is unavailable. Connect before starting pooled work.',
+      canStart: false,
+    }
+  const canonical = (id: string) => catalog.aliases?.[id] ?? id
+  if (target.kind === 'fleet' && !catalog.fleetTargets?.length)
+    return {
+      status: 'offline',
+      message:
+        'This client has no usable fleet placement. Set preferred instances/hosts or visible pools in GInfer Server Manager.',
+      canStart: false,
+    }
   const pool =
     target.kind === 'pool'
       ? catalog.pools.find((p) => p.id === target.id)
@@ -40,14 +74,22 @@ export function roleReadiness(
       message: 'Select an existing worker pool.',
       canStart: false,
     }
-  const members = pool?.members ?? [
-    {
-      instanceId: target.kind === 'instance' ? target.id : current,
-      workerLimit: 8,
-    },
-  ]
+  const members =
+    target.kind === 'fleet'
+      ? (catalog.fleetTargets ?? []).map((instanceId) => ({
+          instanceId,
+          workerLimit: 8,
+        }))
+      : (pool?.members ?? [
+          {
+            instanceId: target.kind === 'instance' ? target.id : current,
+            workerLimit: 8,
+          },
+        ])
   const available = members.flatMap((m) => {
-    const instance = catalog.instances.find((i) => i.id === m.instanceId)
+    const instance = catalog.instances.find(
+      (i) => i.id === canonical(m.instanceId)
+    )
     return instance ? [{ instance, limit: m.workerLimit }] : []
   })
   if (!available.length)
@@ -82,7 +124,7 @@ export function roleReadiness(
   const free = capable.some(({ instance, limit }) => {
     const sharedLimits = catalog.pools.flatMap((p) =>
       p.members
-        .filter((m) => m.instanceId === instance.id)
+        .filter((m) => canonical(m.instanceId) === instance.id)
         .map((m) => m.workerLimit)
     )
     const capacity = Math.min(instance.concurrency ?? 1, limit, ...sharedLimits)

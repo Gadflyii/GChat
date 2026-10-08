@@ -46,6 +46,7 @@ fn capture_output(reader: impl AsyncRead + Unpin + Send + 'static, diagnostics: 
 pub struct LaunchOptions {
     pub vision: bool,
     pub spec: String,
+    pub draft_policy: String,
     pub draft_tokens: u32,
     pub draft_tp: u32,
     pub kv_dtype: String,
@@ -60,6 +61,7 @@ impl Default for LaunchOptions {
         Self {
             vision: true,
             spec: "auto".into(),
+            draft_policy: "auto".into(),
             draft_tokens: 0,
             draft_tp: 0,
             kv_dtype: "auto".into(),
@@ -73,8 +75,11 @@ impl Default for LaunchOptions {
 }
 impl LaunchOptions {
     pub fn validate(&self, tp: u32) -> Result<(), String> {
-        if !matches!(self.spec.as_str(), "auto" | "none" | "dflash") {
-            return Err("spec must be auto, none, or dflash".into());
+        if !matches!(self.spec.as_str(), "auto" | "none" | "dflash" | "mtp") {
+            return Err("spec must be auto, none, dflash, or mtp".into());
+        }
+        if !matches!(self.draft_policy.as_str(), "auto" | "fixed" | "adaptive") {
+            return Err("draft policy must be auto, fixed, or adaptive".into());
         }
         if !matches!(self.kv_dtype.as_str(), "auto" | "bf16" | "int8" | "nvfp4") {
             return Err("unsupported KV dtype".into());
@@ -82,11 +87,20 @@ impl LaunchOptions {
         if !matches!(self.draft_tp, 0 | 1 | 2 | 4) || self.draft_tp > tp {
             return Err("draft TP must be auto or a subgroup of target TP".into());
         }
-        if self.draft_tokens > 15 {
+        if self.spec == "dflash" && self.draft_tokens > 15 {
             return Err("draft token count exceeds supported target maximum".into());
         }
-        if self.draft_tokens != 0 && self.spec != "dflash" {
-            return Err("explicit draft tokens require spec dflash".into());
+        if self.spec == "mtp" && (self.draft_tokens == 0 || self.draft_tokens == u32::MAX) {
+            return Err("MTP requires positive draft tokens with a represented K+1 width".into());
+        }
+        if self.draft_tokens != 0 && !matches!(self.spec.as_str(), "dflash" | "mtp") {
+            return Err("explicit draft tokens require spec dflash or mtp".into());
+        }
+        if self.draft_policy == "adaptive"
+            && (matches!(self.spec.as_str(), "none" | "mtp")
+                || (self.spec == "dflash" && self.draft_tokens != 15))
+        {
+            return Err("adaptive draft policy requires automatic DFlash or explicit DFlash width 15".into());
         }
         if self.prefill_chunk != 0 && !self.prefill_chunk.is_multiple_of(128) {
             return Err("prefill chunk must be a multiple of 128, or automatic".into());
@@ -99,10 +113,60 @@ impl LaunchOptions {
         }
         Ok(())
     }
+    /// Admit only target-supported speculation. The Engine still binds payloads,
+    /// selects automatic widths, and checks device/memory execution constraints.
+    pub fn validate_target(
+        &self,
+        identity: &crate::engine_inventory::ArtifactIdentity,
+        tp: u32,
+        draft_tp: u32,
+    ) -> Result<u32, String> {
+        self.validate(tp)?;
+        if self.draft_tp != 0 && self.draft_tp != draft_tp {
+            return Err("draft TP must match the producer-final artifact".into());
+        }
+        let maximum = match identity.model_id.as_str() {
+            "qwen3.8-flash-next" => {
+                if !matches!(identity.weights_id.as_str(), "groupwise-int" | "smol-q2g64" | "nvfp4") {
+                    return Err("Flash has no registered weights class for this artifact".into());
+                }
+                if draft_tp != 0 || self.draft_tp != 0 {
+                    return Err("Flash MTP uses the target TP group, not a separate draft TP group".into());
+                }
+                if self.spec == "dflash" || self.draft_policy == "adaptive" {
+                    return Err("Flash supports MTP or none with auto or fixed draft policy".into());
+                }
+                262144
+            }
+            "qwen3.8-27b" | "muse-glimmer-30b" => {
+                if self.spec == "mtp" {
+                    return Err("MTP is supported only by the Flash target".into());
+                }
+                if self.spec == "dflash" && draft_tp == 0 {
+                    return Err("artifact has no DFlash body".into());
+                }
+                if identity.model_id == "qwen3.8-27b" {
+                    if self.draft_tokens > 7 {
+                        return Err("Qwen 27B supports at most 7 draft tokens".into());
+                    }
+                    if self.draft_policy == "adaptive" {
+                        return Err("Qwen 27B supports auto or fixed draft policy".into());
+                    }
+                    262144
+                } else {
+                    131072
+                }
+            }
+            _ => return Err("model is not a registered host launch target".into()),
+        };
+        Ok(maximum)
+    }
     fn args(&self) -> Vec<String> {
         let mut args = vec![
             "--spec".into(),
             self.spec.clone(),
+            "--draft-policy".into(),
+            self.draft_policy.clone(),
             "--kv-arena-headroom-bytes".into(),
             self.kv_arena_headroom_bytes.to_string(),
         ];
@@ -599,5 +663,75 @@ mod tests {
         host.launch(launch(Uuid::new_v4())).unwrap();
         host.shutdown().await.unwrap();
         assert!(host.instances().all(|i| i.child.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod launch_options_tests {
+    use super::*;
+
+    #[test]
+    fn automatic_speculation_keeps_engine_defaults_and_omits_zero_drafts() {
+        let options: LaunchOptions = serde_json::from_str("{}").unwrap();
+        options.validate(1).unwrap();
+        assert_eq!(options.spec, "auto");
+        assert_eq!(options.draft_policy, "auto");
+        let args = options.args();
+        assert!(args.windows(2).any(|pair| pair == ["--spec", "auto"]));
+        assert!(args.windows(2).any(|pair| pair == ["--draft-policy", "auto"]));
+        assert!(!args.iter().any(|arg| arg == "--draft-tokens" || arg == "--draft-tp"));
+    }
+
+    #[test]
+    fn mtp_width_and_policy_are_validated_and_forwarded_with_independent_vision() {
+        for vision in [false, true] {
+            for policy in ["auto", "fixed"] {
+                let mut options = LaunchOptions {
+                    vision, spec: "mtp".into(), draft_tokens: 16,
+                    draft_policy: policy.into(), ..Default::default()
+                };
+                options.validate(4).unwrap();
+                let args = options.args();
+                assert!(args.windows(2).any(|pair| pair == ["--spec", "mtp"]));
+                assert!(args.windows(2).any(|pair| pair == ["--draft-tokens", "16"]));
+                assert!(args.windows(2).any(|pair| pair == ["--draft-policy", policy]));
+                assert_eq!(args.iter().any(|arg| arg == "--vision"), vision);
+                for invalid in [0, u32::MAX] {
+                    options.draft_tokens = invalid;
+                    assert!(options.validate(4).is_err());
+                }
+                options.draft_tokens = 16;
+                options.draft_policy = "adaptive".into();
+                assert!(options.validate(4).is_err());
+            }
+        }
+        for json in [
+            r#"{"spec":"mtp","draft_tokens":4294967296}"#,
+            r#"{"spec":"mtp","draft_tokens":-1}"#,
+        ] {
+            assert!(serde_json::from_str::<LaunchOptions>(json).is_err());
+        }
+    }
+
+    #[test]
+    fn speculative_options_keep_dflash_limits_and_reject_incompatible_controls() {
+        let mut options = LaunchOptions { spec: "dflash".into(), draft_tokens: 15, ..Default::default() };
+        options.validate(1).unwrap();
+        options.draft_policy = "adaptive".into();
+        options.validate(1).unwrap();
+        for width in [14, 16] {
+            options.draft_tokens = width;
+            assert!(options.validate(1).is_err());
+        }
+        for spec in ["auto", "none", "unknown"] {
+            options.spec = spec.into();
+            options.draft_tokens = 1;
+            options.draft_policy = "auto".into();
+            assert!(options.validate(1).is_err());
+        }
+        options.spec = "none".into();
+        options.draft_tokens = 0;
+        options.draft_policy = "adaptive".into();
+        assert!(options.validate(1).is_err());
     }
 }

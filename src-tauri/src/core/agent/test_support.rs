@@ -17,6 +17,264 @@ use super::skills::SkillRegistry;
 use super::tools::{ApprovalHook, DesktopServices, FolderAccessHook};
 use super::types::{AgentEvent, ApprovalDecision, ApprovalRequest, FolderAccessRequest};
 
+/// Real TLS host management and shared registry, without an inference process.
+pub(crate) struct TestFleet {
+    pub host: Arc<ginfer_host::service::Host>,
+    pub client: Arc<ginfer_host::client::Client>,
+    pub directory: tempfile::TempDir,
+    pub origin: String,
+    server: tokio::task::JoinHandle<()>,
+    credentials: Arc<TestCredentials>,
+    registry: PathBuf,
+    pause_reads: Arc<std::sync::atomic::AtomicBool>,
+    read_arrived: Arc<tokio::sync::Notify>,
+    read_resumed: Arc<tokio::sync::Notify>,
+}
+
+#[derive(Default)]
+struct TestCredentials(Mutex<std::collections::HashMap<uuid::Uuid, String>>);
+impl ginfer_host::client::CredentialStore for TestCredentials {
+    fn get(&self, id: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, String> {
+        Box::pin(async move {
+            self.0
+                .lock()
+                .unwrap()
+                .get(&id)
+                .cloned()
+                .ok_or("Unknown fixture grant".into())
+        })
+    }
+    fn set<'a>(
+        &'a self,
+        id: uuid::Uuid,
+        token: &'a str,
+    ) -> ginfer_host::client::CredentialFuture<'a, ()> {
+        Box::pin(async move {
+            self.0.lock().unwrap().insert(id, token.to_owned());
+            Ok(())
+        })
+    }
+    fn delete(&self, id: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, ()> {
+        Box::pin(async move {
+            self.0.lock().unwrap().remove(&id);
+            Ok(())
+        })
+    }
+}
+
+impl TestFleet {
+    pub async fn start() -> Self {
+        Self::start_configured(true).await
+    }
+
+    pub async fn unconfigured() -> Self {
+        Self::start_configured(false).await
+    }
+
+    pub async fn unconfigured_shared() -> Self {
+        Self::start_bound(false, true).await
+    }
+
+    async fn start_configured(configured: bool) -> Self {
+        Self::start_bound(configured, false).await
+    }
+
+    async fn start_bound(configured: bool, shared: bool) -> Self {
+        let directory = tempfile::tempdir().unwrap();
+        let host = ginfer_host::service::Host::open(
+            directory.path().join("host"),
+            "Fixture".into(),
+            std::env::current_exe().unwrap(),
+            vec![],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
+        let listener =
+            tokio::net::TcpListener::bind(if shared { "0.0.0.0:0" } else { "127.0.0.1:0" })
+                .await
+                .unwrap();
+        let origin = format!(
+            "https://127.0.0.1:{}",
+            listener.local_addr().unwrap().port()
+        );
+        host.data.lock().await.management_origin = Some(origin.clone());
+        host.save().await.unwrap();
+        // The fixture serves the standalone discoverable host's real pairing API.
+        host.lan_sharing.lock().await.standalone = true;
+        let (host_id, token, fingerprint, acceptor) = {
+            let data = host.data.lock().await;
+            (
+                data.host_id,
+                data.pairing_admin_token.clone(),
+                data.certificate.fingerprint(),
+                data.certificate.acceptor().unwrap(),
+            )
+        };
+        let local = host
+            .clone()
+            .route(
+                Request::post("/host/v1/local-client")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let local: Value =
+            serde_json::from_slice(&to_bytes(local.into_body()).await.unwrap()).unwrap();
+        let client_id: uuid::Uuid = local["client_id"].as_str().unwrap().parse().unwrap();
+        let serving = host.clone();
+        let pause_reads = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let read_arrived = Arc::new(tokio::sync::Notify::new());
+        let read_resumed = Arc::new(tokio::sync::Notify::new());
+        let paused = pause_reads.clone();
+        let arrived = read_arrived.clone();
+        let resumed = read_resumed.clone();
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                let acceptor = acceptor.clone();
+                let serving = serving.clone();
+                let paused = paused.clone();
+                let arrived = arrived.clone();
+                let resumed = resumed.clone();
+                connections.spawn(async move {
+                    if let Ok(tls) = acceptor.accept(socket).await {
+                        let service = service_fn(move |request: Request<Body>| {
+                            let serving = serving.clone();
+                            let paused = paused.clone();
+                            let arrived = arrived.clone();
+                            let resumed = resumed.clone();
+                            async move {
+                                if request.method() == Method::GET
+                                    && request.uri().path() == "/host/v1/fleet"
+                                    && paused.load(std::sync::atomic::Ordering::SeqCst)
+                                {
+                                    arrived.notify_one();
+                                    resumed.notified().await;
+                                }
+                                serving.route(request).await
+                            }
+                        });
+                        let _ = hyper::server::conn::Http::new()
+                            .serve_connection(tls, service)
+                            .await;
+                    }
+                });
+            }
+        });
+        let credentials = Arc::new(TestCredentials::default());
+        credentials.0.lock().unwrap().insert(client_id, token);
+        let registry = directory.path().join("client/hosts.json");
+        let client = Arc::new(ginfer_host::client::Client::new(
+            Some(registry.clone()),
+            credentials.clone(),
+        ));
+        let legacy = directory.path().join("paired-hosts.json");
+        std::fs::write(
+            &legacy,
+            serde_json::to_vec(&vec![ginfer_host::client::SavedHost {
+                host_id,
+                name: "Fixture".into(),
+                base_url: origin.clone(),
+                certificate_sha256: fingerprint.clone(),
+                client_id,
+            }])
+            .unwrap(),
+        )
+        .unwrap();
+        client.import_legacy(&legacy).await.unwrap();
+        if configured {
+            ginfer_host::fleet_client::FleetClient::new(client.clone())
+                .configure(
+                    host_id,
+                    ginfer_host::fleet::AuthorityLocator {
+                        host_id,
+                        origins: vec![origin.clone()],
+                        certificate_sha256: fingerprint,
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        Self {
+            host,
+            client,
+            directory,
+            origin,
+            server,
+            credentials,
+            registry,
+            pause_reads,
+            read_arrived,
+            read_resumed,
+        }
+    }
+
+    pub fn second_client(&self) -> Arc<ginfer_host::client::Client> {
+        Arc::new(ginfer_host::client::Client::new(
+            Some(self.registry.clone()),
+            self.credentials.clone(),
+        ))
+    }
+    pub async fn register(&self, other: &Self) {
+        let record = other
+            .client
+            .registered()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|host| host.base_url == other.origin)
+            .unwrap();
+        let token = other.credentials.0.lock().unwrap()[&record.client_id].clone();
+        self.credentials
+            .0
+            .lock()
+            .unwrap()
+            .insert(record.client_id, token);
+        let path = self
+            .directory
+            .path()
+            .join(format!("import-{}.json", record.host_id));
+        std::fs::write(&path, serde_json::to_vec(&vec![record]).unwrap()).unwrap();
+        self.client.import_legacy(&path).await.unwrap();
+    }
+
+    pub async fn independent_client(&self) -> Arc<ginfer_host::client::Client> {
+        let client = Arc::new(ginfer_host::client::Client::new(
+            Some(self.directory.path().join("independent/hosts.json")),
+            self.credentials.clone(),
+        ));
+        client
+            .import_legacy(&self.directory.path().join("paired-hosts.json"))
+            .await
+            .unwrap();
+        client
+    }
+    pub fn stop(&self) {
+        self.server.abort();
+    }
+    pub fn pause_fleet_reads(&self) {
+        self.pause_reads
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    pub async fn wait_for_fleet_read(&self) {
+        self.read_arrived.notified().await;
+    }
+    pub fn resume_fleet_reads(&self) {
+        self.pause_reads
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        self.read_resumed.notify_one();
+    }
+}
+impl Drop for TestFleet {
+    fn drop(&mut self) {
+        self.server.abort();
+    }
+}
+
 pub(crate) struct TestWorkspace {
     path: PathBuf,
 }
@@ -339,19 +597,34 @@ async fn serve_ginfer(
     requests: Arc<Mutex<Vec<Value>>>,
     model: Value,
 ) -> Result<Response<Body>, Infallible> {
+    if request.method() == Method::GET && request.uri().path() == "/health" {
+        return Ok(json_response(
+            StatusCode::OK,
+            serde_json::json!({"status":"ok"}),
+        ));
+    }
     if request.method() == Method::GET && request.uri().path() == "/v1/models" {
         return Ok(json_response(
             StatusCode::OK,
             serde_json::json!({"object": "list", "data": [model]}),
         ));
     }
-    if request.method() == Method::POST && request.uri().path() == "/v1/chat/completions/count_tokens" {
+    if request.method() == Method::POST
+        && request.uri().path() == "/v1/chat/completions/count_tokens"
+    {
         let body = to_bytes(request.into_body()).await.unwrap();
         let payload: Value = serde_json::from_slice(&body).unwrap();
         // Deterministic fixture tokenizer; production always uses the engine's tokenizer.
-        let text = payload["messages"].as_array().unwrap().iter()
-            .map(|message| message["content"].as_str().unwrap_or("").len()).sum::<usize>();
-        return Ok(json_response(StatusCode::OK, serde_json::json!({"input_tokens":text / 4 + 32})));
+        let text = payload["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|message| message["content"].as_str().unwrap_or("").len())
+            .sum::<usize>();
+        return Ok(json_response(
+            StatusCode::OK,
+            serde_json::json!({"input_tokens":text / 4 + 32}),
+        ));
     }
     if request.method() != Method::POST || request.uri().path() != "/v1/chat/completions" {
         return Ok(json_response(

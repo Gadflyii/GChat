@@ -106,6 +106,10 @@ pub async fn installed_menu() -> Result<(), String> {
 }
 
 impl LocalControl {
+    pub fn host_id(&self) -> uuid::Uuid {
+        self.host_id
+    }
+
     pub fn open(directory: &Path, origin: &str) -> Result<Self, String> {
         let state: Persistent = serde_json::from_reader(std::io::BufReader::new(
             std::fs::File::open(directory.join("host.json")).map_err(|e| {

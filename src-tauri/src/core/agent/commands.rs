@@ -98,11 +98,14 @@ pub struct AgentWorkspaceText {
 pub struct AgentModelInstance {
     pub id: String,
     pub model_id: String,
+    pub session_id: String,
     pub port: Option<u16>,
     pub host_name: String,
     pub vision: bool,
     pub concurrency: u32,
     pub max_context: u32,
+    /// Exact local aliases retained for saved definitions, never new identities.
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -114,27 +117,76 @@ pub struct AgentContextCompactionResult {
 }
 
 #[tauri::command]
-pub async fn agent_list_model_instances(
+pub async fn agent_list_model_instances<R: Runtime>(
+    app_handle: AppHandle<R>,
     ginfer_state: State<'_, GinferState>,
 ) -> Result<Vec<AgentModelInstance>, String> {
     let sessions = ginfer_state.ginfer_process.lock().await;
-    let mut instances = sessions
+    let instances = sessions
         .values()
         .filter(|session| !session.info.is_embedding)
         .map(|session| AgentModelInstance {
-            id: session.info.model_id.clone(),
+            id: ginfer_host::engine_registry::InstanceRef {
+                host_id: session.owner.control.host_id(),
+                instance_id: session.owner.connection.instance_id,
+            }
+            .model_alias(),
             model_id: session.info.model_id.clone(),
+            session_id: session.owner.connection.session_id.to_string(),
             port: Some(session.info.port),
             host_name: "This computer".into(),
             vision: session.info.vision,
             concurrency: session.info.max_concurrency,
             max_context: session.info.max_context,
+            aliases: vec![session.info.model_id.clone()],
         })
         .collect::<Vec<_>>();
     drop(sessions);
-    instances.extend(crate::core::engine_hosts::agent_instances().await);
-    instances.sort_by(|left, right| left.model_id.cmp(&right.model_id));
-    Ok(instances)
+    #[cfg(test)]
+    let host = if let Some(client) = app_handle.try_state::<Arc<ginfer_host::client::Client>>() {
+        crate::core::engine_hosts::agent_instances_from(&client).await
+    } else {
+        crate::core::engine_hosts::agent_instances().await
+    };
+    #[cfg(not(test))]
+    let host = {
+        let _ = app_handle;
+        crate::core::engine_hosts::agent_instances().await
+    };
+    Ok(merge_model_instances(instances, host))
+}
+
+fn merge_model_instances(
+    attached: Vec<AgentModelInstance>,
+    host: Vec<AgentModelInstance>,
+) -> Vec<AgentModelInstance> {
+    let mut instances: std::collections::BTreeMap<_, _> = attached
+        .into_iter()
+        .map(|instance| (instance.id.clone(), instance))
+        .collect();
+    for mut instance in host {
+        if let Some(local) = instances.get(&instance.id) {
+            // The attached connection knows the actual local session. A stale
+            // host snapshot must not replace it with a different incarnation.
+            if local.session_id != instance.session_id {
+                continue;
+            }
+            instance.port = local.port.or(instance.port);
+            for alias in &local.aliases {
+                if !instance.aliases.contains(alias) {
+                    instance.aliases.push(alias.clone());
+                }
+            }
+        }
+        instances.insert(instance.id.clone(), instance);
+    }
+    let mut instances: Vec<_> = instances.into_values().collect();
+    instances.sort_by(|left, right| {
+        left.model_id
+            .cmp(&right.model_id)
+            .then(left.id.cmp(&right.id))
+    });
+    instances
 }
 
 #[tauri::command]
@@ -187,24 +239,48 @@ pub async fn agent_compact_session<R: Runtime>(
         .map_err(|error| error.to_string())?;
     let client = GinferClient::new(&target).map_err(|error| error.to_string())?;
     let cancellation = CancellationToken::new();
-    let archive = crate::core::threads::utils::get_thread_dir(&data_folder, &session_id).join("context");
+    let archive =
+        crate::core::threads::utils::get_thread_dir(&data_folder, &session_id).join("context");
     let mut context = super::context::WorkerContext::new(Some(&archive)).await?;
-    context.record(serde_json::json!({"type":"manual_compaction", "session":session})).await?;
+    context
+        .record(serde_json::json!({"type":"manual_compaction", "session":session}))
+        .await?;
     context.compact_at_next_boundary();
     let before = session.turns.len();
-    let goal = session.turns.iter().rev().find_map(|turn| match turn {
-        super::session::AgentSessionTurn::User { text } => Some(text.clone()), _ => None,
-    }).unwrap_or_else(|| session.current_goal.clone());
-    context.prepare(&mut session, &client, &cancellation, |state| {
-        super::ginfer_client::CompletionRequest::tool_call(
-            format!("Current task:\n{goal}\n\n{}", state.render_conversation()), None)
-    }, &mut |_| Ok(())).await?;
+    let goal = session
+        .turns
+        .iter()
+        .rev()
+        .find_map(|turn| match turn {
+            super::session::AgentSessionTurn::User { text } => Some(text.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| session.current_goal.clone());
+    context
+        .prepare(
+            &mut session,
+            &client,
+            &cancellation,
+            |state| {
+                super::ginfer_client::CompletionRequest::tool_call(
+                    format!("Current task:\n{goal}\n\n{}", state.render_conversation()),
+                    None,
+                )
+            },
+            &mut |_| Ok(()),
+        )
+        .await?;
     let summarized_turns = before - session.turns.len();
     let retained_turns = session.turns.len();
     save_session(&data_folder, &session).await?;
 
     Ok(AgentContextCompactionResult {
-        status: if summarized_turns > 0 { "compacted" } else { "nothing_to_compact" }.into(),
+        status: if summarized_turns > 0 {
+            "compacted"
+        } else {
+            "nothing_to_compact"
+        }
+        .into(),
         summarized_turns,
         retained_turns,
     })
@@ -236,22 +312,37 @@ pub(crate) struct AgentDesktopServices<R: Runtime> {
 
 #[async_trait]
 impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
-    async fn mcp(&self, wire_name: &str, args: serde_json::Value, cancellation: &CancellationToken) -> Result<serde_json::Value, String> {
+    async fn mcp(
+        &self,
+        wire_name: &str,
+        args: serde_json::Value,
+        cancellation: &CancellationToken,
+    ) -> Result<serde_json::Value, String> {
         let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
         if catalog.disabled(&self.disabled_tools, wire_name) {
             return Err(format!("MCP capability `{wire_name}` is disabled"));
         }
-        super::capabilities::execute_mcp_wire(self.app_handle.clone(), wire_name, args, cancellation).await
+        super::capabilities::execute_mcp_wire(
+            self.app_handle.clone(),
+            wire_name,
+            args,
+            cancellation,
+        )
+        .await
     }
     async fn mcp_functions(&self) -> Result<Vec<serde_json::Value>, String> {
         let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
         Ok(catalog.agent_mcp_functions(&self.disabled_tools))
     }
-    fn disabled_tools(&self) -> std::collections::BTreeSet<String> { self.disabled_tools.clone() }
+    fn disabled_tools(&self) -> std::collections::BTreeSet<String> {
+        self.disabled_tools.clone()
+    }
     async fn mcp_identity(&self, wire_name: &str) -> Result<(String, String), String> {
         let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
         match catalog.target(wire_name) {
-            Some(super::capabilities::CapabilityTarget::Mcp { server, tool }) => Ok((server.clone(), tool.clone())),
+            Some(super::capabilities::CapabilityTarget::Mcp { server, tool }) => {
+                Ok((server.clone(), tool.clone()))
+            }
             _ => Err(format!("MCP capability `{wire_name}` is unavailable")),
         }
     }
@@ -554,19 +645,8 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         return Err("This task includes images. Assign Vision to the role that will inspect them in Run setup.".into());
     }
     let cancellation = CancellationToken::new();
-    let mut model_routes = AgentModelRoutes::new(Vec::new())?;
-    model_routes.dispatcher = Some(Arc::new(
-        super::worker_dispatch::Dispatcher::new(
-            app_handle.clone(),
-            definition.role_assignments.clone(),
-            &data_folder,
-            request.model_id.clone(),
-            has_images,
-        )
-        .await?,
-    ));
-    // Worker placement is cancellable and happens after run registration, not
-    // before the cancellation channel exists. No model is loaded here.
+    let started_at_ms = now_ms();
+    let storage_id = Uuid::new_v4().to_string();
     super::session::initialize_session(&data_folder, &request.session_id).await?;
     let staged = stage_attachments(&data_folder, &request.session_id, &request.attachments).await?;
     let user_message = staged.append_manifest(&request.user_message);
@@ -576,9 +656,15 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         trusted_read_roots.push(attachment_root.clone());
     }
     let catalog = super::capabilities::load_catalog(app_handle.clone()).await?;
-    let disabled_tools = request.disabled_tools.iter().cloned().collect::<std::collections::BTreeSet<_>>();
+    let disabled_tools = request
+        .disabled_tools
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
     let skill_registry = super::skills::load_registry_with_tools(
-        &data_folder, &catalog.available_agent_tool_names(&disabled_tools))?;
+        &data_folder,
+        &catalog.available_agent_tool_names(&disabled_tools),
+    )?;
     let bundled_script_runtime = resolve_bundled_script_runtime(&app_handle);
     let (cancel_tx, cancel_rx) = oneshot::channel();
     {
@@ -597,6 +683,59 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
             cancellation_bridge.cancel();
         }
     });
+
+    // Fleet metadata can involve a paired host. Register first so Stop can
+    // cancel preflight as well as the eventual worker-capacity wait.
+    let dispatcher = tokio::select! {
+        _ = cancellation.cancelled() => Err("Agent run was cancelled while loading fleet capacity".to_owned()),
+        result = super::worker_dispatch::Dispatcher::new(app_handle.clone(),definition.role_assignments.clone(),
+            &data_folder,request.model_id.clone(),has_images) => result,
+    };
+    let dispatcher = match dispatcher {
+        Ok(dispatcher) => dispatcher,
+        Err(error) => {
+            state
+                .tool_call_cancellations
+                .lock()
+                .await
+                .remove(&request.run_id);
+            if cancellation.is_cancelled() {
+                let event = AgentEvent::TurnFinished {
+                    reason: "cancelled".into(),
+                    step_count: 0,
+                };
+                let outcome = Ok(super::runner::AgentTurnOutcome {
+                    reply: None,
+                    reason: "cancelled".into(),
+                    step_count: 0,
+                    inference: Default::default(),
+                });
+                let mut record = AgentRunRecord::completed(super::runs::CompletedRun {
+                    id: &storage_id,
+                    run_id: &request.run_id,
+                    session_id: &request.session_id,
+                    origin_session_id: request.origin_session_id.as_deref(),
+                    user_message: &user_message,
+                    definition: &definition,
+                    started_at_ms,
+                    events: std::slice::from_ref(&event),
+                    result: &outcome,
+                });
+                record.workspace = Some(working_dir.to_string_lossy().into_owned());
+                let record_data = data_folder.clone();
+                tokio::task::spawn_blocking(move || record_run(&record_data, record))
+                    .await
+                    .map_err(|error| error.to_string())??;
+                super::studio::observe(&request.run_id, &event);
+                emit(event)?;
+                return Ok(());
+            }
+            return Err(error);
+        }
+    };
+    let fleet_revision = dispatcher.fleet_revision;
+    let mut model_routes = AgentModelRoutes::new(Vec::new())?;
+    model_routes.dispatcher = Some(Arc::new(dispatcher));
 
     let capabilities = CapabilitiesSummary {
         platform: platform_name().into(),
@@ -650,8 +789,6 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         let _session_guard = session_lock.lock().await;
         match load_session(&data_folder, &request.session_id).await {
             Ok(mut session) => {
-                let started_at_ms = now_ms();
-                let storage_id = Uuid::new_v4().to_string();
                 let mut recorded_events = Vec::new();
                 let run_result = run_definition(
                     OrchestrationInput {
@@ -737,6 +874,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
                 });
                 let record_data = data_folder.clone();
                 record.workspace = Some(working_dir.to_string_lossy().into_owned());
+                record.fleet_revision = fleet_revision;
                 let output_workspace = data_folder.join("agent-runs").join(&storage_id);
                 if output_workspace.is_dir() {
                     record.output_workspace = Some(output_workspace.to_string_lossy().into_owned());
@@ -764,7 +902,9 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
     result
 }
 
-pub(crate) fn resolve_bundled_script_runtime<R: Runtime>(app_handle: &AppHandle<R>) -> Option<PathBuf> {
+pub(crate) fn resolve_bundled_script_runtime<R: Runtime>(
+    app_handle: &AppHandle<R>,
+) -> Option<PathBuf> {
     let executable = if cfg!(windows) { "bun.exe" } else { "bun" };
     app_handle
         .path()
@@ -781,8 +921,11 @@ pub(crate) async fn resolve_external_roots(
     let mut read_only = Vec::new();
     for root in roots {
         let expanded = expand_home(&root.path)?;
-        if root.can_edit { editable.push(expanded); }
-        else { read_only.push(canonical_directory(&expanded).await?); }
+        if root.can_edit {
+            editable.push(expanded);
+        } else {
+            read_only.push(canonical_directory(&expanded).await?);
+        }
     }
     Ok((editable, read_only))
 }
@@ -910,7 +1053,10 @@ async fn get_session_lock(
         .clone()
 }
 
-pub(crate) async fn resolve_working_dir(value: Option<&str>, data_folder: &Path) -> Result<PathBuf, String> {
+pub(crate) async fn resolve_working_dir(
+    value: Option<&str>,
+    data_folder: &Path,
+) -> Result<PathBuf, String> {
     let path = match value {
         Some(value) if !value.trim().is_empty() => expand_home(value)?,
         _ => {

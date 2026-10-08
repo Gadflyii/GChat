@@ -10,12 +10,19 @@ Extract the native package and open `ginfer-manager` on Linux or
 `ginfer-manager.exe` on Windows. Keep the included `ginfer-host` companion and
 documentation with the application. Node is not required at runtime. The package
 does not include an inference engine or models.
+The application uses GChat's default dark theme on both platforms.
 
 Install and configure GInfer first if this computer will serve models. Manager
 reuses its registered host, engine paths and model storage. It does not replace
 a running host or copy model files. A service-owned host must be started through
 its OS service manager. Computers without a local host can still pair with other
 hosts from the sidebar.
+
+Hosts must include this version's fleet and client-management endpoints. Update
+a GChat-owned host through its GChat installation, or a service-owned host through
+its service installation. The bundled companion does not replace the registered
+owner just because Manager opens. Available downloads use the host's configured
+`GINFER_MODEL_CATALOG_URL`; no catalog address is selected by Manager.
 
 Linux requires an X11 desktop and the Tauri GTK/WebKit runtime libraries. The
 window stays visible when the desktop has no supported tray. Windows uses the
@@ -46,7 +53,7 @@ before starting, changing or stopping an instance there.
 
 ## Run models
 
-Select a host and use **Start a model**. Choose a saved qualified profile and GPU
+Select a host and use **Start a model**. Choose a saved profile and GPU
 group, or **Custom settings** to select an installed package, its GPU group,
 context window, concurrency, Vision, KV format and speculation. The host
 validates settings before launch. No model starts just by opening Manager.

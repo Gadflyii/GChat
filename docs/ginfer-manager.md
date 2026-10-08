@@ -26,6 +26,8 @@ setting. Reload confirms interruption only when active requests require force.
 Tray menu: **Open Server Manager**, **Refresh**, **Share this host**, and **Exit
 Manager**. Windows close hides to the tray. Linux supports the tray where the
 desktop provides it, with a visible window fallback. No model starts at app launch.
+Use GChat's default dark theme and its existing color tokens regardless of the
+desktop's light/dark preference.
 
 ## Shared controls and ownership
 

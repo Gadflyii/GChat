@@ -1,224 +1,100 @@
-//! GChat's native paired-host registry. Credentials remain in the OS vault.
+//! GChat routing adapters over the shared native GInfer client.
 mod credential_setup;
 use ginfer_host::{
-    discovery::Discovery,
-    engine_registry::{EngineRegistry, RegisteredHost},
+    client::{Client, ClientState as Hosts, CredentialFuture, CredentialStore},
     transport::pinned_client,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::BTreeMap, path::PathBuf, sync::OnceLock};
-use tokio::sync::Mutex;
+use std::sync::{Arc, OnceLock};
 use uuid::Uuid;
-
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SavedHost {
-    pub host_id: Uuid,
-    pub name: String,
-    pub base_url: String,
-    pub certificate_sha256: String,
-    pub client_id: Uuid,
-}
-#[derive(Default)]
-struct Hosts {
-    local_credentials: BTreeMap<Uuid, String>,
-    path: Option<PathBuf>,
-    saved: BTreeMap<Uuid, SavedHost>,
-    registry: EngineRegistry,
-    discovery: Option<Discovery>,
-    snapshots: BTreeMap<Uuid, Value>,
-}
-fn state() -> &'static Mutex<Hosts> {
-    static STATE: OnceLock<Mutex<Hosts>> = OnceLock::new();
-    STATE.get_or_init(|| Mutex::new(Hosts::default()))
-}
-fn endpoint(value: &str) -> Result<String, String> {
-    let url = reqwest::Url::parse(value).map_err(|e| e.to_string())?;
-    if url.scheme() != "https"
-        || url.host_str().is_none()
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.query().is_some()
-        || url.fragment().is_some()
-        || url.path() != "/"
-    {
-        return Err(
-            "host address must be an HTTPS origin, for example https://192.168.1.10:7443".into(),
-        );
+struct NativeVault;
+impl CredentialStore for NativeVault {
+    fn get(&self, id: Uuid) -> CredentialFuture<'_, String> {
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                keyring::Entry::new(ginfer_host::client::VAULT_SERVICE, &id.to_string())
+                    .and_then(|e| e.get_password())
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        })
     }
-    Ok(url.as_str().trim_end_matches('/').into())
-}
-async fn secret(id: Uuid) -> Result<String, String> {
-    if let Some(token) = state().lock().await.local_credentials.get(&id).cloned() { return Ok(token); }
-    tokio::task::spawn_blocking(move || {
-        keyring::Entry::new("app.gchat.ginfer-host", &id.to_string())
-            .and_then(|e| e.get_password())
-            .map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-fn registration(host: &SavedHost) -> RegisteredHost {
-    RegisteredHost {
-        host_id: host.host_id,
-        display_name: host.name.clone(),
-        credential_ref: host.client_id.to_string(),
-        certificate_sha256: host.certificate_sha256.clone(),
+    fn set<'a>(&'a self, id: Uuid, token: &'a str) -> CredentialFuture<'a, ()> {
+        Box::pin(async move {
+            let token = token.to_owned();
+            tokio::task::spawn_blocking(move || {
+                keyring::Entry::new(ginfer_host::client::VAULT_SERVICE, &id.to_string())
+                    .and_then(|e| e.set_password(&token))
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        })
     }
+    fn delete(&self, id: Uuid) -> CredentialFuture<'_, ()> {
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                match keyring::Entry::new(ginfer_host::client::VAULT_SERVICE, &id.to_string())
+                    .and_then(|e| e.delete_credential())
+                {
+                    Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                    Err(e) => Err(e.to_string()),
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        })
+    }
+    fn ensure_ready(&self) -> CredentialFuture<'_, ()> {
+        Box::pin(credential_setup::require_ready())
+    }
+}
+fn client_slot() -> &'static OnceLock<Arc<Client>> {
+    static CLIENT: OnceLock<Arc<Client>> = OnceLock::new();
+    &CLIENT
+}
+fn client() -> &'static Arc<Client> {
+    client_slot().get_or_init(|| Arc::new(Client::new(None, Arc::new(NativeVault))))
+}
+async fn state() -> Result<ginfer_host::client::ClientViewGuard<'static>, String> {
+    client().view().await
+}
+pub async fn shared_client() -> Result<Arc<Client>, String> {
+    client().initialize().await?;
+    Ok(client().clone())
 }
 pub async fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
-    let mut state = state().lock().await;
-    if state.path.is_some() {
-        return Ok(());
-    }
-    let path = crate::core::app::commands::get_jan_data_folder_path(app.clone())
-        .join("ginfer")
-        .join("hosts.json");
-    let saved: Vec<SavedHost> = match std::fs::read(&path) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|e| format!("cannot read saved engine hosts: {e}"))?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
-        Err(e) => return Err(e.to_string()),
-    };
-    for host in saved {
-        state.registry.register_paired(registration(&host));
-        state.saved.insert(host.host_id, host);
-    }
-    state.path = Some(path);
-    Ok(())
-}
-fn persist(state: &Hosts) -> Result<(), String> {
-    let path = state.path.as_ref().ok_or("host registry not initialized")?;
-    ginfer_host::service::write_private(
-        path,
-        &serde_json::to_vec(&state.saved.values().collect::<Vec<_>>())
-            .map_err(|e| e.to_string())?,
-    )
-}
-
-async fn register_local_owner() -> Result<(), String> {
-    let registry_path = state().lock().await.path.clone().ok_or("host registry not initialized")?;
-    let owner = tokio::task::spawn_blocking(move || -> Result<Option<ginfer_host::service::Persistent>, String> {
-        local_owner_from_registry(&registry_path)
-    }).await.map_err(|e| e.to_string())??;
-    let Some(owner) = owner else { return Ok(()); };
-    publish_local_owner(&mut *state().lock().await, owner)
-}
-
-fn local_owner_from_registry(path: &std::path::Path) -> Result<Option<ginfer_host::service::Persistent>, String> {
-    let directory = path.parent().ok_or("host registry has no parent")?.join("host");
-    match std::fs::read(directory.join("host.json")) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|e| format!("Cannot read local host identity: {e}")),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-fn publish_local_owner(state: &mut Hosts, owner: ginfer_host::service::Persistent) -> Result<(), String> {
-    let Some(origin) = owner.management_origin else { return Ok(()); };
-    let origin = endpoint(&origin)?;
-    let client_id = state.saved.get(&owner.host_id).map(|host| host.client_id).unwrap_or(owner.host_id);
-    let host = SavedHost { host_id:owner.host_id, name:owner.name, base_url:origin,
-        certificate_sha256:owner.certificate.fingerprint(), client_id };
-    if state.saved.get(&host.host_id) != Some(&host) { publish_registration(state, host)?; }
-    state.local_credentials.insert(client_id, owner.pairing_admin_token);
-    Ok(())
-}
-
-fn visible_hosts(state: &Hosts) -> Vec<Value> {
-    state.saved.values().map(|host| {
-        let mut value = json!(host);
-        value["local"] = state.local_credentials.contains_key(&host.client_id).into();
-        value
-    }).collect()
-}
-
-// Persist first while holding the registry lock. Readers never observe an
-// unsaved replacement, and a failed write leaves the old credential reference live.
-fn publish_registration(state: &mut Hosts, host: SavedHost) -> Result<Option<SavedHost>, String> {
-    let id = host.host_id;
-    let previous = state.saved.insert(id, host.clone());
-    if let Err(error) = persist(state) {
-        if let Some(previous) = previous {
-            state.saved.insert(id, previous);
-        } else {
-            state.saved.remove(&id);
-        }
-        return Err(error);
-    }
-    state.registry.register_paired(registration(&host));
-    state.snapshots.remove(&id);
-    Ok(previous)
-}
-
-async fn delete_secret(id: Uuid) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        match keyring::Entry::new("app.gchat.ginfer-host", &id.to_string())
-            .and_then(|e| e.delete_credential())
-        {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e.to_string()),
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-fn remove_registration(state: &mut Hosts, id: Uuid) -> Result<SavedHost, String> {
-    let previous = state.saved.remove(&id).ok_or("host is not registered")?;
-    if let Err(error) = persist(state) {
-        state.saved.insert(id, previous);
-        return Err(error);
-    }
-    state.registry.forget(id);
-    state.snapshots.remove(&id);
-    Ok(previous)
-}
-
-async fn rollback_pairing(client: &reqwest::Client, origin: &str, id: Uuid, token: &str) -> String {
-    let mut warnings = Vec::new();
-    if let Err(e) = delete_secret(id).await {
-        warnings.push(format!("new vault credential cleanup failed: {e}"));
-    }
-    match client
-        .delete(format!("{origin}/host/v1/clients/{id}"))
-        .bearer_auth(token)
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
+    #[cfg(test)]
+    let _ = client_slot().set(Arc::new(Client::new(
+        Some(
+            crate::core::app::commands::get_jan_data_folder_path(app.clone())
+                .join("ginfer/shared-hosts.json"),
+        ),
+        Arc::new(NativeVault),
+    )));
+    client().initialize().await?;
+    client()
+        .import_legacy(
+            &crate::core::app::commands::get_jan_data_folder_path(app.clone())
+                .join("ginfer/hosts.json"),
+        )
         .await
-    {
-        Ok(response) if response.status().is_success() => {}
-        _ => warnings.push("new host grant could not be revoked; remove it on the host".into()),
-    }
-    if warnings.is_empty() {
-        String::new()
-    } else {
-        format!("; {}", warnings.join("; "))
-    }
 }
-
+async fn secret(id: Uuid) -> Result<String, String> {
+    client().secret(id).await
+}
+#[cfg(test)]
+async fn delete_secret(id: Uuid) -> Result<(), String> {
+    NativeVault.delete(id).await
+}
 pub async fn request(
-    host_id: Uuid,
+    id: Uuid,
     method: reqwest::Method,
     path: &str,
     body: Option<&Value>,
 ) -> Result<reqwest::Response, String> {
-    let host = state()
-        .lock()
-        .await
-        .saved
-        .get(&host_id)
-        .cloned()
-        .ok_or("host is not registered")?;
-    let token = secret(host.client_id).await?;
-    let client = pinned_client(&host.certificate_sha256)?;
-    let mut req = client
-        .request(method, format!("{}{}", host.base_url, path))
-        .bearer_auth(token);
-    if let Some(body) = body {
-        req = req.json(body);
-    }
-    req.send().await.map_err(|e| e.to_string())
+    client().request(id, method, path, body).await
 }
 async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     let status = response.status();
@@ -243,8 +119,11 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
         use tauri::Manager;
         let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
         if action == "local_model_adopt" {
-            let report = tokio::task::spawn_blocking(move || crate::core::ginfer_models::adopt_root_ginfer_models_in(&root))
-                .await.map_err(|e| e.to_string())??;
+            let report = tokio::task::spawn_blocking(move || {
+                crate::core::ginfer_models::adopt_root_ginfer_models_in(&root)
+            })
+            .await
+            .map_err(|e| e.to_string())??;
             return serde_json::to_value(report).map_err(|e| e.to_string());
         }
         let provider = root.join("ginfer");
@@ -255,27 +134,57 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
         #[cfg(target_os = "linux")]
         let binary = provider.join("bin/ginfer-host");
         #[cfg(not(target_os = "linux"))]
-        let binary = app.path().resource_dir().map_err(|e| e.to_string())?.join("resources/bin")
-            .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" });
+        let binary = app
+            .path()
+            .resource_dir()
+            .map_err(|e| e.to_string())?
+            .join("resources/bin")
+            .join(if cfg!(windows) {
+                "ginfer-host.exe"
+            } else {
+                "ginfer-host"
+            });
         #[cfg(target_os = "linux")]
         let engine = provider.join("linux/sm120a/bin/ginfer-serve");
         #[cfg(not(target_os = "linux"))]
-        let engine = provider.join("bin").join(if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" });
+        let engine = provider.join("bin").join(if cfg!(windows) {
+            "ginfer-serve.exe"
+        } else {
+            "ginfer-serve"
+        });
         let control = ginfer_host::local_host::LocalHost {
             binary,
             engine,
-            directory: provider.join("host"), desktop_provider: Some(provider),
+            directory: provider.join("host"),
+            desktop_provider: Some(provider),
             engine_runtimes,
-            models: vec![], artifact_sets: vec![], name:ginfer_host::local_host::computer_name()?,
-            nvidia_smi:"nvidia-smi".into(), listen:"127.0.0.1:7443".parse().unwrap(),
-        }.ensure_shared_running().await?;
+            models: vec![],
+            artifact_sets: vec![],
+            name: ginfer_host::local_host::computer_name()?,
+            nvidia_smi: "nvidia-smi".into(),
+            listen: "127.0.0.1:7443".parse().unwrap(),
+        }
+        .ensure_shared_running()
+        .await?;
         return match action.as_str() {
             "local_model_downloads" => control.request("/host/v1/downloads", None).await,
-            "local_model_download" => control.request("/host/v1/downloads",
-                Some(args.get("body").cloned().ok_or("release required")?)).await,
-            "local_model_download_action" => control.request("/host/v1/download-actions",
-                Some(json!({"id":argument_id(&args, "id")?,
-                    "action":args["operation"].as_str().ok_or("operation required")?}))).await,
+            "local_model_download" => {
+                control
+                    .request(
+                        "/host/v1/downloads",
+                        Some(args.get("body").cloned().ok_or("release required")?),
+                    )
+                    .await
+            }
+            "local_model_download_action" => {
+                control
+                    .request(
+                        "/host/v1/download-actions",
+                        Some(json!({"id":argument_id(&args, "id")?,
+                    "action":args["operation"].as_str().ok_or("operation required")?})),
+                    )
+                    .await
+            }
             _ => Err("unknown local model operation".into()),
         };
     }
@@ -292,7 +201,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     initialize(&app).await?;
     match action.as_str() {
         "benchmark_sessions" => {
-            let state = state().lock().await;
+            let state = state().await?;
             let mut sessions = Vec::new();
             for (host_id, snapshot) in &state.snapshots {
                 for instance in snapshot
@@ -342,7 +251,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                 .ok_or("benchmark target is required")?;
             let reference = parse_alias(alias)?;
             let (info, host) = {
-                let state = state().lock().await;
+                let state = state().await?;
                 (
                     benchmark_info(&state, &reference)?,
                     state
@@ -379,8 +288,19 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                     .ok_or("benchmark request is required")?,
             )
             .map_err(|e| e.to_string())?;
-            let hardware = response_json(self::request(reference.host_id, reqwest::Method::GET,
-                &format!("/host/v1/instances/{}/benchmark-hardware", reference.instance_id), None).await?).await?;
+            let hardware = response_json(
+                self::request(
+                    reference.host_id,
+                    reqwest::Method::GET,
+                    &format!(
+                        "/host/v1/instances/{}/benchmark-hardware",
+                        reference.instance_id
+                    ),
+                    None,
+                )
+                .await?,
+            )
+            .await?;
             if hardware["session_id"].as_str() != target.info.session_id.as_deref() {
                 return Err("engine session changed while capturing benchmark hardware".into());
             }
@@ -389,267 +309,17 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             result.hardware = Some(hardware["hardware"].clone());
             serde_json::to_value(result).map_err(|e| e.to_string())
         }
-        "list" => {
-            register_local_owner().await?;
-            let state = state().lock().await;
-            Ok(
-                json!({"registered":visible_hosts(&state),"discovered":state.discovery.as_ref().map(|d|d.hosts()).unwrap_or_default()}),
-            )
-        }
-        "discovery" => {
-            let enabled = args
-                .get("enabled")
-                .and_then(Value::as_bool)
-                .ok_or("enabled is required")?;
-            let mut state = state().lock().await;
-            if enabled && state.discovery.is_none() {
-                state.discovery = Some(Discovery::start()?);
-            }
-            if !enabled {
-                state.discovery = None;
-            }
-            Ok(json!({"enabled":enabled}))
-        }
+        "list" => client().list().await,
         "pair" => {
-            static PAIRING: OnceLock<Mutex<()>> = OnceLock::new();
-            let _pairing = PAIRING.get_or_init(|| Mutex::new(())).lock().await;
-            credential_setup::require_ready().await?;
-            let expected = args.get("host_id").and_then(Value::as_str)
-                .map(str::parse::<Uuid>).transpose().map_err(|error| error.to_string())?;
-            let origins = if let Some(id) = expected {
-                state().lock().await.discovery.as_ref().map(|discovery| discovery.hosts())
-                    .unwrap_or_default().into_iter().find(|host| host.host_id == id.to_string())
-                    .ok_or("Host is no longer nearby; refresh discovery or enter its address manually")?.urls
-            } else {
-                vec![endpoint(args.get("base_url").and_then(Value::as_str).ok_or("host address is required")?)?]
-            };
-            let (base_url, host_id, host_name, fingerprint) = ginfer_host::transport::pairing_origin(&origins, expected).await?;
-            if let Some(saved) = state().lock().await.saved.get(&host_id) {
-                if saved.certificate_sha256 != fingerprint { return Err("Paired host certificate has changed; forget it explicitly before pairing again".into()); }
-                return Ok(json!({"host_id":host_id}));
-            }
-            let client = pinned_client(&fingerprint)?;
-            let paired = response_json(
-                client
-                    .post(format!("{base_url}/host/v1/pair"))
-                    .timeout(std::time::Duration::from_secs(10))
-                    .json(&json!({"client_name":format!("GChat on {}", ginfer_host::local_host::computer_name()?)}))
-                    .send()
-                    .await
-                    .map_err(|e| e.to_string())?,
-            )
-            .await?;
-            if paired.get("host_id").and_then(Value::as_str) != Some(host_id.to_string().as_str()) {
-                return Err("pairing returned a different host identity".into());
-            }
-            let token = paired
-                .get("token")
-                .and_then(Value::as_str)
-                .ok_or("pairing returned no credential")?
-                .to_owned();
-            let client_id = paired
-                .get("client_id")
-                .and_then(Value::as_str)
-                .ok_or("pairing returned no client identity")?
-                .parse::<Uuid>()
-                .map_err(|e| e.to_string())?;
-            let vault_token = token.clone();
-            let stored = tokio::task::spawn_blocking(move || {
-                keyring::Entry::new("app.gchat.ginfer-host", &client_id.to_string())
-                    .and_then(|e| e.set_password(&vault_token))
-                    .map_err(|e| format!("could not save paired credential in OS vault: {e}"))
-            })
-            .await
-            .map_err(|e| e.to_string())
-            .and_then(|r| r);
-            if let Err(error) = stored {
-                return Err(format!(
-                    "{error}{}",
-                    rollback_pairing(&client, &base_url, client_id, &token).await
-                ));
-            }
-            let host = SavedHost {
-                host_id,
-                name: host_name,
-                base_url,
-                certificate_sha256: fingerprint,
-                client_id,
-            };
-            let mut state = state().lock().await;
-            let published = publish_registration(&mut state, host.clone());
-            drop(state);
-            let previous = match published {
-                Ok(previous) => previous,
-                Err(error) => {
-                    return Err(format!(
-                        "{error}{}",
-                        rollback_pairing(&client, &host.base_url, client_id, &token).await
-                    ))
-                }
-            };
-            let mut cleanup_warnings = Vec::new();
-            if let Some(previous) = previous {
-                match client
-                    .delete(format!(
-                        "{}/host/v1/clients/{}",
-                        host.base_url, previous.client_id
-                    ))
-                    .bearer_auth(&token)
-                    .timeout(std::time::Duration::from_secs(5))
-                    .send()
-                    .await
-                {
-                    Ok(response) if response.status().is_success() => {}
-                    _ => cleanup_warnings.push("old host grant could not be revoked".to_string()),
-                }
-                if let Err(error) = delete_secret(previous.client_id).await {
-                    cleanup_warnings.push(format!(
-                        "old OS-vault credential could not be removed: {error}"
-                    ));
-                }
-            }
-            let mut result = json!(host);
-            if !cleanup_warnings.is_empty() {
-                result["credential_cleanup_warning"] = cleanup_warnings.join("; ").into();
-            }
-            Ok(result)
+            let mut args = args;
+            args["client_name"] =
+                format!("GChat on {}", ginfer_host::local_host::computer_name()?).into();
+            client().command(&action, args).await
         }
-        "snapshot" => {
-            let id = argument_id(&args, "host_id")?;
-            let (connection, host, alternatives) = {
-                let mut state = state().lock().await;
-                let host = state
-                    .saved
-                    .get(&id)
-                    .cloned()
-                    .ok_or("host is not registered")?;
-                let alternatives = state
-                    .discovery
-                    .as_ref()
-                    .map(|d| d.hosts())
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|h| h.host_id == id.to_string())
-                    .flat_map(|h| h.urls)
-                    .filter(|url| url != &host.base_url)
-                    .collect::<std::collections::BTreeSet<_>>();
-                (state.registry.poll_connection(id)?, host, alternatives)
-            };
-            let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-                use futures_util::StreamExt;
-                let token = secret(host.client_id).await?;
-                let current = ginfer_host::transport::host_snapshot_at(
-                    &host.base_url,
-                    &host.certificate_sha256,
-                    &token,
-                    id,
-                )
-                .await;
-                match current {
-                    Ok(snapshot) => Ok((host.base_url.clone(), snapshot)),
-                    Err(error) => {
-                        let mut probes =
-                            futures_util::stream::iter(alternatives.into_iter().map(|url| {
-                                let fingerprint = &host.certificate_sha256;
-                                let token = &token;
-                                async move {
-                                    ginfer_host::transport::host_snapshot_at(
-                                        &url,
-                                        fingerprint,
-                                        token,
-                                        id,
-                                    )
-                                    .await
-                                    .map(|s| (url, s))
-                                }
-                            }))
-                            .buffer_unordered(4);
-                        while let Some(result) = probes.next().await {
-                            if let Ok(found) = result {
-                                return Ok(found);
-                            }
-                        }
-                        Err(error)
-                    }
-                }
-            })
-            .await
-            .map_err(|_| "host did not respond".to_string())
-            .and_then(|r| r);
-            match result {
-                Ok((origin, snapshot)) => {
-                    let mut state = state().lock().await;
-                    let validated = serde_json::from_value(snapshot.clone())
-                        .map_err(|e| e.to_string())
-                        .and_then(|parsed| state.registry.reconcile(connection, parsed));
-                    if let Err(error) = validated {
-                        state.registry.disconnect(connection);
-                        return Err(error);
-                    }
-                    let name = snapshot["display_name"].as_str().ok_or("host name missing")?;
-                    if origin != host.base_url || name != host.name {
-                        let saved = state.saved.get_mut(&id).ok_or("host was forgotten")?;
-                        let previous = saved.clone();
-                        saved.base_url = origin;
-                        saved.name = name.into();
-                        if let Err(error) = persist(&state) {
-                            state.saved.insert(id, previous);
-                            state.registry.disconnect(connection);
-                            return Err(error);
-                        }
-                    }
-                    state.snapshots.insert(id, snapshot.clone());
-                    Ok(snapshot)
-                }
-                Err(e) => {
-                    state().lock().await.registry.disconnect(connection);
-                    Err(e)
-                }
-            }
-        }
-        "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action" | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
-            let id = argument_id(&args, "host_id")?;
-            let path = match action.as_str() {
-                "host_name" => "/host/v1/name".into(),
-                "lan_sharing" => "/host/v1/lan-sharing".into(),
-                "launch" => "/host/v1/instances".into(),
-                "profile_launch" => "/host/v1/profile-launch".into(),
-                "scan" => "/host/v1/scan".into(),
-                "download" => "/host/v1/downloads".into(),
-                "download_action" => "/host/v1/download-actions".into(),
-                "remove_model" => "/host/v1/remove-model".into(),
-                _ => format!(
-                    "/host/v1/instances/{}/{}",
-                    argument_id(&args, "instance_id")?,
-                    action
-                ),
-            };
-            response_json(
-                request(
-                    id,
-                    reqwest::Method::POST,
-                    &path,
-                    Some(args.get("body").unwrap_or(&json!({}))),
-                )
-                .await?,
-            )
-            .await
-        }
-        "forget" => {
-            let id = argument_id(&args, "host_id")?;
-            // Forget is local and works while a server is offline. Revoke is a separate host action.
-            let mut state = state().lock().await;
-            if state.saved.get(&id).is_some_and(|host| state.local_credentials.contains_key(&host.client_id)) {
-                return Err("The local host is managed automatically; stop its instances instead of forgetting this computer".into());
-            }
-            let previous = remove_registration(&mut state, id)?;
-            drop(state);
-            let warning = delete_secret(previous.client_id).await.err();
-            Ok(json!({"forgotten":id,"credential_cleanup_warning":warning}))
-        }
-        _ => Err("unknown engine-host command".into()),
+        _ => client().command(&action, args).await,
     }
 }
+
 fn argument_id(args: &Value, field: &str) -> Result<Uuid, String> {
     args.get(field)
         .and_then(Value::as_str)
@@ -779,7 +449,7 @@ pub async fn agent_target(
 ) -> Result<crate::core::agent::ginfer_client::GinferSessionTarget, String> {
     use crate::core::agent::ginfer_client::{GinferConnection, GinferSessionTarget};
     let reference = parse_alias(alias)?;
-    let state = state().lock().await;
+    let state = state().await?;
     let instance = state.registry.resolve(&reference)?;
     let session_id = instance
         .session_id
@@ -817,7 +487,7 @@ pub async fn request_instance(
     body: Option<&Value>,
 ) -> Result<reqwest::Response, String> {
     let host = {
-        let state = state().lock().await;
+        let state = state().await?;
         if state.registry.resolve(reference)?.session_id != Some(session_id) {
             return Err("assigned engine instance restarted; resume the run against its new session explicitly".into());
         }
@@ -846,7 +516,14 @@ pub async fn request_instance(
 }
 
 pub async fn agent_instances() -> Vec<crate::core::agent::commands::AgentModelInstance> {
-    let state = state().lock().await;
+    agent_instances_from(client()).await
+}
+pub(crate) async fn agent_instances_from(
+    client: &Client,
+) -> Vec<crate::core::agent::commands::AgentModelInstance> {
+    let Ok(state) = client.view().await else {
+        return Vec::new();
+    };
     let mut models = Vec::new();
     for (host_id, snapshot) in &state.snapshots {
         for instance in snapshot
@@ -869,6 +546,9 @@ pub async fn agent_instances() -> Vec<crate::core::agent::commands::AgentModelIn
             let Ok(resolved) = state.registry.resolve(&reference) else {
                 continue;
             };
+            let Some(session_id) = resolved.session_id else {
+                continue;
+            };
             let number = |path| {
                 instance
                     .pointer(path)
@@ -877,7 +557,9 @@ pub async fn agent_instances() -> Vec<crate::core::agent::commands::AgentModelIn
                     .unwrap_or(0)
             };
             models.push(crate::core::agent::commands::AgentModelInstance {
+                aliases: Vec::new(),
                 id: reference.model_alias(),
+                session_id: session_id.to_string(),
                 model_id: resolved.upstream_model_id.clone(),
                 port: None,
                 host_name: snapshot
@@ -897,7 +579,9 @@ pub async fn agent_instances() -> Vec<crate::core::agent::commands::AgentModelIn
     models
 }
 pub async fn available_models() -> Vec<Value> {
-    let state = state().lock().await;
+    let Ok(state) = state().await else {
+        return Vec::new();
+    };
     let mut models = Vec::new();
     for (id, snapshot) in &state.snapshots {
         for instance in snapshot
@@ -964,8 +648,7 @@ pub async fn forward_alias(
 ) -> Result<hyper::Response<hyper::Body>, String> {
     let reference = parse_alias(alias)?;
     let session = state()
-        .lock()
-        .await
+        .await?
         .registry
         .resolve(&reference)?
         .session_id
@@ -1012,32 +695,6 @@ mod live_tests;
 #[cfg(test)]
 mod registration_tests {
     use super::*;
-    use ginfer_host::engine_registry::{
-        HostSnapshot, InstanceRef, InstanceSnapshot, InstanceStatus,
-    };
-
-    #[tokio::test]
-    async fn local_owner_registration_uses_published_address_without_persisting_credentials() {
-        let directory = tempfile::tempdir().unwrap();
-        let owner = ginfer_host::service::Host::open(directory.path().join("host"), "This computer".into(),
-            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
-        owner.data.lock().await.management_origin = Some("https://127.0.0.1:17443".into());
-        owner.save().await.unwrap();
-        let bytes = std::fs::read(directory.path().join("host/host.json")).unwrap();
-        let private = local_owner_from_registry(&directory.path().join("hosts.json")).unwrap().unwrap();
-        let id = private.host_id;
-        let token = private.pairing_admin_token.clone();
-        let mut registry = Hosts { path:Some(directory.path().join("hosts.json")), ..Hosts::default() };
-        publish_local_owner(&mut registry, private).unwrap();
-        assert_eq!(registry.local_credentials[&id], token);
-        assert_eq!(registry.saved[&id].base_url, "https://127.0.0.1:17443");
-        let visible = visible_hosts(&registry);
-        assert_eq!(visible[0]["local"], true);
-        assert!(!serde_json::to_string(&visible).unwrap().contains(&token));
-        assert!(!std::fs::read_to_string(directory.path().join("hosts.json")).unwrap().contains(&token));
-        publish_local_owner(&mut registry, serde_json::from_slice(&bytes).unwrap()).unwrap();
-        assert_eq!(registry.saved.len(), 1);
-    }
 
     #[tokio::test]
     #[ignore = "requires an unlocked native OS credential vault"]
@@ -1072,72 +729,5 @@ mod registration_tests {
         assert_eq!(model_detail_alias("/models/other").unwrap(), None);
         assert!(model_detail_alias("/models/ginfer%2Fbad%2Fbad").is_err());
         assert!(model_detail_alias("/models/ginfer%2").is_err());
-    }
-
-    #[test]
-    fn failed_repair_or_forget_preserves_live_registration_and_success_persists_new_reference() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("hosts.json");
-        let mut state = Hosts {
-            path: Some(file.clone()),
-            ..Hosts::default()
-        };
-        let host = SavedHost {
-            host_id: Uuid::new_v4(),
-            name: "Lab".into(),
-            base_url: "https://127.0.0.1:7443".into(),
-            certificate_sha256: "a".repeat(64),
-            client_id: Uuid::new_v4(),
-        };
-        publish_registration(&mut state, host.clone()).unwrap();
-        let reference = InstanceRef {
-            host_id: host.host_id,
-            instance_id: Uuid::new_v4(),
-        };
-        let connection = state.registry.connect(host.host_id).unwrap();
-        state
-            .registry
-            .reconcile(
-                connection,
-                HostSnapshot {
-                    protocol_version: 1,
-                    host_id: host.host_id,
-                    boot_id: Uuid::new_v4(),
-                    revision: 1,
-                    display_name: "Lab".into(),
-                    instances: vec![InstanceSnapshot {
-                        instance_id: reference.instance_id,
-                        session_id: Some(Uuid::new_v4()),
-                        display_name: "Muse".into(),
-                        upstream_model_id: "Muse".into(),
-                        status: InstanceStatus::Ready,
-                    }],
-                },
-            )
-            .unwrap();
-        let replacement = SavedHost {
-            client_id: Uuid::new_v4(),
-            ..host.clone()
-        };
-        // A directory cannot be replaced with a registry file on either supported OS.
-        let invalid = dir.path().join("not-a-file");
-        std::fs::create_dir(&invalid).unwrap();
-        state.path = Some(invalid);
-        assert!(publish_registration(&mut state, replacement.clone()).is_err());
-        assert!(remove_registration(&mut state, host.host_id).is_err());
-        assert_eq!(state.saved[&host.host_id].client_id, host.client_id);
-        assert!(state.registry.resolve(&reference).is_ok());
-        let stored: Vec<SavedHost> =
-            serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
-        assert_eq!(stored[0].client_id, host.client_id);
-        state.path = Some(file.clone());
-        publish_registration(&mut state, replacement.clone()).unwrap();
-        assert!(state.registry.resolve(&reference).is_err());
-        let stored: Vec<SavedHost> =
-            serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
-        assert_eq!(stored[0].client_id, replacement.client_id);
-        remove_registration(&mut state, host.host_id).unwrap();
-        assert!(state.saved.is_empty());
-        assert_eq!(std::fs::read_to_string(file).unwrap(), "[]");
     }
 }

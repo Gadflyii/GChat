@@ -50,6 +50,8 @@ pub struct AgentRunRecord {
     pub default_model_instance_id: String,
     #[serde(default)]
     pub role_assignments: super::worker_pools::RoleAssignments,
+    #[serde(default)]
+    pub fleet_revision: Option<u64>,
     pub stages: Vec<AgentRunStage>,
 }
 
@@ -195,6 +197,7 @@ impl AgentRunRecord {
             final_reply,
             default_model_instance_id,
             role_assignments: definition.role_assignments.clone(),
+            fleet_revision: None,
             stages,
         }
     }

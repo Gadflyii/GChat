@@ -55,7 +55,12 @@ export function AgentRunSetup({
   )
   const missing =
     !workspaceValid ||
-    !!catalogError ||
+    (!!catalogError &&
+      roles.some(
+        ({ id }) =>
+          assignments[id].target.kind === 'pool' ||
+          assignments[id].target.kind === 'fleet'
+      )) ||
     roles.some(({ id }) => !readiness[id].canStart)
   const start = async () => {
     if (missing || !task.trim()) return
@@ -107,6 +112,17 @@ export function AgentRunSetup({
             </Button>
           </p>
         )}
+        {catalog.fleet?.authorityId && !catalog.fleet.connected && (
+          <p role="alert" className="text-sm text-destructive">
+            Fleet coordinator offline. New pooled work is unavailable; Current
+            and direct instances remain selectable.
+          </p>
+        )}
+        {catalog.fleet?.migrationIssues.map((issue) => (
+          <p role="alert" className="text-sm text-destructive" key={issue}>
+            {issue}
+          </p>
+        ))}
         <label className="space-y-1 text-sm">
           Task or goal
           <textarea
@@ -125,9 +141,9 @@ export function AgentRunSetup({
           {roles.map((role) => {
             const assignment = assignments[role.id]
             const targetValue =
-              assignment.target.kind === 'current'
-                ? 'current'
-                : `${assignment.target.kind}:${assignment.target.id}`
+              'id' in assignment.target
+                ? `${assignment.target.kind}:${assignment.target.id}`
+                : assignment.target.kind
             return (
               <section
                 key={role.id}
@@ -143,7 +159,7 @@ export function AgentRunSetup({
                       const [kind, ...rest] = e.target.value.split(':')
                       change(role.id, {
                         target:
-                          kind === 'current'
+                          kind === 'current' || kind === 'fleet'
                             ? { kind }
                             : {
                                 kind: kind as 'pool' | 'instance',
@@ -156,10 +172,36 @@ export function AgentRunSetup({
                       Current model
                       {current ? ` · ${current}` : ' · none selected'}
                     </option>
+                    <option
+                      value="fleet"
+                      disabled={
+                        !catalog.fleet?.connected ||
+                        !catalog.fleetTargets?.length
+                      }
+                    >
+                      Use client fleet assignment
+                    </option>
+                    {assignment.target.kind === 'instance' &&
+                      catalog.aliases?.[assignment.target.id] && (
+                        <option value={targetValue}>
+                          Saved local instance · {assignment.target.id}
+                        </option>
+                      )}
                     <optgroup label="Worker pools">
                       {catalog.pools.map((pool) => (
-                        <option key={pool.id} value={`pool:${pool.id}`}>
+                        <option
+                          key={pool.id}
+                          value={`pool:${pool.id}`}
+                          disabled={
+                            !!catalog.availablePoolIds &&
+                            !catalog.availablePoolIds.includes(pool.id)
+                          }
+                        >
                           {pool.name} · {pool.members.length} members
+                          {catalog.availablePoolIds &&
+                          !catalog.availablePoolIds.includes(pool.id)
+                            ? ' · not assigned'
+                            : ''}
                         </option>
                       ))}
                     </optgroup>
@@ -180,13 +222,16 @@ export function AgentRunSetup({
                       </optgroup>
                     ))}
                     {targetValue !== 'current' &&
+                      targetValue !== 'fleet' &&
                       !(assignment.target.kind === 'pool'
                         ? catalog.pools.some(
                             (p) => `pool:${p.id}` === targetValue
                           )
                         : catalog.instances.some(
                             (i) => `instance:${i.id}` === targetValue
-                          )) && (
+                          ) ||
+                          (assignment.target.kind === 'instance' &&
+                            !!catalog.aliases?.[assignment.target.id])) && (
                         <option value={targetValue}>
                           Unavailable · {targetValue}
                         </option>
@@ -236,7 +281,8 @@ export function AgentRunSetup({
             : definition.kind === 'coordinator'
               ? `; up to ${definition.maxParallel} parallel workers`
               : ''}
-          . The definition’s permissions apply to every role; folder access and hard safety blocks remain enforced.
+          . The definition’s permissions apply to every role; folder access and
+          hard safety blocks remain enforced.
         </p>
         {missing && (
           <p role="alert" className="text-sm text-destructive">

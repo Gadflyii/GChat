@@ -67,3 +67,35 @@ it('separates offline from unknown and honors limits in overlapping pools', () =
     }).status
   ).toBe('busy')
 })
+
+it('resolves exact legacy aliases and fleet preference while retaining full unassigned pool visibility', () => {
+  const shared = {
+    ...catalog,
+    aliases: { 'saved-local': 'lan' },
+    fleetTargets: ['lan'],
+    fleet: { connected: true },
+    availablePoolIds: [],
+  }
+  expect(shared.pools[0].id).toBe('pool')
+  expect(roleReadiness(assignment, '', shared)).toMatchObject({
+    canStart: false,
+    message: expect.stringContaining('not assigned'),
+  })
+  expect(
+    roleReadiness(
+      { ...assignment, target: { kind: 'instance', id: 'saved-local' } },
+      '',
+      shared
+    ).canStart
+  ).toBe(true)
+  expect(
+    roleReadiness({ ...assignment, target: { kind: 'fleet' } }, '', shared)
+      .canStart
+  ).toBe(true)
+  expect(
+    roleReadiness({ ...assignment, target: { kind: 'fleet' } }, '', {
+      ...shared,
+      fleet: { connected: false },
+    }).canStart
+  ).toBe(false)
+})

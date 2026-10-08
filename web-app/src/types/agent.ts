@@ -61,15 +61,19 @@ export type AgentInferenceMetrics = {
 export type AgentModelInstance = {
   id: string
   modelId: string
+  sessionId?: string
   port: number | null
   hostName?: string
   vision?: boolean
   concurrency?: number
   maxContext?: number
+  aliases?: string[]
 }
 
 export type AgentRoleAssignment = {
-  target: { kind: 'current' } | { kind: 'instance' | 'pool'; id: string }
+  target:
+    | { kind: 'current' | 'fleet' }
+    | { kind: 'instance' | 'pool'; id: string }
   vision: boolean
   minimumContext: number
 }
@@ -100,7 +104,18 @@ export type AgentWorkflowEdge = {
 }
 
 type AgentDefinitionBase = {
-  permissions?: Partial<Record<'fileRead' | 'fileWrite' | 'shell' | 'scripts' | 'network' | 'management' | 'clipboard', 'default' | 'allow' | 'ask' | 'deny'>>
+  permissions?: Partial<
+    Record<
+      | 'fileRead'
+      | 'fileWrite'
+      | 'shell'
+      | 'scripts'
+      | 'network'
+      | 'management'
+      | 'clipboard',
+      'default' | 'allow' | 'ask' | 'deny'
+    >
+  >
   maxOutputTokens?: number | null
   roleAssignments?: Record<string, AgentRoleAssignment>
   schemaVersion: 3
@@ -261,9 +276,16 @@ export type AgentToolExecution = {
 }
 
 export type AgentEvent =
-  | { type: 'context_status'; context_id: string; input_tokens: number;
-      context_tokens: number; reserved_tokens: number; compactions: number;
-      status: 'ready' | 'compacting' | 'nothing_to_compact' | 'blocked'; archive_path: string | null }
+  | {
+      type: 'context_status'
+      context_id: string
+      input_tokens: number
+      context_tokens: number
+      reserved_tokens: number
+      compactions: number
+      status: 'ready' | 'compacting' | 'nothing_to_compact' | 'blocked'
+      archive_path: string | null
+    }
   | { type: 'inference_measured'; inference: AgentInferenceMetrics }
   | { type: 'stage_queued'; stage_id: string; name: string; reason: string }
   | { type: 'stage_activity'; stage_id: string; event: AgentEvent }
