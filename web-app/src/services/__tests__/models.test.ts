@@ -376,7 +376,7 @@ describe('DefaultModelsService', () => {
         provider: 'ginfer',
         models: [
           {
-            id: 'muse_glimmer_30b_nvfp4_dflash2',
+            id: 'muse_glimmer_30b_nvfp4_df2q4',
             settings: {
               ctx_len: {
                 controller_props: {
@@ -393,11 +393,11 @@ describe('DefaultModelsService', () => {
 
       await modelsService.startModel(
         provider,
-        'muse_glimmer_30b_nvfp4_dflash2'
+        'muse_glimmer_30b_nvfp4_df2q4'
       )
 
       expect(mockEngine.load).toHaveBeenCalledWith(
-        'muse_glimmer_30b_nvfp4_dflash2',
+        'muse_glimmer_30b_nvfp4_df2q4',
         { max_context: 131072 },
         false,
         false

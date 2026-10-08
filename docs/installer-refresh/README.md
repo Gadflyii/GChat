@@ -176,8 +176,12 @@ For AppImage, make the file executable and launch it. Systems without FUSE can u
   process exited 0. GPU memory returned to 14 MiB. This is startup/generation
   evidence, not numerical, performance, media or all-GPU qualification.
 
-The real-GPU check used
-`/mnt/data/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/muse_glimmer_30b_autoround_dflash2.ginfer`.
+The September 30 real-GPU check used the Muse INT TP1 package before the
+October 8 filename rename. Its current Server 2 location is
+`/media/ron/SSD_RAID/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/muse_glimmer_30b_int_df2.ginfer`.
+The October 8 rename receipt and a read-only check on `AIS-1-2950X-L02`
+confirm that path (19,776,776,704 bytes). This filename/location update does
+not constitute new engine or model qualification.
 Its temporary `/home/ron/.local/state/gchat-linux-installer-check-20260930` engine
 and logs were removed after evidence was retained locally. Server 2 remains
 uninstalled; its independent RTX 3090 process and model files were untouched.

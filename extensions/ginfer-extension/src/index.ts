@@ -191,7 +191,7 @@ export default class ginfer_extension extends AIEngine {
       modelConfig.model_path,
     ])
 
-    const profile = ginferModelProfile(modelConfig.identity?.model_id ?? modelId, modelConfig.name)
+    const profile = ginferModelProfile(modelConfig.identity?.model_id ?? modelId)
     return {
       id: modelId,
       name: modelConfig.name ?? modelId,
@@ -246,7 +246,7 @@ export default class ginfer_extension extends AIEngine {
         gchatDataFolderPath,
         modelConfig.model_path,
       ])
-      const profile = ginferModelProfile(modelConfig.identity?.model_id ?? modelId, modelConfig.name)
+      const profile = ginferModelProfile(modelConfig.identity?.model_id ?? modelId)
       modelInfos.push({
         id: modelId,
         name: modelConfig.name ?? modelId,
@@ -389,7 +389,7 @@ export default class ginfer_extension extends AIEngine {
 
   async getMaxCtxTrain(modelId: string): Promise<number | undefined> {
     const model = await this.get(modelId)
-    return model?.nativeContextTokens ?? ginferModelProfile(modelId, model?.name)?.nativeContextTokens
+    return model?.nativeContextTokens ?? ginferModelProfile(modelId)?.nativeContextTokens
   }
 
   async getLoadedContext(modelId: string): Promise<number | undefined> {

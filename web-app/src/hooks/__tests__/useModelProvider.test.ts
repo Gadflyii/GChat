@@ -199,7 +199,7 @@ describe('useModelProvider - displayName functionality', () => {
       active: true,
       models: [
         {
-          id: 'muse_glimmer_30b_nvfp4_dflash2',
+          id: 'muse_glimmer_30b_nvfp4_df2q4',
           settings: {
             ctx_len: { controller_props: { value: 16384 } },
             ngl: { controller_props: { value: 100 } },
@@ -224,7 +224,7 @@ describe('useModelProvider - displayName functionality', () => {
           persist: true,
           models: [
             {
-              id: 'muse_glimmer_30b_nvfp4_dflash2',
+              id: 'muse_glimmer_30b_nvfp4_df2q4',
               settings: {
                 ctx_len: {
                   controller_props: {

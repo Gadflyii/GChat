@@ -195,7 +195,7 @@ describe('DropdownModelProvider - Display Name Integration', () => {
   })
 
   it('marks the running GInfer model as the persisted default', async () => {
-    useAppState.setState({ activeModels: ['muse_glimmer_30b_nvfp4_dflash2'] })
+    useAppState.setState({ activeModels: ['muse_glimmer_30b_nvfp4_df2q4'] })
     const selectModelProvider = vi.fn()
     const ginferProviders = [
       {
@@ -203,7 +203,7 @@ describe('DropdownModelProvider - Display Name Integration', () => {
         active: true,
         models: [
           {
-            id: 'muse_glimmer_30b_nvfp4_dflash2',
+            id: 'muse_glimmer_30b_nvfp4_df2q4',
             displayName: 'Muse Glimmer 30B',
             capabilities: ['completion'],
           },
@@ -229,14 +229,14 @@ describe('DropdownModelProvider - Display Name Integration', () => {
     await waitFor(() =>
       expect(selectModelProvider).toHaveBeenCalledWith(
         'ginfer',
-        'muse_glimmer_30b_nvfp4_dflash2'
+        'muse_glimmer_30b_nvfp4_df2q4'
       )
     )
     expect(
       JSON.parse(localStorage.getItem('last-used-model') ?? 'null')
     ).toEqual({
       provider: 'ginfer',
-      model: 'muse_glimmer_30b_nvfp4_dflash2',
+      model: 'muse_glimmer_30b_nvfp4_df2q4',
     })
   })
 
