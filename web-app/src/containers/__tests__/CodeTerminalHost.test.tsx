@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act } from '@testing-library/react'
 import { useThreads } from '@/hooks/useThreads'
@@ -37,6 +37,7 @@ vi.mock('@xterm/xterm', () => ({
     rows = 24
     cols = 80
     options: Record<string, unknown>
+    private output?: HTMLPreElement
 
     constructor(options: Record<string, unknown>) {
       this.options = options
@@ -44,9 +45,16 @@ vi.mock('@xterm/xterm', () => ({
     }
 
     loadAddon() {}
-    open() {}
-    reset() {}
-    write(_data: Uint8Array, callback?: () => void) {
+    open(container: HTMLElement) {
+      this.output = document.createElement('pre')
+      this.output.setAttribute('role', 'log')
+      container.appendChild(this.output)
+    }
+    reset() {
+      if (this.output) this.output.textContent = ''
+    }
+    write(data: Uint8Array, callback?: () => void) {
+      if (this.output) this.output.textContent += new TextDecoder().decode(data)
       callback?.()
     }
     resize(cols: number, rows: number) {
@@ -54,7 +62,9 @@ vi.mock('@xterm/xterm', () => ({
       this.rows = rows
     }
     focus() {}
-    dispose() {}
+    dispose() {
+      this.output?.remove()
+    }
     onData() {
       return { dispose: vi.fn() }
     }
@@ -85,7 +95,7 @@ vi.mock('@/services/terminal/tauri', () => ({
   stopTerminal: mocks.stopTerminal,
   getTerminalStatus: mocks.getTerminalStatus,
   updateCode: mocks.updateCode,
-  base64ToBytes: vi.fn(() => new Uint8Array()),
+  base64ToBytes: vi.fn((data: string) => Uint8Array.from(atob(data), character => character.charCodeAt(0))),
   terminalBinaryStringToBytes: vi.fn(() => new Uint8Array()),
 }))
 
@@ -229,6 +239,12 @@ function codeThread(id: string, directory = '/project'): Thread {
     metadata: { runtime: 'code', code: { session_id: id, directory } } }
 }
 
+function sendRuntimeOutput(terminalId: string, text: string) {
+  const attached = mocks.attachTerminal.mock.calls.find(([id]) => id === terminalId)
+  if (!attached) throw new Error(`Workspace terminal is not attached: ${terminalId}`)
+  attached[1]({ type: 'output', generation: 1, sequence: 1, data: btoa(text) })
+}
+
 describe('CodeTerminalHost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -264,7 +280,7 @@ describe('CodeTerminalHost', () => {
     })
   })
 
-  it('starts only on Code entry, attaches before launch and retains its parser across navigation', async () => {
+  it('starts only on Code entry, attaches before launch and retains live output across navigation', async () => {
     const { rerender } = render(<CodeTerminalHost visible={false} />)
 
     await act(async () => {})
@@ -278,6 +294,9 @@ describe('CodeTerminalHost', () => {
     expect(mocks.attachTerminal.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.spawnTerminal.mock.invocationCallOrder[0]
     )
+    const pane = screen.getByTestId('code-terminal')
+    act(() => sendRuntimeOutput('code:/data/agent-workspace', 'The running task is waiting for input.'))
+    expect(within(pane).getByRole('log')).toHaveTextContent('The running task is waiting for input.')
 
     rerender(<CodeTerminalHost visible={false} />)
     rerender(<CodeTerminalHost visible />)
@@ -286,6 +305,9 @@ describe('CodeTerminalHost', () => {
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
     expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('code-terminal')).toBe(pane)
+    expect(within(pane).getByRole('log')).toHaveTextContent('The running task is waiting for input.')
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
   })
 
   it('updates Code in the background with confirmation and returns to the TUI', async () => {
@@ -390,11 +412,16 @@ describe('CodeTerminalHost', () => {
     useCodeTerminalStore.setState({ selectedThreadId: first.id })
     render(<CodeTerminalHost visible />)
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    const pane = screen.getByTestId('code-terminal')
+    act(() => sendRuntimeOutput('code:/project', 'Background task is still running.'))
     act(() => useCodeTerminalStore.getState().setSelectedThreadId(second.id))
     await waitFor(() => expect(mocks.selectCodeSession).toHaveBeenCalledWith('code:/project', 'ses_second'))
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
     expect(mocks.stopTerminal).not.toHaveBeenCalled()
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('code-terminal')).toBe(pane)
+    expect(within(pane).getByRole('log')).toHaveTextContent('Background task is still running.')
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
   })
 
   it('retains live workspace terminals while selecting sessions in another workspace', async () => {
@@ -404,13 +431,27 @@ describe('CodeTerminalHost', () => {
     useCodeTerminalStore.setState({ selectedThreadId: first.id })
     render(<CodeTerminalHost visible />)
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    const firstPane = screen.getByTestId('code-terminal')
+    act(() => sendRuntimeOutput('code:/first', 'First workspace task is active.'))
     act(() => useCodeTerminalStore.getState().setSelectedThreadId(second.id))
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2))
+    const secondPane = screen.getAllByTestId('code-terminal').find(pane => pane !== firstPane)!
+    act(() => sendRuntimeOutput('code:/second', 'Second workspace task is active.'))
+    expect(within(firstPane).queryByRole('log')).toBeNull()
+    expect(screen.getByRole('log')).toHaveTextContent('Second workspace task is active.')
+    expect(within(firstPane).getByRole('log', { hidden: true })).toHaveTextContent('First workspace task is active.')
     act(() => useCodeTerminalStore.getState().setSelectedThreadId(first.id))
     await act(async () => {})
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2)
     expect(mocks.stopTerminal).not.toHaveBeenCalled()
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(2)
+    expect(screen.getAllByTestId('code-terminal')).toContain(firstPane)
+    expect(screen.getAllByTestId('code-terminal')).toContain(secondPane)
+    expect(screen.getAllByTestId('code-terminal')).toHaveLength(2)
+    expect(screen.getByRole('log')).toHaveTextContent('First workspace task is active.')
+    expect(within(secondPane).queryByRole('log')).toBeNull()
+    expect(within(firstPane).getByRole('log', { hidden: true })).toHaveTextContent('First workspace task is active.')
+    expect(within(secondPane).getByRole('log', { hidden: true })).toHaveTextContent('Second workspace task is active.')
   })
 
   it('registers stock picker selection in the shared index and persisted selection', async () => {
@@ -444,6 +485,8 @@ describe('CodeTerminalHost', () => {
     expect(mocks.updateCodeBridgePolicy).toHaveBeenCalledWith('code:/first', expect.objectContaining({
       origin_session_id: first.id, auto_approve: true,
     }))
+    const firstPane = screen.getByTestId('code-terminal')
+    act(() => sendRuntimeOutput('code:/first', 'Background session remains active.'))
     act(() => useCodeTerminalStore.getState().setSelectedThreadId(second.id))
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2))
     act(() => useConversationPolicy.getState().setExternalRootPermission(background.id, 'documents', true))
@@ -451,6 +494,9 @@ describe('CodeTerminalHost', () => {
       origin_session_id: background.id, external_roots: [{ path: '/documents', can_edit: true }],
     })))
     expect(mocks.stopTerminal).not.toHaveBeenCalled()
+    expect(within(firstPane).queryByRole('log')).toBeNull()
+    expect(within(firstPane).getByRole('log', { hidden: true })).toHaveTextContent('Background session remains active.')
+    expect(screen.getAllByLabelText('code:status.running')).toHaveLength(2)
   })
 
 })
