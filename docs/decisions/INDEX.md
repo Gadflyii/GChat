@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Unify conversations and expose shared capabilities in Code](2026-10-08-unify-conversations-and-code-capabilities.md)
+
 - [Share Chat and Agent capabilities](2026-10-01-share-chat-and-agent-capabilities.md)
 
 - [Pair sidebar server Stop with scoped model unload](2026-10-01-pair-sidebar-server-stop-with-model-unload.md)

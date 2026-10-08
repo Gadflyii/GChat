@@ -1,5 +1,70 @@
 # Chat and Agent runtime
 
+## Unified sessions and Code capabilities — active October 8 work
+
+The user approved one conversation space for ordinary replies, local-machine
+tools and delegated agent work, with Agent Studio retained for authoring. Deliver
+saved Code sessions in the shared sidebar history; make `/compact` a consistent
+command in Chat, Agent and Code; trace and correct the local-document access
+failure; and expose Studio definitions, agent invocation, skills, native tools
+and configured connectors through the embedded Code bridge. Retain the stock
+OpenCode runtime and its transcript authority. Preserve existing conversations,
+models, saved definitions, worker-pool placement and explicit permission denials.
+The user's MODEL-RENAME instruction adds current fleet/NAS package stems to
+GChat model/profile matching and updates the 12 inventoried fixtures/path
+references in
+`/ai/faceless-video/evidence/benchmarks/model-rename-20261008-data/gchat-inventory.json`.
+That inventory's older report-only policy is superseded by this explicit edit
+instruction. Registered artifact identities and inference behavior remain unchanged.
+
+Acceptance requires session restoration after an app restart, correct session
+view/icons, ordinary Chat file access and inline delegation under the same
+workspace/approval policy, command handling without storing `/compact` as a
+prompt, and Code tool discovery/execution through the shared capability executor.
+Add focused behavioral regressions, review the integrated implementation, and
+pass `make verify` before authorized integration/commit/push. No inference engine,
+task-budget, numerical/performance, dependency or server-manager changes are in
+scope. The standalone tray/server-manager application follows this work under
+the user's October 8 brief at
+`/ai/faceless-video/tmp/briefs/ginfer-server-manager-gchat.md`: write and send
+`docs/ginfer-manager.md` first, build a new thin Tauri workspace member over
+`src-tauri/ginfer-host`, verify Linux X11 against local and paired hosts, then
+build Windows. Fleet worker-pool state must be owned once by the host crate and
+visible consistently to paired clients/managers. Keep its implementation separate
+from this client-fix acceptance; report manager milestones to bubbs as authorized.
+
+The baseline already shares Chat/Agent native and MCP capabilities. Code already
+lists/reads skills, lists definitions and starts/monitors/cancels delegated runs;
+direct native/MCP tool access is absent. The exact cause of the reported Chat
+document failure has not been established. The user clarified it was an Excel
+file on the Windows Desktop and no longer has the error. Native
+`os.fs.read_document` already supports `.xls`/`.xlsx`; verification must exercise
+an external-folder Excel read and its approval/continuation, rather than assume
+Office parsing is absent. Source inspection establishes a content-loss defect:
+shared native capability results choose `details` over `summary`, so document
+metadata suppresses extracted text. Correct that serialization and verify actual
+spreadsheet content reaches Chat; the exact user incident remains untraced.
+Chat and Agent already intercept
+`/compact` in existing threads; initial submission and command/control boundaries
+need verification. OpenCode session registration and restoration are absent from
+GChat history. Prior accepted evidence below remains valid for its recorded scope.
+
+| Owner / host | Exact path / revision | Purpose / retention |
+| --- | --- | --- |
+| GChat / Ron-9950X3D2 | `/ai/gchat`, `94dc24f7e` | Stable baseline, clean and matches remote main |
+| Unified sessions / coordinator | `/ai/gchat-worktrees/unified-sessions`, `fix/unified-sessions` | Integration candidate and current subject authority |
+| Code bridge / delegated SOL | `/ai/gchat-worktrees/code-shared-capabilities`, `fix/code-shared-capabilities` | Bounded shared-tool bridge candidate |
+| Code history / delegated SOL | `/ai/gchat-worktrees/code-session-history`, `fix/code-session-history` | Saved sessions, Code restore and typed sidebar rows |
+| Chat unification / delegated SOL | `/ai/gchat-worktrees/unified-chat-space`, `fix/unified-chat-space` | Shared conversation UI, workspace and execution behavior |
+| Compaction / delegated SOL | `/ai/gchat-worktrees/compact-everywhere`, `fix/compact-everywhere` | Reserved command dispatch and contextual compaction |
+| Model names / delegated SOL | `/ai/gchat-worktrees/model-package-names`, `fix/model-package-names` | Current package matching and targeted fixtures/path update |
+| Existing build caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compilation; preserve accepted installer outputs |
+
+Next: agree the session/policy interfaces between the delegated workers, implement
+the four bounded areas, and integrate their actual changes. No GPU job is booked
+or running for this task; any required GPU check follows
+`/ai/coordination/gpu-booking-howto.md` and the fleet schedule authority.
+
 ## Agent result prompt failure — accepted Windows fix
 
 The user confirms sidebar Stop works. The subsequent delegated run exposed a
