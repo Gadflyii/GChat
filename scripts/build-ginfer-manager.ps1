@@ -85,6 +85,9 @@ try {
         $managerCargo = Start-Process -FilePath (Get-Command cargo.exe).Source -ArgumentList @(
             'build', '--manifest-path', 'src-tauri/Cargo.toml', '-p', 'ginfer-manager',
             '-p', 'ginfer-host', '--release', '--locked') -WorkingDirectory $managerProjectRoot -NoNewWindow -PassThru
+        # PS5.1 Start-Process returns a Process without a retained handle;
+        # after exit its ExitCode otherwise becomes null. Pin the owned handle.
+        $managerOwnedHandle = $managerCargo.Handle
         $managerOwnedStart = $managerCargo.StartTime.ToUniversalTime().ToString('o')
         do {
             $managerSampleTimer = [Diagnostics.Stopwatch]::StartNew()

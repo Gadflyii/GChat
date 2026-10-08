@@ -85,6 +85,55 @@ no GPUs. A continuation is booked for 13:34–14:04 UTC under the same owner.
 Native Windows assembly started at 13:17 UTC with four jobs, an exclusive build
 lock, WSL quiet and a ten-second emergency-memory guard. Fresh available Windows
 memory was 6.75 GB; the guard stops only the owned compiler tree below 4 GiB.
+At 13:18:41 UTC available memory fell to 3,981,864,960 bytes; the guard terminated
+only the owned Cargo tree and the build returned failure without an artifact.
+Resume uses the same owned partial cache with one job, sized to this measured
+headroom. Other processes and WSL caches remain untouched. The memory trace and
+failed build log are retained as proof of the enforced guard and correction.
+The one-job attempt started with 5,703,385,088 available bytes but the single
+`windows` dependency compile reached 3,849,961,472 bytes at 13:20:09 UTC. The guard
+again stopped only its owned tree. No third identical attempt is authorized.
+Before retry, retire this task's completed 1.5 GiB Linux release cache (accepted
+binaries and evidence are retained), then measure actual Windows headroom. The
+floor and release optimization stay unchanged; unrelated caches/apps are preserved.
+The retirement attempt acquired no build lock and made no changes: C1's finite
+legacy-NV comparator job had acquired the ordinary lock and started at 13:24:26
+UTC. No native build is active. Bookings 251 and 252 were returned at 13:25 UTC;
+C1 will report its actual end before Manager requests a fresh quiet interval.
+Read-only native-cache inspection found no exact reusable `windows` dependency
+fingerprint: accepted GChat artifacts use different feature sets/profiles. No
+cache copy or fingerprint substitution was made. Available Windows memory later
+recovered to 9.80 GB, but no retry starts during C1's model run. The inactive
+Linux fixture's private host/config/data state and disposable harnesses are
+retired; redacted screenshots, snapshots and exit receipts remain.
+C1 reported all four comparator commands finished and locks returned at 13:35:22
+UTC, with no successor. Fresh process inspection confirms no model/compiler.
+At 13:36 UTC the exact owned Linux release cache was retired under the build
+lock: 4,932 files, 1,682,564,388 bytes. Accepted binaries and archive remain.
+The new `gchat-manager-windows` booking is 13:36–14:06 UTC, preemptible CPUs 0–31,
+no GPUs. The next one-job attempt requires freshly measured available Windows
+memory of at least 8 GiB, with the existing 4 GiB running emergency guard, an
+owned-process RSS observer and WSL quiet. No identical low-headroom retry occurs.
+Fresh quiet Windows available memory was 10,583,470,080 bytes at 13:36:40 UTC.
+The unchanged single `windows` crate compiled successfully on the one-job retry;
+its measured peak private allocation was 2,406,203,392 bytes. This explains why
+the earlier 5.70 GB starting headroom could not sustain the 4 GiB running floor.
+The same release profile and guard are preserved; application compilation proceeds.
+Final independent review accepts `af5013730`, including the two equivalent lint
+changes, without a remaining source/design blocker.
+Native Rust compilation finished successfully in 3m25s and produced both PE
+binaries. Packaging then stopped because PowerShell 5.1's returned Process object
+reported a null exit code after the timed wait. This is a builder result-handling
+defect, not a compile or memory failure. Before packaging retry, reproduce exit
+0/7 with the same native process/wait path and pin the Process handle if confirmed;
+validate the corrected script with a no-op Cargo run and retain the built binaries.
+Native PowerShell 5.1 reproduction confirms the cause: both exit 0 and exit 7
+returned null without retaining the handle, and returned the exact expected code
+after reading `Process.Handle`. The builder now pins its owned Process handle
+immediately after launch. AST and diff checks pass; no-op packaging validation
+uses the accepted binaries and preserves their before/after hashes.
+Reviewed source is committed as `af5013730`; main integration waits for native
+Windows acceptance. The two lint corrections change no selector semantics.
 Next: finish native assembly and tray/vault/control smoke, then reviewed merge/push.
 The shared release cache is root-owned and unwritable; it remains untouched.
 
@@ -97,11 +146,11 @@ The shared release cache is root-owned and unwritable; it remains untouched.
 | Client fixes | `/ai/gchat-worktrees/unified-sessions` | Accepted client candidate; preserve passing evidence |
 | Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies and compiler cache |
 | Manager build/evidence | `/ai/gchat/out/ginfer-manager/linux/` | Current default-dark native archive, guide, window/control evidence; retain accepted package |
-| Manager compiler / Ron-9950X3D2 | `/ai/gchat/out/ginfer-manager/linux/cargo-target/` | Owned release cache because shared accepted release cache is unwritable; retain through acceptance, then retire disposable intermediates |
+| Manager compiler / Ron-9950X3D2 | `/ai/gchat/out/ginfer-manager/linux/cargo-target/` | Retired after accepted binaries/review retained; 1.68 GB released, receipt in Linux evidence folder |
 | Shared-client verification | Candidate `out/ginfer-manager/client-{check,tests,tests-final}.log` | Scoped host check, client/lease/pairing/fleet regression logs; consolidate at handoff |
 | GChat fleet verification | Candidate `out/ginfer-manager/gchat-fleet-tests.log` | Eight worker, two Code and fourteen frontend regressions, typecheck/lint |
 | Combined gate | `/ai/gchat/out/ginfer-manager/make-verify*.log` | Passing gate and both missing-cache-link failures; retain correction evidence |
-| Native Windows / RON-9950X3D2 | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager\{source,target,out}` | Owned isolated NTFS build planned next; preserve accepted GChat cache/install |
+| Native Windows / RON-9950X3D2 | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager\{source,target,out}` | Owned isolated NTFS partial cache and guard evidence; guarded one-job assembly resumes next, accepted GChat cache/install preserved |
 
 Compile only one process at a time under `/tmp/ginfer-local-build.lock`, with
 `CARGO_BUILD_JOBS=6`, and not during a local model load. Native Windows work waits

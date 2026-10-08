@@ -25,7 +25,8 @@ owner just because Manager opens. Available downloads use the host's configured
 `GINFER_MODEL_CATALOG_URL`; no catalog address is selected by Manager.
 
 Linux requires an X11 desktop and the Tauri GTK/WebKit runtime libraries. The
-window stays visible when the desktop has no supported tray. Windows uses the
+window stays visible when the desktop has no supported tray. Windows requires
+Microsoft Edge WebView2 Runtime and uses the
 system tray; closing its window hides it there. **Open Server Manager** restores
 the window, and **Exit Manager** exits only this application. `--window` opens
 the window explicitly; `--no-tray` uses a window without a tray.
