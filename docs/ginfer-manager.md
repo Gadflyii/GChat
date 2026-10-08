@@ -90,14 +90,29 @@ revision; callers refresh and review rather than silently overwrite/retry.
 `POST /host/v1/fleet/authority` assigns a member's locator. Authenticated host
 snapshots and pairing responses publish that locator. Connect to its expected
 host ID and certificate through the same one-click pairing mechanism; membership
-does not substitute for an inference host's own grant.
+does not substitute for an inference host's own grant. GChat and Manager resolve
+an existing coordinator from any paired member. Published coordinator enrollment
+uses the same pinned pairing routine, so a second workstation joins the same
+fleet without recreating its pools. First-time pool setup offers a shared paired
+host as coordinator; it must not silently create one fleet per workstation.
+
+Hosts also expose a read-only membership report derived from the coordinator:
+their own pool IDs/names, instance memberships, relevant client placements and
+authority revision. Store that projection atomically, ignore stale updates and
+report last-known status when its revision lags. Canonical pool commits succeed
+even if an offline member cannot refresh its projection; synchronization warnings
+remain visible. This projection is not a second writable pool catalog.
 
 The fleet document contains host identities/addresses/pins, UUID pools with
 ordered `InstanceRef` members and per-client worker limits, and assignments keyed
 by coordinator-issued client grant IDs. Same-user GChat and manager share the
-same grant through the shared native registry. Assignments choose visible pools
+same grant through the shared native registry. Assignments choose usable pools
 and preferred host/instance targets; they are placement configuration, not a new
-transport authorization system or global worker reservation scheduler.
+transport authorization system or global worker reservation scheduler. Studio
+can browse the full shared catalog, marking unassigned pools; runnable choices
+follow the client assignment. An explicit **Fleet assignment** worker target
+uses the assigned preferred instances/hosts. Existing Current, selected-model,
+Instance and Pool choices remain explicit and retain their behavior.
 
 GChat's existing Studio pool wire format projects instances to canonical
 `ginfer/<host UUID>/<instance UUID>` aliases and preserves pool UUIDs. Migrate
@@ -109,6 +124,8 @@ coordinator. Saved definitions, role settings and past runs remain local.
 Import exact mapped pools and their source/pool receipts atomically in the host;
 the preserved old file must not resurrect a subsequently deleted pool after a
 client restart. Unresolved pools remain pending and are reported, not discarded.
+A stable shared-registry installation UUID and source path identify imports
+across client re-pairing; changing a remote grant must not reset the receipt.
 Normalize local Current, explicit Instance and Pool capacity accounting to the
 same exact host/instance/session identity so canonical pool migration cannot
 bypass overlapping worker limits or count the same GPU instance twice.

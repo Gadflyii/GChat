@@ -54,9 +54,30 @@ This WSL desktop has X11 and GTK/WebKit/AppIndicator, but no tray watcher and
 no Secret Service provider. Linux window/local control can be checked here;
 native Linux vault/pairing requires a desktop with an available provider. Do not
 save paired tokens as plaintext or install packages to bypass that limitation.
-No GPU allocation, real-model run or fleet mutation has started. Next: complete
-and review the actual shared implementation, then build Linux and verify its
-window/control behavior before native Windows assembly.
+The user clarified the cross-workstation expectation: creating a coder pool on
+one workstation must make it visible from another paired with the same fleet,
+and hosts must know their own pool/instance memberships. Resolve the known
+coordinator from any paired host and enroll through the shared pinned pairing
+routine. First creation offers a shared hosting coordinator instead of a local
+fork. Add read-only derived member projections; they never become editable
+catalog replicas. Studio browses all built pools, while assignments select usable
+ones. An explicit Fleet assignment worker target consumes preferred placements.
+
+Focused host checks pass: 61 unit tests, three shared-client behavior tests,
+pairing, seven fleet integrations, Cargo check and warnings-denied Clippy before
+the latest membership join. Client checks use an inert owned child/HTTP fixture,
+not a real model. Eight production DOM/action tests pass. They caught recursive
+child-rendering and duplicate preferred-host choices; the UI owner corrected
+both. Follow-up tests protect one-click discovered pairing, truthful explicit
+draft-width validation and membership freshness. The combined gate, native
+window/build and latest integration review remain pending.
+
+No GPU allocation, real-model run or fleet mutation has started. Server 2 is
+freshly verified as `AIS-1-2950X-L02` at `192.168.1.112`, glibc 2.39; its user
+session also has no running Secret Service provider. Next: complete and review
+the implementation, then build Linux and verify actual window/control behavior
+before native Windows assembly. Pairing acceptance must distinguish injected
+test credentials from an actual native vault.
 
 ## Owned inventory
 
@@ -67,6 +88,7 @@ window/control behavior before native Windows assembly.
 | Client fixes | `/ai/gchat-worktrees/unified-sessions` | Accepted client candidate; preserve passing evidence |
 | Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies and compiler cache |
 | Manager build/evidence | `/ai/gchat/out/ginfer-manager/linux/` | Planned native Linux artifact and window/control evidence |
+| Shared-client verification | Candidate `out/ginfer-manager/client-{check,tests,tests-final}.log` | Scoped host check, client/lease/pairing/fleet regression logs; consolidate at handoff |
 | Native Windows / RON-9950X3D2 | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager\{source,target,out}` | Planned isolated NTFS build; preserve accepted GChat cache/install |
 
 Compile only one process at a time under `/tmp/ginfer-local-build.lock`, with
