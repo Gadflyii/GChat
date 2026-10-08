@@ -116,10 +116,23 @@ Eleven native bridge regressions, Cargo check and warnings-denied Clippy passed;
 independent review verified actual stock OpenCode 1.18.21 hook export and injection
 timing against its public source. Saved-transcript restart and public selection
 screens passed with isolated stock storage and no inference. Their receipts/logs
-are retained in `/ai/gchat/out/unified-sessions-20261008/code-history/`; source
-history integration and the combined gate are still pending.
+are retained in `/ai/gchat/out/unified-sessions-20261008/code-history/`. History
+is now integrated with the shared conversation changes. The four desktop
+history/policy commands are registered. Command conflict resolution preserves
+`/compact` interception, active-worker dispatch and the restoration guard before
+initial-message consumption and submission. Failed Code deletion retains its
+reference and saved policy; successful deletion removes both.
 
-Next: integrate the remaining bounded changes and verify their combined behavior.
+The final conversation candidate passed 44 focused frontend tests, native XLSX
+extraction with a real folder gate, TypeScript, lint and quality guards. Code
+history passed 58 frontend, 10 stock-plugin and 20 native tests. Their individual
+compile checks used temporary peer dependencies excluded from commits; the
+combined source is now the only acceptance candidate.
+
+Next: run `make verify` and independently review the integrated source, correct
+any material failure, then perform the authorized GChat main integration and
+push. Installer rebuilding and live Windows replay are not acceptance claims
+for this source batch.
 No GPU job is booked
 or running for this task; any required GPU check follows
 `/ai/coordination/gpu-booking-howto.md` and the fleet schedule authority.
