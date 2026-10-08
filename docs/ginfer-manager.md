@@ -37,6 +37,12 @@ Persist shared same-user connection metadata atomically under the existing
 GInfer configuration root, with an OS file lock and reload across processes.
 Import existing GChat registrations once, retaining the same vault service and
 grant IDs. Tokens never enter UI state or fleet documents.
+Local administrator transport remains independent of the desktop vault. Add
+local-admin `POST /host/v1/local-client` to issue a stable local client UUID in
+the host's private state; both applications adopt that same placement identity.
+The host ID is not a client grant. Local-only use must work without Secret
+Service, while paired credentials still require the native OS vault. Local
+administrator requests retain their privileged controls and truthful usage label.
 
 | Control | Existing owner or endpoint |
 | --- | --- |
@@ -71,6 +77,10 @@ with the host's private persistent state, under one lock, and publish a revision
 only after the atomic write succeeds. Member hosts publish a pinned coordinator
 locator, never another writable copy of the catalog. Coordinator changes are
 explicit management actions, never an election or an offline fallback.
+Converting a populated coordinator into a member is refused to preserve its
+catalog. Refreshing the same authority retains the document. A private durable
+revision high-water mark prevents revision reuse if an empty coordinator is
+explicitly reconfigured and later restored.
 
 `GET /host/v1/fleet` returns the coordinator's canonical full snapshot, or a
 member's coordinator locator. `POST /host/v1/fleet/update` requires
@@ -96,6 +106,12 @@ retain the original file and report unresolved members instead of guessing or
 dropping them. Existing local pool ownership can be adopted once by the already
 registered local host; this bootstrap does not replace a discovered/configured
 coordinator. Saved definitions, role settings and past runs remain local.
+Import exact mapped pools and their source/pool receipts atomically in the host;
+the preserved old file must not resurrect a subsequently deleted pool after a
+client restart. Unresolved pools remain pending and are reported, not discarded.
+Normalize local Current, explicit Instance and Pool capacity accounting to the
+same exact host/instance/session identity so canonical pool migration cannot
+bypass overlapping worker limits or count the same GPU instance twice.
 
 All pool consumers use one asynchronous fleet adapter: Studio list/save/delete,
 capacity, Chat/Code discovery and worker-dispatch preflight. Poll while active,

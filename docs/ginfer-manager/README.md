@@ -34,9 +34,29 @@ Do not add a second host process controller or a manager-only pool store.
 Read-only delegated mapping is complete. The design chooses a thin shared client,
 one selected host authority with durable revision/CAS, redacted client activity,
 canonical pool instances and explicit stale/offline behavior. It also identifies
-the bounded host-only Flash/MTP admission gap. The design note is written;
-next send its exact path to bubbs, then begin implementation while review proceeds.
-No manager code, build, GPU allocation or live test has started.
+the bounded host-only Flash/MTP admission gap. The design `fdcb6237d` was sent
+to bubbs before implementation. Shared client/control, fleet authority, GChat
+pool adapters, manager shell/packaging and Flash host admission are now delegated
+in disjoint file areas; the coordinator integrates and verifies their outputs.
+
+Review and implementation mapping exposed concrete identity/migration gaps.
+Local administrator requests used the host UUID, not an issued client grant;
+add a stable host-private local-client identity so local fleet assignments work
+without requiring a desktop vault. A retained legacy pool file can otherwise
+resurrect deleted pools; commit import receipts atomically with mapped pools.
+Canonical local pool IDs must normalize the Current/Instance allocator and
+affinity identity too, preserving overlapping limits. The design also preserves
+populated authority ownership and durable revision ordering during explicit
+empty-authority reconfiguration. Independent review found no further design
+blocker after these corrections; code acceptance remains pending.
+
+This WSL desktop has X11 and GTK/WebKit/AppIndicator, but no tray watcher and
+no Secret Service provider. Linux window/local control can be checked here;
+native Linux vault/pairing requires a desktop with an available provider. Do not
+save paired tokens as plaintext or install packages to bypass that limitation.
+No GPU allocation, real-model run or fleet mutation has started. Next: complete
+and review the actual shared implementation, then build Linux and verify its
+window/control behavior before native Windows assembly.
 
 ## Owned inventory
 
@@ -46,6 +66,15 @@ No manager code, build, GPU allocation or live test has started.
 | GChat | `/ai/gchat`, `6eacebfff` | Accepted stable source; no manager mutation |
 | Client fixes | `/ai/gchat-worktrees/unified-sessions` | Accepted client candidate; preserve passing evidence |
 | Shared caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies and compiler cache |
+| Manager build/evidence | `/ai/gchat/out/ginfer-manager/linux/` | Planned native Linux artifact and window/control evidence |
+| Native Windows / RON-9950X3D2 | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager\{source,target,out}` | Planned isolated NTFS build; preserve accepted GChat cache/install |
+
+Compile only one process at a time under `/tmp/ginfer-local-build.lock`, with
+`CARGO_BUILD_JOBS=6`, and not during a local model load. Native Windows work waits
+for Linux acceptance, verified memory/booking and a quiet WSL interval. The
+October 8 manager brief explicitly authorizes native Windows assembly after
+Linux and supersedes the older October 6 no-Windows-build instruction for this
+assembly only; it does not authorize a model run or GChat update.
 
 The five completed client subtask trees are retired. Unrelated GChat/GInfer
 worktrees, engine artifacts, installed apps and other owners' jobs are untouched.
