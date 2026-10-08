@@ -65,8 +65,30 @@ worker requests. Its scoped checks passed 47 frontend tests, TypeScript, source
 ESLint and the native worker-boundary regression; integrated acceptance remains
 pending. Code history uses typed references in the existing thread index and
 retains one stock runtime per canonical workspace. Direct Code tools use the
-shared executor and a frontend-owned session policy. The paired-host GInfer
-compaction route is being corrected to count against the matched live instance.
+shared executor and a frontend-owned session policy. Paired-host GInfer
+compaction now counts against the exact selected ready alias's loaded capacity;
+39 focused tests cover routing, retained checkpoints and refusal without capacity
+or a running facade. New package matching is integrated: 102 extension and 59
+affected frontend tests, TypeScript and lint passed. Flash has its independently
+defined family/context, rather than inheriting Qwen 27B facts. The installer
+reference retains the historical smoke scope and gives the verified renamed
+Server 2 path. These scoped results do not replace the integrated acceptance gate.
+
+Code permissions must follow the actual stock OpenCode caller, including its
+background child sessions. A public server plugin supplies the authoritative
+caller ID; native code verifies the same-workspace parent chain and resolves the
+top-level saved conversation's current policy. Switching the visible session
+must not change a background run's permissions. Workspace-wide discovery has
+no caller identity, so execution enforces each caller's policy. There is no
+selected-session or permissive fallback. This replaces the initial selected-TUI
+policy design before acceptance.
+
+The user's operations-manual request is a separate concurrent GInfer deliverable:
+`/ai/ginfer-worktrees/operations-manual`, branch `docs/operations-manual`, based on
+current release-development `cd9ecacf2`. Its `docs/operations/README.md` owns the
+source-backed switch audit, operator guide and Linux/Windows runtime inclusion.
+GInfer main is older; other owners' dirty release-development source and campaign
+trees are read-only. No engine qualification or GPU run is added.
 
 Next: integrate the remaining bounded changes and verify their combined behavior.
 No GPU job is booked
