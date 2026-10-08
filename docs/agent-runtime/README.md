@@ -129,14 +129,18 @@ history passed 58 frontend, 10 stock-plugin and 20 native tests. Their individua
 compile checks used temporary peer dependencies excluded from commits; the
 combined source is now the only acceptance candidate.
 
-The first integrated gate passes lint and TypeScript but stops at test quality:
-a new Code host test asserts only mock invocation. Its retained output is
-`make-verify-quality-failure.log`; strengthen the observable behavior instead of
-adding an exception. Integrated review also found draft loss after a historical
-context restoration error: submission returns without sending, while the input
-clears its draft/attachments. Keep admission disabled until restoration succeeds,
-preserve the editable draft and expose retry. Both corrections precede the next
-combined gate; no main merge or installer update has occurred.
+The first integrated gate passed lint and TypeScript but stopped at test quality:
+a new Code host test asserted only mock invocation. Its retained output is
+`make-verify-quality-failure.log`. The corrected tests send terminal output through
+the production event hook and verify retained rendered output, running status and
+foreground/background navigation. All ten focused tests and the quality guard pass;
+no exception was added. Integrated review also found draft loss after a historical
+context restoration error. Submission now waits for successful restoration while
+the draft, selected skill and attachments remain editable. Send and Enter share
+that guard, including `/compact`; active-worker compaction still dispatches when
+restoration is ready. Thirteen focused input tests passed in the source candidate.
+Both corrections are integrated; the combined gate and final review are running.
+No main merge or installer update has occurred.
 
 Next: run `make verify` and independently review the integrated source, correct
 any material failure, then perform the authorized GChat main integration and
