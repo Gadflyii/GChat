@@ -17,6 +17,9 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'engine_hosts_command',
   'adopt_root_ginfer_models',
   'check_for_app_updates',
+  'code_session_new',
+  'code_session_select',
+  'code_workspace_resolve',
   'get_local_http',
   'hermes_readiness',
   'update_hermes',
@@ -31,6 +34,7 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'terminal_spawn',
   'terminal_status',
   'terminal_stop',
+  'terminal_update_bridge_policy',
   'terminal_write',
 ])
 const EXPECTED_MOBILE_ONLY = new Set(['abort_remote_stream'])

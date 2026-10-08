@@ -140,6 +140,12 @@ the draft, selected skill and attachments remain editable. Send and Enter share
 that guard, including `/compact`; active-worker compaction still dispatches when
 restoration is ready. Thirteen focused input tests passed in the source candidate.
 Both corrections are integrated; the combined gate and final review are running.
+Final source review accepts both corrections without a remaining blocker. The
+next gate passed lint, TypeScript and test quality; 2,059 tests passed and one
+IPC contract fixture still expected the old desktop command set. Its explicit
+desktop-only set now includes the four newly registered Code commands. This is
+a fixture correction, not an added command exemption. Rerun the combined gate
+before acceptance.
 No main merge or installer update has occurred.
 
 Next: run `make verify` and independently review the integrated source, correct
