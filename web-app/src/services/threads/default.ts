@@ -5,6 +5,7 @@
 import { ExtensionManager } from '@/lib/extension'
 import { ConversationalExtension, ExtensionTypeEnum } from '@gchat/core'
 import type { ThreadsService } from './types'
+import { getCodeSessionReference } from '@/lib/sessions'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { LOCAL_GINFER_PROVIDER } from '@/lib/utils'
 
@@ -136,7 +137,7 @@ export class DefaultThreadsService implements ThreadsService {
       .get<ConversationalExtension>(ExtensionTypeEnum.Conversational)
       ?.modifyThread({
         ...thread,
-        assistants: thread.assistants?.map((e) => {
+        assistants: getCodeSessionReference(thread) ? [] : thread.assistants?.map((e) => {
           return {
             model: {
               id: thread.model?.id ?? '*',

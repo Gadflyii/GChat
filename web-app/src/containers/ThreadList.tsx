@@ -1,4 +1,4 @@
-import { Folder, MoreHorizontal, Pencil, Trash2, X } from 'lucide-react'
+import { Folder, MoreHorizontal, Pencil, Star, Trash2, X } from 'lucide-react'
 import { useThreads } from '@/hooks/useThreads'
 import { useMessages } from '@/hooks/useMessages'
 import { useThreadManagementStore } from '@/hooks/useThreadManagement'
@@ -25,7 +25,7 @@ import {
 import { useSidebar } from '@/hooks/use-sidebar'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { memo, useMemo, useState } from 'react'
-import { Link, useParams } from '@tanstack/react-router'
+import { Link, useLocation, useParams } from '@tanstack/react-router'
 import { RenameThreadDialog, DeleteThreadDialog } from '@/containers/dialogs'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -33,6 +33,9 @@ import { ThreadMessage } from '@gchat/core'
 import { useChatSessions, isSessionBusy } from '@/stores/chat-session-store'
 import { useThreadReadStatus } from '@/stores/thread-read-store'
 import { ThreadStatusDot } from '@/components/left-sidebar/ThreadStatusDot'
+import { SessionKindIcon } from '@/components/left-sidebar/SessionKindIcon'
+import { getCodeSessionReference } from '@/lib/sessions'
+import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 
 //* Заголовок приветственного треда: новый бренд и старая строка из прошлых версий
 const WELCOME_THREAD_TITLES = new Set(['What is GChat?', 'What is Overchat?'])
@@ -54,6 +57,11 @@ const ThreadItem = memo(
     const deleteThread = useThreads((state) => state.deleteThread)
     const renameThread = useThreads((state) => state.renameThread)
     const updateThread = useThreads((state) => state.updateThread)
+    const toggleFavorite = useThreads((state) => state.toggleFavorite)
+    const code = getCodeSessionReference(thread)
+    const linkProps = code
+      ? { to: '/code' as const, search: { session: thread.id } }
+      : { to: '/threads/$threadId' as const, params: { threadId: thread.id } }
     const getFolderById = useThreadManagementStore(
       (state) => state.getFolderById
     )
@@ -68,7 +76,7 @@ const ThreadItem = memo(
 
     // Only the project cards render a message preview. History rows are titles,
     // so hydrating their message history would be N pointless round-trips.
-    const showPreview = Boolean(currentProjectId)
+    const showPreview = Boolean(currentProjectId) && !code
 
     // Use a ref to track if messages have been loaded
     const messagesLoadedRef = useRef(false)
@@ -178,14 +186,14 @@ const ThreadItem = memo(
       >
         {currentProjectId ? (
           <Link
-            to="/threads/$threadId"
-            params={{ threadId: thread.id }}
+            {...linkProps}
             className={cn(
               'bg-card dark:bg-secondary/20 mb-2 px-4 py-4 border hover:dark:bg-secondary/30 rounded-lg block',
               isActive && 'bg-secondary dark:bg-secondary/80'
             )}
           >
             <span className="flex items-center gap-2 pr-8 min-w-0">
+              <SessionKindIcon thread={thread} />
               {showStatusDot && <ThreadStatusDot pulsing={isBusy} />}
               <span className="truncate flex-1 min-w-0">{threadTitle}</span>
             </span>
@@ -201,8 +209,9 @@ const ThreadItem = memo(
             isActive={isActive}
             className="data-[active=true]:bg-sidebar-foreground/15"
           >
-            <Link to="/threads/$threadId" params={{ threadId: thread.id }}>
+            <Link {...linkProps}>
               <span className="flex w-full items-center gap-2 min-w-0">
+                <SessionKindIcon thread={thread} />
                 {showStatusDot && <ThreadStatusDot pulsing={isBusy} />}
                 <span className="truncate flex-1 min-w-0">{threadTitle}</span>
               </span>
@@ -232,6 +241,10 @@ const ThreadItem = memo(
             <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
               <Pencil className="size-4" />
               <span>{t('common:rename')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => toggleFavorite(thread.id)}>
+              <Star className={cn('size-4', thread.isFavorite && 'fill-current')} />
+              <span>{thread.isFavorite ? 'Remove from favorites' : 'Add to favorites'}</span>
             </DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="gap-2">
@@ -341,6 +354,8 @@ function ThreadList({ threads, currentProjectId, subItem }: ThreadListProps) {
   // the route params. Computed once here (not per row) so only the previously
   // and newly active rows re-render when navigating between threads.
   const { threadId: activeThreadId } = useParams({ strict: false })
+  const pathname = useLocation({ select: location => location.pathname })
+  const selectedCodeThreadId = useCodeTerminalStore(state => state.selectedThreadId)
 
   const sortedThreads = useMemo(() => {
     return [...threads].sort((a, b) => {
@@ -354,7 +369,9 @@ function ThreadList({ threads, currentProjectId, subItem }: ThreadListProps) {
         <ThreadItem
           key={thread.id}
           thread={thread}
-          isActive={thread.id === activeThreadId}
+          isActive={getCodeSessionReference(thread)
+            ? pathname.startsWith('/code') && thread.id === selectedCodeThreadId
+            : thread.id === activeThreadId}
           isMobile={isMobile}
           currentProjectId={currentProjectId}
           subItem={subItem}

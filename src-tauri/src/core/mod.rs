@@ -1,6 +1,8 @@
 pub mod agent;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod code_bridge;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod code_sessions;
 pub mod app;
 pub mod artifact;
 pub mod benchmark_submission;

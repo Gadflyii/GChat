@@ -5,8 +5,9 @@ import {
   IconLoader2,
   IconRefresh,
   IconSquare,
+  IconPlus,
 } from '@tabler/icons-react'
-import { getJanDataFolderPath } from '@gchat/core'
+import { useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import {
   useCallback,
   useEffect,
@@ -15,6 +16,12 @@ import {
   useState,
 } from 'react'
 
+import { useThreads } from '@/hooks/useThreads'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
+import { useToolAvailable } from '@/hooks/useToolAvailable'
+import { getCodeSessionReference } from '@/lib/sessions'
+import { newCodeSession, selectCodeSession, resolveCodeWorkspace, updateCodeBridgePolicy, type CodeSessionEvent } from '@/services/terminal/code-sessions'
+import type { TerminalId } from '@/types/terminal'
 import { AgentWorkspaceSelect } from '@/containers/AgentWorkspaceSelect'
 import { CodeBridgePanel } from '@/containers/CodeBridgePanel'
 import HeaderPage from '@/containers/HeaderPage'
@@ -44,7 +51,6 @@ import type {
   OpenCodeReadiness,
 } from '@/types/terminal'
 
-const DEFAULT_AGENT_WORKSPACE_DIR = 'agent-workspace'
 type CodeTerminalHostProps = {
   visible: boolean
 }
@@ -65,9 +71,109 @@ function currentInstallerProxy() {
   }
 }
 
+function currentBridgePolicy(threadId?: string) {
+  const policy = useConversationPolicy.getState()
+  const workspace = policy.getWorkspace(threadId ?? '')
+  return {
+    origin_session_id: threadId,
+    auto_approve: policy.getApprovalMode(threadId ?? '') === 'skip',
+    disabled_tools: useToolAvailable.getState().getDisabledToolsForThread(threadId ?? ''),
+    external_roots: workspace.externalRoots.map(root => ({ path: root.path, can_edit: root.canEdit })),
+  }
+}
+
+type WorkspaceHost = { directory: string; terminalId: TerminalId }
+
 export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
-  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const pathname = useLocation({ select: location => location.pathname })
+  const search = useSearch({ strict: false }) as { session?: string }
   const serviceHub = useServiceHub()
+  const threads = useThreads(state => state.threads)
+  const configuredWorkspace = useCodeTerminalStore(state => state.workspace)
+  const persistedSelection = useCodeTerminalStore(state => state.selectedThreadId)
+  const selectedThreadId = pathname.startsWith('/code') ? search.session ?? persistedSelection : persistedSelection
+  useEffect(() => {
+    if (visible && search.session) useCodeTerminalStore.getState().setSelectedThreadId(search.session)
+  }, [visible, search.session])
+  const [defaultWorkspace, setDefaultWorkspace] = useState<string>()
+  const [hosts, setHosts] = useState<WorkspaceHost[]>([])
+  const reference = getCodeSessionReference(selectedThreadId ? threads[selectedThreadId] : undefined)
+  const requestedWorkspace = selectedThreadId && !reference ? undefined : reference?.directory ?? configuredWorkspace ?? defaultWorkspace
+  const [resolvedWorkspace, setResolvedWorkspace] = useState<{ requested: string; directory: string }>()
+  const [workspaceError, setWorkspaceError] = useState<string>()
+  const workspace = resolvedWorkspace && resolvedWorkspace.requested === requestedWorkspace ? resolvedWorkspace.directory : undefined
+  useEffect(() => {
+    if (!visible || !requestedWorkspace) return
+    let cancelled = false
+    setWorkspaceError(undefined)
+    void resolveCodeWorkspace(requestedWorkspace).then(directory => {
+      if (!cancelled) setResolvedWorkspace({ requested: requestedWorkspace, directory })
+    }).catch(reason => { if (!cancelled) setWorkspaceError(String(reason)) })
+    return () => { cancelled = true }
+  }, [visible, requestedWorkspace])
+  const activeTerminalId: TerminalId | undefined = workspace ? `code:${workspace}` : undefined
+  const activeRef = useRef({ visible, terminalId: activeTerminalId })
+  activeRef.current = { visible, terminalId: activeTerminalId }
+
+  useEffect(() => {
+    if (!visible || configuredWorkspace || selectedThreadId) return
+    let cancelled = false
+    void resolveCodeWorkspace().then(path => { if (!cancelled) setDefaultWorkspace(path) })
+      .catch(reason => { if (!cancelled) setWorkspaceError(String(reason)) })
+    return () => { cancelled = true }
+  }, [visible, configuredWorkspace, selectedThreadId])
+
+  useEffect(() => {
+    if (!visible || !workspace || !activeTerminalId || (selectedThreadId && !reference)) return
+    setHosts(current => current.some(host => host.directory === workspace)
+      ? current : [...current, { directory: workspace, terminalId: activeTerminalId }])
+  }, [visible, workspace, activeTerminalId, selectedThreadId, reference])
+
+  useEffect(() => {
+    let cancelled = false
+    let unlisten: (() => void) | undefined
+    void serviceHub.events().listen<CodeSessionEvent>('gchat:code-session', ({ payload }) => {
+      const state = useThreads.getState()
+      if (payload.kind === 'deleted') {
+        state.setThreads(Object.values(state.threads).filter(thread => thread.id !== payload.threadId))
+        if (useCodeTerminalStore.getState().selectedThreadId === payload.threadId) {
+          useCodeTerminalStore.getState().setSelectedThreadId(undefined)
+        }
+      } else if (payload.thread) {
+        const incoming = { ...payload.thread, isFavorite: Boolean(payload.thread.metadata?.is_favorite) }
+        const previous = state.threads[incoming.id]
+        const row = previous && previous.updated > incoming.updated
+          ? { ...previous, metadata: { ...previous.metadata, runtime: 'code', code: incoming.metadata?.code } }
+          : incoming
+        state.setThreads([...Object.values(state.threads).filter(thread => thread.id !== row.id), row])
+        if (payload.kind === 'selected' && activeRef.current.visible && activeRef.current.terminalId === payload.terminalId) {
+          useCodeTerminalStore.getState().setSelectedThreadId(row.id)
+          void navigate({ to: '/code', search: { session: row.id }, replace: true })
+        }
+      }
+    }).then(dispose => { if (cancelled) dispose(); else unlisten = dispose })
+    return () => { cancelled = true; unlisten?.() }
+  }, [serviceHub, navigate])
+
+  return <>{visible && workspaceError && <section className="absolute inset-0 flex flex-col gap-3 p-6">
+    <p role="alert">{workspaceError}</p>
+    <AgentWorkspaceSelect workingDir={requestedWorkspace} onChange={directory => {
+      useCodeTerminalStore.getState().setWorkspace(directory)
+      useCodeTerminalStore.getState().setSelectedThreadId(undefined)
+      void navigate({ to: '/code', search: {}, replace: true })
+    }} />
+  </section>}{hosts.map(host => <CodeWorkspaceTerminal key={host.terminalId}
+    visible={visible && host.terminalId === activeTerminalId}
+    workspace={host.directory} terminalId={host.terminalId}
+    selectedThreadId={host.terminalId === activeTerminalId ? selectedThreadId : undefined} />)}</>
+}
+
+function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadId }: CodeTerminalHostProps & {
+  workspace: string; terminalId: TerminalId; selectedThreadId?: string
+}) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
   const hardwareReady = useHardware((state) => state.hardwareReady)
   const hardwareData = useHardware((state) => state.hardwareData)
   const activeModel = useAppState((state) => state.activeModels[0])
@@ -78,7 +184,6 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     apiKey,
     defaultModelLocalApiServer,
   } = useLocalApiServer()
-  const configuredWorkspace = useCodeTerminalStore((state) => state.workspace)
   const enabled = useCodeTerminalStore((state) => state.enabled)
   const setConfiguredWorkspace = useCodeTerminalStore(
     (state) => state.setWorkspace
@@ -102,41 +207,22 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     replayUnavailable,
     setReplayUnavailable,
   } = useEmbeddedTerminal({
-    terminalId: 'code',
+    terminalId,
     visible,
     available: desktopTerminalAvailable,
   })
   const bootstrappedRef = useRef(false)
 
-  const [defaultWorkspace, setDefaultWorkspace] = useState<string>()
   const [readiness, setReadiness] = useState<OpenCodeReadiness>()
   const [provisionPhase, setProvisionPhase] = useState<OpenCodeProvisionPhase>()
   const [readinessRefresh, setReadinessRefresh] = useState(0)
   const [busy, setBusy] = useState(false)
 
-  const workspace = configuredWorkspace || defaultWorkspace
   const hardware = useMemo(
     () => evaluateCodeHardware(hardwareData),
     [hardwareData]
   )
 
-  useEffect(() => {
-    let cancelled = false
-    const resolveDefaultWorkspace = async () => {
-      try {
-        const path = await serviceHub
-          .path()
-          .join(await getJanDataFolderPath(), DEFAULT_AGENT_WORKSPACE_DIR)
-        if (!cancelled) setDefaultWorkspace(path)
-      } catch (reason) {
-        if (!cancelled) setError(String(reason))
-      }
-    }
-    void resolveDefaultWorkspace()
-    return () => {
-      cancelled = true
-    }
-  }, [serviceHub, setError])
 
   useEffect(() => {
     if (
@@ -213,12 +299,16 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     const terminal = terminalRef.current
     const rows = Math.max(2, terminal?.rows ?? 24)
     const cols = Math.max(2, terminal?.cols ?? 80)
+    const resume = getCodeSessionReference(useThreads.getState().threads[selectedThreadId ?? ''])?.session_id
+    lastSelectedRef.current = resume
     const next = await spawnTerminal({
-      terminalId: 'code',
+      terminalId,
       cwd: workspace,
       rows,
       cols,
       launch: 'open_code',
+      codeSessionId: resume,
+      bridgePolicy: currentBridgePolicy(selectedThreadId),
       executable: customOpenCodePath || undefined,
     })
     updateStatus(next)
@@ -232,6 +322,8 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     terminal?.focus()
   }, [
     customOpenCodePath,
+    terminalId,
+    selectedThreadId,
     setConfiguredWorkspace,
     setReplayUnavailable,
     t,
@@ -281,13 +373,13 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     setBusy(true)
     setError(undefined)
     try {
-      updateStatus(await stopTerminal('code'))
+      updateStatus(await stopTerminal(terminalId))
     } catch (reason) {
       setError(String(reason))
     } finally {
       setBusy(false)
     }
-  }, [setError, updateStatus])
+  }, [setError, updateStatus, terminalId])
 
   const toggleTokenSidebar = useCallback(() => {
     const generation = generationRef.current
@@ -295,11 +387,11 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
     // OpenCode's session.sidebar.toggle action is bound to <leader>b by
     // default; the default leader is Ctrl+X. Send the key chord through the
     // native PTY so the embedded TUI remains the sole owner of sidebar state.
-    void writeTerminal('code', generation, Uint8Array.of(0x18, 0x62)).catch((reason) =>
+    void writeTerminal(terminalId, generation, Uint8Array.of(0x18, 0x62)).catch((reason) =>
       setError(String(reason))
     )
     terminalRef.current?.focus()
-  }, [generationRef, setError, statusRef, terminalRef])
+  }, [generationRef, setError, statusRef, terminalRef, terminalId])
 
   const restart = useCallback(async (update = false) => {
     setBusy(true)
@@ -311,9 +403,9 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       setUpdatePhase('Stopping Code')
     }
     try {
-      if (statusRef.current.phase === 'running') await stopTerminal('code')
+      if (statusRef.current.phase === 'running') await stopTerminal(terminalId)
       for (let attempt = 0; attempt < 100; attempt += 1) {
-        const current = await getTerminalStatus('code')
+        const current = await getTerminalStatus(terminalId)
         updateStatus(current)
         if (current.phase !== 'running' && current.phase !== 'stopping') break
         if (attempt === 99) {
@@ -334,11 +426,44 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
       setUpdatePhase(undefined)
       setBusy(false)
     }
-  }, [customOpenCodePath, setError, startSession, statusRef, t, updateStatus])
+  }, [customOpenCodePath, setError, startSession, statusRef, t, updateStatus, terminalId])
+
+  const lastSelectedRef = useRef<string | undefined>(undefined)
+  const workspaceThreads = useThreads(state => state.threads)
+  const selectedCodeSessionId = useThreads(state => getCodeSessionReference(state.threads[selectedThreadId ?? ''])?.session_id)
+  const policySettings = useConversationPolicy()
+  const toolSettings = useToolAvailable()
+  const policy = useMemo(() => ({
+    origin_session_id: selectedThreadId,
+    auto_approve: policySettings.getApprovalMode(selectedThreadId ?? '') === 'skip',
+    disabled_tools: toolSettings.getDisabledToolsForThread(selectedThreadId ?? ''),
+    external_roots: policySettings.getWorkspace(selectedThreadId ?? '').externalRoots.map(root => ({ path: root.path, can_edit: root.canEdit })),
+  }), [selectedThreadId, policySettings, toolSettings])
+  useEffect(() => {
+    if (!visible || status.phase !== 'running') return
+    if (selectedCodeSessionId && lastSelectedRef.current !== selectedCodeSessionId) {
+      lastSelectedRef.current = selectedCodeSessionId
+      void updateCodeBridgePolicy(terminalId, policy).then(() => selectCodeSession(terminalId, selectedCodeSessionId)).catch(reason => {
+        lastSelectedRef.current = undefined
+        setError(String(reason))
+      })
+    }
+  }, [visible, status.phase, selectedCodeSessionId, terminalId, policy, setError])
+
+  // Every saved origin keeps its policy while another session is selected.
+  // Hidden workspace terminals continue to own running background work.
+  useEffect(() => {
+    if (status.phase !== 'running') return
+    const rows = Object.values(workspaceThreads).filter(thread => getCodeSessionReference(thread)?.directory === workspace)
+    void Promise.all(rows.map(thread => updateCodeBridgePolicy(terminalId, {
+      origin_session_id: thread.id,
+      auto_approve: policySettings.getApprovalMode(thread.id) === 'skip',
+      disabled_tools: toolSettings.getDisabledToolsForThread(thread.id),
+      external_roots: policySettings.getWorkspace(thread.id).externalRoots.map(root => ({ path: root.path, can_edit: root.canEdit })),
+    }))).catch(reason => setError(String(reason)))
+  }, [status.phase, workspaceThreads, workspace, terminalId, policySettings, toolSettings, setError])
 
   const running = status.phase === 'running' || status.phase === 'stopping'
-  const workspaceChanged =
-    running && Boolean(workspace) && status.cwd !== workspace
   const configuredModel = activeModel ?? defaultModelLocalApiServer?.model
   const setupState = updateMode ? undefined : !desktopTerminalAvailable
     ? 'desktop'
@@ -382,6 +507,14 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
             aria-label={t(`code:status.${status.phase}`)}
           />
           <div className="ml-auto flex min-w-0 items-center gap-1.5">
+            {running && <Button size="icon-sm" variant="ghost" aria-label="New Code session"
+              disabled={busy || status.phase === 'stopping'} onClick={() => {
+                setConfiguredWorkspace(workspace)
+                useCodeTerminalStore.getState().setSelectedThreadId(undefined)
+                void navigate({ to: '/code', search: {}, replace: true })
+                lastSelectedRef.current = undefined
+                void newCodeSession(terminalId).catch(reason => setError(String(reason)))
+              }}><IconPlus /></Button>}
             {desktopTerminalAvailable && <CodeBridgePanel visible={visible} workspace={status.cwd ?? workspace} />}
             {!updateResult && <Button size="sm" variant="outline" disabled={busy || !workspace || !readiness?.installed}
               onClick={() => updateMode ? void restart() : setUpdateRequested(true)}>
@@ -389,9 +522,13 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
             </Button>}
             <AgentWorkspaceSelect
               workingDir={workspace}
-              onChange={setConfiguredWorkspace}
+              onChange={directory => {
+                useCodeTerminalStore.getState().setSelectedThreadId(undefined)
+                setConfiguredWorkspace(directory)
+                void navigate({ to: '/code', search: {}, replace: true })
+              }}
             />
-            {!updateMode && (workspaceChanged || status.phase === 'exited') && (
+            {!updateMode && status.phase === 'exited' && (
               <Button
                 size="sm"
                 variant="outline"
@@ -403,9 +540,7 @@ export function CodeTerminalHost({ visible }: CodeTerminalHostProps) {
                 ) : (
                   <IconRefresh />
                 )}
-                {workspaceChanged
-                  ? t('code:restartWorkspace')
-                  : t('code:restart')}
+                {t('code:restart')}
               </Button>
             )}
             {running && (

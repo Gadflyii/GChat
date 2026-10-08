@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::{Arc, Condvar, Mutex, MutexGuard},
@@ -18,21 +18,51 @@ const DEFAULT_ROWS: u16 = 24;
 const DEFAULT_COLS: u16 = 80;
 const GCHAT_OPENCODE_THEME: &str = include_str!("../../resources/opencode/gchat.json");
 const GCHAT_OPENCODE_TUI_CONFIG: &str = include_str!("../../resources/opencode/gchat-tui.json");
+const GCHAT_OPENCODE_CALLER: &str = include_str!("../../resources/opencode/gchat-caller.mjs");
 const GCHAT_OPENCODE_STARTUP: &str = include_str!("../../resources/opencode/gchat-startup.mjs");
 const GCHAT_HERMES_DARK_SKIN: &str = include_str!("../../resources/hermes/gchat-dark.yaml");
 const GCHAT_HERMES_LIGHT_SKIN: &str = include_str!("../../resources/hermes/gchat-light.yaml");
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminalId {
     Code,
+    CodeWorkspace(String),
     Hermes,
 }
 
+impl Serialize for TerminalId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.key())
+    }
+}
+impl<'de> Deserialize<'de> for TerminalId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "code" => Ok(Self::Code),
+            "hermes" => Ok(Self::Hermes),
+            value if value.starts_with("code:") && value.len() > 5 => {
+                Ok(Self::CodeWorkspace(value[5..].into()))
+            }
+            _ => Err(serde::de::Error::custom("Unknown embedded terminal")),
+        }
+    }
+}
+
 impl TerminalId {
-    fn label(self) -> &'static str {
+    fn key(&self) -> String {
         match self {
-            Self::Code => "Code",
+            Self::Code => "code".into(),
+            Self::CodeWorkspace(directory) => format!("code:{directory}"),
+            Self::Hermes => "hermes".into(),
+        }
+    }
+    fn is_code(&self) -> bool {
+        !matches!(self, Self::Hermes)
+    }
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Code | Self::CodeWorkspace(_) => "Code",
             Self::Hermes => "Hermes",
         }
     }
@@ -87,6 +117,10 @@ pub struct TerminalSpawnRequest {
     pub executable: Option<String>,
     #[serde(default)]
     pub appearance: Option<TerminalAppearance>,
+    #[serde(default)]
+    pub code_session_id: Option<String>,
+    #[serde(default)]
+    pub bridge_policy: Option<super::code_bridge::BridgePolicy>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,6 +266,7 @@ struct BridgeLease(String);
 
 impl Drop for BridgeLease {
     fn drop(&mut self) {
+        super::code_sessions::close_runtime(&self.0);
         super::code_bridge::close_session(&self.0);
     }
 }
@@ -409,29 +444,43 @@ impl TerminalSlot {
 }
 
 pub struct TerminalState {
-    code: TerminalSlot,
-    hermes: TerminalSlot,
+    code: Arc<TerminalSlot>,
+    code_workspaces: Mutex<HashMap<String, Arc<TerminalSlot>>>,
+    hermes: Arc<TerminalSlot>,
 }
 
 impl Default for TerminalState {
     fn default() -> Self {
         Self {
-            code: TerminalSlot::new(TerminalId::Code),
-            hermes: TerminalSlot::new(TerminalId::Hermes),
+            code: Arc::new(TerminalSlot::new(TerminalId::Code)),
+            code_workspaces: Mutex::new(HashMap::new()),
+            hermes: Arc::new(TerminalSlot::new(TerminalId::Hermes)),
         }
     }
 }
 
 impl TerminalState {
-    fn slot(&self, id: TerminalId) -> &TerminalSlot {
+    fn slot(&self, id: TerminalId) -> Arc<TerminalSlot> {
         match id {
-            TerminalId::Code => &self.code,
-            TerminalId::Hermes => &self.hermes,
+            TerminalId::Code => self.code.clone(),
+            TerminalId::Hermes => self.hermes.clone(),
+            TerminalId::CodeWorkspace(ref directory) => self
+                .code_workspaces
+                .lock()
+                .expect("Code workspace registry poisoned")
+                .entry(directory.clone())
+                .or_insert_with(|| Arc::new(TerminalSlot::new(id.clone())))
+                .clone(),
         }
     }
 
     pub fn shutdown(&self) {
         self.code.shutdown();
+        if let Ok(workspaces) = self.code_workspaces.lock() {
+            for workspace in workspaces.values() {
+                workspace.shutdown();
+            }
+        }
         self.hermes.shutdown();
     }
 }
@@ -477,6 +526,24 @@ fn canonical_working_directory(cwd: &str) -> Result<PathBuf, String> {
         ));
     }
     Ok(canonical)
+}
+
+#[tauri::command]
+pub async fn code_workspace_resolve<R: Runtime>(
+    app_handle: AppHandle<R>,
+    cwd: Option<String>,
+) -> Result<String, String> {
+    let directory = match cwd {
+        Some(cwd) => canonical_working_directory(&cwd)?,
+        None => {
+            super::agent::commands::resolve_working_dir(
+                None,
+                &super::app::commands::get_jan_data_folder_path(app_handle),
+            )
+            .await?
+        }
+    };
+    Ok(windows_cli_path(&directory))
 }
 
 fn command_for_shell(
@@ -751,7 +818,7 @@ pub fn terminal_attach(
     terminal_id: TerminalId,
     on_event: Channel<TerminalEvent>,
 ) -> Result<TerminalStatus, String> {
-    let slot = state.slot(terminal_id);
+    let slot = state.slot(terminal_id.clone());
     let mut session = slot.session()?;
     let replacing_live_view = session.channel.is_some() && session.generation != 0;
     if session.replay.complete && !replacing_live_view {
@@ -788,7 +855,9 @@ pub fn terminal_status(
     state: State<'_, TerminalState>,
     terminal_id: TerminalId,
 ) -> Result<TerminalStatus, String> {
-    Ok(state.slot(terminal_id).session()?.status())
+    let slot = state.slot(terminal_id.clone());
+    let status = slot.session()?.status();
+    Ok(status)
 }
 
 #[tauri::command]
@@ -798,9 +867,9 @@ pub fn terminal_spawn<R: Runtime>(
     request: TerminalSpawnRequest,
 ) -> Result<TerminalStatus, String> {
     let terminal_id = request.terminal_id;
-    let slot = state.slot(terminal_id);
-    match (terminal_id, request.launch) {
-        (TerminalId::Code, TerminalLaunch::Hermes)
+    let slot = state.slot(terminal_id.clone());
+    match (&terminal_id, request.launch) {
+        (TerminalId::Code | TerminalId::CodeWorkspace(_), TerminalLaunch::Hermes)
         | (TerminalId::Hermes, TerminalLaunch::OpenCode) => {
             return Err(format!(
                 "{} cannot launch in the {} terminal",
@@ -820,7 +889,7 @@ pub fn terminal_spawn<R: Runtime>(
         .to_str()
         .ok_or_else(|| "The terminal workspace path must be valid Unicode".to_string())?
         .to_string();
-    let launch_command = match request.launch {
+    let mut launch_command = match request.launch {
         TerminalLaunch::Shell => None,
         TerminalLaunch::OpenCode => Some(quote_open_code_command(
             request.executable.as_deref(),
@@ -899,9 +968,57 @@ pub fn terminal_spawn<R: Runtime>(
         )?;
         let default_model =
             opencode_bridge_model(configured.as_ref(), inherited_config.as_deref())?;
-        let connection = super::code_bridge::prepare_session(&app, &cwd, default_model)?;
-        bridge = Some(BridgeLease(connection.session_id));
-        let config = opencode_bridge_config(inherited_config.as_deref(), &connection.url)?;
+        let connection = super::code_bridge::prepare_session(
+            &app,
+            &cwd,
+            default_model,
+            request.bridge_policy.unwrap_or_default(),
+        )?;
+        bridge = Some(BridgeLease(connection.session_id.clone()));
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+        let port = listener
+            .local_addr()
+            .map_err(|error| error.to_string())?
+            .port();
+        drop(listener);
+        let password = uuid::Uuid::new_v4().simple().to_string();
+        super::code_sessions::register_runtime(
+            &connection.session_id,
+            super::code_sessions::CodeRuntime {
+                terminal_id: terminal_id.key(),
+                directory: windows_cli_path(&cwd),
+                port,
+                password: password.clone(),
+                executable: request.executable.clone(),
+            },
+        )?;
+        command.env("OPENCODE_SERVER_PASSWORD", password);
+        command.env("OPENCODE_SERVER_USERNAME", "opencode");
+        command.env("GCHAT_BRIDGE_URL", &connection.url);
+        if let Some(session_id) = request.code_session_id.as_deref() {
+            if !session_id.starts_with("ses")
+                || !session_id
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+            {
+                return Err("Invalid OpenCode session ID".into());
+            }
+            command.env("GCHAT_CODE_SESSION", session_id);
+        }
+        if let Some(bytes) = launch_command.as_mut() {
+            bytes.pop();
+            bytes.extend_from_slice(format!(" --hostname 127.0.0.1 --port {port}").as_bytes());
+            if let Some(session_id) = request.code_session_id.as_deref() {
+                bytes.extend_from_slice(format!(" --session {session_id}").as_bytes());
+            }
+            bytes.push(b'\r');
+        }
+        let config = opencode_bridge_config(
+            inherited_config.as_deref(),
+            &connection.url,
+            &opencode_config_directory()?.join("gchat-caller.mjs"),
+        )?;
         command.env("OPENCODE_CONFIG_CONTENT", config);
         command.env("GCHAT_BRIDGE_TOKEN", connection.token);
     }
@@ -959,7 +1076,7 @@ pub fn terminal_spawn<R: Runtime>(
     }
 
     slot.push_thread(start_reader(
-        terminal_id,
+        terminal_id.clone(),
         slot.shared.clone(),
         generation,
         reader,
@@ -970,7 +1087,26 @@ pub fn terminal_spawn<R: Runtime>(
         generation,
         child,
     ))?;
-    Ok(slot.session()?.status())
+    let status = slot.session()?.status();
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn terminal_update_bridge_policy(
+    state: State<'_, TerminalState>,
+    terminal_id: TerminalId,
+    policy: super::code_bridge::BridgePolicy,
+) -> Result<(), String> {
+    if !terminal_id.is_code() {
+        return Err("Only Code has a GChat bridge".into());
+    }
+    let slot = state.slot(terminal_id.clone());
+    let session = slot.session()?;
+    let bridge = session
+        .bridge
+        .as_ref()
+        .ok_or("This Code workspace is not running")?;
+    super::code_bridge::update_session_policy(&bridge.0, policy)
 }
 
 #[tauri::command]
@@ -984,7 +1120,7 @@ pub fn terminal_write(state: State<'_, TerminalState>, input: TerminalInput) -> 
         ));
     }
 
-    let slot = state.slot(input.terminal_id);
+    let slot = state.slot(input.terminal_id.clone());
     let mut session = slot.session()?;
     if session.generation != input.generation || session.phase != TerminalPhase::Running {
         return Err(format!(
@@ -1015,7 +1151,7 @@ pub fn terminal_resize(
     request: TerminalResizeRequest,
 ) -> Result<(), String> {
     validate_size(request.rows, request.cols)?;
-    let slot = state.slot(request.terminal_id);
+    let slot = state.slot(request.terminal_id.clone());
     let session = slot.session()?;
     if session.generation != request.generation || session.phase != TerminalPhase::Running {
         return Err(format!(
@@ -1046,7 +1182,7 @@ pub fn terminal_set_flow(
     state: State<'_, TerminalState>,
     request: TerminalFlowRequest,
 ) -> Result<(), String> {
-    let slot = state.slot(request.terminal_id);
+    let slot = state.slot(request.terminal_id.clone());
     let mut session = slot.session()?;
     if session.generation != request.generation || session.phase != TerminalPhase::Running {
         return Err(format!(
@@ -1066,7 +1202,7 @@ pub fn terminal_stop(
     state: State<'_, TerminalState>,
     terminal_id: TerminalId,
 ) -> Result<TerminalStatus, String> {
-    let slot = state.slot(terminal_id);
+    let slot = state.slot(terminal_id.clone());
     let (status, mut killer, writer, master) = {
         let mut session = slot.session()?;
         if session.phase != TerminalPhase::Running {
@@ -1100,7 +1236,11 @@ fn opencode_config_directory() -> Result<PathBuf, String> {
     ))
 }
 
-fn opencode_bridge_config(existing: Option<&str>, url: &str) -> Result<String, String> {
+fn opencode_bridge_config(
+    existing: Option<&str>,
+    url: &str,
+    caller_plugin: &Path,
+) -> Result<String, String> {
     let mut config = match existing.filter(|content| !content.trim().is_empty()) {
         Some(content) => serde_json::from_str::<serde_json::Value>(content)
             .map_err(|_| "OPENCODE_CONFIG_CONTENT must contain a JSON object".to_string())?,
@@ -1109,6 +1249,20 @@ fn opencode_bridge_config(existing: Option<&str>, url: &str) -> Result<String, S
     let root = config
         .as_object_mut()
         .ok_or("OPENCODE_CONFIG_CONTENT must contain a JSON object")?;
+    let caller = url::Url::from_file_path(caller_plugin)
+        .map_err(|_| "OpenCode caller plugin must have an absolute path")?
+        .to_string();
+    let plugins = root
+        .entry("plugin")
+        .or_insert_with(|| serde_json::json!([]))
+        .as_array_mut()
+        .ok_or("OpenCode plugin configuration must be an array")?;
+    if !plugins
+        .iter()
+        .any(|plugin| plugin.as_str() == Some(&caller))
+    {
+        plugins.push(serde_json::json!(caller));
+    }
     let servers = root
         .entry("mcp")
         .or_insert_with(|| serde_json::json!({}))
@@ -1170,14 +1324,22 @@ fn install_gchat_opencode_theme(config_directory: &Path) -> Result<PathBuf, Stri
     })?;
 
     write_managed_terminal_asset(&theme_directory.join("gchat.json"), GCHAT_OPENCODE_THEME)?;
+    write_managed_terminal_asset(
+        &config_directory.join("gchat-caller.mjs"),
+        GCHAT_OPENCODE_CALLER,
+    )?;
     let startup = config_directory.join("gchat-startup.mjs");
     write_managed_terminal_asset(&startup, GCHAT_OPENCODE_STARTUP)?;
     let tui_config = config_directory.join("gchat-tui.json");
-    let mut config: serde_json::Value = serde_json::from_str(GCHAT_OPENCODE_TUI_CONFIG)
-        .map_err(|error| error.to_string())?;
+    let mut config: serde_json::Value =
+        serde_json::from_str(GCHAT_OPENCODE_TUI_CONFIG).map_err(|error| error.to_string())?;
     config["plugin"] = serde_json::json!([url::Url::from_file_path(&startup)
-        .map_err(|_| "OpenCode startup plugin must have an absolute path")?.to_string()]);
-    write_managed_terminal_asset(&tui_config, &serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?)?;
+        .map_err(|_| "OpenCode startup plugin must have an absolute path")?
+        .to_string()]);
+    write_managed_terminal_asset(
+        &tui_config,
+        &serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?,
+    )?;
     Ok(tui_config)
 }
 
@@ -1479,11 +1641,19 @@ mod tests {
     #[test]
     fn embedded_bridge_preserves_other_opencode_configuration() {
         let config = opencode_bridge_config(
-            Some(r#"{"model":"gchat/model","mcp":{"other":{"type":"local","command":["tool"]}}}"#),
+            Some(r#"{"model":"gchat/model","plugin":["file:///user/custom.mjs"],"mcp":{"other":{"type":"local","command":["tool"]}}}"#),
             "http://127.0.0.1:12345/mcp/session",
+            &std::env::temp_dir().join("gchat-caller.mjs"),
         )
         .unwrap();
         let config: serde_json::Value = serde_json::from_str(&config).unwrap();
+        assert_eq!(config["plugin"][0], "file:///user/custom.mjs");
+        assert_eq!(
+            config["plugin"][1],
+            url::Url::from_file_path(std::env::temp_dir().join("gchat-caller.mjs"))
+                .unwrap()
+                .to_string()
+        );
         assert_eq!(config["model"], "gchat/model");
         assert_eq!(config["mcp"]["other"]["command"][0], "tool");
         assert_eq!(
@@ -1499,10 +1669,20 @@ mod tests {
 
     #[test]
     fn embedded_bridge_rejects_invalid_inherited_configuration() {
-        for config in ["not json", "[]", r#"{"mcp":false}"#] {
-            assert!(opencode_bridge_config(Some(config), "http://127.0.0.1:1/mcp").is_err());
+        for config in ["not json", "[]", r#"{"mcp":false}"#, r#"{"plugin":false}"#] {
+            assert!(opencode_bridge_config(
+                Some(config),
+                "http://127.0.0.1:1/mcp",
+                &std::env::temp_dir().join("gchat-caller.mjs")
+            )
+            .is_err());
         }
-        assert!(opencode_bridge_config(None, "http://127.0.0.1:1/mcp").is_ok());
+        assert!(opencode_bridge_config(
+            None,
+            "http://127.0.0.1:1/mcp",
+            &std::env::temp_dir().join("gchat-caller.mjs")
+        )
+        .is_ok());
     }
 
     #[test]
@@ -1588,8 +1768,14 @@ mod tests {
     #[test]
     fn native_shell_uses_normal_windows_workspace_paths() {
         for (input, expected) in [
-            (r"\\?\C:\Users\Ron\agent-workspace", r"C:\Users\Ron\agent-workspace"),
-            (r"\\?\UNC\server\share\workspace", r"\\server\share\workspace"),
+            (
+                r"\\?\C:\Users\Ron\agent-workspace",
+                r"C:\Users\Ron\agent-workspace",
+            ),
+            (
+                r"\\?\UNC\server\share\workspace",
+                r"\\server\share\workspace",
+            ),
         ] {
             let command = command_for_shell(Path::new(input), None, Some(TerminalAppearance::Dark));
             assert_eq!(command.get_cwd().unwrap(), std::ffi::OsStr::new(expected));
@@ -1814,6 +2000,8 @@ mod tests {
             launch: TerminalLaunch::Shell,
             executable: None,
             appearance: None,
+            code_session_id: None,
+            bridge_policy: None,
         };
 
         // Exercise the same portable-pty primitives as the command without a

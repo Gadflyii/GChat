@@ -1,4 +1,11 @@
-export type TerminalId = 'code' | 'hermes'
+export type TerminalId = 'code' | `code:${string}` | 'hermes'
+
+export type CodeBridgePolicy = {
+  origin_session_id?: string
+  auto_approve: boolean
+  disabled_tools: string[]
+  external_roots: Array<{ path: string; can_edit: boolean }>
+}
 
 export type TerminalLaunch = 'shell' | 'open_code' | 'hermes'
 
@@ -93,4 +100,6 @@ export type TerminalSpawnRequest = {
   launch: TerminalLaunch
   executable?: string
   appearance?: TerminalAppearance
+  codeSessionId?: string
+  bridgePolicy?: CodeBridgePolicy
 }

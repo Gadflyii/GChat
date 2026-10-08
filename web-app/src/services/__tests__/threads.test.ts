@@ -193,6 +193,17 @@ describe('DefaultThreadsService', () => {
   })
 
   describe('updateThread', () => {
+    it('preserves Code reference metadata and favorite without inventing a Chat model', async () => {
+      mockConversationalExtension.modifyThread.mockResolvedValue(undefined)
+      const row = { id: 'code-ses_saved', title: 'My task', updated: 1, isFavorite: true,
+        metadata: { runtime: 'code', code: { session_id: 'ses_saved', directory: '/project' },
+          project: { id: 'project-1', name: 'Work' } } }
+      await threadsService.updateThread(row as Thread)
+      expect(mockConversationalExtension.modifyThread).toHaveBeenCalledWith(expect.objectContaining({
+        id: row.id, title: row.title, assistants: [],
+        metadata: expect.objectContaining({ ...row.metadata, is_favorite: true }),
+      }))
+    })
     it('should update thread successfully', async () => {
       const realAssistant = {
         id: 'assistant-1',

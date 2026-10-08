@@ -1,6 +1,7 @@
 import { render, screen, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useParams } from '@tanstack/react-router'
+import { useCodeTerminalStore } from '@/stores/code-terminal-store'
+import { useLocation, useParams } from '@tanstack/react-router'
 import ThreadList from '../ThreadList'
 import type { MessagesService } from '@/services/messages/types'
 import { seedServiceHub } from '@/test/service-hub'
@@ -18,6 +19,7 @@ vi.mock('@tanstack/react-router', () => ({
     </a>
   ),
   useParams: vi.fn(),
+  useLocation: vi.fn(() => '/threads/thread-1'),
 }))
 
 // Lightweight sidebar mock that surfaces `isActive` as `data-active` so the
@@ -109,6 +111,7 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
+vi.mock('@/hooks/useConversationPolicy', () => ({ useConversationPolicy: (selector: any) => selector({ legacyAgentThreads: {} }) }))
 vi.mock('@gchat/core', () => ({}))
 
 const threads: Thread[] = [
@@ -215,18 +218,28 @@ describe('ThreadList active highlight', () => {
     expect(fetchMessages.mock.calls.flat()).toEqual(['thread-1', 'thread-2'])
   })
 
-  it('does not render chat type icons', async () => {
+  it('renders compact Chat indicators for ordinary conversations', async () => {
     vi.mocked(useParams).mockReturnValue({} as never)
 
     await act(async () => {
       render(<ThreadList threads={threads} />)
     })
 
-    expect(
-      screen.queryByLabelText('chat:threadType.chat')
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByLabelText('chat:threadType.agent')
-    ).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText('Chat session')).toHaveLength(2)
+    expect(screen.queryByLabelText('Conversation with agent work')).not.toBeInTheDocument()
   })
+  it('routes saved Code references to their native session and shows correct activity indicators', async () => {
+    vi.mocked(useParams).mockReturnValue({} as never)
+    vi.mocked(useLocation).mockReturnValue('/code' as never)
+    const code: Thread = { id: 'code-ses_saved', title: 'Saved Code', updated: 3,
+      metadata: { runtime: 'code', code: { session_id: 'ses_saved', directory: '/project' } } }
+    const agent: Thread = { id: 'agent-1', title: 'Agent work', updated: 2, metadata: { has_agent_activity: true } }
+    act(() => useCodeTerminalStore.setState({ selectedThreadId: code.id }))
+    await act(async () => render(<ThreadList threads={[code, agent]} currentProjectId="project-1" />))
+    expect(screen.getByLabelText('Code session')).toBeInTheDocument()
+    expect(screen.getByLabelText('Conversation with agent work')).toBeInTheDocument()
+    expect(screen.getByText('Saved Code').closest('a')).toHaveAttribute('href', '/code')
+    expect(fetchMessages.mock.calls.flat()).toEqual(['agent-1'])
+  })
+
 })

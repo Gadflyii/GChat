@@ -25,7 +25,7 @@ pub mod runs;
 pub mod session;
 pub mod shell_guard;
 pub mod skills;
-mod storage;
+pub(crate) mod storage;
 pub mod memory;
 pub mod tools;
 pub mod types;

@@ -1,5 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act } from '@testing-library/react'
+import { useThreads } from '@/hooks/useThreads'
+import { useCodeTerminalStore } from '@/stores/code-terminal-store'
+import { useConversationPolicy } from '@/hooks/useConversationPolicy'
+import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +18,18 @@ const mocks = vi.hoisted(() => ({
   stopTerminal: vi.fn(),
   getTerminalStatus: vi.fn(),
   updateCode: vi.fn(),
+  selectCodeSession: vi.fn(),
+  resolveCodeWorkspace: vi.fn(),
+  newCodeSession: vi.fn(),
+  updateCodeBridgePolicy: vi.fn(),
+  listen: vi.fn(),
+  navigate: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-router', () => ({
+  useLocation: () => '/code',
+  useSearch: () => ({}),
+  useNavigate: () => mocks.navigate,
 }))
 
 vi.mock('@xterm/xterm', () => ({
@@ -76,13 +93,15 @@ vi.mock('@gchat/core', () => ({
   getJanDataFolderPath: vi.fn().mockResolvedValue('/data'),
 }))
 
-vi.mock('@/hooks/useServiceHub', () => ({
-  useServiceHub: () => ({
+vi.mock('@/hooks/useServiceHub', () => {
+  const hub = {
     path: () => ({
       join: (...parts: string[]) => Promise.resolve(parts.join('/')),
     }),
-  }),
-}))
+    events: () => ({ listen: mocks.listen }),
+  }
+  return { useServiceHub: () => hub }
+})
 
 vi.mock('@/hooks/useHardware', () => {
   const state = {
@@ -158,9 +177,18 @@ vi.mock('@/hooks/useTheme', () => {
   )
   return { useTheme }
 })
-vi.mock('@/stores/code-terminal-store', () => ({
-  useCodeTerminalStore: (selector: (state: unknown) => unknown) =>
-    selector({ enabled: true, workspace: undefined, setWorkspace: vi.fn() }),
+vi.mock('@/hooks/useThreads', async () => {
+  const { create } = await import('zustand')
+  return { useThreads: create<any>((set) => ({
+    threads: {},
+    setThreads: (rows: Thread[]) => set({ threads: Object.fromEntries(rows.map(row => [row.id, row])) }),
+  })) }
+})
+vi.mock('@/services/terminal/code-sessions', () => ({
+  selectCodeSession: mocks.selectCodeSession,
+  resolveCodeWorkspace: mocks.resolveCodeWorkspace,
+  newCodeSession: mocks.newCodeSession,
+  updateCodeBridgePolicy: mocks.updateCodeBridgePolicy,
 }))
 vi.mock('@/stores/launch-settings-store', () => ({
   useLaunchSettings: (selector: (state: unknown) => unknown) =>
@@ -196,9 +224,23 @@ vi.mock('@/components/ui/button', () => ({
     size?: string
   }) => <button {...props}>{children}</button>,
 }))
+function codeThread(id: string, directory = '/project'): Thread {
+  return { id: `code-${id}`, title: 'Saved coding task', updated: 1,
+    metadata: { runtime: 'code', code: { session_id: id, directory } } }
+}
+
 describe('CodeTerminalHost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useCodeTerminalStore.setState({ enabled: true, workspace: undefined, selectedThreadId: undefined })
+    useThreads.setState({ threads: {} })
+    useConversationPolicy.getState().clearAll()
+    useToolAvailable.setState({ disabledTools: {}, defaultDisabledTools: [] })
+    mocks.listen.mockResolvedValue(vi.fn())
+    mocks.resolveCodeWorkspace.mockImplementation(async directory => directory ?? '/data/agent-workspace')
+    mocks.selectCodeSession.mockResolvedValue(undefined)
+    mocks.newCodeSession.mockResolvedValue(undefined)
+    mocks.updateCodeBridgePolicy.mockResolvedValue(undefined)
     runtimeState.activeModels = ['qwen']
     mocks.writeTerminal.mockResolvedValue(undefined)
     mocks.attachTerminal.mockResolvedValue({
@@ -222,9 +264,13 @@ describe('CodeTerminalHost', () => {
     })
   })
 
-  it('attaches before auto-start and preserves one xterm across navigation', async () => {
+  it('starts only on Code entry, attaches before launch and retains its parser across navigation', async () => {
     const { rerender } = render(<CodeTerminalHost visible={false} />)
 
+    await act(async () => {})
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+    expect(mocks.terminalConstructed).not.toHaveBeenCalled()
+    rerender(<CodeTerminalHost visible />)
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
     expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
@@ -233,6 +279,7 @@ describe('CodeTerminalHost', () => {
       mocks.spawnTerminal.mock.invocationCallOrder[0]
     )
 
+    rerender(<CodeTerminalHost visible={false} />)
     rerender(<CodeTerminalHost visible />)
 
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
@@ -290,7 +337,7 @@ describe('CodeTerminalHost', () => {
     fireEvent.click(toggle)
 
     expect(mocks.writeTerminal).toHaveBeenCalledWith(
-      'code',
+      'code:/data/agent-workspace',
       1,
       Uint8Array.of(0x18, 0x62)
     )
@@ -319,4 +366,91 @@ describe('CodeTerminalHost', () => {
     )
     expect(mocks.spawnTerminal).not.toHaveBeenCalled()
   })
+  it('restores a saved session and workspace after the host is recreated', async () => {
+    const row = codeThread('ses_saved')
+    useThreads.setState({ threads: { [row.id]: row } })
+    useCodeTerminalStore.setState({ selectedThreadId: row.id })
+    const mounted = render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    expect(mocks.spawnTerminal).toHaveBeenCalledWith(expect.objectContaining({
+      terminalId: 'code:/project', cwd: '/project', codeSessionId: 'ses_saved',
+      bridgePolicy: expect.objectContaining({ origin_session_id: row.id }),
+    }))
+    mounted.unmount()
+    mocks.attachTerminal.mockResolvedValue({ phase: 'idle', generation: 0, replayComplete: true })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2))
+    expect(mocks.spawnTerminal.mock.calls[1][0].codeSessionId).toBe('ses_saved')
+  })
+
+  it('switches saved sessions in one workspace through the stock API without restarting', async () => {
+    const first = codeThread('ses_first')
+    const second = codeThread('ses_second')
+    useThreads.setState({ threads: { [first.id]: first, [second.id]: second } })
+    useCodeTerminalStore.setState({ selectedThreadId: first.id })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    act(() => useCodeTerminalStore.getState().setSelectedThreadId(second.id))
+    await waitFor(() => expect(mocks.selectCodeSession).toHaveBeenCalledWith('code:/project', 'ses_second'))
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+    expect(mocks.stopTerminal).not.toHaveBeenCalled()
+    expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
+  })
+
+  it('retains live workspace terminals while selecting sessions in another workspace', async () => {
+    const first = codeThread('ses_first', '/first')
+    const second = codeThread('ses_second', '/second')
+    useThreads.setState({ threads: { [first.id]: first, [second.id]: second } })
+    useCodeTerminalStore.setState({ selectedThreadId: first.id })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    act(() => useCodeTerminalStore.getState().setSelectedThreadId(second.id))
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2))
+    act(() => useCodeTerminalStore.getState().setSelectedThreadId(first.id))
+    await act(async () => {})
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2)
+    expect(mocks.stopTerminal).not.toHaveBeenCalled()
+    expect(mocks.terminalConstructed).toHaveBeenCalledTimes(2)
+  })
+
+  it('registers stock picker selection in the shared index and persisted selection', async () => {
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    const callback = mocks.listen.mock.calls[0][1]
+    const row = codeThread('ses_picked', '/data/agent-workspace')
+    act(() => callback({ payload: { kind: 'selected', terminalId: 'code:/data/agent-workspace', thread: row } }))
+    expect(useThreads.getState().threads[row.id].metadata?.runtime).toBe('code')
+    expect(useCodeTerminalStore.getState().selectedThreadId).toBe(row.id)
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  it('syncs each saved origin policy and updates background workspace permissions', async () => {
+    const first = codeThread('ses_first', '/first')
+    const background = codeThread('ses_background', '/first')
+    const second = codeThread('ses_second', '/second')
+    useThreads.setState({ threads: { [first.id]: first, [background.id]: background, [second.id]: second } })
+    useConversationPolicy.getState().setApprovalMode(first.id, 'skip')
+    useConversationPolicy.getState().addExternalRoot(background.id, {
+      rootId: 'documents', path: '/documents', name: 'Documents', canEdit: false,
+    })
+    useToolAvailable.getState().setToolDisabledForThread(background.id, 'native', 'os.fs.write_file', false)
+    useCodeTerminalStore.setState({ selectedThreadId: first.id })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.updateCodeBridgePolicy).toHaveBeenCalledWith('code:/first', {
+      origin_session_id: background.id, auto_approve: false,
+      disabled_tools: ['native::os.fs.write_file'],
+      external_roots: [{ path: '/documents', can_edit: false }],
+    }))
+    expect(mocks.updateCodeBridgePolicy).toHaveBeenCalledWith('code:/first', expect.objectContaining({
+      origin_session_id: first.id, auto_approve: true,
+    }))
+    act(() => useCodeTerminalStore.getState().setSelectedThreadId(second.id))
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2))
+    act(() => useConversationPolicy.getState().setExternalRootPermission(background.id, 'documents', true))
+    await waitFor(() => expect(mocks.updateCodeBridgePolicy).toHaveBeenCalledWith('code:/first', expect.objectContaining({
+      origin_session_id: background.id, external_roots: [{ path: '/documents', can_edit: true }],
+    })))
+    expect(mocks.stopTerminal).not.toHaveBeenCalled()
+  })
+
 })

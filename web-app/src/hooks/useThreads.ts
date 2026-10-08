@@ -3,6 +3,7 @@ import { ulid } from 'ulidx'
 import { getServiceHub } from '@/hooks/useServiceHub'
 import { Fzf } from 'fzf'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
+import { getCodeSessionReference } from '@/lib/sessions'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { ExtensionManager } from '@/lib/extension'
 import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
@@ -18,10 +19,10 @@ type ThreadState = {
   getFavoriteThreads: () => Thread[]
   getThreadById: (threadId: string) => Thread | undefined
   toggleFavorite: (threadId: string) => void
-  deleteThread: (threadId: string) => void
+  deleteThread: (threadId: string) => Promise<void>
   renameThread: (threadId: string, newTitle: string) => void
-  deleteAllThreads: () => void
-  clearAllThreads: () => void
+  deleteAllThreads: () => Promise<void>
+  clearAllThreads: () => Promise<void>
   unstarAllThreads: () => void
   setCurrentThreadId: (threadId?: string) => void
   createThread: (
@@ -37,7 +38,7 @@ type ThreadState = {
   updateCurrentThreadAssistant: (assistant: Assistant) => void
   updateThreadTimestamp: (threadId: string) => void
   updateThread: (threadId: string, updates: Partial<Thread>) => void
-  deleteAllThreadsByProject: (projectId: string) => void
+  deleteAllThreadsByProject: (projectId: string) => Promise<void>
   searchIndex: Fzf<Thread[]> | null
 }
 
@@ -169,13 +170,24 @@ export const useThreads = create<ThreadState>()((set, get) => ({
       }
     })
   },
-  deleteThread: (threadId) => {
+  deleteThread: async (threadId) => {
+    if (getCodeSessionReference(get().threads[threadId])) {
+      await getServiceHub().threads().deleteThread(threadId)
+      set(state => {
+        const remainingThreads = { ...state.threads }
+        delete remainingThreads[threadId]
+        useThreadReadStatus.getState().removeThread(threadId)
+        useConversationPolicy.getState().removeThread(threadId)
+        return { threads: remainingThreads, searchIndex: buildSearchIndex(remainingThreads) }
+      })
+      return
+    }
     set((state) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [threadId]: _, ...remainingThreads } = state.threads
 
       useThreadReadStatus.getState().removeThread(threadId)
-      // Clean up the conversation policy
+      // Clean up saved conversation policy
       useConversationPolicy.getState().removeThread(threadId)
       // Clean up vector DB collection
       cleanupVectorDB(threadId)
@@ -187,100 +199,19 @@ export const useThreads = create<ThreadState>()((set, get) => ({
       }
     })
   },
-  deleteAllThreads: () => {
-    set((state) => {
-      const allThreadIds = Object.keys(state.threads)
-
-      // Identify threads to keep (favorites OR have project metadata)
-      const threadsToKeepIds = allThreadIds.filter(
-        (threadId) =>
-          state.threads[threadId].isFavorite ||
-          state.threads[threadId].metadata?.project
-      )
-
-      // Identify threads to delete (non-favorites AND no project metadata)
-      const threadsToDeleteIds = allThreadIds.filter(
-        (threadId) =>
-          !state.threads[threadId].isFavorite &&
-          !state.threads[threadId].metadata?.project
-      )
-
-      // Delete threads and clean up their vector DB collections
-      threadsToDeleteIds.forEach((threadId) => {
-        useThreadReadStatus.getState().removeThread(threadId)
-        cleanupVectorDB(threadId)
-        getServiceHub().threads().deleteThread(threadId)
-      })
-
-      // Keep favorite threads and threads with project metadata
-      const remainingThreads = threadsToKeepIds.reduce(
-        (acc, threadId) => {
-          acc[threadId] = state.threads[threadId]
-          return acc
-        },
-        {} as Record<string, Thread>
-      )
-
-      return {
-        threads: remainingThreads,
-        searchIndex: buildSearchIndex(remainingThreads),
-      }
-    })
+  deleteAllThreads: async () => {
+    await deleteReferences(Object.values(get().threads)
+      .filter(thread => !thread.isFavorite && !thread.metadata?.project)
+      .map(thread => thread.id))
   },
-  clearAllThreads: () => {
-    set((state) => {
-      const allThreadIds = Object.keys(state.threads)
-
-      // Delete all threads and clean up their vector DB collections
-      allThreadIds.forEach((threadId) => {
-        useConversationPolicy.getState().removeThread(threadId)
-        useThreadReadStatus.getState().removeThread(threadId)
-        cleanupVectorDB(threadId)
-        getServiceHub().threads().deleteThread(threadId)
-      })
-
-      return {
-        threads: {},
-        currentThreadId: undefined,
-        searchIndex: buildSearchIndex({}),
-      }
-    })
+  clearAllThreads: async () => {
+    await deleteReferences(Object.keys(get().threads))
+    set({ currentThreadId: undefined })
   },
-  deleteAllThreadsByProject: (projectId) => {
-    set((state) => {
-      const allThreadIds = Object.keys(state.threads)
-
-      // Identify threads belonging to this project
-      const toDeleteSet = new Set(
-        allThreadIds.filter(
-          (threadId) =>
-            state.threads[threadId].metadata?.project?.id === projectId
-        )
-      )
-
-      // Delete threads and clean up their vector DB collections
-      toDeleteSet.forEach((threadId) => {
-        useThreadReadStatus.getState().removeThread(threadId)
-        cleanupVectorDB(threadId)
-        getServiceHub().threads().deleteThread(threadId)
-      })
-
-      // Keep threads that don't belong to this project
-      const remainingThreads = allThreadIds
-        .filter((threadId) => !toDeleteSet.has(threadId))
-        .reduce(
-          (acc, threadId) => {
-            acc[threadId] = state.threads[threadId]
-            return acc
-          },
-          {} as Record<string, Thread>
-        )
-
-      return {
-        threads: remainingThreads,
-        searchIndex: buildSearchIndex(remainingThreads),
-      }
-    })
+  deleteAllThreadsByProject: async (projectId) => {
+    await deleteReferences(Object.values(get().threads)
+      .filter(thread => thread.metadata?.project?.id === projectId)
+      .map(thread => thread.id))
   },
   unstarAllThreads: () => {
     set((state) => {
@@ -527,3 +458,10 @@ export const useThreads = create<ThreadState>()((set, get) => ({
     })
   },
 }))
+
+// Use the same deletion owner for bulk actions, including upstream Code data.
+async function deleteReferences(threadIds: string[]): Promise<void> {
+  const results = await Promise.allSettled(threadIds.map(id => useThreads.getState().deleteThread(id)))
+  const failed = results.find(result => result.status === 'rejected')
+  if (failed?.status === 'rejected') throw failed.reason
+}

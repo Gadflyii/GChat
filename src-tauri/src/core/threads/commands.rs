@@ -1,4 +1,4 @@
-use tauri::Runtime;
+use tauri::{Emitter, Runtime};
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use super::db;
@@ -51,6 +51,14 @@ pub async fn modify_thread<R: Runtime>(
     }
 
     let data_folder = get_jan_data_folder_path(app_handle);
+    let id = thread
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("Missing thread id")?;
+    let lock = super::helpers::get_lock_for_thread(id).await;
+    let _guard = lock.lock().await;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let thread = crate::core::code_sessions::merge_reference_update(&data_folder, thread)?;
     file_store::modify_thread(&data_folder, thread)
 }
 
@@ -65,7 +73,20 @@ pub async fn delete_thread<R: Runtime>(
         return db::db_delete_thread(app_handle, &thread_id).await;
     }
 
-    let data_folder = get_jan_data_folder_path(app_handle);
+    let data_folder = get_jan_data_folder_path(app_handle.clone());
+    let lock = super::helpers::get_lock_for_thread(&thread_id).await;
+    let _guard = lock.lock().await;
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Some(thread) = crate::core::code_sessions::get_reference(&data_folder, &thread_id)? {
+        crate::core::code_sessions::delete_reference(&data_folder, &thread).await?;
+        app_handle
+            .emit(
+                "gchat:code-session",
+                serde_json::json!({"kind":"deleted","threadId":thread_id,"terminalId":"code"}),
+            )
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
     file_store::delete_thread(&data_folder, &thread_id)
 }
 

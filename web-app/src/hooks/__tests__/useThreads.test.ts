@@ -271,4 +271,33 @@ describe('useThreads', () => {
     const filtered = result.current.getFilteredThreads('')
     expect(filtered).toHaveLength(2)
   })
+  it('waits for upstream Code deletion and preserves the shared index when deletion fails', async () => {
+    const row: Thread = { id: 'code-ses_saved', title: 'Saved Code', updated: 1,
+      metadata: { runtime: 'code', code: { session_id: 'ses_saved', directory: '/workspace' } } }
+    const deleteThread = vi.fn().mockRejectedValue(new Error('OpenCode is unavailable'))
+    seedServiceHub({ threads: { deleteThread } as unknown as ThreadsService })
+    act(() => useThreads.setState({ threads: { [row.id]: row } }))
+    await expect(useThreads.getState().deleteThread(row.id)).rejects.toThrow('OpenCode is unavailable')
+    expect(useThreads.getState().threads[row.id]).toEqual(row)
+    deleteThread.mockResolvedValue(undefined)
+    await act(async () => { await useThreads.getState().deleteThread(row.id) })
+    expect(useThreads.getState().threads[row.id]).toBeUndefined()
+  })
+
+  it('bulk deletion retains failed Code rows and preserves favorites and project sessions', async () => {
+    const code: Thread = { id: 'code-ses_bulk', title: 'Code', updated: 1,
+      metadata: { runtime: 'code', code: { session_id: 'ses_bulk', directory: '/workspace' } } }
+    const favorite: Thread = { id: 'favorite', title: 'Favorite', updated: 1, isFavorite: true }
+    const project: Thread = { id: 'project', title: 'Project', updated: 1, metadata: { project: { id: 'work' } } }
+    const chat: Thread = { id: 'chat', title: 'Chat', updated: 1 }
+    seedServiceHub({ threads: { deleteThread: vi.fn(async id => {
+      if (id === code.id) throw new Error('Stock Code deletion failed')
+    }) } as unknown as ThreadsService })
+    act(() => useThreads.setState({ threads: Object.fromEntries([code, favorite, project, chat].map(row => [row.id, row])) }))
+    await act(async () => {
+      await expect(useThreads.getState().deleteAllThreads()).rejects.toThrow('Stock Code deletion failed')
+    })
+    expect(Object.keys(useThreads.getState().threads).sort()).toEqual([code.id, favorite.id, project.id].sort())
+  })
+
 })

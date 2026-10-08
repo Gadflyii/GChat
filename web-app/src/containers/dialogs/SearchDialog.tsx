@@ -4,11 +4,11 @@ import { route } from '@/constants/routes'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
   IconSearch,
-  IconMessage,
-  IconHistory,
   IconCirclePlus,
   IconFolder,
 } from '@tabler/icons-react'
+import { getCodeSessionReference } from '@/lib/sessions'
+import { SessionKindIcon } from '@/components/left-sidebar/SessionKindIcon'
 import { useThreads } from '@/hooks/useThreads'
 import { localStorageKey } from '@/constants/localStorage'
 import { useTranslation } from '@/i18n/react-i18next-compat'
@@ -105,7 +105,11 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
     )
 
     handleClose()
-    navigate({ to: route.threadsDetail, params: { threadId } })
+    if (getCodeSessionReference(threads[threadId])) {
+      navigate({ to: '/code', search: { session: threadId } })
+    } else {
+      navigate({ to: route.threadsDetail, params: { threadId } })
+    }
   }
 
   // Filter and group threads based on search query
@@ -290,7 +294,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
                       selectedIndex === itemIndex && 'bg-secondary/50'
                     )}
                   >
-                    <IconHistory className="size-4 text-muted-foreground shrink-0" />
+                    <SessionKindIcon thread={thread} />
                     <span className="text-sm truncate">{thread.title}</span>
                   </button>
                 )
@@ -314,7 +318,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
                         selectedIndex === itemIndex && 'bg-secondary/50'
                       )}
                     >
-                      <IconMessage className="size-4 text-muted-foreground shrink-0" />
+                      <SessionKindIcon thread={thread} />
                       <div className="flex items-center min-w-0">
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <IconFolder className="size-3" />
@@ -344,7 +348,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
                       selectedIndex === itemIndex && 'bg-secondary/50'
                     )}
                   >
-                    <IconMessage className="size-4 text-muted-foreground shrink-0" />
+                    <SessionKindIcon thread={thread} />
                     <span className="text-sm truncate">{thread.title}</span>
                   </button>
                 )
