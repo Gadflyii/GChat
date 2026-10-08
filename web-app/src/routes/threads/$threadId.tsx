@@ -1222,6 +1222,7 @@ function ThreadDetail() {
                 onSubmit={handleSubmit}
                 onStop={handleStop}
                 chatStatus={inputStatus}
+                submissionReady={historyReady}
               />
             </div>
           </div>

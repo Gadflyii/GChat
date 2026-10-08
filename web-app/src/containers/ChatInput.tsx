@@ -145,6 +145,7 @@ type ChatInputProps = {
   ) => void
   onStop?: () => void
   chatStatus?: ChatStatus
+  submissionReady?: boolean
 }
 
 const ChatInput = memo(function ChatInput({
@@ -156,6 +157,7 @@ const ChatInput = memo(function ChatInput({
   onSubmit,
   onStop,
   chatStatus,
+  submissionReady = true,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const agentSkillTokenRef = useRef<HTMLSpanElement>(null)
@@ -584,6 +586,7 @@ const ChatInput = memo(function ChatInput({
   }
 
   const handleSendMessage = async (prompt: string) => {
+    if (!submissionReady) return
     if (isCompactCommand(prompt)) {
       if (attachments.length) {
         toast.error('Remove attachments before running /compact.')
@@ -2466,6 +2469,7 @@ const ChatInput = memo(function ChatInput({
                       // - The streaming content has finished
                       // - Prompt is not empty
                       if (
+                        submissionReady &&
                         (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
                         (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady))
@@ -2807,6 +2811,7 @@ const ChatInput = memo(function ChatInput({
                     variant="default"
                     size="icon-sm"
                     disabled={
+                      !submissionReady ||
                       !prompt.trim() ||
                       (!isCompactCommand(prompt) &&
                         (isAttachmentPipelineBusy || blockSendUntilModelReady))

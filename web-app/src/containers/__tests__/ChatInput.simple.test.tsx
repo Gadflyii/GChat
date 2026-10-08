@@ -276,7 +276,7 @@ describe('ChatInput', () => {
     fireEvent.change(input, { target: { value: '/compact' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('/compact'))
-    expect(agentModeState.setActiveSkill).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveSkill).not.toHaveBeenCalled()
     expect(start).not.toHaveBeenCalled()
     view.unmount()
     start.mockRestore()
@@ -297,6 +297,50 @@ describe('ChatInput', () => {
     expect(screen.getByTestId('chat-input')).toHaveValue('/compact')
     view.unmount()
     failure.mockRestore()
+  })
+
+  it('keeps the draft, selected skill and attachments editable after failed restoration and sends once when ready', async () => {
+    const threadId = 'failed-restoration'
+    useThreads.setState({ currentThreadId: threadId })
+    agentSkills.value = [{ name: 'agent-builder', description: 'Build agents', version: '1.2.0', requiresTools: [], requiresScripts: [], dangerous: false, platforms: null, enabled: true, compatible: true, reserved: false, unavailableReasons: [], error: null }]
+    const attachment = createDocumentAttachment({ name: 'Budget.xlsx', path: '/Desktop/Budget.xlsx', fileType: 'xlsx' })
+    useChatAttachments.getState().setAttachments(threadId, [attachment])
+    const onSubmit = vi.fn()
+    const view = render(<ChatInput onSubmit={onSubmit} chatStatus="ready" submissionReady={false} preselectedAgentSkillName="agent-builder" />)
+    const input = screen.getByTestId('chat-input')
+    const send = document.querySelector('[data-test-id="send-message-button"]')!
+    fireEvent.change(input, { target: { value: 'Review the spreadsheet' } })
+    expect(send).toBeDisabled()
+    expect(input).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Stop generation' })).not.toBeInTheDocument()
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(input, { target: { value: 'Review the attached spreadsheet' } })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveSkill).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveDefinition).not.toHaveBeenCalled()
+    expect(input).toHaveValue('Review the attached spreadsheet')
+    expect(useChatAttachments.getState().getAttachments(threadId)).toEqual([attachment])
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/agent-builder')
+
+    view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" submissionReady preselectedAgentSkillName="agent-builder" />)
+    expect(send).toBeEnabled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review the attached spreadsheet', undefined, 'agent-builder', undefined))
+    expect(input).toHaveValue('')
+    expect(useChatAttachments.getState().getAttachments(threadId)).toEqual([])
+  })
+
+  it('retains /compact without dispatch or selection changes while restoration blocks submission', () => {
+    const onSubmit = vi.fn()
+    render(<ChatInput onSubmit={onSubmit} chatStatus="ready" submissionReady={false} />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: '/compact' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/compact')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveDefinition).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveSkill).not.toHaveBeenCalled()
   })
 
   it('lets an explicit Send start a model after the sidebar stopped it', async () => {
