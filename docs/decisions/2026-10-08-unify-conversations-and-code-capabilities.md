@@ -17,8 +17,11 @@ title: "Unify conversations and expose shared capabilities in Code"
   icons identify the view and badges identify agent activity. Stock OpenCode owns
   its transcript. GChat registers and reopens its sessions through the public
   adapter and keeps live workspace runtimes when users navigate away. The scoped
-  Code bridge uses the same native/MCP catalog and executor, with the selected
-  session's policy; asynchronous agent delegation keeps its existing lifecycle.
+  Code bridge uses the same native/MCP catalog and executor. A stock public server
+  hook supplies the actual calling session ID; verified same-workspace children
+  inherit their top-level session's saved policy. Visible selection never grants
+  permissions to background work. Discovery is workspace-wide and execution
+  checks the calling session. Asynchronous delegation keeps its existing lifecycle.
 - **Consequences:** existing histories, folders, approval choices and saved-agent
   restrictions must survive the transition. Permission requests and run progress
   stay in the originating view. `/compact` is reserved before ordinary prompt
@@ -27,6 +30,9 @@ title: "Unify conversations and expose shared capabilities in Code"
   remain intact, and compaction never reloads the model. Native tool results
   retain their useful summary and structured details together. This changes no
   inference limits, model placement, task budgets or engine behavior.
+  Older native operational context is imported once into persisted conversation
+  history, where the normal context and compaction path consumes it. Imported
+  observations are hidden in the view; the original native state remains intact.
 - **Owner:** team.
 - **Links:** [current implementation and acceptance](../agent-runtime/README.md),
   [shared capability ownership](2026-10-01-share-chat-and-agent-capabilities.md),

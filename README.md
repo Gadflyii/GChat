@@ -147,17 +147,23 @@ GChat can detect, install, configure, and launch external coding agents against 
 OpenCode, Codex, Claude Code, Cline, Goose, OpenHands, Kilo Code, and other supported clients share
 the model already managed by GChat rather than starting a second inference backend.
 
-The Code tab embeds a persistent PTY running the real OpenCode TUI. Its **GChat tools** bridge lets
-OpenCode discover enabled skills and saved agents, then delegate asynchronous runs to the Agent
-Studio runtime. Saved worker-pool assignments remain active; progress, approvals, and cancellation
-are available in the Code panel and Agent activity view, and completed runs appear in Agent Studio
-history. OpenCode can also list project runs from earlier Code launches. Skill instructions can be
-read directly, while skills that need GChat tools or scripts run through a delegated Agent Studio
-task. Each delegated run starts a fresh Agent session, so include necessary conversation context in
+The Code tab embeds a persistent PTY running the real OpenCode TUI. Code sessions are saved in
+the shared sidebar history and reopen in their original workspace. OpenCode owns their transcripts;
+GChat saves references to them. Conversations use a Chat icon, Code sessions a Code icon, and
+delegated work adds an agent activity badge. `/compact` works in conversations, active agent
+workers and Code; it preserves saved transcripts.
+
+The **GChat tools** bridge exposes shared native tools, configured connectors, skills and saved
+agents. Direct tools use the same executor and folder/approval policy as conversations. Background
+Code sessions keep their own permissions when another session is selected. Skills can use these
+tools directly or delegate asynchronous runs to the Agent Studio runtime. Saved worker-pool
+assignments remain active; progress, approvals and cancellation appear in the Code panel, and
+completed runs appear in Agent Studio history. OpenCode can also list project runs from earlier
+Code launches. Each delegated run starts a fresh Agent session, so include necessary context in
 its task. Runs use the GChat model configured at Code launch unless the saved definition pins a
 model; pass a ready `modelId` to select another instance. A model switch inside OpenCode does not
-change the bridge's default. The bridge is limited to the Code project's local workspace and uses
-GChat's normal approval rules.
+change the bridge's default. Workspace access and explicitly granted folders follow the originating
+session's saved policy. Saving a new agent definition still requires confirmation.
 
 ```bash
 gchat-cli models list
