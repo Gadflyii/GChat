@@ -1,6 +1,6 @@
 # Chat and Agent runtime
 
-## Unified sessions and Code capabilities — active October 8 work
+## Unified sessions and Code capabilities — accepted October 8 source
 
 The user approved one conversation space for ordinary replies, local-machine
 tools and delegated agent work, with Agent Studio retained for authoring. Deliver
@@ -51,13 +51,8 @@ GChat history. Prior accepted evidence below remains valid for its recorded scop
 
 | Owner / host | Exact path / revision | Purpose / retention |
 | --- | --- | --- |
-| GChat / Ron-9950X3D2 | `/ai/gchat`, `94dc24f7e` | Stable baseline, clean and matches remote main |
+| GChat / Ron-9950X3D2 | `/ai/gchat`, `217b88409` | Reviewed accepted source, clean and pushed to remote main |
 | Unified sessions / coordinator | `/ai/gchat-worktrees/unified-sessions`, `fix/unified-sessions` | Integration candidate and current subject authority |
-| Code bridge / delegated SOL | `/ai/gchat-worktrees/code-shared-capabilities`, `fix/code-shared-capabilities` | Bounded shared-tool bridge candidate |
-| Code history / delegated SOL | `/ai/gchat-worktrees/code-session-history`, `fix/code-session-history` | Saved sessions, Code restore and typed sidebar rows |
-| Chat unification / delegated SOL | `/ai/gchat-worktrees/unified-chat-space`, `fix/unified-chat-space` | Shared conversation UI, workspace and execution behavior |
-| Compaction / delegated SOL | `/ai/gchat-worktrees/compact-everywhere`, `fix/compact-everywhere` | Reserved command dispatch and contextual compaction |
-| Model names / delegated SOL | `/ai/gchat-worktrees/model-package-names`, `fix/model-package-names` | Current package matching and targeted fixtures/path update |
 | Existing build caches | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse dependencies/compilation; preserve accepted installer outputs |
 | Unified-session verification / coordinator | `/ai/gchat/out/unified-sessions-20261008/` | Retain full passing gate, prior failure receipts and stock-session evidence |
 
@@ -155,10 +150,15 @@ no remaining blocker. Failure receipts are retained to explain the corrected
 test-quality and IPC-fixture issues. No GPU run, installer rebuild or live
 Windows replay is claimed for this source batch.
 
-Next: perform the authorized reviewed GChat main integration and push, retire
-the five completed delegated worktrees after verifying ownership and clean state,
-then begin the separate manager design note and implementation. Retain the
-integration candidate and shared compiler/dependency caches as accepted evidence.
+The reviewed implementation is integrated and pushed to main as `217b88409`.
+The five completed delegated worktrees are removed after verifying clean state
+and no live process using them, releasing about 1.3 GiB on this host. Their source
+commits remain in Git. The integration worktree, shared caches and concise test
+evidence remain; unrelated worktrees and fleet machines are untouched. The clean
+operations candidate remains available for its separate release-branch handoff.
+
+Next: begin the separately authorized manager design note and implementation.
+Installer updates and real-model Windows replay remain outside this source batch.
 No GPU job is booked
 or running for this task; any required GPU check follows
 `/ai/coordination/gpu-booking-howto.md` and the fleet schedule authority.
