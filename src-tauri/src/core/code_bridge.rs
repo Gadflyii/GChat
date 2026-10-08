@@ -373,39 +373,75 @@ fn operational_tool(identity: &str) -> bool {
     )
 }
 
-fn control_identity(name: &str, args: &Value) -> Option<&'static str> {
+fn disabled_control(policy: &BridgePolicy, identity: &str) -> bool {
+    policy
+        .disabled_tools
+        .contains(&format!("{}::{identity}", capabilities::NATIVE_SERVER))
+}
+
+fn control_identities(name: &str, args: &Value) -> Vec<&'static str> {
     match name {
-        "gchat_list_skills" | "gchat_read_skill" => Some("skill_list"),
-        "gchat_list_agents" => Some("agent_list"),
-        "gchat_start_run" if args.get("skillName").and_then(Value::as_str).is_some() => {
-            Some("skill_invoke")
+        "gchat_list_skills" => vec!["skill_list"],
+        "gchat_read_skill" => vec!["skill_list", "skill_view"],
+        "gchat_list_agents" => vec!["agent_list"],
+        "gchat_start_run" => {
+            let skill = args.get("skillName").and_then(Value::as_str).is_some();
+            let definition = args
+                .get("definitionId")
+                .and_then(Value::as_str)
+                .unwrap_or("general");
+            let mut identities = Vec::new();
+            if !skill || definition != "general" {
+                identities.push("agent_run");
+            }
+            if skill {
+                identities.push("skill_invoke");
+            }
+            identities
         }
-        "gchat_start_run" => Some("agent_run"),
-        "gchat_list_runs" | "gchat_get_run" => Some("agent_monitor"),
-        "gchat_cancel_run" => Some("agent_cancel"),
-        _ => None,
+        "gchat_list_runs" | "gchat_get_run" => vec!["agent_monitor"],
+        "gchat_cancel_run" => vec!["agent_cancel"],
+        _ => vec![],
     }
 }
 
 fn check_control_policy(policy: &BridgePolicy, name: &str, args: &Value) -> Result<(), String> {
-    if name == "gchat_read_skill"
-        && policy
-            .disabled_tools
-            .contains(&format!("{}::skill_view", capabilities::NATIVE_SERVER))
-    {
-        return Err("Capability `skill_view` is disabled for this conversation".into());
-    }
-    if let Some(identity) = control_identity(name, args) {
-        if policy
-            .disabled_tools
-            .contains(&format!("{}::{identity}", capabilities::NATIVE_SERVER))
-        {
+    for identity in control_identities(name, args) {
+        if disabled_control(policy, identity) {
             return Err(format!(
                 "Capability `{identity}` is disabled for this conversation"
             ));
         }
     }
     Ok(())
+}
+
+fn visible_control_tool(policy: &BridgePolicy, mut tool: Value) -> Option<Value> {
+    let name = tool["name"].as_str().unwrap_or_default();
+    if name != "gchat_start_run" {
+        return check_control_policy(policy, name, &json!({}))
+            .is_ok()
+            .then_some(tool);
+    }
+    let agent = !disabled_control(policy, "agent_run");
+    let skill = !disabled_control(policy, "skill_invoke");
+    if !agent && !skill {
+        return None;
+    }
+    if !agent {
+        tool["inputSchema"]["required"]
+            .as_array_mut()?
+            .push(json!("skillName"));
+        tool["inputSchema"]["properties"]["definitionId"] =
+            json!({"type":"string","enum":["general"]});
+        tool["description"] = json!("Start an asynchronous GChat skill task using the general agent in this Code project. skillName is required; saved-agent execution is disabled for this session. Human approvals are handled in GChat. Use a stable requestId and follow the run through gchat_get_run.");
+    } else if !skill {
+        tool["inputSchema"]["properties"]
+            .as_object_mut()?
+            .remove("skillName");
+        tool["description"] = json!("Start an asynchronous saved GChat Agent Studio run in this Code project. Saved worker-pool assignments apply. Skill invocation is disabled for this session. Human approvals are handled in GChat. Use a stable requestId and follow the run through gchat_get_run.");
+    }
+    Some(tool)
 }
 
 async fn bridge_tools<R: Runtime>(
@@ -415,14 +451,7 @@ async fn bridge_tools<R: Runtime>(
     let policy = session_policy(session_id)?;
     let mut tools = control_tools()
         .into_iter()
-        .filter(|tool| {
-            check_control_policy(
-                &policy,
-                tool["name"].as_str().unwrap_or_default(),
-                &json!({}),
-            )
-            .is_ok()
-        })
+        .filter_map(|tool| visible_control_tool(&policy, tool))
         .collect::<Vec<_>>();
     let disabled = policy.disabled_tools.into_iter().collect();
     tools.extend(capabilities::load_catalog(app.clone()).await?.visible(&disabled).into_iter()
@@ -1383,6 +1412,98 @@ mod tests {
             .await
             .unwrap()["result"]
             .clone()
+    }
+
+    #[tokio::test]
+    async fn code_delegation_requires_each_selected_capability_and_advertises_allowed_modes() {
+        let project = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(
+            project.path().join("data"),
+        ));
+        let agent_disabled = BridgePolicy {
+            disabled_tools: vec!["gchat-native::agent_run".into()],
+            ..Default::default()
+        };
+        let connection =
+            prepare_session(app.handle(), project.path(), None, agent_disabled.clone()).unwrap();
+        let tools = rpc(&connection, 1, "tools/list", json!({})).await;
+        let start = tools["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "gchat_start_run")
+            .expect("skill invocation remains available when saved agents are disabled");
+        assert!(start["inputSchema"]["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("skillName")));
+        assert_eq!(
+            start["inputSchema"]["properties"]["definitionId"]["enum"],
+            json!(["general"])
+        );
+        let combined = json!({"task":"do work","requestId":"combined","definitionId":"custom-saved-agent","skillName":"review"});
+        let denied = rpc(
+            &connection,
+            2,
+            "tools/call",
+            json!({"name":"gchat_start_run","arguments":combined}),
+        )
+        .await;
+        assert_eq!(denied["isError"], true);
+        assert!(
+            denied.to_string().contains("agent_run") && denied.to_string().contains("disabled")
+        );
+        assert!(check_control_policy(
+            &agent_disabled,
+            "gchat_start_run",
+            &json!({"skillName":"review"})
+        )
+        .is_ok());
+        assert!(check_control_policy(
+            &agent_disabled,
+            "gchat_start_run",
+            &json!({"definitionId":"general","skillName":"review"})
+        )
+        .is_ok());
+        let skill_disabled = BridgePolicy {
+            disabled_tools: vec!["gchat-native::skill_invoke".into()],
+            ..Default::default()
+        };
+        update_session_policy(&connection.session_id, skill_disabled.clone()).unwrap();
+        let tools = rpc(&connection, 3, "tools/list", json!({})).await;
+        let start = tools["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "gchat_start_run")
+            .expect("saved-agent execution remains available when skill invocation is disabled");
+        assert!(start["inputSchema"]["properties"]
+            .get("skillName")
+            .is_none());
+        assert_eq!(start["inputSchema"]["additionalProperties"], false);
+        let denied = rpc(
+            &connection,
+            4,
+            "tools/call",
+            json!({"name":"gchat_start_run","arguments":combined}),
+        )
+        .await;
+        assert_eq!(denied["isError"], true);
+        assert!(
+            denied.to_string().contains("skill_invoke") && denied.to_string().contains("disabled")
+        );
+        assert!(check_control_policy(
+            &skill_disabled,
+            "gchat_start_run",
+            &json!({"definitionId":"custom-saved-agent"})
+        )
+        .is_ok());
+        assert!(
+            check_control_policy(&BridgePolicy::default(), "gchat_start_run", &combined).is_ok()
+        );
+        close_session(&connection.session_id);
     }
 
     #[derive(Clone)]
