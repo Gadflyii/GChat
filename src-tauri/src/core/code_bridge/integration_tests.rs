@@ -14,8 +14,11 @@ async fn mcp_tool(
     client: &reqwest::Client,
     connection: &BridgeConnection,
     name: &str,
-    arguments: Value,
+    mut arguments: Value,
 ) -> Value {
+    if arguments.get(CALLER_SESSION_KEY).is_none() {
+        arguments[CALLER_SESSION_KEY] = json!("ses_test");
+    }
     let response = client
         .post(&connection.url)
         .bearer_auth(&connection.token)
@@ -136,6 +139,13 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
 
     let connection = prepare_session(app.handle(), project.path(), None, BridgePolicy::default())
         .expect("Code bridge");
+    tests::register_caller(
+        app.handle(),
+        project.path(),
+        &connection,
+        "ses_test",
+        BridgePolicy::default(),
+    );
     let client = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(10))
@@ -211,6 +221,8 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
         .unwrap_or_default()
         .contains("Pool worker finished the review."));
     assert_eq!(scripted.requests().len(), 1, "retry must not execute twice");
+    assert_eq!(finished["originSessionId"], "code-ses_test");
+    assert_eq!(finished["callerSessionId"], "ses_test");
 
     let allocator = Allocator::shared();
     let occupied = allocator
@@ -227,6 +239,13 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
             None,
         )
         .expect("reserve sole pool slot");
+    tests::register_caller(
+        app.handle(),
+        project.path(),
+        &connection,
+        "ses_second",
+        BridgePolicy::default(),
+    );
     let waiting = mcp_tool(
         &client,
         &connection,
@@ -234,7 +253,8 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
         json!({
             "definitionId": "bridge-pool-review",
             "task": "Review a second task.",
-            "requestId": "pool-review-cancel",
+            "requestId": "pool-review-1",
+            CALLER_SESSION_KEY: "ses_second",
         }),
     )
     .await;
@@ -242,9 +262,20 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
         .as_str()
         .expect("waiting run ID")
         .to_string();
+    assert_ne!(
+        waiting_id, run_id,
+        "same requestId from another actual caller must create its own run"
+    );
     close_session(&connection.session_id);
     let reconnected = prepare_session(app.handle(), project.path(), None, BridgePolicy::default())
         .expect("reconnected bridge");
+    tests::register_caller(
+        app.handle(),
+        project.path(),
+        &reconnected,
+        "ses_test",
+        BridgePolicy::default(),
+    );
     let reconnect_status = client
         .post(&reconnected.url)
         .bearer_auth(&reconnected.token)
@@ -277,6 +308,13 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
         BridgePolicy::default(),
     )
     .expect("other bridge");
+    tests::register_caller(
+        app.handle(),
+        other_project.path(),
+        &other,
+        "ses_other",
+        BridgePolicy::default(),
+    );
     let denied: Value = client
         .post(&other.url)
         .bearer_auth(&other.token)
@@ -284,7 +322,7 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
             "jsonrpc": "2.0",
             "id": 3,
             "method": "tools/call",
-            "params": { "name": "gchat_get_run", "arguments": { "runId": waiting_id } },
+            "params": { "name": "gchat_get_run", "arguments": { "runId": waiting_id, CALLER_SESSION_KEY: "ses_other" } },
         }))
         .send()
         .await

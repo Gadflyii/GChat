@@ -21,6 +21,8 @@ export type OpenCodeBridgeApproval = {
 
 export type OpenCodeBridgeRun = {
   runId: string
+  originSessionId?: string
+  callerSessionId?: string
   definitionName: string
   status: 'queued' | 'running' | 'finished' | 'incomplete' | 'cancelled' | 'failed'
   stage?: string

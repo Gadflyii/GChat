@@ -17,7 +17,7 @@ use hyper::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, Runtime};
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Notify};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -32,6 +32,7 @@ use super::{
 
 const MAX_REQUEST_BYTES: usize = 128 * 1024;
 const MAX_BRIDGE_RUNS: usize = 100;
+const CALLER_SESSION_KEY: &str = "_gchat_opencode_session_id";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,8 +55,17 @@ pub struct BridgePolicy {
     pub external_roots: Vec<AgentExternalRoot>,
 }
 
-struct Session {
+struct BridgeCaller {
+    opencode_session_id: String,
     policy: BridgePolicy,
+}
+
+struct Session {
+    project: PathBuf,
+    data_root: PathBuf,
+    policies: HashMap<String, BridgePolicy>,
+    policy_ready: Arc<Notify>,
+    closing: CancellationToken,
     default_model: Option<String>,
     connected: bool,
     server: tauri::async_runtime::JoinHandle<()>,
@@ -65,6 +75,10 @@ struct Session {
 #[serde(rename_all = "camelCase")]
 pub struct BridgeRun {
     pub run_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller_session_id: Option<String>,
     pub definition_name: String,
     pub status: String,
     pub stage: Option<String>,
@@ -85,7 +99,7 @@ struct BridgeRegistry {
     shutting_down: bool,
     sessions: HashMap<String, Session>,
     runs: BTreeMap<String, BridgeRun>,
-    retry_keys: HashMap<(String, String), (String, String)>,
+    retry_keys: HashMap<(String, String, String), (String, String)>,
     run_tasks: HashMap<String, tauri::async_runtime::JoinHandle<()>>,
     tool_requests: HashMap<(String, String), (String, CancellationToken)>,
 }
@@ -105,14 +119,17 @@ pub fn prepare_session<R: Runtime>(
     default_model: Option<String>,
     policy: BridgePolicy,
 ) -> Result<BridgeConnection, String> {
-    if let Some(id) = &policy.origin_session_id {
-        super::agent::session::validate_session_id(id)?;
-    }
     let project = cwd
         .canonicalize()
         .map_err(|e| format!("Cannot open Code project '{}': {e}", cwd.display()))?;
     if !project.is_dir() {
         return Err("Code project must be a directory".into());
+    }
+    let data_root = get_jan_data_folder_path(app.clone());
+    let mut policies = HashMap::new();
+    if let Some(origin) = policy.origin_session_id.clone() {
+        validate_origin_reference(&data_root, &project, &origin)?;
+        policies.insert(origin, policy);
     }
     let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0))
         .map_err(|e| format!("Cannot bind local Code bridge: {e}"))?;
@@ -166,7 +183,11 @@ pub fn prepare_session<R: Runtime>(
     state.sessions.insert(
         session_id,
         Session {
-            policy,
+            project,
+            data_root,
+            policies,
+            policy_ready: Arc::new(Notify::new()),
+            closing: CancellationToken::new(),
             default_model,
             connected: false,
             server: task,
@@ -175,31 +196,117 @@ pub fn prepare_session<R: Runtime>(
     Ok(connection)
 }
 
-/// Apply the saved Code session policy to future calls on this endpoint.
-pub fn update_session_policy(session_id: &str, policy: BridgePolicy) -> Result<(), String> {
-    if let Some(id) = &policy.origin_session_id {
-        super::agent::session::validate_session_id(id)?;
+fn caller_origin_id(caller: &str) -> Result<String, String> {
+    if !caller.starts_with("ses")
+        || !caller
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        return Err("Invalid originating OpenCode session ID".into());
     }
-    lock_registry()?
-        .sessions
-        .get_mut(session_id)
-        .ok_or("Code session is closing")?
-        .policy = policy;
+    let origin = format!("code-{caller}");
+    super::agent::session::validate_session_id(&origin)?;
+    Ok(origin)
+}
+
+fn validate_origin_reference(data: &Path, project: &Path, origin: &str) -> Result<(), String> {
+    let caller = origin
+        .strip_prefix("code-")
+        .ok_or("Invalid Code origin session ID")?;
+    caller_origin_id(caller)?;
+    let reference = super::code_sessions::get_reference(data, origin)?
+        .ok_or("Originating Code session is not registered in GChat history")?;
+    let code =
+        super::code_sessions::code_reference(&reference).ok_or("Invalid Code session reference")?;
+    if reference["id"] != origin || code["session_id"] != caller {
+        return Err("Originating Code session reference does not match its identity".into());
+    }
+    let directory = code["directory"]
+        .as_str()
+        .ok_or("Missing saved Code workspace")?;
+    if Path::new(directory)
+        .canonicalize()
+        .map_err(|error| error.to_string())?
+        != project
+    {
+        return Err("Originating Code session belongs to another workspace".into());
+    }
     Ok(())
 }
 
-fn session_policy(session_id: &str) -> Result<BridgePolicy, String> {
-    lock_registry()?
+/// Register one saved origin's policy without changing any other session's rights.
+pub fn update_session_policy(session_id: &str, policy: BridgePolicy) -> Result<(), String> {
+    let origin = policy
+        .origin_session_id
+        .clone()
+        .ok_or("Code policy requires an origin session ID")?;
+    let mut state = lock_registry()?;
+    let session = state
         .sessions
-        .get(session_id)
-        .map(|session| session.policy.clone())
-        .ok_or_else(|| "Code session is closing".into())
+        .get_mut(session_id)
+        .ok_or("Code session is closing")?;
+    validate_origin_reference(&session.data_root, &session.project, &origin)?;
+    session.policies.insert(origin, policy);
+    session.policy_ready.notify_waiters();
+    Ok(())
+}
+
+async fn caller_policy(session_id: &str, caller: &str) -> Result<BridgePolicy, String> {
+    caller_origin_id(caller)?;
+    let origin = super::code_sessions::caller_origin(session_id, caller)?;
+    let (data_root, project, ready, closing) = {
+        let state = lock_registry()?;
+        let session = state
+            .sessions
+            .get(session_id)
+            .ok_or("Code session is closing")?;
+        (
+            session.data_root.clone(),
+            session.project.clone(),
+            session.policy_ready.clone(),
+            session.closing.clone(),
+        )
+    };
+    validate_origin_reference(&data_root, &project, &origin)?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let notified = ready.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let policy = {
+                let state = lock_registry()?;
+                let session = state
+                    .sessions
+                    .get(session_id)
+                    .ok_or("Code session is closing")?;
+                session.policies.get(&origin).cloned()
+            };
+            if let Some(policy) = policy {
+                validate_origin_reference(&data_root, &project, &origin)?;
+                return Ok(policy);
+            }
+            tokio::select! {
+                _ = notified => {},
+                _ = closing.cancelled() => return Err("Code session is closing".into()),
+            }
+        }
+    })
+    .await
+    .map_err(|_| {
+        "Originating Code session policy is not ready; reconnect this session in GChat".to_string()
+    })?
+}
+
+/// A caller hook waits for GChat to synchronize the saved session's user policy.
+pub async fn wait_origin_policy(session_id: &str, caller: &str) -> Result<(), String> {
+    caller_policy(session_id, caller).await.map(|_| ())
 }
 
 /// Release the endpoint and cancel direct calls. Delegated runs remain app-owned.
 pub fn close_session(session_id: &str) {
     if let Ok(mut state) = lock_registry() {
         if let Some(session) = state.sessions.remove(session_id) {
+            session.closing.cancel();
             session.server.abort();
         }
         for ((owner, _), (_, cancellation)) in &state.tool_requests {
@@ -208,6 +315,7 @@ pub fn close_session(session_id: &str) {
             }
         }
     }
+    super::code_sessions::close_runtime(session_id);
 }
 
 fn response(status: StatusCode, value: Value) -> Response<Body> {
@@ -315,7 +423,7 @@ async fn handle_http<R: Runtime>(
                 }
             }
             Ok(
-                json!({"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"gchat-agent-studio","version":env!("CARGO_PKG_VERSION")},"instructions":"GChat native tools and configured connectors use GChat project permissions and human approvals. Delegated GChat skills and saved agents run in GChat's Agent Studio runtime, including worker-pool placement. Discover skills/agents, then delegate with gchat_start_run. For project edits, wait for a delegated run to finish before editing the same files in OpenCode. Use gchat_get_run to check progress without busy polling. Human approvals appear in GChat; OpenCode must not approve its own delegated actions."}),
+                json!({"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"gchat-agent-studio","version":env!("CARGO_PKG_VERSION")},"instructions":"Tool discovery is shared by this Code workspace. Actual calls use their originating saved Code session's permissions and human approvals, supplied by the managed GChat plugin. Delegated GChat skills and saved agents run in GChat's Agent Studio runtime, including worker-pool placement. Discover skills/agents, then delegate with gchat_start_run. For project edits, wait for a delegated run to finish before editing the same files in OpenCode. Use gchat_get_run to check progress without busy polling. Human approvals appear in GChat; OpenCode must not approve its own delegated actions."}),
             )
         }
         "ping" => Ok(json!({})),
@@ -416,45 +524,17 @@ fn check_control_policy(policy: &BridgePolicy, name: &str, args: &Value) -> Resu
     Ok(())
 }
 
-fn visible_control_tool(policy: &BridgePolicy, mut tool: Value) -> Option<Value> {
-    let name = tool["name"].as_str().unwrap_or_default();
-    if name != "gchat_start_run" {
-        return check_control_policy(policy, name, &json!({}))
-            .is_ok()
-            .then_some(tool);
-    }
-    let agent = !disabled_control(policy, "agent_run");
-    let skill = !disabled_control(policy, "skill_invoke");
-    if !agent && !skill {
-        return None;
-    }
-    if !agent {
-        tool["inputSchema"]["required"]
-            .as_array_mut()?
-            .push(json!("skillName"));
-        tool["inputSchema"]["properties"]["definitionId"] =
-            json!({"type":"string","enum":["general"]});
-        tool["description"] = json!("Start an asynchronous GChat skill task using the general agent in this Code project. skillName is required; saved-agent execution is disabled for this session. Human approvals are handled in GChat. Use a stable requestId and follow the run through gchat_get_run.");
-    } else if !skill {
-        tool["inputSchema"]["properties"]
-            .as_object_mut()?
-            .remove("skillName");
-        tool["description"] = json!("Start an asynchronous saved GChat Agent Studio run in this Code project. Saved worker-pool assignments apply. Skill invocation is disabled for this session. Human approvals are handled in GChat. Use a stable requestId and follow the run through gchat_get_run.");
-    }
-    Some(tool)
-}
-
 async fn bridge_tools<R: Runtime>(
     app: &AppHandle<R>,
     session_id: &str,
 ) -> Result<Vec<Value>, String> {
-    let policy = session_policy(session_id)?;
-    let mut tools = control_tools()
-        .into_iter()
-        .filter_map(|tool| visible_control_tool(&policy, tool))
-        .collect::<Vec<_>>();
-    let disabled = policy.disabled_tools.into_iter().collect();
-    tools.extend(capabilities::load_catalog(app.clone()).await?.visible(&disabled).into_iter()
+    if !lock_registry()?.sessions.contains_key(session_id) {
+        return Err("Code session is closing".into());
+    }
+    // Discovery is workspace-wide because MCP tools/list has no originating
+    // OpenCode session. Each actual call applies its exact saved caller policy.
+    let mut tools = control_tools();
+    tools.extend(capabilities::load_catalog(app.clone()).await?.tools.into_iter()
         .filter(|tool| operational_tool(&tool.identity))
         .map(|tool| json!({"name":tool.name,"description":tool.description,"inputSchema":tool.input_schema})));
     Ok(tools)
@@ -471,11 +551,14 @@ async fn call_tool<R: Runtime>(
         .get("name")
         .and_then(Value::as_str)
         .ok_or("Tool name required")?;
-    let args = params
+    let mut args = params
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let policy = session_policy(session_id)?;
+    let caller = args.as_object_mut().ok_or("Capability arguments must be an object")?
+        .remove(CALLER_SESSION_KEY).and_then(|value| value.as_str().map(str::to_owned))
+        .ok_or("GChat tool call is missing its originating Code session; reconnect the managed Code runtime")?;
+    let policy = caller_policy(session_id, &caller).await?;
     check_control_policy(&policy, name, &args)?;
     let disabled = policy.disabled_tools.iter().cloned().collect();
     let data = get_jan_data_folder_path(app.clone());
@@ -509,7 +592,19 @@ async fn call_tool<R: Runtime>(
             .iter()
             .map(agent_summary)
             .collect::<Vec<_>>()),
-        "gchat_start_run" => start_run(app, project, session_id, &args).await?,
+        "gchat_start_run" => {
+            start_run(
+                app,
+                project,
+                session_id,
+                &args,
+                BridgeCaller {
+                    opencode_session_id: caller,
+                    policy,
+                },
+            )
+            .await?
+        }
         "gchat_list_runs" => json!(list_runs_for_project(app, project).await?),
         "gchat_get_run" => json!(get_run(app, project, arg(&args, "runId")?).await?),
         "gchat_cancel_run" => {
@@ -518,7 +613,21 @@ async fn call_tool<R: Runtime>(
             cancel_bridge_run(app.state(), run_id.into()).await?;
             json!({"cancelled":true,"runId":run_id})
         }
-        _ => return execute_tool(app, project, session_id, rpc_id, name, args, policy).await,
+        _ => {
+            return execute_tool(
+                app,
+                project,
+                session_id,
+                rpc_id,
+                name,
+                args,
+                BridgeCaller {
+                    opencode_session_id: caller,
+                    policy,
+                },
+            )
+            .await
+        }
     };
     Ok(json!({"content":[{"type":"text","text":result.to_string()}]}))
 }
@@ -529,8 +638,12 @@ async fn execute_tool<R: Runtime>(
     rpc_id: Value,
     name: &str,
     arguments: Value,
-    policy: BridgePolicy,
+    caller: BridgeCaller,
 ) -> Result<Value, String> {
+    let BridgeCaller {
+        opencode_session_id,
+        policy,
+    } = caller;
     let catalog = capabilities::load_catalog(app.clone()).await?;
     let descriptor = catalog
         .tools
@@ -566,11 +679,13 @@ async fn execute_tool<R: Runtime>(
     let (finished_tx, finished_rx) = oneshot::channel();
     let (registered_tx, registered_rx) = oneshot::channel();
     let registered = Arc::new(Mutex::new(Some(registered_tx)));
+    let origin_session_id = policy.origin_session_id.clone();
     let request = capabilities::CapabilityExecuteRequest {
         run_id: run_id.clone(),
         session_id: policy
             .origin_session_id
-            .unwrap_or_else(|| session_id.into()),
+            .clone()
+            .ok_or("Code policy requires an origin session ID")?,
         model_id,
         tool_name: name.into(),
         arguments,
@@ -578,6 +693,7 @@ async fn execute_tool<R: Runtime>(
         external_roots: policy.external_roots,
         auto_approve: policy.auto_approve,
         selected_skill: None,
+        attachments: vec![],
         disabled_tools: policy.disabled_tools,
     };
     {
@@ -601,6 +717,8 @@ async fn execute_tool<R: Runtime>(
             run_id.clone(),
             BridgeRun {
                 run_id: run_id.clone(),
+                origin_session_id,
+                caller_session_id: Some(opencode_session_id),
                 definition_name: descriptor.identity.clone(),
                 status: "queued".into(),
                 stage: None,
@@ -788,8 +906,12 @@ async fn start_run<R: Runtime>(
     project: &Path,
     session_id: &str,
     args: &Value,
+    caller: BridgeCaller,
 ) -> Result<Value, String> {
-    let policy = session_policy(session_id)?;
+    let BridgeCaller {
+        opencode_session_id,
+        policy,
+    } = caller;
     let disabled = policy.disabled_tools.iter().cloned().collect();
     let task = arg(args, "task")?.trim();
     let request_id = arg(args, "requestId")?.trim();
@@ -814,7 +936,15 @@ async fn start_run<R: Runtime>(
     }
     let requested_model = args.get("modelId").and_then(Value::as_str);
     let fingerprint=json!({"task":task,"definitionId":definition_id,"skillName":skill_name,"modelId":requested_model}).to_string();
-    let retry_key = (session_id.to_string(), request_id.to_string());
+    let origin = policy
+        .origin_session_id
+        .clone()
+        .ok_or("Code policy requires an origin session ID")?;
+    let retry_key = (
+        session_id.to_string(),
+        opencode_session_id.clone(),
+        request_id.to_string(),
+    );
     {
         let state = lock_registry()?;
         if let Some((existing_fingerprint, run_id)) = state.retry_keys.get(&retry_key) {
@@ -898,6 +1028,8 @@ async fn start_run<R: Runtime>(
             run_id.clone(),
             BridgeRun {
                 run_id: run_id.clone(),
+                origin_session_id: Some(origin),
+                caller_session_id: Some(opencode_session_id),
                 definition_name: definition.name.clone(),
                 status: "queued".into(),
                 stage: None,
@@ -1255,6 +1387,7 @@ pub async fn shutdown<R: Runtime>(app: &AppHandle<R>) {
                 cancellation.cancel();
             }
             for (_, session) in state.sessions.drain() {
+                session.closing.cancel();
                 session.server.abort();
             }
             let active = state
@@ -1400,7 +1533,58 @@ mod tests {
         close_session(&connection.session_id);
     }
 
-    async fn rpc(connection: &BridgeConnection, id: u32, method: &str, params: Value) -> Value {
+    fn register_test_runtime(project: &Path, connection: &BridgeConnection, port: u16) {
+        super::super::code_sessions::register_runtime(
+            &connection.session_id,
+            super::super::code_sessions::CodeRuntime {
+                terminal_id: "test-terminal".into(),
+                directory: project.to_string_lossy().into_owned(),
+                port,
+                password: "test-password".into(),
+                executable: None,
+            },
+        )
+        .unwrap();
+    }
+
+    pub(super) fn write_test_reference<R: Runtime>(
+        app: &AppHandle<R>,
+        project: &Path,
+        caller: &str,
+    ) {
+        let origin = caller_origin_id(caller).unwrap();
+        let data = get_jan_data_folder_path(app.clone());
+        super::super::threads::utils::ensure_thread_dir_exists(&data, &origin).unwrap();
+        super::super::threads::file_store::modify_thread(&data, json!({"id":origin,"metadata":{"runtime":"code","code":{"session_id":caller,"directory":project.to_string_lossy()}}})).unwrap();
+    }
+
+    pub(super) fn register_caller<R: Runtime>(
+        app: &AppHandle<R>,
+        project: &Path,
+        connection: &BridgeConnection,
+        caller: &str,
+        mut policy: BridgePolicy,
+    ) {
+        register_test_runtime(project, connection, 0);
+        write_test_reference(app, project, caller);
+        policy.origin_session_id = Some(caller_origin_id(caller).unwrap());
+        update_session_policy(&connection.session_id, policy).unwrap();
+    }
+
+    fn test_session<R: Runtime>(
+        app: &AppHandle<R>,
+        project: &Path,
+        policy: BridgePolicy,
+    ) -> BridgeConnection {
+        let connection = prepare_session(app, project, None, BridgePolicy::default()).unwrap();
+        register_caller(app, project, &connection, "ses_test", policy);
+        connection
+    }
+
+    async fn rpc(connection: &BridgeConnection, id: u32, method: &str, mut params: Value) -> Value {
+        if method == "tools/call" && params["arguments"].get(CALLER_SESSION_KEY).is_none() {
+            params["arguments"][CALLER_SESSION_KEY] = json!("ses_test");
+        }
         reqwest::Client::new()
             .post(&connection.url)
             .bearer_auth(&connection.token)
@@ -1426,8 +1610,7 @@ mod tests {
             disabled_tools: vec!["gchat-native::agent_run".into()],
             ..Default::default()
         };
-        let connection =
-            prepare_session(app.handle(), project.path(), None, agent_disabled.clone()).unwrap();
+        let connection = test_session(app.handle(), project.path(), agent_disabled.clone());
         let tools = rpc(&connection, 1, "tools/list", json!({})).await;
         let start = tools["tools"]
             .as_array()
@@ -1435,13 +1618,13 @@ mod tests {
             .iter()
             .find(|tool| tool["name"] == "gchat_start_run")
             .expect("skill invocation remains available when saved agents are disabled");
-        assert!(start["inputSchema"]["required"]
+        assert!(!start["inputSchema"]["required"]
             .as_array()
             .unwrap()
             .contains(&json!("skillName")));
         assert_eq!(
             start["inputSchema"]["properties"]["definitionId"]["enum"],
-            json!(["general"])
+            Value::Null
         );
         let combined = json!({"task":"do work","requestId":"combined","definitionId":"custom-saved-agent","skillName":"review"});
         let denied = rpc(
@@ -1471,7 +1654,13 @@ mod tests {
             disabled_tools: vec!["gchat-native::skill_invoke".into()],
             ..Default::default()
         };
-        update_session_policy(&connection.session_id, skill_disabled.clone()).unwrap();
+        register_caller(
+            app.handle(),
+            project.path(),
+            &connection,
+            "ses_test",
+            skill_disabled.clone(),
+        );
         let tools = rpc(&connection, 3, "tools/list", json!({})).await;
         let start = tools["tools"]
             .as_array()
@@ -1481,7 +1670,7 @@ mod tests {
             .expect("saved-agent execution remains available when skill invocation is disabled");
         assert!(start["inputSchema"]["properties"]
             .get("skillName")
-            .is_none());
+            .is_some());
         assert_eq!(start["inputSchema"]["additionalProperties"], false);
         let denied = rpc(
             &connection,
@@ -1541,6 +1730,11 @@ mod tests {
             request: rmcp::model::CallToolRequestParam,
             _: rmcp::service::RequestContext<rmcp::RoleServer>,
         ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+            assert_eq!(
+                request.arguments.as_ref().unwrap().len(),
+                1,
+                "internal caller metadata must not reach a configured connector"
+            );
             self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(rmcp::model::CallToolResult::success(vec![
                 rmcp::model::Content::text(format!(
@@ -1571,16 +1765,14 @@ mod tests {
             "configured".into(),
             crate::core::state::RunningServiceEnum::NoInit(client.unwrap()),
         );
-        let connection = prepare_session(
+        let connection = test_session(
             app.handle(),
             project.path(),
-            None,
             BridgePolicy {
                 auto_approve: true,
                 ..Default::default()
             },
-        )
-        .unwrap();
+        );
         let tools = rpc(&connection, 1, "tools/list", json!({})).await;
         let tools = tools["tools"].as_array().unwrap();
         assert!(tools.iter().any(|tool| tool["name"] == "os_fs_read"));
@@ -1607,8 +1799,11 @@ mod tests {
         .await;
         assert!(connected.to_string().contains("configured connector"));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
-        update_session_policy(
-            &connection.session_id,
+        register_caller(
+            app.handle(),
+            project.path(),
+            &connection,
+            "ses_test",
             BridgePolicy {
                 auto_approve: true,
                 disabled_tools: vec![
@@ -1619,10 +1814,9 @@ mod tests {
                 ],
                 ..Default::default()
             },
-        )
-        .unwrap();
+        );
         let tools = rpc(&connection, 4, "tools/list", json!({})).await;
-        assert!(!tools["tools"]
+        assert!(tools["tools"]
             .as_array()
             .unwrap()
             .iter()
@@ -1668,7 +1862,239 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn code_direct_tool_surfaces_approval_and_transport_cancellation_clears_it() {
+    async fn simultaneous_code_callers_keep_distinct_disabled_tools_and_approval_modes() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("note.txt"), "caller B reads this").unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(
+            project.path().join("data"),
+        ));
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (server_io, client_io) = tokio::io::duplex(4096);
+        let (server, client) = tokio::join!(
+            Connector(calls.clone()).serve(server_io),
+            ().serve(client_io)
+        );
+        let server = server.unwrap();
+        app.state::<AppState>().mcp_servers.lock().await.insert(
+            "configured".into(),
+            crate::core::state::RunningServiceEnum::NoInit(client.unwrap()),
+        );
+        let connection =
+            prepare_session(app.handle(), project.path(), None, BridgePolicy::default()).unwrap();
+        register_caller(
+            app.handle(),
+            project.path(),
+            &connection,
+            "ses_A",
+            BridgePolicy {
+                disabled_tools: vec!["gchat-native::os_fs_read".into()],
+                ..Default::default()
+            },
+        );
+        register_caller(
+            app.handle(),
+            project.path(),
+            &connection,
+            "ses_B",
+            BridgePolicy {
+                auto_approve: true,
+                disabled_tools: vec!["gchat-native::os_fs_write".into()],
+                ..Default::default()
+            },
+        );
+        let (a, b) = tokio::join!(
+            rpc(
+                &connection,
+                11,
+                "tools/call",
+                json!({"name":"os_fs_read","arguments":{"path":"note.txt",CALLER_SESSION_KEY:"ses_A"}})
+            ),
+            rpc(
+                &connection,
+                12,
+                "tools/call",
+                json!({"name":"os_fs_read","arguments":{"path":"note.txt",CALLER_SESSION_KEY:"ses_B"}})
+            )
+        );
+        assert_eq!(a["isError"], true);
+        assert!(a.to_string().contains("disabled"));
+        assert_eq!(b["isError"], false);
+        assert!(b.to_string().contains("caller B reads this"));
+        let wire = capabilities::mcp_wire_name("configured", "read");
+        let a = rpc(
+            &connection,
+            13,
+            "tools/call",
+            json!({"name":wire,"arguments":{"key":"A",CALLER_SESSION_KEY:"ses_A"}}),
+        );
+        let b = async {
+            let b = rpc(
+                &connection,
+                14,
+                "tools/call",
+                json!({"name":wire,"arguments":{"key":"B",CALLER_SESSION_KEY:"ses_B"}}),
+            )
+            .await;
+            assert_eq!(b["isError"], false);
+            let pending = tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let rows = list_runs_for_project(app.handle(), project.path())
+                        .await
+                        .unwrap();
+                    if let Some(row) = rows.into_iter().find(|row| !row.approvals.is_empty()) {
+                        break row;
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(pending.origin_session_id.as_deref(), Some("code-ses_A"));
+            assert_eq!(pending.approvals[0]["tool"], wire);
+            assert_eq!(
+                calls.load(std::sync::atomic::Ordering::SeqCst),
+                1,
+                "caller A must still await a human while B proceeds"
+            );
+            opencode_bridge_cancel_run(app.state(), pending.run_id)
+                .await
+                .unwrap();
+        };
+        let (a, ()) = tokio::time::timeout(Duration::from_secs(8), async { tokio::join!(a, b) })
+            .await
+            .unwrap();
+        assert_eq!(a["isError"], true);
+        let rows = list_runs_for_project(app.handle(), project.path())
+            .await
+            .unwrap();
+        assert!(rows
+            .iter()
+            .any(|row| row.origin_session_id.as_deref() == Some("code-ses_A")
+                && row.status == "cancelled"));
+        assert!(rows
+            .iter()
+            .any(|row| row.origin_session_id.as_deref() == Some("code-ses_B")
+                && row.status == "finished"));
+        let missing: Value = reqwest::Client::new().post(&connection.url).bearer_auth(&connection.token)
+            .json(&json!({"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"os_fs_read","arguments":{"path":"note.txt"}}})).send().await.unwrap().json().await.unwrap();
+        assert_eq!(missing["result"]["isError"], true);
+        assert!(missing.to_string().contains("missing its originating"));
+        let unknown = rpc(&connection, 16, "tools/call", json!({"name":"os_fs_read","arguments":{"path":"note.txt",CALLER_SESSION_KEY:"ses_unknown"}})).await;
+        assert_eq!(unknown["isError"], true);
+        assert!(unknown.to_string().contains("not registered"));
+        let outside = tempfile::tempdir().unwrap();
+        write_test_reference(app.handle(), outside.path(), "ses_outside");
+        let outside_call = rpc(&connection, 17, "tools/call", json!({"name":"os_fs_read","arguments":{"path":"note.txt",CALLER_SESSION_KEY:"ses_outside"}})).await;
+        assert_eq!(outside_call["isError"], true);
+        assert!(outside_call.to_string().contains("another workspace"));
+        close_session(&connection.session_id);
+        server.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn child_code_calls_inherit_live_parent_policy_without_creating_child_history() {
+        let project = tempfile::tempdir().unwrap();
+        std::fs::write(project.path().join("note.txt"), "parent-owned file").unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        let data = project.path().join("data");
+        app.manage(crate::test_support::TestDataRoot(data.clone()));
+        let connection =
+            prepare_session(app.handle(), project.path(), None, BridgePolicy::default()).unwrap();
+        register_caller(
+            app.handle(),
+            project.path(),
+            &connection,
+            "ses_root",
+            BridgePolicy::default(),
+        );
+        let root_info = json!({"id":"ses_root","directory":project.path().to_string_lossy(),"title":"Parent task"});
+        let child_info = json!({"id":"ses_child","parentID":"ses_root","directory":project.path().to_string_lossy(),"title":"Worker task"});
+        let api_listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        api_listener.set_nonblocking(true).unwrap();
+        let port = api_listener.local_addr().unwrap().port();
+        let child_for_api = child_info.clone();
+        let root_for_api = root_info.clone();
+        let api_reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let reads_for_api = api_reads.clone();
+        let api = Server::from_tcp(api_listener)
+            .unwrap()
+            .serve(make_service_fn(move |_| {
+                let root = root_for_api.clone();
+                let child = child_for_api.clone();
+                let reads = reads_for_api.clone();
+                async move {
+                    Ok::<_, Infallible>(service_fn(move |request: Request<Body>| {
+                        let value = match request.uri().path() {
+                            "/session/ses_root" => root.clone(),
+                            "/session/ses_child" => child.clone(),
+                            _ => Value::Null,
+                        };
+                        reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        async move { Ok::<_, Infallible>(response(StatusCode::OK, value)) }
+                    }))
+                }
+            }));
+        let api_task = tokio::spawn(api);
+        register_test_runtime(project.path(), &connection, port);
+        let reported = reqwest::Client::new()
+            .post(format!("{}/history", connection.url))
+            .bearer_auth(&connection.token)
+            .json(&json!({"kind":"caller","info":child_info,"parents":[root_info]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            reported.status(),
+            StatusCode::OK,
+            "{}",
+            reported.text().await.unwrap()
+        );
+        assert_eq!(
+            api_reads.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "the native boundary independently checks actual child and root through the public API"
+        );
+        let read = rpc(&connection, 21, "tools/call", json!({"name":"os_fs_read","arguments":{"path":"note.txt",CALLER_SESSION_KEY:"ses_child"}})).await;
+        assert_eq!(read["isError"], false);
+        assert!(read.to_string().contains("parent-owned file"));
+        let rows = list_runs_for_project(app.handle(), project.path())
+            .await
+            .unwrap();
+        assert_eq!(rows[0].origin_session_id.as_deref(), Some("code-ses_root"));
+        assert_eq!(rows[0].caller_session_id.as_deref(), Some("ses_child"));
+        assert!(
+            super::super::code_sessions::get_reference(&data, "code-ses_child")
+                .unwrap()
+                .is_none()
+        );
+        assert!(!super::super::threads::utils::get_thread_dir(&data, "code-ses_child").exists());
+        update_session_policy(
+            &connection.session_id,
+            BridgePolicy {
+                origin_session_id: Some("code-ses_root".into()),
+                auto_approve: true,
+                disabled_tools: vec!["gchat-native::os_fs_read".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let denied = rpc(&connection, 22, "tools/call", json!({"name":"os_fs_read","arguments":{"path":"note.txt",CALLER_SESSION_KEY:"ses_child"}})).await;
+        assert_eq!(denied["isError"], true);
+        assert!(denied.to_string().contains("disabled"));
+        close_session(&connection.session_id);
+        assert!(
+            super::super::code_sessions::caller_origin(&connection.session_id, "ses_child")
+                .unwrap_err()
+                .contains("closed")
+        );
+        api_task.abort();
+    }
+
+    #[tokio::test]
+    async fn new_caller_waits_for_its_own_policy_and_close_interrupts_admission() {
         let project = tempfile::tempdir().unwrap();
         let app = tauri::test::mock_app();
         app.manage(AppState::default());
@@ -1677,6 +2103,46 @@ mod tests {
         ));
         let connection =
             prepare_session(app.handle(), project.path(), None, BridgePolicy::default()).unwrap();
+        register_test_runtime(project.path(), &connection, 0);
+        write_test_reference(app.handle(), project.path(), "ses_waiting");
+        let (ready, ()) = tokio::join!(
+            wait_origin_policy(&connection.session_id, "ses_waiting"),
+            async {
+                tokio::task::yield_now().await;
+                register_caller(
+                    app.handle(),
+                    project.path(),
+                    &connection,
+                    "ses_waiting",
+                    BridgePolicy::default(),
+                );
+            }
+        );
+        ready.unwrap();
+        write_test_reference(app.handle(), project.path(), "ses_closing");
+        let (closed, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+            tokio::join!(
+                wait_origin_policy(&connection.session_id, "ses_closing"),
+                async {
+                    tokio::task::yield_now().await;
+                    close_session(&connection.session_id);
+                }
+            )
+        })
+        .await
+        .unwrap();
+        assert!(closed.unwrap_err().contains("closing"));
+    }
+
+    #[tokio::test]
+    async fn code_direct_tool_surfaces_approval_and_transport_cancellation_clears_it() {
+        let project = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(
+            project.path().join("data"),
+        ));
+        let connection = test_session(app.handle(), project.path(), BridgePolicy::default());
         let request = rpc(
             &connection,
             42,
@@ -1740,16 +2206,14 @@ mod tests {
         app.manage(AppState::default());
         let data = project.path().join("data");
         app.manage(crate::test_support::TestDataRoot(data.clone()));
-        let connection = prepare_session(
+        let connection = test_session(
             app.handle(),
             project.path(),
-            None,
             BridgePolicy {
                 auto_approve: true,
                 ..Default::default()
             },
-        )
-        .unwrap();
+        );
         let mut definition = definitions::general_agent();
         definition.id = "code-confirmation-test".into();
         definition.name = "Code confirmation test".into();
@@ -1837,6 +2301,8 @@ mod tests {
             run_id.clone(),
             BridgeRun {
                 run_id: run_id.clone(),
+                origin_session_id: None,
+                caller_session_id: None,
                 definition_name: "Team".into(),
                 status: "running".into(),
                 stage: None,
