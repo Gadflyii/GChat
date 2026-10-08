@@ -59,12 +59,15 @@ impl FleetClient {
         path: &str,
         body: Option<&serde_json::Value>,
     ) -> Result<serde_json::Value, ClientError> {
-        tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            self.client.request_json(host_id, method, path, body),
-        )
-        .await
-        .map_err(|_| ClientError::Offline("Fleet host did not respond".into()))?
+        self.client
+            .request_json_bounded(
+                host_id,
+                method,
+                path,
+                body,
+                std::time::Duration::from_secs(10),
+            )
+            .await
     }
 
     /// Discover published locators only when no authority was already selected.

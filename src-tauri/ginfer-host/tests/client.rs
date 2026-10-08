@@ -34,6 +34,27 @@ impl CredentialStore for Vault {
         })
     }
 }
+
+#[derive(Default)]
+struct StallingVault {
+    inner: Vault,
+    stalled: std::sync::atomic::AtomicBool,
+}
+impl CredentialStore for StallingVault {
+    fn get(&self, id: Uuid) -> CredentialFuture<'_, String> {
+        if self.stalled.load(std::sync::atomic::Ordering::SeqCst) {
+            Box::pin(std::future::pending())
+        } else {
+            self.inner.get(id)
+        }
+    }
+    fn set<'a>(&'a self, id: Uuid, token: &'a str) -> CredentialFuture<'a, ()> {
+        self.inner.set(id, token)
+    }
+    fn delete(&self, id: Uuid) -> CredentialFuture<'_, ()> {
+        self.inner.delete(id)
+    }
+}
 async fn tls(host: Arc<Host>) -> (String, tokio::task::JoinHandle<()>) {
     tls_with_snapshot_gate(host, None).await
 }
@@ -728,6 +749,105 @@ async fn typed_requests_distinguish_stopped_hosts_from_vault_auth_and_pin_proble
         .await
         .unwrap_err()
         .is_offline());
+}
+
+#[tokio::test]
+async fn fleet_deadline_keeps_a_stalled_vault_actionable_and_preserves_cached_pools() {
+    use ginfer_host::{
+        engine_registry::InstanceRef,
+        fleet::{AuthorityLocator, FleetOperation, FleetPool, FleetPoolMember, FleetUpdate},
+        fleet_client::{FleetClient, FleetHostPhase},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let host = Host::open(
+        root.path().join("host"),
+        "Vault fixture".into(),
+        std::env::current_exe().unwrap(),
+        vec![],
+        vec![],
+        vec![],
+    )
+    .await
+    .unwrap();
+    let (origin, server) = tls(host.clone()).await;
+    host.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
+    let vault = Arc::new(StallingVault::default());
+    let client = Arc::new(Client::new(
+        Some(root.path().join("registry.json")),
+        vault.clone(),
+    ));
+    client
+        .pair(PairRequest {
+            host_id: None,
+            base_url: Some(origin.clone()),
+            client_name: "Vault fixture".into(),
+        })
+        .await
+        .unwrap();
+    let saved = client.registered().await.unwrap()[0].clone();
+    let fleet = FleetClient::new(client);
+    fleet
+        .configure(
+            saved.host_id,
+            AuthorityLocator {
+                host_id: saved.host_id,
+                origins: vec![origin],
+                certificate_sha256: saved.certificate_sha256,
+            },
+        )
+        .await
+        .unwrap();
+    let initial = fleet.read().await.unwrap();
+    assert!(initial.connected);
+    let cached = fleet
+        .update(FleetUpdate {
+            expected_revision: initial.snapshot.unwrap().revision,
+            operation: FleetOperation::SavePool {
+                pool: FleetPool {
+                    id: Uuid::new_v4(),
+                    name: "Cached workers".into(),
+                    members: vec![FleetPoolMember {
+                        instance: InstanceRef {
+                            host_id: saved.host_id,
+                            instance_id: Uuid::new_v4(),
+                        },
+                        worker_limit: 1,
+                    }],
+                },
+            },
+        })
+        .await
+        .unwrap();
+    vault
+        .stalled
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let started = std::time::Instant::now();
+    let report = tokio::time::timeout(std::time::Duration::from_secs(20), fleet.read())
+        .await
+        .expect("The existing ten-second fleet deadline must include credential lookup")
+        .unwrap();
+    assert!(started.elapsed() >= std::time::Duration::from_secs(10));
+    assert!(!report.connected);
+    assert!(report.error.is_none());
+    assert_eq!(report.snapshot, Some(cached.clone()));
+    assert_eq!(report.host_issues.len(), 1);
+    let issue = &report.host_issues[0];
+    assert_eq!(issue.host_id, saved.host_id);
+    assert_eq!(issue.phase, FleetHostPhase::Coordinator);
+    assert!(
+        !issue.offline,
+        "A stalled credential store is not an offline host"
+    );
+    assert!(issue.message.contains("secure storage"));
+    vault
+        .stalled
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    let recovered = fleet.read().await.unwrap();
+    assert!(recovered.connected);
+    assert!(recovered.host_issues.is_empty());
+    assert_eq!(recovered.snapshot, Some(cached));
+    server.abort();
 }
 
 #[tokio::test]

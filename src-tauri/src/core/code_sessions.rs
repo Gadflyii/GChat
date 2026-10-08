@@ -462,7 +462,7 @@ mod tests {
         let child = json!({"id":"ses_child","parentID":"ses_root","directory":directory});
         let root = json!({"id":"ses_root","directory":directory,"title":"Root task"});
         check_ancestry(&[child.clone(), root.clone()], project.path()).unwrap();
-        assert!(check_ancestry(&[child.clone()], project.path()).is_err());
+        assert!(check_ancestry(std::slice::from_ref(&child), project.path()).is_err());
         assert!(check_ancestry(
             &[
                 child.clone(),

@@ -1,4 +1,5 @@
 //! Trust on first pairing; saved connections pin the enrolled TLS certificate.
+use crate::client::ClientError;
 use rustls::{Certificate, PrivateKey, ServerName};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -14,8 +15,8 @@ pub async fn host_snapshot_at(
     fingerprint: &str,
     token: &str,
     expected: uuid::Uuid,
-) -> Result<serde_json::Value, String> {
-    let mut url = reqwest::Url::parse(origin).map_err(|e| e.to_string())?;
+) -> Result<serde_json::Value, ClientError> {
+    let mut url = reqwest::Url::parse(origin).map_err(|e| ClientError::Problem(e.to_string()))?;
     if url.scheme() != "https"
         || url.host_str().is_none()
         || !url.username().is_empty()
@@ -33,19 +34,34 @@ pub async fn host_snapshot_at(
         .timeout(Duration::from_secs(3))
         .send()
         .await
-        .map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("host returned {}", response.status()));
-    }
-    let snapshot: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-    let parsed: crate::engine_registry::HostSnapshot =
-        serde_json::from_value(snapshot.clone()).map_err(|e| e.to_string())?;
+        .map_err(ClientError::from)?;
+    let snapshot = response_json(response).await?;
+    let parsed: crate::engine_registry::HostSnapshot = serde_json::from_value(snapshot.clone())
+        .map_err(|e| ClientError::Problem(e.to_string()))?;
     if parsed.host_id != expected
         || parsed.protocol_version != crate::engine_registry::HOST_PROTOCOL_VERSION
     {
         return Err("endpoint identity or protocol does not match paired host".into());
     }
     Ok(snapshot)
+}
+
+pub(crate) async fn response_json(
+    response: reqwest::Response,
+) -> Result<serde_json::Value, ClientError> {
+    let status = response.status();
+    let body = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(ClientError::from)?;
+    if !status.is_success() {
+        return Err(format!(
+            "host returned {status}: {}",
+            body.get("error").unwrap_or(&body)
+        )
+        .into());
+    }
+    Ok(body)
 }
 
 #[derive(Serialize, Deserialize)]

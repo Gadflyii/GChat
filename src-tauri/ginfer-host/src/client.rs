@@ -3,7 +3,7 @@
 use crate::{
     discovery::Discovery,
     engine_registry::{EngineRegistry, RegisteredHost},
-    transport::pinned_client,
+    transport::{host_snapshot_at, pinned_client, response_json},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -65,6 +65,8 @@ impl From<reqwest::Error> for ClientError {
                         | std::io::ErrorKind::ConnectionReset
                         | std::io::ErrorKind::NotConnected
                         | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::NetworkUnreachable
+                        | std::io::ErrorKind::HostUnreachable
                 );
             }
             let detail = cause.to_string();
@@ -351,44 +353,6 @@ fn publish_local_owner(
     Ok(())
 }
 
-async fn response_json(response: reqwest::Response) -> Result<Value, ClientError> {
-    let status = response.status();
-    let body = response.json::<Value>().await.map_err(ClientError::from)?;
-    if !status.is_success() {
-        return Err(format!(
-            "host returned {status}: {}",
-            body.get("error").unwrap_or(&body)
-        )
-        .into());
-    }
-    Ok(body)
-}
-
-async fn snapshot_at(
-    origin: &str,
-    fingerprint: &str,
-    token: &str,
-    expected: Uuid,
-) -> Result<Value, ClientError> {
-    let origin = endpoint(origin)?;
-    let response = pinned_client(fingerprint)?
-        .get(format!("{origin}/host/v1/snapshot"))
-        .bearer_auth(token)
-        .timeout(std::time::Duration::from_secs(3))
-        .send()
-        .await
-        .map_err(ClientError::from)?;
-    let snapshot = response_json(response).await?;
-    let parsed: crate::engine_registry::HostSnapshot = serde_json::from_value(snapshot.clone())
-        .map_err(|error| ClientError::Problem(error.to_string()))?;
-    if parsed.host_id != expected
-        || parsed.protocol_version != crate::engine_registry::HOST_PROTOCOL_VERSION
-    {
-        return Err("endpoint identity or protocol does not match paired host".into());
-    }
-    Ok(snapshot)
-}
-
 impl Client {
     pub fn new(path: Option<PathBuf>, credentials: Arc<dyn CredentialStore>) -> Self {
         Self {
@@ -602,11 +566,11 @@ impl Client {
             (state.registry.poll_connection(id)?, host, alternatives)
         };
         let mut network_started = false;
-        let result = tokio::time::timeout(std::time::Duration::from_secs(8), async {
+        let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             use futures_util::StreamExt;
             let token = self.secret(host.client_id).await?;
             network_started = true;
-            match snapshot_at(&host.base_url, &host.certificate_sha256, &token, id).await {
+            match host_snapshot_at(&host.base_url, &host.certificate_sha256, &token, id).await {
                 Ok(snapshot) => Ok((host.base_url.clone(), snapshot)),
                 Err(mut error) => {
                     let mut probes =
@@ -614,29 +578,22 @@ impl Client {
                             let fingerprint = &host.certificate_sha256;
                             let token = &token;
                             async move {
-                                snapshot_at(&url, fingerprint, token, id)
+                                host_snapshot_at(&url, fingerprint, token, id)
                                     .await
                                     .map(|s| (url, s))
                             }
                         }))
                         .buffer_unordered(4);
-                    let found = tokio::time::timeout(std::time::Duration::from_secs(7), async {
-                        while let Some(result) = probes.next().await {
-                            match result {
-                                Ok(found) => return Some(found),
-                                Err(problem) if error.is_offline() && !problem.is_offline() => {
-                                    error = problem
-                                }
-                                Err(_) => {}
+                    while let Some(result) = probes.next().await {
+                        match result {
+                            Ok(found) => return Ok(found),
+                            Err(problem) if error.is_offline() && !problem.is_offline() => {
+                                error = problem
                             }
+                            Err(_) => {}
                         }
-                        None
-                    })
-                    .await;
-                    match found {
-                        Ok(Some(found)) => Ok(found),
-                        _ => Err(error),
                     }
+                    Err(error)
                 }
             }
         })
@@ -717,6 +674,19 @@ impl Client {
         path: &str,
         body: Option<&Value>,
     ) -> Result<reqwest::Response, ClientError> {
+        self.prepare_request_current(host_id, method, path, body)
+            .await?
+            .send()
+            .await
+            .map_err(ClientError::from)
+    }
+    async fn prepare_request_current(
+        &self,
+        host_id: Uuid,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<reqwest::RequestBuilder, ClientError> {
         let host = self
             .state
             .lock()
@@ -734,7 +704,7 @@ impl Client {
         if let Some(body) = body {
             req = req.json(body);
         }
-        req.send().await.map_err(ClientError::from)
+        Ok(req)
     }
     pub async fn request_json(
         &self,
@@ -744,6 +714,36 @@ impl Client {
         body: Option<&Value>,
     ) -> Result<Value, ClientError> {
         response_json(self.request(id, method, path, body).await?).await
+    }
+    /// Bound the complete operation, keeping registry/vault waits distinct from
+    /// host availability without allocating separate preparation/network budgets.
+    pub(crate) async fn request_json_bounded(
+        &self,
+        id: Uuid,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&Value>,
+        timeout: std::time::Duration,
+    ) -> Result<Value, ClientError> {
+        let mut network_started = false;
+        tokio::time::timeout(timeout, async {
+            self.refresh().await?;
+            let request = self.prepare_request_current(id, method, path, body).await?;
+            network_started = true;
+            let response = request.send().await.map_err(ClientError::from)?;
+            response_json(response).await
+        })
+        .await
+        .map_err(|_| {
+            if network_started {
+                ClientError::Offline("Fleet host did not respond".into())
+            } else {
+                ClientError::Problem(
+                    "Host request preparation did not respond; check the registry and secure storage"
+                        .into(),
+                )
+            }
+        })?
     }
     async fn rollback_pairing(
         &self,

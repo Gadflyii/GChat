@@ -388,8 +388,7 @@ pub async fn catalog<R: Runtime>(app: &AppHandle<R>, data: &Path) -> Result<Cata
             Err(error) => issues.push(error),
         }
     }
-    // Adopt a registered local owner only for an exact legacy migration and only
-    // Only migrate after every paired host confirmed there is no coordinator.
+    // Migrate only after every paired host confirms there is no coordinator.
     if !converted.is_empty()
         && report.authority.is_none()
         && report.error.is_none()
