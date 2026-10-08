@@ -83,6 +83,12 @@ no caller identity, so execution enforces each caller's policy. There is no
 selected-session or permissive fallback. This replaces the initial selected-TUI
 policy design before acceptance.
 
+Review found that the removed native Agent submission path had retained original
+image filenames while ordinary Chat submission/reload did not. Shared delegation
+must preserve names through submission, persisted messages, restored UI parts and
+attachment staging; otherwise requests naming one of several images lose identity.
+The attachment correction is pending integrated verification.
+
 The user's operations-manual request is a separate concurrent GInfer deliverable:
 `/ai/ginfer-worktrees/operations-manual`, branch `docs/operations-manual`, based on
 current release-development `cd9ecacf2`. Its `docs/operations/README.md` owns the
