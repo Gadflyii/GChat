@@ -20,6 +20,7 @@ import { isSessionBusy, useChatSessions } from '@/stores/chat-session-store'
 import { convertThreadMessageToUIMessage, extractContentPartsFromUIMessage } from '../messages'
 import type { GInferContextState } from '../smart-context'
 import type { CapabilitiesService } from '@/services/capabilities/types'
+import * as agentDefinitions from '@/services/agent/definitions'
 
 type ModelStreamPart =
   | { type: 'stream-start'; warnings: [] }
@@ -643,5 +644,70 @@ describe('CustomChatTransport production harness', () => {
     useAppState.setState({ intentionallyStoppedModels: new Set([`ginfer::${modelId}`]) })
     await expect(transport.compactContext('chat-1', [userMessage])).rejects.toThrow('Start the selected model')
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it('uses the matched paired instance loaded context for manual compaction', async () => {
+    const alias = 'ginfer/paired-host/ready-instance'
+    const provider = { provider: 'ginfer-lan', active: true, api_key: '', base_url: 'http://127.0.0.1:1337/v1', models: [], settings: [] } as never
+    useModelProvider.setState({ selectedProvider: 'ginfer-lan', selectedModel: { id: alias, capabilities: [], settings: {} } as never, providers: [provider] })
+    seedServiceHub({
+      rag: { getTools: vi.fn().mockResolvedValue([]) } as never,
+      app: { getServerStatus: vi.fn().mockResolvedValue(true) } as never,
+    })
+    const instances = vi.spyOn(agentDefinitions, 'listAgentModelInstances').mockResolvedValue([
+      { id: 'ginfer/other-host/other-instance', modelId: 'muse', maxContext: 131072 },
+      { id: alias, modelId: 'muse', maxContext: 32768 },
+    ] as never)
+    const factory = vi.spyOn(ModelFactory, 'createModel').mockImplementation(async (modelId, selectedProvider, _params, _override, policy) => {
+      expect(modelId).toBe(alias)
+      expect(selectedProvider.provider).toBe('ginfer-lan')
+      expect(policy?.configuredContextTokens).toBe(32768)
+      policy!.state!.manualCompactionResult = { status: 'compacted' }
+      return fakeStreamingModel([{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: 'stop', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } }])
+    })
+    try {
+      await expect(new CustomChatTransport().compactContext('paired-thread', [userMessage])).resolves.toEqual({ status: 'compacted' })
+      expect(instances).toHaveBeenCalledOnce()
+      expect(factory).toHaveBeenCalledOnce()
+    } finally {
+      instances.mockRestore()
+      factory.mockRestore()
+    }
+  })
+
+  it('keeps a stopped facade stopped when compacting a paired-host conversation', async () => {
+    const alias = 'ginfer/paired-host/ready-instance'
+    useModelProvider.setState({
+      selectedProvider: 'ginfer-lan', selectedModel: { id: alias } as never,
+      providers: [{ provider: 'ginfer-lan', active: true, api_key: '', base_url: 'http://127.0.0.1:1337/v1', models: [], settings: [] }] as never,
+    })
+    seedServiceHub({ app: { getServerStatus: vi.fn().mockResolvedValue(false) } as never })
+    const factory = vi.spyOn(ModelFactory, 'createModel')
+    try {
+      await expect(new CustomChatTransport().compactContext('paired-thread', [userMessage])).rejects.toThrow('Start the local API facade')
+      expect(factory).not.toHaveBeenCalled()
+    } finally {
+      factory.mockRestore()
+    }
+  })
+
+  it.each([undefined, 0])('refuses paired compaction without a reported loaded capacity (%s)', async (capacity) => {
+    const alias = 'ginfer/paired-host/ready-instance'
+    useModelProvider.setState({
+      selectedProvider: 'ginfer-lan', selectedModel: { id: alias, settings: { ctx_len: { controller_props: { value: 131072 } } } } as never,
+      providers: [{ provider: 'ginfer-lan', active: true, api_key: '', base_url: 'http://127.0.0.1:1337/v1', models: [], settings: [] }] as never,
+    })
+    seedServiceHub({ app: { getServerStatus: vi.fn().mockResolvedValue(true) } as never })
+    const instances = vi.spyOn(agentDefinitions, 'listAgentModelInstances').mockResolvedValue(
+      capacity === undefined ? [] : [{ id: alias, maxContext: capacity }] as never
+    )
+    const factory = vi.spyOn(ModelFactory, 'createModel')
+    try {
+      await expect(new CustomChatTransport().compactContext('paired-thread', [userMessage])).rejects.toThrow('did not report its loaded context capacity')
+      expect(factory).not.toHaveBeenCalled()
+    } finally {
+      instances.mockRestore()
+      factory.mockRestore()
+    }
   })
 })

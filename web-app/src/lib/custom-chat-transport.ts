@@ -45,6 +45,7 @@ const stripSpecialTokensTransform = () =>
     },
   })
 import { useServiceStore } from '@/hooks/useServiceHub'
+import { listAgentModelInstances } from '@/services/agent/definitions'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { ModelFactory } from './model-factory'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -321,11 +322,12 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     messages: UIMessage[]
   ): Promise<ManualContextCompactionResult> {
     if (!messages.length) return { status: 'nothing_to_compact' }
-    if (useModelProvider.getState().selectedProvider !== 'ginfer') {
+    if (!['ginfer', 'ginfer-lan'].includes(useModelProvider.getState().selectedProvider)) {
       throw new Error('/compact is available only for a loaded GInfer model.')
     }
     const modelId = useModelProvider.getState().selectedModel?.id
-    if (modelId && useAppState.getState().intentionallyStoppedModels.has(`ginfer::${modelId}`)) {
+    const providerId = useModelProvider.getState().selectedProvider
+    if (modelId && useAppState.getState().intentionallyStoppedModels.has(`${providerId}::${modelId}`)) {
       throw new Error('Start the selected model before compacting context.')
     }
     if (this.contextState.manualCompactionRequested) {
@@ -466,16 +468,26 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
         ttftMark('deltaStart')
         const effectiveProvider = updatedProvider ?? provider
-        if (!isLocalProviderName(effectiveProvider.provider)) {
+        if (effectiveProviderName === 'ginfer-lan' && this.contextState.manualCompactionRequested) {
+          if (!(await this.serviceHub.app().getServerStatus())) {
+            throw new Error('Start the local API facade before compacting paired-host context.')
+          }
+        } else if (!isLocalProviderName(effectiveProvider.provider)) {
           await ensureRemoteProviderReady(effectiveProvider, this.serviceHub)
         }
-        const contextPolicy = effectiveProviderName === 'ginfer'
+        const contextPolicy = effectiveProviderName === 'ginfer' || effectiveProviderName === 'ginfer-lan'
           ? ginferContextPolicyForModel(
               this.threadId ?? options.chatId, modelId,
               updatedProvider?.models, provider.models, this.contextState
             )
           : undefined
-        if (contextPolicy) {
+        if (contextPolicy && effectiveProviderName === 'ginfer-lan') {
+          const instance = (await listAgentModelInstances()).find((candidate) => candidate.id === modelId)
+          if (!instance || typeof instance.maxContext !== 'number' || !Number.isInteger(instance.maxContext) || instance.maxContext <= 0) {
+            throw new Error('The paired GInfer instance is unavailable or did not report its loaded context capacity.')
+          }
+          contextPolicy.configuredContextTokens = instance.maxContext
+        } else if (contextPolicy) {
           const engine = EngineManager.instance().get('ginfer') as
             | { getLoadedContext?: (id: string) => Promise<number | undefined> }
             | undefined

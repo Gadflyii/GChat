@@ -584,6 +584,11 @@ export class ModelFactory {
           contextPolicy
         )
 
+      case 'ginfer-lan':
+        // The facade resolves this ready instance alias; never start a local
+        // model for a paired host. It serves the same exact context protocol.
+        return this.createOpenAICompatibleModel(modelId, provider, localInjected, contextPolicy)
+
       case 'anthropic':
         return this.createAnthropicModel(modelId, provider, override)
 
@@ -780,7 +785,8 @@ export class ModelFactory {
   private static createOpenAICompatibleModel(
     modelId: string,
     provider: ProviderObject,
-    parameters: Record<string, unknown> = {}
+    parameters: Record<string, unknown> = {},
+    contextPolicy?: GInferContextPolicy
   ): LanguageModel {
     const headers: Record<string, string> = {}
 
@@ -806,7 +812,7 @@ export class ModelFactory {
       headers,
       includeUsage: true,
       // Use the IPC-channel streaming fetch (see OpenAI factory rationale).
-      fetch: createLocalStreamingFetch(httpFetch, parameters),
+      fetch: createLocalStreamingFetch(httpFetch, parameters, contextPolicy),
     })
 
     // Some OpenAI-compatible providers (MiniMax, DeepSeek, Moonshot, NVIDIA
