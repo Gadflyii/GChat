@@ -1,5 +1,4 @@
 import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
-// import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 
 import DialogAppUpdater from '@/containers/dialogs/AppUpdater'
 import { Fragment } from 'react/jsx-runtime'
@@ -157,7 +156,6 @@ function RootLayout() {
             <GlobalEventHandler />
             {IS_LOGS_ROUTE ? <LogsLayout /> : <AppLayout />}
           </ExtensionProvider>
-          {/* <TanStackRouterDevtools position="bottom-right" /> */}
           <AgentApprovalDialog inlineThreadId={inlineThreadId} />
           <AgentFolderAccessDialog inlineThreadId={inlineThreadId} />
           <AttachmentIngestionDialog />

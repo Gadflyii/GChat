@@ -31,7 +31,54 @@ Server 2 administration and unrelated Engine speed work are excluded. Ron approv
 controlled dependency alignment on October 9 for the actual React, TypeScript and
 Vitest peer conflicts (OI-105). Preserve runtime and test workflows; do not silence
 conflicts by widening peer ranges. Real fleet/tray/publication acceptance retains
-its actual prerequisites.
+its actual prerequisites. Other dependency upgrades remain excluded.
+
+OI-105 uses the owned frontend/package tree based on accepted source `0a4e2b56c`.
+Select React/DOM 19.2.8, compatible with the unchanged AI SDK's represented React
+peer range; TypeScript ESLint 8.44.1 supports the retained TypeScript 5.9.2 and
+ESLint 9.25.1. Match the extension Vitest UI to its existing 3.2.4 runner, preserving
+`test:ui`. Remove unused interfaces and three Webpack-only loader declarations.
+Core's sole React source reference is the public MCP `ComponentType` type: retain
+that API and its existing type tooling, remove the inaccurate runtime React peer
+and unused development runtime. Do not broaden peers, suppress warnings, replace
+the SDK or add React to non-React extensions. The offline caches lack these new
+React/parser/UI versions; only this alignment's represented packages may be fetched.
+Install into owned dependency/install-state directories, then verify real peer
+graphs, affected tests/typechecks, UI serving and production output. Root owns
+integration, final source verification and native assembly; no shared main or
+Windows dependency directory is changed by this work.
+
+The aligned candidate passes core package/type generation, all 2,092 frontend/core
+checks (six skipped), 102 GInfer and 18 download extension tests, frontend lint and
+TypeScript checks. The actual extension `test:ui --watch` serves its JS/CSS assets
+and passes all 102 tests; watch mode is explicit because the first fixture inherited
+run mode and exited before HTTP acceptance. The corrected fixture stops only its
+owned process group. Offline immutable installs succeed against both lockfiles.
+Unused router devtools and its two commented references are removed; no supported
+workflow imports it. All project-owned peers pass; three unmet peers remain inside
+`@streamdown/cjk` 1.0.2 / remark-cjk-friendly 1.2.3: the wrapper omits `unified`, and
+the two remark packages omit `micromark`. Adding application dependencies cannot
+supply an external parent's peers; published newer wrappers retain these metadata
+faults. Retain the supported CJK behavior and report this external blocker without
+an adapter redesign or peer suppression.
+
+The approved 25.8-second production check ended at 19:23:34Z on October 9 with no
+build warning. Entry JS is 482,388 B; the largest JS chunk is deferred Mermaid at
+499,377 B. The complete 14-file static startup closure is 2,146,064 B; terminal,
+emoji, Mermaid and the code highlighter remain deferred, with zero static cycles.
+All 250 grammar JSON assets and the 466,610 B WASM are emitted. A native Edge
+fixture with observed `--disable-gpu` arguments loads Russian locale, JSON/C++/
+Emacs Lisp syntax, Streamdown code and Mermaid from these emitted assets with zero
+external resource requests. It verifies offline asset behavior, not installed
+startup speed. The disposable profile (16.86 MB) is removed after confirming zero
+owned browser processes; its local server is stopped. Root still owns final native
+integration and acceptance.
+
+Retain `out/oi105-dependency-alignment/` receipts/logs (under 1 MB), the owned core
+package and production bundle, and owned dependency state (about 1.8 GB) until
+integration. Shared main/native dependencies are untouched. The earlier OI-070
+assembly plan must use the aligned accepted graph before execution; it has produced
+no Linux installer. No GPU or native build was run for OI-105.
 
 Implementation evidence: [quality review](gchat-quality.md) and
 [remaining acceptance](../agent-runtime/remaining-acceptance.md).
