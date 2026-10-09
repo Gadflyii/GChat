@@ -19,8 +19,7 @@
     "typescript": "5.9.2"
   },
   "dependencies": {
-    "@gchat/core": "../../core/package.tgz",
-    "ts-loader": "^9.5.0"
+    "@gchat/core": "../../core/package.tgz"
   },
   "files": [
     "dist/*",
