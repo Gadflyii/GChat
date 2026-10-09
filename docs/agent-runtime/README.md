@@ -52,10 +52,13 @@ rejected, and execution retains changed workspace/approval/disabled policy.
 All 21 harness tests passed. These scripted checks do not run a model or count
 rendered tokens. Chat and Agent activity label wrapper calls with the resolved
 native or connector target. Focused presenter tests pass (6), and TypeScript
-`tsc -b` passes. The Rust `core::agent::` suite passed 306 tests (5 ignored),
-and the Code bridge native/MCP session-policy integration test passed. Final
-`make verify` and installed UI replay remain with the coordinator; no runtime
-context capacity changed.
+`tsc -b` passes. **Rust verification correction:** the earlier 306-test Agent
+run and Code bridge test were launched from `/ai/gchat/src-tauri`, not this
+candidate's `src-tauri`; `/ai/gchat/out/oi091-lazy-tools/rust-focused.log`
+therefore does not validate OI-091 Rust changes. The composed candidate gate
+found and corrected two borrowed-string mismatches and an unimported `json!`
+macro in MCP dispatch. Candidate Rust verification remains with the coordinator.
+No runtime context capacity changed.
 
 ## Unified sessions and Code capabilities — accepted October 8 source
 
