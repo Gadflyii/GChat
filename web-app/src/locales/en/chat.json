@@ -52,7 +52,7 @@
   "agentFolderAccess": {
     "title": "Allow folder access",
     "description": "{{tool}} needs access to this folder.",
-    "canEditNotice": "Allowing adds this folder to External with CAN EDIT access for this Agent thread.",
+    "canEditNotice": "Allowing adds this folder to External with CAN EDIT access for this session.",
     "deny": "Deny",
     "allow": "Allow folder",
     "resolveFailed": "Failed to send the folder access decision."
