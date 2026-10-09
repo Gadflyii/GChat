@@ -118,11 +118,18 @@ canonical guards protect compilation and model execution. Windows source
 `0a4e2b56c` built successfully and its packages passed verification. Removing the
 ignored Vite option preserved all 832 frontend files exactly. Manager source
 `43c8d71cf` is reused with explicit producer provenance; its inputs are unchanged.
-C4 has a finite 19:17–19:21Z postmerge smoke slot. The apps are updated and actual Chat acceptance passes; the original profile
-is restored exactly and stopped with zero engines. Dependency alignment is
-integrated as `d78473f38`. Next: test the pending automatic C4/128K candidate under
-booking 279, integrate OI-106, run the composed gate and refresh the affected app
-package. Preserve the distinct producer and acceptance scope of each build.
+C4 returned the postmerge gap at 19:21:08Z: C1/C2/C8 Ready and normal Stop pass,
+plus one short C1 request. The apps are updated and actual Chat acceptance passes.
+The first automatic C4/128K attempt reached Ready but its exact-count preparer
+aborted on an expected over-context upper probe, before inference. The typed
+HTTP correction passed ten native PowerShell component cases and is integrated.
+The corrected run prepared all four exact prompts, then its physical VRAM
+guard stopped the wave after 13.54 seconds at 292 MiB free versus the unchanged
+300 MiB requirement. No capacity pass is claimed. Original-profile restoration
+and stopped/zero-Engine cleanup pass; saved allocation evidence is being reviewed. Dependency alignment is integrated
+as `d78473f38`; reviewed OI-106 local-alias lifecycle and stale-refresh fixes are
+composed. Next: read the actual capacity result, run the final composed gate and
+refresh the affected app package. Preserve each producer and acceptance scope.
 
 ## Current allocation
 
