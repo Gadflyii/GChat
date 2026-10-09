@@ -34,7 +34,16 @@ Implementation evidence: [quality review](gchat-quality.md) and
 [remaining acceptance](../agent-runtime/remaining-acceptance.md).
 The integration candidate contains OI-067 `05e9e8760`, OI-091 `447137298`,
 OI-074/OI-096 `21bbc284f`, OI-072 `6dc94493c` and OI-092–095 `24af05967`.
-Focused gates pass; next action is the composed full gate, then native acceptance.
+Composed frontend gates pass: 2,091 tests, 102 extension tests and all six coverage
+floors. The quality guard caught a mock-only assertion, corrected to actual tool
+output in `adba9ac74`. Rust staging then reproduced a cached build script writing
+the profile catalog into its earlier compile-time worktree. Correct its owning
+manifest lookup to runtime environment, then resume the Rust gate and Clippy;
+passing frontend checks need no repeat for that build-only correction. The
+first root lock wait overlapped another booking after its early lock release;
+all later executions start only inside our booked interval. Current slot is
+17:10–18:10Z (October 9); the other owner completed and released its booking.
+Next: corrected composed Rust verification, then native acceptance.
 
 ## Current allocation
 
