@@ -35,16 +35,14 @@ function normalizeGinferConfig(config) {
     };
 }
 // GInfer server commands
-async function loadGinferModel(binaryPath, hostDirectory, modelId, modelPath, cfg, isEmbedding = false, timeout = 600) {
-    const config = normalizeGinferConfig(cfg);
+async function loadGinferModel(request) {
     return await core.invoke('plugin:ginfer|load_ginfer_model', {
-        binaryPath,
-        hostDirectory,
-        modelId,
-        modelPath,
-        config,
-        isEmbedding,
-        timeout,
+        request: {
+            ...request,
+            config: normalizeGinferConfig(request.config),
+            isEmbedding: request.isEmbedding === undefined ? false : request.isEmbedding,
+            timeout: request.timeout === undefined ? 600 : request.timeout,
+        },
     });
 }
 async function unloadGinferModel(pid) {

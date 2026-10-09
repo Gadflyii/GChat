@@ -1,5 +1,5 @@
 use crate::{
-    commands::GinferConfig,
+    commands::{GinferConfig, GinferLoadRequest},
     state::{GinferSession, SessionInfo, SessionOwner},
 };
 use ginfer_host::{
@@ -92,21 +92,24 @@ fn matches_resident(
 pub async fn load(
     sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     host_binary: PathBuf,
-    engine: PathBuf,
-    directory: PathBuf,
-    model_id: String,
-    model_path: String,
-    config: GinferConfig,
-    is_embedding: bool,
-    timeout: u64,
+    request: GinferLoadRequest,
 ) -> Result<SessionInfo, String> {
-    if is_embedding {
+    if request.is_embedding {
         return Err("GInfer does not provide an embeddings endpoint".into());
     }
+    let GinferLoadRequest {
+        binary_path: engine,
+        host_directory: directory,
+        model_id,
+        model_path,
+        config,
+        timeout,
+        is_embedding: _,
+    } = request;
     let control = Arc::new(
         LocalHost {
             binary: host_binary,
-            engine: engine.clone(),
+            engine,
             engine_runtimes: {
                 #[cfg(target_os = "linux")]
                 { ginfer_host::local_host::desktop_runtimes(directory.parent().ok_or("GChat host has no provider directory")?)? }
@@ -439,6 +442,24 @@ mod tests {
             ..GinferConfig::default()
         };
         let sessions = Arc::new(Mutex::new(HashMap::new()));
+        let embedding = load(
+            sessions.clone(),
+            root.path().join("absent-host"),
+            GinferLoadRequest {
+                binary_path: root.path().join("absent-engine"),
+                host_directory: directory.clone(),
+                model_id: "embedding-alias".into(),
+                model_path: artifact.to_string_lossy().into_owned(),
+                config: config.clone(),
+                is_embedding: true,
+                timeout: 5,
+            },
+        )
+        .await;
+        assert_eq!(
+            embedding.unwrap_err(),
+            "GInfer does not provide an embeddings endpoint"
+        );
         let info = load_on_host(
             sessions.clone(),
             control.clone(),

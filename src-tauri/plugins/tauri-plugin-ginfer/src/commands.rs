@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
 };
 use tauri::{Manager, Runtime, State};
@@ -47,20 +47,32 @@ pub struct UnloadResult {
     error: Option<String>,
 }
 
+/// A model load owns its Host paths and requested launch settings.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GinferLoadRequest {
+    pub binary_path: PathBuf,
+    pub host_directory: PathBuf,
+    pub model_id: String,
+    pub model_path: String,
+    pub config: GinferConfig,
+    pub is_embedding: bool,
+    pub timeout: u64,
+}
+
+/// CLI facade settings are separate from Host-owned Engine launch settings.
+pub struct CliEndpointSettings {
+    pub port: u16,
+    pub api_key: String,
+}
+
 /// CLI endpoint settings do not change ownership of the inference process.
 pub async fn load_ginfer_model_impl(
     sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
-    binary_path: &str,
-    host_directory: PathBuf,
-    model_id: String,
-    model_path: String,
-    port: u16,
-    config: GinferConfig,
-    api_key: String,
-    is_embedding: bool,
-    timeout: u64,
+    request: GinferLoadRequest,
+    endpoint_settings: CliEndpointSettings,
 ) -> Result<SessionInfo, String> {
-    let listener = std::net::TcpListener::bind(("127.0.0.1", port))
+    let listener = std::net::TcpListener::bind(("127.0.0.1", endpoint_settings.port))
         .map_err(|e| format!("cannot bind CLI endpoint: {e}"))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -72,26 +84,15 @@ pub async fn load_ginfer_model_impl(
         } else {
             "ginfer-host"
         });
-    let mut info = crate::managed::load(
-        sessions.clone(),
-        host_binary,
-        Path::new(binary_path).to_path_buf(),
-        host_directory,
-        model_id,
-        model_path,
-        config,
-        is_embedding,
-        timeout,
-    )
-    .await?;
+    let mut info = crate::managed::load(sessions.clone(), host_binary, request).await?;
     let endpoint = crate::cli_endpoint::CliEndpoint::start(
         listener,
         info.port,
         info.api_key.clone(),
-        api_key.clone(),
+        endpoint_settings.api_key.clone(),
     )?;
     info.port = port;
-    info.api_key = api_key;
+    info.api_key = endpoint_settings.api_key;
     let mut map = sessions.lock().await;
     let session = map
         .get_mut(&info.pid)
@@ -104,13 +105,7 @@ pub async fn load_ginfer_model_impl(
 #[tauri::command]
 pub async fn load_ginfer_model<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
-    binary_path: &str,
-    host_directory: String,
-    model_id: String,
-    model_path: String,
-    config: GinferConfig,
-    is_embedding: bool,
-    timeout: u64,
+    request: GinferLoadRequest,
 ) -> Result<SessionInfo, String> {
     let state: State<GinferState> = app_handle.state();
     let bundled_host = app_handle
@@ -124,24 +119,16 @@ pub async fn load_ginfer_model<R: Runtime>(
             "ginfer-host"
         });
     #[cfg(target_os = "linux")]
-    let host_binary = Path::new(&host_directory).parent().ok_or("GChat host has no provider directory")?
+    let host_binary = request
+        .host_directory
+        .parent()
+        .ok_or("GChat host has no provider directory")?
         .join("bin/ginfer-host");
     #[cfg(not(target_os = "linux"))]
     let host_binary = bundled_host;
     #[cfg(target_os = "linux")]
     let _ = bundled_host;
-    crate::managed::load(
-        state.ginfer_process.clone(),
-        host_binary,
-        Path::new(binary_path).to_path_buf(),
-        host_directory.into(),
-        model_id,
-        model_path,
-        config,
-        is_embedding,
-        timeout,
-    )
-    .await
+    crate::managed::load(state.ginfer_process.clone(), host_binary, request).await
 }
 
 pub async fn stop_session(

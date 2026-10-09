@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Own GInfer model load requests](2026-10-09-own-ginfer-model-load-requests.md)
+
 - [Share host management and fleet pools](2026-10-08-share-host-management-and-fleet-pools.md)
 
 - [Unify conversations and expose shared capabilities in Code](2026-10-08-unify-conversations-and-code-capabilities.md)
