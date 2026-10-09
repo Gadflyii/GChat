@@ -7,7 +7,7 @@ Start with the root [README](../README.md) for product scope and releases, or
 | --- | --- |
 | Current installer refresh | [Installer refresh](installer-refresh/README.md) |
 | Shared Chat/Agent capabilities and recovery | [Agent runtime](agent-runtime/README.md) |
-| Remaining release acceptance | [Open work](open-work.md) |
+| Master issues and TODOs | [Open work](open-work.md) |
 | Verification and its limits | [Critical flows](testing-critical-flows.md) |
 | Model/profile ownership and launcher | [Model management](model-management.md) |
 | Recorded profile qualification | [Profile evidence](model-profile-evidence.md) |

@@ -1,80 +1,29 @@
 # Open work
 
-Updated 2026-10-08. This is the active GChat release-acceptance list. Completed
-implementation and historical measurements are not pending tasks.
+GInfer's `docs/maintainer/open-work.md` is the single master issue and TODO list
+for the engine, serving, GChat and GInfer Server Manager. The current coordinator
+copy is [the master list](/ai/ginfer-worktrees/open-work/docs/maintainer/open-work.md)
+on branch `docs/open-work`; its owner integrates updates into GInfer. This page
+is a navigation pointer, not a second backlog.
 
-- **Installed Windows acceptance:** exercise the selected release in its actual
-  WebView, including the Muse 131072/C4 first-question case: the context meter
-  should show exact rendered-request usage (including instructions and tools),
-  oversized current-turn tool results should be summarized for the request while
-  their transcript and tool-call IDs remain intact, and context exhaustion should
-  direct the user to change the host profile or shorten the request without an
-  automatic process reload. Also check older-turn/manual compaction, agent
-  tool-boundary checkpoints, approvals, workspace/history continuation, and
-  interactive Hermes launch. Source edits and automated coverage do not establish
-  the installed walkthrough. October 1 testing reproduced a completed ordinary
-  tool-follow-up answer that remained Working, plus lost terminal-stage throughput
-  and unnecessary access prompts for agents' own handoff files. Fixes and
-  verification are tracked in [agent runtime](agent-runtime/README.md). The earlier
-  context/format warnings did not recur; their cause remains unconfirmed.
-  Coordinator run status currently follows synthesis, so a Finished run can
-  contain workers that exhausted their budgets; loop-breaker fallback replies
-  also appear finished. Correct terminal reporting separately from the current
-  installer refresh. Raising step budgets alone does not address repeated work.
-- **Physical worker pools:** exercise queueing, cancellation, disconnection, and
-  concurrent workers across real paired hosts. Baseline two-host discovery,
-  pairing, inference/lifecycle, native Windows vault, and platform service checks
-  have already passed; see [host setup](lan-host-setup.md).
-- **Release assembly:** confirm the selected engine runtime and accepted catalogs
-  in final platform bundles, then validate the installed result. Local Windows
-  2.0.42 installers exist; their presence does not qualify subsequent source edits.
-  October 8 shared sessions, Code capabilities, document access and compaction
-  fixes are included in the rebuilt and installed local Windows release, with
-  current GChat/Host and the standalone Manager. Both actual windows attach the
-  original real Host; payload, startup and user-data preservation checks pass.
-  The exact existing clean engine `6138913f` and 103 profiles are retained.
-  Local click testing and real-model replay remain open. Standalone Manager
-  Linux/Windows packages and shared fleet state are accepted; real-fleet click
-  testing requires a chosen coordinator and matching remote host versions.
-  Server 2 received no update. Linux native tray/vault acceptance remains open
-  on a desktop with those providers. See [Manager status](ginfer-manager/README.md).
-  The Linux 2.0.42 AppImage was rebuilt on September 30 against Ubuntu 24.04;
-  its bundled host and profile catalog were checked. It still needs the October 8
-  client/host source refresh. Server 2 was uninstalled at
-  the user's request, preserving data and models. The prior X11 startup check
-  does not qualify this new build. See [installer refresh](installer-refresh/README.md).
-  Per-SKU model and TP qualification requires exact artifacts and available hardware;
-  see [profile evidence](model-profile-evidence.md). Do not relabel older measurements
-  as qualification of a new engine.
-- **G.bench live lifecycle:** exercise installed community-client signed publication,
-  receipt-based deletion, lost-response retry, and concurrent replay/rollback with
-  designated test results. Official signed publication and readback of 12 reference
-  series / 36 points have passed. Preserve those reference results and receipts.
-- **Frontend bundle size:** the production build reports chunks above 500 kB,
-  including syntax grammars and the main application bundle. Review loading and
-  splitting with measurements; do not hide the advisory by raising its threshold.
-- **Performance evidence:** idle and long-chat UI performance has not been measured.
-  Profile a concrete issue before proposing further rendering changes.
+GChat's October 9 inventory is recorded in OI-066 through OI-077. Existing
+OI-056/OI-057 cover current-engine integration and Linux desktop acceptance.
+Rows distinguish reproduced defects, acceptance gaps and deferred work. Completed
+Chat/Code/agent capabilities, throughput, Stop, permission and prompt fixes are
+implementation evidence rather than new open defects.
 
-Chat counts the exact rendered GInfer request before admission and reports that
-usage against the running context capacity when available. Automatic chat
-compaction checkpoints older complete turns in the wire request and preserves the
-stored transcript. If the current turn alone is too large, oversized tool results
-are summarized in bounded chunks for that request; original transcript messages
-and tool-call IDs remain intact. GInfer capacity is startup-fixed, so an
-unadmittable request reports that the user must select a larger host profile or
-reduce the request; GChat does not automatically grow and reload the process.
-Native agents checkpoint completed tool exchanges, including within a task, and
-preserve full transcript/artifact history. Manual `/compact` and the worker
-Compact control use their respective context managers. The Windows case above
-remains pending the user's real-model walkthrough of the installed October 8
-Windows update; assembly/startup checks do not establish that behavior.
+Check the master list before adding an issue. Edit only in
+`/ai/ginfer-worktrees/open-work` under `flock /tmp/ginfer-open-work.lock`, preserve
+other owners' work, and commit for the owning coordinator to merge. Record the
+symptom, reproduction, affected source/build, host and evidence; update an
+existing row instead of duplicating it.
 
-The website source lives separately in the Sectile Web `site/gbench` directory,
-outside this repository. Its deployment and private configuration are not covered
-by a GChat Git push. Official reference imports and current board behavior are
-recorded in the [reference-results decision](decisions/2026-09-19-official-reference-results.md).
+Current implementation, acceptance evidence and retained packages remain in
+[Agent runtime](agent-runtime/README.md), [Manager](ginfer-manager/README.md),
+[Installer refresh](installer-refresh/README.md), [Host UI](host-ui/README.md) and
+[profile evidence](model-profile-evidence.md). Use
+[critical-flow verification](testing-critical-flows.md) for the automated gate.
+The G.bench website lives in the separate Sectile Web `site/gbench` repository.
 
-Use [critical-flow verification](testing-critical-flows.md) for the automated gate.
-Do not treat this list as authorization to replace running engines, delete user
-state, republish results, or begin a hardware qualification campaign.
+Issue registration does not authorize model/engine replacement, data deletion,
+reference-result publication, Server 2 deployment or GPU qualification.

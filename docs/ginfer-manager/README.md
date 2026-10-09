@@ -1,6 +1,9 @@
 # GInfer Server Manager
 
 Repository: GChat. Owner: GChat coordinator. Subject: `docs/ginfer-manager/`.
+Open defects and TODOs belong in the [master list](../open-work.md); this record
+retains Manager decisions, implementation and evidence. The fixed-pool startup
+issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
 Accepted runtime source: `ce6a6c0e6` for Windows; `2a6e21ff2` for the retained
 Linux package. Packages and native proof live in `/ai/gchat/out/ginfer-manager/`.
 Documentation-only handoffs do not rebuild accepted binaries.
@@ -24,65 +27,115 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
-The user's C1/context correction distinguishes request capacity from whole-pool
-allocation. The previous explanation did not establish that the requested context
-lacks VRAM. In installed source `6138913f`, `resolve_ranked_kv_arena_capacity`
-compares the complete fixed arena with post-startup free bytes minus headroom;
-it takes no context or concurrency input. A small C1 workload can fit while an
-unnecessarily large fixed pool fails. The Manager control is an explicit sizing
-workaround, not a demonstrated diagnosis of changed Engine allocations.
-No failure-time CUDA/NVML free-memory breakdown or current request-KV sizing
-measurement exists in the retained error, so neither an accounting defect nor a
-particular competing allocation is established. Clarify the user's reported
-16K/162K value before a new run; the original captured failure was Muse C1/131,072.
-Outcome for this correction is accurate diagnosis, with no context/concurrency
-reduction, new qualification or unrequested GPU campaign. Source inspection and
-the retained error suffice for this distinction; the next unresolved observation
-is the actual startup memory breakdown for the reported failing settings.
-The October 9 00:17 UTC read-only snapshot now shows the Host only, no engine,
-and a saved custom Muse C4/8,192 configuration with automatic KV and 1 GiB
-headroom. Preserve those user settings. Earlier installed acceptance below is
-historical evidence, not the current runtime configuration.
+The October 9 diagnosis of OI-066 is complete at the startup-fit scope. The
+saved tested profile and Host command match: Muse native-NVFP4 text, TP1,
+C4/131,072, DFlash K4, NVFP4 KV, 1,024-token prefill, CUDA graphs enabled,
+Vision disabled, 11,997,806,592 fixed arena bytes and 314,572,800 headroom bytes.
+The catalog records engine `922e5a8`; the installed executable is `6138913f`.
+No `--structured-outputs` flag is passed and its installed default is false.
+Disk/NUMA warnings are nonfatal. The actual rejected reservation is the whole
+fixed pool; it is separate from the memory needed by four 128K requests.
 
-The custom KV-budget correction is installed on RON-9950X3D2 from `ce6a6c0e6`.
-Use **Reload → Custom settings**, clear **GPU KV budget (bytes, blank =
-automatic)**, review the remaining settings and submit **Reload**. Clearing sends
-`kv_arena_bytes: null` and removes qualified-profile attribution, while retaining
-context, concurrency, headroom and all other saved options. A positive byte count
-requests an exact arena. Qualified catalogs and their evidence stay unchanged.
+One bounded native startup reproduced the exact failure without changing saved
+options or sending an inference request. The original qualification used the
+same RTX 5090 UUID, artifact, fixed arena, headroom and C4/context/KV settings.
+Its retained telemetry distinguishes physical NVML availability from the old
+benchmark's CUDA-only startup counter:
 
-The October 8 failure is an explicit-arena fit rejection. The pinned actual Host
-snapshot selected Muse native-NVFP4 text C1 / 131,072, requesting 12,467,568,640
-arena bytes with 314,572,800 headroom bytes from the installed bundled catalog.
-That profile records engine `922e5a8`; installed engine `6138913f` rejects its exact
-arena after startup. Host forwards the saved value unchanged. Disk/NUMA profile
-warnings are nonfatal. No measurement identifies a changed startup allocation or
-establishes current full-context capacity. Manager previously inherited the fixed
-arena without exposing a way to change it; the new control closes that UI gap.
+| Physical GPU free memory / reservation | Passing September test | October 9 retry |
+| --- | ---: | ---: |
+| Before engine startup | 30,963 MiB | 30,104 MiB |
+| Last observed before pool allocation / failure cleanup | 11,831 MiB | 10,983 MiB |
+| Fixed arena | 11,442 MiB | 11,442 MiB |
+| Required safety margin | 300 MiB | 300 MiB |
+| Free required for arena plus margin | 11,742 MiB | 11,742 MiB |
+| Spare above requirement / shortfall | +89 MiB | −759 MiB |
+| Startup consumption between those phases | 19,132 MiB | 19,121 MiB |
 
-The native control is visible with the saved 11.6 GiB value and 131,072/C1 fields.
-A custom Reload at 21:37:59 UTC retained that fixed arena and repeated the failure;
-only `qualified_profile_id` changed to null. Attribution to live user clicking or
-numeric UI automation is unresolved; the user was asked. Interactive form editing
-by automation stopped. No successful automatic launch or native clearing claim is
-made. Next: the user's explicit automatic-budget retry. Requalify current-runtime
-profile capacity before publishing a new fit claim; old measurements are not new
-engine qualification.
+The current GPU already had 859 MiB less free memory before loading. The
+pre-pool difference is 848 MiB; these samples show essentially unchanged startup
+consumption, not a new 1 GiB Engine allocation. The failed process exited and
+free memory returned to its 30,104 MiB starting level. A later read-only check
+found no engine and 30,092 MiB free. The extra baseline usage remains after
+Engine cleanup. The old GPU-client list has no per-client memory amounts, and
+current Windows process memory counters do not reconcile with physical NVML
+usage, so a particular application cannot be named as the owner of that delta.
 
-All apps were closed before the actual update; Manager normal startup opened the
-registered GChat-owned Host. At verification, Manager PID 12192 and Host PID 12996
-share original Host ID `4941572e-7ccf-48b7-a950-de8d4dd731c6` at HTTPS 7443.
-Registry, owner locator, settings and readable native remote grant are preserved.
-Two installed models remain; the instance is failed with no engine running.
-The saved workload, fixed arena and headroom are unchanged by the latest attempt.
-Fleet remains unconfigured. Existing per-host Online/Offline and actionable
-Needs-attention behavior remain. GChat was not rebuilt; Linux retains `2a6e21ff2`.
-Server 2 received no administration or testing.
+In `6138913f`, `registry.cpp` releases the temporary capture arena before
+querying memory and resolving pool capacity. The four native NVFP4 capture
+tails total 33,466,368 bytes (31.916 MiB); even crediting the entire payload again
+after the last 10,983 MiB sample leaves a 727.084 MiB shortfall. Capture release
+also destroys 64 CUDA events whose driver-owned bytes are not quantified.
+The final error is after release, so temporary capture storage does not explain
+away the physical shortage. Requested sampling is 50 ms, effective roughly
+64 ms: the 759 MiB shortfall is a nearby observation, not the exact private
+CUDA/NVML pair at the check.
 
-Current diagnosis, source/native checks, observed state change and cleanup:
-`/ai/gchat/out/manager-kv-startup-20261008/`. Prior offline evidence remains in
-`/ai/gchat/out/manager-offline-status-20261008/`; local GChat installation evidence
-remains in `/ai/gchat/out/local-update-20261008/`.
+Commit `32cf870caa` changed the final query from CUDA-only free bytes to the
+minimum of CUDA process and NVML device-wide free bytes. The original
+qualification reported 12,295 MiB CUDA-free at startup while nearby physical
+telemetry had 11,831 MiB free, a 464 MiB difference. Its apparent CUDA surplus
+of 553 MiB was only 89 MiB of physically observed spare above the required
+reservation. Both the ambient baseline and accounting changed; query change
+alone is not demonstrated as the cause. Source comparison also finds a smaller
+dominant prefill workspace, not the material allocation growth previously
+suspected. HTTP queue settings are host-side and warmup follows construction.
+
+The profile was tested and passed. Its fixed whole-pool reservation has little
+physical tolerance for a busier Windows desktop. OI-066 remains open for the
+owning Host/profile/engine decision on current-memory pool sizing, preserving
+the user's C4/131,072/NVFP4 workload. No catalog, installed binary, headroom or
+saved settings were changed by this diagnosis. Automatic sizing is exposed by
+the installed Manager control from `ce6a6c0e6`; it is a workaround, not proof of
+current full-context qualification or a completed profile fix. Server 2 was
+untouched.
+
+Measured evidence: `/ai/gchat/out/manager-kv-startup-20261008/` contains
+`c4-startup-measured.json`, `c4-startup-gpu.csv`, `c4-diagnosis-summary.json`,
+the pinned repeat snapshot and the redacted effective command. The matched old
+qualification is
+`/mnt/nas/AltaStratusAI/GInfer/qualification/launch-profile-qualification-20260909/profiles/windows-sm120a/rtx5090/muse-native-nvfp4-c4-ctx131072-explicit-margin300m-fit/`.
+Its benchmark, physical telemetry and resource observation remain unchanged.
+The local GPU booking was released at the run's actual end; no owned GPU job
+or lock remains. Available system RAM stayed above 8 GiB throughout the retry.
+
+### C1 and C4 VRAM arithmetic
+
+Read-only calculation: `/ai/gchat/out/manager-kv-startup-20261008/kv-math.py`
+and `kv-math.json`, using Python 3.11. Only the installed artifact's 273,074-byte
+directory and 16-byte header were read; no weight payload was copied or changed.
+Muse has 13 full-attention layers, two KV heads and 128 dimensions. NVFP4 stores
+one byte per two values plus one byte of scale per sixteen values:
+
+`13 × 2 × 128 × 2 (K/V) × (1/2 + 1/16) = 3,744 bytes/token`.
+
+At C1/131,072, full-history payload is 490,733,568 bytes (468 MiB). The 39
+2,048-token INT8 sliding rings, FP16 scales and BF16 open V groups add
+43,450,368 bytes (41.4375 MiB). Five 2,048-token BF16 draft rings with eight KV
+heads add 41,943,040 bytes (40 MiB). Combined cache payload is 576,126,976 bytes
+(549.4375 MiB / 0.537 GiB) for C1 and 2,304,507,904 bytes
+(2,197.75 MiB / 2.146 GiB) for C4. Segmented allocation overhead, retained
+prefixes, pending state, workspaces, graphs and driver allocations are additional;
+these payloads are not exact physical arena minima or launch qualification.
+
+The installed artifact has 627 Text weights, two FP32 KV normalization arrays
+and 81 draft tensors. Their 256-byte-aligned device residency upper bound is
+18,575,123,200 bytes (17.299 GiB); the old benchmark reports 18,575,122,948 bytes,
+252 bytes lower from the last allocation's unused tail padding. Vision, disabled
+in this failure, would add 3,843,814,400 weight bytes (3.580 GiB) and workspaces.
+Native NVFP4 weights still include W8 vocabulary and BF16 tensors; sliding and
+draft KV formats are separate from the full-attention NVFP4 cache.
+
+The earlier October 8 C1 failure requested a different 12,467,568,640-byte
+(11.611 GiB) pool with the same 300 MiB headroom. Its post-failure free memory
+was 30,021 MiB, not a failure-time measurement; that evidence did not establish
+a changed startup allocation. The October 9 matched C4 measurement above now
+establishes whole-pool fit under the actual current device-wide memory state.
+
+At 16,384 tokens, C1 combined cache payload is 139.9375 MiB. Hypothetical
+162,000- and 165,888-token payloads are 659.868 and 673.75 MiB respectively;
+both exceed Muse's supported 131,072-token context and are only arithmetic
+comparisons. The user's repeated launch was C4/131,072, not either larger value.
 
 ## Ownership and fleet contract
 
@@ -183,6 +236,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
+| C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation candidate from `7ebe26ada`; measured trace and arithmetic retained beside existing KV evidence, checkout retired after reviewed merge |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | KV budget evidence | `/ai/gchat/out/manager-kv-startup-20261008/` | Pinned public snapshot/catalogs, review and source/native checks; no credentials or model copy |
 | KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Retired after accepted Windows package/install; shared cache junction detached first |

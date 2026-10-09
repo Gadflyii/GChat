@@ -66,12 +66,15 @@ The subsequent authorized [October 8 local Windows update](../installer-refresh/
 now includes this source and current GChat/Host; normal startup and preserved user
 state pass. The user's real-model and shared-session walkthrough remains open.
 
-GInfer's current source-audited operations manual and six-entry offline release
-payload are accepted on `origin/docs/operations-manual`, implementation
-`66f52a0e2`, handoff `8d0b1a4d1`. Linux staging and native PowerShell archive/link/hash
-checks passed. The owning release-development line must integrate that branch
-before its next runtime assembly; its other owner's dirty index remains untouched.
-The separate authority is `/ai/ginfer-worktrees/operations-manual/docs/operations/README.md`.
+GInfer's source-audited operations manual and six-entry offline release payload
+are accepted at `66f52a0e2`, handoff `8d0b1a4d1`. Linux staging and native
+PowerShell archive/link/hash checks passed. October 9 ancestry inspection confirms
+that implementation is already integrated into `dev/next` at `848fbc624`; the
+earlier pending-integration statement is obsolete. OI-056 in the
+[master list](../open-work.md) owns final selected-engine/Host/client assembly
+and checking its offline documentation payload. This does not qualify current
+development builds or update the older installed engine. The retained authority
+is `/ai/ginfer-worktrees/operations-manual/docs/operations/README.md`.
 
 ## Agent result prompt failure — accepted Windows fix
 
