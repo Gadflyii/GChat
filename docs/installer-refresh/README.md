@@ -26,8 +26,10 @@ MSVC 19.44/CUDA 13.3.73 Release/SM120a, native build `2ef56a52a`, branch
 `dev/oi058-msvc-f6d09756` tip `4f47bb3f9` (documentation only after the build).
 Native compile/link, help, server version, closed ZIP, PE dependencies and all
 six offline operator docs pass; final compiler/linker warnings are zero.
-C3's Linux all-SM check gates the merge. Bubbs authorized Windows UI/model checks
-while that gate runs. Use `ginfer-serve --version`; the CLI has no version flag.
+Bubbs merged the portability branch as `634a16e16`: all four Linux images
+and tests passed, with zero new warnings and 228 SM120a CTest cases. Future
+Windows engine builds start from `dev/next`. The tested native `2ef56a52a`
+payload is retained without a redundant rebuild. Use `ginfer-serve --version`; the CLI has no version flag.
 
 Actual Manager Start with the original Muse C4/131072/NVFP4 fixed pool still
 fails before Ready (OI-066/OI-072). For bounded functional checks, reuse the
@@ -42,8 +44,23 @@ OI-083 reproduces a local Host instance missing from ordinary Chat's picker.
 The native alias route supports local instances; frontend projection and facade
 readiness exclude them. The fix exposes online Ready local and paired instances
 through the same opaque aliases and labels the provider GInfer Hosts. Stopped
-instances/offline hosts remain unavailable. Actual installed Chat acceptance,
-required source checks and rebuilding the corrected app are the next actions.
+instances/offline hosts remain unavailable. Source `a40d7221` passed full
+`make verify`; native NSIS/MSI assembly and the local update passed. Independent
+installed checks confirm the desktop's accepted three-byte bundle tag, exact
+CLI/Host bytes, both 125-payload runtimes and all 103 profile values. Seven
+original thread IDs, original model files, settings, owner, saved runs and Host
+identity/certificate are retained. The actual picker now exposes the Ready local
+instance and the facade starts; OI-083's behavior is verified.
+
+Ordinary Chat completion remains unaccepted (OI-056): the existing active GMCP
+catalog and shared native schemas are injected into every completion. Qwen's
+32K screen cannot fit the current-turn input/output budget; Muse's exact count
+reports 40,666 prepared input tokens versus 32,768 loaded capacity. The capacity
+lookup agrees with the engine metadata. This is a shared tool-payload issue,
+tracked as OI-084; increasing capacity or disabling user tools is not the fix.
+Next: compact tool discovery with exact schema loading through the existing
+capability and permission runtime, then repeat the actual Chat/continued-Chat
+checks. Original saved-profile restoration uses the supported lifecycle.
 
 Owned source: `/ai/gchat-worktrees/oi056-current-engine`, branch
 `dev/oi056-current-engine`; Engine source: `/ai/ginfer-worktrees/gchat-oi056-engine`.
@@ -62,7 +79,11 @@ launcher was updated; no `/tmp` GPU/build lock is used. C4 has the current signe
 startup matrix priority; our next native build starts after its actual release,
 not a predicted time. Keep the physical RAM floor and compile/load exclusion.
 Failures go in GInfer's sole master `docs/maintainer/open-work.md` under its edit
-lock. The future review/cleanup phase waits for bubbs's REVIEW START.
+lock. Ron's newer in-session instruction authorizes the post-Windows-merge GChat bug
+and review phase now. After this client source merges, retire only verified
+owned superseded trees/builds and delegate the remaining GChat master-list
+items plus a dedicated quality/CPU/RAM/polling/thread/comment review. Preserve
+other owners' trees and the accepted installed/build baseline; leave Server 2 alone.
 
 ## Local workstation update — accepted October 8, 2026
 
