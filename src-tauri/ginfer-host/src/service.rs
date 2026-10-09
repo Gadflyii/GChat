@@ -11,7 +11,7 @@ use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::Duration,
@@ -128,6 +128,7 @@ pub struct Host {
     pub processes: Mutex<HostProcesses>,
     pub inventory: RwLock<Vec<ModelEntry>>,
     pub inventory_errors: RwLock<Vec<serde_json::Value>>,
+    inventory_dirty: AtomicBool,
     pub gpus: Vec<Gpu>,
     pub boot_id: Uuid,
     pub revision: AtomicU64,
@@ -345,6 +346,7 @@ impl Host {
             processes: Mutex::new(processes),
             inventory: RwLock::new(vec![]),
             inventory_errors: RwLock::new(vec![]),
+            inventory_dirty: AtomicBool::new(false),
             gpus,
             boot_id: Uuid::new_v4(),
             revision: AtomicU64::new(1),
@@ -363,7 +365,9 @@ impl Host {
         write_private(
             &self.directory.join("host.json"),
             &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
-        )
+        )?;
+        self.inventory_dirty.store(false, Ordering::SeqCst);
+        Ok(())
     }
 
     // The caller holds data's lock through the durable write. Neither another
@@ -534,7 +538,10 @@ impl Host {
         for (path, metadata, artifact_set) in entries {
             let key = serde_json::to_string(&(&path, artifact_set, metadata.tp_size))
                 .map_err(|e| e.to_string())?;
-            let id = *data.models.entry(key).or_insert_with(Uuid::new_v4);
+            let id = *data.models.entry(key).or_insert_with(|| {
+                self.inventory_dirty.store(true, Ordering::SeqCst);
+                Uuid::new_v4()
+            });
             models.insert(
                 id,
                 ModelEntry {
@@ -548,7 +555,7 @@ impl Host {
         *self.inventory.write().await = models.into_values().collect();
         *self.inventory_errors.write().await = errors;
         drop(data);
-        self.save().await?;
+        if self.inventory_dirty.load(Ordering::SeqCst) { self.save().await?; }
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -1723,6 +1730,46 @@ mod target_launch_tests {
             options: LaunchOptions::default(),
         };
         (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn unchanged_inventory_keeps_durable_state_and_refreshes_artifact_metadata() {
+        let (dir, host, _) = installed_flash("groupwise-int", false).await;
+        let path = dir.path().join("state/host.json");
+        let formatted = serde_json::to_vec_pretty(&*host.data.lock().await).unwrap();
+        std::fs::write(&path, &formatted).unwrap();
+        let original = host.inventory.read().await[0].clone();
+        host.scan().await.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), formatted);
+
+        let artifact = dir.path().join("models/flash.ginfer");
+        let file = std::fs::OpenOptions::new().write(true).open(artifact).unwrap();
+        file.set_len(8192).unwrap();
+        drop(file);
+        host.scan().await.unwrap();
+        let updated = host.inventory.read().await[0].clone();
+        assert_eq!(updated.id, original.id);
+        assert_eq!(updated.metadata.size_bytes, 8192);
+        assert_eq!(std::fs::read(&path).unwrap(), formatted);
+    }
+
+    #[tokio::test]
+    async fn new_inventory_mapping_retries_failed_persistence_and_survives_restart() {
+        let (dir, host, _) = installed_flash("groupwise-int", false).await;
+        let state = dir.path().join("state");
+        let path = state.join("host.json");
+        std::fs::copy(dir.path().join("models/flash.ginfer"), dir.path().join("models/second.ginfer")).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(host.scan().await.is_err());
+        let failed_ids: BTreeMap<_, _> = host.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        assert_eq!(failed_ids.len(), 2);
+        std::fs::remove_dir(&path).unwrap();
+        host.scan().await.unwrap();
+        let restarted = Host::open(state, "Ignored".into(), std::env::current_exe().unwrap(),
+            vec![dir.path().join("models")], vec![], vec![]).await.unwrap();
+        let restored_ids: BTreeMap<_, _> = restarted.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        assert_eq!(restored_ids, failed_ids);
     }
 
     #[tokio::test]
