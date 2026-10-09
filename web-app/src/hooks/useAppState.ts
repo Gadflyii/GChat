@@ -30,6 +30,7 @@ type AppState = {
   activeModels: string[]
   intentionallyStoppedModels: Set<string>
   pendingModelStops: number
+  modelStopSequence: number
   cancelToolCall?: () => void
   setServerStatus: (value: 'running' | 'stopped' | 'pending') => void
   updateStreamingContent: (content: ThreadMessage | undefined) => void
@@ -71,6 +72,7 @@ export const useAppState = create<AppState>()((set) => ({
   activeModels: [],
   intentionallyStoppedModels: new Set(),
   pendingModelStops: 0,
+  modelStopSequence: 0,
   updateStreamingContent: (content: ThreadMessage | undefined) => {
     set(() => ({
       streamingContent: content
@@ -189,6 +191,9 @@ export const useAppState = create<AppState>()((set) => ({
       return { intentionallyStoppedModels: next }
     })
   },
-  reserveModelStop: () => set((state) => ({ pendingModelStops: state.pendingModelStops + 1 })),
+  reserveModelStop: () => set((state) => ({
+    pendingModelStops: state.pendingModelStops + 1,
+    modelStopSequence: state.modelStopSequence + 1,
+  })),
   releaseModelStop: () => set((state) => ({ pendingModelStops: Math.max(0, state.pendingModelStops - 1) })),
 }))

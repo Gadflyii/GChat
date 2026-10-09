@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServiceHub } from '@/services'
 import { ensureRemoteProviderReady } from './ensureRemoteProviderReady'
+import { ensureLocalApiServerRunning } from './ensureLocalApiServerRunning'
+import { useAppState } from '@/hooks/useAppState'
+import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 
-const { registerRemoteProvider, setServerStatus, setServerPort } = vi.hoisted(
+const { registerRemoteProvider } = vi.hoisted(
   () => ({
     registerRemoteProvider: vi.fn(),
-    setServerStatus: vi.fn(),
-    setServerPort: vi.fn(),
   })
 )
 
@@ -18,28 +19,6 @@ vi.mock('@/utils/registerRemoteProvider', () => ({
   isKeylessRemoteProvider: (provider: ModelProvider) =>
     provider.base_url?.startsWith('http://localhost') ?? false,
   registerRemoteProvider,
-}))
-
-vi.mock('@/hooks/useAppState', () => ({
-  useAppState: {
-    getState: () => ({ setServerStatus }),
-  },
-}))
-
-vi.mock('@/hooks/useLocalApiServer', () => ({
-  useLocalApiServer: {
-    getState: () => ({
-      serverHost: '127.0.0.1',
-      serverPort: 1337,
-      apiPrefix: '/v1',
-      apiKey: '',
-      trustedHosts: [],
-      corsEnabled: true,
-      verboseLogs: false,
-      proxyTimeout: 600,
-      setServerPort,
-    }),
-  },
 }))
 
 const provider = {
@@ -61,6 +40,10 @@ function serviceHubWithStatus(running: boolean): Pick<ServiceHub, 'app'> {
 describe('ensureRemoteProviderReady', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useAppState.setState({ serverStatus: 'stopped', pendingModelStops: 0, intentionallyStoppedModels: new Set() })
+    useLocalApiServer.setState({ serverHost: '127.0.0.1', serverPort: 1337,
+      apiPrefix: '/v1', apiKey: '', trustedHosts: [], corsEnabled: true,
+      verboseLogs: false, proxyTimeout: 600 })
     registerRemoteProvider.mockResolvedValue(true)
     window.core = {
       api: {
@@ -74,7 +57,7 @@ describe('ensureRemoteProviderReady', () => {
 
     expect(registerRemoteProvider).toHaveBeenCalledWith(provider)
     expect(window.core?.api?.startServer).not.toHaveBeenCalled()
-    expect(setServerStatus).toHaveBeenCalledWith('running')
+    expect(useAppState.getState().serverStatus).toBe('running')
   })
 
   it('starts the proxy before resolving when it is stopped', async () => {
@@ -90,8 +73,25 @@ describe('ensureRemoteProviderReady', () => {
       isVerboseEnabled: false,
       proxyTimeout: 600,
     })
-    expect(setServerStatus).toHaveBeenNthCalledWith(1, 'pending')
-    expect(setServerStatus).toHaveBeenLastCalledWith('running')
+    expect(useAppState.getState().serverStatus).toBe('running')
+  })
+
+  it('shares one native start between persisted Host-provider readiness and the Ready-edge intake', async () => {
+    let releaseStart: (port: number) => void = () => {}
+    vi.mocked(window.core!.api!.startServer).mockImplementation(() =>
+      new Promise<number>(resolve => { releaseStart = resolve }))
+    const services = serviceHubWithStatus(false)
+    const selectedHostProvider = { ...provider, provider: 'ginfer-lan',
+      base_url: 'http://localhost:1337/v1', api_key: '', models: [{ id: 'ginfer/local/instance' }] } as ModelProvider
+    const hydration = ensureRemoteProviderReady(selectedHostProvider, services)
+    const readyEdge = ensureLocalApiServerRunning(services)
+    await vi.waitFor(() => expect(registerRemoteProvider).toHaveBeenCalledWith(selectedHostProvider))
+    await vi.waitFor(() => expect(window.core!.api!.startServer).toHaveBeenCalledOnce())
+    releaseStart(1444)
+    await Promise.all([hydration, readyEdge])
+    expect(window.core!.api!.startServer).toHaveBeenCalledOnce()
+    expect(useAppState.getState().serverStatus).toBe('running')
+    expect(useLocalApiServer.getState().serverPort).toBe(1444)
   })
 
   it('rejects a remote provider without a base URL before registration', async () => {

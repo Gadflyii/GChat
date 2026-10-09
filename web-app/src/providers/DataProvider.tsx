@@ -25,8 +25,6 @@ import { consumeSilentImport } from '@/utils/backgroundImports'
 import {
   isDev,
   LOCAL_GINFER_PROVIDER,
-  SERVER_START_WATCHDOG_MS,
-  withTimeout,
 } from '@/lib/utils'
 import {
   AppEvent,
@@ -46,6 +44,7 @@ import {
   unregisterRemoteProvider,
 } from '@/utils/registerRemoteProvider'
 import { hydrateActiveModelsForRunningServer } from '@/utils/activeModelsSync'
+import { ensureLocalApiServerRunning } from '@/utils/ensureLocalApiServerRunning'
 import { ensureRemoteProviderReady } from '@/utils/ensureRemoteProviderReady'
 import { reconcileLaunchAtStartup } from '@/lib/launchAtStartup'
 import { getLastUsedModel } from '@/utils/getModelToStart'
@@ -470,8 +469,10 @@ export function DataProvider() {
   // Raise the facade for an already-running local or paired host instance.
   // Discovery itself never loads or selects a model.
   useEffect(() => {
-    const autoStartServer = async () => {
+    let disposed = false
+    const autoStartServer = async (current: () => boolean) => {
       try {
+        if (!current()) return
         const { enableOnStartup } = useLocalApiServer.getState()
         if (!enableOnStartup) {
           console.log(
@@ -481,6 +482,7 @@ export function DataProvider() {
         }
 
         const isRunning = await serviceHub.app().getServerStatus()
+        if (!current()) return
         if (isRunning) {
           console.log('[LocalAPI:startup] Server already running')
           setServerStatus('running')
@@ -493,6 +495,7 @@ export function DataProvider() {
         }
 
         const runningModels = await serviceHub.models().getActiveModels()
+        if (!current()) return
         if (!runningModels?.length && !hasReadyHostInstance(useEngineHosts.getState())) {
           console.log(
             '[LocalAPI:startup] No model currently running; leaving server stopped'
@@ -500,55 +503,28 @@ export function DataProvider() {
           return
         }
 
-        const serverState = useLocalApiServer.getState()
-        setServerStatus('pending')
         console.log(
           '[LocalAPI:startup] Raising server for already-running model(s):',
           runningModels
         )
-        try {
-          // ATO-270: never let a stuck native invoke leave the UI on
-          // "Starting Server" forever.
-          const startServerCall = window.core?.api?.startServer({
-            host: serverState.serverHost,
-            port: serverState.serverPort,
-            prefix: serverState.apiPrefix,
-            apiKey: serverState.apiKey,
-            trustedHosts: serverState.trustedHosts,
-            isCorsEnabled: serverState.corsEnabled,
-            isVerboseEnabled: serverState.verboseLogs,
-            proxyTimeout: serverState.proxyTimeout,
-          }) as Promise<number> | undefined
-          const actualPort = startServerCall
-            ? await withTimeout(
-                startServerCall,
-                SERVER_START_WATCHDOG_MS,
-                'Timed out waiting for the Local API Server to start.'
-              )
-            : undefined
-          if (actualPort && actualPort !== serverState.serverPort) {
-            serverState.setServerPort(actualPort)
-          }
+        if (await ensureLocalApiServerRunning(serviceHub, current) && current()) {
           await hydrateActiveModelsForRunningServer(serviceHub.models())
-          setServerStatus('running')
-        } catch (err) {
-          console.error('[LocalAPI:startup] Server start failed:', err)
-          setServerStatus('stopped')
         }
       } catch (error) {
         console.error('[LocalAPI:startup] Failed to auto-start server:', error)
-        setServerStatus('stopped')
       }
     }
 
     // Serialize startup and host readiness transitions so discovery cannot race
     // the initial native start. Do not restart a manually stopped facade on
     // every registry poll: only a newly ready host instance triggers intake.
-    let disposed = false
     let pending = Promise.resolve()
     const schedule = () => {
+      const stopSequence = useAppState.getState().modelStopSequence
+      const current = () => !disposed && useAppState.getState().pendingModelStops === 0 &&
+        useAppState.getState().modelStopSequence === stopSequence
       pending = pending.then(async () => {
-        if (!disposed) await autoStartServer()
+        await autoStartServer(current)
       })
     }
     const unsubscribe = useEngineHosts.subscribe((state, previous) => {

@@ -17,6 +17,7 @@ vi.mock('@/stores/provider-registry-store', () => ({
 
 // The component subscribes with selectors, so the mock has to apply them.
 const mockModelProvider = (state: Record<string, unknown>) => {
+  Object.assign(useModelProvider, { getState: () => state })
   vi.mocked(useModelProvider).mockImplementation(((selector?: any) =>
     selector ? selector(state) : state) as never)
 }

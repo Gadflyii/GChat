@@ -29,6 +29,7 @@ import {
 } from '@/lib/utils'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 import { ensureModelForServer } from '@/utils/ensureModelForServer'
+import { ensureLocalApiServerRunning, stopLocalApiServer } from '@/utils/ensureLocalApiServerRunning'
 import { restartLocalModel } from '@/utils/restartLocalModel'
 import { controlLocalHostModel, isLocallyOwnedModel, localHostModel, readyLocalHostModels } from '@/utils/localHostModel'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
@@ -76,23 +77,9 @@ export function ServerQuickActions() {
       ])
       const models = await serviceHub.models().getActiveModels()
       syncActiveModelsFromEngines(models ?? [])
-      const call = window.core?.api?.startServer({
-        host: settings.serverHost,
-        port: settings.serverPort,
-        prefix: settings.apiPrefix,
-        apiKey: settings.apiKey,
-        trustedHosts: settings.trustedHosts,
-        isCorsEnabled: settings.corsEnabled,
-        isVerboseEnabled: settings.verboseLogs,
-        proxyTimeout: settings.proxyTimeout,
-      }) as Promise<number> | undefined
-      if (!call) throw new Error('The native server controller is unavailable.')
-      const port = await withTimeout(
-        call,
-        SERVER_START_WATCHDOG_MS,
-        'Timed out waiting for the Local API Server to start.'
-      )
-      if (port && port !== settings.serverPort) settings.setServerPort(port)
+      if (!await ensureLocalApiServerRunning(serviceHub)) {
+        throw new Error('Local API Server startup was superseded by Stop.')
+      }
       useAppState.getState().setIntentionalModelStop(
         result.providerName,
         result.modelId,
@@ -101,7 +88,9 @@ export function ServerQuickActions() {
       useAppState.getState().setServerStatus('running')
       toast.success('Local API Server started')
     } catch (error) {
-      useAppState.getState().setServerStatus('stopped')
+      const running = await withTimeout(serviceHub.app().getServerStatus(),
+        SERVER_START_WATCHDOG_MS, 'Timed out checking the Local API Server.').catch(() => false)
+      useAppState.getState().setServerStatus(running ? 'running' : 'stopped')
       toast.error('Could not start Local API Server', {
         description: String(error),
       })
@@ -129,18 +118,14 @@ export function ServerQuickActions() {
         const selectedProvider = modelState.selectedProvider
         appState.setServerStatus('pending')
 
-        if (apiWasRunning) {
-          try {
-            const stopServer = window.core?.api?.stopServer()
-            if (!stopServer) throw new Error('The native server controller is unavailable.')
-            await stopServer
-          } catch (error) {
-            useAppState.getState().setServerStatus('running')
-            toast.error('Could not stop Local API Server', {
-              description: String(error),
-            })
-            return
-          }
+        try {
+          await stopLocalApiServer(apiWasRunning)
+        } catch (error) {
+          useAppState.getState().setServerStatus('running')
+          toast.error('Could not stop Local API Server', {
+            description: String(error),
+          })
+          return
         }
         useAppState.getState().setServerStatus('stopped')
         if (selectedModel && isLocallyOwnedModel(selectedProvider, selectedModel)) {

@@ -5,6 +5,7 @@ import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import type { EngineSnapshot } from '@/services/engines'
+import { useAppState } from '@/hooks/useAppState'
 
 const mocks = vi.hoisted(() => ({
   switchToModel: vi.fn(),
@@ -14,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   setAssistants: vi.fn(),
   setMessages: vi.fn(),
   setProviders: vi.fn(),
-  setServerStatus: vi.fn(),
   setServers: vi.fn(),
   setSettings: vi.fn(),
   setThreads: vi.fn(),
@@ -81,19 +81,6 @@ vi.mock('@/hooks/useMCPServers', () => ({
     setSettings: mocks.setSettings,
   }),
 }))
-
-vi.mock('@/hooks/useAppState', () => {
-  const state = {
-    activeModels: [],
-    serverStatus: 'stopped',
-    setActiveModels: vi.fn(),
-    setServerStatus: mocks.setServerStatus,
-  }
-  const useAppState = (selector: (value: typeof state) => unknown) =>
-    selector(state)
-  useAppState.getState = () => state
-  return { useAppState }
-})
 
 vi.mock('@/hooks/useLocalApiServer', () => ({
   useLocalApiServer: {
@@ -181,6 +168,7 @@ describe('DataProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.autoStart = true
+    useAppState.setState({ serverStatus: 'stopped', activeModels: [], pendingModelStops: 0, intentionallyStoppedModels: new Set() })
     useEngineHosts.setState({ snapshots: {}, errors: {} })
     Object.assign(window.core.api, { startServer: mocks.startServer })
     localStorage.clear()
@@ -249,11 +237,31 @@ describe('DataProvider', () => {
     expect(mocks.startServer).not.toHaveBeenCalled()
     const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
     act(() => useEngineHosts.setState({ hosts: [{ host_id: 'lan', local, name: 'Host', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot } }))
-    await waitFor(() => expect(mocks.setServerStatus).toHaveBeenCalledWith('running'))
+    await waitFor(() => expect(useAppState.getState().serverStatus).toBe('running'))
     expect(mocks.startServer).toHaveBeenCalledOnce()
     expect(mocks.setServerPort).toHaveBeenCalledWith(1444)
     act(() => useEngineHosts.setState({ snapshots: { lan: { ...snapshot } } }))
     expect(mocks.startServer).toHaveBeenCalledOnce()
+    view.unmount()
+  })
+
+  it.each([
+    ['local', true], ['paired', false],
+  ])('discards startup status read when an explicit %s Stop finishes while it is pending', async (_kind, local) => {
+    let releaseStatus: (running: boolean) => void = () => {}
+    getServerStatus.mockImplementationOnce(() => new Promise<boolean>(resolve => { releaseStatus = resolve }))
+    const view = render(<DataProvider />)
+    await waitFor(() => expect(getServerStatus).toHaveBeenCalledOnce())
+    act(() => {
+      useAppState.getState().reserveModelStop()
+      if (local) useAppState.getState().setIntentionalModelStop('ginfer-lan', 'ginfer/local/instance', true)
+      useAppState.getState().setServerStatus('stopped')
+      useAppState.getState().releaseModelStop()
+    })
+    await act(async () => { releaseStatus(true) })
+    expect(useAppState.getState().serverStatus).toBe('stopped')
+    expect(getActiveModels).not.toHaveBeenCalled()
+    expect(mocks.startServer).not.toHaveBeenCalled()
     view.unmount()
   })
 

@@ -1,7 +1,6 @@
 import { useAppState } from '@/hooks/useAppState'
-import { useLocalApiServer } from '@/hooks/useLocalApiServer'
-import { SERVER_START_WATCHDOG_MS, withTimeout } from '@/lib/utils'
 import type { ServiceHub } from '@/services'
+import { ensureLocalApiServerRunning } from '@/utils/ensureLocalApiServerRunning'
 import {
   isKeylessRemoteProvider,
   isLocalProvider,
@@ -12,7 +11,8 @@ let readinessQueue: Promise<void> = Promise.resolve()
 
 async function reconcileRemoteProvider(
   provider: ModelProvider,
-  serviceHub: Pick<ServiceHub, 'app'>
+  serviceHub: Pick<ServiceHub, 'app'>,
+  current: () => boolean
 ): Promise<void> {
   if (isLocalProvider(provider.provider)) return
 
@@ -35,63 +35,18 @@ async function reconcileRemoteProvider(
     )
   }
 
-  if (await serviceHub.app().getServerStatus()) {
-    useAppState.getState().setServerStatus('running')
-    return
-  }
-
-  const startServer = window.core?.api?.startServer
-  if (!startServer) {
-    throw new Error('Local API Server is unavailable in this environment.')
-  }
-
-  const {
-    serverHost,
-    serverPort,
-    apiPrefix,
-    apiKey,
-    trustedHosts,
-    corsEnabled,
-    verboseLogs,
-    proxyTimeout,
-    setServerPort,
-  } = useLocalApiServer.getState()
-
-  useAppState.getState().setServerStatus('pending')
-
-  try {
-    const startServerCall = startServer({
-      host: serverHost,
-      port: serverPort,
-      prefix: apiPrefix,
-      apiKey,
-      trustedHosts,
-      isCorsEnabled: corsEnabled,
-      isVerboseEnabled: verboseLogs,
-      proxyTimeout,
-    }) as Promise<number>
-    const actualPort = await withTimeout(
-      startServerCall,
-      SERVER_START_WATCHDOG_MS,
-      'Timed out while starting the Local API Server for a remote provider'
-    )
-
-    if (actualPort !== serverPort) {
-      setServerPort(actualPort)
-    }
-    useAppState.getState().setServerStatus('running')
-  } catch (error) {
-    useAppState.getState().setServerStatus('stopped')
-    throw error
-  }
+  await ensureLocalApiServerRunning(serviceHub, current)
 }
 
 export function ensureRemoteProviderReady(
   provider: ModelProvider,
   serviceHub: Pick<ServiceHub, 'app'>
 ): Promise<void> {
+  const stopSequence = useAppState.getState().modelStopSequence
+  const current = () => useAppState.getState().pendingModelStops === 0 &&
+    useAppState.getState().modelStopSequence === stopSequence
   const reconciliation = readinessQueue.then(() =>
-    reconcileRemoteProvider(provider, serviceHub)
+    reconcileRemoteProvider(provider, serviceHub, current)
   )
   readinessQueue = reconciliation.catch(() => undefined)
   return reconciliation
