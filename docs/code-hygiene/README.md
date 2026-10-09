@@ -1,7 +1,8 @@
 # GChat remediation and code hygiene
 
 Repository: `/ai/gchat`. Subject: `docs/code-hygiene/`. Owner: GChat coordinator.
-Published main code is `e239eac023`, fast-forwarded from `104d4ec6e` and pushed.
+Reviewed Windows product `0f06ba433` is published on main; Linux packaging
+source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Integration `dev/gchat-remediation-104d4ec6` remains at
 `/ai/gchat-worktrees/remediation-integration`.
 
@@ -24,69 +25,34 @@ records unavailable physical prerequisites without making a second issue list.
 
 ## Current state and next action
 
-All reviewed source fixes are merged and pushed on main `e239eac023`;
-`origin/main` equality is verified at 22:01 UTC. Only subject metadata/docs
-follow installed Windows product source `0f06ba433`, whose code is unchanged.
-Its composed `make verify` gate passes at 21:17 UTC: 2,112 frontend/core tests, 102 extension tests, all six
-coverage floors and supported Rust suites. The reviewed OI-106 winner
-`68315e6a3` also passes 85 focused cases, noEmit, production lint and independent
-review. Native Windows build PID 38512 terminates with exit 0 at 21:30 UTC;
-independent package verification passes at 21:34 UTC. The 125-payload Engine
-runtime, 104 profiles including all 103 unchanged original entries, and retained
-Manager `43c8d71cf` producer inputs verify. Evidence:
-`out/oi106-final-update-20261009/{composed-final-gate.json,package-verification.json}`.
-Installed source `0f06ba433` now passes payload and preservation checks, retaining
-seven original threads, all models/profiles, credentials and Host identity.
-Actual continued Chat saves `QXr1fqK7RSTetk3Y` as ready with `finishReason=stop`
-and output 30,000 after compaction from 26,366 to 1,705 tokens; the UI is idle.
-Real sidebar Stop leaves the Host stopped with zero Engines/API listeners and
-stays stopped on a later observation. Start reaches Ready with fresh session
-`11ba8c36-0426-4912-a089-083cfca2b86f`, one Engine/API listener, selected alias
-and Server running. Reload reaches fresh Ready session
-`3b3bf837-f98b-400b-bf19-b9c05c334d21` while retaining selection/status. Final
-GUI Stop returns to zero Engines/API listeners. The original profile is restored
-exactly through supported Reload/Stop, and normal apps are restored without debug
-listeners. Receipts: `out/oi106-final-update-20261009/installed-verification.json`
-and `installed-lifecycle-acceptance.json`. This is Muse C4/32K functional
-acceptance; the saved fixed-arena 128K startup failure remains unchanged.
+Windows installation and actual continued Chat/sidebar Stop/Start/Reload pass.
+Original history, models, profiles, credentials and Host identity are preserved;
+normal Windows apps remain open with the original profile stopped and zero
+Engines. Product `0f06ba433` passes composed `make verify` and installed lifecycle
+checks in `out/oi106-final-update-20261009/`. This is C4/32K functional acceptance;
+OI-072's original fixed-arena 128K failure remains open.
 
-Earlier installed source `7d9eb55f9`, Manager `43c8d71cf` and Engine `2ef56a52a`
-passed package/payload and user-state preservation checks. Continued Chat returned
-30,000 with `stop` and idle UI after automatic compaction from 26,285 to 2,159
-tokens. The original 45-step Coordinator history displayed incomplete with its
-output, limiting stages and metrics preserved. Sidebar Stop unloaded the local
-Host; explicit Start reached Ready/API serving but left selection/status stale.
-This failed Start is retained evidence, not the current correction's acceptance.
+Linux DEB, AppImage and Manager are refreshed and accepted. Compilation uses
+`54c931c68`; `02d369e8a` adds only cached offline AppImage runtime selection.
+Independent verification covers exact four 167-payload runtime images, 174
+profiles, six version-matched offline manuals, companions and GLIBC <= 2.39.
+Both real X11 clients start dark; Manager Scan works and close/reopen preserves
+the shared Host. Zero models, instances and requests are used. All fixture
+processes stop and both canonical guards are released. Packages are in
+`out/linux/` and `out/ginfer-manager/linux/`; evidence is retained in
+`out/oi070-linux-refresh/`. Default Windows-owned mirrored ports require an
+isolated 17443 test locator. LAN/tray/vault, Flash, current-Engine capacity and
+Server 2 are not qualified by this check. The actual frontend offline fixture
+passes with a largest JS chunk of 499,377 bytes.
 
-The integrated correction preserves Ready Host aliases, ignores stale picker
-initialization, shares native facade startup across sidebar, Host readiness and
-persisted provider hydration, and uses the existing Stop reservation sequence to
-invalidate delayed local or paired intake. Stop waits for an already dispatched
-native start before shutting down the singleton. Windows acceptance is complete.
-Linux preparation found the retained `05a286ba` runtime contains only its README,
-so it cannot satisfy the six-entry offline operator-manual check. The current
-item adds separately staged docs matched to that exact engine; six hashes, local
-links, wrong-source rejection and actual staging/producer equality pass. four-image
-Engine bytes and manifests stay unchanged. The selected docs input is
-`out/oi070-linux-refresh/operator-docs` in the frontend/packages tree.
-Next: assemble and inspect Linux packages, then verify local X11 windows under
-booking 287, 22:21–23:15Z. Completed OI-106 and profile source trees are retired; branches and
-external evidence remain.
-
-The temporary read-only tool restriction is removed. C2 stopped its sole Linux
-Muse repro at 21:08:45Z. At that check PID 826631 is absent and the RTX 5090
-reports 31,015 MiB free.
-That diagnostic lost its controller and inherited guard FDs; completion evidence
-is invalid, and C2 owns the follow-up. Windows verification/build/acceptance
-used the canonical GPU/build guards at WSL PIDs 838489/847974 under booking
-284, 21:00–22:00Z. Installed acceptance ends at 21:40:55Z with the exact
-original profile stopped and zero Engines/API listeners. Normal GChat PID 40160,
-Manager PID 15224 and unchanged Host PID 23052 are restored without debug ports.
-Both canonical guard sessions are terminated/released and booking 284 is
-canceled after actual END; the direct result is delivered to C3 at 21:41Z.
-Linux assembly/X11 acceptance remains pending under booking 287, 22:21–23:15Z, 22:21–23:15Z. Source publication
-is complete. Completed OI-106 and profile source trees are retired after
-postmerge and fresh live-use checks; Linux package work remains.
+Next: the requested review of `src-tauri/ginfer-host/` and
+`src-tauri/ginfer-manager/`, from the published composed source. Remove proven
+dead/redundant code and historical comments while preserving behavior and
+Windows/CMP/laptop paths. Record CPU/memory/loop findings with measurement
+proposals on the master list; performance changes remain separate from this
+cleanup. Acceptance is independent review, affected tests, strict Clippy and
+composed `make verify`, then commit/push/main integration and owned cleanup.
+No GPU experiment is needed for source review.
 
 ## Implementation and verification
 
@@ -131,7 +97,8 @@ No margin, context, concurrency or profile promotion is justified by that result
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Source matches published main `e239eac023`; subject metadata edits await coordinator review, retain through Linux acceptance |
+| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Accepted packaging source `02d369e8a`; retain through current Host/Manager review |
+| Coordinator / local Linux | `/ai/gchat/out/oi070-linux-refresh` | Accepted Linux package/native proof, six-doc inputs and runner; old packet path is a stable symlink, temporary extracts/state retired after final checks; published packages retained |
 | OI-106 / local Linux | `/ai/gchat-worktrees/oi106-selection-facade-7d9eb55` | Retired after published main and fresh live-use checks; exact local/remote source branches and external evidence retained |
 | Frontend/packages / local Linux | `/ai/gchat-worktrees/oi074-frontend-packages` | Approved physical dependency graph and prepared Linux runner; needed for final packages |
 | Profiles / local Linux | `/ai/gchat-worktrees/oi072-current-profiles` | Retired; `e0112d2fc` retained on local/remote branches, content represented in published main and external evidence kept |
@@ -158,6 +125,12 @@ The final two completed source trees are also retired with `git worktree remove`
 releasing 553,762,816 B of owned WSL allocation. Their local/remote branches,
 shared dependency targets and external evidence remain. Receipt:
 `out/oi106-final-update-20261009/cleanup-completed-worktrees.json`.
+Linux item retirement removes both package extracts, both empty native fixtures,
+new fixture-installed CLI companions and exact owned bundle copies. Accepted
+packages, manuals, source and concise evidence remain. The explicit AppImage
+temporary extraction plus normal/root cleanup receipts account for 17,405,161,472 B
+of reclaimed local allocation; shared native compiler/dependency baselines stay.
+Receipts: `out/oi070-linux-refresh/{cleanup-normal.json,cleanup-root-bundle.json}`.
 No whole-fleet cleanup claim is made.
 
 Physical results: [installer refresh](../installer-refresh/README.md),

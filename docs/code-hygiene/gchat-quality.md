@@ -285,3 +285,23 @@ authority. No whole-fleet cleanup claim is made.
 An initial
 inefficient reference survey was stopped; the corrected survey tokenizes only
 tracked text once and completed in 28 ms. No duplicate model or build directory was allocated.
+
+
+## Accepted Linux refresh
+
+Native/frontend compilation at `54c931c68` and cached AppImage packaging at
+`02d369e8a` pass. DEB/AppImage/Manager payload verification covers 488 ELF
+objects, GLIBC <= 2.39, four exact 167-payload images, 174 profiles and six
+version-matched offline manuals. Final frontend fixture passes syntax,
+Mermaid, localization and zero external content requests; largest JS is
+499,377 bytes. Actual X11 windows start dark; Manager Scan and close/reopen
+retain each shared Host with zero models/instances/requests. Evidence:
+`out/oi070-linux-refresh/{package-verification.json,native-acceptance.json}`.
+The isolated locator uses 17443 because Windows owns mirrored 7443/7444;
+LAN/tray/vault and current Engine/Flash/capacity are outside this acceptance.
+The package item is complete; the focused Host/Manager review is next.
+
+Owned Linux fixture/bundle retirement reclaims 17,405,161,472 B; accepted packages,
+manual input and concise evidence remain. Shared compiler/dependency baselines
+are retained. See `out/oi070-linux-refresh/cleanup-normal.json` and
+`cleanup-root-bundle.json`.

@@ -4,8 +4,10 @@ Repository: GChat. Owner: GChat coordinator. Subject: `docs/ginfer-manager/`.
 Open defects and TODOs belong in the [master list](../open-work.md); this record
 retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
-Installed Windows Manager producer is `43c8d71cf`; the retained Linux
-package remains `2a6e21ff2`. Packages and native proof live in `/ai/gchat/out/ginfer-manager/`.
+Installed Windows Manager producer is `43c8d71cf`. The refreshed Linux
+Manager/Host is compiled from `54c931c68` and assembled at `02d369e8a`;
+independent package and native X11 acceptance pass. The older `2a6e21ff2`
+Linux proof remains historical evidence. Package paths and proof are recorded below.
 Documentation-only handoffs do not rebuild accepted binaries.
 
 ## Outcome and acceptance
@@ -39,10 +41,11 @@ Reload/Stop restores the original profile exactly and normal apps are restored
 without debug ports. Evidence:
 `/ai/gchat/out/oi106-final-update-20261009/installed-verification.json` and
 `installed-lifecycle-acceptance.json`. Reviewed code is merged and pushed on
-main `e239eac023`; `origin/main` equality is verified at 22:01 UTC. Installed
-Windows product remains `0f06ba433`, with only subject metadata/docs following.
-Linux package/X11 refresh remains pending under booking 285, 22:15–23:00Z,
-Completed OI-106 and profile source trees are retired; source branches and evidence remain. This C4/32K functional acceptance leaves the original fixed-arena
+Windows main `e2521e33`; installed product remains `0f06ba433`. Linux
+assembly, both-format independent package verification and actual native X11
+lifecycle acceptance pass at `02d369e8a`, as recorded below. Completed OI-106 and profile
+source trees are retired; source branches and evidence remain. This C4/32K
+functional acceptance leaves the original fixed-arena
 128K startup failure and physical qualification requirements below unchanged.
 
 ### Current Engine profile repair — OI-072
@@ -477,15 +480,51 @@ proof is retained in the Windows package's `native-smoke/` and
 Private fixtures and superseded native source/output were retired. The current
 acceptance does not claim inference/GPU qualification.
 
-Linux package:
-`/ai/gchat/out/ginfer-manager/linux/ginfer-manager-linux-x64.tar.gz`.
-Its accepted `2a6e21ff2` assembly and pinned HTTPS/sharing checks remain valid
-baseline evidence. Both ELFs require at most GLIBC 2.39. GTK3, WebKit2GTK 4.1 and
-Soup3 are prerequisites. Earlier X11 checks cover default dark, Models Scan and
-window exit preserving the empty Host. This desktop has no tray watcher or
-Secret Service provider, so native Linux tray/vault pairing remains unqualified.
-Server 2's matching ABI was a screen, not deployment. The offline-panel fix was
-not rebuilt into this retained Linux archive.
+Linux refresh packet:
+`/ai/gchat-worktrees/oi074-frontend-packages/out/oi070-linux-refresh/`.
+Its `manager/ginfer-manager-linux-x64.tar.gz` contains the Manager and matching
+Host compiled from `54c931c68`; accepted assembly source `02d369e8a` only
+changes the cached AppImage runtime environment. Ubuntu 24.04 native compilation
+and both client package formats pass. The outer archive postcopy's ownership
+failure was recovered with unique temporary archive/checksum files and atomic
+replacement, terminal 0; see `assembly-final-status.json`.
+Root promotes the accepted Manager archive/guide/checksums to
+`/ai/gchat/out/ginfer-manager/linux/` and retains the evidence packet at
+`/ai/gchat/out/oi070-linux-refresh/`, with the old packet path as a stable
+symlink to the same files. The earlier `2a6e21ff2` pinned HTTPS/sharing proof
+remains historical evidence rather than a replay of this binary.
+
+Independent DEB and AppImage package closure/ABI, companion and Manager
+archive verification pass in `package-verification.json`. Actual dark X11
+startup, four installed-runtime verification, Models Scan showing Inventory
+refreshed, and Manager close/reopen pass for both formats. `WM_DELETE_WINDOW`
+exits Manager; its new process returns online with the same shared Host
+PID/UUID. DEB uses Host 1055553 / `726abf22-f807-483f-9098-d067f84ef9f9`;
+AppImage's actual wrapper 1061283 launches desktop 1061355 and Host 1065499 /
+`38674ad7-0bb9-4148-9a6b-fe048702e729`. Each has zero models, instances and
+requests; see `native-acceptance.json` and `evidence/native/`.
+
+The fixture uses public locator `127.0.0.1:17443` because mirrored Windows
+Host PID 23052 owns 7443/7444 and native default binding returns `EADDRINUSE`.
+This does not qualify default-port coexistence or LAN sharing. All owned native
+app/Manager/Host/wrapper processes are absent after shutdown and port 17443 is
+free. Original Windows PIDs 40160/15224/23052 remain unchanged, with zero
+Engines. The leftover 2,117,107,712-byte AppImage extraction was explicitly
+retired after a privileged live-use scan found no references or uninspectable
+processes. Canonical guard 1043205 terminated/released; booking 287 was canceled
+at actual END 22:57 UTC.
+
+The Ubuntu 24.04 build's ELFs require at most GLIBC 2.39; current native checks
+on Ubuntu 26.04 are not a fresh clean-Ubuntu 24.04 qualification. GTK3,
+WebKit2GTK 4.1 and Soup3 remain prerequisites. Linux tray and Secret Service
+pairing acceptance (OI-071) are unrun. Client packages retain Engine `05a286ba`,
+four exact 167-payload images, 22 catalogs / 174 Qwen/Muse profiles and six
+version-matched offline documents. That historical Engine reports unknown
+embedded commit/dirty fields; exact baseline bytes/manifests establish its
+provenance. There is no Flash, new Engine capacity, model or GPU qualification
+claim, and Server 2 is untouched. See [installer refresh](../installer-refresh/README.md).
+Linux package/native lifecycle acceptance is complete. Next continue
+Host/Manager review from Bubbs’s 22:43 handoff.
 
 Both packages contain Manager, matching Host, guide and font license. They
 contain no inference engine or models. Registered service/Desktop ownership
@@ -538,7 +577,8 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Retired after accepted Windows package/install; shared cache junction detached first |
 | Offline source candidate | `/ai/gchat-worktrees/manager-offline-status` | Reviewed source retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | Windows accepted package/proof | `/ai/gchat/out/ginfer-manager/windows/` | Current archive/guide/hashes and earlier public native proof |
-| Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Retained `2a6e21ff2` archive and native evidence |
+| Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Refreshed Manager compiled `54c931c68`, guide/checksums; earlier native proof retained as historical evidence |
+| Linux refresh packet | `/ai/gchat/out/oi070-linux-refresh/` | Accepted `02d369e8a` assembly, compiled `54c931c68`, independent package/native proof; old packet path retained as stable symlink |
 | Offline task evidence | `/ai/gchat/out/manager-offline-status-20261008/` | Required gate, Clippy, native build, installed UI/identity, cleanup receipts |
 | Native task mirror | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-offline-status-20261008` | Retired after package/install acceptance; detached shared-cache junction first |
 | Superseded native baseline | `C:\Users\Ron\AppData\Local\GChat\windows-build\ginfer-manager` | Retired; public proof preserved beside accepted Windows package |

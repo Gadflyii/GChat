@@ -48,11 +48,10 @@ Normal apps are restored without debug listeners. Evidence:
 `installed-lifecycle-acceptance.json`. This is C4/32K functional acceptance,
 not a new 128K capacity pass. Earlier `7d9eb55f9` Start reached Ready/API serving
 with blank selection/stale status; that failure remains historical evidence.
-Reviewed code is merged and pushed on main `e239eac023`; `origin/main` equality
-is verified at 22:01 UTC. Only subject metadata/docs follow installed Windows
-product `0f06ba433`. Linux package/X11 refresh remains pending under booking
-286, 22:32–23:20Z; booking 285 is canceled. Completed OI-106 and profile
-source trees are retired; source branches and evidence remain.
+Windows reviewed source and metadata are published on main `e2521e33`;
+installed Windows product remains `0f06ba433`. Linux assembly is complete at
+`02d369e8a`; independent package and actual native X11 acceptance pass below. Completed OI-106
+and profile source trees are retired; source branches and evidence remain.
 
 GInfer `docs/installer-refresh/README.md` owns OI-058's portability build:
 frozen production source matches requested `f9af4cff4`, current base `f6d097566`,
@@ -104,9 +103,8 @@ open; no reduced margin, retry or capacity promotion is authorized by this resul
 Evidence: `out/code-hygiene-20261009/integration/` and
 `out/remediation-native-correction-20261009/`.
 
-Published main code is `e239eac023`, fast-forwarded from `104d4ec6e` and pushed;
-installed
-Windows product remains `0f06ba433` with the same source code. Both clean
+Windows main is `e2521e33`; installed product remains `0f06ba433` with the
+same reviewed runtime code. Both clean
 merged OI-056 source worktrees are retired; their committed branches and remote
 ancestors remain. Current remediation is coordinated in
 [code hygiene](../code-hygiene/README.md).
@@ -127,11 +125,12 @@ no model bytes were copied or downloaded. Retain that useful registration.
 Use only `/ai/coordination/locks/local-5090-gpu.lock` and
 `/ai/coordination/locks/local-build.lock`, held for the actual run. The old owned
 launcher was updated; no `/tmp` GPU/build lock is used. Windows source/build/package and actual lifecycle acceptance are complete;
-Linux assembly needs its separately admitted window after actual resource handoff. Keep the physical RAM floor and compile/load exclusion.
+Linux assembly, independent package verification and native X11 acceptance pass. Keep the physical RAM floor and compile/load exclusion.
 Failures go in GInfer's sole master `docs/maintainer/open-work.md` under its edit
 lock. Ron's newer in-session instruction authorizes the post-Windows-merge GChat bug
-and review phase now. This client source is merged and pushed; next complete
-Linux assembly/X11 acceptance and retire only verified owned completed trees.
+and review phase now. Windows source is merged and pushed and Linux package/X11
+acceptance passes; next continue the Host/Manager review requested
+in Bubbs’s 22:43 handoff. Retire only verified owned completed trees.
 Remaining physical work stays in the sole master list. Preserve
 other owners' trees and the accepted installed/build baseline; leave Server 2 alone.
 
@@ -451,66 +450,89 @@ Prevent recurrence by reading complete build stdout/stderr before acceptance,
 not only matching the large-chunk advisory. Source/config checks and the final
 coordinator frontend/native check complete this correction.
 
-OI-070 remains open. Assemble final integrated client/Host/Manager once after
-bugfix acceptance. Reuse Ubuntu 24.04 / Node 22 image
-`gchat-linux-installer-build:ubuntu24`, the existing dependency/compiler caches,
-and exact accepted engine set
-`/ai/ginfer/out/linux-installer-20260930/runtime-set/` (source `05a286ba5741`);
-do not regenerate engines. The current retained client packages under
-`/ai/gchat/out/linux/` are September 30; Manager under
-`/ai/gchat/out/ginfer-manager/linux/` is `2a6e21ff2`. Its previous 1.68 GB private
-cache was intentionally retired; build the new Manager once in the shared cache.
-The Manager builder now uses `/ai/coordination/locks/local-build.lock`; bind that
-same directory when running it in Docker. Normal X11 window/Host startup and exact
-payload verification are required for refreshed packages. Tray and Secret Service
-require the separate OI-071 desktop providers. Preserve user data and old accepted
-packages until replacements pass; do not deploy to Server 2.
-The prepared runner now uses the approved physical aligned dependency graph in
-`/ai/gchat-worktrees/oi074-frontend-packages` and its current packed core/types,
-read-only; accepted-source manifests, both lockfiles and core tree must match.
-The cached image's actual mounted-workspace preflight passes Node 22.22.1,
-React/DOM 19.2.8, TypeScript ESLint 8.44.1, Vitest/UI 3.2.4 and unchanged SDK
-2.0.139. It performs no install, compilation or model execution. The exact
-`b8d8ea49` catalogs remain 22 Linux files /174 Qwen/Muse profiles; Windows's
-104 profiles are a separate platform set. All four retained `05a286ba` images
-have 167 declared payloads. This retains the historical Engine, with no Flash
-support or new current-engine qualification claim.
+Linux assembly passes at source `02d369e8a`; native/frontend compilation is
+from `54c931c68`. The later source delta only selects the supported cached
+AppImage runtime environment. Ubuntu 24.04 / Node 22 image
+`gchat-linux-installer-build:ubuntu24` reused the approved aligned dependencies
+and shared compiler caches. Native compilation, DEB, and gzip AppImage assembly
+exit 0. The outer postcopy wrapper initially exited 2 because its owned Manager
+archive was root-owned. A unique temporary archive/checksum followed by atomic
+replacement recovered postcopy with terminal 0; no product rebuild was needed.
+The exact packet is
+`/ai/gchat-worktrees/oi074-frontend-packages/out/oi070-linux-refresh/`, with
+`assembly-final-status.json` and `linux-source-admission.json` recording that
+source distinction and recovery. Independent package verification and actual
+X11 acceptance pass for both formats. Root publishes the evidence packet to
+`/ai/gchat/out/oi070-linux-refresh/`, retaining the old path as a stable symlink
+to the same files, and promotes the accepted packages to `/ai/gchat/out/linux/`
+and `/ai/gchat/out/ginfer-manager/linux/`.
 
-The refresh also ships six offline GInfer operator documents from the selected
-`05a286ba574114e2ef4dfb00b4015e07ab8c26a5` source: package README and the
-documentation index, CLI, serving, operations and versioning references.
-The owned input is
-`/ai/gchat-worktrees/oi074-frontend-packages/out/oi070-linux-refresh/operator-docs/`;
-its `provenance.json` records the source and each document's size/SHA256.
-The operations guide uses that revision's CLI/server help authorities; the
-retained CLI, serving and versioning text pins supplementary source links to
-the same revision. Newer Windows Engine docs are not substituted.
-Assembly requires `--operator-docs-directory` (or
-`GINFER_OPERATOR_DOCS_DIRECTORY`), validates its source against the runtime set,
-checks all six hashes and offline local links, then stages the docs separately
-at `resources/ginfer/docs/` for both DEB and AppImage. Markdown remains in the
-normal AppImage resource bundle; only the Engine runtime directories bypass
-linuxdeploy. The immutable four-image runtime set is unchanged. Actual final
-package/document inclusion and X11 acceptance remain pending.
+The packet's `linux/` contains `GChat_2.0.42_amd64.deb` and
+`GChat_2.0.42_amd64.AppImage` with checksums; `manager/` contains the matching
+Manager/Host archive and guide. Both packages retain the exact four-image
+`/ai/ginfer/out/linux-installer-20260930/runtime-set/` from Engine source
+`05a286ba574114e2ef4dfb00b4015e07ab8c26a5`, 167 payloads per image, and the
+`b8d8ea49` catalogs: 22 Linux files / 174 Qwen/Muse profiles. Windows's 104
+profiles are a separate platform set. These historical Linux Engines support
+Qwen/Muse only, with no Flash or new current-Engine/capacity qualification.
+Their embedded server version reports `1.0.0.0-unknown` and unknown commit/dirty
+fields; exact baseline payload hashes and manifests establish source provenance,
+not those embedded fields. Native checks run on Ubuntu 26.04; the Ubuntu 24.04
+build and maximum GLIBC 2.39 are verified ABI evidence, not a fresh clean-Ubuntu
+24.04 desktop qualification.
 
-Root supplies the final accepted SHA and composed verification receipt to the
-existing `out/oi070-linux-refresh/assemble.sh` after the quiet-window admission,
-and releases its guards before execution. The one container opens the shared
-canonical build lock before GPU, then passes its already-open build descriptor
-to the existing Manager builder; no host descriptor forwarding through Docker
-is assumed. Standalone Manager still owns the canonical build lock. A bounded
-fixture with fake cargo in an isolated lock namespace confirms standalone waits,
-inherited open-file-description reuse leaves the parent locked, and incorrect,
-closed and nonnumeric descriptors fail. Windows Manager source is unchanged.
-The runner rejects assembly until the accepted source includes that checked
-builder. Evidence is `out/oi070-linux-refresh/inputs.json`,
-`aligned-toolchain-preflight.log` and `lock-fixture/receipt.json`.
+Six offline GInfer documents match the retained `05a286ba` Engine: package
+README and the documentation index, CLI, serving, operations and versioning
+references. The packet's `operator-docs/provenance.json` records source and
+sizes/SHA256. Assembly requires `--operator-docs-directory` (or
+`GINFER_OPERATOR_DOCS_DIRECTORY`), checks the six hashes and offline links
+against the selected runtime source, and stages `resources/ginfer/docs/` for
+both formats. Newer Windows Engine documentation is not substituted. Markdown
+uses normal AppImage resource bundling; verified Engine runtime directories
+bypass linuxdeploy rewriting. The immutable four-image runtime set is unchanged.
 
-Composed source verification and installed Windows acceptance pass at
-`0f06ba433`; reviewed code is published on main `e239eac023`. Next: one Linux
-assembly and package/X11 acceptance under booking 286, 22:32–23:20Z, then
-update package evidence and the owned disk inventory. No Linux package has been
-refreshed by this source work.
+Independent DEB and AppImage payload/closure, ABI, companion help/version,
+profile, Manager archive and six-document verification pass in
+`package-verification.json`, with format receipts under `evidence/package-check/`.
+The final emitted
+frontend's offline browser fixture passes at 22:37 UTC: largest JS 499,377 bytes,
+entry 489,712 bytes, fourteen bootstrap files / 2,153,867 bytes and bootstrap
+plus home 33 files / 2,808,043 bytes. This is asset/loading evidence, not a
+measured startup-speed improvement. See `frontend-final-measurements.json` and
+`evidence/frontend-fixture/`.
+
+Actual DEB and AppImage X11 clients start dark and install all four verified
+runtimes. Manager is online against each format's shared Host. DEB uses Host
+PID 1055553 / UUID `726abf22-f807-483f-9098-d067f84ef9f9`; the actual AppImage
+wrapper PID 1061283 launches desktop PID 1061355 and Host PID 1065499 / UUID
+`38674ad7-0bb9-4148-9a6b-fe048702e729`. Actual Models Scan displays Inventory
+refreshed. `WM_DELETE_WINDOW` closes each Manager; reopening is online against
+the same Host PID/UUID for that format. Both retain zero models, instances and
+requests. Evidence is `native-acceptance.json` and `evidence/native/`.
+
+WSL's mirrored Windows Host PID 23052 owns default ports 7443/7444; native
+binding returned `EADDRINUSE` even though Linux socket listing did not expose
+that owner. The isolated native fixture uses public locator `127.0.0.1:17443`.
+It does not qualify default-port coexistence or LAN sharing. Linux tray and
+Secret Service acceptance (OI-071) remain unrun. Server 2 is untouched; there
+is no model, GPU, capacity or numerical acceptance claim.
+
+All owned app/Manager/Host/wrapper PIDs are absent after shutdown, with zero
+Linux Engines and port 17443 free. Original Windows app/Manager/Host PIDs
+40160/15224/23052 remain alive unchanged, with zero Windows Engines. AppImage
+left a 2,117,107,712-byte extracted temporary tree; an exact privileged live-use
+scan found zero references and zero uninspectable processes before explicit
+retirement. Canonical guard PID 1043205 terminated with status 143 and released
+its locks; booking 287 was canceled at actual END 22:57 UTC.
+
+The runner and standalone Manager use the canonical
+`/ai/coordination/locks/local-build.lock`; the container holds build before GPU
+and supplies its open build descriptor to Manager. The bounded inherited-lock
+fixture passes; evidence remains `inputs.json`, `aligned-toolchain-preflight.log`
+and `lock-fixture/receipt.json`. Windows Manager source is unchanged. Linux
+package and native lifecycle acceptance are complete; next proceed to the
+Host/Manager review in Bubbs’s 22:43 handoff and scoped owned-output retirement.
+Windows installed acceptance and OI-072 remain unchanged.
 
 ## Accepted Linux installers — September 30, 2026
 
@@ -608,7 +630,8 @@ build/dependency copies, disposable acceptance containers/images and unpacked
 bundle staging are retired during final handoff. The prior host-only AppImage is
 replaced and the separate glibc-2.43 runtime archive is superseded and removed.
 Unrelated worktrees, model files, Windows builds and other sessions' jobs remain.
-No Linux installer work remains after the documented commit/push and cleanup.
+The September 30 installer work completed after its documented commit/push and
+cleanup; the October refresh's current state is recorded above.
 
 ## Completed Windows update and Server 2 removal
 
