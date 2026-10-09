@@ -221,7 +221,9 @@ An in-flight refresh keeps any lifecycle snapshot published since its reads
 began, using snapshot object identity rather than revision/UUID chronology.
 Delayed-Stop regressions retain the stopped view with both a greater revision
 and a reset revision, so a replaced Host boot is not rejected by counter order.
-Focused sidebar/restart/Host-store tests pass 20/20 on the approved aligned
+Explicit Start and Restart restore the selected alias only after the current
+session reaches Ready, if its selection was cleared by the Ready-only projection.
+Focused sidebar/restart/Host-store tests pass 21/21 on the approved aligned
 `oi074-frontend-packages/node_modules` graph; production ESLint and `tsc -b`
 pass. The existing switch-race fixture still emits React act warnings; no
 warnings are suppressed. This is source evidence; composed/native acceptance

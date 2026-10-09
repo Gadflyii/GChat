@@ -200,6 +200,7 @@ describe('sidebar server shortcut', () => {
     expect(models.startModel).not.toHaveBeenCalled()
     expect(useAppState.getState().activeModels).toEqual([localAlias])
     expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(true)
+    expect(useModelProvider.getState().selectedModel?.id).toBe(localAlias)
   })
 
   it('restarts the local Host with its current session rather than a missing engine adapter', async () => {
@@ -234,6 +235,21 @@ describe('sidebar server shortcut', () => {
     expect(vi.mocked(engineCommand).mock.calls.filter(([action]) => action === 'restart')).toHaveLength(1)
     expect(vi.mocked(engineCommand).mock.calls.some(([action]) => action === 'start' || action === 'stop')).toBe(false)
     expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('restores the selected alias after Restart passes through Starting to Ready', async () => {
+    const ready = hostAlias()
+    let snapshots = 0
+    vi.mocked(engineCommand).mockImplementation(async action => {
+      if (action === 'snapshot' && ++snapshots === 1) return ready
+      return { ...ready, instances: [{ ...ready.instances[0],
+        status: action === 'restart' ? 'starting' : 'ready', session_id: 'new-session' }] }
+    })
+    render(<ServerQuickActions />)
+    fireEvent.click(screen.getByRole('button', { name: /Reload model/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Model reloaded'), { timeout: 2500 })
+    expect(useModelProvider.getState().selectedModel?.id).toBe(localAlias)
+    expect(useAppState.getState().activeModels).toEqual([localAlias])
   })
 
   it('offers Stop model when the API is already stopped', async () => {
