@@ -85,7 +85,8 @@ and a nonempty string message as an above-target sentinel. It never parses a
 token count from prose or records the sentinel as a measured count. All other
 errors and `RunC4` exact-count validation still fail. All three preparation
 count paths keep 96 calls per lane / 600 seconds total, four distinct early
-markers, exact 131,009-token acceptance, 64 outputs and omitted public defaults.
+markers, exact 131,009-token acceptance, 64 requested outputs and omitted
+public defaults.
 Native PowerShell 5.1 parser/Add-Type and ten bounded component cases pass,
 including actual HTTP/PS exception wrapping, wrong status/code/type/parameter,
 malformed JSON/object fields and default exact-validation rejection. The fixture
@@ -94,15 +95,40 @@ transport/count code only; no Host, Engine or GPU execution. Receipt:
 `/ai/gchat/out/oi072-current-profiles/count-upper-bound-component.json`;
 its sibling fixture source is retained for this reproduced regression.
 
-Next: the coordinator reviews the unchanged geometry and corrected calibrator
-before booking the single public C4 wave. The direct JSONL supplies exact
-scheduler and batch counters that Host metadata and normal logs do not expose;
-it is not Host telemetry proof. Preserve public prefix reuse and sample
-device-wide free memory throughout, without inventing graph/eager numerical
-qualification. Ready/restart/stop and original-profile restoration remain
-separate supported Host lifecycle checks.
-Use four distinct inputs counted at exactly 131,009 tokens through the loaded
-public frontend. The retained 63-decode-input qualification workload may serve
+The corrected October 9, 19:56–19:57 UTC execution passes Host automatic
+Reload/Ready/Stop again. Its separate direct Engine records a new automatic
+10,638,176,256-byte arena (9.91 GiB) and 9,198 slots, with the same adaptive/15,
+graphs and prefix reuse. Preparation succeeds for all four distinct inputs at
+exactly 131,009 tokens: 24 public count calls per lane, 2.035 seconds total.
+Each body requests 64 outputs for the retained 63-decode-input control; no
+outputs were returned.
+
+The actual wave is stopped after 13.537 seconds by the helper's unchanged
+300 MiB physical-free-memory guard: the device-wide samples start at 410 MiB
+and end at 292 MiB, with intervening variation up to 436 MiB. JSONL contains
+four `request_start` and three `throughput` events. Its last scheduler sample
+shows four running/prefilling lanes, zero waiting/decode-ready lanes and
+524,036 logical input tokens. Aggregate represented prefill is 96,564 tokens,
+including 96,507 computed prefill tokens; complete histories are not reached.
+All decode/B4 counters are zero, there are no responses, and no Engine error,
+completion, OOM or admission error is recorded. Supported cleanup restores the
+exact original stopped configuration, with no native Engine or cleanup error.
+Evidence: `/ai/gchat/out/code-hygiene-20261009/integration/native-c4-128k-corrected-20261009/`.
+
+The current decision is to retain `calculated-pending-validation`: automatic
+startup and exact preparation pass, but full C4 capacity has not passed the
+physical guard. No retry, margin change or profile promotion is authorized.
+The device-wide free-memory change during prefill does not establish the
+allocating owner, Engine payload growth, Windows residency/spill or an external
+client cause. The saved receipts lack paired live Engine allocation/CUDA-free,
+Engine PID local committed/resident and other-client counters. Runtime
+attribution is handed to the native owner under master OI-072-RUNTIME; these
+missing observations are the next unresolved evidence. The direct JSONL is
+separate Engine evidence and does not prove Host telemetry or model quality.
+
+Remaining physical acceptance uses four distinct inputs counted at exactly
+131,009 tokens through the loaded public frontend. The retained 63-decode-input
+qualification workload may serve
 as the matched control (64 returned outputs, 63 decode inputs); it does not change
 a product output limit. Early EOS leaves this matched-wave evidence incomplete;
 it does not establish a product bug or authorize changing stop/sampling defaults
@@ -110,11 +136,11 @@ or retries to force a chosen result. Capture both
 the Engine scheduler's four admitted lanes and batch-four decode counters;
 four active Host HTTP requests alone cannot prove the requested concurrency.
 The existing startup and 32K functional screens do not satisfy this acceptance.
-Preserve the original profile and stopped state after the check. No GPU run,
-native build, server change or remote administration is authorized in this
-source phase. Historical residency attribution remains separately unresolved
-under OI-066 and is not a prerequisite for correcting the excessive fixed
-reservation.
+Preserve the original profile and stopped state after the check. No additional
+GPU run, native build, server change or remote administration is authorized in
+this documentation handoff. Historical residency attribution remains separately
+unresolved under OI-066 and is not a prerequisite for correcting the excessive
+fixed reservation.
 
 Owned source candidates are `/ai/gchat-worktrees/oi072-current-profiles` from
 `104d4ec6e` and `/ai/ginfer-worktrees/gchat-oi072-catalog` from origin/dev/next
@@ -187,8 +213,9 @@ Earlier source pressure review corrected the JSONL `auto_max` spelling,
 requested/resolved AUTO distinction, explicit direct model ID and lifecycle
 deadline. Actual preparation exposed the upper-bracket failure above; source
 review and startup alone did not establish the full helper or capacity result.
-The measured adaptive/15 startup does not change the calculated bound. Physical
-full-context inference and its scheduler/B4 evidence remain untested.
+The measured adaptive/15 startup does not change the calculated bound. The
+corrected wave demonstrates four admitted prefill lanes; full-context completion
+and B4 decode evidence remain unachieved after the physical guard abort.
 
 The coordinator's owned execution adapter is
 `/ai/gchat/out/code-hygiene-20261009/integration/c4-profile-capacity.ps1`.
