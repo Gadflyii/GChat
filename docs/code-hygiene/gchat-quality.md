@@ -18,7 +18,7 @@ framework/platform changes and speculative SIMD are excluded.
 
 Baseline is main `104d4ec6e`. Owned candidate is
 `/ai/gchat-worktrees/review-quality-104d4ec6`, branch
-`review/gchat-quality-104d4ec6`. Initial cleanup changes four files:
+`review/gchat-quality-104d4ec6`. Initial cleanup changes four production files:
 
 - `ginfer-manager/ui/manager.js`: remove discovered-host fallbacks after the
   discovered pairing branch always returns.
@@ -34,9 +34,11 @@ no production Host/Manager function referenced only by its definition; trait
 hooks and test entry points remain. This establishes the bounded survey, not
 proof that every repository path is free of dead code.
 
-Existing Manager UI tests pass 19/19 and `git diff --check` passes. No Rust or
-TypeScript compilation has started while the coordinator's model job is active.
-The coordinator will run the final composed gate once the candidates are ready.
+Cleanup commit is `7e80fa7ae`. Runtime changes are separate commits:
+`2ff833a3a` (Manager rendering), `9bf2e3724` (inventory persistence),
+`de458c468` (ordered parallel observations), and `eeb7fc837` (pinned transports). The focused gates below pass. The coordinator's composed
+`make verify`, native GChat adapter build and installed acceptance remain the
+next integration actions.
 
 ## Review evidence and selected next action
 
@@ -64,17 +66,106 @@ Selected next steps, sent to the coordinator before implementation:
    credentials for each operation. Forget, changed identity/pin and registry
    replacement retire the applicable pool; mutations are never retried.
 
-Only the first two are next implementation candidates while the Rust compile
-window is unavailable. Performance edits will have separate commits from cleanup.
+All four are implemented. Manager uses the shared Client's ordered
+concurrent observation operation; its TLS-barrier regression passes. The UI tests pass 21/21, including heartbeat-only DOM/focus (Host revision and
+nonrendered usage), visible client timestamp/request changes, fresh instance
+session guards, hidden latest state, visibility return and disposal. In the same
+identical-snapshot screen, replacement
+mutations drop from 100 to zero and focus is retained; visible median apply time
+is 0.044 ms. A changing-snapshot screen preserves 100 visible renders while hidden
+renders drop from 100 to zero. This demonstrates the intended DOM work removal.
+
+Before the remaining changes, write-failure pressure testing identified that a
+new-ID comparison alone would miss a retry after the ID enters memory but the
+write fails. The selected Host-owned dirty flag remains set until successful
+state persistence. TLS pools belong to the shared Client's registered host/pin/
+grant; changed registration invalidates them, and credentials remain per-request.
+Already superseded request metadata may use an uncached pin client, preserving
+existing in-flight behavior without reinserting a stale pool. The coordinator
+has these designs; no external protocol or model behavior changes are proposed.
+
+The coordinator's native Windows idle observation is retained in
+`/ai/gchat/out/remaining-acceptance-20261009/idle-sample.json`. At zero model
+processes, the 30.09-second aggregate CPU sample was 3.84% of one logical core for
+GChat, 0.363% for Manager and 0.208% for Host. It covers the untouched current view,
+not a long conversation or an attribution to a specific renderer. Working-set
+sums can double-count shared pages; private bytes measure commit, not residency.
+
+The first focused Rust gate ran after the coordinator released the model/other
+compiler work, under the canonical build/GPU locks and an eight-minute command
+limit. Six of ten client tests passed. The two added fixtures initially omitted
+the explicit sharing setup; existing stopped-host/fleet checks also exposed
+pooled TLS EOF classified as a configuration problem. Fixtures now own accepted
+connections so aborting a server actually stops them. The first correction
+incorrectly limited that cause to connection establishment.
+Cached reqwest/hyper source distinguishes established I/O from connection setup.
+The final source traverses the actual error chain and classifies typed
+`UnexpectedEof` only during request/connect phases as unavailable; decoded
+HTTP/schema, identity, protocol, authentication and certificate errors remain
+problems. Mutations are not retried. The added TLS regression checks those
+boundaries, ten warm read connections, changed credentials/pins and forget/re-pair.
+Inventory checks cover unchanged durable bytes with changed artifact metadata,
+failed durable-write retry, and stable IDs after restart. The final bounded Rust
+gate passes: both existing stopped-host/fleet cases,
+both new TLS regressions, four target/admission and inventory checks, and the
+Manager compile check. The six remaining client cases passed in earlier runs;
+there is no remaining focused client failure. Receipts are
+`/ai/gchat/out/code-hygiene-20261009/review-quality-104d4ec6/rust-focused*.log`.
+Only offline cached Host/Manager Rust checks ran under the canonical build/GPU
+locks. The native GChat inference adapter preserves its session/header/credential
+checks in source and awaits the coordinator's composed compile/integration gate.
+
+The heartbeat screen changes Host revisions, local-administrator last-seen data,
+and client timestamp milliseconds within the displayed second on 100 updates.
+The baseline replaces the tree 100 times and loses focus; the candidate makes
+zero DOM mutations and retains focus. Visible median apply time is 1.378 ms
+before and 0.041 ms after in Node/JSDOM. Actual displayed client timestamps,
+request counts, fleet revisions and instance sessions continue to trigger updates;
+changing visible data can still rebuild the tree. No native CPU/RAM reduction
+is claimed from these screens.
+
+## Bounded review conclusions
+
+The coordinator records findings in the sole master; OI-092 through OI-095 map
+to the implemented runtime changes above. Source opportunities remain distinct
+from measured gains. In particular, a startup health probe currently holds the
+Host process mutex across up to two one-second HTTP reads per starting instance;
+measure a slow-start snapshot before changing lock/publication ownership.
+Token-count preparation transforms the whole retained history on each draft
+change before its network debounce; measure native long-conversation allocation
+and main-thread time before selecting immutable-history reuse. The all-message
+DOM and attachment-reference projections belong to existing OI-075 acceptance.
+
+Qualified profile validation streams the full artifact through SHA256 on every
+qualified launch/reload. It already uses `spawn_blocking`; this review adds no
+hash timing claim. A stat-only digest cache would weaken exact artifact identity.
+Any reuse design needs an explicit immutable-payload and change-invalidation
+contract before implementation.
+
+Studio catalog polling already deduplicates requests, compares unchanged data,
+and stops while hidden. Engine host polling guards overlap and uses concurrent
+host observations. Queued worker allocation waits on notifications or a two-second
+refresh; it is not a busy spin. Current native thread/working-set totals do not
+establish a thread leak. No supported SIMD hot path was established.
+
+Independent read-only reviews found no blocking defect in the actual OI-067
+outcome/status correction or OI-072 recorded-Engine evidence-label patch. Their
+own focused evidence remains owned by those candidates; this branch does not
+copy their implementations or rerun their gates.
+
+Runtime improvements are separate commits from the behavior-identical cleanup.
 
 ## Owned disk and jobs
 
 | Owner / host | Exact path | Status / retention |
 | --- | --- | --- |
 | GChat review / local Linux | `/ai/gchat-worktrees/review-quality-104d4ec6` | Candidate source; retain until coordinator integration |
-| GChat review / local Linux | `/ai/gchat/out/code-hygiene-20261009/review-quality-104d4ec6/` | Bounded Manager screen script and baseline result; retain evidence |
+| GChat review / local Linux | `/ai/gchat/out/code-hygiene-20261009/review-quality-104d4ec6/` | Bounded DOM screens and focused Rust receipts, including contrary failures; retain evidence |
 | Shared dependency/compiler cache | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse only; not owned disposable outputs |
 
-No owned compiler, GPU/model, deployment or remote job is live. An initial
+No owned compiler, GPU/model, deployment or remote job is live. The candidate
+source tree occupies 264 MiB; small review receipts occupy under 64 KiB. The
+node_modules symlink and shared target cache are reused, not duplicate allocations.
+An initial
 inefficient reference survey was stopped; the corrected survey tokenizes only
-tracked text once and completed in 28 ms. No model/build payload was allocated.
+tracked text once and completed in 28 ms. No duplicate model or build directory was allocated.
