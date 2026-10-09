@@ -31,22 +31,13 @@ pub fn calculate_exponential_backoff_delay(attempt: u32) -> u64 {
         let hash = hasher.finish();
 
         // Convert hash to jitter value in range [-jitter_range, +jitter_range]
-        let jitter_offset = (hash % (jitter_range * 2)) as i64 - jitter_range as i64;
-        jitter_offset
+        (hash % (jitter_range * 2)) as i64 - jitter_range as i64
     } else {
         0
     };
 
-    // Apply jitter while ensuring delay stays positive and within bounds
-    let final_delay = cmp::max(
-        100, // Minimum 100ms delay
-        cmp::min(
-            MCP_MAX_RESTART_DELAY_MS,
-            (capped_delay as i64 + jitter) as u64,
-        ),
-    );
-
-    final_delay
+    // Bound jittered delay to 100 ms through the configured cap.
+    ((capped_delay as i64 + jitter) as u64).clamp(100, MCP_MAX_RESTART_DELAY_MS)
 }
 
 #[cfg(test)]
