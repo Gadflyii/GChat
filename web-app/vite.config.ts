@@ -91,8 +91,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           // These are shared semantic runtimes, not size-based fragments.
-          // Explicit ownership keeps route/app modules in their natural chunks.
-          onlyExplicitManualChunks: true,
+          // Rollup also includes unassigned static dependencies in these chunks.
           manualChunks(id) {
             if (id === '\0commonjsHelpers.js') return 'module-runtime'
             if (!id.includes('/node_modules/')) return
