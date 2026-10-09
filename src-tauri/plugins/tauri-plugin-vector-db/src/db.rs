@@ -77,11 +77,11 @@ pub fn try_load_sqlite_vec(conn: &Connection) -> bool {
     let paths = possible_sqlite_vec_paths();
     for p in paths {
         unsafe {
-            if conn.load_extension(&p, Some("sqlite3_vec_init")).is_ok() {
-                if conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.temp_vec USING vec0(embedding float[1])", []).is_ok() {
-                    let _ = conn.execute("DROP TABLE IF EXISTS temp.temp_vec", []);
-                    return true;
-                }
+            if conn.load_extension(&p, Some("sqlite3_vec_init")).is_ok()
+                && conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.temp_vec USING vec0(embedding float[1])", []).is_ok()
+            {
+                let _ = conn.execute("DROP TABLE IF EXISTS temp.temp_vec", []);
+                return true;
             }
         }
     }
