@@ -112,9 +112,17 @@ pub async fn load(
             engine,
             engine_runtimes: {
                 #[cfg(target_os = "linux")]
-                { ginfer_host::local_host::desktop_runtimes(directory.parent().ok_or("GChat host has no provider directory")?)? }
+                {
+                    ginfer_host::local_host::desktop_runtimes(
+                        directory
+                            .parent()
+                            .ok_or("GChat host has no provider directory")?,
+                    )?
+                }
                 #[cfg(not(target_os = "linux"))]
-                { Default::default() }
+                {
+                    Default::default()
+                }
             },
             desktop_provider: directory.parent().map(std::path::Path::to_path_buf),
             directory,
@@ -410,7 +418,7 @@ mod tests {
             }),
         );
         let upstream = tokio::spawn(upstream);
-        host.processes.lock().await.refresh().await.unwrap();
+        host.refresh_processes().await.unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("https://{}", listener.local_addr().unwrap());
         let acceptor = host.data.lock().await.certificate.acceptor().unwrap();

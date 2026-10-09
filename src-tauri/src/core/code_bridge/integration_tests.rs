@@ -73,7 +73,7 @@ async fn attached_local_instance_and_ready_host_snapshot_share_one_code_choice()
             Duration::from_secs(10),
         )
         .unwrap();
-        let session = processes
+        processes
             .launch(EngineLaunch {
                 instance_id,
                 artifact,
@@ -86,14 +86,21 @@ async fn attached_local_instance_and_ready_host_snapshot_share_one_code_choice()
                 concurrency: 2,
                 options: LaunchOptions::default(),
             })
-            .unwrap();
-        processes.refresh().await.unwrap();
-        assert_eq!(
-            processes.instances().next().unwrap().status,
-            ginfer_host::engine_registry::InstanceStatus::Ready
-        );
-        session
+            .unwrap()
     };
+    fleet.host.refresh_processes().await.unwrap();
+    assert_eq!(
+        fleet
+            .host
+            .processes
+            .lock()
+            .await
+            .instances()
+            .next()
+            .unwrap()
+            .status,
+        ginfer_host::engine_registry::InstanceStatus::Ready
+    );
     let host_id = fleet.host.data.lock().await.host_id;
     let snapshot = fleet.client.snapshot(host_id).await.unwrap();
     assert_eq!(
