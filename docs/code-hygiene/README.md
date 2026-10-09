@@ -60,7 +60,7 @@ Next: full composed verification and Clippy, then native build and acceptance.
 | Quality and CPU/RAM changes | gchat_code_review | `/ai/gchat-worktrees/review-quality-104d4ec6`, `review/gchat-quality-104d4ec6` | Focus retention, parallel snapshots, unchanged persistence/pinned pools |
 | Remaining acceptance prerequisites | remaining_acceptance | `/ai/gchat-worktrees/remaining-acceptance`, `dev/gchat-remaining-acceptance-104d4ec6` | Use saved evidence; prepare independent checks and actual blockers |
 | Source composition and final gate | coordinator | `/ai/gchat-worktrees/remediation-integration`, `dev/gchat-remediation-104d4ec6` | Integrate reviewed winners and verify affected contracts |
-| Hardware plugin Clippy corrections | shared_tools_review | `/ai/gchat-worktrees/review-hardware-880ecb5c`, `review/gchat-hardware-880ecb5c` | Focused CPU tests and hardware Clippy under coordinator cache admission |
+| Hardware plugin Clippy corrections | shared_tools_review | `/ai/gchat-worktrees/review-hardware-880ecb5c`, `review/gchat-hardware-880ecb5c` | Source and focused checks complete; coordinator integration/full gate pending |
 
 The supporting hardware candidate addresses the four hardware warnings in
 `out/code-hygiene-20261009/integration/composed-clippy-desktop.log`: CPU default
@@ -69,8 +69,19 @@ and NVIDIA UUID prefix removal retains the same exact output. The NVML Ready
 state owns its handle in a box; closures still borrow it while the existing read
 or write guard is held, and invalidation drops it under the write guard. This
 changes the enum's inline storage, not the initialization/failure cache or driver
-call schedule. No native performance claim is made. Focused checks await the
-coordinator's build-cache slot; no hardware probe or model job has been launched.
+call schedule. No native performance claim is made.
+
+Hardware source `9067b7af69c51917711fc9271f36dde9dac02ba5` passed crate
+`cargo check`, `cargo clippy -- -D warnings` and all 12 existing hardware tests
+(zero failures/ignored). Each command used `--locked --offline --manifest-path
+plugins/tauri-plugin-hardware/Cargo.toml` from the candidate's `src-tauri/`.
+The coordinator-admitted 300-second job held the canonical build then GPU locks,
+used the shared `/ai/gchat/src-tauri/target` with six Cargo jobs and exited 0;
+both job-owned guards are released. Retain the three check logs in
+`/ai/gchat/out/code-hygiene-20261009/hardware-review/` (16 KiB) and this clean
+source candidate (265 MiB) until integration. No candidate-local build,
+dependency copy, driver change or model execution was allocated. The coordinator
+owns the composed full gate and retirement of the reviewed worktree.
 
 ## Evidence and disk ownership
 
