@@ -1,12 +1,12 @@
 # GChat bug fixes and code hygiene
 
-Repository: GChat. Owner: GChat coordinator. Current baseline: main `104d4ec6e`;
-installed desktop source `a40d7221`, Manager `ce6a6c0e6`, engine `2ef56a52a`.
-Windows portability is merged in GInfer `634a16e16`; native build, installation,
-local picker and data preservation pass. Ordinary Chat completion remains blocked
-by the excessive shared tool payload, tracked as OI-091 in the installed baseline; its reviewed fix is now composed with the other
-candidates. See
-[installer acceptance](../installer-refresh/README.md).
+Repository: GChat. Owner: GChat coordinator. Main baseline: `104d4ec6e`.
+Local Windows desktop source `0a4e2b56c` and Manager `43c8d71cf` are installed;
+engine `2ef56a52a` remains the tested native baseline. Actual Chat, workbook read,
+agent discovery, manual/automatic compaction and continued replies pass. The
+original Coordinator history is incomplete with its output preserved. Sidebar
+Stop leaves the local Host alias loaded (OI-106); Manager Stop works. Source and
+physical evidence are in `out/remediation-native-correction-20261009/`.
 
 Ron authorized parallel remediation of remaining GChat issues and a broad review
 once Windows merged. This replaces the older review brief's waiting condition.
@@ -118,10 +118,11 @@ canonical guards protect compilation and model execution. Windows source
 `0a4e2b56c` built successfully and its packages passed verification. Removing the
 ignored Vite option preserved all 832 frontend files exactly. Manager source
 `43c8d71cf` is reused with explicit producer provenance; its inputs are unchanged.
-C4 has a finite 19:17–19:21Z postmerge smoke slot. After its actual end, update
-the local apps and verify installed Chat completion and the current Muse profile
-separately. Integrate the approved dependency fix after its focused checks, then
-refresh the affected package; do not conflate that later build with this one.
+C4 has a finite 19:17–19:21Z postmerge smoke slot. The apps are updated and actual Chat acceptance passes; the original profile
+is restored exactly and stopped with zero engines. Dependency alignment is
+integrated as `d78473f38`. Next: test the pending automatic C4/128K candidate under
+booking 279, integrate OI-106, run the composed gate and refresh the affected app
+package. Preserve the distinct producer and acceptance scope of each build.
 
 ## Current allocation
 

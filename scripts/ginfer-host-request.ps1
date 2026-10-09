@@ -1,5 +1,4 @@
-# Adapted from out/oi056-current-engine/host-request.ps1. Execution needs a booked
-# native window. This helper never starts or reloads an Engine or changes a profile.
+# Host transport and bounded C4 probes require a booked native window.
 param(
  [ValidateSet('Request','PrepareC4','RunC4')][string]$Mode='Request',
  [string]$Path='/host/v1/snapshot', [string]$BodyFile,
