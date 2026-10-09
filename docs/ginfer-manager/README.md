@@ -72,6 +72,11 @@ installed artifact, C4/131,072 settings and automatic pool with unchanged
 300 MiB guard. Record resolved bytes and segment slots, four full-context
 prefix-enabled requests, commit/return counts, graph execution and sampled
 device-wide free memory; then Ready/restart/stop through supported Host control.
+Use four distinct inputs counted at exactly 131,009 tokens through the loaded
+public frontend. The retained 63-decode-input qualification workload may serve
+as the matched control; it does not change a product output limit. Capture both
+the Engine scheduler's four admitted lanes and batch-four decode counters;
+four active Host HTTP requests alone cannot prove the requested concurrency.
 The existing startup and 32K functional screens do not satisfy this acceptance.
 Preserve the original profile and stopped state after the check. No GPU run,
 native build, server change or remote administration is authorized in this
@@ -89,8 +94,15 @@ Source verification: nineteen Manager DOM tests and sixteen focused desktop
 picker/benchmark tests pass, with product ESLint, release `tsc -b` and both
 repository diff checks. The catalog's original eight entries compare exactly
 with its base; independent integer layout arithmetic reproduces the retained
-wave and the new pending requirement. Focused Host Rust checks and required
-`make verify` await the coordinator's shared compiler-lock window. The two
+wave and the new pending requirement. The focused offline Host gate passed
+13 catalog tests and three launcher tests under the canonical build and GPU
+locks in 6.69 seconds, reusing `/ai/gchat/src-tauri/target`. The real
+`ProfileCatalog::read` accepted the exact nine-entry GInfer candidate with
+the pending automatic policy and evidence intact. Receipt:
+`/ai/gchat/out/oi072-current-profiles/focused-host-gate.log`; its disposable
+validator source and binary were removed. Independent review found no blocker
+in the evidence-label changes. Required `make verify` remains with the
+coordinator's composed integration gate. The two
 source trees occupy 264 MiB and 240 MiB; dependency links reuse existing shared
 caches. No disposable model, build or GPU output was created.
 
