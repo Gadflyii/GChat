@@ -96,3 +96,12 @@ export type GinferConfig = {
     max_concurrency: number;
     no_cuda_graph: boolean;
 };
+export type GinferLoadRequest = {
+    binaryPath: string;
+    hostDirectory: string;
+    modelId: string;
+    modelPath: string;
+    config: GinferConfig;
+    isEmbedding?: boolean;
+    timeout?: number;
+};

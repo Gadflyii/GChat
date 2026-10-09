@@ -3,6 +3,7 @@ import {
   SessionInfo,
   UnloadResult,
   GinferConfig,
+  GinferLoadRequest,
   GinferBenchmarkRequest,
   GinferBenchmarkResult,
 } from './types'
@@ -42,23 +43,16 @@ export function normalizeGinferConfig(config: any): GinferConfig {
 
 // GInfer server commands
 export async function loadGinferModel(
-  binaryPath: string,
-  hostDirectory: string,
-  modelId: string,
-  modelPath: string,
-  cfg: GinferConfig,
-  isEmbedding: boolean = false,
-  timeout: number = 600
+  request: GinferLoadRequest
 ): Promise<SessionInfo> {
-  const config = normalizeGinferConfig(cfg)
   return await invoke('plugin:ginfer|load_ginfer_model', {
-    binaryPath,
-    hostDirectory,
-    modelId,
-    modelPath,
-    config,
-    isEmbedding,
-    timeout,
+    request: {
+      ...request,
+      config: normalizeGinferConfig(request.config),
+      isEmbedding:
+        request.isEmbedding === undefined ? false : request.isEmbedding,
+      timeout: request.timeout === undefined ? 600 : request.timeout,
+    },
   })
 }
 

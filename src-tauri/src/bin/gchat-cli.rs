@@ -18,7 +18,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use app_lib::core::cli::{
     cli_get_data_folder, discover_ginfer_binary, download_hf_model, fetch_hf_ginfer_files,
     init_ginfer_state, integrations, list_chat_models, load_ginfer_model_impl, looks_like_hf_repo,
-    resolve_model_by_id, GinferConfig, HfFileInfo,
+    resolve_model_by_id, CliEndpointSettings, GinferConfig, GinferLoadRequest, HfFileInfo,
 };
 use app_lib::core::server::state_file::{self, LocalApiServerState};
 
@@ -946,15 +946,19 @@ async fn handle_serve(args: ServeArgs) {
 
     match load_ginfer_model_impl(
         ginfer_state.ginfer_process.clone(),
-        &bin_path.to_string_lossy(),
-        cli_get_data_folder().join("ginfer/host"),
-        model_id.clone(),
-        model_path.to_string_lossy().into_owned(),
-        port,
-        config,
-        args.api_key.clone(),
-        args.embedding,
-        args.timeout,
+        GinferLoadRequest {
+            binary_path: bin_path,
+            host_directory: cli_get_data_folder().join("ginfer/host"),
+            model_id: model_id.clone(),
+            model_path: model_path.to_string_lossy().into_owned(),
+            config,
+            is_embedding: args.embedding,
+            timeout: args.timeout,
+        },
+        CliEndpointSettings {
+            port,
+            api_key: args.api_key.clone(),
+        },
     )
     .await
     {
@@ -1206,15 +1210,16 @@ async fn start_model_server(
 
     let info = match load_ginfer_model_impl(
         ginfer_state.ginfer_process.clone(),
-        &bin_path.to_string_lossy(),
-        cli_get_data_folder().join("ginfer/host"),
-        model_id.to_string(),
-        model_path.to_string_lossy().into_owned(),
-        port,
-        config,
-        api_key,
-        false,
-        120,
+        GinferLoadRequest {
+            binary_path: bin_path,
+            host_directory: cli_get_data_folder().join("ginfer/host"),
+            model_id: model_id.to_string(),
+            model_path: model_path.to_string_lossy().into_owned(),
+            config,
+            is_embedding: false,
+            timeout: 120,
+        },
+        CliEndpointSettings { port, api_key },
     )
     .await
     {

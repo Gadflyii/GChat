@@ -1,6 +1,6 @@
-import { SessionInfo, UnloadResult, GinferConfig, GinferBenchmarkRequest, GinferBenchmarkResult } from './types';
+import { SessionInfo, UnloadResult, GinferConfig, GinferLoadRequest, GinferBenchmarkRequest, GinferBenchmarkResult } from './types';
 export declare function normalizeGinferConfig(config: any): GinferConfig;
-export declare function loadGinferModel(binaryPath: string, hostDirectory: string, modelId: string, modelPath: string, cfg: GinferConfig, isEmbedding?: boolean, timeout?: number): Promise<SessionInfo>;
+export declare function loadGinferModel(request: GinferLoadRequest): Promise<SessionInfo>;
 export declare function unloadGinferModel(pid: number): Promise<UnloadResult>;
 export declare function isProcessRunning(pid: number): Promise<boolean>;
 export declare function findSessionByModel(modelId: string): Promise<SessionInfo | null>;

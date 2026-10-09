@@ -1,5 +1,6 @@
 # Engineering Decisions (ADR)
 
+- [Own GInfer model load requests](2026-10-09-own-ginfer-model-load-requests.md)
 - [Preserve Agent stage outcomes through final output](2026-10-09-preserve-agent-stage-outcomes.md)
 - [Load capability schemas on demand](2026-10-09-load-capability-schemas-on-demand.md)
 
