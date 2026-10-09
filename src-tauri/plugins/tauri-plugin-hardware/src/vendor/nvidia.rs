@@ -18,7 +18,7 @@ use {
 enum NvmlState {
     Uninit,
     Failed,
-    Ready(Nvml),
+    Ready(Box<Nvml>),
 }
 
 /// NVML handle. On Linux we use RwLock so we can invalidate after sleep/resume
@@ -42,7 +42,7 @@ where
     {
         let guard = NVML.read().expect("RwLock poisoned");
         match &*guard {
-            NvmlState::Ready(nvml) => return f(Some(nvml)),
+            NvmlState::Ready(nvml) => return f(Some(nvml.as_ref())),
             // Already attempted and failed — return without re-trying or
             // re-logging. This is what stops the per-poll log spam.
             NvmlState::Failed => return f(None),
@@ -65,7 +65,7 @@ where
             match result {
                 Ok(nvml) => {
                     log::debug!("NVML initialized successfully");
-                    *guard = NvmlState::Ready(nvml);
+                    *guard = NvmlState::Ready(Box::new(nvml));
                 }
                 Err(e) => {
                     // Logged at `warn!` so the failure is visible in
@@ -80,7 +80,7 @@ where
             }
         }
         match &*guard {
-            NvmlState::Ready(nvml) => f(Some(nvml)),
+            NvmlState::Ready(nvml) => f(Some(nvml.as_ref())),
             _ => f(None),
         }
     }
@@ -210,8 +210,8 @@ fn create_gpu_info(nvml: &Nvml, index: u32, driver_version: &str) -> Result<GpuI
     let compute_capability = device.cuda_compute_capability()?;
 
     let uuid = device.uuid()?;
-    let clean_uuid = if uuid.starts_with("GPU-") {
-        uuid[4..].to_string()
+    let clean_uuid = if let Some(stripped) = uuid.strip_prefix("GPU-") {
+        stripped.to_string()
     } else {
         uuid
     };
