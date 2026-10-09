@@ -47,11 +47,26 @@ passes check, strict Clippy and 86 Host tests, including delayed health/model
 responses during Stop and Reload. Supporting Clippy warnings are corrected in
 utilities, hardware, RAG/vector DB and compact dispatch. GInfer launch ownership
 uses a named request consistently in desktop, CLI, guest bindings and extension;
-explicit embedding rejection and defaults remain. These final additions need
-the composed gate, strict Clippy and CLI compile before native source freeze.
-Timed competitors have completed; the root reservation is 17:52–19:30Z on
-October 9. Both canonical guards protect compilation and model execution.
-Next: full composed verification and Clippy, then native build and acceptance.
+explicit embedding rejection and defaults remain. The final composed frontend
+gate passes 2,092 tests, 102 extension tests and all six coverage floors. The
+resumed Rust gate passes 553 desktop tests, 86 Host tests, six managed-adapter
+tests, 12 hardware tests and 29 utility tests. Desktop, Host and Manager strict
+Clippy and the supported CLI compile pass at source `01d3b05b5`.
+
+Composition found two Code/managed-adapter fixtures still calling the removed
+process-owned refresh. Both now call Host refresh outside the process mutex;
+future ownership changes require scanning all workspace callers. Two nested
+SQLite probe conditions are corrected without changing short-circuit behavior.
+The first CLI check incorrectly disabled required default desktop features; the
+supported `cargo check --features cli --bin gchat-cli` passes. These checks are
+recorded in `out/code-hygiene-20261009/integration/`; no native acceptance is
+claimed from them.
+
+Timed competitors have completed. Root reservations cover 17:52–19:30Z for
+verification/build and 19:30–20:30Z for installed acceptance on October 9. Both
+canonical guards protect compilation and model execution. Next: freeze this
+checked source, build the Windows apps once using the tested `2ef56a52a` engine,
+then verify installed Chat completion and the current Muse profile separately.
 
 ## Current allocation
 
