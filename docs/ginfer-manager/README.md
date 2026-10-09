@@ -165,6 +165,40 @@ explicit direct model ID and Host lifecycle deadline. The native PowerShell
 parser passes without executing the script body. Embedded transport compilation,
 API calls and physical execution remain untested until the booked native run.
 
+The coordinator's owned execution adapter is
+`/ai/gchat/out/code-hygiene-20261009/integration/c4-profile-capacity.ps1`.
+It references the committed helper/bank and retained
+`original-profile-public.json`, checks the live booking and coordinator-owned
+canonical locks, and inspects the installed native manifest/version, GPU and
+actual Host child arguments. It performs automatic custom-profile Reload
+(which already starts the instance), Ready and Stop, then owns the separate
+direct process on `127.0.0.1:9537`. Credentials remain in memory; the direct
+process reuses the Host-generated Engine key and native public model label,
+with separate alias ownership. Its approved lifecycle difference omits the
+Host-only `--exit-on-stdin-close`; exact PID, creation time and image checks
+govern direct cleanup. Engine inference parameters remain the same, with the
+new JSONL diagnostics recorded explicitly.
+
+The adapter's `finally` covers earlier API/preparation/preflight failures and
+successful waves, stops the exact direct process, and restores the exact saved
+flat original configuration through supported Reload/Stop. It checks stopped
+idle state, original identity/certificate and absence of native Engines. The
+coordinator supplies the existing outer RAM/hard-deadline guard. Native `2ef`
+uses `%LOCALAPPDATA%\GInfer\hardware.json` with no Host profile override;
+startup can refresh stale NUMA facts, so the adapter compares that same existing
+path/hash after each startup and stops the same-settings comparison if it
+changes. It does not copy that profile or introduce `--no-profile`.
+Current booking metadata is local5090 line 278, October 9, 17:52–19:30 UTC,
+owned by GChat; the adapter requires fresh bounds and line/PID parameters.
+This adapter is a retained source artifact for coordinator review/execution,
+not a live job or completed physical result. No native parser, compiler,
+API call or GPU execution has run for the adapter in this source phase.
+Independent source pressure review found no concrete blocker in the composed
+adapter/helper/bank and confirmed that the actual Host public label comes from
+the artifact identity/weights, while the saved UUID is only its inventory lookup.
+The final receipt is written only to a directory created by this invocation;
+rejecting a reused output directory cannot overwrite retained evidence.
+
 Source verification: nineteen Manager DOM tests and sixteen focused desktop
 picker/benchmark tests pass, with product ESLint, release `tsc -b` and both
 repository diff checks. The catalog's original eight entries compare exactly
