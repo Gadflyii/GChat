@@ -27,6 +27,75 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
+### Current Engine profile repair — OI-072
+
+The installed Engine is now native `2ef56a52a`. The original fixed-pool profile
+remains saved exactly and stopped. OI-072 must deliver Muse TP1, C4/131,072,
+NVFP4 long KV and native NVFP4 DFlash, 1,024-token prefill, graphs enabled and
+Vision disabled through the public prefix-enabled serving route. Context,
+concurrency, the 300 MiB guard and sampling behavior are not reduced. Engine
+memory admission remains the authority; the earlier fixed-pool rejection is
+retained evidence, not a reason to weaken that guard.
+
+The source candidate keeps the September fixed profile unchanged and adds a
+distinct automatic-pool profile, initially `calculated-pending-validation`.
+Automatic sizing uses current post-startup availability minus the same guard;
+it maximizes the shared arena instead of reserving yesterday's unused capacity.
+GChat already forwards and persists null/omitted versus positive fixed arena
+bytes correctly. Catalogs are owned by GInfer's `config/launch-profiles/`.
+The candidate is not installed and does not rewrite live `host.json`.
+
+Frozen `2ef56a52a` source selects a 2,208-token native tail containing
+8,366,592 bytes, including 256-byte plane alignment and the 15-token BF16 V
+microtail. The startup minimum is only four such capture tails (33,466,368
+bytes); reaching Ready with automatic sizing cannot establish C4 full-context
+capacity. The September placement harness disabled prefix reuse. Its exact
+2,139,451,392 measured arena bytes are reproduced by 63 full tails and one
+2,048-token tail per lane, and exclude public-serving checkpoint reservations.
+Those histories left 9,858,355,200 of the fixed arena's bytes unused.
+
+For the public route, one Muse compound checkpoint reserves 85,406,720 bytes
+per lane: 43,450,368 sliding INT8 bytes, 41,943,040 draft BF16 bytes and 13,312
+BF16 continuation-hidden bytes. Sliding/draft live rings and pending state are
+fixed allocations made before the final arena, while this checkpoint image
+belongs inside it. Publishing a prompt checkpoint seals its terminal tail, so
+output requires another tail. A conservative cold full-context C4 calculation
+uses 64 preferred tails per lane, one extra tail for that seal, one largest
+atomic-growth tail and one compound checkpoint: 2,550,407,168 arena bytes and
+268 segment slots. This is a calculated bound for four independent cold text
+requests; retained fragmented histories and physical allocator state are checked
+by the Engine's reservation transactions. It is not a fixed pool cap or a
+current measured available budget.
+
+Next: the coordinator books one native public-serving check using the exact
+installed artifact, C4/131,072 settings and automatic pool with unchanged
+300 MiB guard. Record resolved bytes and segment slots, four full-context
+prefix-enabled requests, commit/return counts, graph execution and sampled
+device-wide free memory; then Ready/restart/stop through supported Host control.
+The existing startup and 32K functional screens do not satisfy this acceptance.
+Preserve the original profile and stopped state after the check. No GPU run,
+native build, server change or remote administration is authorized in this
+source phase. Historical residency attribution remains separately unresolved
+under OI-066 and is not a prerequisite for correcting the excessive fixed
+reservation.
+
+Owned source candidates are `/ai/gchat-worktrees/oi072-current-profiles` from
+`104d4ec6e` and `/ai/ginfer-worktrees/gchat-oi072-catalog` from origin/dev/next
+`a6dc193fb`. Retain source/evidence until reviewed integration; no model copy,
+build or live job is owned by this item. The accepted installed `2ef56a52a`
+payload is reused. Required physical acceptance remains open.
+
+Source verification: nineteen Manager DOM tests and sixteen focused desktop
+picker/benchmark tests pass, with product ESLint, release `tsc -b` and both
+repository diff checks. The catalog's original eight entries compare exactly
+with its base; independent integer layout arithmetic reproduces the retained
+wave and the new pending requirement. Focused Host Rust checks and required
+`make verify` await the coordinator's shared compiler-lock window. The two
+source trees occupy 264 MiB and 240 MiB; dependency links reuse existing shared
+caches. No disposable model, build or GPU output was created.
+
+### Retained startup diagnosis — OI-066
+
 The October 9 measurement establishes the OI-066 startup admission rejection.
 The owner of the baseline difference and its reclaimability remain unresolved. The
 saved tested profile and Host command match: Muse native-NVFP4 text, TP1,

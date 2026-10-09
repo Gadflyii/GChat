@@ -38,7 +38,7 @@ function fixture() {
     local_administrator: { active_requests: 1, last_seen_unix_ms: 1700000000000 },
     launch_profiles: [{ model_id: 'installed-muse', gpu_groups: [['GPU-local']], compatible_gpu_groups: [['GPU-local']],
       profile: { id: 'muse-qualified', name: 'Muse TP1 32K', tp: 1, max_context: 32768, concurrency: 4,
-        options: configuration, qualification: { tier: 'full-context-tested' } } }],
+        options: configuration, qualification: { tier: 'full-context-tested', engine_revision: '922e5a879b9af12e52763d52b73362937f9dd148' } } }],
     model_management: { version: 1, managed_root: '/models', downloads: [], engine_presets_available: true },
   }
   return {
@@ -133,6 +133,8 @@ test('manager renders local and paired status, installed model, GPU, profile and
   button(app.document, 'Start a model…').click()
   const pane = app.document.querySelector('[role="dialog"]')
   assert.match(pane.textContent, /Muse TP1 32K.*RTX 5090.*full-context-tested/s)
+  assert.match(pane.textContent, /full-context-tested · Engine 922e5a87/)
+  assert.match(pane.textContent, /A changed Engine needs separate validation/)
   assert.equal(requests(app).length, 0, 'rendering and selecting a profile never start a model')
   button(pane, 'Cancel').click()
   app.document.querySelectorAll('.host-button')[1].click()

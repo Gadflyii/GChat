@@ -94,7 +94,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
       <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={disabled || !choices.length} value={selected?.key ?? ''} onChange={e => setChoice(e.target.value)}>
         <option value="">{currentSettings && !pending ? `Current settings · C${instance?.configuration.concurrency ?? 1} · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} context` : 'Choose a profile'}</option>
         {choices.map(({ entry, key }) => <option key={key} value={key}>
-          {entry.profile.name} · {entry.profile.options.vision ? 'Vision + text (default)' : 'Text only'} · TP{entry.profile.tp} · C{entry.profile.concurrency} · {entry.profile.max_context.toLocaleString()} context · {entry.profile.qualification.tier === 'full-context-tested' ? 'Full-context tested' : entry.profile.qualification.tier === 'calculated-startup-smoke' ? 'Calculated + startup/smoke checked' : 'Calculated — pending validation'}
+          {entry.profile.name} · {entry.profile.options.vision ? 'Vision + text (default)' : 'Text only'} · TP{entry.profile.tp} · C{entry.profile.concurrency} · {entry.profile.max_context.toLocaleString()} context · {entry.profile.qualification.tier === 'full-context-tested' ? 'Full-context tested' : entry.profile.qualification.tier === 'calculated-startup-smoke' ? 'Calculated + startup/smoke checked' : 'Calculated — pending validation'} · Engine {entry.profile.qualification.engine_revision.slice(0, 8)}
         </option>)}
       </select>
     </label>
@@ -105,6 +105,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
       : selected.entry.profile.qualification.tier === 'calculated-startup-smoke'
         ? 'Capacity calculated for the full context; startup and concurrent short requests checked. Full-length requests have not been tested.'
         : 'Pending validation: capacity is calculated only. Startup, memory margin and inference are unverified; this profile may fail to load until the required engine support is available.'}</p>}
+    {selected && <p className="text-sm text-muted-foreground">Evidence applies to Engine {selected.entry.profile.qualification.engine_revision.slice(0, 8)} and the recorded workload. A changed Engine needs separate validation.</p>}
     {!choices.length && <p className="text-sm text-muted-foreground">{
       !snapshot.models.length ? 'No installed models were found. Add a .ginfer model to this host’s model folder, then rescan.'
         : currentSettings ? 'No alternate profiles match this model and GPU group. You can benchmark the current running settings, or select another installed model with a compatible profile.'

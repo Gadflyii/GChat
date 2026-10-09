@@ -212,7 +212,10 @@ never manufacture Vision support or alter a profile's DFlash setting.
 
 Calculation-only entries use the pending tier, never a tested tier.
 Existing full-context evidence retains its stronger
-tier; no compatibility default infers a tier for an old catalog.
+tier for its recorded Engine and workload; no compatibility default infers a tier
+for an old catalog. The desktop, Manager and text launcher display that Engine
+revision beside the evidence tier. A changed runtime needs separate validation;
+a historic full-context pass is not relabeled as current Engine qualification.
 
 Snapshots expose `launch_profiles` with matching installed `model_id`, free
 `gpu_groups`, and hardware-compatible `compatible_gpu_groups` for changing an

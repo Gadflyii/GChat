@@ -243,7 +243,7 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
                 vision: profile["options"]["vision"].as_bool() == Some(true),
                 concurrency: profile["concurrency"].as_u64().unwrap_or(8),
                 label: format!(
-                    "{} · {} · TP{} · C{} · {} context · {}",
+                    "{} · {} · TP{} · C{} · {} context · {} · Engine {} (recorded evidence)",
                     profile["name"].as_str().unwrap_or("Profile"),
                     if profile["options"]["vision"].as_bool() == Some(true) {
                         "Vision + text (default)"
@@ -259,6 +259,8 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
                         Some("calculated-pending-validation") => "Calculated — pending validation (startup/memory/inference unverified; may require engine update)",
                         _ => "Unknown evidence tier",
                     },
+                    profile["qualification"]["engine_revision"].as_str()
+                        .unwrap_or("unrecorded").chars().take(8).collect::<String>(),
                 ),
                 body: json!({"profile_id":profile["id"],"model_id":entry["model_id"],
                     "gpu_uuids":group,"instance_id":replacing,"force":false,
@@ -586,7 +588,7 @@ mod tests {
     #[test]
     fn menu_uses_host_profiles_and_excludes_other_instances_gpu_groups() {
         let snapshot = json!({"instances":[{"instance_id":"running","status":"ready","configuration":{"gpu_uuids":["gpu0"]}}],
-            "launch_profiles":[{"model_id":"model","profile":{"id":"fixture","name":"Test C4","tp":1,"concurrency":4,"max_context":32768,"qualification":{"tier":"calculated-startup-smoke"}},
+            "launch_profiles":[{"model_id":"model","profile":{"id":"fixture","name":"Test C4","tp":1,"concurrency":4,"max_context":32768,"qualification":{"tier":"calculated-startup-smoke","engine_revision":"922e5a879b9af12e52763d52b73362937f9dd148"}},
                 "compatible_gpu_groups":[["gpu0"],["gpu1"]]}]});
         let available = choices(&snapshot, None);
         assert_eq!(available.len(), 1);
@@ -596,6 +598,7 @@ mod tests {
         assert_eq!(replacing[0].body["instance_id"], "running");
         assert!(replacing[0].label.contains("32768 context"));
         assert!(replacing[0].label.contains("not full-context tested"));
+        assert!(replacing[0].label.contains("Engine 922e5a87 (recorded evidence)"));
     }
 
     #[test]
