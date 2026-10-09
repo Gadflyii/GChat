@@ -4,7 +4,8 @@ Repository: GChat. Owner: GChat coordinator. Current baseline: main `104d4ec6e`;
 installed desktop source `a40d7221`, Manager `ce6a6c0e6`, engine `2ef56a52a`.
 Windows portability is merged in GInfer `634a16e16`; native build, installation,
 local picker and data preservation pass. Ordinary Chat completion remains blocked
-by the excessive shared tool payload, tracked as OI-091. See
+by the excessive shared tool payload, tracked as OI-091 in the installed baseline; its reviewed fix is now composed with the other
+candidates. See
 [installer acceptance](../installer-refresh/README.md).
 
 Ron authorized parallel remediation of remaining GChat issues and a broad review
@@ -28,6 +29,12 @@ completion/continued Chat and relevant lifecycle behavior after the next app bui
 Keep behavior-identical cleanup separate from measured performance changes.
 Server 2 administration, dependency upgrades and unrelated Engine speed work are
 excluded. Real fleet/tray/publication acceptance retains its actual prerequisites.
+
+Implementation evidence: [quality review](gchat-quality.md) and
+[remaining acceptance](../agent-runtime/remaining-acceptance.md).
+The integration candidate contains OI-067 `05e9e8760`, OI-091 `447137298`,
+OI-074/OI-096 `21bbc284f`, OI-072 `6dc94493c` and OI-092–095 `24af05967`.
+Focused gates pass; next action is the composed full gate, then native acceptance.
 
 ## Current allocation
 

@@ -1,5 +1,8 @@
 # Chat and Agent runtime
 
+[Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
+prerequisites and distinguishes saved source evidence from installed replay.
+
 ## OI-067 — active outcome correction
 
 Deliver accurate overall Coordinator status when planning, workers or synthesis
