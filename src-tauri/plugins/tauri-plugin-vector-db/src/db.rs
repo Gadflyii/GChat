@@ -3,7 +3,7 @@ use crate::VectorDBError;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,8 +37,8 @@ pub struct MinimalChunkInput {
 // Connection & Path Management
 // ============================================================================
 
-pub fn collection_path(base: &PathBuf, name: &str) -> PathBuf {
-    let mut p = base.clone();
+pub fn collection_path(base: &Path, name: &str) -> PathBuf {
+    let mut p = base.to_path_buf();
     let clean = name.replace(['/', '\\'], "_");
     let filename = format!("{}.db", clean);
     p.push(&filename);
@@ -77,7 +77,7 @@ pub fn try_load_sqlite_vec(conn: &Connection) -> bool {
     let paths = possible_sqlite_vec_paths();
     for p in paths {
         unsafe {
-            if let Ok(_) = conn.load_extension(&p, Some("sqlite3_vec_init")) {
+            if conn.load_extension(&p, Some("sqlite3_vec_init")).is_ok() {
                 if conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.temp_vec USING vec0(embedding float[1])", []).is_ok() {
                     let _ = conn.execute("DROP TABLE IF EXISTS temp.temp_vec", []);
                     return true;

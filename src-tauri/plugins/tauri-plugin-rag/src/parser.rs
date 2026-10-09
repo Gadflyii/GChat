@@ -2,8 +2,6 @@ use crate::RagError;
 use calamine::{open_workbook_auto, DataType, Reader as _};
 use chardetng::EncodingDetector;
 use csv as csv_crate;
-use html2text;
-use infer;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use std::borrow::Cow;
@@ -229,7 +227,7 @@ fn parse_spreadsheet(file_path: &str) -> Result<String, RagError> {
                 out.push_str(&cells);
                 out.push('\n');
             }
-            out.push_str("\n");
+            out.push('\n');
         }
     }
     Ok(out)

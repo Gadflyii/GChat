@@ -49,7 +49,7 @@ pub async fn get_status(state: State<'_, VectorDBState>) -> Result<Status, Vecto
             for p in paths {
                 println!("[VectorDB]   Trying: {}", p);
                 unsafe {
-                    if let Ok(_) = conn.load_extension(&p, Some("sqlite3_vec_init")) {
+                    if conn.load_extension(&p, Some("sqlite3_vec_init")).is_ok() {
                         if conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.temp_vec USING vec0(embedding float[1])", []).is_ok() {
                             let _ = conn.execute("DROP TABLE IF EXISTS temp.temp_vec", []);
                             println!("[VectorDB] ✓ sqlite-vec loaded from: {}", p);
@@ -78,8 +78,7 @@ pub async fn get_status(state: State<'_, VectorDBState>) -> Result<Status, Vecto
 }
 
 #[tauri::command]
-pub async fn create_collection<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn create_collection(
     state: State<'_, VectorDBState>,
     name: String,
     dimension: usize,
@@ -103,8 +102,7 @@ pub async fn create_collection<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn create_file<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn create_file(
     state: State<'_, VectorDBState>,
     collection: String,
     file: FileInput,
@@ -121,8 +119,7 @@ pub async fn create_file<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn insert_chunks<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn insert_chunks(
     state: State<'_, VectorDBState>,
     collection: String,
     file_id: String,
@@ -135,8 +132,7 @@ pub async fn insert_chunks<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn delete_file<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn delete_file(
     state: State<'_, VectorDBState>,
     collection: String,
     file_id: String,
@@ -147,8 +143,7 @@ pub async fn delete_file<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn search_collection<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn search_collection(
     state: State<'_, VectorDBState>,
     collection: String,
     query_embedding: Vec<f32>,
@@ -172,8 +167,7 @@ pub async fn search_collection<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn list_attachments<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn list_attachments(
     state: State<'_, VectorDBState>,
     collection: String,
     limit: Option<usize>,
@@ -184,8 +178,7 @@ pub async fn list_attachments<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn delete_chunks<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn delete_chunks(
     state: State<'_, VectorDBState>,
     collection: String,
     ids: Vec<String>,
@@ -196,8 +189,7 @@ pub async fn delete_chunks<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn delete_collection<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn delete_collection(
     state: State<'_, VectorDBState>,
     collection: String,
 ) -> Result<(), VectorDBError> {
@@ -209,8 +201,7 @@ pub async fn delete_collection<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn chunk_text<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn chunk_text(
     text: String,
     chunk_size: usize,
     chunk_overlap: usize,
@@ -219,8 +210,7 @@ pub async fn chunk_text<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub async fn get_chunks<R: tauri::Runtime>(
-    _app: tauri::AppHandle<R>,
+pub async fn get_chunks(
     state: State<'_, VectorDBState>,
     collection: String,
     file_id: String,
