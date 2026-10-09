@@ -7,9 +7,12 @@ param(
  [string]$OutputName='snapshot.json', [string]$EngineOrigin,
  [string]$ApiKey='', [string[]]$BodyFiles, [string]$RequestLogJsonl,
  [int]$EngineProcessId, [string]$ExpectedEnginePath,
- [string]$CorpusFile=(Join-Path $PSScriptRoot 'muse-qualified-context-bank.json')
+ [string]$CorpusFile
 )
 $ErrorActionPreference='Stop'
+if([string]::IsNullOrWhiteSpace($CorpusFile)){
+ $CorpusFile=Join-Path $PSScriptRoot 'muse-qualified-context-bank.json'
+}
 if($env:COMPUTERNAME -ne 'RON-9950X3D2'){throw 'Wrong workstation'}
 New-Item -ItemType Directory -Force -Path $OutputDirectory|Out-Null
 $gpu='GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e'
