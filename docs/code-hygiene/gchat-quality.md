@@ -174,7 +174,8 @@ to 600; distinct saved-message objects from 50,000 to 500 and content-block
 objects from 60,000 to 600. Preparation time is 37.08 ms before and 2.80 ms after
 in that fixture. These measure fixture work/allocation, not native CPU or RAM.
 The coordinator owns acceptance/integration and the remaining composed gate.
-All JS checks ended before the subsequent Infernix timed window; no job remains.
+All JS checks ended before the coordinator's subsequent timing-window restriction;
+no job remains. This does not establish the other owner's actual run start time.
 
 ## Owned disk and jobs
 
