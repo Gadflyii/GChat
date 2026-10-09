@@ -225,9 +225,10 @@ Explicit Start and Restart restore the selected alias only after the current
 session reaches Ready, if its selection was cleared by the Ready-only projection.
 Focused sidebar/restart/Host-store tests pass 21/21 on the approved aligned
 `oi074-frontend-packages/node_modules` graph; production ESLint and `tsc -b`
-pass. The existing switch-race fixture still emits React act warnings; no
-warnings are suppressed. This is source evidence; composed/native acceptance
-belongs to the coordinator. No native/GPU/build job or model copy is owned.
+pass. The switch-race fixture owns its asynchronous updates through `act`;
+the focused rerun emits no React act warnings. This is source evidence;
+composed/native acceptance belongs to the coordinator. No native/GPU/build job
+or model copy is owned.
 
 | Owner / host | Exact path | Status / retention |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { useAppState } from '@/hooks/useAppState'
@@ -319,19 +319,24 @@ describe('sidebar server shortcut', () => {
     })
     render(<ServerQuickActions />)
 
-    const firstSwitch = switchToModel({
-      modelId: 'switch-model', providerName: 'ginfer', serviceHub,
+    let firstSwitch: ReturnType<typeof switchToModel>
+    await act(async () => {
+      firstSwitch = switchToModel({
+        modelId: 'switch-model', providerName: 'ginfer', serviceHub,
+      })
     })
     await waitFor(() => expect(getServerStatus).toHaveBeenCalledOnce())
     fireEvent.click(screen.getByRole('button', { name: /Stop server/ }))
     expect(useAppState.getState().pendingModelStops).toBe(1)
     expect(shouldAttemptAutoStart('ginfer', 'switch-model')).toBe(false)
 
-    const laterSwitch = switchToModel({
-      modelId: 'later-model', providerName: 'ginfer', serviceHub,
+    await act(async () => {
+      const laterSwitch = switchToModel({
+        modelId: 'later-model', providerName: 'ginfer', serviceHub,
+      })
+      releaseProbe(false)
+      await Promise.all([firstSwitch, laterSwitch])
     })
-    releaseProbe(false)
-    await Promise.all([firstSwitch, laterSwitch])
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Local API Server and model stopped'))
 
     expect(models.stopModel).toHaveBeenCalledExactlyOnceWith('switch-model', 'ginfer')
