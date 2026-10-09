@@ -217,7 +217,11 @@ aliases disappear, explicit Start restores the saved instance, and changed
 sessions abort readiness without replaying mutations. Existing watchdog values
 remain; no model, context, profile or facade contract is changed.
 
-Focused sidebar/restart/Host-store tests pass 18/18 on the approved aligned
+An in-flight refresh keeps any lifecycle snapshot published since its reads
+began, using snapshot object identity rather than revision/UUID chronology.
+Delayed-Stop regressions retain the stopped view with both a greater revision
+and a reset revision, so a replaced Host boot is not rejected by counter order.
+Focused sidebar/restart/Host-store tests pass 20/20 on the approved aligned
 `oi074-frontend-packages/node_modules` graph; production ESLint and `tsc -b`
 pass. The existing switch-race fixture still emits React act warnings; no
 warnings are suppressed. This is source evidence; composed/native acceptance

@@ -16,6 +16,28 @@ vi.mock('@/services/engines', async (original) => ({
 }))
 
 describe('Host facade address projection', () => {
+  it.each([21, 1])('retains a lifecycle Stop publication at revision %s when an earlier read finishes late', async revision => {
+    const host = { host_id: 'local', local: true, name: 'This computer' }
+    const ready = { host_id: 'local', revision: 20, instances: [{ instance_id: 'one', status: 'ready', configuration: {} }] }
+    const stopped = { ...ready, revision, instances: [{ ...ready.instances[0], status: 'stopped' }] }
+    useEngineHosts.setState({ hosts: [host] as never, snapshots: { local: ready } as never, refreshing: false, errors: {} })
+    let releaseSnapshot: (snapshot: unknown) => void = () => {}
+    let readStarted: () => void = () => {}
+    const started = new Promise<void>(resolve => { readStarted = resolve })
+    vi.mocked(engineCommand).mockImplementation(async action => {
+      if (action === 'list') return { registered: [host], discovered: [] } as never
+      return new Promise(resolve => { releaseSnapshot = resolve; readStarted() })
+    })
+    const refresh = useEngineHosts.getState().refresh()
+    await started
+    useEngineHosts.getState().publishSnapshot('local', stopped as never)
+    releaseSnapshot(ready)
+    await refresh
+    expect(useEngineHosts.getState().snapshots.local.instances[0].status).toBe('stopped')
+    expect(useEngineHosts.getState().snapshots.local.revision).toBe(revision)
+    expect(providers.updateProvider.mock.calls.at(-1)?.[1].models).toEqual([])
+    expect(hasReadyHostInstance(useEngineHosts.getState())).toBe(false)
+  })
   it('projects ready local and remote instances and treats either as host readiness', async () => {
     const hosts = [
       { host_id: 'local', local: true, name: 'This computer' },
