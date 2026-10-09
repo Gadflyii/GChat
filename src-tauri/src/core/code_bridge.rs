@@ -470,8 +470,7 @@ fn control_tools() -> Vec<Value> {
 ]
 }
 
-// Keep one asynchronous delegation surface: shared synchronous control tools
-// are represented by the existing Code wrappers rather than a second run path.
+// Code wrappers own delegation; shared control tools must not add a second run path.
 fn operational_tool(identity: &str) -> bool {
     !matches!(
         identity,
@@ -795,8 +794,7 @@ async fn execute_tool<R: Runtime>(
         let task = tauri::async_runtime::spawn(async move {
             let cancel_app = app.clone();
             let cancel_run_id = task_run_id.clone();
-            // The shared executor registers its cancellation sender before TurnStarted.
-            // Wait for that event so an immediate transport cancellation is not lost.
+            // Wait for TurnStarted so cancellation is registered before it can be requested.
             let gate_cancellation = cancellation.clone();
             let cancel_task = tokio::spawn(async move {
                 if registered_rx.await.is_ok() {
@@ -828,9 +826,7 @@ async fn execute_tool<R: Runtime>(
                     json!({"content":[{"type":"text","text":error}],"isError":true})
                 }
             };
-            // Clearing pending approvals can wake a denied tool before the
-            // shared cancellation receiver runs. The bridge's accepted cancel
-            // request remains authoritative for its terminal activity status.
+            // Accepted bridge cancellation wins over a racing approval denial.
             if cancellation.is_cancelled() {
                 observe(
                     &task_run_id,

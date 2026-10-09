@@ -138,7 +138,6 @@ export const useTokensCount = (
     return undefined
   }, [selectedModel?.settings?.ctx_len?.controller_props?.value])
 
-  // Debounced calculation that includes current prompt
   const runTokenCalculation = useCallback(async () => {
     const modelId = selectedModel?.id
     const maxTokensNum = getMaxTokens()
@@ -224,14 +223,12 @@ export const useTokensCount = (
     latestCalculationRef.current = runTokenCalculation
   }, [runTokenCalculation])
 
-  // Debounced effect that triggers when prompt or messages change
+  // Debounce token requests after draft changes.
   useEffect(() => {
-    // Clear existing timeout
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current)
     }
 
-    // Only calculate if we have messages or a prompt
     if (
       messagesWithPrompt.length > 0 &&
       isGinferProvider(selectedProvider) &&
@@ -239,7 +236,7 @@ export const useTokensCount = (
     ) {
       debounceTimeoutRef.current = setTimeout(() => {
         void latestCalculationRef.current?.()
-      }, 500) // 500ms debounce to reduce repeated token calculations
+      }, 500)
     } else {
       setTokenData({
         tokenCount: 0,
@@ -264,9 +261,8 @@ export const useTokensCount = (
     getMaxTokens,
   ])
 
-  // Manual calculation function (for click events)
   const calculateTokens = useCallback(async () => {
-    // Trigger the debounced calculation immediately
+    // An explicit request bypasses the debounce.
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current)
     }

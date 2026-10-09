@@ -116,7 +116,6 @@ export const useTools = () => {
   useEffect(() => {
     async function setTools(snapshot: ToolSnapshot) {
       try {
-        // Get MCP extension first
         const mcpExtension = ExtensionManager.getInstance().get<MCPExtension>(
           ExtensionTypeEnum.MCP
         )
@@ -125,11 +124,11 @@ export const useTools = () => {
 
         updateTools(catalog.tools)
 
-        // Update cached tool names for fast synchronous access
+        // Cache tool names for synchronous lookup.
         updateCapabilityToolNames(catalog.tools.map((tool) => tool.name))
         updateRagToolNames(ragToolNames)
 
-        // Initialize default disabled tools for new users (only once)
+        // Apply default exclusions only before preferences are initialized.
         if (!isDefaultsInitialized() && catalog.tools.some((tool) => tool.origin === 'mcp') && mcpExtension?.getDefaultDisabledTools) {
           const defaultDisabled = await mcpExtension.getDefaultDisabledTools()
           if (defaultDisabled.length > 0) {
