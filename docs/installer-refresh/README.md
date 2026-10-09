@@ -51,7 +51,8 @@ with blank selection/stale status; that failure remains historical evidence.
 Reviewed code is merged and pushed on main `e239eac023`; `origin/main` equality
 is verified at 22:01 UTC. Only subject metadata/docs follow installed Windows
 product `0f06ba433`. Linux package/X11 refresh remains pending under booking
-285, 22:15–23:00Z, Completed OI-106 and profile source trees are retired; source branches and evidence remain.
+286, 22:32–23:20Z; booking 285 is canceled. Completed OI-106 and profile
+source trees are retired; source branches and evidence remain.
 
 GInfer `docs/installer-refresh/README.md` owns OI-058's portability build:
 frozen production source matches requested `f9af4cff4`, current base `f6d097566`,
@@ -475,6 +476,23 @@ React/DOM 19.2.8, TypeScript ESLint 8.44.1, Vitest/UI 3.2.4 and unchanged SDK
 have 167 declared payloads. This retains the historical Engine, with no Flash
 support or new current-engine qualification claim.
 
+The refresh also ships six offline GInfer operator documents from the selected
+`05a286ba574114e2ef4dfb00b4015e07ab8c26a5` source: package README and the
+documentation index, CLI, serving, operations and versioning references.
+The owned input is
+`/ai/gchat-worktrees/oi074-frontend-packages/out/oi070-linux-refresh/operator-docs/`;
+its `provenance.json` records the source and each document's size/SHA256.
+The operations guide uses that revision's CLI/server help authorities; the
+retained CLI, serving and versioning text pins supplementary source links to
+the same revision. Newer Windows Engine docs are not substituted.
+Assembly requires `--operator-docs-directory` (or
+`GINFER_OPERATOR_DOCS_DIRECTORY`), validates its source against the runtime set,
+checks all six hashes and offline local links, then stages the docs separately
+at `resources/ginfer/docs/` for both DEB and AppImage. Markdown remains in the
+normal AppImage resource bundle; only the Engine runtime directories bypass
+linuxdeploy. The immutable four-image runtime set is unchanged. Actual final
+package/document inclusion and X11 acceptance remain pending.
+
 Root supplies the final accepted SHA and composed verification receipt to the
 existing `out/oi070-linux-refresh/assemble.sh` after the quiet-window admission,
 and releases its guards before execution. The one container opens the shared
@@ -490,7 +508,9 @@ builder. Evidence is `out/oi070-linux-refresh/inputs.json`,
 
 Composed source verification and installed Windows acceptance pass at
 `0f06ba433`; reviewed code is published on main `e239eac023`. Next: one Linux
-assembly and package/X11 acceptance under booking 285, 22:15–23:00Z, then update package evidence and the owned disk inventory. No Linux package has been refreshed by this source work.
+assembly and package/X11 acceptance under booking 286, 22:32–23:20Z, then
+update package evidence and the owned disk inventory. No Linux package has been
+refreshed by this source work.
 
 ## Accepted Linux installers — September 30, 2026
 
@@ -552,7 +572,8 @@ The Windows installation was unchanged.
 
 Use [the Linux release script](../../scripts/build-linux-release.sh) inside
 [the Ubuntu 24.04 / Node 22 build image](../../scripts/linux-release.Dockerfile),
-with the explicit runtime set and profile catalog directory; see
+with the explicit runtime set, profile catalog directory and version-matched
+operator documentation directory; see
 [DEVELOP.md](../../DEVELOP.md#complete-linux-release).
 
 The extension install refreshes its generated local core-tarball reference while

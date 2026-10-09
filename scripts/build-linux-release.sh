@@ -6,15 +6,18 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 runtime_set=${GINFER_RUNTIME_SET:-}
 catalog_directory=${GINFER_PROFILE_CATALOG_DIRECTORY:-}
+operator_docs_directory=${GINFER_OPERATOR_DOCS_DIRECTORY:-}
 while (($#)); do
   case "$1" in
     --runtime-set) runtime_set=$2; shift 2 ;;
     --profile-catalog-directory) catalog_directory=$2; shift 2 ;;
-    *) echo "Usage: $0 --runtime-set DIR --profile-catalog-directory DIR" >&2; exit 2 ;;
+    --operator-docs-directory) operator_docs_directory=$2; shift 2 ;;
+    *) echo "Usage: $0 --runtime-set DIR --profile-catalog-directory DIR --operator-docs-directory DIR" >&2; exit 2 ;;
   esac
 done
 : "${runtime_set:?Select the complete GInfer Linux runtime set}"
 : "${catalog_directory:?Select the GInfer launch-profile catalog directory}"
+: "${operator_docs_directory:?Select operator documentation matching the GInfer runtime source}"
 source /etc/os-release
 if [[ $ID != ubuntu || $VERSION_ID != 24.04 ]]; then
   echo 'Build Linux releases in Ubuntu 24.04 to preserve the deployment ABI.' >&2
@@ -23,7 +26,9 @@ fi
 node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Linux release assembly requires Node.js 22 or newer"); process.exit(1); }'
 python=${PYTHON:-python3}
 "$python" scripts/stage-linux-runtime-set.py --source "$runtime_set" \
-  --destination src-tauri/resources/ginfer/linux
+  --destination src-tauri/resources/ginfer/linux \
+  --operator-docs-directory "$operator_docs_directory" \
+  --operator-docs-destination src-tauri/resources/ginfer/docs
 export GINFER_PROFILE_CATALOGS
 GINFER_PROFILE_CATALOGS=$("$python" - "$catalog_directory" <<'PY'
 import json,sys
@@ -71,7 +76,7 @@ from pathlib import Path
 staging=Path('src-tauri/target/release/bundle/appimage_deb')
 if staging.exists(): shutil.rmtree(staging)
 config=json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
-resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/') and p not in ('resources/bin/bun', 'resources/bin/uv')]
+resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/linux/') and p not in ('resources/bin/bun', 'resources/bin/uv')]
 Path('out/linux/appimage-config.json').write_text(json.dumps({'bundle':{'resources':resources}}))
 PY
 NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 ./src-tauri/build-utils/shim-linuxdeploy.sh yarn tauri bundle \

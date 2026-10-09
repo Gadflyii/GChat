@@ -49,7 +49,8 @@
       "resources/bin/sqlite-vec.so",
       "resources/bin/bun",
       "resources/bin/uv",
-      "resources/ginfer/linux/**/*"
+      "resources/ginfer/linux/**/*",
+      "resources/ginfer/docs/**/*"
     ],
     "externalBin": [],
     "linux": {

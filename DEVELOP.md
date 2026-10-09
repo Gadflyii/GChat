@@ -148,11 +148,14 @@ and the Yarn distribution at `/opt/yarn`. Inside that environment run:
 ```sh
 ./scripts/build-linux-release.sh \
   --runtime-set /path/to/ginfer-runtime-set \
-  --profile-catalog-directory /path/to/ginfer/config/launch-profiles
+  --profile-catalog-directory /path/to/ginfer/config/launch-profiles \
+  --operator-docs-directory /path/to/version-matched/ginfer-operator-docs
 ```
 
 The runtime set must contain the four verified Ubuntu 24.04 images produced by
-GInfer's Linux release tooling. The script rejects incomplete or altered payloads,
+GInfer's Linux release tooling. The selected operator docs must contain the six
+offline Markdown entries and `provenance.json` matching that runtime source.
+The script rejects incomplete or altered runtime/document payloads,
 builds the CLI, host, extensions and desktop, then writes `.deb`, AppImage and
 SHA256 files under `out/linux`. Existing signing configuration applies to the
 release build. Bun, uv and sqlite-vec must be staged with the repository's normal

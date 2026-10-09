@@ -63,8 +63,14 @@ initialization, shares native facade startup across sidebar, Host readiness and
 persisted provider hydration, and uses the existing Stop reservation sequence to
 invalidate delayed local or paired intake. Stop waits for an already dispatched
 native start before shutting down the singleton. Windows acceptance is complete.
+Linux preparation found the retained `05a286ba` runtime contains only its README,
+so it cannot satisfy the six-entry offline operator-manual check. The current
+item adds separately staged docs matched to that exact engine; six hashes, local
+links, wrong-source rejection and actual staging/producer equality pass. four-image
+Engine bytes and manifests stay unchanged. The selected docs input is
+`out/oi070-linux-refresh/operator-docs` in the frontend/packages tree.
 Next: assemble and inspect Linux packages, then verify local X11 windows under
-booking 285. Completed OI-106 and profile source trees are retired; branches and
+booking 287, 22:21–23:15Z. Completed OI-106 and profile source trees are retired; branches and
 external evidence remain.
 
 The temporary read-only tool restriction is removed. C2 stopped its sole Linux
@@ -78,7 +84,7 @@ original profile stopped and zero Engines/API listeners. Normal GChat PID 40160,
 Manager PID 15224 and unchanged Host PID 23052 are restored without debug ports.
 Both canonical guard sessions are terminated/released and booking 284 is
 canceled after actual END; the direct result is delivered to C3 at 21:41Z.
-Linux assembly/X11 acceptance remains pending under booking 285, 22:15–23:00Z. Source publication
+Linux assembly/X11 acceptance remains pending under booking 287, 22:21–23:15Z, 22:21–23:15Z. Source publication
 is complete. Completed OI-106 and profile source trees are retired after
 postmerge and fresh live-use checks; Linux package work remains.
 
