@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildToolsRecord,
+  buildCapabilityDiscoveryTools,
+  capabilitySchema,
+  capabilitySearchResults,
   splitAnthropicSerialToolUse,
 } from '../custom-chat-transport-helpers'
 import type { MCPTool } from '@/types/completion'
@@ -122,5 +125,24 @@ describe('buildToolsRecord', () => {
     )
 
     expect(result.lookup.description).toBe('RAG version')
+  })
+})
+
+describe('lazy capability discovery', () => {
+  it('advertises only compact meta-tools and resolves enabled exact schemas on demand', () => {
+    const catalog = [
+      tool('os_fs_read_document', 'gchat-native', 'Extract document text'),
+      tool('mcp_search_docs', 'docs', 'Search project documentation'),
+    ]
+    const discovery = buildCapabilityDiscoveryTools()
+    expect(Object.keys(discovery)).toEqual([
+      'gchat_capability_search', 'gchat_capability_read', 'gchat_capability_call',
+    ])
+    expect(JSON.stringify(discovery)).not.toContain('os_fs_read_document')
+    expect(capabilitySearchResults(catalog, ['docs::mcp_search_docs'], 'document')).toEqual([
+      { name: 'os_fs_read_document', description: 'Extract document text' },
+    ])
+    expect(capabilitySchema(catalog, [], 'mcp_search_docs')).toEqual(catalog[1])
+    expect(capabilitySchema(catalog, ['docs::mcp_search_docs'], 'mcp_search_docs')).toBeUndefined()
   })
 })

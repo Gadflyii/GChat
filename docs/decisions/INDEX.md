@@ -1,6 +1,7 @@
 # Engineering Decisions (ADR)
 
 - [Preserve Agent stage outcomes through final output](2026-10-09-preserve-agent-stage-outcomes.md)
+- [Load capability schemas on demand](2026-10-09-load-capability-schemas-on-demand.md)
 
 - [Share host management and fleet pools](2026-10-08-share-host-management-and-fleet-pools.md)
 
@@ -57,7 +58,7 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-255 records, 2026-05-19 → 2026-09-24.
+256 records, 2026-05-19 → 2026-10-09.
 
 ---
 
@@ -148,7 +149,9 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-06-02** — [Add a `/v1/responses` translation shim to the local proxy so Codex CLI works on llama.cpp models](2026-06-02-add-a-v1-responses-translation-shim-to-the-local-proxy-so-codex.md)
 - **2026-06-01** — [Add a "Launch" page to install + configure external coding agents / assistants against the local OpenAI-compatible API](2026-06-01-add-a-launch-page-to-install-configure-external-coding-agents.md)
 
-## Agent mode — autonomous loop, tools, skills, workspace (46)
+## Agent mode — autonomous loop, tools, skills, workspace (47)
+
+- **2026-10-09** — [Load capability schemas on demand](2026-10-09-load-capability-schemas-on-demand.md)
 
 - **2026-08-30** — [Teach Agent composition and preserve incomplete runs](2026-08-30-teach-agent-composition-and-preserve-incomplete-runs.md)
 - **2026-08-30** — [Make Agent task and run actions own their lifecycle](2026-08-30-make-agent-task-and-run-actions-own-their-lifecycle.md)

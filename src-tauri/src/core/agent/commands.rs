@@ -312,6 +312,18 @@ pub(crate) struct AgentDesktopServices<R: Runtime> {
 
 #[async_trait]
 impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
+    async fn capability_search(&self, query: &str) -> Result<serde_json::Value, String> {
+        let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
+        Ok(serde_json::json!(catalog.search(query, &self.disabled_tools).iter()
+            .map(|tool| serde_json::json!({"name":tool.name,"description":tool.description}))
+            .collect::<Vec<_>>()))
+    }
+    async fn capability_read(&self, name: &str) -> Result<serde_json::Value, String> {
+        let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
+        let tool = catalog.available_mcp_tool(name, &self.disabled_tools)
+            .ok_or_else(|| format!("MCP capability `{name}` is unavailable or disabled"))?;
+        serde_json::to_value(tool).map_err(|error| error.to_string())
+    }
     async fn mcp(
         &self,
         wire_name: &str,
@@ -319,6 +331,32 @@ impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
         cancellation: &CancellationToken,
     ) -> Result<serde_json::Value, String> {
         let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
+        match wire_name {
+            "mcp_call" => {
+                let name = args
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|name| !name.is_empty())
+                    .ok_or("MCP tool name is required")?;
+                let tool = catalog
+                    .available_mcp_tool(name, &self.disabled_tools)
+                    .ok_or_else(|| format!("MCP capability `{name}` is unavailable or disabled"))?;
+                let target = tool.name.clone();
+                let arguments = args
+                    .get("arguments")
+                    .cloned()
+                    .filter(serde_json::Value::is_object)
+                    .ok_or("MCP tool arguments must be an object")?;
+                return super::capabilities::execute_mcp_wire(
+                    self.app_handle.clone(),
+                    &target,
+                    arguments,
+                    cancellation,
+                )
+                .await;
+            }
+            _ => {}
+        }
         if catalog.disabled(&self.disabled_tools, wire_name) {
             return Err(format!("MCP capability `{wire_name}` is disabled"));
         }
@@ -337,8 +375,29 @@ impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
     fn disabled_tools(&self) -> std::collections::BTreeSet<String> {
         self.disabled_tools.clone()
     }
-    async fn mcp_identity(&self, wire_name: &str) -> Result<(String, String), String> {
+    async fn mcp_identity(
+        &self,
+        wire_name: &str,
+        args: &serde_json::Value,
+    ) -> Result<(String, String), String> {
         let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
+        if wire_name == "mcp_call" {
+            let name = args
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("MCP tool name is required")?;
+            return match catalog
+                .available_mcp_tool(name, &self.disabled_tools)
+                .and_then(|tool| catalog.target(&tool.name))
+            {
+                Some(super::capabilities::CapabilityTarget::Mcp { server, tool }) => {
+                    Ok((server.clone(), tool.clone()))
+                }
+                _ => Err(format!(
+                    "MCP capability `{name}` is unavailable or disabled"
+                )),
+            };
+        }
         match catalog.target(wire_name) {
             Some(super::capabilities::CapabilityTarget::Mcp { server, tool }) => {
                 Ok((server.clone(), tool.clone()))

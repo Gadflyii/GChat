@@ -62,3 +62,61 @@ export function buildToolsRecord(
     Object.entries(toolsRecord).sort(([a], [b]) => a.localeCompare(b))
   )
 }
+
+export function buildCapabilityDiscoveryTools(): Record<string, Tool> {
+  return {
+    gchat_capability_search: {
+      description: 'Search enabled GChat native and connected MCP capabilities by name or purpose. Returns matching names and short descriptions.',
+      inputSchema: jsonSchema({
+        type: 'object', properties: { query: { type: 'string', minLength: 1 } },
+        required: ['query'], additionalProperties: false,
+      }),
+    } as Tool,
+    gchat_capability_read: {
+      description: 'Read the exact argument schema for one enabled capability before calling it.',
+      inputSchema: jsonSchema({
+        type: 'object', properties: { name: { type: 'string', minLength: 1 } },
+        required: ['name'], additionalProperties: false,
+      }),
+    } as Tool,
+    gchat_capability_call: {
+      description: 'Call one enabled GChat native or connected MCP capability by its exact name, with arguments matching its schema.',
+      inputSchema: jsonSchema({
+        type: 'object',
+        properties: { name: { type: 'string' }, arguments: { type: 'object' } },
+        required: ['name', 'arguments'],
+        additionalProperties: false,
+      }),
+    } as Tool,
+  }
+}
+
+export const CAPABILITY_DISCOVERY_TOOL_NAMES = new Set([
+  'gchat_capability_search',
+  'gchat_capability_read',
+  'gchat_capability_call',
+])
+
+export function capabilitySearchResults(
+  tools: readonly MCPTool[],
+  disabledToolKeys: readonly string[],
+  query: string
+): Array<{ name: string; description: string }> {
+  const needle = query.trim().toLocaleLowerCase()
+  if (!needle) return []
+  const disabled = new Set(disabledToolKeys)
+  return tools
+    .filter((tool) => !disabled.has(`${tool.server || 'unknown'}::${tool.name}`))
+    .filter((tool) => `${tool.name}\n${tool.description}`.toLocaleLowerCase().includes(needle))
+    .map(({ name, description }) => ({ name, description }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function capabilitySchema(
+  tools: readonly MCPTool[],
+  disabledToolKeys: readonly string[],
+  name: string
+): MCPTool | undefined {
+  const disabled = new Set(disabledToolKeys)
+  return tools.find((tool) => tool.name === name && !disabled.has(`${tool.server || 'unknown'}::${tool.name}`))
+}

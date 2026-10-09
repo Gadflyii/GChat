@@ -13,6 +13,7 @@ import { createImageAttachment, createDocumentAttachment } from '@/types/attachm
 import { Chat } from '@ai-sdk/react'
 import { CustomChatTransport } from '../custom-chat-transport'
 import { useChatSessions } from '@/stores/chat-session-store'
+import { useAppState } from '@/hooks/useAppState'
 import { useInitialMessage } from '@/hooks/useInitialMessage'
 import { conversationDocumentAccess, processAttachmentsForSend } from '../attachmentProcessing'
 
@@ -102,6 +103,24 @@ describe('Chat capability execution', () => {
     expect(execute.mock.calls[0][0]).toMatchObject({ session_id: 'a', model_id: 'a-model', auto_approve: true, working_dir: '/workspace', external_roots: [{ path: '/reference', can_edit: false }], disabled_tools: ['tools::write'] })
     expect(result.content).toMatchObject({ result: 'Saved result', agent_run: { status: 'finished', step_count: 2 } })
     expect(chatCapabilityRun({ id: 'reply', role: 'assistant', parts: [{ type: 'tool-agent_run', toolCallId: 'call', state: 'output-available', input: {}, output: result.content }] })).toMatchObject({ status: 'finished', step_count: 2 })
+  })
+
+  it('invokes an exact discovered capability through the original policy-aware executor', async () => {
+    const execute = vi.fn<CapabilitiesService['execute']>(async () => ({ content: 'Document text' }))
+    const service = seedServiceHub({ capabilities: { execute, cancel: vi.fn(), getCatalog: vi.fn() } }).capabilities()
+    useAppState.setState({ tools: [{
+      name: 'os_fs_read_document', server: 'gchat-native',
+      description: 'Extract document contents', inputSchema: { type: 'object', required: ['path'] },
+    }] })
+    await executeChatCapability({
+      service, threadId: 'a', toolName: 'gchat_capability_call',
+      arguments: { name: 'os_fs_read_document', arguments: { path: '/workspace/report.xlsx' } },
+      signal: new AbortController().signal,
+    })
+    expect(execute).toHaveBeenCalledOnce()
+    expect(execute.mock.calls[0][0]).toMatchObject({
+      tool_name: 'os_fs_read_document', arguments: { path: '/workspace/report.xlsx' }, session_id: 'a',
+    })
   })
 
   it('cancels a registration race, suppresses late progress, and settles the owning run', async () => {
