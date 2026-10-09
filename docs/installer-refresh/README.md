@@ -396,6 +396,17 @@ model or native build. Native Edge used a disposable profile at
 `--disable-gpu` and software WARP rendering. Its process exits normally.
 The fixture server and profile are retired after preserving the receipt.
 
+The retained Linux log and composed Windows build both contain an unsupported
+`onlyExplicitManualChunks` output-option warning. Both actually use cached Rollup
+4.40.0, which ignores that property and includes unassigned static dependencies
+in manual chunks. The earlier explicit-ownership intention was not applied.
+Remove the ignored property and correct its comment; this preserves the behavior
+already measured by both builds, including the lazy features and chunk bounds.
+The no-large-chunk claim remains valid; these builds were not warning-free.
+Prevent recurrence by reading complete build stdout/stderr before acceptance,
+not only matching the large-chunk advisory. Source/config checks and the final
+coordinator frontend/native check complete this correction.
+
 OI-070 remains open. Assemble final integrated client/Host/Manager once after
 bugfix acceptance. Reuse Ubuntu 24.04 / Node 22 image
 `gchat-linux-installer-build:ubuntu24`, the existing dependency/compiler caches,
