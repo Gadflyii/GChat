@@ -37,8 +37,8 @@ previously tested C4/32768 automatic-pool controls; they do not qualify 128K
 capacity. Both Qwen and Muse reach Ready. Each completes four overlapping
 responses with normal stop finishes, peak four active requests and zero after
 drain. Manager Reload reaches a new Ready engine session for each; Manager Stop
-leaves both stopped with no native engine. The original fixed profile remains
-to be restored through the supported lifecycle after final Chat acceptance.
+leaves both stopped with no native engine. The original fixed profile is restored exactly through supported Reload/Stop;
+the final snapshot is stopped with zero active requests and no native engine.
 
 OI-083 reproduces a local Host instance missing from ordinary Chat's picker.
 The native alias route supports local instances; frontend projection and facade
@@ -57,10 +57,12 @@ catalog and shared native schemas are injected into every completion. Qwen's
 32K screen cannot fit the current-turn input/output budget; Muse's exact count
 reports 40,666 prepared input tokens versus 32,768 loaded capacity. The capacity
 lookup agrees with the engine metadata. This is a shared tool-payload issue,
-tracked as OI-084; increasing capacity or disabling user tools is not the fix.
+tracked as OI-091; increasing capacity or disabling user tools is not the fix.
 Next: compact tool discovery with exact schema loading through the existing
 capability and permission runtime, then repeat the actual Chat/continued-Chat
-checks. Original saved-profile restoration uses the supported lifecycle.
+checks. Original saved-profile restoration passed through the supported lifecycle.
+The GPU/build guards and booking were released at 16:14Z; C4 owns the next
+local startup window. No further model run is active in this item.
 
 Owned source: `/ai/gchat-worktrees/oi056-current-engine`, branch
 `dev/oi056-current-engine`; Engine source: `/ai/ginfer-worktrees/gchat-oi056-engine`.
