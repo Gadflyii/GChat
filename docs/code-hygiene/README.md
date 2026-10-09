@@ -34,17 +34,21 @@ Implementation evidence: [quality review](gchat-quality.md) and
 [remaining acceptance](../agent-runtime/remaining-acceptance.md).
 The integration candidate contains OI-067 `05e9e8760`, OI-091 `447137298`,
 OI-074/OI-096 `21bbc284f`, OI-072 `6dc94493c` and OI-092–095 `24af05967`.
-Composed frontend gates pass: 2,091 tests, 102 extension tests and all six coverage
-floors. The quality guard caught a mock-only assertion, corrected to actual tool
-output in `adba9ac74`. Rust staging reproduced a cached build script writing
-the profile catalog into its earlier compile-time worktree. Runtime manifest
-lookup in `ef55a2ea4` corrects staging. The first actual candidate Rust compile
-then found three tool-dispatch compile errors, corrected in `e702ee5e0`.
-The earlier author's 306-test result ran in main and is invalid as candidate
-evidence; the corrected candidate still needs its actual Rust gate and Clippy.
-The next full gate includes OI-101 `bc221f048`, which composes
-immutable history reuse: 100 fixture inputs remain exact while transformations
-fall from 50,100 to 600. This is fixture work removal, not native CPU evidence.
+Full composed `make verify` on `880ecb5c9` passes: 2,092 frontend tests,
+102 extension tests, all six coverage floors, 553 desktop Rust tests and all
+platform-supported suites. Host/Manager strict Clippy passes. The earlier
+mock-only assertion, stale build-script path and three compact-dispatch compile
+errors are corrected. The author's earlier 306-test run used main and is not
+candidate evidence. OI-101 history reuse preserves 100 fixture inputs while
+reducing transformations from 50,100 to 600; no native CPU gain is claimed.
+
+OI-100 now moves startup HTTP outside process ownership. Its actual owning gate
+passes check, strict Clippy and 86 Host tests, including delayed health/model
+responses during Stop and Reload. Supporting Clippy warnings are corrected in
+utilities, hardware, RAG/vector DB and compact dispatch. GInfer launch ownership
+uses a named request consistently in desktop, CLI, guest bindings and extension;
+explicit embedding rejection and defaults remain. These final additions need
+the composed gate, strict Clippy and CLI compile before native source freeze.
 Timed competitors have completed; the root reservation is 17:52–19:30Z on
 October 9. Both canonical guards protect compilation and model execution.
 Next: full composed verification and Clippy, then native build and acceptance.
@@ -97,7 +101,9 @@ and `%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4`, plus concise acceptance evidence.
 The clean, merged OI-056 trees `/ai/gchat-worktrees/oi056-current-engine`
 and `/ai/ginfer-worktrees/gchat-oi056-engine` are retired with no-force worktree
 removal. Exact current installers/checksums are promoted to `/ai/gchat/out/windows`.
-Net reclaimed allocation is 2,478,735,360 bytes (2.479 GB); shared-filesystem free
+Net reclaimed allocation is 2,478,735,360 bytes (2.479 GB), plus 4,096 bytes from
+the unregistered generated-only `compact-everywhere` directory after verifying
+it held no source, profile objects or writer. Shared-filesystem free
 deltas are not attributed to this cleanup. Branch objects and remote source remain. Active candidates, other owners' trees, user models,
 profiles, saved results and Tessera paths remain. Cleanup receipts and freed bytes
 are recorded under `/ai/gchat/out/oi056-current-engine/`; unchecked/shared paths
