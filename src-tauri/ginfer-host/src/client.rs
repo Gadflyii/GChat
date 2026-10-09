@@ -403,7 +403,7 @@ impl Client {
         self.initialize().await?;
         let provider = match owner {
             crate::local_host_registry::Owner::Desktop(local) => local.desktop_provider.as_deref(),
-            // The earlier native registry sat beside its private host directory.
+            // Service client metadata lives beside the private host directory.
             crate::local_host_registry::Owner::Service { directory, .. } => directory.parent(),
         };
         if let Some(provider) = provider {

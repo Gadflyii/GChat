@@ -459,8 +459,7 @@ impl HostProcesses {
         }
     }
 
-    /// Force-stop is explicit. A later HTTP drain handler must finish active
-    /// requests before calling this unless the user selected force-stop.
+    /// Callers drain active requests first unless the user selected force-stop.
     pub async fn stop(&mut self, id: Uuid) -> Result<(), String> {
         let instance = self.instances.get_mut(&id).ok_or("unknown instance")?;
         if let Some(child) = &mut instance.child {
