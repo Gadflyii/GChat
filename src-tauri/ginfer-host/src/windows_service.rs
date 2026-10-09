@@ -98,8 +98,7 @@ fn service_main(_arguments: Vec<OsString>) {
     {
         return;
     }
-    // Parse the registered executable command line, not SCM's start parameters.
-    // Do not call Parser::parse here: its process exit would skip Stopped status.
+    // Parse the registered command line without exiting before reporting Stopped.
     let result = (|| -> Result<(), String> {
         let args = super::Args::try_parse().map_err(|e| e.to_string())?;
         let diagnostics = args
@@ -158,8 +157,7 @@ fn service_main(_arguments: Vec<OsString>) {
             Ok(()) => "Service stopped normally.\n".to_string(),
             Err(error) => format!("Service failed: {error}\n"),
         };
-        // SCM has no attached stderr console. Keep actionable diagnostics within
-        // the installer-protected state directory, never in public discovery.
+        // SCM has no stderr console; retain diagnostics in protected service state.
         let _ = ginfer_host::service::write_private(&diagnostics, message.as_bytes());
         result
     })();

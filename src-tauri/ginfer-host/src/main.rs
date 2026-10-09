@@ -193,8 +193,7 @@ async fn run(
     if args.desktop_managed { host.initialize_lan_sharing().await; }
     let mut connections = tokio::task::JoinSet::new();
     ready()?;
-    // Disk inventory and health requests must never prevent accepting a fresh
-    // client connection (notably while an engine saturates NAS startup reads).
+    // Keep slow inventory and health reads off the connection accept loop.
     let mut maintenance = tokio::task::JoinSet::new();
     let monitor_host = host.clone();
     maintenance.spawn(async move {

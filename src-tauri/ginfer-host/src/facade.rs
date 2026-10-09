@@ -7,7 +7,6 @@ pub fn model_metadata(value: &mut Value, alias: &str) -> bool {
         *model = alias.into();
         changed = true;
     }
-    // Responses event envelopes and Anthropic message_start envelopes.
     for envelope in ["response", "message"] {
         if let Some(model) = value
             .get_mut(envelope)
@@ -141,14 +140,12 @@ pub async fn alias_response(
         let mut events = AliasEvents::new(alias);
         events.scope = scope;
         let stream = futures_util::stream::try_unfold(
-            (response.bytes_stream(), Some(events)),
+            (response.bytes_stream(), events),
             |(mut input, mut events)| async move {
                 loop {
                     match input.next().await {
                         Some(Ok(bytes)) => {
                             let output = events
-                                .as_mut()
-                                .unwrap()
                                 .push(&bytes)
                                 .map_err(std::io::Error::other)?;
                             if !output.is_empty() {
@@ -158,8 +155,6 @@ pub async fn alias_response(
                         Some(Err(e)) => return Err(std::io::Error::other(e)),
                         None => {
                             events
-                                .take()
-                                .unwrap()
                                 .finish()
                                 .map_err(std::io::Error::other)?;
                             return Ok(None);

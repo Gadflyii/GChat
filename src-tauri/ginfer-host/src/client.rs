@@ -304,8 +304,7 @@ fn visible_hosts(state: &ClientState) -> Vec<Value> {
         .collect()
 }
 
-// Persist first while holding the registry lock. Readers never observe an
-// unsaved replacement, and a failed write leaves the old credential reference live.
+// Persist before publishing so failed writes leave the old credential reference live.
 fn publish_registration(
     state: &mut ClientState,
     host: SavedHost,
@@ -379,9 +378,6 @@ impl Client {
             credentials,
             operation: Mutex::new(()),
         }
-    }
-    fn state(&self) -> &Mutex<ClientState> {
-        &self.state
     }
     pub async fn view(&self) -> Result<ClientViewGuard<'_>, String> {
         self.refresh().await?;
@@ -495,7 +491,7 @@ impl Client {
             return Err(e);
         }
         reload(&mut state)?;
-        // The disk merge above precedes publishing newly imported routes.
+        // Publish imported routes only after the merged registry is durable.
         for host in state.saved.values().cloned().collect::<Vec<_>>() {
             state.registry.register_paired(registration(&host));
         }
@@ -505,7 +501,6 @@ impl Client {
         let Some(owner) = crate::local_host_registry::registered().await? else {
             return Ok(None);
         };
-        // Ownership/connection stays in the existing locator implementation.
         let connection = tokio::time::timeout(std::time::Duration::from_secs(10), owner.connect())
             .await
             .unwrap_or_else(|_| Err("local host did not respond".into()));
@@ -568,7 +563,7 @@ impl Client {
     pub async fn snapshot(&self, id: Uuid) -> Result<Value, ClientError> {
         self.refresh().await?;
         let (connection, host, alternatives) = {
-            let mut state = self.state().lock().await;
+            let mut state = self.state.lock().await;
             let host = state
                 .saved
                 .get(&id)
@@ -634,7 +629,7 @@ impl Client {
                 // disk document, never the pre-request copy held by this app.
                 let _operation = self.operation.lock().await;
                 let _lock = self.lock_registry().await?;
-                let mut state = self.state().lock().await;
+                let mut state = self.state.lock().await;
                 reload(&mut state)?;
                 if state.saved.get(&id) != Some(&host) {
                     state.registry.disconnect(connection);
@@ -665,7 +660,7 @@ impl Client {
                 Ok(snapshot)
             }
             Err(e) => {
-                self.state().lock().await.registry.disconnect(connection);
+                self.state.lock().await.registry.disconnect(connection);
                 Err(e)
             }
         }
@@ -825,7 +820,7 @@ impl Client {
         self.refresh().await?;
         match action {
             "list" => {
-                let state = self.state().lock().await;
+                let state = self.state.lock().await;
                 Ok(
                     json!({"registered":visible_hosts(&state),"discovered":state.discovery.as_ref().map(|d|d.hosts()).unwrap_or_default()}),
                 )
@@ -835,7 +830,7 @@ impl Client {
                     .get("enabled")
                     .and_then(Value::as_bool)
                     .ok_or("enabled is required")?;
-                let mut state = self.state().lock().await;
+                let mut state = self.state.lock().await;
                 if enabled && state.discovery.is_none() {
                     state.discovery = Some(Discovery::start()?);
                 }
@@ -860,7 +855,7 @@ impl Client {
                         .map(|origin| endpoint(origin))
                         .collect::<Result<Vec<_>, _>>()?
                 } else if let Some(id) = expected {
-                    self.state().lock().await.discovery.as_ref().map(|discovery| discovery.hosts())
+                    self.state.lock().await.discovery.as_ref().map(|discovery| discovery.hosts())
                     .unwrap_or_default().into_iter().find(|host| host.host_id == id.to_string())
                     .ok_or("Host is no longer nearby; refresh discovery or enter its address manually")?.urls
                 } else {
@@ -883,7 +878,7 @@ impl Client {
                         );
                     }
                 }
-                if let Some(saved) = self.state().lock().await.saved.get(&host_id) {
+                if let Some(saved) = self.state.lock().await.saved.get(&host_id) {
                     if saved.certificate_sha256 != fingerprint {
                         return Err("Paired host certificate has changed; forget it explicitly before pairing again".into());
                     }
@@ -931,7 +926,7 @@ impl Client {
                     certificate_sha256: fingerprint,
                     client_id,
                 };
-                let mut state = self.state().lock().await;
+                let mut state = self.state.lock().await;
                 let published = publish_registration(&mut state, host.clone());
                 drop(state);
                 let previous = match published {
@@ -1013,7 +1008,7 @@ impl Client {
             "forget" => {
                 let id = argument_id(&args, "host_id")?;
                 // Forget is local and works while a server is offline. Revoke is a separate host action.
-                let mut state = self.state().lock().await;
+                let mut state = self.state.lock().await;
                 if state
                     .saved
                     .get(&id)

@@ -105,7 +105,7 @@ impl LaunchOptions {
         if self.prefill_chunk != 0 && !self.prefill_chunk.is_multiple_of(128) {
             return Err("prefill chunk must be a multiple of 128, or automatic".into());
         }
-        if self.spec == "none" && (self.draft_tokens != 0 || self.draft_tp != 0) {
+        if self.spec == "none" && self.draft_tp != 0 {
             return Err("draft settings require speculative decoding".into());
         }
         if self.kv_arena_bytes == Some(0) {
@@ -113,8 +113,7 @@ impl LaunchOptions {
         }
         Ok(())
     }
-    /// Admit only target-supported speculation. The Engine still binds payloads,
-    /// selects automatic widths, and checks device/memory execution constraints.
+    /// Host admission cannot replace Engine payload and device validation.
     pub fn validate_target(
         &self,
         identity: &crate::engine_inventory::ArtifactIdentity,
@@ -130,7 +129,7 @@ impl LaunchOptions {
                 if !matches!(identity.weights_id.as_str(), "groupwise-int" | "smol-q2g64" | "nvfp4") {
                     return Err("Flash has no registered weights class for this artifact".into());
                 }
-                if draft_tp != 0 || self.draft_tp != 0 {
+                if draft_tp != 0 {
                     return Err("Flash MTP uses the target TP group, not a separate draft TP group".into());
                 }
                 if self.spec == "dflash" || self.draft_policy == "adaptive" {
@@ -333,8 +332,7 @@ impl HostProcesses {
         Ok(())
     }
 
-    /// Invoked only with an inventory-resolved artifact and validated host settings.
-    /// Engine startup performs artifact binding and physical TP qualification.
+    /// Engine startup owns payload binding and physical TP qualification.
     pub fn launch(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
         self.validate_launch(&launch, false)?;
         self.spawn(launch)
@@ -482,7 +480,7 @@ impl HostProcesses {
         ))
     }
 
-    /// Service shutdown attempts every owned child even if one stop fails.
+    /// One stop failure must not prevent reaping the remaining owned children.
     pub async fn shutdown(&mut self) -> Result<(), String> {
         let ids: Vec<_> = self.instances.keys().copied().collect();
         let mut errors = Vec::new();

@@ -11,8 +11,7 @@ fn keep_client_pipes_private() -> Result<(), String> {
         fn GetFileType(handle: *mut c_void) -> u32;
         fn SetHandleInformation(handle: *mut c_void, mask: u32, flags: u32) -> i32;
     }
-    // The host gets explicit log/null handles. Inheriting a client's original
-    // pipeline handles would keep PowerShell waiting for EOF after the client exits.
+    // Inherited client pipes would keep PowerShell waiting for EOF after client exit.
     for which in [-10_i32, -11, -12] {
         unsafe {
             let handle = GetStdHandle(which as u32);
@@ -97,8 +96,7 @@ impl LocalHost {
             return Ok(control);
         }
         let mut child = None;
-        // An existing owner may still be initializing. Never replace it merely
-        // because its HTTP endpoint is not ready.
+        // An initializing owner must retain ownership before its endpoint is ready.
         if let Ok(owner) = ServiceOwner::acquire(&self.directory) {
             if !self.binary.is_file() {
                 return Err("installed host executable is missing".into());
@@ -119,8 +117,7 @@ impl LocalHost {
             let mut command = tokio::process::Command::new(&self.binary);
             #[cfg(target_os = "linux")]
             if std::env::var_os("APPIMAGE").is_some() {
-                // The host outlives the AppImage mount. Its engine children must
-                // not inherit paths to libraries inside that temporary mount.
+                // The host and its engine children outlive the AppImage library mount.
                 for variable in [
                     "APPDIR", "APPIMAGE", "ARGV0", "OWD", "LD_LIBRARY_PATH", "LD_PRELOAD",
                     "GDK_PIXBUF_MODULE_FILE", "GDK_PIXBUF_MODULEDIR", "GIO_EXTRA_MODULES",

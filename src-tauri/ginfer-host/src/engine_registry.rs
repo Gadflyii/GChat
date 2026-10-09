@@ -93,16 +93,9 @@ impl EngineRegistry {
 
     /// Start a new authenticated connection, invalidating callbacks from its predecessor.
     pub fn connect(&mut self, host_id: Uuid) -> Result<HostConnection, String> {
-        if !self.hosts.contains_key(&host_id) {
-            return Err("host has not been paired".into());
-        }
-        let generation = Uuid::new_v4();
-        self.connections.insert(host_id, generation);
+        let connection = self.poll_connection(host_id)?;
         self.mark_offline(host_id);
-        Ok(HostConnection {
-            host_id,
-            generation,
-        })
+        Ok(connection)
     }
 
     pub fn disconnect(&mut self, connection: HostConnection) {

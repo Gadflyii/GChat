@@ -196,7 +196,6 @@ impl LocalControl {
     }
 }
 
-#[derive(Debug)]
 struct Choice {
     label: String,
     body: Value,
