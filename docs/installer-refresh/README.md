@@ -421,6 +421,30 @@ same directory when running it in Docker. Normal X11 window/Host startup and exa
 payload verification are required for refreshed packages. Tray and Secret Service
 require the separate OI-071 desktop providers. Preserve user data and old accepted
 packages until replacements pass; do not deploy to Server 2.
+The prepared runner now uses the approved physical aligned dependency graph in
+`/ai/gchat-worktrees/oi074-frontend-packages` and its current packed core/types,
+read-only; accepted-source manifests, both lockfiles and core tree must match.
+The cached image's actual mounted-workspace preflight passes Node 22.22.1,
+React/DOM 19.2.8, TypeScript ESLint 8.44.1, Vitest/UI 3.2.4 and unchanged SDK
+2.0.139. It performs no install, compilation or model execution. The exact
+`b8d8ea49` catalogs remain 22 Linux files /174 Qwen/Muse profiles; Windows's
+104 profiles are a separate platform set. All four retained `05a286ba` images
+have 167 declared payloads. This retains the historical Engine, with no Flash
+support or new current-engine qualification claim.
+
+Root supplies the final accepted SHA and composed verification receipt to the
+existing `out/oi070-linux-refresh/assemble.sh` after the quiet-window admission,
+and releases its guards before execution. The one container opens the shared
+canonical build lock before GPU, then passes its already-open build descriptor
+to the existing Manager builder; no host descriptor forwarding through Docker
+is assumed. Standalone Manager still owns the canonical build lock. A bounded
+fixture with fake cargo in an isolated lock namespace confirms standalone waits,
+inherited open-file-description reuse leaves the parent locked, and incorrect,
+closed and nonnumeric descriptors fail. Windows Manager source is unchanged.
+The runner rejects assembly until the accepted source includes that checked
+builder. Evidence is `out/oi070-linux-refresh/inputs.json`,
+`aligned-toolchain-preflight.log` and `lock-fixture/receipt.json`.
+
 Next: coordinator source integration/full verification, then one Linux assembly
 and package/X11 acceptance. No Linux package has been refreshed by this source work.
 

@@ -17,11 +17,24 @@ export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}"
 manager_output="$(realpath -m -- "$manager_output")"
 mkdir -p -- "$manager_output"
 
-# Serialize this scoped build with the host/client checks that share the cache.
+# Assembly may already hold this canonical lock before the GPU guard. Reuse its
+# open file description; opening the path again would deadlock the parent.
+manager_lock=/ai/coordination/locks/local-build.lock
 mkdir -p /ai/coordination/locks
-flock /ai/coordination/locks/local-build.lock cargo build \
-  --manifest-path "$manager_source_root/src-tauri/Cargo.toml" \
-  -p ginfer-manager -p ginfer-host --release --locked
+manager_build=(cargo build --manifest-path "$manager_source_root/src-tauri/Cargo.toml"
+  -p ginfer-manager -p ginfer-host --release --locked)
+if [[ -n ${GINFER_BUILD_LOCK_FD:-} ]]; then
+  if [[ ! $GINFER_BUILD_LOCK_FD =~ ^[0-9]+$ ]] ||
+     [[ ! -e /proc/self/fd/$GINFER_BUILD_LOCK_FD ]] ||
+     [[ $(stat -Lc '%d:%i' "/proc/self/fd/$GINFER_BUILD_LOCK_FD") != $(stat -Lc '%d:%i' "$manager_lock") ]]; then
+    printf 'Inherited Manager build descriptor must refer to the canonical build lock.\n' >&2
+    exit 1
+  fi
+  flock -n -E 75 "$GINFER_BUILD_LOCK_FD"
+  "${manager_build[@]}"
+else
+  flock "$manager_lock" "${manager_build[@]}"
+fi
 
 install -m755 "$CARGO_TARGET_DIR/release/ginfer-manager" "$manager_output/ginfer-manager"
 install -m755 "$CARGO_TARGET_DIR/release/ginfer-host" "$manager_output/ginfer-host"
