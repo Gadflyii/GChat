@@ -8,17 +8,27 @@ RON-9950X3D2, superseding the intervening Linux-only instruction. Acceptance:
 normal GChat/Manager startup; Qwen 27B and Muse load; actual Chat replies finish
 and return idle; four overlapping requests finish; Reload reaches Ready in a
 new session; Stop leaves no engine or automatic reload. Preserve user data and
-the original saved Muse profile. Server 2, broad capacity/numerical qualification,
-performance work and dependency upgrades are excluded.
+the original saved Muse profile. Server 2 and unrelated Engine performance/numerical work remain excluded.
+The user subsequently approved controlled React/parser/Vitest alignment; see
+[the composed remediation](../code-hygiene/README.md) for current scope.
 
 The physical local GPU is RTX 5090 UUID
 `GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e`; Windows reports 128 GB RAM.
-Installed GChat/Manager baseline is `de0edde34`/`ce6a6c0e6`. Engine `6138913f`
-is replaced by native clean `2ef56a52a` in both active and bundled runtime roots;
-all 125 payloads match. Settings, local owner/host identity and saved profile
-survived replacement. Normal application startup passes. The original seven
-conversation directories at recovery are retained; older nine-thread evidence
-below belongs to October 8, before this item.
+Installed desktop source is `0a4e2b56c`; Manager source `43c8d71cf` is reused
+with explicit unchanged-input provenance. Native clean `2ef56a52a` is installed
+in active and bundled runtime roots; all 125 payloads match. Actual Chat and
+continued replies finish idle, XLSX local document access returns exact fixture
+values, agent definitions/calling tools are discoverable, and manual/automatic
+compaction preserves continued context. The original step-limited Coordinator
+history displays incomplete with its available output intact. Original threads,
+model files, settings, owner, runs, Host identity/certificate and all 103 original
+profile values survive; the distinct automatic candidate is pending qualification.
+
+Actual sidebar Stop on a local Host alias stopped only the facade, leaving the
+model resident (OI-106). Manager Stop works. The composed fix uses the local
+Host's session-checked lifecycle, preserves explicit Start/Restart selection and
+prevents stale status reads from undoing Stop. Paired remote Stop remains local
+facade control. Final composed checks and rebuilt native acceptance are pending.
 
 GInfer `docs/installer-refresh/README.md` owns OI-058's portability build:
 frozen production source matches requested `f9af4cff4`, current base `f6d097566`,
@@ -52,17 +62,23 @@ original thread IDs, original model files, settings, owner, saved runs and Host
 identity/certificate are retained. The actual picker now exposes the Ready local
 instance and the facade starts; OI-083's behavior is verified.
 
-Ordinary Chat completion remains unaccepted (OI-056): the existing active GMCP
-catalog and shared native schemas are injected into every completion. Qwen's
-32K screen cannot fit the current-turn input/output budget; Muse's exact count
-reports 40,666 prepared input tokens versus 32,768 loaded capacity. The capacity
-lookup agrees with the engine metadata. This is a shared tool-payload issue,
-tracked as OI-091; increasing capacity or disabling user tools is not the fix.
-Next: compact tool discovery with exact schema loading through the existing
-capability and permission runtime, then repeat the actual Chat/continued-Chat
-checks. Original saved-profile restoration passed through the supported lifecycle.
-The GPU/build guards and booking were released at 16:14Z; C4 owns the next
-local startup window. No further model run is active in this item.
+OI-091 compact capability discovery replaces the former 40,666-token tool
+payload with exact schema loading through the shared permission runtime. The
+actual first installed Chat request used 1,514 input tokens and completed; all
+four continued replies ended normally. Automatic compaction reduced 25,988 to
+5,419 prompt tokens; manual compaction reclaimed 20,569. These checks establish
+ordinary Chat behavior, not maximum-context capacity. The original saved Muse
+profile is restored exactly and stopped, with zero native engines.
+
+The corrected public C4/128K attempt reaches Ready and prepares four distinct
+131,009-token inputs, but device-wide free memory drops to 292 MiB during
+prefill, below the unchanged 300 MiB guard. The runner aborts and restores the
+original stopped profile successfully. No decode completes; no Engine OOM or
+KV/admission error is logged. Allocation ownership is unresolved because the
+saved telemetry lacks live process-residency/allocation counters. OI-072 remains
+open; no reduced margin, retry or capacity promotion is authorized by this result.
+Evidence: `out/code-hygiene-20261009/integration/` and
+`out/remediation-native-correction-20261009/`.
 
 Accepted source is main `104d4ec6e` (desktop runtime `a40d7221`). Both clean
 merged OI-056 source worktrees are retired; their committed branches and remote
