@@ -61,6 +61,7 @@ decision is reversed, add a new one that says which record it supersedes.
 
 ## Load-bearing — read before touching platform / provider / agent code
 
+- **2026-10-09** — [Load frontend features and syntax data on demand](2026-10-09-load-frontend-features-and-syntax-data-on-demand.md)
 - **2026-09-17** — [Reuse server instances across launches](2026-09-17-reuse-host-gpu-group-instances.md)
 
 - **2026-09-16** — [Manage worker context at completed tool boundaries](2026-09-16-worker-context-checkpoints.md)

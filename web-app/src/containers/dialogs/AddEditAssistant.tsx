@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { lazy, Suspense, useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { IconMoodSmile } from '@tabler/icons-react'
-import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react'
+import type { EmojiClickData, Theme } from 'emoji-picker-react'
+const EmojiPicker = lazy(() => import('emoji-picker-react'))
 
 import { Textarea } from '@/components/ui/textarea'
 
@@ -157,7 +158,7 @@ export default function AddEditAssistant({
                 )}
               </div>
               <div className="relative" ref={emojiPickerRef}>
-                <EmojiPicker
+                {showEmojiPicker && <Suspense fallback={null}><EmojiPicker
                   open={showEmojiPicker}
                   theme={isDark ? ('dark' as Theme) : ('light' as Theme)}
                   className="absolute!s z-40! overflow-y-auto! top-2"
@@ -173,7 +174,7 @@ export default function AddEditAssistant({
                     }
                     setShowEmojiPicker(false)
                   }}
-                />
+                /></Suspense>}
               </div>
             </div>
 

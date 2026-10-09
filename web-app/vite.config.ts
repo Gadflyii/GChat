@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { syntaxGrammarAssets } from './scripts/syntax-grammar-assets'
 import tauriConfig from '../src-tauri/tauri.conf.json'
 const host = process.env.TAURI_DEV_HOST
 
@@ -14,6 +15,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      syntaxGrammarAssets(),
       TanStackRouterVite({
         target: 'react',
         autoCodeSplitting: true,
@@ -85,6 +87,36 @@ export default defineConfig(({ mode }) => {
 
     build: {
       sourcemap: false,
+      manifest: true,
+      rollupOptions: {
+        output: {
+          // These are shared semantic runtimes, not size-based fragments.
+          // Explicit ownership keeps route/app modules in their natural chunks.
+          onlyExplicitManualChunks: true,
+          manualChunks(id) {
+            if (id === '\0commonjsHelpers.js') return 'module-runtime'
+            if (!id.includes('/node_modules/')) return
+            const packagePath = id.split('/node_modules/').pop()!
+            const packageName = packagePath.startsWith('@')
+              ? packagePath.split('/').slice(0, 2).join('/')
+              : packagePath.split('/')[0]
+            if (['react', 'react-dom', 'scheduler'].includes(packageName)) return 'react-runtime'
+            if (packageName.startsWith('@tanstack/') && packageName.includes('router')) return 'routing'
+            // Mermaid owns a distinct installed KaTeX version. Keeping it
+            // separate also keeps diagram-only math out of startup.
+            if (packageName === 'katex') return id.includes('/mermaid/node_modules/') ? 'diagram-math' : 'math'
+            if (packageName.startsWith('@tauri-apps/')) return 'desktop-api'
+            if (['tailwind-merge', 'clsx', 'class-variance-authority'].includes(packageName)) return 'style-runtime'
+            if (packageName === 'shiki' && packagePath.endsWith('/dist/langs.mjs')) return 'syntax-catalog'
+            if (packageName.startsWith('unist-util-') || ['vfile', 'vfile-message'].includes(packageName)) return 'syntax-tree'
+            if (packageName.startsWith('hast-util-') || ['parse5', 'entities', 'property-information', 'hastscript', 'comma-separated-tokens', 'space-separated-tokens', 'html-void-elements', 'web-namespaces', 'style-to-object', 'style-to-js'].includes(packageName)) return 'html-parser'
+            if (packageName.startsWith('@radix-ui/') || packageName.startsWith('@floating-ui/') || ['sonner', 'cmdk'].includes(packageName)) return 'ui-primitives'
+            if (['framer-motion', 'motion-dom', 'motion-utils'].includes(packageName)) return 'animation'
+            if (packageName.startsWith('@dnd-kit/')) return 'drag-drop'
+            if (['streamdown', 'react-markdown', 'unified', 'vfile', 'vfile-message', 'parse5', 'entities', 'property-information'].includes(packageName) || /^(remark|rehype|micromark|mdast-util|hast-util|unist-util)-/.test(packageName)) return 'markdown'
+          },
+        },
+      },
     },
 
     // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

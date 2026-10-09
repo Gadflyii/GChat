@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentDefinition } from '@/types/agent'
-import { AgentStudioPage } from './index'
+import { Route } from './index'
+const AgentStudioPage = Route.options.component!
 
 const navigate = vi.hoisted(() => vi.fn())
 const listAgentTemplates = vi.hoisted(() => vi.fn())
@@ -22,7 +23,7 @@ const definitionState = vi.hoisted(() => ({
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (config: object) => ({
-    ...config,
+    options: config,
     useSearch: () => ({}),
   }),
   useNavigate: () => navigate,

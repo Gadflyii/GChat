@@ -342,6 +342,73 @@ unrelated worktrees and user data remain untouched.
 | Installed Windows / Ron-9950X3D2 | `%LOCALAPPDATA%/GChat`; app PID 39788, host PID 41000 at acceptance | Updated visible desktop and persistent host; no model loaded by acceptance checks |
 | GInfer | `/ai/ginfer/out/windows/ginfer-windows-x64-sm120a.zip` | Accepted unchanged 120-member engine runtime |
 
+## OI-074 frontend loading and OI-070 Linux refresh — current work
+
+Owner: frontend/package agent; candidate
+`/ai/gchat-worktrees/oi074-frontend-packages`, branch
+`dev/oi074-frontend-packages-104d4ec6`, baseline `104d4ec6e`.
+OI-074 source acceptance passes. The existing 500 kB warning threshold and
+locked dependencies are unchanged. Source defers unused locales, emoji picker,
+terminal hosts, syntax engines and Mermaid. Visited terminal hosts stay mounted
+through navigation. Saved initial language loads before React renders; language
+switches publish only the newest completed selection. JSON-only editors preserve
+Prism JSON token classes and editing, while omitting unrelated editor grammars.
+Every Shiki language and alias remains supported. Shared grammar data and exact
+Oniguruma WASM bytes ship as offline assets, fetched on demand. The agent page is
+private to its route, allowing the router's existing automatic split.
+
+Final Linux/Tauri frontend build: Node 22.22.1 / Vite 6.3.2, 14.63 seconds, no
+large-chunk advisory. Actual largest JS is 499,377 bytes (deferred Mermaid), entry
+485,905 bytes. Bootstrap static closure is 14 JS files / 2,141,685 bytes;
+bootstrap plus home route is 33 files / 2,795,678 bytes. Neither closure includes
+terminal rendering, emoji picker, syntax engines, Mermaid or unused locales.
+The saved Windows baseline main alone is 4,679.49 kB (gzip 1,401.26 kB); this
+comparison describes emitted/loading bytes, not measured desktop startup speed.
+The final graph has zero chunk cycles. Shared grammar data: 250 assets /
+7,091,778 bytes, deduplicated across embedded-language dependencies.
+
+Typecheck, focused ESLint, exact all-language reconstruction and WASM-byte tests,
+Markdown, both terminal hosts, route behavior, locale cold-start/races, JSON editor
+and stale-highlight regressions pass (50 tests across the focused sets). A
+GPU-disabled Edge 154 fixture loads actual emitted files: Russian locale,
+JSON/C++/Emacs Lisp colors and preserved text in light/dark themes, Streamdown's
+JavaScript regex engine, and Mermaid SVG all pass; external resource requests
+are zero. This is frontend asset acceptance, not installed application acceptance.
+The coordinator runs full `make verify` after integrating the bugfix branches.
+
+One initial harness used repository cwd, which prevented router generation;
+only subsequent builds from `web-app/` are valid measurements. Manual grouping
+initially introduced an HTML-parser/Markdown cycle, caught by the actual browser
+before source promotion. Concrete prevention: HTML representation/construction
+and parser ownership stay together; AST/file utilities and module glue are
+independent leaves. Distinct Mermaid math retains its installed version and stays
+outside startup. Do not regroup these solely to hit a chunk size.
+
+Evidence: `out/oi074-frontend-packages/` contains the final build log, chunk graph,
+loading measurements and actual browser receipt/request list/launch arguments.
+Candidate owns 22 MB frontend output and small evidence only; no copied engine,
+model or native build. Native Edge used a disposable profile at
+`%LOCALAPPDATA%/GChat/oi074-frontend-assets/`; its observed launch includes
+`--disable-gpu` and software WARP rendering. Its process exits normally.
+The fixture server and profile are retired after preserving the receipt.
+
+OI-070 remains open. Assemble final integrated client/Host/Manager once after
+bugfix acceptance. Reuse Ubuntu 24.04 / Node 22 image
+`gchat-linux-installer-build:ubuntu24`, the existing dependency/compiler caches,
+and exact accepted engine set
+`/ai/ginfer/out/linux-installer-20260930/runtime-set/` (source `05a286ba5741`);
+do not regenerate engines. The current retained client packages under
+`/ai/gchat/out/linux/` are September 30; Manager under
+`/ai/gchat/out/ginfer-manager/linux/` is `2a6e21ff2`. Its previous 1.68 GB private
+cache was intentionally retired; build the new Manager once in the shared cache.
+The Manager builder now uses `/ai/coordination/locks/local-build.lock`; bind that
+same directory when running it in Docker. Normal X11 window/Host startup and exact
+payload verification are required for refreshed packages. Tray and Secret Service
+require the separate OI-071 desktop providers. Preserve user data and old accepted
+packages until replacements pass; do not deploy to Server 2.
+Next: coordinator source integration/full verification, then one Linux assembly
+and package/X11 acceptance. No Linux package has been refreshed by this source work.
+
 ## Accepted Linux installers — September 30, 2026
 
 The complete Linux release is ready for an Ubuntu 24.04+ x86-64 desktop with a

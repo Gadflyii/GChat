@@ -20,14 +20,14 @@ import { TranslationProvider } from '@/i18n/TranslationContext'
 import OutOfContextPromiseModal from '@/containers/dialogs/OutOfContextDialog'
 import AttachmentIngestionDialog from '@/containers/dialogs/AttachmentIngestionDialog'
 import WhatsNewDialog from '@/containers/dialogs/WhatsNewDialog'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import GlobalError from '@/containers/GlobalError'
 import { GlobalEventHandler } from '@/providers/GlobalEventHandler'
 import { ServiceHubProvider } from '@/providers/ServiceHubProvider'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LeftSidebar } from '@/components/left-sidebar'
-import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
-import { HermesTerminalHost } from '@/containers/HermesTerminalHost'
+const CodeTerminalHost = lazy(() => import('@/containers/CodeTerminalHost').then(module => ({ default: module.CodeTerminalHost })))
+const HermesTerminalHost = lazy(() => import('@/containers/HermesTerminalHost').then(module => ({ default: module.HermesTerminalHost })))
 import { EmbeddedIntegrationProvisioner } from '@/containers/EmbeddedIntegrationProvisioner'
 import { EngineDiscovery } from '@/containers/EngineDiscovery'
 import { StudioActivity } from '@/containers/StudioActivity'
@@ -43,6 +43,14 @@ const AppLayout = () => {
   const { pathname } = useLocation()
   const codeVisible = pathname.startsWith('/code')
   const hermesVisible = pathname.startsWith('/hermes')
+  // Keep each host mounted after its first visit so navigation preserves the
+  // terminal connection, replay/history and workspace tabs.
+  const [codeVisited, setCodeVisited] = useState(codeVisible)
+  const [hermesVisited, setHermesVisited] = useState(hermesVisible)
+  useEffect(() => {
+    if (codeVisible) setCodeVisited(true)
+    if (hermesVisible) setHermesVisited(true)
+  }, [codeVisible, hermesVisible])
   const { showOnboardingModelReminder } = useOnboardingModelReminder()
   const isLeftPanelOpen = useLeftPanel((state) => state.open)
   const setLeftPanel = useLeftPanel((state) => state.setLeftPanel)
@@ -70,8 +78,10 @@ const AppLayout = () => {
         <SidebarInset>
           <div className="relative bg-background size-full">
             <Outlet />
-            <CodeTerminalHost visible={codeVisible} />
-            <HermesTerminalHost visible={hermesVisible} />
+            <Suspense fallback={null}>
+              {(codeVisible || codeVisited) && <CodeTerminalHost visible={codeVisible} />}
+              {(hermesVisible || hermesVisited) && <HermesTerminalHost visible={hermesVisible} />}
+            </Suspense>
           </div>
         </SidebarInset>
 

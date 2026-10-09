@@ -16,8 +16,7 @@ import {
   type MermaidErrorComponentProps,
 } from 'streamdown'
 import { cjk } from '@streamdown/cjk'
-import { code } from '@streamdown/code'
-import { mermaid } from '@streamdown/mermaid'
+import { code, mermaid } from '@/lib/markdownPlugins'
 
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
