@@ -24,6 +24,26 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
+The user's C1/context correction distinguishes request capacity from whole-pool
+allocation. The previous explanation did not establish that the requested context
+lacks VRAM. In installed source `6138913f`, `resolve_ranked_kv_arena_capacity`
+compares the complete fixed arena with post-startup free bytes minus headroom;
+it takes no context or concurrency input. A small C1 workload can fit while an
+unnecessarily large fixed pool fails. The Manager control is an explicit sizing
+workaround, not a demonstrated diagnosis of changed Engine allocations.
+No failure-time CUDA/NVML free-memory breakdown or current request-KV sizing
+measurement exists in the retained error, so neither an accounting defect nor a
+particular competing allocation is established. Clarify the user's reported
+16K/162K value before a new run; the original captured failure was Muse C1/131,072.
+Outcome for this correction is accurate diagnosis, with no context/concurrency
+reduction, new qualification or unrequested GPU campaign. Source inspection and
+the retained error suffice for this distinction; the next unresolved observation
+is the actual startup memory breakdown for the reported failing settings.
+The October 9 00:17 UTC read-only snapshot now shows the Host only, no engine,
+and a saved custom Muse C4/8,192 configuration with automatic KV and 1 GiB
+headroom. Preserve those user settings. Earlier installed acceptance below is
+historical evidence, not the current runtime configuration.
+
 The custom KV-budget correction is installed on RON-9950X3D2 from `ce6a6c0e6`.
 Use **Reload → Custom settings**, clear **GPU KV budget (bytes, blank =
 automatic)**, review the remaining settings and submit **Reload**. Clearing sends
@@ -162,6 +182,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
+| Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | KV budget evidence | `/ai/gchat/out/manager-kv-startup-20261008/` | Pinned public snapshot/catalogs, review and source/native checks; no credentials or model copy |
 | KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Retired after accepted Windows package/install; shared cache junction detached first |
