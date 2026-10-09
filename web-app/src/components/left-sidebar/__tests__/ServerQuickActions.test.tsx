@@ -11,6 +11,10 @@ import { ServerQuickActions } from '../ServerQuickActions'
 import { shouldAttemptAutoStart, switchToModel } from '@/utils/switchModel'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { engineCommand, type EngineSnapshot } from '@/services/engines'
+import DropdownModelProvider from '@/containers/DropdownModelProvider'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import { hydrateActiveModelsForRunningServer } from '@/utils/activeModelsSync'
+import { ensureLocalApiServerRunning } from '@/utils/ensureLocalApiServerRunning'
 
 const models = vi.hoisted(() => ({
   stopModel: vi.fn(),
@@ -21,6 +25,9 @@ const models = vi.hoisted(() => ({
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
+}))
+vi.mock('@tanstack/react-router', async () => ({
+  ...await vi.importActual('@tanstack/react-router'), useNavigate: () => vi.fn(),
 }))
 vi.mock('@/services/engines', async () => ({
   ...await vi.importActual('@/services/engines'), engineCommand: vi.fn(),
@@ -45,11 +52,14 @@ vi.mock('@/components/ui/sidebar', () => ({
 describe('sidebar server shortcut', () => {
   const stopServer = vi.fn()
   const startServer = vi.fn()
+  const getServerStatus = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
     useEngineHosts.setState({ hosts: [], snapshots: {}, errors: {} })
-    seedServiceHub({ models: models as unknown as ModelsService })
+    getServerStatus.mockResolvedValue(false)
+    seedServiceHub({ models: models as unknown as ModelsService,
+      app: { getServerStatus } as unknown as AppService })
     window.core = { api: { stopServer, startServer } } as typeof window.core
     stopServer.mockResolvedValue(undefined)
     startServer.mockResolvedValue(1337)
@@ -73,6 +83,7 @@ describe('sidebar server shortcut', () => {
     })
     useLocalApiServer.setState({
       defaultModelLocalApiServer: { model: 'shortcut-model', provider: 'ginfer' },
+      lastServerModels: [],
     })
   })
 
@@ -120,7 +131,8 @@ describe('sidebar server shortcut', () => {
   const localAlias = `ginfer/${localId}/${instanceId}`
   function hostAlias(hostId = localId, status = 'ready', session = 'original-session') {
     const alias = `ginfer/${hostId}/${instanceId}`
-    const snapshot = { host_id: hostId, instances: [{ instance_id: instanceId, session_id: session, status,
+    const snapshot = { host_id: hostId, display_name: 'Local Host', instances: [{ instance_id: instanceId,
+      display_name: 'Muse Glimmer 30B', session_id: session, status,
       configuration: { vision: false, gpu_uuids: [], max_context: 8192, concurrency: 1 } }] } as EngineSnapshot
     useEngineHosts.setState({
       hosts: [{ local: true, host_id: localId, name: 'Local Host', base_url: '', client_id: '', certificate_sha256: '' }],
@@ -184,7 +196,7 @@ describe('sidebar server shortcut', () => {
 
   it('explicitly starts the saved local Host instance after its Ready-only picker entry disappears', async () => {
     const stopped = hostAlias(localId, 'stopped')
-    useModelProvider.setState({ selectedModel: null, providers: [{ provider: 'ginfer-lan', models: [] }] as ModelProvider[] })
+    useModelProvider.setState({ selectedProvider: '', selectedModel: null, providers: [{ provider: 'ginfer-lan', models: [] }] as ModelProvider[] })
     useAppState.setState({ serverStatus: 'stopped', activeModels: [] })
     useAppState.getState().setIntentionalModelStop('ginfer-lan', localAlias, true)
     vi.mocked(engineCommand).mockImplementation(async action => action === 'snapshot' ? stopped : {
@@ -201,6 +213,67 @@ describe('sidebar server shortcut', () => {
     expect(useAppState.getState().activeModels).toEqual([localAlias])
     expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(true)
     expect(useModelProvider.getState().selectedModel?.id).toBe(localAlias)
+    expect(useModelProvider.getState().selectedProvider).toBe('ginfer-lan')
+    expect(screen.getByText('Server running')).toBeInTheDocument()
+  })
+
+  it('keeps the restored local selection after the real picker finishes an older empty active-model read', async () => {
+    const stopped = hostAlias(localId, 'stopped')
+    useGeneralSetting.setState({ preloadModelOnStartup: false })
+    useModelProvider.setState({ selectedProvider: '', selectedModel: null,
+      providers: [{ provider: 'ginfer-lan', active: true, settings: [], models: [] }] as ModelProvider[] })
+    useAppState.setState({ serverStatus: 'stopped', activeModels: [] })
+    let releaseOldRead: (models: string[]) => void = () => {}
+    models.getActiveModels.mockImplementationOnce(() => new Promise<string[]>(resolve => { releaseOldRead = resolve }))
+      .mockResolvedValue([])
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'snapshot' ? stopped : {
+      ...stopped, instances: [{ ...stopped.instances[0], status: 'ready', session_id: 'current-session' }],
+    })
+    render(<><DropdownModelProvider showSampler={false} /><ServerQuickActions /></>)
+    await waitFor(() => expect(models.getActiveModels).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: /Start server/ }))
+    await waitFor(() => expect(screen.getByText('Server running')).toBeInTheDocument())
+    await act(async () => { releaseOldRead([]) })
+    expect(screen.getByTitle(localAlias)).toHaveTextContent('Muse Glimmer 30B — Local Host')
+    expect(useModelProvider.getState().selectedProvider).toBe('ginfer-lan')
+    expect(useModelProvider.getState().selectedModel?.id).toBe(localAlias)
+    await act(async () => { await hydrateActiveModelsForRunningServer(models as unknown as ModelsService) })
+    expect(useAppState.getState().activeModels).toEqual([localAlias])
+    expect(startServer).toHaveBeenCalledOnce()
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('does not hydrate a stopped local Host default as a credentialed cloud model', async () => {
+    hostAlias(localId, 'stopped')
+    useModelProvider.getState().updateProvider('ginfer-lan', { api_key: 'local-facade-key' })
+    useAppState.setState({ activeModels: [] })
+    await hydrateActiveModelsForRunningServer(models as unknown as ModelsService)
+    expect(useAppState.getState().activeModels).toEqual([])
+  })
+
+  it('does not reopen the facade when Stop overtakes a delayed Ready-edge status probe', async () => {
+    const ready = hostAlias()
+    useAppState.setState({ serverStatus: 'stopped' })
+    let releaseStatus: (running: boolean) => void = () => {}
+    getServerStatus.mockImplementationOnce(() => new Promise<boolean>(resolve => { releaseStatus = resolve }))
+    const serviceHub = seedServiceHub({ models: models as unknown as ModelsService,
+      app: { getServerStatus } as unknown as AppService })
+    const startup = ensureLocalApiServerRunning(serviceHub)
+    await waitFor(() => expect(getServerStatus).toHaveBeenCalledOnce())
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'snapshot' ? ready : {
+      ...ready, instances: [{ ...ready.instances[0], status: 'stopped', session_id: null }],
+    })
+    models.getActiveModels.mockResolvedValue([])
+    render(<ServerQuickActions />)
+    fireEvent.click(screen.getByRole('button', { name: /Stop model/ }))
+    await waitFor(() => expect(useAppState.getState().pendingModelStops).toBe(1))
+    await act(async () => { releaseStatus(false); await startup })
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Model stopped'))
+    expect(startServer).not.toHaveBeenCalled()
+    expect(stopServer).toHaveBeenCalledOnce()
+    expect(useAppState.getState().serverStatus).toBe('stopped')
+    expect(useAppState.getState().activeModels).toEqual([])
+    expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(false)
   })
 
   it('restarts the local Host with its current session rather than a missing engine adapter', async () => {

@@ -2,7 +2,6 @@ import { useAppState } from '@/hooks/useAppState'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import type { ModelsService } from '@/services/models/types'
-import { isLocalProvider } from '@/utils/registerRemoteProvider'
 import { isLocallyOwnedModel, readyLocalHostModels } from '@/utils/localHostModel'
 
 /**
@@ -86,16 +85,16 @@ export async function hydrateActiveModelsForRunningServer(
       .getState()
       .providers.find((p) => p.provider === serverDefault.provider)
     // Only surface a cloud default as active when it's still resolvable and
-    // has credentials the proxy can route with. Local-engine defaults are
-    // already represented by `localActive` above.
+    // has credentials the proxy can route with. Local defaults come from
+    // native engine activity and Ready Host snapshots, never this pointer.
     if (
       provider &&
-      !isLocalProvider(provider.provider) &&
+      !isLocallyOwnedModel(provider.provider, serverDefault.model) &&
       Boolean(provider.api_key)
     ) {
       combined.add(serverDefault.model)
     }
   }
 
-  useAppState.getState().setActiveModels([...combined])
+  syncActiveModelsFromEngines([...combined])
 }

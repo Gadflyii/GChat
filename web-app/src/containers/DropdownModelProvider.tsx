@@ -98,6 +98,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
 
   // Initialize model provider on first mount (no model selected yet)
   useEffect(() => {
+    let disposed = false
     const initializeModel = async () => {
       if (selectedProvider && selectedModel) {
         return
@@ -111,6 +112,8 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
         // session); otherwise leave the selector blank.
         try {
           const activeModelIds = await serviceHub.models().getActiveModels()
+          const selection = useModelProvider.getState()
+          if (disposed || (selection.selectedProvider && selection.selectedModel)) return
           const activeModelId = activeModelIds?.[0]
           if (activeModelId) {
             const activeProvider = providers.find(
@@ -125,6 +128,8 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
         } catch (error) {
           console.debug('Error checking active models on startup:', error)
         }
+        const selection = useModelProvider.getState()
+        if (disposed || (selection.selectedProvider && selection.selectedModel)) return
         selectModelProvider('', '')
         return
       }
@@ -156,6 +161,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
     }
 
     initializeModel()
+    return () => { disposed = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providers, selectModelProvider, checkModelExists])
 

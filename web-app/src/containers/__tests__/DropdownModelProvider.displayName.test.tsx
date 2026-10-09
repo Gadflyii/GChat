@@ -44,6 +44,7 @@ vi.mock('@/hooks/useModelProvider', () => ({
 
 // The component subscribes with selectors, so the mock has to apply them.
 const mockModelProvider = (state: MockHookReturn) => {
+  Object.assign(useModelProvider, { getState: () => state })
   vi.mocked(useModelProvider).mockImplementation(((selector?: any) =>
     selector ? selector(state) : state) as never)
 }

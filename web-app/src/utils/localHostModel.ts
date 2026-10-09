@@ -48,9 +48,9 @@ export async function controlLocalHostModel(modelId: string, operation: 'start' 
     }
     if (instance.status === 'ready') {
       const providers = useModelProvider.getState()
-      if (providers.selectedProvider === 'ginfer-lan' && !providers.selectedModel) {
+      if (!providers.selectedModel && (!providers.selectedProvider || providers.selectedProvider === 'ginfer-lan')) {
         const model = providers.getProviderByName('ginfer-lan')?.models.find(candidate => candidate.id === modelId)
-        if (model) useModelProvider.setState({ selectedModel: model })
+        if (model) providers.selectModelProvider('ginfer-lan', model.id)
       }
       return
     }
