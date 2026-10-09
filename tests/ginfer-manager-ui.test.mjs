@@ -68,7 +68,7 @@ async function waitFor(predicate, description) {
 
 async function manager(t, view = fixture(), request = () => ({})) {
   const html = readFileSync(new URL('../src-tauri/ginfer-manager/ui/index.html', import.meta.url), 'utf8')
-  const dom = new JSDOM(html, { url: 'https://manager.local/', runScripts: 'outside-only' })
+  const dom = new JSDOM(html, { url: 'https://manager.local/', runScripts: 'outside-only', pretendToBeVisual: true })
   const calls = []
   const listeners = new Map()
   const { window } = dom
@@ -92,6 +92,7 @@ async function manager(t, view = fixture(), request = () => ({})) {
   await runtime.start()
   return {
     window, document: window.document, calls, view,
+    runtime,
     publish: async (next) => {
       view = next
       listeners.get('manager-snapshot')({ payload: structuredClone(next) })
@@ -120,6 +121,72 @@ function submit(app) {
   form.dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }))
   return form
 }
+
+test('heartbeat-only snapshots retain Manager controls and keyboard focus', async (t) => {
+  const app = await manager(t)
+  const refresh = button(app.document, 'Refresh')
+  refresh.focus()
+  await app.publish(structuredClone(app.view))
+  assert.equal(button(app.document, 'Refresh'), refresh)
+  assert.equal(app.document.activeElement, refresh)
+
+  const heartbeat = structuredClone(app.view)
+  for (const host of heartbeat.hosts) {
+    host.snapshot.revision++
+    host.snapshot.local_administrator.last_seen_unix_ms += 4000
+    host.snapshot.local_administrator.active_instances = { [readyId]: 3 }
+  }
+  heartbeat.hosts[0].snapshot.clients[0].last_seen_unix_ms += 20
+  heartbeat.hosts[0].snapshot.clients[0].active_instances = { [readyId]: 1, [stoppedId]: 1 }
+  await app.publish(heartbeat)
+  assert.equal(button(app.document, 'Refresh'), refresh)
+  assert.equal(app.document.activeElement, refresh)
+
+  const changed = structuredClone(app.view)
+  changed.hosts[0].snapshot.instances[0].active_requests = 7
+  await app.publish(changed)
+  assert.match(app.document.querySelector(`[data-instance="${readyId}"]`).textContent, /Active requests7/)
+
+  const timestamp = structuredClone(changed)
+  timestamp.hosts[0].snapshot.clients[0].last_seen_unix_ms += 4000
+  await app.publish(timestamp)
+  assert.match(app.document.querySelector('[data-section="clients"]').textContent,
+    new RegExp(new Date(timestamp.hosts[0].snapshot.clients[0].last_seen_unix_ms).toLocaleString().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+
+  const newSession = '30000000-0000-4000-8000-000000000099'
+  const restarted = structuredClone(timestamp)
+  restarted.hosts[0].snapshot.instances[0].session_id = newSession
+  await app.publish(restarted)
+  button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Stop').click()
+  await completed(app, (calls) => calls.length === 1)
+  assert.equal(requests(app)[0].args.expected_session_id, newSession)
+})
+
+test('hidden Manager retains latest data and renders it on return to visibility', async (t) => {
+  const app = await manager(t)
+  const refresh = button(app.document, 'Refresh')
+  let hidden = true
+  Object.defineProperty(app.document, 'hidden', { configurable: true, get: () => hidden })
+  for (const count of [5, 9]) {
+    const changed = structuredClone(app.view)
+    changed.hosts[0].snapshot.instances[0].active_requests = count
+    await app.publish(changed)
+  }
+  assert.equal(button(app.document, 'Refresh'), refresh)
+  assert.match(app.document.querySelector(`[data-instance="${readyId}"]`).textContent, /Active requests2/)
+  hidden = false
+  app.document.dispatchEvent(new app.window.Event('visibilitychange'))
+  assert.match(app.document.querySelector(`[data-instance="${readyId}"]`).textContent, /Active requests9/)
+
+  hidden = true
+  const changed = structuredClone(app.view)
+  changed.hosts[0].snapshot.instances[0].active_requests = 11
+  await app.publish(changed)
+  app.runtime.stop()
+  hidden = false
+  app.document.dispatchEvent(new app.window.Event('visibilitychange'))
+  assert.match(app.document.querySelector(`[data-instance="${readyId}"]`).textContent, /Active requests9/)
+})
 
 test('manager renders local and paired status, installed model, GPU, profile and client activity', async (t) => {
   const app = await manager(t)

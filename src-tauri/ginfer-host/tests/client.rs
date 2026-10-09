@@ -61,6 +61,8 @@ async fn tls(host: Arc<Host>) -> (String, tokio::task::JoinHandle<()>) {
 #[derive(Default)]
 struct SnapshotGate {
     armed: std::sync::atomic::AtomicBool,
+    connections: std::sync::atomic::AtomicUsize,
+    snapshot_override: Mutex<Option<Value>>,
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
 }
@@ -79,12 +81,19 @@ async fn tls_at(
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
     let origin = format!("https://{}", listener.local_addr().unwrap());
     let job = tokio::spawn(async move {
+        let mut connections = tokio::task::JoinSet::new();
         loop {
-            let (socket, _) = listener.accept().await.unwrap();
+            let socket = tokio::select! {
+                Some(_) = connections.join_next(), if !connections.is_empty() => continue,
+                accepted = listener.accept() => accepted.unwrap().0,
+            };
+            if let Some(gate) = &gate {
+                gate.connections.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
             let acceptor = acceptor.clone();
             let host = host.clone();
             let gate = gate.clone();
-            tokio::spawn(async move {
+            connections.spawn(async move {
                 if let Ok(tls) = acceptor.accept(socket).await {
                     let _ = hyper::server::conn::Http::new()
                         .serve_connection(
@@ -94,8 +103,13 @@ async fn tls_at(
                                 let gate = gate.clone();
                                 async move {
                                     let snapshot = req.uri().path() == "/host/v1/snapshot";
-                                    let response = host.route(req).await?;
+                                    let mut response = host.route(req).await?;
                                     if let Some(gate) = gate.filter(|_| snapshot) {
+                                        if response.status().is_success() {
+                                            if let Some(body) = gate.snapshot_override.lock().unwrap().clone() {
+                                                response = ginfer_host::service::json(hyper::StatusCode::OK, body);
+                                            }
+                                        }
                                         if gate
                                             .armed
                                             .swap(false, std::sync::atomic::Ordering::SeqCst)
@@ -115,6 +129,112 @@ async fn tls_at(
     });
     (origin, job)
 }
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn snapshot_batch_observes_hosts_concurrently_and_preserves_order_and_errors() {
+    let root = tempfile::tempdir().unwrap();
+    let vault = Arc::new(Vault::default());
+    let client = Arc::new(Client::new(Some(root.path().join("shared/hosts.json")), vault.clone()));
+    let mut ids = Vec::new();
+    let mut gates = Vec::new();
+    let mut servers = Vec::new();
+    for index in 0..2 {
+        let host = Host::open(root.path().join(format!("host-{index}")), format!("Host {index}"),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let gate = Arc::new(SnapshotGate::default());
+        let (origin, server) = tls_with_snapshot_gate(host.clone(), Some(gate.clone())).await;
+        host.lan_sharing.lock().await.standalone = Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
+        client.pair(PairRequest { host_id: None, base_url: Some(origin), client_name: "Batch client".into() }).await.unwrap();
+        ids.push(host.data.lock().await.host_id);
+        gates.push(gate);
+        servers.push(server);
+    }
+    let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let offline_id = Uuid::new_v4();
+    let offline_grant = Uuid::new_v4();
+    let offline = SavedHost { host_id: offline_id, name: "Offline".into(),
+        base_url: format!("https://{}", closed.local_addr().unwrap()), certificate_sha256: "ab".repeat(32),
+        client_id: offline_grant };
+    drop(closed);
+    vault.set(offline_grant, "offline-token").await.unwrap();
+    let imported = root.path().join("imported.json");
+    std::fs::write(&imported, serde_json::to_vec(&vec![offline]).unwrap()).unwrap();
+    client.import_legacy(&imported).await.unwrap();
+    for gate in &gates { gate.armed.store(true, std::sync::atomic::Ordering::SeqCst); }
+    let batch_client = client.clone();
+    let batch_ids = vec![ids[1], offline_id, Uuid::new_v4(), ids[0]];
+    let batch = tokio::spawn(async move { batch_client.snapshots(&batch_ids).await });
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        tokio::join!(gates[0].entered.notified(), gates[1].entered.notified());
+    }).await.expect("both independent hosts must be observed before either is released");
+    for gate in &gates { gate.release.notify_one(); }
+    let result = batch.await.unwrap();
+    assert_eq!(result[0].as_ref().unwrap()["host_id"], ids[1].to_string());
+    assert!(result[1].as_ref().unwrap_err().is_offline());
+    assert!(!result[2].as_ref().unwrap_err().is_offline());
+    assert_eq!(result[3].as_ref().unwrap()["host_id"], ids[0].to_string());
+    for server in servers { server.abort(); }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn pinned_requests_reuse_connections_without_reusing_credentials_or_changed_pins() {
+    let root = tempfile::tempdir().unwrap();
+    let host = Host::open(root.path().join("host"), "Pool fixture".into(),
+        std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+    let gate = Arc::new(SnapshotGate::default());
+    let (origin, server) = tls_with_snapshot_gate(host.clone(), Some(gate.clone())).await;
+    host.lan_sharing.lock().await.standalone = Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
+    let vault = Arc::new(Vault::default());
+    let registry = root.path().join("shared/hosts.json");
+    let client = Client::new(Some(registry.clone()), vault.clone());
+    client.pair(PairRequest { host_id: None, base_url: Some(origin.clone()), client_name: "Pool client".into() }).await.unwrap();
+    let saved = client.registered().await.unwrap().remove(0);
+    let token = vault.get(saved.client_id).await.unwrap();
+    client.snapshot(saved.host_id).await.unwrap();
+    let warm_connections = gate.connections.load(std::sync::atomic::Ordering::SeqCst);
+    for _ in 0..5 {
+        client.snapshot(saved.host_id).await.unwrap();
+        client.request_json(saved.host_id, reqwest::Method::GET, "/host/v1/clients", None).await.unwrap();
+    }
+    assert_eq!(gate.connections.load(std::sync::atomic::Ordering::SeqCst), warm_connections,
+        "ten complete warm reads must reuse the enrolled transport's TLS connection");
+
+    vault.set(saved.client_id, "revoked-token").await.unwrap();
+    let unauthorized = client.snapshot(saved.host_id).await.unwrap_err();
+    assert!(!unauthorized.is_offline());
+    assert!(unauthorized.to_string().contains("401"));
+    vault.set(saved.client_id, &token).await.unwrap();
+    client.snapshot(saved.host_id).await.unwrap();
+
+    let original = std::fs::read(&registry).unwrap();
+    let mut changed: Value = serde_json::from_slice(&original).unwrap();
+    changed["hosts"][0]["certificate_sha256"] = "00".repeat(32).into();
+    std::fs::write(&registry, serde_json::to_vec(&changed).unwrap()).unwrap();
+    let bad_pin = client.snapshot(saved.host_id).await.unwrap_err();
+    assert!(!bad_pin.is_offline());
+    assert!(bad_pin.to_string().contains("certificate has changed"));
+    std::fs::write(&registry, original).unwrap();
+    client.snapshot(saved.host_id).await.unwrap();
+    let valid_snapshot = client.snapshot(saved.host_id).await.unwrap();
+    let mut wrong_identity = valid_snapshot.clone();
+    wrong_identity["host_id"] = Uuid::new_v4().to_string().into();
+    let mut wrong_protocol = valid_snapshot;
+    wrong_protocol["protocol_version"] = 2.into();
+    for invalid in [wrong_identity, wrong_protocol, json!({"malformed":"snapshot"})] {
+        *gate.snapshot_override.lock().unwrap() = Some(invalid);
+        assert!(!client.snapshot(saved.host_id).await.unwrap_err().is_offline(),
+            "authenticated identity, protocol and schema failures remain problems");
+    }
+    *gate.snapshot_override.lock().unwrap() = None;
+    client.forget(saved.host_id).await.unwrap();
+    assert!(client.snapshot(saved.host_id).await.is_err());
+    client.pair(PairRequest { host_id: None, base_url: Some(origin), client_name: "Pool client".into() }).await.unwrap();
+    let before_new_snapshot = gate.connections.load(std::sync::atomic::Ordering::SeqCst);
+    client.snapshot(saved.host_id).await.unwrap();
+    assert_eq!(gate.connections.load(std::sync::atomic::Ordering::SeqCst), before_new_snapshot + 1,
+        "forget/re-pair retires the previous grant's transport pool");
+    server.abort();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_native_clients_share_enrollment_reload_forget_and_one_time_migration() {
     let root = tempfile::tempdir().unwrap();

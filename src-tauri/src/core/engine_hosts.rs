@@ -1,9 +1,6 @@
 //! GChat routing adapters over the shared native GInfer client.
 mod credential_setup;
-use ginfer_host::{
-    client::{Client, ClientState as Hosts, CredentialFuture, CredentialStore},
-    transport::pinned_client,
-};
+use ginfer_host::client::{Client, ClientState as Hosts, CredentialFuture, CredentialStore};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 use uuid::Uuid;
@@ -500,8 +497,8 @@ pub async fn request_instance(
             .cloned()
             .ok_or("host registration missing")?
     };
-    let client = pinned_client(&host.certificate_sha256)?;
-    let mut request = client
+    let transport = client().pinned_transport(&host).await?;
+    let mut request = transport
         .request(
             method,
             format!(

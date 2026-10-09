@@ -61,33 +61,26 @@ export const useTokensCount = (
   const latestCalculationRef = useRef<(() => Promise<void>) | null>(null)
   const inFlightRef = useRef(false)
   const needsRecalcRef = useRef(false)
-  const isIncreasingContextSize = useRef<boolean>(false)
   const serviceHub = useServiceHub()
   const { selectedModel, selectedProvider } = useModelProvider()
   const { prompt } = usePrompt()
 
-  // Create messages with current prompt for live calculation.
-  // This mirrors the payload sent to token counting by appending the draft
-  // user message (text plus any uploaded images) to the existing thread
-  // history so the model sees the full context that will be submitted.
   const messagesWithPrompt = useMemo(() => {
     const result = [...messages]
     if (prompt.trim() || (uploadedFiles && uploadedFiles.length > 0)) {
       const content = []
 
-      // Add text content if prompt exists
       if (prompt.trim()) {
         content.push({ type: ContentType.Text, text: { value: prompt } })
       }
 
-      // Add image content for uploaded files
       if (uploadedFiles && uploadedFiles.length > 0) {
         uploadedFiles.forEach((file) => {
           content.push({
             type: ContentType.Image,
             image_url: {
               url: file.dataUrl,
-              detail: 'high', // Default to high detail for token calculation
+              detail: 'high',
             },
           })
         })
@@ -104,7 +97,6 @@ export const useTokensCount = (
       }
     }
     return result.map((e) => {
-      // Pull inline file contents stored on the message metadata
       const inlineFileContents = getInlineFileContents(e.metadata)
 
       const buildInlineText = (base: string) => {
@@ -237,11 +229,6 @@ export const useTokensCount = (
     // Clear existing timeout
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current)
-    }
-
-    // Skip calculation if we're currently increasing context size
-    if (isIncreasingContextSize.current) {
-      return
     }
 
     // Only calculate if we have messages or a prompt
