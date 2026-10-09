@@ -218,7 +218,7 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
         "tool.view" => tool_view::execute(&call.args, context.loaded_tools).await,
         "capability_search" => async {
             let query = required_string(&call.args, "query").map_err(ToolOutcome::error)?;
-            context.desktop.capability_search(query).await.map(|value| {
+            context.desktop.capability_search(&query).await.map(|value| {
                 let mut outcome = ToolOutcome::ok(value.to_string());
                 outcome.details = Some(value);
                 outcome
@@ -226,7 +226,7 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
         }.await,
         "capability_read" => async {
             let name = required_string(&call.args, "name").map_err(ToolOutcome::error)?;
-            context.desktop.capability_read(name).await.map(|value| {
+            context.desktop.capability_read(&name).await.map(|value| {
                 let mut outcome = ToolOutcome::ok(value.to_string());
                 outcome.details = Some(value);
                 outcome
@@ -399,7 +399,7 @@ async fn authorize_call(
 
 fn safe_preview(call: &ToolCallPayload) -> Value {
     if call.tool == "mcp_call" {
-        return json!({"name":call.args.get("name")});
+        return serde_json::json!({"name":call.args.get("name")});
     }
     if matches!(
         call.tool.as_str(),
