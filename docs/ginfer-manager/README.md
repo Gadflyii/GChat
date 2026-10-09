@@ -27,7 +27,8 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
-The October 9 diagnosis of OI-066 is complete at the startup-fit scope. The
+The October 9 measurement establishes the OI-066 startup admission rejection.
+The owner of the baseline difference and its reclaimability remain unresolved. The
 saved tested profile and Host command match: Muse native-NVFP4 text, TP1,
 C4/131,072, DFlash K4, NVFP4 KV, 1,024-token prefill, CUDA graphs enabled,
 Vision disabled, 11,997,806,592 fixed arena bytes and 314,572,800 headroom bytes.
@@ -61,6 +62,38 @@ Engine cleanup. The old GPU-client list has no per-client memory amounts, and
 current Windows process memory counters do not reconcile with physical NVML
 usage, so a particular application cannot be named as the owner of that delta.
 
+The user requested attribution of the additional VRAM. A subsequent read-only
+Windows query of the same 5090's local memory segment reports 1,185,017,856
+Allocated bytes (1,130.121 MiB), 840,577,024 Modified bytes (801.637 MiB), and
+no Zero or Standby bytes. Allocated plus Modified approximately matches nearby
+NVML 1,918 MiB Used, with asynchronous changes between queries. This is a
+specific OS-managed residency bucket worth investigating; it does not establish
+that this bucket grew by the historical 859 MiB. The original test did not record
+these buckets. Direct process queries also differ substantially from the normal
+performance counters. Protected DWM/csrss/System/vmwp inspection is access-denied
+without elevation; no applications were closed and no UAC prompt was raised.
+
+The installed SDK defines `ModifiedBytes` separately but does not define its
+reclamation contract. Microsoft documents dynamic WDDM residency budgets and
+trimming; NVIDIA distinguishes WDDM OS management from Linux/TCC channel
+accounting. Neither guarantees that these specific local Modified pages are
+recoverable for this arena. Conversely, current NVML free alone does not prove
+an irreducible allocation shortage. `src/runtime/engine/kv_arena_capacity.cpp`
+rejects before attempting the final CUDA arena allocation. The demonstrated
+cause is the admission policy's free-memory comparison; whether that policy
+rejects recoverable residency without host spill remains an unproven hypothesis.
+The failed engine returned memory to its baseline, but that observation does not
+prove Windows cannot reclaim the remaining pages later.
+
+At the user's shutdown drain request, finer attribution and the reclamation
+question are parked in OI-066. Resume from these retained measurements after the
+RAM installation; do not repeat qualification to recover missing context.
+Evidence: `gpu-direct-process-memory-20261009.json` and
+`gpu-protected-process-memory-20261009.json` beside the measured startup trace.
+Relevant primary contracts: [NVIDIA NVML memory queries](https://docs.nvidia.com/deploy/nvml-api/latest/api/group__nvmlDeviceQueries.html),
+[Microsoft residency budgets](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/process-residency-budgets),
+and [the reserved statistics interface](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmthk/ne-d3dkmthk-d3dkmt_querystatistics_type).
+
 In `6138913f`, `registry.cpp` releases the temporary capture arena before
 querying memory and resolving pool capacity. The four native NVFP4 capture
 tails total 33,466,368 bytes (31.916 MiB); even crediting the entire payload again
@@ -82,8 +115,8 @@ dominant prefill workspace, not the material allocation growth previously
 suspected. HTTP queue settings are host-side and warmup follows construction.
 
 The profile was tested and passed. Its fixed whole-pool reservation has little
-physical tolerance for a busier Windows desktop. OI-066 remains open for the
-owning Host/profile/engine decision on current-memory pool sizing, preserving
+physical tolerance for a busier Windows desktop. OI-066 is parked for the shutdown drain. Resolve attribution and reclaimability
+before the owning Host/profile/engine decision on current-memory pool sizing, preserving
 the user's C4/131,072/NVFP4 workload. No catalog, installed binary, headroom or
 saved settings were changed by this diagnosis. Automatic sizing is exposed by
 the installed Manager control from `ce6a6c0e6`; it is a workaround, not proof of
@@ -236,7 +269,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
-| C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation candidate from `7ebe26ada`; measured trace and arithmetic retained beside existing KV evidence, checkout retired after reviewed merge |
+| C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | KV budget evidence | `/ai/gchat/out/manager-kv-startup-20261008/` | Pinned public snapshot/catalogs, review and source/native checks; no credentials or model copy |
 | KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Retired after accepted Windows package/install; shared cache junction detached first |
