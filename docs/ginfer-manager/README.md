@@ -67,16 +67,40 @@ requests; retained fragmented histories and physical allocator state are checked
 by the Engine's reservation transactions. It is not a fixed pool cap or a
 current measured available budget.
 
-Next: the coordinator books actual Host automatic-profile Start/Stop, checking
-the exact effective C4/131,072 settings and unchanged 300 MiB guard. After that
-Host instance stops, a separately labeled direct loopback public-Engine capacity
-check uses the same native binary/artifact/settings and existing supported
-`--request-log-jsonl` flag. That log supplies exact resolved arena bytes/slots,
-scheduler and batch counters that Host metadata and normal logs do not expose.
-It is not Host telemetry proof. Record graph-enabled startup, without inventing
-graph/eager numerical qualification. Preserve public prefix reuse and sample
-device-wide free memory throughout. Ready/restart/stop and original-profile
-restoration remain separate supported Host lifecycle checks.
+Actual October 9, 19:40–19:41 UTC Host automatic Reload/Ready/Stop passes with
+the exact C4/131,072 settings and 300 MiB guard. The separate direct Engine
+also reaches Ready: JSONL records an automatic 10,400,743,424-byte arena and
+9,198 slots, adaptive/15, prefix reuse and graphs enabled. Its sole event is
+`server_start`; no inference ran. Preparation doubled the retained text past
+the frontend's capacity and received typed HTTP 400 `context_length_exceeded`
+for a 152,381-token prompt. The helper incorrectly aborted that expected upper
+bracket. Supported cleanup restores the exact original stopped profile and
+zero native Engines, with no cleanup error. Evidence:
+`/ai/gchat/out/code-hygiene-20261009/integration/native-c4-128k-20261009/`.
+
+The correction preserves HTTP status and JSON body in a typed transport failure.
+Only preparation opts into recognizing HTTP 400 with a valid error object,
+string `context_length_exceeded` / `invalid_request_error` / `messages` fields
+and a nonempty string message as an above-target sentinel. It never parses a
+token count from prose or records the sentinel as a measured count. All other
+errors and `RunC4` exact-count validation still fail. All three preparation
+count paths keep 96 calls per lane / 600 seconds total, four distinct early
+markers, exact 131,009-token acceptance, 64 outputs and omitted public defaults.
+Native PowerShell 5.1 parser/Add-Type and ten bounded component cases pass,
+including actual HTTP/PS exception wrapping, wrong status/code/type/parameter,
+malformed JSON/object fields and default exact-validation rejection. The fixture
+uses an opaque message without token numbers. It executes extracted production
+transport/count code only; no Host, Engine or GPU execution. Receipt:
+`/ai/gchat/out/oi072-current-profiles/count-upper-bound-component.json`;
+its sibling fixture source is retained for this reproduced regression.
+
+Next: the coordinator reviews the unchanged geometry and corrected calibrator
+before booking the single public C4 wave. The direct JSONL supplies exact
+scheduler and batch counters that Host metadata and normal logs do not expose;
+it is not Host telemetry proof. Preserve public prefix reuse and sample
+device-wide free memory throughout, without inventing graph/eager numerical
+qualification. Ready/restart/stop and original-profile restoration remain
+separate supported Host lifecycle checks.
 Use four distinct inputs counted at exactly 131,009 tokens through the loaded
 public frontend. The retained 63-decode-input qualification workload may serve
 as the matched control (64 returned outputs, 63 decode inputs); it does not change
@@ -159,11 +183,12 @@ growth. Independent review confirms the calculated 2,550,407,168-byte / 268-slot
 cold-cohort requirement remains valid. Runtime width-dependent pending state,
 workspace and graphs precede automatic arena sizing; their actual residency
 is measured by the physical check, not assumed from this KV calculation.
-Independent source pressure review found no remaining definite helper blocker
-after correcting the JSONL `auto_max` spelling, requested/resolved AUTO distinction,
-explicit direct model ID and Host lifecycle deadline. The native PowerShell
-parser passes without executing the script body. Embedded transport compilation,
-API calls and physical execution remain untested until the booked native run.
+Earlier source pressure review corrected the JSONL `auto_max` spelling,
+requested/resolved AUTO distinction, explicit direct model ID and lifecycle
+deadline. Actual preparation exposed the upper-bracket failure above; source
+review and startup alone did not establish the full helper or capacity result.
+The measured adaptive/15 startup does not change the calculated bound. Physical
+full-context inference and its scheduler/B4 evidence remain untested.
 
 The coordinator's owned execution adapter is
 `/ai/gchat/out/code-hygiene-20261009/integration/c4-profile-capacity.ps1`.
@@ -188,11 +213,10 @@ uses `%LOCALAPPDATA%\GInfer\hardware.json` with no Host profile override;
 startup can refresh stale NUMA facts, so the adapter compares that same existing
 path/hash after each startup and stops the same-settings comparison if it
 changes. It does not copy that profile or introduce `--no-profile`.
-Current booking metadata is local5090 line 278, October 9, 17:52–19:30 UTC,
-owned by GChat; the adapter requires fresh bounds and line/PID parameters.
-This adapter is a retained source artifact for coordinator review/execution,
-not a live job or completed physical result. No native parser, compiler,
-API call or GPU execution has run for the adapter in this source phase.
+The actual first capacity attempt used local5090 booking 279, October 9,
+19:30–20:30 UTC, owned by GChat. The adapter requires fresh bounds and line/PID
+parameters for any later coordinator run. It is a retained execution artifact;
+the startup/lifecycle evidence above does not complete physical capacity.
 Independent source pressure review found no concrete blocker in the composed
 adapter/helper/bank and confirmed that the actual Host public label comes from
 the artifact identity/weights, while the saved UUID is only its inventory lookup.

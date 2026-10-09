@@ -1,5 +1,4 @@
-# Adapted from out/oi056-current-engine/host-request.ps1. Execution needs a booked
-# native window. This helper never starts or reloads an Engine or changes a profile.
+# Host transport and bounded C4 probes require a booked native window.
 param(
  [ValidateSet('Request','PrepareC4','RunC4')][string]$Mode='Request',
  [string]$Path='/host/v1/snapshot', [string]$BodyFile,
@@ -7,9 +6,12 @@ param(
  [string]$OutputName='snapshot.json', [string]$EngineOrigin,
  [string]$ApiKey='', [string[]]$BodyFiles, [string]$RequestLogJsonl,
  [int]$EngineProcessId, [string]$ExpectedEnginePath,
- [string]$CorpusFile=(Join-Path $PSScriptRoot 'muse-qualified-context-bank.json')
+ [string]$CorpusFile
 )
 $ErrorActionPreference='Stop'
+if([string]::IsNullOrWhiteSpace($CorpusFile)){
+ $CorpusFile=Join-Path $PSScriptRoot 'muse-qualified-context-bank.json'
+}
 if($env:COMPUTERNAME -ne 'RON-9950X3D2'){throw 'Wrong workstation'}
 New-Item -ItemType Directory -Force -Path $OutputDirectory|Out-Null
 $gpu='GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e'
@@ -27,6 +29,11 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+public sealed class C4HttpFailure : Exception {
+ public int StatusCode { get; private set; }
+ public string ResponseBody { get; private set; }
+ public C4HttpFailure(int statusCode,string body,Exception cause):base(body,cause){StatusCode=statusCode;ResponseBody=body;}
+}
 public static class C4HostRequest {
  static HttpWebRequest[] wave;
  static volatile bool cancelled;
@@ -38,7 +45,11 @@ public static class C4HostRequest {
   r.Method=String.IsNullOrEmpty(body)?"GET":"POST";
   if(!String.IsNullOrEmpty(body)){var b=Encoding.UTF8.GetBytes(body);r.ContentType="application/json";r.ContentLength=b.Length;using(var s=r.GetRequestStream())s.Write(b,0,b.Length);}
   try {using(var response=r.GetResponse())using(var reader=new StreamReader(response.GetResponseStream()))return reader.ReadToEnd();}
-  catch(WebException e){if(e.Response==null)throw;using(var reader=new StreamReader(e.Response.GetResponseStream()))throw new Exception(reader.ReadToEnd(),e);}
+  catch(WebException e){
+   var response=e.Response as HttpWebResponse;if(response==null)throw;
+   using(response)using(var reader=new StreamReader(response.GetResponseStream()))
+    throw new C4HttpFailure((int)response.StatusCode,reader.ReadToEnd(),e);
+  }
  }
  public static Task<string>[] Four(string origin,string token,string[] bodies,int timeout){
   ServicePointManager.DefaultConnectionLimit=16;
@@ -80,8 +91,22 @@ if($Mode -eq 'Request'){
 $uri=[Uri]$EngineOrigin
 if($uri.Scheme -ne 'http' -or $uri.Host -ne '127.0.0.1' -or $uri.AbsolutePath -ne '/' -or $uri.Query -or $uri.UserInfo){throw 'Direct capacity check requires a native HTTP loopback origin'}
 $EngineOrigin=$EngineOrigin.TrimEnd('/')
-function Count-Body([string]$body,[int]$timeout=60000){
- $value=[C4HostRequest]::Call($EngineOrigin,$null,$ApiKey,'/v1/chat/completions/count_tokens',$body,$timeout)|ConvertFrom-Json
+function Count-Body([string]$body,[int]$timeout=60000,[bool]$AllowContextUpperBound=$false){
+ try{
+  $value=[C4HostRequest]::Call($EngineOrigin,$null,$ApiKey,'/v1/chat/completions/count_tokens',$body,$timeout)|ConvertFrom-Json
+ }catch{
+  $caught=$_;$failure=$caught.Exception
+  # Native PowerShell wraps a thrown C# exception in invocation exceptions.
+  while($failure -and $failure -isnot [C4HttpFailure]){$failure=$failure.InnerException}
+  if(!$AllowContextUpperBound -or !$failure -or $failure.StatusCode -ne 400){throw $caught}
+  try{$errorBody=$failure.ResponseBody|ConvertFrom-Json -ErrorAction Stop}catch{throw $caught}
+  if($errorBody -isnot [pscustomobject] -or $errorBody.error -isnot [pscustomobject]){throw $caught}
+  foreach($field in @('code','type','param','message')){if($errorBody.error.$field -isnot [string]){throw $caught}}
+  if($errorBody.error.code -cne 'context_length_exceeded' -or $errorBody.error.type -cne 'invalid_request_error' -or $errorBody.error.param -cne 'messages' -or [string]::IsNullOrWhiteSpace($errorBody.error.message)){throw $caught}
+  # A typed over-context response is an upper bracket, never a measured count.
+  # Exact RunC4 validation does not opt in; no count is parsed from error prose.
+  return [int]::MaxValue
+ }
  if($value.object -ne 'chat.completion.token_count' -or $null -eq $value.input_tokens){throw 'Unexpected public count response'}
  return [int]$value.input_tokens
 }
@@ -103,7 +128,7 @@ if($Mode -eq 'PrepareC4'){
   while($true){
    if(++$calls -gt 96 -or $timer.ElapsedMilliseconds -ge $deadlineMs){throw 'Bounded exact-count preparation exhausted'}
    $body=Make-Body ($marker+$text)
-   $count=Count-Body $body ([Math]::Min(60000,$deadlineMs-[int]$timer.ElapsedMilliseconds))
+   $count=Count-Body $body ([Math]::Min(60000,$deadlineMs-[int]$timer.ElapsedMilliseconds)) $true
    if($count -eq 131009){$exact=$body;break}
    if($count -gt 131009){break}
    $text+=$text
@@ -114,7 +139,7 @@ if($Mode -eq 'PrepareC4'){
    $middle=[int][Math]::Floor(($low+$high)/2)
    if(++$calls -gt 96 -or $timer.ElapsedMilliseconds -ge $deadlineMs){throw 'Bounded exact-count preparation exhausted'}
    $body=Make-Body ($marker+$text.Substring(0,$middle))
-   $count=Count-Body $body ([Math]::Min(60000,$deadlineMs-[int]$timer.ElapsedMilliseconds))
+   $count=Count-Body $body ([Math]::Min(60000,$deadlineMs-[int]$timer.ElapsedMilliseconds)) $true
    if($count -eq 131009){$exact=$body;break}
    if($count -lt 131009){$low=$middle}else{$high=$middle}
   }
@@ -124,7 +149,7 @@ if($Mode -eq 'PrepareC4'){
    foreach($length in ([Math]::Max(0,$low-24))..([Math]::Min($text.Length,$high+24))){
     if(++$calls -gt 96 -or $timer.ElapsedMilliseconds -ge $deadlineMs){throw 'Bounded exact-count preparation exhausted'}
     $body=Make-Body ($marker+$text.Substring(0,$length))
-    if((Count-Body $body ([Math]::Min(60000,$deadlineMs-[int]$timer.ElapsedMilliseconds))) -eq 131009){$exact=$body;break}
+    if((Count-Body $body ([Math]::Min(60000,$deadlineMs-[int]$timer.ElapsedMilliseconds)) $true) -eq 131009){$exact=$body;break}
    }
   }
   if($null -eq $exact){throw 'Could not represent exactly 131009 public input tokens in bounded preparation'}
