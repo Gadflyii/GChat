@@ -19,6 +19,7 @@ use super::prompt::{
     DEFAULT_MAX_PARALLEL_TOOL_CALLS, ITERATION_ONE_TOOLS,
 };
 use super::runner::{
+    combine_turn_reason, turn_status,
     run_turn_with_options, AgentTurnOutcome, RunTurnInput, RunTurnOptions, MAX_STEPS,
 };
 use super::session::AgentSessionState;
@@ -518,10 +519,11 @@ async fn run_goal_loop(
         inference.merge(executor_result.outcome.inference);
         if matches!(
             executor_result.outcome.reason.as_str(),
-            "cancelled" | "finish" | "max_steps"
+            "cancelled" | "finish" | "max_steps" | "loop_detected" | "failed"
         ) {
             let mut outcome = executor_result.outcome;
             outcome.inference = inference;
+            outcome.step_count = total_steps;
             return Ok(outcome);
         }
         let executor_reply = executor_result.outcome.reply.clone().unwrap_or_default();
@@ -554,16 +556,17 @@ async fn run_goal_loop(
         inference.merge(evaluator_result.outcome.inference);
         if matches!(
             evaluator_result.outcome.reason.as_str(),
-            "cancelled" | "finish"
+            "cancelled" | "finish" | "failed"
         ) {
             let mut outcome = evaluator_result.outcome;
             outcome.inference = inference;
+            outcome.step_count = total_steps;
             return Ok(outcome);
         }
-        if evaluator_result.outcome.reason == "max_steps" {
+        if turn_status(&evaluator_result.outcome.reason) == "incomplete" {
             return Ok(AgentTurnOutcome {
                 reply: last_executor,
-                reason: "max_steps".into(),
+                reason: evaluator_result.outcome.reason,
                 step_count: total_steps,
                 inference,
             });
@@ -630,9 +633,10 @@ async fn run_coordinator(
         reasoning_effort: definition.reasoning_effort,
     };
     let plan_result = execute_observed_stage(context, plan, 0, emit).await?;
-    if plan_result.outcome.reason == "cancelled" {
+    if matches!(plan_result.outcome.reason.as_str(), "cancelled" | "failed") {
         return Ok(plan_result.outcome);
     }
+    let mut overall_reason = plan_result.outcome.reason.clone();
     let mut inference = plan_result.outcome.inference;
     let plan_text = plan_result.outcome.reply.unwrap_or_default();
 
@@ -697,6 +701,7 @@ async fn run_coordinator(
             cancelled = true;
             continue;
         }
+        overall_reason = combine_turn_reason(&overall_reason, &result.outcome.reason);
         reports.push((result.name, handoff(context.run_root, &result.id, result.outcome.reply.as_deref().unwrap_or_default())));
     }
     if let Some(error) = first_error {
@@ -743,7 +748,7 @@ async fn run_coordinator(
     inference.merge(synthesis_result.outcome.inference);
     Ok(AgentTurnOutcome {
         reply: synthesis_result.outcome.reply,
-        reason: synthesis_result.outcome.reason,
+        reason: combine_turn_reason(&overall_reason, &synthesis_result.outcome.reason),
         step_count: total_steps,
         inference,
     })
@@ -768,6 +773,7 @@ async fn run_workflow(
     let mut total_steps = 0;
     let mut inference = AgentInferenceMetrics::default();
     let mut last_outcome = None;
+    let mut overall_reason = "reply".to_owned();
 
     for level in levels {
         let specs = level
@@ -854,6 +860,7 @@ async fn run_workflow(
                 })?;
             }
             results.insert(result.id.clone(), reply);
+            overall_reason = combine_turn_reason(&overall_reason, &result.outcome.reason);
             last_outcome = Some(result.outcome);
         }
         if let Some(error) = first_error {
@@ -871,6 +878,7 @@ async fn run_workflow(
     let mut outcome = last_outcome.ok_or_else(|| "Workflow produced no result".to_string())?;
     outcome.step_count = total_steps;
     outcome.inference = inference;
+    outcome.reason = overall_reason;
     Ok(outcome)
 }
 
@@ -1360,6 +1368,223 @@ mod tests {
         assert!(prompt(3).contains(&worker_result.to_string_lossy().to_string()));
     }
 
+    #[tokio::test]
+    async fn coordinator_preserves_synthesis_and_incomplete_stage_outcomes() {
+        use crate::core::agent::runs::{list_runs, record_run, AgentRunRecord, CompletedRun};
+        let reply = |text: &str| {
+            ScriptedResponse::completion(
+                serde_json::json!([{"tool":"reply","args":{"text":text}}]).to_string(),
+            )
+        };
+        // A later reply must not erase the reason an earlier stage stopped.
+        for limiting_stage in [
+            "worker_steps",
+            "worker_loop",
+            "planning_steps",
+            "worker_failed",
+            "workflow_steps",
+            "none",
+        ] {
+            let workspace = TestWorkspace::new();
+            workspace.write("fixture.txt", "unchanging");
+            let read = || {
+                ScriptedResponse::completion(
+                serde_json::json!([{"tool":"os.fs.read","args":{"path":workspace.path().join("fixture.txt")}}]).to_string()
+            )
+            };
+            let mut responses = vec![if limiting_stage == "planning_steps" {
+                read()
+            } else {
+                reply("plan")
+            }];
+            responses.extend(match limiting_stage {
+                "worker_steps" => vec![read()],
+                "worker_loop" => vec![read(); 7],
+                "worker_failed" => vec![
+                    ScriptedResponse::completion("unfinished")
+                        .with_finish_reason("output_limit");
+                    2
+                ],
+                "workflow_steps" => vec![read()],
+                _ => vec![reply("report")],
+            });
+            responses.push(reply("completed synthesis"));
+            let server = ScriptedGinferServer::start(responses).await;
+            let routes = AgentModelRoutes::new(vec![AgentModelRoute {
+                instance_id: "active".into(),
+                model_id: "active".into(),
+                client: server.client(),
+            }])
+            .unwrap();
+            let mut definition = general_agent();
+            definition.max_steps = 1;
+            definition.strategy = AgentStrategy::Coordinator {
+                max_parallel: 1,
+                coordinator_instructions: "Plan".into(),
+                synthesis_instructions: "Combine".into(),
+                synthesis_model_instance_id: None,
+                synthesis_reasoning_effort: None,
+                workers: vec![AgentRole {
+                    id: "research".into(),
+                    name: "Researcher".into(),
+                    instructions: "Investigate".into(),
+                    skills: vec![],
+                    max_steps: if limiting_stage == "worker_loop" {
+                        10
+                    } else {
+                        1
+                    },
+                    model_instance_id: None,
+                    reasoning_effort: None,
+                }],
+            };
+            if limiting_stage == "workflow_steps" {
+                definition.strategy = AgentStrategy::Workflow {
+                    nodes: ["coordinate", "worker-research", "synthesize"]
+                        .iter()
+                        .map(|id| WorkflowNode {
+                            id: (*id).into(),
+                            name: (*id).into(),
+                            instructions: "Work".into(),
+                            skills: vec![],
+                            max_steps: 1,
+                            workspace: StageWorkspace::Isolated,
+                            model_instance_id: None,
+                            reasoning_effort: None,
+                        })
+                        .collect(),
+                    edges: vec![
+                        WorkflowEdge {
+                            from: "coordinate".into(),
+                            to: "worker-research".into(),
+                        },
+                        WorkflowEdge {
+                            from: "worker-research".into(),
+                            to: "synthesize".into(),
+                        },
+                    ],
+                };
+            }
+            let roots = EditableRoots::new(workspace.path(), &[]).await.unwrap();
+            let caps = CapabilitiesSummary {
+                platform: std::env::consts::OS.into(),
+                arch: std::env::consts::ARCH.into(),
+                browser_channel: "none".into(),
+                working_dir: workspace.path().display().to_string(),
+                has_clipboard: false,
+                has_wmctrl: false,
+                has_notifications: false,
+            };
+            let approval = RecordingApproval::deny();
+            let folder = RecordingFolderAccess::deny();
+            let desktop = RecordingDesktop::default();
+            let cancellation = CancellationToken::new();
+            let registry = workspace.skill_registry();
+            let mut session = AgentSessionState::new("session");
+            let mut events = vec![];
+            let result = run_definition(
+                OrchestrationInput {
+                    run_id: "run",
+                    storage_id: "record",
+                    session_id: "session",
+                    user_message: "goal",
+                    selected_skill: None,
+                    definition: &definition,
+                    capabilities: &caps,
+                    skill_descriptors: &[],
+                    active_model_instance_id: "active",
+                    working_dir: workspace.path(),
+                    editable_roots: &roots,
+                    external_read_only_roots: &[],
+                    trusted_read_roots: &[],
+                    max_steps_override: None,
+                    model_routes: &routes,
+                    approval: &approval,
+                    folder_access: &folder,
+                    desktop: &desktop,
+                    cancellation: &cancellation,
+                    session: &mut session,
+                    skill_registry: &registry,
+                    bundled_script_runtime: None,
+                    data_folder: workspace.path(),
+                },
+                |event| {
+                    events.push(event);
+                    Ok(())
+                },
+            )
+            .await;
+            let outcome = result
+                .as_ref()
+                .unwrap_or_else(|error| panic!("{limiting_stage}: {error}"));
+            let reason = match limiting_stage {
+                "none" => "reply",
+                "worker_loop" => "loop_detected",
+                "worker_failed" => "failed",
+                _ => "max_steps",
+            };
+            assert_eq!(outcome.reason, reason, "{limiting_stage}");
+            assert_eq!(outcome.reply.as_deref(), Some("completed synthesis"));
+            assert_eq!(
+                outcome.step_count + u32::from(limiting_stage == "worker_failed"),
+                server.requests().len() as u32
+            );
+            assert_eq!(
+                workspace.read("agent-runs/record/synthesize/result.txt"),
+                b"completed synthesis"
+            );
+            assert!(events.iter().any(|event| matches!(event, AgentEvent::TurnFinished { reason: actual, .. } if actual == reason)));
+            let record = AgentRunRecord::completed(CompletedRun {
+                id: "record",
+                run_id: "run",
+                session_id: "session",
+                origin_session_id: None,
+                user_message: "goal",
+                definition: &definition,
+                started_at_ms: 0,
+                events: &events,
+                result: &result,
+            });
+            record_run(workspace.path(), record).unwrap();
+            let saved = list_runs(workspace.path()).unwrap().remove(0);
+            assert_eq!(
+                saved.status,
+                if limiting_stage == "none" {
+                    "finished"
+                } else if limiting_stage == "worker_failed" {
+                    "failed"
+                } else {
+                    "incomplete"
+                }
+            );
+            assert_eq!(saved.finish_reason, reason);
+            assert_eq!(saved.final_reply, "completed synthesis");
+            assert_eq!(saved.stages.last().unwrap().status, "reply");
+            assert_eq!(saved.stages.len(), 3);
+            assert_eq!(
+                saved.stages[if limiting_stage == "planning_steps" {
+                    0
+                } else {
+                    1
+                }]
+                .status,
+                reason
+            );
+        }
+    }
+
+    #[test]
+    fn terminal_failure_and_cancellation_override_partial_outputs() {
+        assert_eq!(combine_turn_reason("max_steps", "reply"), "max_steps");
+        assert_eq!(
+            combine_turn_reason("loop_detected", "max_steps"),
+            "loop_detected"
+        );
+        assert_eq!(combine_turn_reason("max_steps", "failed"), "failed");
+        assert_eq!(combine_turn_reason("failed", "cancelled"), "cancelled");
+        assert_eq!(combine_turn_reason("cancelled", "reply"), "cancelled");
+    }
+
     async fn run_test_goal_loop(
         executor_responses: Vec<ScriptedResponse>,
         evaluator_responses: Vec<ScriptedResponse>,
@@ -1513,6 +1738,19 @@ mod tests {
             assert_eq!((shell_count,blocked_count),(stages,stages),"{}",definition.name);
             assert!(approval.requests().is_empty());
         }
+    }
+
+    #[tokio::test]
+    async fn goal_loop_stops_on_loop_fallback_without_evaluating_it() {
+        let call = ScriptedResponse::completion(
+            r#"[{"tool":"os.fs.read","args":{"path":"missing.txt"}}]"#,
+        );
+        let (outcome, executor_requests, evaluator_requests) =
+            run_test_goal_loop(vec![call; 7], Vec::new(), 10, 3).await;
+        assert_eq!(outcome.reason, "loop_detected");
+        assert!(outcome.reply.unwrap().contains("no-progress loop"));
+        assert_eq!(executor_requests, 7);
+        assert_eq!(evaluator_requests, 0);
     }
 
     #[tokio::test]

@@ -1,3 +1,4 @@
+import { incompleteOutcomeMessage } from '@/lib/agent-outcome'
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { continuationTask } from '@/lib/agent-continuation'
@@ -241,13 +242,10 @@ function executionBudget(definition: AgentDefinition): {
 }
 
 function runStatusLabel(run: AgentRunRecord): string {
-  if (
-    run.finishReason === 'max_steps' ||
-    run.stages.some((stage) => stage.status === 'max_steps')
-  ) {
-    return 'step limit reached'
-  }
-  if (run.finishReason === 'max_cycles') return 'revision limit reached'
+  if (run.status === 'failed' || run.status === 'cancelled') return run.status
+  if (run.finishReason === 'max_steps') return 'incomplete · step limit reached'
+  if (run.finishReason === 'max_cycles') return 'incomplete · revision limit reached'
+  if (run.finishReason === 'loop_detected') return 'incomplete · no progress'
   return run.status
 }
 
@@ -256,12 +254,12 @@ function stageStatusLabel(status: string): string {
   if (status === 'finish') return 'finished session'
   if (status === 'max_steps') return 'step limit reached'
   if (status === 'max_cycles') return 'revision limit reached'
+  if (status === 'loop_detected') return 'no progress · incomplete'
   return status
 }
 
 function runStatusTone(run: AgentRunRecord): string {
-  const label = runStatusLabel(run)
-  if (label.includes('limit')) {
+  if (run.status === 'incomplete') {
     return 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200'
   }
   if (run.status === 'failed') {
@@ -1937,11 +1935,8 @@ function RunInspector({
       inference: stage.inference,
     })) ?? []
   )
-  const limitStage = selected?.stages.find(
-    (stage) => stage.status === 'max_steps'
-  )
-  const finishReason =
-    selected?.finishReason || (limitStage ? 'max_steps' : undefined)
+  const finishReason = selected?.finishReason
+  const incompleteMessage = incompleteOutcomeMessage(finishReason)
   return (
     <div className="grid min-h-0 grid-cols-[340px_1fr]">
       <aside className="min-h-0 overflow-y-auto border-r p-3">
@@ -2109,22 +2104,13 @@ function RunInspector({
                 default: {selected.defaultModelInstanceId}
               </p>
             </div>
-            {(finishReason === 'max_steps' ||
-              finishReason === 'max_cycles') && (
+            {incompleteMessage && (
               <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
                 <div className="flex items-start gap-3">
                   <IconAlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-300" />
                   <div>
-                    <h3 className="font-medium text-amber-900 dark:text-amber-100">
-                      {finishReason === 'max_steps'
-                        ? 'A stage used its full step budget'
-                        : 'The loop used every revision cycle'}
-                    </h3>
-                    <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
-                      {finishReason === 'max_steps'
-                        ? `${limitStage?.name ?? 'The agent'} reached ${limitStage?.stepCount ?? selected.maxSteps ?? 'its configured'} model steps without returning a completed result. The run and trace were preserved so you can inspect where it stalled.`
-                        : `The evaluator never returned PASS within ${selected.maxCycles ?? 'the configured'} cycles. The last executor result is preserved below as the best available output.`}
-                    </p>
+                    <h3 className="font-medium text-amber-900 dark:text-amber-100">Run incomplete</h3>
+                    <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">{incompleteMessage}</p>
                   </div>
                 </div>
               </section>
@@ -2239,11 +2225,7 @@ function RunInspector({
             )}
             <section>
               <h3 className="mb-2 font-medium">
-                {finishReason === 'max_cycles'
-                  ? 'Best available output'
-                  : finishReason === 'max_steps'
-                    ? 'Terminal message'
-                    : 'Final output'}
+                {selected.status === 'incomplete' ? 'Available output' : 'Final output'}
               </h3>
               <pre className="whitespace-pre-wrap rounded-xl border bg-muted/20 p-4 font-sans text-sm">
                 {selected.finalReply || 'No output was returned.'}

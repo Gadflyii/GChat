@@ -1247,7 +1247,7 @@ async fn repeated_no_progress_calls_trip_the_breaker() {
             ..
         }
     )));
-    assert_eq!(finished_reason(&run.events), Some(("reply", 7)));
+    assert_eq!(finished_reason(&run.events), Some(("loop_detected", 7)));
 }
 
 #[tokio::test]

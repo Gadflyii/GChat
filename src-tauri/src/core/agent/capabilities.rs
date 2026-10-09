@@ -757,12 +757,7 @@ async fn run_delegated<R: Runtime>(
             "reply".into()
         }
     });
-    let status = match reason.as_str() {
-        "cancelled" => "cancelled",
-        "failed" => "failed",
-        "max_steps" | "max_cycles" => "incomplete",
-        _ => "finished",
-    };
+    let status = super::runner::turn_status(&reason);
     let run = DelegatedRunSummary {
         run_id: request.run_id,
         status: status.into(),

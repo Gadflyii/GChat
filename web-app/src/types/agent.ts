@@ -9,6 +9,7 @@ export type AgentTurnFinishReason =
   | 'finish'
   | 'max_steps'
   | 'max_cycles'
+  | 'loop_detected'
   | 'cancelled'
   | 'failed'
 

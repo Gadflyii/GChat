@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Preserve Agent stage outcomes through final output](2026-10-09-preserve-agent-stage-outcomes.md)
+
 - [Share host management and fleet pools](2026-10-08-share-host-management-and-fleet-pools.md)
 
 - [Unify conversations and expose shared capabilities in Code](2026-10-08-unify-conversations-and-code-capabilities.md)
