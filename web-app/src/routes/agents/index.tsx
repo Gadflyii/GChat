@@ -346,7 +346,7 @@ function slug(value: string): string {
     .slice(0, 52)
 }
 
-export function AgentStudioPage() {
+function AgentStudioPage() {
   const [runSetup, setRunSetup] = useState<AgentDefinition | null>(null)
   const [runTask, setRunTask] = useState('')
   const [runWorkspace, setRunWorkspace] = useState('')

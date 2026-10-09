@@ -9,7 +9,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
 
 import './index.css'
-import './i18n'
+import { loadTranslations } from './i18n/setup'
 import { installCodeBlockDownloadHandler } from './lib/codeBlockDownload'
 import { AppErrorBoundary } from '@/containers/AppErrorBoundary'
 import { resetForcedOnboardingRun } from './lib/onboarding'
@@ -171,9 +171,13 @@ declare module '@tanstack/react-router' {
 const rootElement = document.getElementById('root')!
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
-  root.render(
+  // Resolve the saved language before rendering, with the bundled English
+  // fallback retained if an asset cannot be read.
+  void loadTranslations().catch(error => {
+    console.error('Failed to load initial translations:', error)
+  }).then(() => root.render(
     <StrictMode>
       <AppErrorBoundary><RouterProvider router={router} /></AppErrorBoundary>
     </StrictMode>
-  )
+  ))
 }

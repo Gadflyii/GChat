@@ -13,7 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import CodeEditor from '@uiw/react-textarea-code-editor'
+import CodeEditor from '@/components/JSONCodeEditor'
 import '@uiw/react-textarea-code-editor/dist.css'
 
 interface MessageMetadataDialogProps {

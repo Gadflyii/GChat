@@ -18,7 +18,8 @@ manager_output="$(realpath -m -- "$manager_output")"
 mkdir -p -- "$manager_output"
 
 # Serialize this scoped build with the host/client checks that share the cache.
-flock /tmp/ginfer-local-build.lock cargo build \
+mkdir -p /ai/coordination/locks
+flock /ai/coordination/locks/local-build.lock cargo build \
   --manifest-path "$manager_source_root/src-tauri/Cargo.toml" \
   -p ginfer-manager -p ginfer-host --release --locked
 

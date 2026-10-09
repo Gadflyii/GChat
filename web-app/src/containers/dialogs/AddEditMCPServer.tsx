@@ -33,7 +33,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
-import CodeEditor from '@uiw/react-textarea-code-editor'
+import CodeEditor from '@/components/JSONCodeEditor'
 import '@uiw/react-textarea-code-editor/dist.css'
 
 // Sortable argument item component

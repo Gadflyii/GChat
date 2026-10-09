@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { MCPServerConfig, MCPServers, MCPSettings } from '@/hooks/useMCPServers'
-import CodeEditor from '@uiw/react-textarea-code-editor'
+import CodeEditor from '@/components/JSONCodeEditor'
 import '@uiw/react-textarea-code-editor/dist.css'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 

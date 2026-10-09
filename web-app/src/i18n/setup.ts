@@ -15,41 +15,48 @@ export interface I18nInstance {
   resources: TranslationResources
   namespaces: string[]
   defaultNS: string
-  changeLanguage: (lng: string) => void
+  changeLanguage: (lng: string) => Promise<void>
   t: (key: string, options?: Record<string, unknown>) => string
 }
 
 // Global i18n instance
 let i18nInstance: I18nInstance
 
-// Dynamically load locale files
-const localeFiles = import.meta.glob('../locales/**/*.json', { eager: true })
+// English is the synchronous fallback. Other languages are loaded only when
+// selected, including the persisted initial selection before React mounts.
+const englishFiles = import.meta.glob('../locales/en/*.json', { eager: true, import: 'default' })
+const localeFiles = import.meta.glob([
+  '../locales/**/*.json', '!../locales/en/*.json',
+], { import: 'default' })
+const resources: TranslationResources = { en: {} }
+const namespaces = Object.keys(englishFiles).map(path => path.split('/').pop()!.replace('.json', ''))
+for (const [path, value] of Object.entries(englishFiles)) {
+  resources.en[path.split('/').pop()!.replace('.json', '')] = value as Record<string, string>
+}
+const languageLoads = new Map<string, Promise<void>>()
+const listeners = new Set<() => void>()
+let languageRequest = 0
 
-const resources: TranslationResources = {}
-const namespaces: string[] = []
+export function subscribeLanguage(listener: () => void) {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
+}
 
-// Process all locale files
-Object.entries(localeFiles).forEach(([path, module]) => {
-  // Example path: '../locales/en/common.json' -> language: 'en', namespace: 'common'
-  const match = path.match(/\.\.\/locales\/([^/]+)\/([^/]+)\.json/)
-
-  if (match) {
-    const [, language, namespace] = match
-
-    // Initialize language object if it doesn't exist
-    if (!resources[language]) {
-      resources[language] = {}
-    }
-
-    // Add namespace to list if it's not already there
-    if (!namespaces.includes(namespace)) {
-      namespaces.push(namespace)
-    }
-
-    // Add namespace resources to language
-    resources[language][namespace] = (module as { default: { [key: string]: string } }).default || (module as { [key: string]: string })
+async function ensureLanguage(language: string) {
+  if (resources[language]) return
+  const files = Object.entries(localeFiles).filter(([path]) => path.startsWith(`../locales/${language}/`))
+  if (files.length === 0) return
+  let loading = languageLoads.get(language)
+  if (!loading) {
+    loading = Promise.all(files.map(async ([path, load]) => {
+      const value = await load()
+      return [path.split('/').pop()!.replace('.json', ''), value] as const
+    })).then(entries => { resources[language] = Object.fromEntries(entries) as Record<string, Record<string, string>> })
+    languageLoads.set(language, loading)
+    loading.catch(() => { languageLoads.delete(language) })
   }
-})
+  await loading
+}
 
 // Get stored language preference
 const getStoredLanguage = (): string => {
@@ -118,14 +125,19 @@ const translate = (key: string, options: Record<string, unknown> = {}): string =
 }
 
 // Change language function
-const changeLanguage = (lng: string): void => {
+const changeLanguage = async (lng: string): Promise<void> => {
+  const request = ++languageRequest
+  await ensureLanguage(lng)
+  if (request !== languageRequest) return
   if (i18nInstance && resources[lng]) {
     i18nInstance.language = lng
+    for (const listener of listeners) listener()
     
     // Update localStorage
     try {
       const stored = localStorage.getItem(localStorageKey.settingGeneral)
       const parsed = stored ? JSON.parse(stored) : { state: {} }
+      parsed.state ??= {}
       parsed.state.currentLanguage = lng
       localStorage.setItem(localStorageKey.settingGeneral, JSON.stringify(parsed))
     } catch (error) {
@@ -136,7 +148,7 @@ const changeLanguage = (lng: string): void => {
 
 // Initialize i18n instance
 const initI18n = (): I18nInstance => {
-  const currentLanguage = getStoredLanguage()
+  const currentLanguage = 'en'
   
   i18nInstance = {
     language: currentLanguage,
@@ -151,12 +163,7 @@ const initI18n = (): I18nInstance => {
   return i18nInstance
 }
 
-// Load translations function (for compatibility with reference implementation)
-export const loadTranslations = (): void => {
-  // Translations are already loaded via import.meta.glob
-  // This function exists for compatibility but doesn't need to do anything
-  console.log('Translations loaded:', Object.keys(resources))
-}
+export const loadTranslations = (): Promise<void> => changeLanguage(getStoredLanguage())
 
 // Initialize and export the i18n instance
 const i18n = initI18n()

@@ -9,10 +9,13 @@ import {
   type HTMLAttributes,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
-import { type BundledLanguage, codeToHtml, type ShikiTransformer } from "shiki";
+import type { BundledLanguage, ShikiTransformer } from "shiki";
+
+// Tool code is usually JSON. Load the highlighter on first use, keeping its
+// engine and grammar data out of ordinary application startup.
+const loadHighlighter = () => import("@/lib/codeHighlighter");
 
 type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
@@ -57,6 +60,7 @@ export async function highlightCode(
     ? [lineNumberTransformer]
     : [];
 
+  const { codeToHtml } = await loadHighlighter();
   return await Promise.all([
     codeToHtml(code, {
       lang: language,
@@ -81,20 +85,19 @@ export const CodeBlock = ({
 }: CodeBlockProps) => {
   const [html, setHtml] = useState<string>("");
   const [darkHtml, setDarkHtml] = useState<string>("");
-  const mounted = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setHtml("");
+    setDarkHtml("");
     highlightCode(code, language, showLineNumbers).then(([light, dark]) => {
-      if (!mounted.current) {
+      if (!cancelled) {
         setHtml(light);
         setDarkHtml(dark);
-        mounted.current = true;
       }
-    });
+    }).catch(error => console.error("[GChat Code] Failed to highlight code:", error));
 
-    return () => {
-      mounted.current = false;
-    };
+    return () => { cancelled = true; };
   }, [code, language, showLineNumbers]);
 
   return (
@@ -110,12 +113,14 @@ export const CodeBlock = ({
           <div
             className="overflow-auto dark:hidden [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
-            dangerouslySetInnerHTML={{ __html: html }}
+            dangerouslySetInnerHTML={html ? { __html: html } : undefined}
+            children={html ? undefined : <pre><code>{code}</code></pre>}
           />
           <div
             className="hidden overflow-auto dark:block [&>pre]:m-0 [&>pre]:bg-background! [&>pre]:p-4 [&>pre]:text-foreground! [&>pre]:text-sm [&_code]:font-mono [&_code]:text-sm"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
-            dangerouslySetInnerHTML={{ __html: darkHtml }}
+            dangerouslySetInnerHTML={darkHtml ? { __html: darkHtml } : undefined}
+            children={darkHtml ? undefined : <pre><code>{code}</code></pre>}
           />
           {children && (
             <div className="absolute top-2 right-2 flex items-center gap-2">
