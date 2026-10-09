@@ -9,8 +9,8 @@ type State = {
   errors: Record<string, string>; refreshing: boolean; discoveryError: string | null;
   refresh: () => Promise<void>; discover: (enabled: boolean) => Promise<void>
 }
-export const hasReadyLanInstance = (state: Pick<State, 'hosts' | 'snapshots' | 'errors'>) =>
-  state.hosts.some((host) => !host.local && !state.errors[host.host_id] &&
+export const hasReadyHostInstance = (state: Pick<State, 'hosts' | 'snapshots' | 'errors'>) =>
+  state.hosts.some((host) => !state.errors[host.host_id] &&
     state.snapshots[host.host_id]?.instances.some((instance) => instance.status === 'ready'))
 
 export const useEngineHosts = create<State>((set, get) => ({
@@ -37,7 +37,7 @@ export const useEngineHosts = create<State>((set, get) => ({
         provider: 'ginfer-lan', active: true, settings: [],
         base_url: `http://127.0.0.1:${settings.serverPort}/${settings.apiPrefix.replace(/^\/+|\/+$/g, '')}`,
         api_key: settings.apiKey,
-        models: listed.registered.filter((host) => !host.local && !errors[host.host_id]).flatMap((host) => (snapshots[host.host_id]?.instances ?? [])
+        models: listed.registered.filter((host) => !errors[host.host_id]).flatMap((host) => (snapshots[host.host_id]?.instances ?? [])
           .filter((instance) => instance.status === 'ready')
           .map((instance) => ({ id: engineAlias(host.host_id, instance.instance_id),
             displayName: `${instance.display_name} — ${snapshots[host.host_id].display_name}`,

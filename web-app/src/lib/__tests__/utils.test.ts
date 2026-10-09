@@ -35,6 +35,7 @@ describe('getProviderLogo', () => {
 describe('getProviderTitle', () => {
   it('returns formatted titles for special providers', () => {
     expect(getProviderTitle('ginfer')).toBe('GInfer')
+    expect(getProviderTitle('ginfer-lan')).toBe('GInfer Hosts')
     expect(getProviderTitle('openai')).toBe('OpenAI')
     expect(getProviderTitle('openrouter')).toBe('OpenRouter')
     expect(getProviderTitle('gemini')).toBe('Gemini')

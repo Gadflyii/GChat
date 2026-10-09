@@ -240,12 +240,15 @@ describe('DataProvider', () => {
     unmount()
   })
 
-  it('starts the facade when a LAN-only instance becomes ready and retains the assigned port', async () => {
+  it.each([
+    ['local', true],
+    ['paired', false],
+  ])('starts the facade when a %s host instance becomes ready and retains the assigned port', async (_kind, local) => {
     const view = render(<DataProvider />)
     await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
     expect(mocks.startServer).not.toHaveBeenCalled()
     const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
-    act(() => useEngineHosts.setState({ hosts: [{ host_id: 'lan', local: false, name: 'LAN', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot } }))
+    act(() => useEngineHosts.setState({ hosts: [{ host_id: 'lan', local, name: 'Host', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot } }))
     await waitFor(() => expect(mocks.setServerStatus).toHaveBeenCalledWith('running'))
     expect(mocks.startServer).toHaveBeenCalledOnce()
     expect(mocks.setServerPort).toHaveBeenCalledWith(1444)
@@ -254,9 +257,12 @@ describe('DataProvider', () => {
     view.unmount()
   })
 
-  it('does not auto-start for an offline LAN instance or when auto-start is disabled', async () => {
+  it.each([
+    ['local', true],
+    ['paired', false],
+  ])('does not auto-start for an offline or disabled %s host instance', async (_kind, local) => {
     const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
-    useEngineHosts.setState({ hosts: [{ host_id: 'lan', local: false, name: 'LAN', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot }, errors: { lan: 'offline' } })
+    useEngineHosts.setState({ hosts: [{ host_id: 'lan', local, name: 'Host', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot }, errors: { lan: 'offline' } })
     const view = render(<DataProvider />)
     await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
     expect(mocks.startServer).not.toHaveBeenCalled()

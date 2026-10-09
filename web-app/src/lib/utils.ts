@@ -140,6 +140,8 @@ export const getProviderTitle = (provider: string) => {
       return 'GChat'
     case 'ginfer':
       return 'GInfer'
+    case 'ginfer-lan':
+      return 'GInfer Hosts'
     case 'openai':
       return 'OpenAI'
     case 'openrouter':

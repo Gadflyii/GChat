@@ -16,7 +16,7 @@ import { route } from '@/constants/routes'
 import { useThreads } from '@/hooks/useThreads'
 import { ensureProjectsLoaded } from '@/hooks/useThreadManagement'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
-import { useEngineHosts, hasReadyLanInstance } from '@/stores/engine-hosts-store'
+import { useEngineHosts, hasReadyHostInstance } from '@/stores/engine-hosts-store'
 import { useAppState } from '@/hooks/useAppState'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { switchToModel } from '@/utils/switchModel'
@@ -467,7 +467,7 @@ export function DataProvider() {
     }
   }, [serviceHub, setProviders, setServerStatus])
 
-  // Raise the facade for an already-running local or paired LAN instance.
+  // Raise the facade for an already-running local or paired host instance.
   // Discovery itself never loads or selects a model.
   useEffect(() => {
     const autoStartServer = async () => {
@@ -493,7 +493,7 @@ export function DataProvider() {
         }
 
         const runningModels = await serviceHub.models().getActiveModels()
-        if (!runningModels?.length && !hasReadyLanInstance(useEngineHosts.getState())) {
+        if (!runningModels?.length && !hasReadyHostInstance(useEngineHosts.getState())) {
           console.log(
             '[LocalAPI:startup] No model currently running; leaving server stopped'
           )
@@ -541,9 +541,9 @@ export function DataProvider() {
       }
     }
 
-    // Serialize startup and LAN readiness transitions so discovery cannot race
+    // Serialize startup and host readiness transitions so discovery cannot race
     // the initial native start. Do not restart a manually stopped facade on
-    // every registry poll: only a newly ready LAN instance triggers intake.
+    // every registry poll: only a newly ready host instance triggers intake.
     let disposed = false
     let pending = Promise.resolve()
     const schedule = () => {
@@ -552,7 +552,7 @@ export function DataProvider() {
       })
     }
     const unsubscribe = useEngineHosts.subscribe((state, previous) => {
-      if (hasReadyLanInstance(state) && !hasReadyLanInstance(previous)) schedule()
+      if (hasReadyHostInstance(state) && !hasReadyHostInstance(previous)) schedule()
     })
     schedule()
     return () => { disposed = true; unsubscribe() }

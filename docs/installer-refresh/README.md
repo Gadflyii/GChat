@@ -1,5 +1,69 @@
 # GChat installer refresh
 
+## Current engine acceptance — OI-056/OI-083, October 9, 2026
+
+Repository: GChat; subject: `docs/installer-refresh/`. Owner: GChat coordinator.
+Ron approved a current native Windows engine build and end-to-end testing on
+RON-9950X3D2, superseding the intervening Linux-only instruction. Acceptance:
+normal GChat/Manager startup; Qwen 27B and Muse load; actual Chat replies finish
+and return idle; four overlapping requests finish; Reload reaches Ready in a
+new session; Stop leaves no engine or automatic reload. Preserve user data and
+the original saved Muse profile. Server 2, broad capacity/numerical qualification,
+performance work and dependency upgrades are excluded.
+
+The physical local GPU is RTX 5090 UUID
+`GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e`; Windows reports 128 GB RAM.
+Installed GChat/Manager baseline is `de0edde34`/`ce6a6c0e6`. Engine `6138913f`
+is replaced by native clean `2ef56a52a` in both active and bundled runtime roots;
+all 125 payloads match. Settings, local owner/host identity and saved profile
+survived replacement. Normal application startup passes. The original seven
+conversation directories at recovery are retained; older nine-thread evidence
+below belongs to October 8, before this item.
+
+GInfer `docs/installer-refresh/README.md` owns OI-058's portability build:
+frozen production source matches requested `f9af4cff4`, current base `f6d097566`,
+MSVC 19.44/CUDA 13.3.73 Release/SM120a, native build `2ef56a52a`, branch
+`dev/oi058-msvc-f6d09756` tip `4f47bb3f9` (documentation only after the build).
+Native compile/link, help, server version, closed ZIP, PE dependencies and all
+six offline operator docs pass; final compiler/linker warnings are zero.
+C3's Linux all-SM check gates the merge. Bubbs authorized Windows UI/model checks
+while that gate runs. Use `ginfer-serve --version`; the CLI has no version flag.
+
+Actual Manager Start with the original Muse C4/131072/NVFP4 fixed pool still
+fails before Ready (OI-066/OI-072). For bounded functional checks, reuse the
+previously tested C4/32768 automatic-pool controls; they do not qualify 128K
+capacity. Both Qwen and Muse reach Ready. Each completes four overlapping
+responses with normal stop finishes, peak four active requests and zero after
+drain. Manager Reload reaches a new Ready engine session for each; Manager Stop
+leaves both stopped with no native engine. The original fixed profile remains
+to be restored through the supported lifecycle after final Chat acceptance.
+
+OI-083 reproduces a local Host instance missing from ordinary Chat's picker.
+The native alias route supports local instances; frontend projection and facade
+readiness exclude them. The fix exposes online Ready local and paired instances
+through the same opaque aliases and labels the provider GInfer Hosts. Stopped
+instances/offline hosts remain unavailable. Actual installed Chat acceptance,
+required source checks and rebuilding the corrected app are the next actions.
+
+Owned source: `/ai/gchat-worktrees/oi056-current-engine`, branch
+`dev/oi056-current-engine`; Engine source: `/ai/ginfer-worktrees/gchat-oi056-engine`.
+Evidence: `/ai/gchat/out/oi056-current-engine/`, including original-profile-public,
+original-start-final-snapshot, both four-concurrent results, both UI Reload/Stop
+snapshots and runtime-update-result. The native tested build/stage/archive is
+`%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4/` (3.71 GB, retained for integration/reuse).
+App rebuild uses the existing `%LOCALAPPDATA%/GChat/windows-build/` cache and the
+exact verified 2ef archive; cached 613 resources must be replaced by the builder.
+Qwen inventory registration references its existing release-1003 artifact;
+no model bytes were copied or downloaded. Retain that useful registration.
+
+Use only `/ai/coordination/locks/local-5090-gpu.lock` and
+`/ai/coordination/locks/local-build.lock`, held for the actual run. The old owned
+launcher was updated; no `/tmp` GPU/build lock is used. C4 has the current signed
+startup matrix priority; our next native build starts after its actual release,
+not a predicted time. Keep the physical RAM floor and compile/load exclusion.
+Failures go in GInfer's sole master `docs/maintainer/open-work.md` under its edit
+lock. The future review/cleanup phase waits for bubbs's REVIEW START.
+
 ## Local workstation update — accepted October 8, 2026
 
 GChat 2.0.42 and its owning Host are updated on RON-9950X3D2. The standalone
