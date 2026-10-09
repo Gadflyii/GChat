@@ -60,6 +60,17 @@ Next: full composed verification and Clippy, then native build and acceptance.
 | Quality and CPU/RAM changes | gchat_code_review | `/ai/gchat-worktrees/review-quality-104d4ec6`, `review/gchat-quality-104d4ec6` | Focus retention, parallel snapshots, unchanged persistence/pinned pools |
 | Remaining acceptance prerequisites | remaining_acceptance | `/ai/gchat-worktrees/remaining-acceptance`, `dev/gchat-remaining-acceptance-104d4ec6` | Use saved evidence; prepare independent checks and actual blockers |
 | Source composition and final gate | coordinator | `/ai/gchat-worktrees/remediation-integration`, `dev/gchat-remediation-104d4ec6` | Integrate reviewed winners and verify affected contracts |
+| Hardware plugin Clippy corrections | shared_tools_review | `/ai/gchat-worktrees/review-hardware-880ecb5c`, `review/gchat-hardware-880ecb5c` | Focused CPU tests and hardware Clippy under coordinator cache admission |
+
+The supporting hardware candidate addresses the four hardware warnings in
+`out/code-hygiene-20261009/integration/composed-clippy-desktop.log`: CPU default
+construction delegates to the existing probe, AMD retains the same error text,
+and NVIDIA UUID prefix removal retains the same exact output. The NVML Ready
+state owns its handle in a box; closures still borrow it while the existing read
+or write guard is held, and invalidation drops it under the write guard. This
+changes the enum's inline storage, not the initialization/failure cache or driver
+call schedule. No native performance claim is made. Focused checks await the
+coordinator's build-cache slot; no hardware probe or model job has been launched.
 
 ## Evidence and disk ownership
 
