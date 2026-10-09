@@ -544,6 +544,9 @@ impl Client {
         locator.validate()?;
         self.command("pair",json!({"host_id":locator.host_id,"origins":locator.origins,"expected_certificate_sha256":locator.certificate_sha256,"client_name":client_name})).await
     }
+    pub async fn snapshots(&self, ids: &[Uuid]) -> Vec<Result<Value, ClientError>> {
+        futures_util::future::join_all(ids.iter().map(|id| self.snapshot(*id))).await
+    }
     pub async fn snapshot(&self, id: Uuid) -> Result<Value, ClientError> {
         self.refresh().await?;
         let (connection, host, alternatives) = {

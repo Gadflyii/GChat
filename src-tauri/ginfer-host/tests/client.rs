@@ -116,6 +116,52 @@ async fn tls_at(
     (origin, job)
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn snapshot_batch_observes_hosts_concurrently_and_preserves_order_and_errors() {
+    let root = tempfile::tempdir().unwrap();
+    let vault = Arc::new(Vault::default());
+    let client = Arc::new(Client::new(Some(root.path().join("shared/hosts.json")), vault.clone()));
+    let mut ids = Vec::new();
+    let mut gates = Vec::new();
+    let mut servers = Vec::new();
+    for index in 0..2 {
+        let host = Host::open(root.path().join(format!("host-{index}")), format!("Host {index}"),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let gate = Arc::new(SnapshotGate::default());
+        let (origin, server) = tls_with_snapshot_gate(host.clone(), Some(gate.clone())).await;
+        host.lan_sharing.lock().await.standalone = Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
+        client.pair(PairRequest { host_id: None, base_url: Some(origin), client_name: "Batch client".into() }).await.unwrap();
+        ids.push(host.data.lock().await.host_id);
+        gates.push(gate);
+        servers.push(server);
+    }
+    let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let offline_id = Uuid::new_v4();
+    let offline_grant = Uuid::new_v4();
+    let offline = SavedHost { host_id: offline_id, name: "Offline".into(),
+        base_url: format!("https://{}", closed.local_addr().unwrap()), certificate_sha256: "ab".repeat(32),
+        client_id: offline_grant };
+    drop(closed);
+    vault.set(offline_grant, "offline-token").await.unwrap();
+    let imported = root.path().join("imported.json");
+    std::fs::write(&imported, serde_json::to_vec(&vec![offline]).unwrap()).unwrap();
+    client.import_legacy(&imported).await.unwrap();
+    for gate in &gates { gate.armed.store(true, std::sync::atomic::Ordering::SeqCst); }
+    let batch_client = client.clone();
+    let batch_ids = vec![ids[1], offline_id, Uuid::new_v4(), ids[0]];
+    let batch = tokio::spawn(async move { batch_client.snapshots(&batch_ids).await });
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        tokio::join!(gates[0].entered.notified(), gates[1].entered.notified());
+    }).await.expect("both independent hosts must be observed before either is released");
+    for gate in &gates { gate.release.notify_one(); }
+    let result = batch.await.unwrap();
+    assert_eq!(result[0].as_ref().unwrap()["host_id"], ids[1].to_string());
+    assert!(result[1].as_ref().unwrap_err().is_offline());
+    assert!(!result[2].as_ref().unwrap_err().is_offline());
+    assert_eq!(result[3].as_ref().unwrap()["host_id"], ids[0].to_string());
+    for server in servers { server.abort(); }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn two_native_clients_share_enrollment_reload_forget_and_one_time_migration() {
     let root = tempfile::tempdir().unwrap();
     let host = Host::open(
