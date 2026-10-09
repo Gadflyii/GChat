@@ -54,11 +54,21 @@ export const useEngineHosts = create<State>((set, get) => ({
     set({ refreshing: true })
     try {
       const listed = await engineCommand<{ registered: EngineHost[]; discovered: NearbyHost[] }>('list')
-      const snapshots = { ...get().snapshots }; const errors: Record<string, string> = {}
+      const initialSnapshots = get().snapshots
+      const snapshots = { ...initialSnapshots }; const errors: Record<string, string> = {}
       await Promise.all(listed.registered.map(async (host) => {
         try { snapshots[host.host_id] = await engineCommand<EngineSnapshot>('snapshot', { host_id: host.host_id }) }
         catch (e) { errors[host.host_id] = String(e) }
       }))
+      // A lifecycle response published during this read owns the newer view.
+      // Object identity also permits Host restarts with reset revision counters.
+      const published = get().snapshots
+      for (const host of listed.registered) {
+        if (published[host.host_id] && published[host.host_id] !== initialSnapshots[host.host_id]) {
+          snapshots[host.host_id] = published[host.host_id]
+          delete errors[host.host_id]
+        }
+      }
       for (const id of Object.keys(snapshots)) if (!listed.registered.some((h) => h.host_id === id)) delete snapshots[id]
       // This is a picker projection of the native host registry, not a second
       // registration authority. The facade resolves each opaque instance alias.
