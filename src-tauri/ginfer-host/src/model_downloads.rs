@@ -814,6 +814,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn removed_managed_package_profiles_stay_removed_after_host_restart() {
+        use crate::service::{Host, LaunchRequest};
+        use hyper::{Body, Request, StatusCode};
+
+        for fail_persistence in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let provider = directory.path().join("ginfer");
+            let retained_models = directory.path().join("retained-models");
+            std::fs::create_dir(&retained_models).unwrap();
+            let (release, bytes) = fixture();
+            std::fs::write(retained_models.join("keep.ginfer"), &bytes).unwrap();
+            let state = provider.join("host");
+            let engine = provider.join("bin/missing-engine");
+            let host = Host::open_with_model_storage(state.clone(), "Test".into(), engine.clone(),
+                vec![retained_models.clone()], vec![], vec![], Some(provider.clone())).await.unwrap();
+            let download = insert(&host.downloads, release.clone()).await;
+            std::fs::write(host.downloads.root().join(format!("{download}.part")), &bytes).unwrap();
+            host.downloads.transfer(download).await.unwrap();
+            host.scan().await.unwrap();
+            let package = host.downloads.root().join(&release.sha256);
+            let removed_path = package.join("model.ginfer");
+            let models = host.inventory.read().await.clone();
+            let removed_model = models.iter().find(|model| model.path == removed_path).unwrap().id;
+            let retained_model = models.iter().find(|model| model.id != removed_model).unwrap().id;
+            let removed_profile = Uuid::new_v4();
+            let retained_profile = Uuid::new_v4();
+            for (instance_id, model_id, gpu) in [
+                (removed_profile, removed_model, "GPU-removed"),
+                (retained_profile, retained_model, "GPU-retained"),
+            ] {
+                host.data.lock().await.profiles.insert(instance_id, LaunchRequest {
+                    instance_id: Some(instance_id), qualified_profile_id: None, model_id,
+                    gpu_uuids: vec![gpu.into()], max_context: 4096, concurrency: 1,
+                    options: Default::default(),
+                });
+            }
+            host.save().await.unwrap();
+            let before = host.snapshot().await;
+            let retained = before["instances"].as_array().unwrap().iter()
+                .find(|instance| instance["instance_id"] == retained_profile.to_string()).unwrap().clone();
+            let mappings = host.data.lock().await.models.clone();
+            let durable_path = state.join("host.json");
+            let saved = std::fs::read(&durable_path).unwrap();
+            if fail_persistence {
+                std::fs::remove_file(&durable_path).unwrap();
+                std::fs::create_dir(&durable_path).unwrap();
+            }
+            let token = host.data.lock().await.pairing_admin_token.clone();
+            let request = Request::post("/host/v1/remove-model")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(serde_json::json!({"model_id":removed_model}).to_string())).unwrap();
+            let response = host.clone().route(request).await.unwrap();
+            assert_eq!(response.status(), if fail_persistence { StatusCode::BAD_REQUEST } else { StatusCode::OK });
+            if fail_persistence {
+                std::fs::remove_dir(&durable_path).unwrap();
+                std::fs::write(&durable_path, saved).unwrap();
+                host.scan().await.unwrap();
+            }
+            assert!(!package.exists());
+            assert!(host.downloads.list().await.is_empty());
+            let after = host.snapshot().await;
+            assert_eq!(after["instances"], serde_json::json!([retained.clone()]));
+            assert_eq!(after["host_id"], before["host_id"]);
+            assert_eq!(after["boot_id"], before["boot_id"]);
+            drop(host);
+
+            let reopened = Host::open_with_model_storage(state, "Ignored".into(), engine,
+                vec![retained_models], vec![], vec![], Some(provider)).await.unwrap();
+            let restored = reopened.snapshot().await;
+            assert_eq!(restored["instances"], serde_json::json!([retained]));
+            assert_eq!(restored["host_id"], before["host_id"]);
+            assert_eq!(restored["models"].as_array().unwrap().len(), 1);
+            assert_eq!(restored["models"][0]["id"], retained_model.to_string());
+            assert_eq!(reopened.data.lock().await.models, mappings);
+        }
+    }
+
+    #[tokio::test]
     async fn local_install_publishes_manifest_and_identity_and_recovers_after_publication() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("ginfer/models");

@@ -1559,11 +1559,14 @@ impl Host {
                 }
                 drop(processes);
                 self.downloads.remove_installed(&model.path).await?;
-                self.data
-                    .lock()
-                    .await
-                    .profiles
-                    .retain(|_, p| p.model_id != id);
+                {
+                    let mut data = self.data.lock().await;
+                    let previous_len = data.profiles.len();
+                    data.profiles.retain(|_, p| p.model_id != id);
+                    if data.profiles.len() != previous_len {
+                        self.inventory_dirty.store(true, Ordering::SeqCst);
+                    }
+                }
                 self.scan().await?;
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }

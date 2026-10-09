@@ -3,8 +3,8 @@
 Repository: `/ai/gchat`. Subject: `docs/code-hygiene/`. Owner: GChat coordinator.
 Reviewed Windows product `0f06ba433` is published on main; Linux packaging
 source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
-Integration `dev/gchat-remediation-104d4ec6` remains at
-`/ai/gchat-worktrees/remediation-integration`.
+Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
+and pushed; current candidate inventory is below.
 
 ## Outcome and acceptance
 
@@ -22,6 +22,39 @@ context/concurrency or physical guards, model/user-data deletion and unrelated
 Engine speed work are excluded. The sole issue authority is GInfer
 `docs/maintainer/open-work.md`; [remaining acceptance](../agent-runtime/remaining-acceptance.md)
 records unavailable physical prerequisites without making a second issue list.
+
+## Current bug-remediation phase
+
+The Host/Manager review is merged and pushed on main `0dd5d45ce`. The master
+rows are merged in GInfer dev/next `c72edea85`. Ron's next instruction is to fix
+OI-111–114 one at a time with short existing-fixture loops, then retire owned
+disposable outputs. Deadline: October 10 02:00 UTC. The candidate is
+`fix/gchat-host-review-bugs-0dd5d45c` at
+`/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c`, from main `0dd5d45ce`.
+Current item: OI-111, the listed durable profile-removal defect. Its owning
+fixture reproduces saved stopped profiles after restart. The narrow fix marks
+persistence dirty while holding the data mutex; the normal removal/restart and
+failed `host.json` write/retry cases pass. Independent source review accepts
+lock ordering, unrelated profiles and stable UUID mappings. Acceptance remains
+the composed checks and standalone commit/main publication. Next unresolved
+action: run those checks in an admitted CPU interval, then merge OI-111 alone.
+
+Contrary review found three distinct baseline defects: closed-set aliases
+survive raw-payload removal (OI-120); an invalidating rescan loses active alias
+protection (OI-121); a download-journal failure after physical deletion skips
+profile cleanup (OI-122). Ron approved separate rows and ordered fixes after
+OI-112–114, before feature work. Dependency proposals and expanded specific
+regressions are retained unapplied in
+`out/code-hygiene-20261009/host-review-bugs-0dd5d45c/`; these cases remain
+source-proven and unrun. They are not covered by the narrow OI-111 pass.
+Proceed to OI-112, then OI-113 and OI-114 after this standalone item completes.
+No user models/state, GPU/model run, installer rebuild, inference controls or
+performance change is needed. The local CPU/GPU exclusive bookings run until
+00:20 UTC; compile only in an admitted quiet interval. CPU-only booking291
+covers 00:20–00:40. OI-115–119 remain the unmeasured speed-phase list; OI-072
+remains separate with C2. The candidate reuses nine dependency aliases from the
+retained OI-074 physical graph and the shared `/ai/gchat/src-tauri/target`; no
+new dependency installation or model copy is created.
 
 ## Current state and next action
 
@@ -115,8 +148,8 @@ No margin, context, concurrency or profile promotion is justified by that result
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| Review coordinator / local Linux | `/ai/gchat-worktrees/review-host-manager-a7003488` | Accepted candidate from main a70034880; checks complete, no live job/model; retire after main publication |
-| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Accepted main a70034880 source; eligible owned retirement after review publication; preserve unique evidence first |
+| Review coordinator / local Linux | `/ai/gchat-worktrees/review-host-manager-a7003488` | Retired after accepted main0dd5d45ce publication and fresh zero-reference checks; branch/build/evidence retained |
+| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Retired after committed/pushed ancestry and live-use checks; two unique coverage summaries retained externally |
 | Coordinator / local Linux | `/ai/gchat/out/oi070-linux-refresh` | Accepted Linux package/native proof, six-doc inputs and runner; old packet path is a stable symlink, temporary extracts/state retired after final checks; published packages retained |
 | OI-106 / local Linux | `/ai/gchat-worktrees/oi106-selection-facade-7d9eb55` | Retired after published main and fresh live-use checks; exact local/remote source branches and external evidence retained |
 | Frontend/packages / local Linux | `/ai/gchat-worktrees/oi074-frontend-packages` | Approved physical dependency graph and retained Linux runner; still reused by source checks, shared dependents preserved |
@@ -157,3 +190,11 @@ Physical results: [installer refresh](../installer-refresh/README.md),
 `out/code-hygiene-20261009/integration/`. Windows idle sampling is retained in
 `out/remaining-acceptance-20261009/idle-sample.json`; it does not measure long-chat
 rendering or establish a before/after CPU improvement.
+
+Review source retirement removes two verified own merged checkouts, recovering
+2,585,649,152 B net after preserving both unique coverage summaries. Receipt:
+`out/code-hygiene-20261009/review-host-manager-a7003488/cleanup-sources.json`.
+Root-owned Linux staging required matching-owner residual cleanup after Git
+unregistered the partially removed tree. Future retirement checks staging
+ownership and registration/residual paths separately. Physical dependency
+graphs, shared builds, packages/evidence, models and other owners remain.
