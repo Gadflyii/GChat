@@ -112,8 +112,11 @@ supported `cargo check --features cli --bin gchat-cli` passes. These checks are
 recorded in `out/code-hygiene-20261009/integration/`; no native acceptance is
 claimed from them.
 
-Timed competitors have completed. Root reservations cover 17:52–19:30Z for
-verification/build and 19:30–20:30Z for installed acceptance on October 9. Both
+Timed competitors have completed. Root reservations covered 17:52–19:30Z for verification/build and installed
+acceptance under booking 279 until the actual 20:05Z handoff. Both canonical
+guards are released and booking 279 canceled for C2's roughly 20-minute Linux
+reproduction of OI-072. Resume only after C2 returns the GPU. The next reserved
+app build/acceptance window is 20:30–22:00Z. Both
 canonical guards protect compilation and model execution. Windows source
 `0a4e2b56c` built successfully and its packages passed verification. Removing the
 ignored Vite option preserved all 832 frontend files exactly. Manager source
@@ -128,8 +131,11 @@ guard stopped the wave after 13.54 seconds at 292 MiB free versus the unchanged
 300 MiB requirement. No capacity pass is claimed. Original-profile restoration
 and stopped/zero-Engine cleanup pass; saved allocation evidence is being reviewed. Dependency alignment is integrated
 as `d78473f38`; reviewed OI-106 local-alias lifecycle and stale-refresh fixes are
-composed. Next: read the actual capacity result, run the final composed gate and
-refresh the affected app package. Preserve each producer and acceptance scope.
+composed. Final composed `make verify` at `c9428c456` passes: 2,101 frontend/core tests
+(six skipped), 102 extension tests, six coverage floors and all supported Rust
+suites. Only active documentation changes follow that gate. Next: freeze the
+source, refresh the affected app package and verify actual local-alias Stop,
+Start/Reload and continued Chat. Full C4 qualification remains open. Preserve each producer and acceptance scope.
 
 ## Current allocation
 
