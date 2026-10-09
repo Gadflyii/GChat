@@ -33,7 +33,7 @@ excluded. Real fleet/tray/publication acceptance retains its actual prerequisite
 
 | Item | Owner | Candidate path / branch | Next unresolved action |
 | --- | --- | --- | --- |
-| Shared compact tool discovery, schema and invocation | bridge_review | `/ai/gchat-worktrees/oi091-lazy-tools`, `dev/oi091-lazy-tools-104d4ec6` | Focused SDK/native/Code regressions, then installed Chat |
+| Shared compact tool discovery, schema and invocation | bridge_review | `/ai/gchat-worktrees/oi091-lazy-tools`, `dev/oi091-lazy-tools` | Focused SDK/native/Code regressions, then installed Chat |
 | Agent overall outcomes and history | agent_outcomes | `/ai/gchat-worktrees/oi067-agent-outcomes`, `dev/oi067-agent-outcomes-104d4ec6` | Limiting stage outcomes survive synthesis/persistence/UI |
 | Current profile candidates | profile_current_engine | `/ai/gchat-worktrees/oi072-current-profiles`, `dev/oi072-current-profiles-104d4ec6`; separate GInfer catalog candidate | Exact prefix-enabled public C4/128K evidence, no historical promotion |
 | Frontend loading and Linux refresh | frontend_packages | `/ai/gchat-worktrees/oi074-frontend-packages`, `dev/oi074-frontend-packages-104d4ec6` | Bundle/load evidence, offline grammar/locale/terminal checks |
@@ -52,8 +52,11 @@ Evidence: `/ai/gchat/out/oi056-current-engine/normal-final-state.json` and
 Retain current native caches/builds and canonical installers under
 `%LOCALAPPDATA%/GChat/windows-build/source`, `%LOCALAPPDATA%/GChat/release-output`
 and `%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4`, plus concise acceptance evidence.
-Only this coordinator's merged clean OI-056 source trees and verified duplicate
-packages are retired. Active candidates, other owners' trees, user models,
+The clean, merged OI-056 trees `/ai/gchat-worktrees/oi056-current-engine`
+and `/ai/ginfer-worktrees/gchat-oi056-engine` are retired with no-force worktree
+removal. Exact current installers/checksums are promoted to `/ai/gchat/out/windows`.
+Net reclaimed allocation is 2,478,735,360 bytes (2.479 GB); shared-filesystem free
+deltas are not attributed to this cleanup. Branch objects and remote source remain. Active candidates, other owners' trees, user models,
 profiles, saved results and Tessera paths remain. Cleanup receipts and freed bytes
 are recorded under `/ai/gchat/out/oi056-current-engine/`; unchecked/shared paths
 are listed rather than deleted.
