@@ -88,7 +88,7 @@ Pinned HTTPS and actual windows verify both apps resolve that same updated Host.
 | Local update / coordinator | `/ai/gchat-worktrees/local-update-20261008` | Accepted candidate; release at final handoff after reviewed merge/push, preserving source in Git |
 | Prior Manager candidate | `/ai/gchat-worktrees/ginfer-manager` | Superseded clean tree retired; six focused logs preserved in `out/ginfer-manager/focused/` |
 | Local update evidence | `/ai/gchat/out/local-update-20261008/` | Retain gate, input/payload proofs, resource-failure evidence, migration backup, install/startup receipts and final Manager image |
-| Accepted installers | `/ai/gchat/out/windows/`, native `%LOCALAPPDATA%/GChat/release-output` | Current NSIS/MSI and adjacent checksums; promoted bytes verified |
+| Accepted installers | `/ai/gchat/out/windows/` | Current NSIS/MSI and valid adjacent checksums; duplicate native staging copies retired October 9 |
 | Native shared build | `%LOCALAPPDATA%/GChat/windows-build/source` | Accepted release/dependency cache; preserve |
 | Native task | `%LOCALAPPDATA%/GChat/windows-build/local-update-20261008` | Disposable wrappers/fixtures retired after evidence copy and live-use checks; 837,401 bytes released |
 | Recovered engine input | `/ai/gchat/out/local-update-20261008/recovered-installed-runtime-6138913f.zip` | Exact current manifest and 120 installed payloads; retain reproducible input |
@@ -102,6 +102,27 @@ Concise acceptance and exact receipts: `/ai/gchat/out/local-update-20261008/HAND
 `normal-local-host.json`, `normal-credential-preservation.json` and `manager-normal-window.png`.
 Cleanup receipts record actual retirement; normal installed apps remain open.
 The prior Manager worktree released 310,585,359 bytes; its focused logs remain.
+
+### October 9 shutdown drain
+
+The drain removed 1,384,909,864 nominal bytes of outside-cache Windows installer
+and runtime duplicates after exact comparison with retained canonical files.
+Two stale staging checksum sidecars were also retired; canonical installer
+checksums and promotion receipts remain valid. The owned documentation checkout
+is retired after its parked branch is committed and pushed.
+
+Six other coordinators' code branches remain unmerged into main: `dev/fn-product-host`,
+`dev/fn-product-installers`, `dev/fn-product-native-lifecycle`, `dev/fn-product-gchat-ui`,
+`dev/fn-trash-contract-platform`, and `dev/gbench-engine-telemetry`. Their worktrees
+are preserved. Installed Manager `ce6a6c0e6` and desktop `de0edde34` are already
+ancestors of main. This coordinator's remaining handoff is documentation only.
+
+Shared caches remain. The superseded 7.15 GB Linux private target remains because
+process-inspection permissions prevented a complete live-use check. The scoped
+GChat survey reached S1, Ada, S2 and the laptop; no remote files were deleted.
+Retained paths and publication status are recorded in
+`/ai/gchat/out/manager-kv-startup-20261008/drain-hygiene-not-deleted.md`, with actual
+deletions in `drain-cleanup-result.json`. No builds or GPU tests were started.
 
 ## Offline host status Windows update — accepted October 1, 2026
 

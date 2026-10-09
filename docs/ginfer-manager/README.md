@@ -283,7 +283,12 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Earlier source candidates | `/ai/gchat-worktrees/ginfer-manager`, `/ai/gchat-worktrees/unified-sessions`, `/ai/gchat-worktrees/local-update-20261008` | Retired; source commits and accepted evidence retained |
 
 Earlier Manager-specific Linux/Windows compiler targets were retired after their
-acceptance. Unrelated worktrees, installed apps/data, engine artifacts and other
-owners' jobs are preserved. Only this workstation was inspected; no fleet cleanup
-is claimed. GInfer's separate operations-manual handoff is tracked in
+acceptance. The October 9 shutdown drain also retired duplicate Windows staging
+artifacts and the parked documentation checkout. Six other owners' unmerged
+worktrees, shared caches, installed apps/data, engine artifacts and evidence remain.
+The scoped read-only GChat survey reached S1, Ada, S2 and the laptop; no remote
+deletions or fleet-wide cleanliness claim are made. The retained-path list and
+cleanup receipts are in `/ai/gchat/out/manager-kv-startup-20261008/`, including
+`drain-hygiene-not-deleted.md` and `drain-cleanup-result.json`.
+GInfer's separate operations-manual handoff is tracked in
 [Agent runtime](../agent-runtime/README.md).
