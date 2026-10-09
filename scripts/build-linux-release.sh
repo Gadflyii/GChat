@@ -79,6 +79,10 @@ config=json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
 resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/linux/') and p not in ('resources/bin/bun', 'resources/bin/uv')]
 Path('out/linux/appimage-config.json').write_text(json.dumps({'bundle':{'resources':resources}}))
 PY
+# The output plugin forwards this cached runtime to appimagetool --runtime-file.
+if [[ -s .cache/build-tools/type2-runtime-x86_64 ]]; then
+  export LDAI_RUNTIME_FILE="$PWD/.cache/build-tools/type2-runtime-x86_64"
+fi
 NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 ./src-tauri/build-utils/shim-linuxdeploy.sh yarn tauri bundle \
   --verbose --bundles appimage --config out/linux/appimage-config.json
 ./src-tauri/build-utils/buildAppImage.sh
