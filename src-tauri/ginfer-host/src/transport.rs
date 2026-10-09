@@ -16,6 +16,10 @@ pub async fn host_snapshot_at(
     token: &str,
     expected: uuid::Uuid,
 ) -> Result<serde_json::Value, ClientError> {
+    read_snapshot(snapshot_origin(origin)?, &pinned_client(fingerprint)?, token, expected).await
+}
+
+fn snapshot_origin(origin: &str) -> Result<reqwest::Url, ClientError> {
     let mut url = reqwest::Url::parse(origin).map_err(|e| ClientError::Problem(e.to_string()))?;
     if url.scheme() != "https"
         || url.host_str().is_none()
@@ -28,7 +32,25 @@ pub async fn host_snapshot_at(
         return Err("discovered endpoint must be an HTTPS origin".into());
     }
     url.set_path("/host/v1/snapshot");
-    let response = pinned_client(fingerprint)?
+    Ok(url)
+}
+
+pub(crate) async fn host_snapshot_with_client(
+    origin: &str,
+    client: &reqwest::Client,
+    token: &str,
+    expected: uuid::Uuid,
+) -> Result<serde_json::Value, ClientError> {
+    read_snapshot(snapshot_origin(origin)?, client, token, expected).await
+}
+
+async fn read_snapshot(
+    url: reqwest::Url,
+    client: &reqwest::Client,
+    token: &str,
+    expected: uuid::Uuid,
+) -> Result<serde_json::Value, ClientError> {
+    let response = client
         .get(url)
         .bearer_auth(token)
         .timeout(Duration::from_secs(3))

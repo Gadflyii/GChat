@@ -3,7 +3,7 @@
 use crate::{
     discovery::Discovery,
     engine_registry::{EngineRegistry, RegisteredHost},
-    transport::{host_snapshot_at, pinned_client, response_json},
+    transport::{host_snapshot_with_client, pinned_client, response_json},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -59,6 +59,8 @@ impl From<reqwest::Error> for ClientError {
         let mut source = error.source();
         while let Some(cause) = source {
             if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+                offline |= (error.is_connect() || error.is_request())
+                    && io.kind() == std::io::ErrorKind::UnexpectedEof;
                 offline |= matches!(
                     io.kind(),
                     std::io::ErrorKind::ConnectionRefused
@@ -103,6 +105,7 @@ pub struct SavedHost {
 }
 #[derive(Default)]
 pub struct ClientState {
+    transports: BTreeMap<Uuid, HostTransport>,
     local_credentials: BTreeMap<Uuid, String>,
     path: Option<PathBuf>,
     installation_id: Option<Uuid>,
@@ -113,6 +116,16 @@ pub struct ClientState {
     pub registry: EngineRegistry,
     discovery: Option<Discovery>,
     pub snapshots: BTreeMap<Uuid, Value>,
+}
+struct HostTransport {
+    certificate_sha256: String,
+    client_id: Uuid,
+    client: reqwest::Client,
+}
+impl HostTransport {
+    fn matches(&self, host: &SavedHost) -> bool {
+        self.certificate_sha256 == host.certificate_sha256 && self.client_id == host.client_id
+    }
 }
 #[derive(Serialize, Deserialize)]
 struct Document {
@@ -204,6 +217,7 @@ fn reload(state: &mut ClientState) -> Result<(), String> {
         .into_iter()
         .map(|host| (host.host_id, host))
         .collect();
+    state.transports.retain(|id, transport| saved.get(id).is_some_and(|host| transport.matches(host)));
     let removed: Vec<_> = state
         .saved
         .keys()
@@ -307,6 +321,9 @@ fn publish_registration(
         return Err(error);
     }
     state.registry.register_paired(registration(&host));
+    if state.transports.get(&id).is_some_and(|transport| !transport.matches(&host)) {
+        state.transports.remove(&id);
+    }
     state.snapshots.remove(&id);
     Ok(previous)
 }
@@ -318,6 +335,7 @@ fn remove_registration(state: &mut ClientState, id: Uuid) -> Result<SavedHost, S
         return Err(error);
     }
     state.registry.forget(id);
+    state.transports.remove(&id);
     state.snapshots.remove(&id);
     Ok(previous)
 }
@@ -573,15 +591,16 @@ impl Client {
             use futures_util::StreamExt;
             let token = self.secret(host.client_id).await?;
             network_started = true;
-            match host_snapshot_at(&host.base_url, &host.certificate_sha256, &token, id).await {
+            let client = self.pinned_transport(&host).await?;
+            match host_snapshot_with_client(&host.base_url, &client, &token, id).await {
                 Ok(snapshot) => Ok((host.base_url.clone(), snapshot)),
                 Err(mut error) => {
                     let mut probes =
                         futures_util::stream::iter(alternatives.into_iter().map(|url| {
-                            let fingerprint = &host.certificate_sha256;
+                            let client = &client;
                             let token = &token;
                             async move {
-                                host_snapshot_at(&url, fingerprint, token, id)
+                                host_snapshot_with_client(&url, client, token, id)
                                     .await
                                     .map(|s| (url, s))
                             }
@@ -660,6 +679,22 @@ impl Client {
         }
         self.credentials.get(id).await
     }
+    pub async fn pinned_transport(&self, host: &SavedHost) -> Result<reqwest::Client, String> {
+        let mut state = self.state.lock().await;
+        if state.saved.get(&host.host_id).is_none_or(|current|
+            current.certificate_sha256 != host.certificate_sha256 || current.client_id != host.client_id) {
+            // An in-flight operation may outlive its registration; never cache that transport.
+            return pinned_client(&host.certificate_sha256);
+        }
+        if let Some(transport) = state.transports.get(&host.host_id).filter(|transport| transport.matches(host)) {
+            return Ok(transport.client.clone());
+        }
+        let client = pinned_client(&host.certificate_sha256)?;
+        state.transports.insert(host.host_id, HostTransport {
+            certificate_sha256: host.certificate_sha256.clone(), client_id: host.client_id, client: client.clone(),
+        });
+        Ok(client)
+    }
     pub async fn request(
         &self,
         host_id: Uuid,
@@ -699,7 +734,7 @@ impl Client {
             .cloned()
             .ok_or("host is not registered")?;
         let token = self.secret(host.client_id).await?;
-        let client = pinned_client(&host.certificate_sha256)?;
+        let client = self.pinned_transport(&host).await?;
         let mut req = client
             .request(method, format!("{}{}", host.base_url, path))
             .bearer_auth(token)
