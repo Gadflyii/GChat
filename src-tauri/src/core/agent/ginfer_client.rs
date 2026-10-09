@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
 use super::definitions::AgentReasoningEffort;
-use super::prompt::ITERATION_ONE_TOOLS;
+use super::prompt::{ToolTier, ITERATION_ONE_TOOLS};
 use super::types::ToolCallPayload;
 
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
@@ -51,8 +51,10 @@ pub struct CompletionRequest {
     pub top_p: Option<f32>,
     pub top_k: Option<i32>,
     pub stop: Vec<String>,
-    /// Dynamic exact MCP tools from the shared capability catalog.
+    /// Compact MCP discovery and exact-call tools.
     pub dynamic_tools: Vec<Value>,
+    /// Rare native schemas explicitly loaded through `tool.view`.
+    pub loaded_native_tools: std::collections::BTreeSet<String>,
     pub disabled_tools: std::collections::BTreeSet<String>,
 }
 
@@ -74,6 +76,7 @@ impl CompletionRequest {
             top_k: None,
             stop: Vec::new(),
             dynamic_tools: Vec::new(),
+            loaded_native_tools: Default::default(),
             disabled_tools: Default::default(),
         }
     }
@@ -92,6 +95,7 @@ impl CompletionRequest {
             top_k: None,
             stop: Vec::new(),
             dynamic_tools: Vec::new(),
+            loaded_native_tools: Default::default(),
             disabled_tools: Default::default(),
         }
     }
@@ -452,6 +456,7 @@ fn completion_request_payload(model_id: &str, request: &CompletionRequest) -> Va
     let mut tools = ITERATION_ONE_TOOLS
         .iter()
         .filter(|tool| !request.authoring || matches!(tool.name, "studio.inspect" | "studio.manage" | "tool.view" | "reply" | "finish"))
+        .filter(|tool| request.authoring || tool.tier == ToolTier::Frequent || request.loaded_native_tools.contains(tool.name))
         .filter(|tool| !request.disabled_tools.contains(&format!("gchat-native::{}", wire_tool_name(tool.name))))
         .map(|descriptor| {
             serde_json::json!({
@@ -1488,6 +1493,13 @@ mod tests {
         assert!(!advertised
             .iter()
             .any(|tool| tool["function"]["name"] == "os_fs_read"));
+        assert!(!advertised
+            .iter()
+            .any(|tool| tool["function"]["name"] == "os_fs_hash"));
+        request.loaded_native_tools.insert("os.fs.hash".into());
+        let loaded_payload = completion_request_payload("model", &request);
+        assert!(loaded_payload["tools"].as_array().unwrap().iter()
+            .any(|tool| tool["function"]["name"] == "os_fs_hash"));
         let response: CompletionEnvelope = serde_json::from_value(serde_json::json!({
             "choices":[{"message":{"tool_calls":[{"function":{
                 "name":"mcp_0123456789abcdef0123456789abcdef",

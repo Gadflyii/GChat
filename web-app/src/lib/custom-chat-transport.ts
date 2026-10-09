@@ -17,6 +17,7 @@ import { chatMemoryContext, supportsGChatMemory } from './memory'
 import { prepareToolResultImagesForModel } from './toolResultImages'
 import {
   buildToolsRecord,
+  buildCapabilityDiscoveryTools,
   splitAnthropicSerialToolUse,
 } from './custom-chat-transport-helpers'
 import type { MCPTool } from '@/types/completion'
@@ -300,7 +301,13 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       }
     }
 
-    this.tools = buildToolsRecord(ragTools, capabilityTools, disabledToolKeys)
+    const controlNames = new Set([
+      'skill_list', 'skill_view', 'skill_invoke', 'agent_list', 'agent_run', 'agent_monitor', 'agent_cancel',
+    ])
+    this.tools = {
+      ...buildToolsRecord(ragTools, capabilityTools.filter((tool) => controlNames.has(tool.name)), disabledToolKeys),
+      ...buildCapabilityDiscoveryTools(),
+    }
     this.toolsCacheKey = cacheKey
     this.toolsCacheValid = true
   }
@@ -576,10 +583,10 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       { file_attachments?: Array<{ name?: string; path?: string; native_reference?: boolean }> } | undefined)?.file_attachments?.filter((file) => file.native_reference)
     const capabilityGuidance = shouldEnableTools
       ? [
+          this.tools.gchat_capability_search && 'Discover native and connected tools with gchat_capability_search, read an exact schema with gchat_capability_read, then invoke that exact name with gchat_capability_call. Disabled tools remain unavailable. Calls use this conversation’s permissions, approvals, folders, and cancellation.',
           this.tools.skill_list && 'GChat skills are available through skill_list. Read instructions with skill_view and apply a skill using skill_invoke.',
-          this.tools.agent_list && 'Discover saved agents and worker pools with agent_list; dispatch them using agent_run. Native tools and MCP tools use the conversation permissions and connected folders.',
-          this.tools.os_fs_read_document && 'Read Excel (.xls/.xlsx), Office documents (.docx/.pptx), PDFs and other supported documents with os_fs_read_document, which extracts their content. os_fs_read reads UTF-8 text only. When a tool reports an error or denied folder access, report that specific failure and request access through the inline approval.',
-          this.tools.os_fs_read_document && attachedDocuments?.length && `Attached local documents: ${JSON.stringify(attachedDocuments.map(({name, path}) => ({name, path})))}. Read their content with os_fs_read_document when needed; these references have not been indexed for retrieval.`,
+          this.tools.agent_list && 'Discover saved agents and worker pools with agent_list; dispatch them using agent_run.',
+          attachedDocuments?.length && `Attached local documents: ${JSON.stringify(attachedDocuments.map(({name, path}) => ({name, path})))}. Read their content through capability discovery when needed; these references have not been indexed for retrieval.`,
           workspace.primaryRoot && `Conversation workspace: ${JSON.stringify(workspace.primaryRoot.path)}.`,
           workspace.externalRoots.length > 0 && `Connected folders: ${JSON.stringify(workspace.externalRoots.map(({path, canEdit}) => ({path, canEdit})))}.`,
           invocationTool === 'skill_invoke' && `Apply the selected skill ${JSON.stringify(selectedSkill)} to the current user request using skill_invoke.`,

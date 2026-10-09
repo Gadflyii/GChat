@@ -1,6 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react'
 import { lastAssistantMessageIsCompleteWithToolCalls } from 'ai'
 import { useChatSessions } from '@/stores/chat-session-store'
+import { CAPABILITY_DISCOVERY_TOOL_NAMES } from './custom-chat-transport-helpers'
 
 export type ChatToolCall = {
   toolCallId: string
@@ -90,7 +91,7 @@ export async function executeChatToolCalls({
           projectId,
           scope: projectId ? 'project' : 'thread',
         })
-      } else if (capabilityToolNames.has(toolCall.toolName)) {
+      } else if (capabilityToolNames.has(toolCall.toolName) || CAPABILITY_DISCOVERY_TOOL_NAMES.has(toolCall.toolName)) {
         result = await callCapability({
           toolName: toolCall.toolName,
           arguments: toolCall.input,

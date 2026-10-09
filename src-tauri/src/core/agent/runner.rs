@@ -220,6 +220,7 @@ async fn run_turn_inner(
             ), reasoning_effort);
             request.authoring = authoring;
             request.dynamic_tools = dynamic_tools.clone();
+            request.loaded_native_tools = loaded_tool_names.iter().cloned().collect();
             request.disabled_tools = input.desktop.disabled_tools();
             request.output_limit_override = options.max_output_tokens;
             if authoring {

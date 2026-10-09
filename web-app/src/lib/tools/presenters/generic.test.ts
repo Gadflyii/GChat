@@ -41,4 +41,22 @@ describe('presentGenericTool', () => {
     expect(presentGenericTool({ toolName: 'os_fs_mkdir', state: 'output-available' }).title).toBe('Created folder')
   })
 
+  it('shows the exact capability target for Chat and Agent wrapper calls', () => {
+    for (const toolName of ['gchat_capability_call', 'mcp_call']) {
+      expect(presentGenericTool({
+        toolName,
+        input: { name: 'os_fs_read_document', arguments: { path: 'report.xlsx' } },
+        state: 'input-available',
+      })).toMatchObject({ title: 'Reading document', subtitle: 'report.xlsx' })
+    }
+  })
+
+  it('names the selected capability while loading its schema', () => {
+    expect(presentGenericTool({
+      toolName: 'gchat_capability_read',
+      input: { name: 'os_fs_read_document' },
+      state: 'output-available',
+    }).title).toBe('Loaded Read document details')
+  })
+
 })

@@ -1,5 +1,62 @@
 # Chat and Agent runtime
 
+## OI-091 compact capability discovery — active
+
+**Outcome:** keep the complete native/MCP catalog and existing execution
+permissions while avoiding sending every tool schema with every ordinary Chat,
+Agent, and Code model request. Use shared discovery, exact schema lookup, and
+on-demand invocation; keep skill and saved-agent/worker-pool calls first-class.
+
+**Acceptance:** a fresh short Chat request can be prepared for a 32K host without
+the full tool catalog; all catalog tools remain discoverable and callable through
+the existing native/MCP dispatch, disabled-tool checks, approvals, workspace
+scope, and cancellation. Agent and Code must use the same compact discovery
+contract without bypassing their current runtime ownership. Verify the relevant
+catalog, prompt, dispatch, and continuation behavior with focused production-path
+tests, then record the coordinator's installed UI and full-gate evidence here.
+
+**Scope/exclusions:** `web-app/src/hooks/useTools.ts`, Chat transport/executor,
+Rust capability catalog/executor, Agent tool loading, and OpenCode bridge. No
+capability removal, arbitrary catalog cap, model/profile/context tuning, new
+dependency, native build, or GPU inference. No run/stage outcome or status
+changes; see the parallel Agent outcome owner for those files.
+
+**Baseline/candidate:** source baseline `104d4ec6e` (`main`); candidate branch
+`dev/oi091-lazy-tools` at `/ai/gchat-worktrees/oi091-lazy-tools`. The installed
+Muse Chat returned `prepared prompt has 40666 tokens, exceeding Engine
+max_context 32768`; see
+`/ai/gchat/out/oi056-current-engine/muse-chat-response-ui.json`. Ready instance
+metadata and selected alias both report 32,768 context, so this work changes
+prompt payload composition, not capacity.
+
+**Inventory:** GChat / coordinator-owned shared candidate; reuse
+`/ai/gchat/node_modules` and `/ai/gchat/src-tauri/target` only for focused checks
+under coordinator lock. Focused Rust output is retained at
+`/ai/gchat/out/oi091-lazy-tools/rust-focused.log`.
+
+**Implementation in progress:** Chat advertises three compact capability tools
+plus its existing skill/agent controls; discovery and schema reads use the
+cached catalog, and invocation re-enters `capability_execute` for fresh policy
+checks. Agent inference sends frequent native schemas and rare schemas loaded by
+`tool.view`; MCP uses compact local discovery/schema reads and an approval-gated
+exact connector call. Code exposes compact search/read/call tools and checks
+the originating session policy again for each target. Existing RAG tools,
+skill/agent orchestration, builder's restricted Studio schemas, approvals and
+cancellation remain on their current paths. Frontend focused suite passes
+(44 tests before the additional integration cases) and TypeScript project build
+passes. Independent SDK review then added two native/MCP four-request
+search/read/call/final-answer chains using an EngineManager fixture configured
+for 32,768 context. Each scripted-model request carries only the three compact
+schemas; the selected schema appears as tool output, disabled-after-read is
+rejected, and execution retains changed workspace/approval/disabled policy.
+All 21 harness tests passed. These scripted checks do not run a model or count
+rendered tokens. Chat and Agent activity label wrapper calls with the resolved
+native or connector target. Focused presenter tests pass (6), and TypeScript
+`tsc -b` passes. The Rust `core::agent::` suite passed 306 tests (5 ignored),
+and the Code bridge native/MCP session-policy integration test passed. Final
+`make verify` and installed UI replay remain with the coordinator; no runtime
+context capacity changed.
+
 ## Unified sessions and Code capabilities — accepted October 8 source
 
 The user's shared conversation design is implemented: ordinary replies, native

@@ -423,7 +423,7 @@ async fn handle_http<R: Runtime>(
                 }
             }
             Ok(
-                json!({"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"gchat-agent-studio","version":env!("CARGO_PKG_VERSION")},"instructions":"Tool discovery is shared by this Code workspace. Actual calls use their originating saved Code session's permissions and human approvals, supplied by the managed GChat plugin. Delegated GChat skills and saved agents run in GChat's Agent Studio runtime, including worker-pool placement. Discover skills/agents, then delegate with gchat_start_run. For project edits, wait for a delegated run to finish before editing the same files in OpenCode. Use gchat_get_run to check progress without busy polling. Human approvals appear in GChat; OpenCode must not approve its own delegated actions."}),
+                json!({"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"gchat-agent-studio","version":env!("CARGO_PKG_VERSION")},"instructions":"Use gchat_search_capabilities to discover native or connected tools, gchat_read_capability to inspect an exact schema, and gchat_call_capability to invoke that exact target. Calls use the originating saved Code session's permissions and human approvals, supplied by the managed GChat plugin. Discover skills/agents separately and delegate through gchat_start_run; saved worker-pool placement applies. For project edits, wait for a delegated run to finish before editing the same files in OpenCode. Use gchat_get_run to check progress without busy polling. Human approvals appear in GChat; OpenCode must not approve its own delegated actions."}),
             )
         }
         "ping" => Ok(json!({})),
@@ -464,6 +464,9 @@ fn control_tools() -> Vec<Value> {
     tool("gchat_list_runs", "List delegated runs for this Code project, including runs from earlier Code sessions. Follow or cancel by runId.", json!({}), &[]),
     tool("gchat_get_run", "Get current status, progress, approval requests, result and artifacts for a delegated run. Poll only when useful; approvals require a human in GChat.", json!({"runId":{"type":"string"}}), &["runId"]),
     tool("gchat_cancel_run", "Cancel an active delegated GChat run.", json!({"runId":{"type":"string"}}), &["runId"]),
+    tool("gchat_search_capabilities", "Search enabled native and connected MCP capabilities by name or purpose.", json!({"query":{"type":"string","minLength":1}}), &["query"]),
+    tool("gchat_read_capability", "Read the exact schema for one enabled native or connected MCP capability.", json!({"name":{"type":"string","minLength":1}}), &["name"]),
+    tool("gchat_call_capability", "Call one enabled native or connected MCP capability by exact name and schema-conforming arguments.", json!({"name":{"type":"string","minLength":1},"arguments":{"type":"object"}}), &["name","arguments"]),
 ]
 }
 
@@ -525,19 +528,14 @@ fn check_control_policy(policy: &BridgePolicy, name: &str, args: &Value) -> Resu
 }
 
 async fn bridge_tools<R: Runtime>(
-    app: &AppHandle<R>,
+    _app: &AppHandle<R>,
     session_id: &str,
 ) -> Result<Vec<Value>, String> {
     if !lock_registry()?.sessions.contains_key(session_id) {
         return Err("Code session is closing".into());
     }
-    // Discovery is workspace-wide because MCP tools/list has no originating
-    // OpenCode session. Each actual call applies its exact saved caller policy.
-    let mut tools = control_tools();
-    tools.extend(capabilities::load_catalog(app.clone()).await?.tools.into_iter()
-        .filter(|tool| operational_tool(&tool.identity))
-        .map(|tool| json!({"name":tool.name,"description":tool.description,"inputSchema":tool.input_schema})));
-    Ok(tools)
+    // Calls carry their originating Code session and are checked there.
+    Ok(control_tools())
 }
 
 async fn call_tool<R: Runtime>(
@@ -612,6 +610,58 @@ async fn call_tool<R: Runtime>(
             ensure_run_project(project, run_id)?;
             cancel_bridge_run(app.state(), run_id.into()).await?;
             json!({"cancelled":true,"runId":run_id})
+        }
+        "gchat_search_capabilities" => {
+            let query = arg(&args, "query")?.trim().to_lowercase();
+            if query.is_empty() {
+                return Err("Capability search query is required".into());
+            }
+            let catalog = capabilities::load_catalog(app.clone()).await?;
+            json!(catalog
+                .tools
+                .iter()
+                .filter(|tool| operational_tool(&tool.identity)
+                    && !catalog.disabled(&disabled, &tool.name))
+                .filter(|tool| format!("{}\n{}", tool.name, tool.description)
+                    .to_lowercase()
+                    .contains(&query))
+                .map(|tool| json!({"name":tool.name,"description":tool.description}))
+                .collect::<Vec<_>>())
+        }
+        "gchat_read_capability" => {
+            let target = arg(&args, "name")?;
+            let catalog = capabilities::load_catalog(app.clone()).await?;
+            let tool = catalog
+                .tools
+                .iter()
+                .find(|tool| {
+                    tool.name == target
+                        && operational_tool(&tool.identity)
+                        && !catalog.disabled(&disabled, &tool.name)
+                })
+                .ok_or_else(|| format!("Capability `{target}` is unavailable or disabled"))?;
+            json!({"name":tool.name,"description":tool.description,"inputSchema":tool.input_schema})
+        }
+        "gchat_call_capability" => {
+            let target = arg(&args, "name")?.to_owned();
+            let arguments = args
+                .get("arguments")
+                .cloned()
+                .filter(Value::is_object)
+                .ok_or("Capability arguments must be an object")?;
+            return execute_tool(
+                app,
+                project,
+                session_id,
+                rpc_id,
+                &target,
+                arguments,
+                BridgeCaller {
+                    opencode_session_id: caller,
+                    policy,
+                },
+            )
+            .await;
         }
         _ => {
             return execute_tool(
@@ -1800,26 +1850,51 @@ mod tests {
         );
         let tools = rpc(&connection, 1, "tools/list", json!({})).await;
         let tools = tools["tools"].as_array().unwrap();
-        assert!(tools.iter().any(|tool| tool["name"] == "os_fs_read"));
+        assert!(tools.iter().any(|tool| tool["name"] == "gchat_search_capabilities"));
+        assert!(tools.iter().any(|tool| tool["name"] == "gchat_read_capability"));
+        assert!(tools.iter().any(|tool| tool["name"] == "gchat_call_capability"));
+        assert!(!tools.iter().any(|tool| tool["name"] == "os_fs_read"));
         assert!(!tools
             .iter()
             .any(|tool| tool["name"] == "agent_run" || tool["name"] == "skill_invoke"));
         let wire = capabilities::mcp_wire_name("configured", "read");
-        assert!(tools.iter().any(|tool| tool["name"] == wire));
-        let read = rpc(
+        assert!(!tools.iter().any(|tool| tool["name"] == wire));
+        let search = rpc(
             &connection,
             2,
             "tools/call",
-            json!({"name":"os_fs_read","arguments":{"path":"note.txt"}}),
+            json!({"name":"gchat_search_capabilities","arguments":{"query":"read"}}),
+        ).await;
+        assert!(search.to_string().contains("os_fs_read"));
+        assert!(search.to_string().contains(&wire));
+        let schema = rpc(
+            &connection,
+            3,
+            "tools/call",
+            json!({"name":"gchat_read_capability","arguments":{"name":wire}}),
+        ).await;
+        assert!(schema.to_string().contains("inputSchema"));
+        let native_schema = rpc(
+            &connection,
+            4,
+            "tools/call",
+            json!({"name":"gchat_read_capability","arguments":{"name":"os_fs_read"}}),
+        ).await;
+        assert!(native_schema["content"][0]["text"].as_str().unwrap().contains("path"));
+        let read = rpc(
+            &connection,
+            5,
+            "tools/call",
+            json!({"name":"gchat_call_capability","arguments":{"name":"os_fs_read","arguments":{"path":"note.txt"}}}),
         )
         .await;
         assert!(read.to_string().contains("shared native read"));
         assert_eq!(read["isError"], false);
         let connected = rpc(
             &connection,
-            3,
+            6,
             "tools/call",
-            json!({"name":wire,"arguments":{"key":"document"}}),
+            json!({"name":"gchat_call_capability","arguments":{"name":wire,"arguments":{"key":"document"}}}),
         )
         .await;
         assert!(connected.to_string().contains("configured connector"));
@@ -1845,22 +1920,12 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|tool| tool["name"] == wire
-                || tool["name"] == "os_fs_read"
-                || tool["name"] == "gchat_start_run"));
+            .any(|tool| tool["name"] == "gchat_call_capability" || tool["name"] == "gchat_start_run"));
         for (id, name, arguments) in [
-            (5, wire.as_str(), json!({"key":"document"})),
-            (6, "os_fs_read", json!({"path":"note.txt"})),
-            (
-                7,
-                "gchat_start_run",
-                json!({"task":"test","requestId":"denied"}),
-            ),
-            (
-                8,
-                "gchat_start_run",
-                json!({"task":"test","requestId":"denied-skill","skillName":"anything"}),
-            ),
+            (7, "gchat_call_capability", json!({"name":wire,"arguments":{"key":"document"}})),
+            (8, "gchat_call_capability", json!({"name":"os_fs_read","arguments":{"path":"note.txt"}})),
+            (9, "gchat_start_run", json!({"task":"test","requestId":"denied"})),
+            (10, "gchat_start_run", json!({"task":"test","requestId":"denied-skill","skillName":"anything"})),
         ] {
             let denied = rpc(
                 &connection,

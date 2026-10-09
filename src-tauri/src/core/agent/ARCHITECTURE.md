@@ -14,12 +14,17 @@ executor used by Studio: Standard Agent, evaluator-led Goal Loop, Coordinator
 Team, or acyclic Workflow. Definitions, runs, skills, scoped workspaces,
 attachments, approvals and monitoring are durable.
 
-`capability_list` exposes wire-safe names, exact identities and argument schemas.
-Native names map to registered dotted identities; MCP names derive from the exact
-server/tool pair, so equal names on different servers remain distinct. Disabled
-conversation tools are filtered from requests and denied at execution, including
-inside delegated runs. Chat uses the same approval mode and connected folders as
-Studio. Builder saves always require their existing readable confirmation.
+`capability_list` retains the complete wire-safe catalog for UI and runtime use.
+Model requests discover tools through compact search, exact-schema lookup, and
+exact-target invocation instead of carrying every native/MCP schema. Native
+Agent requests include frequent schemas and rare schemas explicitly loaded with
+`tool.view`; connected MCP calls use `capability_search`, `capability_read`, and
+approval-gated `mcp_call`. Native names map to registered dotted identities;
+MCP names derive from the exact server/tool pair, so equal names on different
+servers remain distinct. Disabled conversation tools are filtered from
+discovery and denied at execution, including inside delegated runs. Chat uses
+the same approval mode and connected folders as Studio. Builder saves always
+require their existing readable confirmation.
 
 Each Chat tool invocation has its own cancellable run ID. Delegated continuation
 uses a stable session per Chat thread and definition/skill; run records retain
@@ -66,7 +71,11 @@ scopes its bearer token and canonical workspace to that terminal launch, and
 closes the endpoint when the terminal stops. The adapter targets OpenCode's
 v1 remote-MCP configuration contract.
 
-OpenCode can list and read enabled GChat skills, list saved agents, start an
+OpenCode discovers native and configured MCP tools with `gchat_search_capabilities`,
+reads exact schemas with `gchat_read_capability`, then invokes the selected exact
+target with `gchat_call_capability`. The bridge checks the originating Code
+session's disabled tools and existing approval policy for each target. OpenCode
+can also list and read enabled GChat skills, list saved agents, start an
 asynchronous Agent Studio run, list project runs across Code launches, inspect
 or cancel a run. A new run uses the GChat model captured when that Code
 terminal launched unless its definition pins a model; an explicit `modelId`

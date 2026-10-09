@@ -7,6 +7,8 @@ import type { CapabilitiesService } from '@/services/capabilities/types'
 import type { AgentAttachment, AgentRunSummary } from '@/types/agent'
 import { useChatSessions } from '@/stores/chat-session-store'
 import { buildAgentRunSummary } from './agent-run-message'
+import { useAppState } from '@/hooks/useAppState'
+import { capabilitySchema, capabilitySearchResults } from './custom-chat-transport-helpers'
 
 export async function executeChatCapability({
   service, threadId, modelId, toolName, arguments: input, signal,
@@ -19,6 +21,32 @@ export async function executeChatCapability({
   signal: AbortSignal
 }) {
   if (signal.aborted) throw new DOMException('Cancelled', 'AbortError')
+  const disabledTools = useToolAvailable.getState().getDisabledToolsForThread(threadId)
+  if (toolName === 'gchat_capability_search') {
+    const query = (input as { query?: unknown }).query
+    if (typeof query !== 'string' || !query.trim()) throw new Error('Search query is required')
+    return { content: capabilitySearchResults(useAppState.getState().tools, disabledTools, query) }
+  }
+  if (toolName === 'gchat_capability_read') {
+    const name = (input as { name?: unknown }).name
+    if (typeof name !== 'string' || !name) throw new Error('Capability name is required')
+    const schema = capabilitySchema(useAppState.getState().tools, disabledTools, name)
+    if (!schema) throw new Error(`Capability '${name}' is unavailable or disabled`)
+    return { content: schema }
+  }
+  if (toolName === 'gchat_capability_call') {
+    const call = input as { name?: unknown; arguments?: unknown }
+    if (typeof call.name !== 'string' || !call.name || !call.arguments || typeof call.arguments !== 'object' || Array.isArray(call.arguments)) {
+      throw new Error('Capability name and object arguments are required')
+    }
+    if (!capabilitySchema(useAppState.getState().tools, disabledTools, call.name)) {
+      throw new Error(`Capability '${call.name}' is unavailable or disabled`)
+    }
+    return executeChatCapability({
+      service, threadId, modelId, toolName: call.name,
+      arguments: call.arguments as object, signal,
+    })
+  }
   const runId = `capability-${generateId()}`
   const policy = useConversationPolicy.getState()
   const workspace = policy.getWorkspace(threadId)
