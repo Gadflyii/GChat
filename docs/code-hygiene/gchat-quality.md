@@ -14,42 +14,43 @@ or memory improvements require native measurements; JSDOM screens do not supply
 them. GPU/model operations, deployment, remote hosts, Server 2, dependencies,
 framework/platform changes and speculative SIMD are excluded.
 
-## Current integration and accepted review
+## Current review
 
-Reviewed changes are merged and pushed on main `e239eac023`, fast-forwarded
-from `104d4ec6e`; `origin/main` equality is verified at 22:01 UTC. The integration
-tree `/ai/gchat-worktrees/remediation-integration` retains the same code; only
-following subject metadata/docs may change. Installed Windows product remains
-`0f06ba433`.
-The current composed `make verify` gate at `0f06ba433` passes at 21:17 UTC:
-2,112 frontend/core checks (six skipped), 102 extension checks, all six coverage
-floors, 553 desktop, 86 Host, six managed-adapter, 12 hardware and 29 utility
-tests. Strict Clippy is reused for unchanged Rust. Native Windows build exits 0
-at 21:30 UTC; independent package verification passes at 21:34 UTC for the
-125-payload Engine runtime, 104 profiles with 103 unchanged original entries
-and retained Manager `43c8d71cf`. Receipts:
-`/ai/gchat/out/oi106-final-update-20261009/composed-final-gate.json`
-and `package-verification.json`. Installed `0f06ba433` now passes payload/
-preservation checks and actual OI-106 lifecycle/selection and continued Chat
-acceptance. Seven original threads, models/profiles, credentials and Host
-identity survive. Continued Chat saves ready/stop output 30,000 after compaction
-from 26,366 to 1,705 tokens and returns idle. Current receipts in that folder are
-`installed-verification.json` and `installed-lifecycle-acceptance.json`.
+The Host/Manager review is accepted from published baseline `a70034880`.
+All 29 production source/assets/build files were assigned to six disjoint
+writers, with separate independent review and coordinator diff inspection.
+Host `116c6ac51` and Manager `4342ddedd` remove proven redundant validation,
+state access and unused UI code/styles; 12 files change by +35/-71. Trait,
+Serde, test and Windows hooks remain. Current ownership comments are short;
+CLI-help documentation remains observable product behavior.
 
-Earlier Windows GChat `7d9eb55f9`, retained Manager `43c8d71cf` and unchanged
-Engine `2ef56a52a` pass package/install preservation verification. Actual Chat
-workbook, agent discovery, compaction and continuation are accepted in the
-[runtime record](../agent-runtime/README.md); its continuation returns 30,000
-with `stop` and ready/idle UI. These results retain their earlier installed scope
-and establish no capacity promotion or native CPU/RAM improvement.
+The new source passes all composed verification components and strict
+Host/Manager all-target Clippy with warnings denied. Linux manual test-resource
+stubbing is corrected separately in `62be0eb8a`. The quiet-window timeout ended
+only utility compilation; resuming that remaining target passes without
+repeating completed suites. Full scope and contrary failure are recorded in
+`out/code-hygiene-20261009/review-host-manager-a7003488/gate-result.json`, with
+the independent verdict in `independent-review.md`.
 
-The review tree `review-quality-104d4ec6` and supporting `review-hardware-880ecb5c`
-are retired after remote/tip/live-use checks; source branches and evidence remain.
-The integration authority owns current build/job inventory, pending Linux
-package/X11 acceptance under booking 285, 22:15–23:00Z, and current disk inventory. Windows acceptance used canonical
-GPU/build guards at WSL PIDs 838489/847974; C2 ended its sole Linux repro at
-21:08:45 UTC and owns its invalid diagnostic follow-up. Windows acceptance is
-complete; Linux refresh remains open.
+Four baseline bugs (OI-111–114) are source-demonstrated and remain outside behavior-identical
+cleanup: removed-model profile persistence, rename without a revision,
+queued-download Pause overwritten during admission, and a fleet edit reporting
+failure after its canonical commit. Their fixture reproduction proposals and
+all resource opportunities are on the sole master list (OI-115–119 and linked existing rows). No native CPU/RAM gain,
+thread leak or SIMD opportunity is established. Separate behavioral fixes and
+measured performance work must preserve their stated contracts.
+
+Windows product `0f06ba433` remains accepted and installed with preserved user
+state. Linux product compile `54c931c68` / packaging `02d369e8a` is accepted
+and published in `out/linux/` and `out/ginfer-manager/linux/`; final proof is
+`out/oi070-linux-refresh/`. Both X11 fixture Hosts/apps are stopped, guards
+released, and temporary extracts/state/duplicate bundles retired. OI-072's
+128K physical-memory cause remains open; this review changes no inference
+controls. Existing composed verification and installed lifecycle proof remain
+baseline evidence; the cleanup source passes its affected and composed
+gates for main publication.
+
+## Earlier accepted review
 
 The accepted initial cleanup changes four production files:
 
@@ -299,7 +300,7 @@ retain each shared Host with zero models/instances/requests. Evidence:
 `out/oi070-linux-refresh/{package-verification.json,native-acceptance.json}`.
 The isolated locator uses 17443 because Windows owns mirrored 7443/7444;
 LAN/tray/vault and current Engine/Flash/capacity are outside this acceptance.
-The package item is complete; the focused Host/Manager review is next.
+The package item and focused Host/Manager review are complete.
 
 Owned Linux fixture/bundle retirement reclaims 17,405,161,472 B; accepted packages,
 manual input and concise evidence remain. Shared compiler/dependency baselines

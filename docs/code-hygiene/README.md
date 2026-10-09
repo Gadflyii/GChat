@@ -45,14 +45,32 @@ isolated 17443 test locator. LAN/tray/vault, Flash, current-Engine capacity and
 Server 2 are not qualified by this check. The actual frontend offline fixture
 passes with a largest JS chunk of 499,377 bytes.
 
-Next: the requested review of `src-tauri/ginfer-host/` and
-`src-tauri/ginfer-manager/`, from the published composed source. Remove proven
-dead/redundant code and historical comments while preserving behavior and
-Windows/CMP/laptop paths. Record CPU/memory/loop findings with measurement
-proposals on the master list; performance changes remain separate from this
-cleanup. Acceptance is independent review, affected tests, strict Clippy and
-composed `make verify`, then commit/push/main integration and owned cleanup.
-No GPU experiment is needed for source review.
+The focused Host/Manager review is accepted. Starting from published main
+`a70034880`, six disjoint writers and an independent reviewer examined all 29
+production source/assets/build files. Cleanup commits `116c6ac51` (Host) and
+`4342ddedd` (Manager) change 12 files, adding 35 and removing 71 lines. Proven
+redundant guards, private accessors/derive, SSE wrappers, unused UI branches and
+selectors are removed; current ownership comments are shortened. Behavior,
+protocols, credentials, session/lifecycle guards and Windows/CMP/laptop paths
+are preserved. Source-supported CPU/RAM/loop findings and four unchanged
+baseline defects belong to the master list, with measurement or reproduction
+proposals; none supplies a measured native performance gain.
+
+The composed checks pass at `62be0eb8a`, including independent review,
+frontend/core 2,112 tests, extension 102, Manager UI 21, six coverage floors,
+desktop 553, Host 86, managed adapter six, hardware 12 and utility 29. Strict
+Host/Manager all-target Clippy passes with warnings denied. Existing live tests
+remain explicitly ignored. The first Rust gate exposed a missing inert test
+resource for the new Linux manual glob; `62be0eb8a` corrects the existing
+stubber without touching real manuals. A quiet-window timeout interrupted only
+utility compilation; that remaining target and Clippy were resumed, with no
+rerun of already passing suites. Evidence is
+`out/code-hygiene-20261009/review-host-manager-a7003488/gate-result.json`.
+No GPU/model or installer rebuild was needed for this behavior-identical review.
+Canonical build guards are released; all owned check processes ended before
+23:15 UTC. Main integration and owned source retirement complete this review;
+new defect fixes and measured performance changes use separate master-list
+items and branches.
 
 ## Implementation and verification
 
@@ -97,12 +115,13 @@ No margin, context, concurrency or profile promotion is justified by that result
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Accepted packaging source `02d369e8a`; retain through current Host/Manager review |
+| Review coordinator / local Linux | `/ai/gchat-worktrees/review-host-manager-a7003488` | Accepted candidate from main a70034880; checks complete, no live job/model; retire after main publication |
+| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Accepted main a70034880 source; eligible owned retirement after review publication; preserve unique evidence first |
 | Coordinator / local Linux | `/ai/gchat/out/oi070-linux-refresh` | Accepted Linux package/native proof, six-doc inputs and runner; old packet path is a stable symlink, temporary extracts/state retired after final checks; published packages retained |
 | OI-106 / local Linux | `/ai/gchat-worktrees/oi106-selection-facade-7d9eb55` | Retired after published main and fresh live-use checks; exact local/remote source branches and external evidence retained |
-| Frontend/packages / local Linux | `/ai/gchat-worktrees/oi074-frontend-packages` | Approved physical dependency graph and prepared Linux runner; needed for final packages |
+| Frontend/packages / local Linux | `/ai/gchat-worktrees/oi074-frontend-packages` | Approved physical dependency graph and retained Linux runner; still reused by source checks, shared dependents preserved |
 | Profiles / local Linux | `/ai/gchat-worktrees/oi072-current-profiles` | Retired; `e0112d2fc` retained on local/remote branches, content represented in published main and external evidence kept |
-| Coordinator / local Linux | `/ai/gchat/out/oi106-final-update-20261009` | Frozen source `0f06ba433`, Passing source/build/package/installed Windows acceptance; retained Manager `43c8d71cf` producer and exact original-profile restoration; Linux refresh pending; code merged/pushed on main `e239eac023` |
+| Coordinator / local Linux | `/ai/gchat/out/oi106-final-update-20261009` | Frozen source `0f06ba433`, Passing source/build/package/installed Windows acceptance; retained Manager `43c8d71cf` producer and exact original-profile restoration; Linux refresh accepted/published; source included in main a70034880 |
 | Accepted Windows evidence | `/ai/gchat/out/remediation-final-20261009`, `/ai/gchat/out/remediation-native-correction-20261009` | Installed source7d, original history, Chat, Stop and failed Start observations; retain concise evidence through promotion |
 | Native caches / Windows | `%LOCALAPPDATA%/GChat/windows-build/source`, `%LOCALAPPDATA%/GChat/release-output` | Existing app compiler/dependency cache and accepted packages; reuse |
 | Native Engine baseline / Windows | `%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4/output/ginfer-windows-x64-sm120a.zip` | Tested closed 125-payload `2ef56a52a` Engine; retain without rebuilding |
@@ -131,7 +150,7 @@ packages, manuals, source and concise evidence remain. The explicit AppImage
 temporary extraction plus normal/root cleanup receipts account for 17,405,161,472 B
 of reclaimed local allocation; shared native compiler/dependency baselines stay.
 Receipts: `out/oi070-linux-refresh/{cleanup-normal.json,cleanup-root-bundle.json}`.
-No whole-fleet cleanup claim is made.
+The two owned frontend Edge fixture profiles are also retired after process/open-file and evidence checks, freeing 23,179,264 allocated B; receipt is `out/oi070-linux-refresh/evidence/frontend-fixture/cleanup.json`. No whole-fleet cleanup claim is made.
 
 Physical results: [installer refresh](../installer-refresh/README.md),
 [Agent/Chat runtime](../agent-runtime/README.md), and
