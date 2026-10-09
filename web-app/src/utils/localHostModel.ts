@@ -2,6 +2,7 @@ import { engineAlias, engineCommand, type EngineSnapshot } from '@/services/engi
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { MODEL_LOAD_WATCHDOG_MS, withTimeout } from '@/lib/utils'
 import { isLocalProvider } from '@/utils/registerRemoteProvider'
+import { useModelProvider } from '@/hooks/useModelProvider'
 
 export function localHostModel(modelId: string) {
   const [prefix, hostId, instanceId, extra] = modelId.split('/')
@@ -32,9 +33,9 @@ export async function controlLocalHostModel(modelId: string, operation: 'start' 
   const current = result.instances.find(instance => instance.instance_id === target.instance_id)
   if (!current) throw new Error('The local Host instance is no longer available.')
   if (!(operation === 'start' && ['ready', 'starting'].includes(current.status))) {
-    result = await engineCommand<EngineSnapshot>(operation, {
+    result = await withTimeout(engineCommand<EngineSnapshot>(operation, {
       ...target, body: { expected_session_id: current.session_id, force: false },
-    })
+    }), Math.max(1, deadline - Date.now()), 'Timed out waiting for the local Host model.')
   }
   const session = result.instances.find(instance => instance.instance_id === target.instance_id)?.session_id
   while (true) {
@@ -45,7 +46,14 @@ export async function controlLocalHostModel(modelId: string, operation: 'start' 
       if (instance.status !== 'stopped') throw new Error('The local Host did not confirm the model stopped.')
       return
     }
-    if (instance.status === 'ready') return
+    if (instance.status === 'ready') {
+      const providers = useModelProvider.getState()
+      if (providers.selectedProvider === 'ginfer-lan' && !providers.selectedModel) {
+        const model = providers.getProviderByName('ginfer-lan')?.models.find(candidate => candidate.id === modelId)
+        if (model) useModelProvider.setState({ selectedModel: model })
+      }
+      return
+    }
     if (instance.status !== 'starting') throw new Error(instance.last_error || 'The local Host model did not become ready.')
     if (Date.now() >= deadline) throw new Error('Timed out waiting for the local Host model.')
     await new Promise(resolve => setTimeout(resolve, 1000))
