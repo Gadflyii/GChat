@@ -10,7 +10,7 @@ use tauri::{AppHandle, Runtime};
 use crate::core::app::commands::get_jan_data_folder_path;
 
 use super::definitions::{AgentDefinition, AgentReasoningEffort, AgentStrategy};
-use super::runner::AgentTurnOutcome;
+use super::runner::{combine_turn_reason, turn_status, AgentTurnOutcome};
 use super::types::{AgentEvent, AgentInferenceMetrics};
 
 const RUN_HISTORY_FILE: &str = "agent-runs.json";
@@ -136,11 +136,7 @@ impl AgentRunRecord {
         let completed_stage_steps = stages.iter().map(|stage| stage.step_count).sum();
         let (status, finish_reason, total_steps, final_reply) = match result {
             Ok(outcome) => {
-                let status = match outcome.reason.as_str() {
-                    "cancelled" => "cancelled",
-                    "max_steps" | "max_cycles" => "incomplete",
-                    _ => "finished",
-                };
+                let status = turn_status(&outcome.reason);
                 (
                     status,
                     outcome.reason.clone(),
@@ -283,6 +279,27 @@ fn read_history(data_folder: &Path) -> Result<RunHistory, String> {
     history.schema_version = RUN_HISTORY_SCHEMA_VERSION;
     for run in &mut history.runs {
         run.schema_version = RUN_HISTORY_SCHEMA_VERSION;
+        // Correct demonstrable historical status loss without rewriting saved evidence.
+        // Goal Loop may recover after earlier cycles, so only closed stage pipelines
+        // aggregate predecessor outcomes.
+        if run.status == "finished" {
+            let mut reason = if matches!(run.finish_reason.as_str(), "max_steps" | "max_cycles" | "loop_detected" | "failed" | "cancelled") {
+                run.finish_reason.clone()
+            } else {
+                "reply".into()
+            };
+            if matches!(run.kind.as_str(), "coordinator" | "workflow") {
+                for stage in &run.stages {
+                    if matches!(stage.status.as_str(), "max_steps" | "max_cycles" | "loop_detected" | "failed" | "cancelled") {
+                        reason = combine_turn_reason(&reason, &stage.status);
+                    }
+                }
+            }
+            if matches!(reason.as_str(), "max_steps" | "max_cycles" | "loop_detected" | "failed" | "cancelled") {
+                run.status = turn_status(&reason).into();
+                run.finish_reason = reason;
+            }
+        }
     }
     Ok(history)
 }
@@ -448,6 +465,102 @@ mod tests {
         assert_eq!(record.max_steps, 7);
         assert_eq!(record.max_cycles, Some(3));
         assert_eq!(record.final_reply, "best available");
+    }
+
+    #[test]
+    fn history_corrects_proven_stage_outcomes_without_rewriting_saved_data() {
+        let root = tempfile::tempdir().unwrap();
+        let result = Ok(AgentTurnOutcome {
+            reply: Some("completed synthesis".into()),
+            reason: "reply".into(),
+            step_count: 45,
+            inference: AgentInferenceMetrics::default(),
+        });
+        let mut record = AgentRunRecord::completed(CompletedRun {
+            id: "record",
+            run_id: "run",
+            session_id: "session",
+            origin_session_id: None,
+            user_message: "task",
+            definition: &general_agent(),
+            started_at_ms: 1,
+            events: &[],
+            result: &result,
+        });
+        record.kind = "coordinator".into();
+        record.stages.push(AgentRunStage {
+            stage_id: "worker".into(),
+            name: "Critic".into(),
+            status: "max_steps".into(),
+            summary: "limit".into(),
+            step_count: 12,
+            duration_ms: 1,
+            model_instance_id: "model".into(),
+            model_id: "model".into(),
+            reasoning_effort: None,
+            inference: AgentInferenceMetrics::default(),
+        });
+        record.finish_reason.clear();
+        for kind in ["coordinator", "workflow", "goal_loop", "standard"] {
+            record.kind = kind.into();
+            write_history(
+                root.path(),
+                &RunHistory {
+                    schema_version: 3,
+                    runs: vec![record.clone()],
+                },
+            )
+            .unwrap();
+            let original = std::fs::read(history_path(root.path())).unwrap();
+            let corrected = list_runs(root.path()).unwrap().remove(0);
+            assert_eq!(
+                corrected.status,
+                if matches!(kind, "coordinator" | "workflow") {
+                    "incomplete"
+                } else {
+                    "finished"
+                }
+            );
+            assert_eq!(corrected.final_reply, "completed synthesis");
+            assert_eq!(std::fs::read(history_path(root.path())).unwrap(), original);
+        }
+        record.kind = "coordinator".into();
+        record.stages[0].status = "unknown".into();
+        write_history(
+            root.path(),
+            &RunHistory {
+                schema_version: 3,
+                runs: vec![record],
+            },
+        )
+        .unwrap();
+        assert_eq!(list_runs(root.path()).unwrap()[0].status, "finished");
+    }
+
+    #[test]
+    fn returned_failure_and_loop_fallback_never_persist_as_finished() {
+        for (reason, status) in [("failed", "failed"), ("loop_detected", "incomplete")] {
+            let outcome = Ok(AgentTurnOutcome {
+                reply: Some("preserved output".into()),
+                reason: reason.into(),
+                step_count: 7,
+                inference: AgentInferenceMetrics::default(),
+            });
+            let record = AgentRunRecord::completed(CompletedRun {
+                id: "record",
+                run_id: "run",
+                session_id: "session",
+                origin_session_id: None,
+                user_message: "task",
+                definition: &general_agent(),
+                started_at_ms: 1,
+                events: &[],
+                result: &outcome,
+            });
+            assert_eq!(record.status, status);
+            assert_eq!(record.finish_reason, reason);
+            assert_eq!(record.final_reply, "preserved output");
+        }
     }
 
     #[test]

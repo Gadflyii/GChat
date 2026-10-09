@@ -376,7 +376,7 @@ pub enum AgentEvent {
         category: String,
     },
     TurnFinished {
-        /// `"reply"` | `"finish"` | `"max_steps"` | `"cancelled"` | `"failed"`.
+        /// `"reply"` | `"finish"` | `"max_steps"` | `"max_cycles"` | `"loop_detected"` | `"cancelled"` | `"failed"`.
         reason: String,
         step_count: u32,
     },

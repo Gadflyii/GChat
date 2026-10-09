@@ -1,3 +1,4 @@
+import { incompleteOutcomeMessage } from '@/lib/agent-outcome'
 import {
   memo,
   useState,
@@ -442,8 +443,7 @@ export const MessageItem = memo(
       const stages = block.agentSummary?.stages ?? []
       const finishReason = block.agentSummary?.finish_reason
       const runError = block.agentSummary?.error
-      const incompleteReason =
-        finishReason === 'max_steps' || finishReason === 'max_cycles'
+      const incompleteReason = incompleteOutcomeMessage(finishReason)
       const instanceMetrics = aggregateAgentMetrics(
         stages.map((stage) => ({
           modelInstanceId: stage.model_instance_id,
@@ -470,15 +470,13 @@ export const MessageItem = memo(
           durationLabel={t('activity.workedFor', {
             count: durationSeconds,
           })}
-          hasDetails={toolCount > 0 || stages.length > 0 || incompleteReason}
+          hasDetails={toolCount > 0 || stages.length > 0 || Boolean(incompleteReason)}
           error={runError?.message}
         >
           {incompleteReason && (
             <ActivityDetail label="Run outcome">
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-                {finishReason === 'max_steps'
-                  ? 'Step limit reached. A stage used its full model-step budget without returning a completed result.'
-                  : 'Revision limit reached. The evaluator did not return PASS; the best available executor result was preserved.'}
+                {incompleteReason}
               </div>
             </ActivityDetail>
           )}

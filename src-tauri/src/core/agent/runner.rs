@@ -79,6 +79,31 @@ pub struct AgentTurnOutcome {
     pub inference: AgentInferenceMetrics,
 }
 
+/// Terminal status shared by run persistence and delegated tool results.
+pub fn turn_status(reason: &str) -> &'static str {
+    match reason {
+        "reply" | "finish" => "finished",
+        "cancelled" => "cancelled",
+        "failed" => "failed",
+        _ => "incomplete",
+    }
+}
+
+/// Preserve the first limiting stage, while cancellation and failure take precedence.
+pub(super) fn combine_turn_reason(current: &str, next: &str) -> String {
+    let priority = |reason: &str| match turn_status(reason) {
+        "cancelled" => 3,
+        "failed" => 2,
+        "incomplete" => 1,
+        _ => 0,
+    };
+    if priority(next) > priority(current) || priority(current) == 0 {
+        next.into()
+    } else {
+        current.into()
+    }
+}
+
 #[derive(Default)]
 pub struct RunTurnOptions<'a> {
     pub max_output_tokens: Option<u32>,
@@ -530,13 +555,13 @@ async fn run_turn_inner(
                 text: reply.clone(),
             })?;
             emit(AgentEvent::TurnFinished {
-                reason: "reply".into(),
+                reason: "loop_detected".into(),
                 step_count: step_index + 1,
             })?;
             finish_session(input.session, &loaded_tools, &loaded_skills, Some(&reply)).await;
             return Ok(AgentTurnOutcome {
                 reply: Some(reply),
-                reason: "reply".into(),
+                reason: "loop_detected".into(),
                 step_count: step_index + 1,
                 inference: combined_inference(inference, &tool_inference),
             });

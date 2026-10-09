@@ -111,6 +111,12 @@ Definitions use schema version 3.
 - Workflows are validated acyclic graphs with exactly one final node. A graph
   level may run concurrently only with isolated workspaces; a shared-workspace
   node occupies its level alone.
+- Final output does not imply completion. Coordinator and Workflow carry the
+  first incomplete stage reason into the overall run even when synthesis or the
+  final node returns a reply. Failure and cancellation take precedence. A
+  loop-breaker fallback is `loop_detected` and incomplete; Goal Loop never
+  evaluates that fallback as completed executor work. Persistence, delegated
+  results and live UI classify only `reply` and `finish` as finished.
 - Parent cancellation, approval policy, and failure semantics govern all child
   stages. Concurrent siblings always publish a terminal stage status, even
   when another sibling fails or cancels.

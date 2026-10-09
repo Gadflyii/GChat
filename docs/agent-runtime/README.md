@@ -1,5 +1,46 @@
 # Chat and Agent runtime
 
+## OI-067 — active outcome correction
+
+Deliver accurate overall Coordinator status when planning, workers or synthesis
+stop before completion, including loop-breaker fallback, while preserving the
+synthesis content and distinct stage outcomes. Acceptance requires scripted
+regressions through orchestration, persisted history and frontend reporting;
+no changes to step budgets, sampling, permissions or model execution. Saved
+October 1 evidence below establishes the bug; real models will not be rerun.
+Implementation now carries incomplete planning/workers through synthesis,
+records loop fallback as `loop_detected`, fixes returned failure persistence,
+and applies the same propagation to Workflow and Goal Loop. Final output and
+individual stage statuses remain available. The focused frontend suites pass
+29 tests, including saved-summary Chat rendering; production ESLint and
+TypeScript pass. All 18 focused Rust tests pass: orchestration (11), run
+history/persistence (6) and the actual loop breaker (1), using offline shared
+caches and nested local build/GPU guards on Ron-9950X3D2. The guarded corrective
+run ended at 16:31:29Z, October 9; no model or GPU inference ran. Full verification
+and installed Windows acceptance belong to the root integration batch. Read-time
+history correction uses only explicit limiting stage/finish reasons, keeps final
+output and raw file bytes intact, and does not infer failure from missing data
+or earlier Goal Loop cycles that may have recovered. Next action: coordinator
+integration verification. Independent read-only source review found no blocking
+status/propagation defect. Task-owned resource placeholders and dependency links
+are removed; the shared compiler cache and original incident evidence remain.
+
+Two fixture failures were corrected: raw history mocks omitted required metrics,
+and a selector assumed the automatically selected run name was unique. The
+fixture now uses `AgentRunRecord`, so TypeScript checks required fields; the test
+uses the actual automatic-selection behavior. The initial Rust matrix also
+exhausted its script because the output-limit failure fixture omitted the
+runner's existing larger retry. The fixture now supplies both exhaustion
+responses, uses an absolute source file across isolated workers, labels each
+case on failure and distinguishes logical steps from completion attempts. The
+corrective run verified these actual paths; no budget was changed.
+
+| Owner / host | Exact path | Purpose / retention |
+| --- | --- | --- |
+| OI-067 / Ron-9950X3D2 | `/ai/gchat-worktrees/oi067-agent-outcomes`, `dev/oi067-agent-outcomes-104d4ec6` | Reviewed candidate from `104d4ec6e`; about 264 MiB source, no live jobs/model copies; temporary links and test placeholders released |
+| Stable / shared caches | `/ai/gchat`, `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Baseline and reused dependencies/compiler cache |
+| Evidence | `/ai/gchat/out/agent-recovery-20261001/` | Original incident; retained unchanged |
+
 ## Unified sessions and Code capabilities — accepted October 8 source
 
 The user's shared conversation design is implemented: ordinary replies, native
@@ -283,8 +324,9 @@ repeat, Practitioner's apparent reply was the no-progress loop breaker's
 fallback. Original stages exhausted 8 planning / 12 per worker / 25 synthesis
 rounds. Transcripts show repeated file operations, missing `plan` paths and
 access denials consuming those rounds. These are deliberate terminal budget or
-loop exits, not demonstrated engine crashes. Overall status follows synthesis
-and can obscure incomplete workers; correcting that reporting is still open.
+loop exits, not demonstrated engine crashes. The historical implementation followed synthesis and obscured incomplete
+workers. The OI-067 candidate above corrects that reporting; this paragraph
+retains the original incident rather than describing current candidate behavior.
 Step budgets and saved definitions are unchanged. The ordinary-chat Working
 state later reproduced as described above; the context warning did not.
 
