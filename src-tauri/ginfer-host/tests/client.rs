@@ -521,7 +521,7 @@ async fn inference_usage_releases_on_completion_cancellation_and_rejection() {
         }),
     );
     let server = tokio::spawn(upstream);
-    host.processes.lock().await.refresh().await.unwrap();
+    host.refresh_processes().await.unwrap();
     let path = format!("/host/v1/instances/{id}/inference/v1/chat/completions");
     let call = || {
         Request::post(&path)

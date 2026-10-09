@@ -559,6 +559,17 @@ impl Host {
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
+    pub async fn refresh_processes(&self) -> Result<(), String> {
+        let probes = self.processes.lock().await.pending_readiness().await?;
+        let observations = futures_util::future::join_all(
+            probes.into_iter().map(|probe| probe.observe()),
+        ).await;
+        let mut processes = self.processes.lock().await;
+        for observation in observations.into_iter().flatten() {
+            processes.confirm_readiness(observation)?;
+        }
+        Ok(())
+    }
     pub async fn snapshot(&self) -> serde_json::Value {
         let sharing = self.lan_sharing.lock().await;
         let data = self.data.lock().await;
@@ -2030,6 +2041,115 @@ mod lifecycle_tests {
             assert_eq!(unchanged["instances"][0]["session_id"], session);
             assert_eq!(unchanged["instances"][0]["status"], "starting");
         }
+        let second_id = Uuid::from_u128(u128::MAX);
+        let mut second_profile = profile.clone();
+        second_profile.instance_id = Some(second_id);
+        second_profile.gpu_uuids = vec!["GPU-second".into()];
+        host.launch(second_profile).await.unwrap();
+        let second_session = host.snapshot().await["instances"][1]["session_id"].clone();
+        let (arrived, mut arrivals) = tokio::sync::mpsc::unbounded_channel();
+        let mut delayed_upstreams = Vec::new();
+        let mut health_gates = Vec::new();
+        let mut model_gates = Vec::new();
+        for instance_id in [id, second_id] {
+            let launch = host.processes.lock().await.instances()
+                .find(|instance| instance.instance_id == instance_id).unwrap().launch.clone();
+            let health_gate = Arc::new(tokio::sync::Semaphore::new(0));
+            let model_gate = Arc::new(tokio::sync::Semaphore::new(0));
+            health_gates.push(health_gate.clone());
+            model_gates.push(model_gate.clone());
+            let arrived = arrived.clone();
+            let upstream = hyper::Server::bind(&([127, 0, 0, 1], launch.port).into()).serve(
+                hyper::service::make_service_fn(move |_| {
+                    let model = launch.model_id.clone();
+                    let arrived = arrived.clone();
+                    let health_gate = health_gate.clone();
+                    let model_gate = model_gate.clone();
+                    async move {
+                        Ok::<_, std::convert::Infallible>(hyper::service::service_fn(
+                            move |request: Request<Body>| {
+                                let model = model.clone();
+                                let arrived = arrived.clone();
+                                let health_gate = health_gate.clone();
+                                let model_gate = model_gate.clone();
+                                async move {
+                                    let (stage, gate) = if request.uri().path() == "/health" {
+                                        ("health", health_gate)
+                                    } else {
+                                        ("models", model_gate)
+                                    };
+                                    arrived.send((instance_id, stage)).unwrap();
+                                    let _permit = gate.acquire().await.unwrap();
+                                    Ok::<_, std::convert::Infallible>(json(
+                                        StatusCode::OK,
+                                        if stage == "models" {
+                                            serde_json::json!({"data":[{"id":model,"fixture":"stale readiness"}]})
+                                        } else {
+                                            serde_json::json!({})
+                                        },
+                                    ))
+                                }
+                            },
+                        ))
+                    }
+                }),
+            );
+            delayed_upstreams.push(tokio::spawn(upstream));
+        }
+        let monitor_host = host.clone();
+        let refresh = tokio::spawn(async move { monitor_host.refresh_processes().await });
+        async fn wait_for_stage(
+            arrivals: &mut tokio::sync::mpsc::UnboundedReceiver<(Uuid, &'static str)>,
+            stage: &'static str,
+            expected: [Uuid; 2],
+        ) {
+            let mut observed = std::collections::BTreeSet::new();
+            for _ in 0..2 {
+                let (instance_id, actual_stage) = arrivals.recv().await.unwrap();
+                assert_eq!(actual_stage, stage);
+                observed.insert(instance_id);
+            }
+            assert_eq!(observed, expected.into_iter().collect());
+        }
+        tokio::time::timeout(Duration::from_millis(500), wait_for_stage(&mut arrivals, "health", [id, second_id]))
+            .await.unwrap();
+        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot()).await.unwrap();
+        assert_eq!(snapshot["instances"][0]["status"], "starting");
+        assert_eq!(snapshot["instances"][1]["status"], "starting");
+        assert!(!refresh.is_finished());
+        let stop = Request::post(format!("/host/v1/instances/{id}/stop"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"expected_session_id":session}).to_string())).unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(500), host.clone().route(stop))
+            .await.unwrap().unwrap().status().is_success());
+        for gate in health_gates { gate.add_permits(1); }
+        tokio::time::timeout(Duration::from_millis(500), wait_for_stage(&mut arrivals, "models", [id, second_id]))
+            .await.unwrap();
+        let reload = Request::post(format!("/host/v1/instances/{second_id}/reload"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"expected_session_id":second_session}).to_string())).unwrap();
+        assert!(tokio::time::timeout(Duration::from_millis(500), host.clone().route(reload))
+            .await.unwrap().unwrap().status().is_success());
+        assert!(!refresh.is_finished());
+        for gate in model_gates { gate.add_permits(1); }
+        refresh.await.unwrap().unwrap();
+        let after_probes = host.snapshot().await;
+        assert_eq!(after_probes["instances"][0]["status"], "stopped");
+        assert!(after_probes["instances"][0]["model_metadata"].is_null());
+        assert_eq!(after_probes["instances"][1]["status"], "starting");
+        assert_ne!(after_probes["instances"][1]["session_id"], second_session);
+        assert!(after_probes["instances"][1]["model_metadata"].is_null());
+        for upstream in delayed_upstreams {
+            upstream.abort();
+            let _ = upstream.await;
+        }
+        for (instance_id, operation) in [(second_id, "stop"), (id, "start")] {
+            let request = Request::post(format!("/host/v1/instances/{instance_id}/{operation}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from("{}")).unwrap();
+            assert!(host.clone().route(request).await.unwrap().status().is_success());
+        }
+        session = host.snapshot().await["instances"][0]["session_id"].clone();
         let mut qualified = crate::launch_profiles::LaunchProfile {
             id: "fixture-c4".into(),
             name: "Synthetic lifecycle fixture".into(),
@@ -2169,7 +2289,7 @@ mod lifecycle_tests {
             }),
         );
         let upstream = tokio::spawn(upstream);
-        host.processes.lock().await.refresh().await.unwrap();
+        host.refresh_processes().await.unwrap();
         let denied = Request::post(format!("/host/v1/instances/{id}/local-connection"))
             .header("authorization", format!("Bearer {token}"))
             .body(Body::empty())
