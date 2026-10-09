@@ -8,13 +8,43 @@ type State = {
   hosts: EngineHost[]; nearby: NearbyHost[]; snapshots: Record<string, EngineSnapshot>;
   errors: Record<string, string>; refreshing: boolean; discoveryError: string | null;
   refresh: () => Promise<void>; discover: (enabled: boolean) => Promise<void>
+  publishSnapshot: (hostId: string, snapshot: EngineSnapshot) => void
 }
 export const hasReadyHostInstance = (state: Pick<State, 'hosts' | 'snapshots' | 'errors'>) =>
   state.hosts.some((host) => !state.errors[host.host_id] &&
     state.snapshots[host.host_id]?.instances.some((instance) => instance.status === 'ready'))
 
+function projectHostModels(hosts: EngineHost[], snapshots: Record<string, EngineSnapshot>, errors: Record<string, string>) {
+  const settings = useLocalApiServer.getState()
+  const provider: ModelProvider = {
+    provider: 'ginfer-lan', active: true, settings: [],
+    base_url: `http://127.0.0.1:${settings.serverPort}/${settings.apiPrefix.replace(/^\/+|\/+$/g, '')}`,
+    api_key: settings.apiKey,
+    models: hosts.filter(host => !errors[host.host_id]).flatMap(host => (snapshots[host.host_id]?.instances ?? [])
+      .filter(instance => instance.status === 'ready')
+      .map(instance => ({ id: engineAlias(host.host_id, instance.instance_id),
+        displayName: `${instance.display_name} — ${snapshots[host.host_id].display_name}`,
+        format: 'ginfer', capabilities: ['tools', 'reasoning', ...(instance.configuration.vision ? ['vision'] : [])],
+      }))),
+  }
+  const providers = useModelProvider.getState()
+  const existing = providers.getProviderByName(provider.provider)
+  if (existing) {
+    const projection = { provider: existing.provider, active: existing.active, settings: existing.settings, base_url: existing.base_url, api_key: existing.api_key, models: existing.models }
+    if (JSON.stringify(projection) !== JSON.stringify(provider)) providers.updateProvider(provider.provider, provider)
+  } else if (provider.models.length) providers.addProvider(provider)
+}
+
 export const useEngineHosts = create<State>((set, get) => ({
   hosts: [], nearby: [], snapshots: {}, errors: {}, refreshing: false, discoveryError: null,
+  publishSnapshot: (hostId, snapshot) => {
+    const state = get()
+    const snapshots = { ...state.snapshots, [hostId]: snapshot }
+    const errors = { ...state.errors }
+    delete errors[hostId]
+    projectHostModels(state.hosts, snapshots, errors)
+    set({ snapshots, errors })
+  },
   discover: async (enabled) => {
     try { await engineCommand('discovery', { enabled }); set({ discoveryError: null }) }
     catch (e) { set({ discoveryError: String(e) }) }
@@ -32,27 +62,7 @@ export const useEngineHosts = create<State>((set, get) => ({
       for (const id of Object.keys(snapshots)) if (!listed.registered.some((h) => h.host_id === id)) delete snapshots[id]
       // This is a picker projection of the native host registry, not a second
       // registration authority. The facade resolves each opaque instance alias.
-      const settings = useLocalApiServer.getState()
-      const provider: ModelProvider = {
-        provider: 'ginfer-lan', active: true, settings: [],
-        base_url: `http://127.0.0.1:${settings.serverPort}/${settings.apiPrefix.replace(/^\/+|\/+$/g, '')}`,
-        api_key: settings.apiKey,
-        models: listed.registered.filter((host) => !errors[host.host_id]).flatMap((host) => (snapshots[host.host_id]?.instances ?? [])
-          .filter((instance) => instance.status === 'ready')
-          .map((instance) => ({ id: engineAlias(host.host_id, instance.instance_id),
-            displayName: `${instance.display_name} — ${snapshots[host.host_id].display_name}`,
-            // Registered GInfer targets support tools/reasoning; Vision is an
-            // explicit startup option, advertised only after that launch is ready.
-            format: 'ginfer', capabilities: ['tools', 'reasoning', ...(instance.configuration.vision ? ['vision'] : [])],
-          }))),
-      }
-      const providers = useModelProvider.getState()
-      const existing = providers.getProviderByName(provider.provider)
-      if (existing) {
-        const projection = { provider: existing.provider, active: existing.active, settings: existing.settings, base_url: existing.base_url, api_key: existing.api_key, models: existing.models }
-        if (JSON.stringify(projection) !== JSON.stringify(provider)) providers.updateProvider(provider.provider, provider)
-      }
-      else if (provider.models.length) providers.addProvider(provider)
+      projectHostModels(listed.registered, snapshots, errors)
       set({ hosts: listed.registered, nearby: listed.discovered, snapshots, errors })
     } finally { set({ refreshing: false }) }
   },

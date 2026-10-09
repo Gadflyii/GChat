@@ -3,6 +3,7 @@ import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import type { ModelsService } from '@/services/models/types'
 import { isLocalProvider } from '@/utils/registerRemoteProvider'
+import { isLocallyOwnedModel, readyLocalHostModels } from '@/utils/localHostModel'
 
 /**
  * Find the provider that owns a model id by scanning the provider registry.
@@ -23,7 +24,7 @@ function findOwningProviderName(modelId: string): string | undefined {
 function isCloudModel(modelId: string): boolean {
   const providerName = findOwningProviderName(modelId)
   if (!providerName) return false
-  return !isLocalProvider(providerName)
+  return !isLocallyOwnedModel(providerName, modelId)
 }
 
 /**
@@ -43,7 +44,7 @@ export function preserveActiveCloudModels(
 ): string[] {
   const prevActive = useAppState.getState().activeModels
   const retainedCloud = prevActive.filter(isCloudModel)
-  return Array.from(new Set([...(freshLocal ?? []), ...retainedCloud]))
+  return Array.from(new Set([...(freshLocal ?? []), ...readyLocalHostModels(), ...retainedCloud]))
 }
 
 /**
