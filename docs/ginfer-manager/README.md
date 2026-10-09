@@ -67,14 +67,22 @@ requests; retained fragmented histories and physical allocator state are checked
 by the Engine's reservation transactions. It is not a fixed pool cap or a
 current measured available budget.
 
-Next: the coordinator books one native public-serving check using the exact
-installed artifact, C4/131,072 settings and automatic pool with unchanged
-300 MiB guard. Record resolved bytes and segment slots, four full-context
-prefix-enabled requests, commit/return counts, graph execution and sampled
-device-wide free memory; then Ready/restart/stop through supported Host control.
+Next: the coordinator books actual Host automatic-profile Start/Stop, checking
+the exact effective C4/131,072 settings and unchanged 300 MiB guard. After that
+Host instance stops, a separately labeled direct loopback public-Engine capacity
+check uses the same native binary/artifact/settings and existing supported
+`--request-log-jsonl` flag. That log supplies exact resolved arena bytes/slots,
+scheduler and batch counters that Host metadata and normal logs do not expose.
+It is not Host telemetry proof. Record graph-enabled startup, without inventing
+graph/eager numerical qualification. Preserve public prefix reuse and sample
+device-wide free memory throughout. Ready/restart/stop and original-profile
+restoration remain separate supported Host lifecycle checks.
 Use four distinct inputs counted at exactly 131,009 tokens through the loaded
 public frontend. The retained 63-decode-input qualification workload may serve
-as the matched control; it does not change a product output limit. Capture both
+as the matched control (64 returned outputs, 63 decode inputs); it does not change
+a product output limit. Early EOS leaves this matched-wave evidence incomplete;
+it does not establish a product bug or authorize changing stop/sampling defaults
+or retries to force a chosen result. Capture both
 the Engine scheduler's four admitted lanes and batch-four decode counters;
 four active Host HTTP requests alone cannot prove the requested concurrency.
 The existing startup and 32K functional screens do not satisfy this acceptance.
@@ -89,6 +97,73 @@ Owned source candidates are `/ai/gchat-worktrees/oi072-current-profiles` from
 `a6dc193fb`. Retain source/evidence until reviewed integration; no model copy,
 build or live job is owned by this item. The accepted installed `2ef56a52a`
 payload is reused. Required physical acceptance remains open.
+
+The existing `/ai/gchat/out/oi056-current-engine/host-request.ps1` is adapted
+into `scripts/ginfer-host-request.ps1` for four distinct bodies, exact
+public counts, a 600-second wave deadline (the retained wave took 199.45
+seconds), direct loopback transport and JSONL evidence. The retained qualification
+source bank is recovered from `922e5a8:tools/bench/make_bench_corpus.py`; its
+5,815 UTF-8 bytes match the retained manifest's `source_bank.sha256` exactly.
+The adaptation tiles that text with an early lane marker and counts the full
+`role=user` request with reasoning and sampling fields omitted. It establishes
+capacity/lifecycle evidence, not new model-quality evidence. Source preparation
+creates no native/GPU job; actual execution and exact process ownership/cleanup
+belong to the coordinator's booked window.
+
+The direct command uses the exact retained native `2ef56a52a` executable and
+the original profile's artifact. The coordinator supplies the booked port and
+new diagnostic path; its reviewed argument vector is:
+
+```powershell
+$serveArgs = @($artifact, '--host', '127.0.0.1', '--port', $port,
+  '--model-id', 'muse-glimmer-30b/nvfp4-dflash-nvfp4',
+  '--tp', '1', '--max-context', '131072', '--max-concurrency', '4',
+  '--spec', 'dflash', '--draft-policy', 'auto', '--draft-tokens', '4',
+  '--draft-tp', '1', '--kv-dtype', 'nvfp4',
+  '--kv-arena-headroom-bytes', '314572800', '--prefill-chunk', '1024',
+  '--request-log-jsonl', $requestLog)
+# Same UUID as Host; same runtime directory/dependency environment.
+$env:CUDA_VISIBLE_DEVICES = 'GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e'
+```
+
+Omit fixed-arena, Vision, graph-disable, reasoning, sampling and stop overrides.
+The direct public model ID is explicit and distinct from Host alias ownership.
+The helper does not launch a process. The caller retains its exact PID, creation
+time and image, wraps launch/preparation/run in `finally` cleanup, and stops that
+owned direct process before restoring the Host profile. Host lifecycle calls
+carry `expected_session_id` and have a 600-second transport deadline because
+the retained original-artifact hash exceeded 30 seconds. Snapshot calls remain
+bounded to 30 seconds; no automatic retry or duplicate launch is introduced.
+
+Use helper `PrepareC4` with the direct origin and owned output directory, then
+`RunC4` with its four `c4-lane-0.json` through `c4-lane-3.json` bodies, that
+origin, `RequestLogJsonl`, `EngineProcessId`, and `ExpectedEnginePath`.
+Preparation is bounded to 96 exact-count calls per lane and 600 seconds in
+total. Wave failure aborts its HTTP requests and stops only that unchanged
+caller-owned PID; earlier preflight failure and normal cleanup remain the
+caller's responsibility. Keep raw JSONL and the helper's input/result/event
+receipts in the booked output. `server_start.memory` supplies the measured
+arena and descriptor capacity; `throughput.scheduler.running` must show four
+admitted lanes, and `decode_batch.rounds_by_batch[3]` /
+`committed_tokens_by_batch[3]` must show actual B4 work. Require four 64-token
+responses and 252 committed decode inputs total, with zero prefix-hit credit.
+
+Frozen Muse AUTO resolution is preserved: requested `auto`/four draft tokens
+can resolve to adaptive/15 or calibrated fixed families. The helper checks
+requested CLI arguments separately from JSONL's resolved policy/window and
+records both. The 85,406,720-byte checkpoint uses fixed 2,048-token cyclic
+rings plus continuation hidden; the native tail's 15-value microtail belongs
+to the KV codec, independent of draft width. At most 16 staged tokens fit well
+below the 2,208-token preferred tail, so one such tail still bounds atomic
+growth. Independent review confirms the calculated 2,550,407,168-byte / 268-slot
+cold-cohort requirement remains valid. Runtime width-dependent pending state,
+workspace and graphs precede automatic arena sizing; their actual residency
+is measured by the physical check, not assumed from this KV calculation.
+Independent source pressure review found no remaining definite helper blocker
+after correcting the JSONL `auto_max` spelling, requested/resolved AUTO distinction,
+explicit direct model ID and Host lifecycle deadline. The native PowerShell
+parser passes without executing the script body. Embedded transport compilation,
+API calls and physical execution remain untested until the booked native run.
 
 Source verification: nineteen Manager DOM tests and sixteen focused desktop
 picker/benchmark tests pass, with product ESLint, release `tsc -b` and both
