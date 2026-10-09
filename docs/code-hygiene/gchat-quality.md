@@ -205,6 +205,24 @@ no job remains. This does not establish the other owner's actual run start time.
 
 ## Owned disk and jobs
 
+OI-106 follows actual installed `0a4e2b56c` sidebar Stop leaving the local Host
+Ready with one Engine after facade 1337 stopped. Candidate
+`/ai/gchat-worktrees/oi106-local-host-stop-159224262` on
+`review/gchat-local-host-stop-159224262` starts from `159224262`.
+The sidebar resolves aliases against the registry's actual local Host ID and
+uses existing Host Stop/Start/Restart with a fresh expected session. Paired
+aliases receive no Host mutation from local facade Stop. Ready-only picker and
+active-model projections share the same snapshot publication; stopped local
+aliases disappear, explicit Start restores the saved instance, and changed
+sessions abort readiness without replaying mutations. Existing watchdog values
+remain; no model, context, profile or facade contract is changed.
+
+Focused sidebar/restart/Host-store tests pass 18/18 on the approved aligned
+`oi074-frontend-packages/node_modules` graph; production ESLint and `tsc -b`
+pass. The existing switch-race fixture still emits React act warnings; no
+warnings are suppressed. This is source evidence; composed/native acceptance
+belongs to the coordinator. No native/GPU/build job or model copy is owned.
+
 | Owner / host | Exact path | Status / retention |
 | --- | --- | --- |
 | GChat review / local Linux | `/ai/gchat-worktrees/review-quality-104d4ec6` | Candidate source; retain until coordinator integration |

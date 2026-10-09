@@ -30,13 +30,18 @@ import {
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 import { ensureModelForServer } from '@/utils/ensureModelForServer'
 import { restartLocalModel } from '@/utils/restartLocalModel'
-import { isLocalProvider } from '@/utils/registerRemoteProvider'
+import { controlLocalHostModel, isLocallyOwnedModel, localHostModel, readyLocalHostModels } from '@/utils/localHostModel'
+import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { runModelStop } from '@/utils/switchModel'
 
 export function ServerQuickActions() {
   const serviceHub = useServiceHub()
   const serverStatus = useAppState((state) => state.serverStatus)
-  const activeModel = useAppState((state) => state.activeModels[0])
+  useEngineHosts(state => state.hosts)
+  useEngineHosts(state => state.snapshots)
+  const trackedModel = useAppState((state) => state.activeModels[0])
+  const selectedModel = useModelProvider(state => state.selectedModel?.id)
+  const activeModel = trackedModel ?? (selectedModel && readyLocalHostModels().includes(selectedModel) ? selectedModel : undefined)
   const activeProvider = useModelProvider((state) =>
     state.providers.find((candidate) =>
       candidate.models?.some((model) => model.id === activeModel)
@@ -49,8 +54,14 @@ export function ServerQuickActions() {
     setBusy(true)
     useAppState.getState().setServerStatus('pending')
     try {
-      const result = await withTimeout(
-        ensureModelForServer({
+      const modelState = useModelProvider.getState()
+      const localDefault = settings.defaultModelLocalApiServer ?? settings.lastServerModels[0]
+        ?? (modelState.selectedModel ? { model: modelState.selectedModel.id, provider: modelState.selectedProvider } : undefined)
+      const localTarget = localDefault?.provider === 'ginfer-lan' && localHostModel(localDefault.model)
+        ? localDefault.model : undefined
+      const result = localTarget
+        ? await controlLocalHostModel(localTarget, 'start').then(() => ({ modelId: localTarget, providerName: 'ginfer-lan', status: 'loaded' as const }))
+        : await withTimeout(ensureModelForServer({
           modelsService: serviceHub.models(),
           modelOverride: settings.defaultModelLocalApiServer,
         }),
@@ -132,26 +143,27 @@ export function ServerQuickActions() {
           }
         }
         useAppState.getState().setServerStatus('stopped')
-        if (selectedModel && isLocalProvider(selectedProvider)) {
+        if (selectedModel && isLocallyOwnedModel(selectedProvider, selectedModel)) {
           useAppState.getState().setIntentionalModelStop(selectedProvider, selectedModel, true)
         }
-        if (loadedModel && provider && isLocalProvider(provider.provider)) {
-          useAppState.getState().setIntentionalModelStop(provider.provider, loadedModel, true)
+        const loadedTarget = loadedModel ?? (selectedModel && readyLocalHostModels().includes(selectedModel) ? selectedModel : undefined)
+        const loadedProvider = provider?.provider ?? (loadedTarget && localHostModel(loadedTarget) ? 'ginfer-lan' : undefined)
+        if (loadedTarget && loadedProvider && isLocallyOwnedModel(loadedProvider, loadedTarget)) {
+          useAppState.getState().setIntentionalModelStop(loadedProvider, loadedTarget, true)
         }
 
         let unloadError: unknown
         let unloadedModel = false
-        if (loadedModel && !provider) {
-          unloadError = new Error(`Could not find the provider for '${loadedModel}'.`)
-        } else if (loadedModel && provider && isLocalProvider(provider.provider)) {
+        if (loadedTarget && !loadedProvider) {
+          unloadError = new Error(`Could not find the provider for '${loadedTarget}'.`)
+        } else if (loadedTarget && isLocallyOwnedModel(loadedProvider, loadedTarget)) {
           try {
-            const result = await serviceHub.models().stopModel(
-              loadedModel,
-              provider.provider
-            )
+            const result = loadedProvider === 'ginfer-lan'
+              ? await controlLocalHostModel(loadedTarget, 'stop').then(() => ({ success: true, error: undefined }))
+              : await serviceHub.models().stopModel(loadedTarget, loadedProvider)
             if (!result?.success) {
               throw new Error(
-                result?.error || `Could not confirm that '${loadedModel}' unloaded.`
+                result?.error || `Could not confirm that '${loadedTarget}' unloaded.`
               )
             }
             unloadedModel = true
@@ -203,14 +215,20 @@ export function ServerQuickActions() {
       .providers.find((candidate) =>
         candidate.models?.some((model) => model.id === activeModel)
       )
-    if (!provider) {
+    const providerName = provider?.provider ?? (localHostModel(activeModel) ? 'ginfer-lan' : undefined)
+    if (!providerName) {
       toast.error(`Could not find the provider for '${activeModel}'.`)
       return
     }
     setBusy(true)
     try {
-      await restartLocalModel(serviceHub, provider.provider, activeModel)
-      useAppState.getState().setIntentionalModelStop(provider.provider, activeModel, false)
+      if (providerName === 'ginfer-lan' && localHostModel(activeModel)) {
+        await controlLocalHostModel(activeModel, 'restart')
+        syncActiveModelsFromEngines(await serviceHub.models().getActiveModels())
+      } else {
+        await restartLocalModel(serviceHub, providerName, activeModel)
+      }
+      useAppState.getState().setIntentionalModelStop(providerName, activeModel, false)
       toast.success('Model reloaded')
     } catch (error) {
       toast.error('Could not reload model', { description: String(error) })
@@ -221,7 +239,7 @@ export function ServerQuickActions() {
 
   const running = serverStatus === 'running'
   const modelLoaded = Boolean(
-    activeModel && (!activeProvider || isLocalProvider(activeProvider.provider))
+    activeModel && (!activeProvider || isLocallyOwnedModel(activeProvider.provider, activeModel))
   )
 
   return (
@@ -250,9 +268,9 @@ export function ServerQuickActions() {
           )}
           {(running || modelLoaded) && (
             <>
-              <DropdownMenuItem onSelect={() => void reload()}>
+              {modelLoaded && <DropdownMenuItem onSelect={() => void reload()}>
                 <IconRefresh /> Reload model
-              </DropdownMenuItem>
+              </DropdownMenuItem>}
               <DropdownMenuItem onSelect={() => void stop()}>
                 <IconSquare /> {running ? 'Stop server' : 'Stop model'}
               </DropdownMenuItem>

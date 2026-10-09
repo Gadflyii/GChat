@@ -9,6 +9,8 @@ import type { AppService } from '@/services/app/types'
 import { resetServiceHubStore, seedServiceHub } from '@/test/service-hub'
 import { ServerQuickActions } from '../ServerQuickActions'
 import { shouldAttemptAutoStart, switchToModel } from '@/utils/switchModel'
+import { useEngineHosts } from '@/stores/engine-hosts-store'
+import { engineCommand, type EngineSnapshot } from '@/services/engines'
 
 const models = vi.hoisted(() => ({
   stopModel: vi.fn(),
@@ -19,6 +21,9 @@ const models = vi.hoisted(() => ({
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
+}))
+vi.mock('@/services/engines', async () => ({
+  ...await vi.importActual('@/services/engines'), engineCommand: vi.fn(),
 }))
 
 vi.mock('@/components/ui/dropdown-menu', () => ({
@@ -43,6 +48,7 @@ describe('sidebar server shortcut', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    useEngineHosts.setState({ hosts: [], snapshots: {}, errors: {} })
     seedServiceHub({ models: models as unknown as ModelsService })
     window.core = { api: { stopServer, startServer } } as typeof window.core
     stopServer.mockResolvedValue(undefined)
@@ -107,6 +113,127 @@ describe('sidebar server shortcut', () => {
     )
     expect(toast.success).not.toHaveBeenCalled()
     expect(shouldAttemptAutoStart('ginfer', 'shortcut-model')).toBe(false)
+  })
+
+  const localId = '4941572e-7ccf-48b7-a950-de8d4dd731c6'
+  const instanceId = '00e0ffab-31fd-48fa-9b00-9caf1c20e69c'
+  const localAlias = `ginfer/${localId}/${instanceId}`
+  function hostAlias(hostId = localId, status = 'ready', session = 'original-session') {
+    const alias = `ginfer/${hostId}/${instanceId}`
+    const snapshot = { host_id: hostId, instances: [{ instance_id: instanceId, session_id: session, status,
+      configuration: { vision: false, gpu_uuids: [], max_context: 8192, concurrency: 1 } }] } as EngineSnapshot
+    useEngineHosts.setState({
+      hosts: [{ local: true, host_id: localId, name: 'Local Host', base_url: '', client_id: '', certificate_sha256: '' }],
+      snapshots: { [hostId]: snapshot },
+    })
+    useModelProvider.setState({ selectedProvider: 'ginfer-lan', selectedModel: { id: alias } as Model,
+      providers: [{ provider: 'ginfer-lan', models: [{ id: alias }] }] as ModelProvider[] })
+    useAppState.setState({ activeModels: [alias] })
+    useLocalApiServer.setState({ defaultModelLocalApiServer: { model: alias, provider: 'ginfer-lan' } })
+    models.getActiveModels.mockResolvedValue([])
+    return snapshot
+  }
+
+  it('stops the exact local Host alias and prevents automatic reload after projection refresh', async () => {
+    const ready = hostAlias()
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'snapshot' ? ready : {
+      ...ready, instances: [{ ...ready.instances[0], status: 'stopped' }],
+    })
+    render(<ServerQuickActions />)
+    fireEvent.click(screen.getByRole('button', { name: /Stop server/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Local API Server and model stopped'))
+    expect(engineCommand).toHaveBeenCalledWith('stop', {
+      host_id: localId, instance_id: instanceId,
+      body: { expected_session_id: 'original-session', force: false },
+    })
+    expect(stopServer).toHaveBeenCalledOnce()
+    expect(models.stopModel).not.toHaveBeenCalled()
+    expect(useAppState.getState().activeModels).toEqual([])
+    expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(false)
+    expect(screen.getByText('Server stopped')).toBeInTheDocument()
+  })
+
+  it('recognizes a Ready imported local alias even without ModelsService active models', async () => {
+    const ready = hostAlias()
+    useAppState.setState({ serverStatus: 'stopped', activeModels: [] })
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'snapshot' ? ready : {
+      ...ready, instances: [{ ...ready.instances[0], status: 'stopped' }],
+    })
+    render(<ServerQuickActions />)
+    expect(screen.getByText('Model loaded')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Stop model/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Model stopped'))
+    expect(stopServer).not.toHaveBeenCalled()
+    expect(engineCommand).toHaveBeenCalledWith('stop', expect.objectContaining({ host_id: localId, instance_id: instanceId }))
+    expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(false)
+  })
+
+  it('stops only the facade for a paired remote alias', async () => {
+    const alias = `ginfer/remote-host/${instanceId}`
+    hostAlias('remote-host')
+    render(<ServerQuickActions />)
+    expect(screen.queryByRole('button', { name: /Reload model/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Stop server/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Local API Server stopped'))
+    expect(stopServer).toHaveBeenCalledOnce()
+    expect(engineCommand).not.toHaveBeenCalled()
+    expect(models.stopModel).not.toHaveBeenCalled()
+    expect(useAppState.getState().activeModels).toEqual([alias])
+    expect(shouldAttemptAutoStart('ginfer-lan', alias)).toBe(true)
+  })
+
+  it('explicitly starts the saved local Host instance after its Ready-only picker entry disappears', async () => {
+    const stopped = hostAlias(localId, 'stopped')
+    useModelProvider.setState({ selectedModel: null, providers: [{ provider: 'ginfer-lan', models: [] }] as ModelProvider[] })
+    useAppState.setState({ serverStatus: 'stopped', activeModels: [] })
+    useAppState.getState().setIntentionalModelStop('ginfer-lan', localAlias, true)
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'snapshot' ? stopped : {
+      ...stopped, instances: [{ ...stopped.instances[0], status: 'ready', session_id: 'new-session' }],
+    })
+    render(<ServerQuickActions />)
+    fireEvent.click(screen.getByRole('button', { name: /Start server/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Local API Server started'))
+    expect(engineCommand).toHaveBeenCalledWith('start', expect.objectContaining({
+      host_id: localId, instance_id: instanceId, body: { expected_session_id: 'original-session', force: false },
+    }))
+    expect(startServer).toHaveBeenCalledOnce()
+    expect(models.startModel).not.toHaveBeenCalled()
+    expect(useAppState.getState().activeModels).toEqual([localAlias])
+    expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(true)
+  })
+
+  it('restarts the local Host with its current session rather than a missing engine adapter', async () => {
+    const ready = hostAlias()
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'snapshot' ? ready : {
+      ...ready, instances: [{ ...ready.instances[0], session_id: 'new-session' }],
+    })
+    render(<ServerQuickActions />)
+    fireEvent.click(screen.getByRole('button', { name: /Reload model/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Model reloaded'))
+    expect(engineCommand).toHaveBeenCalledWith('restart', expect.objectContaining({
+      host_id: localId, instance_id: instanceId, body: { expected_session_id: 'original-session', force: false },
+    }))
+    expect(models.stopModel).not.toHaveBeenCalled()
+    expect(models.startModel).not.toHaveBeenCalled()
+    expect(useAppState.getState().activeModels).toEqual([localAlias])
+  })
+
+  it('rejects a replaced session during reload without replaying a lifecycle mutation', async () => {
+    const ready = hostAlias()
+    let snapshots = 0
+    vi.mocked(engineCommand).mockImplementation(async action => {
+      if (action === 'snapshot' && ++snapshots === 1) return ready
+      return { ...ready, instances: [{ ...ready.instances[0],
+        status: action === 'restart' ? 'starting' : 'ready',
+        session_id: action === 'restart' ? 'requested-session' : 'replacement-session' }] }
+    })
+    render(<ServerQuickActions />)
+    fireEvent.click(screen.getByRole('button', { name: /Reload model/ }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Could not reload model',
+      expect.objectContaining({ description: expect.stringContaining('session changed') })), { timeout: 2500 })
+    expect(vi.mocked(engineCommand).mock.calls.filter(([action]) => action === 'restart')).toHaveLength(1)
+    expect(vi.mocked(engineCommand).mock.calls.some(([action]) => action === 'start' || action === 'stop')).toBe(false)
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('offers Stop model when the API is already stopped', async () => {
