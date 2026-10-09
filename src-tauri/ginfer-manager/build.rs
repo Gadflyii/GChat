@@ -6,8 +6,7 @@ fn main() {
     println!("cargo:rerun-if-changed=../../web-app/public/fonts/geist");
     let mut attributes = tauri_build::Attributes::new();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
-        // The shared brand source is 512px. ICO entries support up to 256px;
-        // derive a 256px PNG frame without Python, Node or additional tooling.
+        // ICO entries cannot use the shared 512px brand frame.
         let source = std::fs::read("../icons/icon.png").expect("shared brand icon");
         let mut reader = png::Decoder::new(Cursor::new(source))
             .read_info()

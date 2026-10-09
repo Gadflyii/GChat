@@ -10,7 +10,6 @@ button:hover:not(:disabled) { border-color: var(--teal); background: var(--teal-
 button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--teal); color: var(--paper); border-color: var(--teal); }
 button.danger { color: var(--red); }
-button.link { border: 0; background: transparent; color: var(--teal); padding-left: 0; justify-content: start; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 input:not([type=checkbox]), select, textarea { width: 100%; min-height: 36px; border: 1px solid var(--rule); border-radius: 6px; padding: 7px 9px; background: var(--paper); color: var(--ink); }
 input[type=checkbox] { accent-color: var(--teal); width: 16px; height: 16px; }
@@ -69,8 +68,6 @@ details.section > summary { padding: 14px 16px; cursor: pointer; font-weight: 50
 .list-row p { margin: 3px 0; font-size: 12px; color: var(--muted); }
 .list-row .title { font-weight: 500; overflow-wrap: anywhere; }
 .mono { font-family: 'Geist Mono', Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; }
-.progress { height: 5px; border-radius: 4px; background: var(--subtle); overflow: hidden; margin: 8px 0; }
-.progress > span { display: block; height: 100%; background: var(--teal); }
 .dialog-backdrop { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; background: #0008; z-index: 10; }
 .dialog { width: min(620px, 100%); max-height: calc(100vh - 48px); overflow: auto; background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: 12px; padding: 22px; box-shadow: 0 20px 70px #0004; }
 .dialog h2 { font-size: 19px; margin-bottom: 8px; }
@@ -85,5 +82,4 @@ details.section > summary { padding: 14px 16px; cursor: pointer; font-weight: 50
 .pool-labels { display: grid; grid-template-columns: minmax(0, 1fr) 76px 68px; gap: 10px; color: var(--muted); font-size: 11px; }
 .radio-tabs { display: flex; gap: 14px; align-items: center; }
 .radio-tabs label { flex-direction: row; align-items: center; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
 @media (max-width: 800px) { .layout { grid-template-columns: 180px minmax(0,1fr); } main { padding: 20px 18px; } .facts { gap: 8px 12px; } .heading { flex-direction: column; } }

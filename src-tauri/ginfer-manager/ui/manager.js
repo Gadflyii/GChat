@@ -8,6 +8,7 @@ const modelLabel = (model) => {
 }
 const size = (bytes) => Number.isFinite(Number(bytes)) ? `${(Number(bytes) / 2 ** 30).toFixed(1)} GiB` : '—'
 const instanceKey = (ref) => `${ref.host_id}/${ref.instance_id}`
+const parseOrigins = (value) => value.split(/\r?\n/).map((origin) => origin.trim()).filter(Boolean)
 const lastSeen = (client) => client.last_seen_unix_ms ? `Last seen ${new Date(client.last_seen_unix_ms).toLocaleString()}` : 'No requests yet'
 const renderKey = (view) => JSON.stringify({ ...view, hosts: array(view.hosts).map((host) => ({ ...host,
   snapshot: host.snapshot && { ...host.snapshot, revision: undefined,
@@ -38,7 +39,6 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     for (const [key, value] of Object.entries(properties)) {
       if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value)
       else if (key === 'class') node.className = value
-      else if (key === 'text') node.textContent = text(value, '')
       else if (key === 'checked' || key === 'disabled' || key === 'open') node[key] = !!value
       else if (key === 'value') node.value = value
       else if (value != null) node.setAttribute(key, value)
@@ -104,8 +104,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       return response.result
     } catch (error) {
       state.error = String(error)
-      // A conflict never retries the edit. Refresh the account behind the open
-      // draft so its old expected_revision stays fixed for explicit review.
+      // Keep the draft's expected_revision fixed while refreshing a conflict.
       if (state.error.includes('409')) {
         try { apply(await invoke('manager_snapshot')) } catch { /* Keep the reported edit conflict. */ }
       }
@@ -149,7 +148,6 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     document.body.append(backdrop)
     state.dialog = { close }
     pane.querySelector('input,select,textarea,button')?.focus()
-    return form
   }
 
   function field(label, name, value = '', type = 'text', properties = {}) {
@@ -171,7 +169,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   function pair(discovered = null) {
     if (discovered) {
       run({ action: 'pair', host_id: discovered.host_id, base_url: discovered.urls?.[0] || null, client_name: null }, 'Host paired')
-        .catch(() => { /* Shared enrollment errors remain visible; no second pairing step. */ })
+        .catch(() => { /* Shared enrollment errors remain visible. */ })
       return
     }
     const name = field('Client name', 'client_name', state.view.client_name || '', 'text', { required: '', maxlength: 80 })
@@ -186,8 +184,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         base_url: fieldValue(form, 'base_url'), client_name: fieldValue(form, 'client_name') }, 'Host paired'))
   }
 
-  function section(key, title, children, initiallyOpen = false) {
-    const node = h('details', { class: 'section', 'data-section': key, open: state.sections.get(key) ?? initiallyOpen },
+  function section(key, title, children) {
+    const node = h('details', { class: 'section', 'data-section': key, open: state.sections.get(key) ?? false },
       h('summary', {}, title), h('div', { class: 'section-content' }, children))
     node.addEventListener('toggle', () => state.sections.set(key, node.open))
     return node
@@ -403,7 +401,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         const registration = hosts.find((entry) => entry.host_id === fieldValue(form, 'coordinator'))
         if (!registration) throw new Error('Choose a paired coordinator')
         return run({ action: 'fleet_configure', member_host_id: host.host_id, authority: { host_id: registration.host_id,
-          certificate_sha256: registration.certificate_sha256, origins: fieldValue(form, 'origins').split(/\r?\n/).map((origin) => origin.trim()).filter(Boolean) } }, 'Fleet coordinator updated')
+          certificate_sha256: registration.certificate_sha256, origins: parseOrigins(fieldValue(form, 'origins')) } }, 'Fleet coordinator updated')
       }, afterSave)
   }
 
@@ -522,7 +520,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       dialog('Enroll fleet member', `Add ${host.name} to the coordinator’s catalog. This does not replace its own pairing grant.`,
         [h('label', {}, 'Addresses reachable by fleet clients', h('textarea', { name: 'origins', required: '' }, origins.join('\n')))], 'Enroll',
         (form) => update({ operation: 'enroll_member', member: { display_name: host.name, host: { host_id: host.host_id,
-          certificate_sha256: host.certificate_sha256, origins: fieldValue(form, 'origins').split(/\r?\n/).map((origin) => origin.trim()).filter(Boolean) } } }))
+          certificate_sha256: host.certificate_sha256, origins: parseOrigins(fieldValue(form, 'origins')) } } }))
     }
     return section('fleet', 'Work pools and client assignments', [
       h('div', { class: 'row' }, h('div', {}, h('h3', {}, report.authority ? `Coordinator: ${coordinatorName}` : 'No fleet coordinator selected'),

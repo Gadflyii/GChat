@@ -37,7 +37,6 @@ enum ManagerRequest {
     Pair {
         host_id: Option<Uuid>,
         base_url: Option<String>,
-        #[serde(default)]
         client_name: Option<String>,
     },
     Discovery {
@@ -181,8 +180,7 @@ impl ManagerState {
                 operation,
                 mut args,
             } => {
-                // Only management routes are exposed. Inference and credentials
-                // (including local-connection) stay outside the Manager UI.
+                // Keep inference and credentials outside the Manager UI.
                 let (method, path) = match operation {
                     HostOperation::Snapshot => {
                         return self.client.snapshot(host_id).await.map_err(String::from)
@@ -277,8 +275,7 @@ async fn manager_snapshot(app: tauri::AppHandle) -> Result<Value, String> {
 #[tauri::command]
 async fn manager_request(app: tauri::AppHandle, request: ManagerRequest) -> Result<Value, String> {
     let result = app.state::<ManagerState>().execute(request).await?;
-    // Catalog/storage fetches also refresh the same display, keeping tray state
-    // and the visible controls on the same host-owned account.
+    // Keep tray state and visible controls on the same host-owned account.
     let view = match publish(&app).await {
         Ok(view) => view,
         Err(error) => {
