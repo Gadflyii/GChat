@@ -27,8 +27,11 @@ Each change needs focused behavioral evidence. Run full `make verify` once on th
 composed candidate when source winners are ready; inspect actual installed Chat
 completion/continued Chat and relevant lifecycle behavior after the next app build.
 Keep behavior-identical cleanup separate from measured performance changes.
-Server 2 administration, dependency upgrades and unrelated Engine speed work are
-excluded. Real fleet/tray/publication acceptance retains its actual prerequisites.
+Server 2 administration and unrelated Engine speed work are excluded. Ron approved
+controlled dependency alignment on October 9 for the actual React, TypeScript and
+Vitest peer conflicts (OI-105). Preserve runtime and test workflows; do not silence
+conflicts by widening peer ranges. Real fleet/tray/publication acceptance retains
+its actual prerequisites.
 
 Implementation evidence: [quality review](gchat-quality.md) and
 [remaining acceptance](../agent-runtime/remaining-acceptance.md).
@@ -64,9 +67,14 @@ claimed from them.
 
 Timed competitors have completed. Root reservations cover 17:52–19:30Z for
 verification/build and 19:30–20:30Z for installed acceptance on October 9. Both
-canonical guards protect compilation and model execution. Next: freeze this
-checked source, build the Windows apps once using the tested `2ef56a52a` engine,
-then verify installed Chat completion and the current Muse profile separately.
+canonical guards protect compilation and model execution. Windows source
+`0a4e2b56c` built successfully and its packages passed verification. Removing the
+ignored Vite option preserved all 832 frontend files exactly. Manager source
+`43c8d71cf` is reused with explicit producer provenance; its inputs are unchanged.
+C4 has a finite 19:17–19:21Z postmerge smoke slot. After its actual end, update
+the local apps and verify installed Chat completion and the current Muse profile
+separately. Integrate the approved dependency fix after its focused checks, then
+refresh the affected package; do not conflate that later build with this one.
 
 ## Current allocation
 
