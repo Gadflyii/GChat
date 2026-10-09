@@ -132,11 +132,11 @@ from measured gains. Follow-up candidates for startup lock ownership and typing
 preparation are recorded below as OI-100 and OI-101. The all-message DOM and
 attachment-reference projections belong to existing OI-075 acceptance.
 
-Qualified profile validation streams the full artifact through SHA256 on every
-qualified launch/reload. It already uses `spawn_blocking`; this review adds no
-hash timing claim. A stat-only digest cache would weaken exact artifact identity.
-Any reuse design needs an explicit immutable-payload and change-invalidation
-contract before implementation.
+Qualified launch/reload retains full artifact SHA256 verification in
+`spawn_blocking`, before stopping the current session. Existing writers provide
+no unchanged-content proof that would justify a digest cache; file stamps alone
+cannot preserve exact artifact identity. The modified-payload regression remains
+the guard for this behavior. No hash cache or timing claim is added.
 
 Studio catalog polling already deduplicates requests, compares unchanged data,
 and stops while hidden. Engine host polling guards overlap and uses concurrent
@@ -170,9 +170,16 @@ of delayed metadata for stopped/replaced sessions. The owned-child timeout and
 real ready/inference fixtures call the updated owner method. Kill and log-drain
 waits remain inside the process lock; this change addresses health HTTP waits.
 
-Source diff inspection and `git diff --check` pass. Rust compilation and these
-regressions are pending the coordinator's active guard release and focused gate.
-No native latency, CPU or RAM improvement is claimed before actual execution.
+Exact source `d05f3712f` passes owning all-target Cargo check, all-target Clippy
+with warnings denied and 86 Host tests (three explicit live tests remain ignored).
+The gated lifecycle case passes its 500 ms observation/action bounds before
+response release, including both model probes and stale-session rejection.
+The offline cached gate ran from this owned tree at 18:01:42–18:02:09Z under
+canonical build then GPU locks, bounded to 300 seconds with six Cargo jobs.
+Both guards released; no job remains. Receipt and wrapper are retained as
+`oi100-focused-gate.log`/`.sh` in the owned evidence directory. Diff inspection
+and `git diff --check` pass. Native desktop integration belongs to the
+coordinator; this fixture establishes no native latency, CPU or RAM improvement.
 
 ## OI-101 typing preparation candidate
 
@@ -205,7 +212,7 @@ no job remains. This does not establish the other owner's actual run start time.
 | Shared dependency/compiler cache | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse only; not owned disposable outputs |
 
 No owned compiler, GPU/model, deployment or remote job is live. The candidate
-source tree occupies 264 MiB; small review receipts occupy under 64 KiB. The
+source tree occupies 265 MiB; small review receipts occupy 72 KiB. The
 node_modules symlink and shared target cache are reused, not duplicate allocations.
 An initial
 inefficient reference survey was stopped; the corrected survey tokenizes only
