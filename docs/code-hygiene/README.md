@@ -136,7 +136,12 @@ source preservation, reclaiming 2.479 GB net allocation. The OI-067 tree and fiv
 completed review/acceptance trees are also retired; branches and external results
 remain. Review retirement reclaimed 1.386 GB, plus 277,282,816 B for OI-067.
 Retain cleanup receipts under `out/code-hygiene-20261009/` and
-`out/oi056-current-engine/`. Other owners' work, models/profiles, saved evidence
+`out/oi056-current-engine/`. October 9 final retirement removes nine verified
+own stale Engine/app build and source-copy paths, recovering 3,124,961,280 B
+net Windows allocation after debug retention and 5,187,133,440 B in WSL.
+The selected Engine ZIP, current installers, reused Manager/catalog inputs and
+63 verified debug/evidence files remain. Current receipt:
+`out/oi106-final-update-20261009/cleanup-stale-builds.json`. Other owners' work, models/profiles, saved evidence
 and Tessera are excluded; unchecked/shared paths remain in the not-deleted list.
 No whole-fleet cleanup claim is made.
 
