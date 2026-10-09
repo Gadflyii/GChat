@@ -65,7 +65,7 @@ pub async fn compute_file_sha256_with_cancellation(
         hasher.update(&buffer[..bytes_read]);
         total_read += bytes_read as u64;
 
-        // Log progress for very large files (every 100MB)
+        // Report progress every 100 MiB.
         if total_read.is_multiple_of(100 * 1024 * 1024) {
             #[cfg(feature = "logging")]
             log::debug!("Hash progress: {} MB processed", total_read / (1024 * 1024));
