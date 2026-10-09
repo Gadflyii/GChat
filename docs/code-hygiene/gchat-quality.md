@@ -155,6 +155,27 @@ copy their implementations or rerun their gates.
 
 Runtime improvements are separate commits from the behavior-identical cleanup.
 
+## OI-101 typing preparation candidate
+
+The follow-up candidate starts from integrated `503fa3f7e`. Token-count
+preparation now normalizes immutable saved history only when its message array
+changes, then normalizes the synthetic draft separately. The saved-message store
+publishes new arrays for additions, edits and deletion. Existing attachment
+ordering/text, reasoning removal, images, draft timestamps, count scheduling and
+model-capacity semantics remain unchanged.
+
+The existing prompt suite passes 8/8 with an observable token-service input
+regression for saved history, inline files, images, draft changes, edited history
+and changed model/capacity. Production ESLint and TypeScript build checks pass.
+The retained `token-draft-screen.mjs`/JSON screen uses the actual transpiled hook
+with a Node memo/effect fixture: 500 saved messages and 100 keystrokes produce
+100/100 exactly equal count inputs before/after. Text transforms fall from 50,100
+to 600; distinct saved-message objects from 50,000 to 500 and content-block
+objects from 60,000 to 600. Preparation time is 37.08 ms before and 2.80 ms after
+in that fixture. These measure fixture work/allocation, not native CPU or RAM.
+The coordinator owns acceptance/integration and the remaining composed gate.
+All JS checks ended before the subsequent Infernix timed window; no job remains.
+
 ## Owned disk and jobs
 
 | Owner / host | Exact path | Status / retention |

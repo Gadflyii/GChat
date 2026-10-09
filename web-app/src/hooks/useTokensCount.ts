@@ -41,6 +41,34 @@ const getInlineFileContents = (
   })
 }
 
+const normalizeTokenMessage = (e: ThreadMessage) => {
+  const inlineFileContents = getInlineFileContents(e.metadata)
+
+  const buildInlineText = (base: string) => {
+    if (!inlineFileContents.length) return base
+    const formatted = inlineFileContents
+      .map((f) => `File: ${f.name || 'attachment'}\n${f.content ?? ''}`)
+      .join('\n\n')
+    return base ? `${base}\n\n${formatted}` : formatted
+  }
+
+  return {
+    ...e,
+    content: e.content.map((c) => ({
+      ...c,
+      text:
+        c.type === 'text'
+          ? {
+              value: removeReasoningContent(
+                buildInlineText(c.text?.value ?? '.')
+              ),
+              annotations: [],
+            }
+          : c.text,
+    })),
+  }
+}
+
 export const useTokensCount = (
   messages: ThreadMessage[] = [],
   uploadedFiles?: Array<{
@@ -65,8 +93,12 @@ export const useTokensCount = (
   const { selectedModel, selectedProvider } = useModelProvider()
   const { prompt } = usePrompt()
 
+  const normalizedHistory = useMemo(
+    () => messages.map(normalizeTokenMessage),
+    [messages]
+  )
   const messagesWithPrompt = useMemo(() => {
-    const result = [...messages]
+    const result = [...normalizedHistory]
     if (prompt.trim() || (uploadedFiles && uploadedFiles.length > 0)) {
       const content = []
 
@@ -87,43 +119,19 @@ export const useTokensCount = (
       }
 
       if (content.length > 0) {
-        result.push({
-          id: 'temp-prompt',
-          thread_id: '',
-          role: 'user',
-          content,
-          created_at: Date.now(),
-        } as ThreadMessage)
+        result.push(
+          normalizeTokenMessage({
+            id: 'temp-prompt',
+            thread_id: '',
+            role: 'user',
+            content,
+            created_at: Date.now(),
+          } as ThreadMessage)
+        )
       }
     }
-    return result.map((e) => {
-      const inlineFileContents = getInlineFileContents(e.metadata)
-
-      const buildInlineText = (base: string) => {
-        if (!inlineFileContents.length) return base
-        const formatted = inlineFileContents
-          .map((f) => `File: ${f.name || 'attachment'}\n${f.content ?? ''}`)
-          .join('\n\n')
-        return base ? `${base}\n\n${formatted}` : formatted
-      }
-
-      return {
-        ...e,
-        content: e.content.map((c) => ({
-          ...c,
-          text:
-            c.type === 'text'
-              ? {
-                  value: removeReasoningContent(
-                    buildInlineText(c.text?.value ?? '.')
-                  ),
-                  annotations: [],
-                }
-              : c.text,
-        })),
-      }
-    })
-  }, [messages, prompt, uploadedFiles])
+    return result
+  }, [normalizedHistory, prompt, uploadedFiles])
 
   const getMaxTokens = useCallback(() => {
     const maxTokensValue =
