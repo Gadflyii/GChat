@@ -128,13 +128,9 @@ is claimed from these screens.
 
 The coordinator records findings in the sole master; OI-092 through OI-095 map
 to the implemented runtime changes above. Source opportunities remain distinct
-from measured gains. In particular, a startup health probe currently holds the
-Host process mutex across up to two one-second HTTP reads per starting instance;
-measure a slow-start snapshot before changing lock/publication ownership.
-Token-count preparation transforms the whole retained history on each draft
-change before its network debounce; measure native long-conversation allocation
-and main-thread time before selecting immutable-history reuse. The all-message
-DOM and attachment-reference projections belong to existing OI-075 acceptance.
+from measured gains. Follow-up candidates for startup lock ownership and typing
+preparation are recorded below as OI-100 and OI-101. The all-message DOM and
+attachment-reference projections belong to existing OI-075 acceptance.
 
 Qualified profile validation streams the full artifact through SHA256 on every
 qualified launch/reload. It already uses `spawn_blocking`; this review adds no
@@ -154,6 +150,29 @@ own focused evidence remains owned by those candidates; this branch does not
 copy their implementations or rerun their gates.
 
 Runtime improvements are separate commits from the behavior-identical cleanup.
+
+## OI-100 startup observation candidate
+
+The follow-up candidate starts from integrated `bc221f048`. Process exit,
+startup timeout, child reaping, log-reader drain and GPU reservation remain owned
+by `HostProcesses` under its mutex. `Host::refresh_processes` takes immutable
+session-scoped probes, awaits independent health/authenticated model reads
+concurrently outside that mutex, then publishes only for the same instance and
+session still Starting with an owned child not observed exited. The existing
+one-second HTTP timeout, startup deadline, model-ID match and lifecycle defaults
+remain unchanged. Stop/reload/shutdown retain their existing child ownership;
+probes never own children or spawn background jobs.
+
+The existing lifecycle fixture now gates two independent health/model endpoints.
+It checks parallel health arrival, snapshot and expected-session stop while
+health reads wait, expected-session reload while model reads wait, and rejection
+of delayed metadata for stopped/replaced sessions. The owned-child timeout and
+real ready/inference fixtures call the updated owner method. Kill and log-drain
+waits remain inside the process lock; this change addresses health HTTP waits.
+
+Source diff inspection and `git diff --check` pass. Rust compilation and these
+regressions are pending the coordinator's active guard release and focused gate.
+No native latency, CPU or RAM improvement is claimed before actual execution.
 
 ## OI-101 typing preparation candidate
 

@@ -1,5 +1,5 @@
-//! Host-owned inference processes. The service loop calls `refresh` to observe exits
-//! and readiness; only processes spawned here can be stopped here.
+//! Host-owned inference processes. The service observes exits and readiness;
+//! only processes spawned here can be stopped here.
 
 use super::engine_registry::InstanceStatus;
 use std::{
@@ -235,6 +235,45 @@ pub struct HostProcesses {
     instances: BTreeMap<Uuid, ManagedInstance>,
     client: reqwest::Client,
     startup_timeout: Duration,
+}
+
+pub(crate) struct StartupProbe {
+    instance_id: Uuid,
+    session_id: Uuid,
+    model_id: String,
+    port: u16,
+    api_key: String,
+    client: reqwest::Client,
+}
+
+pub(crate) struct ReadyObservation {
+    instance_id: Uuid,
+    session_id: Uuid,
+    metadata: serde_json::Value,
+}
+
+impl StartupProbe {
+    pub(crate) async fn observe(self) -> Option<ReadyObservation> {
+        let base = format!("http://127.0.0.1:{}", self.port);
+        let health = self.client.get(format!("{base}/health")).send().await.ok()?;
+        if !health.status().is_success() {
+            return None;
+        }
+        let response = self.client.get(format!("{base}/v1/models"))
+            .bearer_auth(&self.api_key).send().await.ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let models = response.json::<serde_json::Value>().await.ok()?;
+        let metadata = models.get("data")?.as_array()?.iter().find(|model| {
+            model.get("id").and_then(|id| id.as_str()) == Some(self.model_id.as_str())
+        })?.clone();
+        Some(ReadyObservation {
+            instance_id: self.instance_id,
+            session_id: self.session_id,
+            metadata,
+        })
+    }
 }
 
 impl HostProcesses {
@@ -476,7 +515,8 @@ impl HostProcesses {
         Ok(())
     }
 
-    pub async fn refresh(&mut self) -> Result<(), String> {
+    pub(crate) async fn pending_readiness(&mut self) -> Result<Vec<StartupProbe>, String> {
+        let mut probes = Vec::new();
         for instance in self.instances.values_mut() {
             let Some(child) = instance.child.as_mut() else {
                 continue;
@@ -503,41 +543,32 @@ impl HostProcesses {
                 instance.last_error = Some("engine startup timed out".into());
                 continue;
             }
-            let base = format!("http://127.0.0.1:{}", instance.launch.port);
-            let Ok(health) = self.client.get(format!("{base}/health")).send().await else {
-                continue;
-            };
-            if !health.status().is_success() {
-                continue;
-            }
-            let Ok(response) = self
-                .client
-                .get(format!("{base}/v1/models"))
-                .bearer_auth(&instance.api_key)
-                .send()
-                .await
-            else {
-                continue;
-            };
-            if !response.status().is_success() {
-                continue;
-            }
-            let Ok(models) = response.json::<serde_json::Value>().await else {
-                continue;
-            };
-            let metadata = models
-                .get("data")
-                .and_then(|d| d.as_array())
-                .and_then(|models| {
-                    models.iter().find(|m| {
-                        m.get("id").and_then(|id| id.as_str())
-                            == Some(instance.launch.model_id.as_str())
-                    })
-                });
-            if let Some(metadata) = metadata {
-                instance.model_metadata = Some(metadata.clone());
-                instance.status = InstanceStatus::Ready;
-            }
+            probes.push(StartupProbe {
+                instance_id: instance.instance_id,
+                session_id: instance.session_id,
+                model_id: instance.launch.model_id.clone(),
+                port: instance.launch.port,
+                api_key: instance.api_key.clone(),
+                client: self.client.clone(),
+            });
+        }
+        Ok(probes)
+    }
+
+    pub(crate) fn confirm_readiness(&mut self, observation: ReadyObservation) -> Result<(), String> {
+        let Some(instance) = self.instances.get_mut(&observation.instance_id) else {
+            return Ok(());
+        };
+        // A delayed response must not qualify a stopped or replacement session.
+        if instance.session_id != observation.session_id || instance.status != InstanceStatus::Starting {
+            return Ok(());
+        }
+        let Some(child) = instance.child.as_mut() else {
+            return Ok(());
+        };
+        if child.try_wait().map_err(|e| e.to_string())?.is_none() {
+            instance.model_metadata = Some(observation.metadata);
+            instance.status = InstanceStatus::Ready;
         }
         Ok(())
     }
@@ -651,7 +682,7 @@ mod tests {
         // A startup timeout must reap the owned child before the GPU is reused.
         host.startup_timeout = Duration::ZERO;
         host.launch(launch(id)).unwrap();
-        host.refresh().await.unwrap();
+        host.pending_readiness().await.unwrap();
         let failed = host.instances().next().unwrap();
         assert_eq!(failed.status, InstanceStatus::Failed);
         assert_eq!(
