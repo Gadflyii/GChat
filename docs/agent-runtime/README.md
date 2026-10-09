@@ -3,105 +3,110 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-## OI-067 — active outcome correction
+## Current October 9 acceptance
 
-Deliver accurate overall Coordinator status when planning, workers or synthesis
-stop before completion, including loop-breaker fallback, while preserving the
-synthesis content and distinct stage outcomes. Acceptance requires scripted
-regressions through orchestration, persisted history and frontend reporting;
-no changes to step budgets, sampling, permissions or model execution. Saved
-October 1 evidence below establishes the bug; real models will not be rerun.
-Implementation now carries incomplete planning/workers through synthesis,
-records loop fallback as `loop_detected`, fixes returned failure persistence,
+The current composed source gate at `0f06ba433` passes `make verify` at
+21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
+all six coverage floors, 553 desktop, 86 Host, six managed-adapter, 12 hardware
+and 29 utility tests. Strict Clippy results are reused for unchanged Rust.
+Native Windows build exits 0 at 21:30 UTC; independent package verification
+passes at 21:34 UTC for the 125-payload Engine runtime, 104 profiles including
+103 unchanged original entries, and retained Manager `43c8d71cf`.
+Receipts: `/ai/gchat/out/oi106-final-update-20261009/composed-final-gate.json`
+and `package-verification.json`. Installed `0f06ba433` now passes preservation
+and actual OI-106 lifecycle/selection and continued Chat acceptance. Seven
+original threads, all models/profiles, credentials and Host identity survive.
+Receipts in the same folder are `installed-verification.json` and
+`installed-lifecycle-acceptance.json`.
+
+Earlier installed Windows GChat `7d9eb55f9`, retained Manager `43c8d71cf` and
+Engine `2ef56a52a` pass package, payload and user-state preservation verification:
+`/ai/gchat/out/remediation-final-20261009/installed-verification.json`.
+The original workbook/discovery/history checks below retain that installed
+scope; the ordinary continuation now also passes on `0f06ba433`.
+
+Actual saved Chat reads the Budget workbook through native local document
+extraction after approval of precisely the fixture folder, discovers saved-agent
+and Studio tools and the enabled Agent Builder, and continues after compaction.
+The current `0f06ba433` continuation saves message `QXr1fqK7RSTetk3Y` with
+30,000, `finishReason=stop` and ready/idle UI after automatic compaction from
+26,366 to 1,705 input tokens. The observed turn works for 4.614 seconds. Evidence is retained in
+`/ai/gchat/out/remediation-native-correction-20261009/actual-chat-acceptance.json`
+and `/ai/gchat/out/oi106-final-update-20261009/installed-lifecycle-acceptance.json`.
+This validates native workbook extraction; no installed XLSX skill is claimed.
+Real Code, running-worker, configured-connector and Hermes acceptance remains
+partial; [remaining acceptance](remaining-acceptance.md) owns those prerequisites.
+
+Earlier installed `7d9eb55f9` sidebar Stop closes the facade and unloads the
+local Host, while explicit Start reaches Ready/API serving with blank selection
+and stale sidebar status. The OI-106 correction is integrated in `0f06ba433`;
+source/build/package and actual installed Stop/Start/Reload now pass. Start
+and Reload reach distinct Ready sessions with selection and Server running
+retained; final GUI Stop leaves zero Engines/API listeners and remains stable.
+Supported Reload/Stop restores the exact original profile; its known fixed-arena
+startup failure remains separate. Normal apps are restored without debug ports.
+The [integration authority](../code-hygiene/README.md) owns Linux package/X11
+acceptance, pending main merge and current source/build/job inventory. No
+original long agent run is rerun.
+
+## OI-067 — accepted outcome correction
+
+Overall Coordinator status now retains incomplete planning/workers through
+synthesis, records loop fallback as `loop_detected`, persists returned failures,
 and applies the same propagation to Workflow and Goal Loop. Final output and
-individual stage statuses remain available. The focused frontend suites pass
-29 tests, including saved-summary Chat rendering; production ESLint and
-TypeScript pass. All 18 focused Rust tests pass: orchestration (11), run
-history/persistence (6) and the actual loop breaker (1), using offline shared
-caches and nested local build/GPU guards on Ron-9950X3D2. The guarded corrective
-run ended at 16:31:29Z, October 9; no model or GPU inference ran. Full verification
-and installed Windows acceptance belong to the root integration batch. Read-time
-history correction uses only explicit limiting stage/finish reasons, keeps final
-output and raw file bytes intact, and does not infer failure from missing data
-or earlier Goal Loop cycles that may have recovered. Next action: coordinator
-integration verification. Independent read-only source review found no blocking
-status/propagation defect. Task-owned resource placeholders and dependency links
-are removed; the shared compiler cache and original incident evidence remain.
+individual stage outcomes remain available. Read-time history correction uses
+only explicit limiting stage/finish reasons; it preserves raw history bytes and
+does not infer failure from missing data or earlier recoverable Goal Loop cycles.
+Step budgets, sampling, permissions and saved definitions are unchanged.
 
-Two fixture failures were corrected: raw history mocks omitted required metrics,
-and a selector assumed the automatically selected run name was unique. The
-fixture now uses `AgentRunRecord`, so TypeScript checks required fields; the test
-uses the actual automatic-selection behavior. The initial Rust matrix also
-exhausted its script because the output-limit failure fixture omitted the
-runner's existing larger retry. The fixture now supplies both exhaustion
-responses, uses an absolute source file across isolated workers, labels each
-case on failure and distinguishes logical steps from completion attempts. The
-corrective run verified these actual paths; no budget was changed.
+Focused frontend checks pass 29 cases; focused Rust checks pass 18 cases covering
+orchestration, history/persistence and the actual loop breaker. Independent
+read-only review found no blocking defect, and the composed gate above passes.
+Actual installed Agent Studio opens the original saved run
+`eeaff6d8-0e7f-46d3-bb0c-a9695d7c9f8b` as **INCOMPLETE · STEP LIMIT REACHED**
+after its original 45 steps, with final synthesis output, limiting stage outcomes
+and model-instance metrics visible. The original raw history is preserved; this
+is installed read-time correction, not a replay of the run. Receipt:
+`/ai/gchat/out/remediation-native-correction-20261009/ui-original-history-and-server-menu.json`.
+The original October 1 incidents remain under `out/agent-recovery-20261001/`.
+
+Two focused frontend fixture failures were corrected by using `AgentRunRecord`
+with required metrics and testing actual automatic selection. The Rust script
+now supplies the runner's existing output-limit retry, uses an absolute fixture
+path and distinguishes logical steps from completion attempts. The corrective
+checks exercised the actual paths without changing budgets.
+
+## OI-091 — accepted compact discovery source and Chat
+
+Chat advertises three compact capability tools plus its existing skill/agent
+controls. Discovery/schema reads use the cached catalog; invocation re-enters
+`capability_execute` for fresh permission, workspace, disabled-tool, approval and
+cancellation checks. Agent uses frequent native schemas and rare schemas loaded
+by `tool.view`; MCP uses compact discovery/schema reads and approval-gated exact
+connector calls. Code exposes compact search/read/call tools and rechecks the
+originating session policy. RAG, skills, saved-agent/pool orchestration and
+restricted Studio schemas retain their execution ownership and controls.
+No catalog tool or runtime context capacity was removed or changed.
+
+The original installed Muse failure prepared 40,666 tokens against 32,768 loaded
+capacity (`out/oi056-current-engine/muse-chat-response-ui.json`). Installed Chat
+now prepares its fresh short request at 1,514 tokens and completes the actual
+workbook/discovery/continuation sequence above. The 21 scripted SDK harness
+checks include native/MCP search/read/call/final-answer chains and changed policy
+after schema lookup; they do not establish real connector or Code acceptance.
+Presenter checks pass six cases and TypeScript passes.
+
+The earlier 306-test Agent/Code run used main rather than the candidate and is
+not candidate evidence. Composition corrected two borrowed-string mismatches
+and the missing `json!` import, then passed the composed Rust gate above. Actual
+Code/worker/connector checks remain scoped in the existing acceptance reference.
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| OI-067 / Ron-9950X3D2 | `/ai/gchat-worktrees/oi067-agent-outcomes`, `dev/oi067-agent-outcomes-104d4ec6` | Reviewed candidate from `104d4ec6e`; about 264 MiB source, no live jobs/model copies; temporary links and test placeholders released |
+| GChat / coordinator | `/ai/gchat-worktrees/remediation-integration`, `dev/gchat-remediation-104d4ec6` | Composed candidate; active source, build and job inventory in the integration authority |
+| Completed OI-067/OI-091 | `/ai/gchat-worktrees/oi067-agent-outcomes`, `/ai/gchat-worktrees/oi091-lazy-tools` | Owned trees retired after remote/tip/live-use checks; source branches and evidence retained |
 | Stable / shared caches | `/ai/gchat`, `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Baseline and reused dependencies/compiler cache |
-| Evidence | `/ai/gchat/out/agent-recovery-20261001/` | Original incident; retained unchanged |
-## OI-091 compact capability discovery — active
-
-**Outcome:** keep the complete native/MCP catalog and existing execution
-permissions while avoiding sending every tool schema with every ordinary Chat,
-Agent, and Code model request. Use shared discovery, exact schema lookup, and
-on-demand invocation; keep skill and saved-agent/worker-pool calls first-class.
-
-**Acceptance:** a fresh short Chat request can be prepared for a 32K host without
-the full tool catalog; all catalog tools remain discoverable and callable through
-the existing native/MCP dispatch, disabled-tool checks, approvals, workspace
-scope, and cancellation. Agent and Code must use the same compact discovery
-contract without bypassing their current runtime ownership. Verify the relevant
-catalog, prompt, dispatch, and continuation behavior with focused production-path
-tests, then record the coordinator's installed UI and full-gate evidence here.
-
-**Scope/exclusions:** `web-app/src/hooks/useTools.ts`, Chat transport/executor,
-Rust capability catalog/executor, Agent tool loading, and OpenCode bridge. No
-capability removal, arbitrary catalog cap, model/profile/context tuning, new
-dependency, native build, or GPU inference. No run/stage outcome or status
-changes; see the parallel Agent outcome owner for those files.
-
-**Baseline/candidate:** source baseline `104d4ec6e` (`main`); candidate branch
-`dev/oi091-lazy-tools` at `/ai/gchat-worktrees/oi091-lazy-tools`. The installed
-Muse Chat returned `prepared prompt has 40666 tokens, exceeding Engine
-max_context 32768`; see
-`/ai/gchat/out/oi056-current-engine/muse-chat-response-ui.json`. Ready instance
-metadata and selected alias both report 32,768 context, so this work changes
-prompt payload composition, not capacity.
-
-**Inventory:** GChat / coordinator-owned shared candidate; reuse
-`/ai/gchat/node_modules` and `/ai/gchat/src-tauri/target` only for focused checks
-under coordinator lock. Focused Rust output is retained at
-`/ai/gchat/out/oi091-lazy-tools/rust-focused.log`.
-
-**Implementation in progress:** Chat advertises three compact capability tools
-plus its existing skill/agent controls; discovery and schema reads use the
-cached catalog, and invocation re-enters `capability_execute` for fresh policy
-checks. Agent inference sends frequent native schemas and rare schemas loaded by
-`tool.view`; MCP uses compact local discovery/schema reads and an approval-gated
-exact connector call. Code exposes compact search/read/call tools and checks
-the originating session policy again for each target. Existing RAG tools,
-skill/agent orchestration, builder's restricted Studio schemas, approvals and
-cancellation remain on their current paths. Frontend focused suite passes
-(44 tests before the additional integration cases) and TypeScript project build
-passes. Independent SDK review then added two native/MCP four-request
-search/read/call/final-answer chains using an EngineManager fixture configured
-for 32,768 context. Each scripted-model request carries only the three compact
-schemas; the selected schema appears as tool output, disabled-after-read is
-rejected, and execution retains changed workspace/approval/disabled policy.
-All 21 harness tests passed. These scripted checks do not run a model or count
-rendered tokens. Chat and Agent activity label wrapper calls with the resolved
-native or connector target. Focused presenter tests pass (6), and TypeScript
-`tsc -b` passes. **Rust verification correction:** the earlier 306-test Agent
-run and Code bridge test were launched from `/ai/gchat/src-tauri`, not this
-candidate's `src-tauri`; `/ai/gchat/out/oi091-lazy-tools/rust-focused.log`
-therefore does not validate OI-091 Rust changes. The composed candidate gate
-found and corrected two borrowed-string mismatches and an unimported `json!`
-macro in MCP dispatch. Candidate Rust verification remains with the coordinator.
-No runtime context capacity changed.
+| Evidence | `/ai/gchat/out/agent-recovery-20261001/`, `/ai/gchat/out/oi091-lazy-tools/`, `/ai/gchat/out/remediation-native-correction-20261009/`, `/ai/gchat/out/remediation-final-20261009/` | Original incidents, focused/source checks and actual installed evidence; preserve raw histories |
 
 ## Unified sessions and Code capabilities — accepted October 8 source
 
@@ -167,7 +172,9 @@ That record owns Linux/Windows assembly, review and any remaining native checks.
 Installer updates and real-model Windows replay remain outside this source batch.
 The subsequent authorized [October 8 local Windows update](../installer-refresh/README.md)
 now includes this source and current GChat/Host; normal startup and preserved user
-state pass. The user's real-model and shared-session walkthrough remains open.
+state pass. The October 9 Chat workbook/discovery/compaction/continuation
+acceptance is recorded above; real Code, worker and connector walkthroughs
+remain partial.
 
 GInfer's source-audited operations manual and six-entry offline release payload
 are accepted at `66f52a0e2`, handoff `8d0b1a4d1`. Linux staging and native
@@ -234,9 +241,9 @@ and checks termination. Installation success requires payload/startup verificati
 
 The interrupted `/tmp/gchat-agent-followup-20261001` snapshot is removed.
 Unrelated telemetry worktree and Server 2 are outside this cleanup; Server 2
-remains uninstalled. Next user check: replay the saved agent in the existing
-conversation, then send an ordinary message. Real-model replay remains distinct
-from scripted verification. Ask Chat to list saved agents, or type
+remains uninstalled. October 9 installed acceptance opens the original saved
+agent without replay and continues ordinary Chat, as recorded above. Real Code/worker acceptance remains
+distinct from scripted verification. Ask Chat to list saved agents, or type
 “Run my <agent name> on: <task>”; progress stays inline and inherits the chat's
 folders/permissions, subject to saved-definition restrictions.
 
@@ -352,7 +359,7 @@ Full verification and independent review passed. This change delivers the
 reviewed source fixes; retained evidence lives under `out/agent-recovery-20261001/`.
 The authorized [Windows installer update](../installer-refresh/README.md) is installed
 and reopened. Runtime integrity, source identity and preserved user data passed.
-Next: the user replays the continued conversation in the updated app.
+The October 9 installed continued Chat acceptance is recorded above.
 No engine failure or leaked request has been shown.
 The earlier context warning's exact diagnostic is unavailable and has not
 reproduced; do not claim its cause has been established.
@@ -387,7 +394,7 @@ fallback. Original stages exhausted 8 planning / 12 per worker / 25 synthesis
 rounds. Transcripts show repeated file operations, missing `plan` paths and
 access denials consuming those rounds. These are deliberate terminal budget or
 loop exits, not demonstrated engine crashes. The historical implementation followed synthesis and obscured incomplete
-workers. The OI-067 candidate above corrects that reporting; this paragraph
+workers. The accepted OI-067 correction above fixes that reporting; this paragraph
 retains the original incident rather than describing current candidate behavior.
 Step budgets and saved definitions are unchanged. The ordinary-chat Working
 state later reproduced as described above; the context warning did not.

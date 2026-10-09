@@ -14,7 +14,7 @@ The user subsequently approved controlled React/parser/Vitest alignment; see
 
 The physical local GPU is RTX 5090 UUID
 `GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e`; Windows reports 128 GB RAM.
-Installed desktop source is `0a4e2b56c`; Manager source `43c8d71cf` is reused
+Installed desktop source is `0f06ba433`; Manager source `43c8d71cf` is reused
 with explicit unchanged-input provenance. Native clean `2ef56a52a` is installed
 in active and bundled runtime roots; all 125 payloads match. Actual Chat and
 continued replies finish idle, XLSX local document access returns exact fixture
@@ -24,11 +24,31 @@ history displays incomplete with its available output intact. Original threads,
 model files, settings, owner, runs, Host identity/certificate and all 103 original
 profile values survive; the distinct automatic candidate is pending qualification.
 
-Actual sidebar Stop on a local Host alias stopped only the facade, leaving the
-model resident (OI-106). Manager Stop works. The composed fix uses the local
-Host's session-checked lifecycle, preserves explicit Start/Restart selection and
-prevents stale status reads from undoing Stop. Paired remote Stop remains local
-facade control. Final composed checks and rebuilt native acceptance are pending.
+Reviewed source `68315e6a3`, integrated as `0f06ba433`, preserves Ready
+aliases, rejects stale picker reads and shares native startup across sidebar,
+Host readiness and persisted provider hydration. Stop invalidates delayed local
+or paired intake and waits for an already dispatched native start before
+shutting down the singleton. Paired remote aliases receive no native model
+mutation. All 85 focused cases and composed `make verify` pass: 2,112 frontend/
+core checks, 102 extension checks, six coverage floors and supported Rust suites.
+Native build exits 0 at 21:30 UTC; independent package verification passes at
+21:34 UTC. Installed payload/preservation and actual lifecycle acceptance pass.
+
+Real sidebar Stop leaves the Host stopped with zero Engines/API listeners and
+remains stable on a later check. Start reaches fresh Ready session
+`11ba8c36-0426-4912-a089-083cfca2b86f` with selected alias/Server running and one
+Engine/API listener. Reload reaches distinct Ready session
+`3b3bf837-f98b-400b-bf19-b9c05c334d21` with selection/status retained. Continued
+Chat saves `QXr1fqK7RSTetk3Y` ready/stop with 30,000 after automatic compaction
+from 26,366 to 1,705 tokens; the 4.614-second turn returns idle. Final GUI Stop
+returns to zero Engines/API listeners. Supported Reload/Stop restores the exact
+original profile; its existing fixed-arena startup failure remains OI-072.
+Normal apps are restored without debug listeners. Evidence:
+`out/oi106-final-update-20261009/installed-verification.json` and
+`installed-lifecycle-acceptance.json`. This is C4/32K functional acceptance,
+not a new 128K capacity pass. Earlier `7d9eb55f9` Start reached Ready/API serving
+with blank selection/stale status; that failure remains historical evidence.
+Linux package/X11 refresh and reviewed main merge/push remain pending.
 
 GInfer `docs/installer-refresh/README.md` owns OI-058's portability build:
 frozen production source matches requested `f9af4cff4`, current base `f6d097566`,
@@ -80,7 +100,8 @@ open; no reduced margin, retry or capacity promotion is authorized by this resul
 Evidence: `out/code-hygiene-20261009/integration/` and
 `out/remediation-native-correction-20261009/`.
 
-Accepted source is main `104d4ec6e` (desktop runtime `a40d7221`). Both clean
+Main baseline remains `104d4ec6e`; installed desktop is `0f06ba433` on the
+pushed remediation branch, with reviewed main merge pending. Both clean
 merged OI-056 source worktrees are retired; their committed branches and remote
 ancestors remain. Current remediation is coordinated in
 [code hygiene](../code-hygiene/README.md).
@@ -97,9 +118,8 @@ no model bytes were copied or downloaded. Retain that useful registration.
 
 Use only `/ai/coordination/locks/local-5090-gpu.lock` and
 `/ai/coordination/locks/local-build.lock`, held for the actual run. The old owned
-launcher was updated; no `/tmp` GPU/build lock is used. C4 has the current signed
-startup matrix priority; our next native build starts after its actual release,
-not a predicted time. Keep the physical RAM floor and compile/load exclusion.
+launcher was updated; no `/tmp` GPU/build lock is used. Windows source/build/package and actual lifecycle acceptance are complete;
+Linux assembly needs its separately admitted window after actual resource handoff. Keep the physical RAM floor and compile/load exclusion.
 Failures go in GInfer's sole master `docs/maintainer/open-work.md` under its edit
 lock. Ron's newer in-session instruction authorizes the post-Windows-merge GChat bug
 and review phase now. After this client source merges, retire only verified
@@ -461,8 +481,9 @@ The runner rejects assembly until the accepted source includes that checked
 builder. Evidence is `out/oi070-linux-refresh/inputs.json`,
 `aligned-toolchain-preflight.log` and `lock-fixture/receipt.json`.
 
-Next: coordinator source integration/full verification, then one Linux assembly
-and package/X11 acceptance. No Linux package has been refreshed by this source work.
+Composed source verification and installed Windows acceptance pass at
+`0f06ba433`. Next: one Linux assembly and package/X11 acceptance, then reviewed
+main merge/push. No Linux package has been refreshed by this source work.
 
 ## Accepted Linux installers — September 30, 2026
 

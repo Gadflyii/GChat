@@ -4,15 +4,36 @@ This reference supports the existing entries in GInfer's [single master
 list](/ai/ginfer-worktrees/open-work/docs/maintainer/open-work.md). It records
 evidence scope and concrete check inputs; issue status, owners and prioritization
 remain in that list. Repository: GChat; subject: `docs/agent-runtime/`.
-The October 9 review uses source `104d4ec6e`, installed GChat `a40d7221`,
-Manager `ce6a6c0e6`, and native Engine `2ef56a52a`. Source acceptance and installed
-acceptance are different claims.
+Current installed source is `0f06ba433`; retained Manager is `43c8d71cf`
+and native Engine is `2ef56a52a`. Composed `make verify` passes at 21:17 UTC,
+the native Windows build exits 0 at 21:30 UTC, and independent package
+verification passes at 21:34 UTC. The 125-payload runtime, 104 profiles with
+103 unchanged original entries and the reused Manager producer verify.
+Receipts: `/ai/gchat/out/oi106-final-update-20261009/composed-final-gate.json`
+and `package-verification.json`. Installed source `0f06ba433` now passes
+preservation and actual sidebar Stop/Start/Reload, selection/status and continued
+Chat checks. Seven original threads, all models/profiles, credentials and Host
+identity survive. Stop remains stable with zero Engines/API listeners; Start and
+Reload reach distinct Ready sessions with selected alias/Server running retained.
+Final GUI Stop and supported exact original-profile restoration leave zero
+Engines/API listeners; normal apps are restored without debug ports.
+Receipts in that folder are `installed-verification.json` and
+`installed-lifecycle-acceptance.json`. Linux package/X11 acceptance and main
+merge remain pending; the known saved fixed-arena startup failure is unchanged.
 
-The next dependent action is OI-091's shared tool discovery/schema fix followed
-by the coordinated installed Chat continuation check. This work performed no
-GPU operation, inference, application restart, dependency installation,
-publication, remote administration or user permission/settings mutation. Server
-2 remains excluded; Ron's OI-077 profile-presentation work remains parked.
+Earlier installed `7d9eb55f9` passes package/install preservation at
+`/ai/gchat/out/remediation-final-20261009/installed-verification.json`.
+Its accepted Chat workbook/discovery/compaction/continuation and original saved-run
+reporting are recorded below. Its blank picker/stale status after explicit Start
+is retained failure evidence; the integrated correction now passes installed
+acceptance. The [integration authority](../code-hygiene/README.md) owns the next
+Linux package/X11 and main-merge work. Windows acceptance used the canonical
+GPU/build guards at WSL PIDs 838489/847974. C2 ended its sole
+Linux repro at 21:08:45 UTC; its lost-controller diagnostic remains invalid and
+C2 owns follow-up. Real Code, worker, connector and Hermes acceptance remains
+partial. Physical fleet, Linux native providers and community publication retain
+their prerequisites below. Server 2 is untouched; Ron's OI-077
+profile-presentation work remains parked.
 
 ## Shared conversation, documents and compaction
 
@@ -37,24 +58,35 @@ An actual workbook copied from the existing Rust regression is prepared at
 independent XML read confirm A1=Revenue, B1=42000, A2=Expenses, B2=12000.
 Fixture integrity establishes the check input only.
 
-For the coordinated installed OI-068 replay, use the exact fixture path from an
-otherwise normal saved Chat and Code workspace. Ask for its worksheet and both
-amounts. Preserve the actual external-folder request and the user's decision;
-inspect the shared tool summary and subsequent assistant reply for the exact
-cells. An auto-approval mode alone does not establish folder permission. A denied
-folder check must preserve denial; discovery must not grant access. Continue in
-the same session, reload saved history and inspect retained document references,
-sidebar type and stock Code transcript authority. Then exercise the existing
-`/compact` boundary in Chat, Code and a running worker, preserving context counts,
-checkpoint state, completion/Working state and metrics. Select existing saved
-agents, skills and configured connectors through the same native executor; do
-not change their definitions, grants or budgets to make the replay pass.
+Actual installed Chat acceptance reads the native workbook from
+`C:\Users\Ron\OneDrive\Desktop\GChat acceptance 20261009\Quarterly budget.xlsx`
+after approval of precisely its fixture folder. It exposes worksheet Budget,
+Revenue 42,000 and Expenses 12,000; a later reply retains both values. Shared tool
+discovery identifies agent/Studio controls and the enabled Agent Builder without
+creating or running an agent. Automatic and manual Chat compaction complete,
+and continued Chat reaches `stop`/ready rather than Working. Earlier acceptance
+used 25,988 → 5,419 input tokens; the accepted `7d9eb55f9` continuation used
+26,285 → 2,159. Current `0f06ba433` continuation saves `QXr1fqK7RSTetk3Y` as
+ready/stop with output 30,000 after compaction from 26,366 to 1,705 tokens;
+the UI is idle after the 4.614-second turn.
+Evidence: `/ai/gchat/out/remediation-native-correction-20261009/actual-chat-acceptance.json`
+and `/ai/gchat/out/oi106-final-update-20261009/installed-lifecycle-acceptance.json`.
+The initial actual short request now prepares 1,514 tokens; the earlier OI-091
+40,666-token overflow is historical. Workbook acceptance covers native local
+extraction, not an installed XLSX skill or the missing original Desktop error.
 
-Installed tiny-question Chat is currently blocked by OI-091: Muse recorded
-40,666 prepared input tokens against 32,768 loaded capacity. Source or fixture
-checks cannot substitute for actual continuation after that fix. The original
-Desktop Excel error is unavailable; this workbook validates the corrected
-shared path and cannot establish that original incident's cause.
+The installed original run `eeaff6d8-0e7f-46d3-bb0c-a9695d7c9f8b` displays
+**INCOMPLETE · STEP LIMIT REACHED**, original 45 steps, final output and throughput
+metrics. Its raw history remains intact; no original long run was rerun. Evidence:
+`/ai/gchat/out/remediation-native-correction-20261009/ui-original-history-and-server-menu.json`.
+
+Source/stock-session evidence in the table does not close actual Code document
+access and continuation, running-worker compaction/checkpoint/continuation or
+configured connector execution. Those checks still require their real selected
+sessions and inputs. Preserve existing definitions, folder decisions, grants,
+budgets and transcript authority. A denied folder stays denied; discovery alone
+never grants access. Use the existing `/compact` boundary and retain loaded
+capacity, context counts, checkpoint state, completion/Working state and metrics.
 
 Hermes configuration independently advertises 65,536 tokens
 (`web-app/src/routes/launch/index.tsx` and native `configure_hermes_agent`), and
@@ -180,9 +212,10 @@ available receipt.
 
 | Owner / exact path | Purpose and retention |
 | --- | --- |
-| Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Evidence reference from `104d4ec6e`; no product source or shared cache changes. |
-| `/ai/gchat/out/remaining-acceptance-20261009/` | Retain bounded idle receipt/command and the copied Office fixture for the coordinated installed replay; no live job or build. |
-| Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/` | Reused retained evidence; no duplicated suite or model artifacts. |
+| Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Owned tree retired after remote/tip/live-use checks; branch and concise evidence retained. |
+| Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Current composed source; active job/build inventory in the integration authority. |
+| `/ai/gchat/out/remaining-acceptance-20261009/` | Retain bounded idle receipt/command and the accepted Office fixture; no live job or build. |
+| Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
 
 Two file-launch attempts ran no measurement: a guessed native path did not
 exist, and UNC script-file execution was rejected by PowerShell authorization.
@@ -191,5 +224,6 @@ without changing execution policy. Future checks use actual path translation,
 durable JSON output and retained process completion status.
 
 This documentation-only change uses link/path review and `git diff --check`.
-Already accepted source suites were not rerun; no installed capability or
-publication result is claimed by preparing inputs or writing this reference.
+Accepted source suites and installed receipts are reused without reruns. Actual
+installed Chat acceptance is identified above; preparing inputs establishes no
+additional capability or publication result.

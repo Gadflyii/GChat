@@ -4,8 +4,8 @@ Repository: GChat. Owner: GChat coordinator. Subject: `docs/ginfer-manager/`.
 Open defects and TODOs belong in the [master list](../open-work.md); this record
 retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
-Accepted runtime source: `ce6a6c0e6` for Windows; `2a6e21ff2` for the retained
-Linux package. Packages and native proof live in `/ai/gchat/out/ginfer-manager/`.
+Installed Windows Manager producer is `43c8d71cf`; the retained Linux
+package remains `2a6e21ff2`. Packages and native proof live in `/ai/gchat/out/ginfer-manager/`.
 Documentation-only handoffs do not rebuild accepted binaries.
 
 ## Outcome and acceptance
@@ -27,6 +27,21 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
+Installed Windows client `0f06ba433` passes with retained Manager producer
+`43c8d71cf` and clean Engine `2ef56a52a`. Composed `make verify`, native build,
+package verification and installed payload/user-state preservation pass.
+Seven original threads, all models/profiles, credentials and Host identity are
+preserved. Actual sidebar Stop stays stopped with zero Engines/API listeners;
+Start and Reload reach distinct Ready sessions with selected alias/Server
+running retained. Continued Chat returns 30,000 ready/stop after compaction
+from 26,366 to 1,705 tokens; final GUI Stop returns to zero. Supported
+Reload/Stop restores the original profile exactly and normal apps are restored
+without debug ports. Evidence:
+`/ai/gchat/out/oi106-final-update-20261009/installed-verification.json` and
+`installed-lifecycle-acceptance.json`. Linux package/X11 refresh and main merge
+remain pending. This C4/32K functional acceptance leaves the original fixed-arena
+128K startup failure and physical qualification requirements below unchanged.
+
 ### Current Engine profile repair — OI-072
 
 The installed Engine is now native `2ef56a52a`. The original fixed-pool profile
@@ -43,7 +58,10 @@ Automatic sizing uses current post-startup availability minus the same guard;
 it maximizes the shared arena instead of reserving yesterday's unused capacity.
 GChat already forwards and persists null/omitted versus positive fixed arena
 bytes correctly. Catalogs are owned by GInfer's `config/launch-profiles/`.
-The candidate is not installed and does not rewrite live `host.json`.
+The 104-profile Windows catalog is installed with the distinct automatic entry
+still calculated/pending; original 103 profile values are retained exactly.
+Supported lifecycle tests restore the original saved profile. No private
+`host.json` edit or capacity promotion is used.
 
 Frozen `2ef56a52a` source selects a 2,208-token native tail containing
 8,366,592 bytes, including 256-byte plane alignment and the 15-token BF16 V
@@ -261,10 +279,11 @@ locks in 6.69 seconds, reusing `/ai/gchat/src-tauri/target`. The real
 the pending automatic policy and evidence intact. Receipt:
 `/ai/gchat/out/oi072-current-profiles/focused-host-gate.log`; its disposable
 validator source and binary were removed. Independent review found no blocker
-in the evidence-label changes. Required `make verify` remains with the
-coordinator's composed integration gate. The two
-source trees occupy 264 MiB and 240 MiB; dependency links reuse existing shared
-caches. No disposable model, build or GPU output was created.
+in the evidence-label changes. The composed `make verify` at `0f06ba433` now
+passes; source verification does not qualify full-context capacity. Candidate
+source is represented in the integration tree, with retirement pending final
+merge/live-use checks; dependency links reuse shared caches. No disposable model,
+build or GPU output was created by this source-preparation work.
 
 ### Retained startup diagnosis — OI-066
 

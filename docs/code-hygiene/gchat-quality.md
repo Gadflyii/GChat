@@ -14,11 +14,41 @@ or memory improvements require native measurements; JSDOM screens do not supply
 them. GPU/model operations, deployment, remote hosts, Server 2, dependencies,
 framework/platform changes and speculative SIMD are excluded.
 
-## Current candidate
+## Current integration and accepted review
 
-Baseline is main `104d4ec6e`. Owned candidate is
-`/ai/gchat-worktrees/review-quality-104d4ec6`, branch
-`review/gchat-quality-104d4ec6`. Initial cleanup changes four production files:
+Baseline is main `104d4ec6e`. Reviewed changes are integrated in
+`/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6`.
+The current composed `make verify` gate at `0f06ba433` passes at 21:17 UTC:
+2,112 frontend/core checks (six skipped), 102 extension checks, all six coverage
+floors, 553 desktop, 86 Host, six managed-adapter, 12 hardware and 29 utility
+tests. Strict Clippy is reused for unchanged Rust. Native Windows build exits 0
+at 21:30 UTC; independent package verification passes at 21:34 UTC for the
+125-payload Engine runtime, 104 profiles with 103 unchanged original entries
+and retained Manager `43c8d71cf`. Receipts:
+`/ai/gchat/out/oi106-final-update-20261009/composed-final-gate.json`
+and `package-verification.json`. Installed `0f06ba433` now passes payload/
+preservation checks and actual OI-106 lifecycle/selection and continued Chat
+acceptance. Seven original threads, models/profiles, credentials and Host
+identity survive. Continued Chat saves ready/stop output 30,000 after compaction
+from 26,366 to 1,705 tokens and returns idle. Current receipts in that folder are
+`installed-verification.json` and `installed-lifecycle-acceptance.json`.
+
+Earlier Windows GChat `7d9eb55f9`, retained Manager `43c8d71cf` and unchanged
+Engine `2ef56a52a` pass package/install preservation verification. Actual Chat
+workbook, agent discovery, compaction and continuation are accepted in the
+[runtime record](../agent-runtime/README.md); its continuation returns 30,000
+with `stop` and ready/idle UI. These results retain their earlier installed scope
+and establish no capacity promotion or native CPU/RAM improvement.
+
+The review tree `review-quality-104d4ec6` and supporting `review-hardware-880ecb5c`
+are retired after remote/tip/live-use checks; source branches and evidence remain.
+The integration authority owns current build/job inventory, pending Linux
+package/X11 acceptance and main merge. Windows acceptance used canonical
+GPU/build guards at WSL PIDs 838489/847974; C2 ended its sole Linux repro at
+21:08:45 UTC and owns its invalid diagnostic follow-up. Windows acceptance is
+complete; Linux refresh and main merge remain open.
+
+The accepted initial cleanup changes four production files:
 
 - `ginfer-manager/ui/manager.js`: remove discovered-host fallbacks after the
   discovered pairing branch always returns.
@@ -36,11 +66,11 @@ proof that every repository path is free of dead code.
 
 Cleanup commit is `7e80fa7ae`. Runtime changes are separate commits:
 `2ff833a3a` (Manager rendering), `9bf2e3724` (inventory persistence),
-`de458c468` (ordered parallel observations), and `eeb7fc837` (pinned transports). The focused gates below pass. The coordinator's composed
-`make verify`, native GChat adapter build and installed acceptance remain the
-next integration actions.
+`de458c468` (ordered parallel observations), and `eeb7fc837` (pinned transports).
+The focused gates below and the composed gate above pass. Native package and
+Chat and OI-106 lifecycle acceptance are recorded above and pass.
 
-## Review evidence and selected next action
+## Retained review evidence
 
 Source inspection identifies serial Manager host reads, unconditional durable
 scan writes, per-request TLS clients and complete Manager DOM replacement.
@@ -53,7 +83,7 @@ was 1.283 ms, p95 4.425 ms; the Node process used 385.942 ms CPU. With the docum
 marked hidden, median was 1.180 ms and CPU was 279.032 ms. These are a bounded DOM
 screen and deterministic replacement evidence, not native desktop measurements.
 
-Selected next steps, sent to the coordinator before implementation:
+The implemented design preserves these behaviors:
 
 1. Preserve registration order and previous offline data while reading independent
    Manager snapshots concurrently. Fleet discovery/enrollment remains afterward.
@@ -81,8 +111,8 @@ write fails. The selected Host-owned dirty flag remains set until successful
 state persistence. TLS pools belong to the shared Client's registered host/pin/
 grant; changed registration invalidates them, and credentials remain per-request.
 Already superseded request metadata may use an uncached pin client, preserving
-existing in-flight behavior without reinserting a stale pool. The coordinator
-has these designs; no external protocol or model behavior changes are proposed.
+existing in-flight behavior without reinserting a stale pool. These accepted
+changes preserve external protocols and model behavior.
 
 The coordinator's native Windows idle observation is retained in
 `/ai/gchat/out/remaining-acceptance-20261009/idle-sample.json`. At zero model
@@ -113,7 +143,7 @@ there is no remaining focused client failure. Receipts are
 `/ai/gchat/out/code-hygiene-20261009/review-quality-104d4ec6/rust-focused*.log`.
 Only offline cached Host/Manager Rust checks ran under the canonical build/GPU
 locks. The native GChat inference adapter preserves its session/header/credential
-checks in source and awaits the coordinator's composed compile/integration gate.
+checks; the composed compile/integration gate above passes.
 
 The heartbeat screen changes Host revisions, local-administrator last-seen data,
 and client timestamp milliseconds within the displayed second on 100 updates.
@@ -128,8 +158,8 @@ is claimed from these screens.
 
 The coordinator records findings in the sole master; OI-092 through OI-095 map
 to the implemented runtime changes above. Source opportunities remain distinct
-from measured gains. Follow-up candidates for startup lock ownership and typing
-preparation are recorded below as OI-100 and OI-101. The all-message DOM and
+from measured gains. Integrated startup lock ownership and typing
+preparation changes are recorded below as OI-100 and OI-101. The all-message DOM and
 attachment-reference projections belong to existing OI-075 acceptance.
 
 Qualified launch/reload retains full artifact SHA256 verification in
@@ -146,12 +176,12 @@ establish a thread leak. No supported SIMD hot path was established.
 
 Independent read-only reviews found no blocking defect in the actual OI-067
 outcome/status correction or OI-072 recorded-Engine evidence-label patch. Their
-own focused evidence remains owned by those candidates; this branch does not
-copy their implementations or rerun their gates.
+focused evidence is retained and the composed gate includes their implementations;
+no duplicate review gate is needed.
 
 Runtime improvements are separate commits from the behavior-identical cleanup.
 
-## OI-100 startup observation candidate
+## OI-100 — integrated startup observation
 
 The follow-up candidate starts from integrated `bc221f048`. Process exit,
 startup timeout, child reaping, log-reader drain and GPU reservation remain owned
@@ -178,10 +208,10 @@ The offline cached gate ran from this owned tree at 18:01:42–18:02:09Z under
 canonical build then GPU locks, bounded to 300 seconds with six Cargo jobs.
 Both guards released; no job remains. Receipt and wrapper are retained as
 `oi100-focused-gate.log`/`.sh` in the owned evidence directory. Diff inspection
-and `git diff --check` pass. Native desktop integration belongs to the
-coordinator; this fixture establishes no native latency, CPU or RAM improvement.
+and `git diff --check` pass. The composed desktop gate passes; this fixture
+establishes no native latency, CPU or RAM improvement.
 
-## OI-101 typing preparation candidate
+## OI-101 — integrated typing preparation
 
 The follow-up candidate starts from integrated `503fa3f7e`. Token-count
 preparation now normalizes immutable saved history only when its message array
@@ -199,46 +229,56 @@ with a Node memo/effect fixture: 500 saved messages and 100 keystrokes produce
 to 600; distinct saved-message objects from 50,000 to 500 and content-block
 objects from 60,000 to 600. Preparation time is 37.08 ms before and 2.80 ms after
 in that fixture. These measure fixture work/allocation, not native CPU or RAM.
-The coordinator owns acceptance/integration and the remaining composed gate.
+The composed frontend gate above passes with this integrated change.
 All JS checks ended before the coordinator's subsequent timing-window restriction;
 no job remains. This does not establish the other owner's actual run start time.
 
+## OI-106 — installed lifecycle accepted
+
+Actual installed `0a4e2b56c` sidebar Stop originally closed facade 1337 while
+leaving the local Host Ready with one Engine. The reviewed source resolves
+aliases against the registry's actual local Host ID and uses Host Stop/Start/
+Restart with a fresh expected session. Paired aliases receive no Host mutation
+from local facade Stop. Ready-only picker and active-model projections share
+snapshot publication; delayed refresh preserves lifecycle snapshots published
+since its reads began, without relying on revision/UUID chronology.
+
+Focused sidebar/restart/Host-store checks passed 21 cases, production ESLint and
+`tsc -b` passed, and the composed gate above passed. Installed `7d9eb55f9` Stop
+now closes the facade and unloads the local Host. A subsequent explicit Start
+reaches Ready and API serving, but its picker stays blank and sidebar status
+stays stale. The earlier source expectation that restoring the selected alias
+also proves complete Start behavior is invalidated by this installed observation.
+Evidence is retained under `/ai/gchat/out/remediation-final-20261009/`.
+
+Winner `68315e6a3`, integrated in `0f06ba433`, corrects shared-facade startup
+for persisted `ginfer-lan` aliases/Ready transitions and invalidates delayed
+automatic intake after explicit Stop. Its 85 focused checks, production lint,
+noEmit and independent review pass. The composed gate, native build and package
+verification and actual installed acceptance are complete. Real DOM sidebar
+Stop closes the facade and unloads the Host, with zero Engines/API listeners on
+both initial and later observations. Start reaches Ready in session
+`11ba8c36-0426-4912-a089-083cfca2b86f`; Reload reaches Ready in distinct session
+`3b3bf837-f98b-400b-bf19-b9c05c334d21`. Selection and Server running remain
+visible with one Engine/API listener. Final GUI Stop returns to zero, and
+supported Reload/Stop restores the original profile exactly. Normal apps are
+restored without debug ports. This accepts the C4/32K functional route; the
+original fixed-arena 128K startup failure remains OI-072. The old OI-106
+Stop tree is retired; source branch and evidence remain. No runtime capacity promotion follows from this work.
+
 ## Owned disk and jobs
-
-OI-106 follows actual installed `0a4e2b56c` sidebar Stop leaving the local Host
-Ready with one Engine after facade 1337 stopped. Candidate
-`/ai/gchat-worktrees/oi106-local-host-stop-159224262` on
-`review/gchat-local-host-stop-159224262` starts from `159224262`.
-The sidebar resolves aliases against the registry's actual local Host ID and
-uses existing Host Stop/Start/Restart with a fresh expected session. Paired
-aliases receive no Host mutation from local facade Stop. Ready-only picker and
-active-model projections share the same snapshot publication; stopped local
-aliases disappear, explicit Start restores the saved instance, and changed
-sessions abort readiness without replaying mutations. Existing watchdog values
-remain; no model, context, profile or facade contract is changed.
-
-An in-flight refresh keeps any lifecycle snapshot published since its reads
-began, using snapshot object identity rather than revision/UUID chronology.
-Delayed-Stop regressions retain the stopped view with both a greater revision
-and a reset revision, so a replaced Host boot is not rejected by counter order.
-Explicit Start and Restart restore the selected alias only after the current
-session reaches Ready, if its selection was cleared by the Ready-only projection.
-Focused sidebar/restart/Host-store tests pass 21/21 on the approved aligned
-`oi074-frontend-packages/node_modules` graph; production ESLint and `tsc -b`
-pass. The switch-race fixture owns its asynchronous updates through `act`;
-the focused rerun emits no React act warnings. This is source evidence;
-composed/native acceptance belongs to the coordinator. No native/GPU/build job
-or model copy is owned.
 
 | Owner / host | Exact path | Status / retention |
 | --- | --- | --- |
-| GChat review / local Linux | `/ai/gchat-worktrees/review-quality-104d4ec6` | Candidate source; retain until coordinator integration |
+| GChat review / local Linux | `/ai/gchat-worktrees/review-quality-104d4ec6`, `/ai/gchat-worktrees/review-hardware-880ecb5c` | Retired owned source trees after integration and remote/tip/live-use checks; branches/evidence retained |
+| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Current composed source; build/job inventory in subject README |
 | GChat review / local Linux | `/ai/gchat/out/code-hygiene-20261009/review-quality-104d4ec6/` | Bounded DOM screens and focused Rust receipts, including contrary failures; retain evidence |
 | Shared dependency/compiler cache | `/ai/gchat/node_modules`, `/ai/gchat/src-tauri/target` | Reuse only; not owned disposable outputs |
 
-No owned compiler, GPU/model, deployment or remote job is live. The candidate
-source tree occupies 265 MiB; small review receipts occupy 72 KiB. The
-node_modules symlink and shared target cache are reused, not duplicate allocations.
+No delegated review job remains live. The retired review trees own no retained
+compiler/model allocation. Small review receipts and shared compiler/dependency
+caches remain; current native packages are retained under the integration
+authority. No whole-fleet cleanup claim is made.
 An initial
 inefficient reference survey was stopped; the corrected survey tokenizes only
 tracked text once and completed in 28 ms. No duplicate model or build directory was allocated.
