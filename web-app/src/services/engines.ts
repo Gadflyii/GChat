@@ -31,7 +31,7 @@ export type EngineSnapshot = {
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
       options: { vision: boolean };
-      qualification: { tier: 'full-context-tested' | 'calculated-startup-smoke' | 'calculated-pending-validation' } } }[];
+      qualification: { tier: 'full-context-tested' | 'calculated-startup-smoke' | 'calculated-pending-validation'; engine_revision: string } } }[];
   profile_error?: string | null;
   host_id: string; display_name: string; revision: number;
   gpus: import('@/lib/model-release').ModelGpu[];

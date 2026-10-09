@@ -11,7 +11,7 @@ const snapshot = (): EngineSnapshot => ({
     upstream_model_id: 'muse', status: 'ready', configuration: { gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1 } }],
   launch_profiles: [{ model_id: 'model', gpu_groups: [], compatible_gpu_groups: [['GPU-one']],
     profile: { id: 'fixture-c4', name: 'Fixture C4', tp: 1, max_context: 32768, concurrency: 4,
-      options: { vision: false }, qualification: { tier: 'full-context-tested' } } }],
+      options: { vision: false }, qualification: { tier: 'full-context-tested', engine_revision: '922e5a879b9af12e52763d52b73362937f9dd148' } } }],
 })
 
 it('reserves other instances GPUs and requires confirmation before switching their profile', async () => {
@@ -53,6 +53,16 @@ it('distinguishes calculated smoke evidence from full-context testing', () => {
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   expect(screen.getByText(/Full-length requests have not been tested/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeEnabled()
+})
+
+it('identifies the Engine recorded by full-context evidence without claiming a newer runtime passed', () => {
+  const data = snapshot()
+  data.instances = []
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
+  const option = screen.getByRole('option', { name: /Full-context tested · Engine 922e5a87/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
+  expect(screen.getByText(/Evidence applies to Engine 922e5a87 and the recorded workload/)).toBeInTheDocument()
+  expect(screen.getByText(/A changed Engine needs separate validation/)).toBeInTheDocument()
 })
 
 it('defaults new instances to an available Vision profile without starting it', () => {

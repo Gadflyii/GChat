@@ -8,6 +8,12 @@ const modelLabel = (model) => {
 }
 const size = (bytes) => Number.isFinite(Number(bytes)) ? `${(Number(bytes) / 2 ** 30).toFixed(1)} GiB` : '—'
 const instanceKey = (ref) => `${ref.host_id}/${ref.instance_id}`
+const lastSeen = (client) => client.last_seen_unix_ms ? `Last seen ${new Date(client.last_seen_unix_ms).toLocaleString()}` : 'No requests yet'
+const renderKey = (view) => JSON.stringify({ ...view, hosts: array(view.hosts).map((host) => ({ ...host,
+  snapshot: host.snapshot && { ...host.snapshot, revision: undefined,
+    local_administrator: host.snapshot.local_administrator && { active_requests: host.snapshot.local_administrator.active_requests },
+    clients: array(host.snapshot.clients).map((client) => ({ ...client, active_instances: undefined, last_seen_unix_ms: lastSeen(client) })) },
+})) })
 
 export function createManager(root, invoke, listen, storage = globalThis.localStorage) {
   const document = root.ownerDocument
@@ -21,6 +27,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     ignored: new Set(readPreference('ignored', [])), sections: new Map(), catalogs: new Map(),
     busy: false, notice: '', error: '', errorSource: null, dialog: null, stopped: false }
   const subscriptions = []
+  let snapshotKey
+  let pendingRender = false
 
   function append(node, ...children) {
     for (const child of children.flat(Infinity)) if (child != null) node.append(child.nodeType ? child : document.createTextNode(String(child)))
@@ -59,13 +67,18 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
 
   function apply(view) {
     if (state.stopped || !view) return
+    const key = renderKey(view)
+    const changed = key !== snapshotKey
+    const previousError = state.error
+    const previousSelected = state.selected
+    snapshotKey = key
     state.view = view
     if (state.errorSource === 'runtime') state.error = ''
     if (!array(view.hosts).some((host) => host.host_id === state.selected)) {
       state.selected = array(view.hosts).find((host) => host.local)?.host_id || array(view.hosts)[0]?.host_id || null
     }
     savePreference('host', state.selected)
-    render()
+    if (changed || previousError !== state.error || previousSelected !== state.selected) render()
   }
 
   async function refresh() {
@@ -162,14 +175,14 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       return
     }
     const name = field('Client name', 'client_name', state.view.client_name || '', 'text', { required: '', maxlength: 80 })
-    const address = field('Host address', 'base_url', discovered?.urls?.[0] || '', 'url', { required: '', placeholder: 'https://192.168.1.10:7444' })
+    const address = field('Host address', 'base_url', '', 'url', { required: '', placeholder: 'https://192.168.1.10:7444' })
     const secureStatus = h('p', { class: 'section-error', role: 'status' })
     dialog('Pair a host',
       'Pairing saves the verified host certificate and this client’s grant in shared native storage. Secure storage must be available.',
       [name, address, button('Check secure storage', async () => {
         try { await run({ action: 'secure_storage' }, 'Secure storage is ready'); secureStatus.textContent = 'Secure storage is ready' }
         catch (error) { secureStatus.textContent = String(error) }
-      }), secureStatus], 'Pair', (form) => run({ action: 'pair', host_id: discovered?.host_id || null,
+      }), secureStatus], 'Pair', (form) => run({ action: 'pair', host_id: null,
         base_url: fieldValue(form, 'base_url'), client_name: fieldValue(form, 'client_name') }, 'Host paired'))
   }
 
@@ -200,7 +213,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     function fill() {
       if (mode === 'profile') {
         content.replaceChildren(select('Profile and GPU group', 'profile_choice', profiles.map(({ entry, group }, index) => [String(index),
-          `${entry.profile.name} · ${gpuNames(group)} · ${entry.profile.qualification?.tier || ''}`]), '0'))
+          `${entry.profile.name} · ${gpuNames(group)} · ${entry.profile.qualification.tier} · Engine ${entry.profile.qualification.engine_revision.slice(0, 8)}`]), '0'),
+        h('p', { class: 'muted' }, 'Profile evidence applies to its recorded Engine and workload. A changed Engine needs separate validation.'))
         return
       }
       const modelField = select('Installed model', 'model_id', models.map((entry) => [entry.id, `${modelLabel(entry)} · TP${entry.metadata?.tp_size}`]), model)
@@ -335,7 +349,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   function clientsSection(host) {
     const clients = array(host.snapshot?.clients)
     const rows = clients.map((client) => h('div', { class: 'list-row row' }, h('div', {}, h('div', { class: 'title' }, client.name),
-      h('p', {}, `${client.active_requests || 0} active request(s) · ${client.last_seen_unix_ms ? `Last seen ${new Date(client.last_seen_unix_ms).toLocaleString()}` : 'No requests yet'}`),
+      h('p', {}, `${client.active_requests || 0} active request(s) · ${lastSeen(client)}`),
       h('div', { class: 'mono' }, client.client_id)), client.local ? badge('local') : button('Revoke', () => confirm('Revoke client',
         `Revoke ${client.name} on ${host.name}? This removes its grant to this host.`, hostRequest(host, 'revoke', { client_id: client.client_id }), 'Client revoked'), !online(host), 'danger')))
     const administrator = host.snapshot?.local_administrator
@@ -536,6 +550,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
 
   function render() {
     if (state.stopped) return
+    if (document.hidden) { pendingRender = true; return }
+    pendingRender = false
     for (const details of root.querySelectorAll('details[data-section]')) state.sections.set(details.dataset.section, details.open)
     const hosts = array(state.view.hosts)
     const host = selectedHost()
@@ -574,6 +590,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   }
 
   async function start() {
+    document.addEventListener('visibilitychange', showLatest)
     render()
     for (const [event, handler] of [['manager-snapshot', (event) => apply(event.payload)], ['manager-error', (event) => { state.error = String(event.payload); state.errorSource = 'runtime'; render() }]]) {
       try { const unsubscribe = await listen(event, handler); subscriptions.push(unsubscribe) }
@@ -583,8 +600,12 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   }
   function stop() {
     state.stopped = true
+    document.removeEventListener('visibilitychange', showLatest)
     state.dialog?.close()
     subscriptions.forEach((unsubscribe) => unsubscribe())
+  }
+  function showLatest() {
+    if (!document.hidden && pendingRender) render()
   }
   return { start, stop, apply, refresh }
 }

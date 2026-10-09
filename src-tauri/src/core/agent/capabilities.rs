@@ -90,6 +90,33 @@ impl CapabilityCatalog {
             .collect()
     }
 
+    pub fn search(&self, query: &str, disabled: &BTreeSet<String>) -> Vec<CapabilityTool> {
+        let needle = query.trim().to_lowercase();
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        self.tools
+            .iter()
+            .filter(|tool| tool.origin == "mcp" && !self.disabled(disabled, &tool.name))
+            .filter(|tool| {
+                format!("{}\n{}", tool.name, tool.description)
+                    .to_lowercase()
+                    .contains(&needle)
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub fn available_mcp_tool(
+        &self,
+        name: &str,
+        disabled: &BTreeSet<String>,
+    ) -> Option<&CapabilityTool> {
+        self.tools.iter().find(|tool| {
+            tool.origin == "mcp" && tool.name == name && !self.disabled(disabled, name)
+        })
+    }
+
     pub fn available_agent_tool_names(&self, disabled: &BTreeSet<String>) -> BTreeSet<String> {
         let mut names: BTreeSet<String> = self
             .tools
@@ -111,17 +138,12 @@ impl CapabilityCatalog {
         names
     }
 
-    pub fn agent_mcp_functions(&self, disabled: &BTreeSet<String>) -> Vec<Value> {
-        self.tools
-            .iter()
-            .filter(|tool| tool.origin == "mcp" && !self.disabled(disabled, &tool.name))
-            .map(|tool| {
-                json!({"type":"function","function":{
-                    "name":tool.name,"description":tool.description,
-                    "parameters":tool.input_schema,"strict":false
-                }})
-            })
-            .collect()
+    pub fn agent_mcp_functions(&self, _disabled: &BTreeSet<String>) -> Vec<Value> {
+        [
+            ("capability_search", "Search enabled connected MCP tools by name or purpose.", json!({"type":"object","properties":{"query":{"type":"string","minLength":1}},"required":["query"],"additionalProperties":false})),
+            ("capability_read", "Read the exact argument schema for an enabled connected MCP tool.", json!({"type":"object","properties":{"name":{"type":"string","minLength":1}},"required":["name"],"additionalProperties":false})),
+            ("mcp_call", "Call an enabled connected MCP tool by exact name and schema-conforming arguments.", json!({"type":"object","properties":{"name":{"type":"string","minLength":1},"arguments":{"type":"object"}},"required":["name","arguments"],"additionalProperties":false})),
+        ].into_iter().map(|(name, description, parameters)| json!({"type":"function","function":{"name":name,"description":description,"parameters":parameters,"strict":false}})).collect()
     }
 }
 
@@ -757,12 +779,7 @@ async fn run_delegated<R: Runtime>(
             "reply".into()
         }
     });
-    let status = match reason.as_str() {
-        "cancelled" => "cancelled",
-        "failed" => "failed",
-        "max_steps" | "max_cycles" => "incomplete",
-        _ => "finished",
-    };
+    let status = super::runner::turn_status(&reason);
     let run = DelegatedRunSummary {
         run_id: request.run_id,
         status: status.into(),
@@ -876,14 +893,16 @@ mod tests {
         let disabled = BTreeSet::from([format!("one::{one}")]);
         assert!(catalog.disabled(&disabled, &one));
         assert!(!catalog.disabled(&disabled, &two));
-        assert!(catalog
-            .agent_mcp_functions(&disabled)
-            .iter()
-            .all(|tool| tool["function"]["name"] != one));
-        assert!(catalog
-            .agent_mcp_functions(&disabled)
-            .iter()
-            .any(|tool| tool["function"]["name"] == two));
+        let advertised = catalog.agent_mcp_functions(&disabled);
+        assert_eq!(advertised.len(), 3);
+        assert_eq!(
+            advertised.iter().map(|tool| tool["function"]["name"].as_str().unwrap()).collect::<Vec<_>>(),
+            ["capability_search", "capability_read", "mcp_call"]
+        );
+        assert!(catalog.search("read", &disabled).iter().all(|tool| tool.name != one));
+        assert!(catalog.search("read", &disabled).iter().any(|tool| tool.name == two));
+        assert!(catalog.available_mcp_tool(&one, &disabled).is_none());
+        assert!(catalog.available_mcp_tool(&two, &disabled).is_some());
         let approval = RecordingApproval::allow();
         let permissions = [(Capability::Network, Permission::Deny)]
             .into_iter()

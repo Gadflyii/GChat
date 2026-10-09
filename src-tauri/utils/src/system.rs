@@ -57,11 +57,7 @@ pub fn setup_library_path(library_path: Option<&Path>, command: &mut tokio::proc
             let lib_str = lib_path.to_string_lossy();
 
             // Normalize UNC prefix
-            let normalized_str = if lib_str.starts_with(r"\\?\") {
-                &lib_str[4..]
-            } else {
-                lib_str.as_ref()
-            };
+            let normalized_str = lib_str.strip_prefix(r"\\?\").unwrap_or(lib_str.as_ref());
 
             let new_path = match std::env::var("PATH") {
                 Ok(path) => format!("{};{}", normalized_str, path),

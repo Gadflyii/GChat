@@ -10,7 +10,9 @@ mod managed;
 pub mod process;
 pub mod state;
 
-pub use commands::{load_ginfer_model_impl, stop_session, GinferConfig};
+pub use commands::{
+    load_ginfer_model_impl, stop_session, CliEndpointSettings, GinferConfig, GinferLoadRequest,
+};
 pub use process::cleanup_ginfer_processes;
 pub use state::GinferState;
 

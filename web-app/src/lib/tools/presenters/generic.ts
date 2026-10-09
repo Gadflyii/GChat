@@ -8,6 +8,16 @@ type ActionLabel = {
 }
 
 const ACTION_LABELS: Record<string, ActionLabel> = {
+  gchat_capability_search: {
+    active: 'Searching available tools',
+    completed: 'Searched available tools',
+    failed: 'Could not search available tools',
+  },
+  gchat_capability_read: {
+    active: 'Loading tool details',
+    completed: 'Loaded tool details',
+    failed: 'Could not load tool details',
+  },
   'tool.view': {
     active: 'Loading tool details',
     completed: 'Loaded tool details',
@@ -173,6 +183,11 @@ function humanizeToolName(toolName: string): string {
     .replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
+function actionFor(toolName: string): ActionLabel | undefined {
+  return ACTION_LABELS[toolName] ?? Object.entries(ACTION_LABELS)
+    .find(([name]) => name.replaceAll('.', '_') === toolName)?.[1]
+}
+
 function readSubtitle(input: unknown): string | undefined {
   if (!input || typeof input !== 'object') return undefined
   const values = input as Record<string, unknown>
@@ -193,27 +208,44 @@ export function presentGenericTool(args: {
   errorText?: string
   state?: string
 }): ToolPresentation {
+  const input = args.input && typeof args.input === 'object'
+    ? args.input as Record<string, unknown>
+    : undefined
+  const targetName = input?.name
+  if (
+    (args.toolName === 'gchat_capability_call' || args.toolName === 'mcp_call') &&
+    typeof targetName === 'string' && targetName && targetName !== args.toolName &&
+    input?.arguments && typeof input.arguments === 'object' && !Array.isArray(input.arguments)
+  ) {
+    return presentGenericTool({ ...args, toolName: targetName, input: input.arguments })
+  }
   const isActive =
     args.state === 'input-streaming' || args.state === 'input-available'
   const hasError =
     args.state === 'output-error' || args.state === 'output-denied'
-  const action = ACTION_LABELS[args.toolName] ?? Object.entries(ACTION_LABELS).find(([name]) => name.replaceAll('.', '_') === args.toolName)?.[1]
+  const action = actionFor(args.toolName)
   const fallbackName = humanizeToolName(args.toolName)
+  const targetLabel =
+    (args.toolName === 'gchat_capability_read' && typeof targetName === 'string' && targetName.trim())
+      ? actionFor(targetName)?.completed ?? humanizeToolName(targetName)
+      : undefined
 
   return {
     kind: 'generic',
-    title: action
-      ? isActive
+    title: targetLabel
+      ? (isActive ? `Loading ${targetLabel} details` : hasError ? `Could not load ${targetLabel} details` : `Loaded ${targetLabel} details`)
+      : action
+        ? isActive
         ? action.active
         : hasError
           ? action.failed
           : action.completed
-      : isActive
-        ? `Calling ${fallbackName}`
-        : hasError
-          ? `${fallbackName} failed`
-          : `Called ${fallbackName}`,
-    subtitle: readSubtitle(args.input),
+        : isActive
+          ? `Calling ${fallbackName}`
+          : hasError
+            ? `${fallbackName} failed`
+            : `Called ${fallbackName}`,
+    subtitle: targetLabel ? undefined : readSubtitle(args.input),
     input: args.input,
     output: args.output,
     errorText: args.errorText,

@@ -1,3 +1,4 @@
+import { incompleteOutcomeMessage } from '@/lib/agent-outcome'
 import {
   memo,
   useState,
@@ -98,9 +99,7 @@ export const MessageItem = memo(
     const { t } = useTranslation('chat')
     const serviceHub = useServiceHub()
     const selectedModel = useModelProvider((state) => state.selectedModel)
-    // Global "Disable reasoning" toggle: some providers (e.g. MiniMax) ignore
-    // every known API flag and keep streaming chain-of-thought. Hide those
-    // parts in the UI so the experience matches the user's intent.
+    // Hide reasoning even when the provider ignores the API setting.
     const disableReasoning = useGeneralSetting(
       (state) => state.disableReasoning
     )
@@ -119,9 +118,7 @@ export const MessageItem = memo(
           }
         | undefined
     )?.contextCompaction
-    // Editing state is deliberately local: the memo comparator below does not
-    // compare `onEdit` or any edit prop, so an `editingMessageId` lifted to the
-    // thread route would go stale for every non-last message.
+    // Keep edit state local; memoized non-last messages ignore lifted edit props.
     const [isEditing, setIsEditing] = useState(false)
 
     const handleRegenerate = useCallback(() => {
@@ -215,7 +212,6 @@ export const MessageItem = memo(
       [isAgentMessage, serviceHub]
     )
 
-    // Extract file metadata from message text (for user messages with attachments)
     const attachedFiles = useMemo(() => {
       if (message.role !== 'user') return []
 
@@ -230,7 +226,6 @@ export const MessageItem = memo(
       return files
     }, [message.parts, message.role])
 
-    // Get full text content for copy button
     const fullTextContent = useMemo(() => {
       return message.parts
         .filter(
@@ -263,8 +258,7 @@ export const MessageItem = memo(
       return (
         <div key={key} className="w-full">
           <div className="flex justify-end w-full text-start">
-            {/* `w-full` instead of the bubble's `inline-block`, so clearing the
-                text does not collapse the box to caret width. */}
+            {/* Keep an empty editor from collapsing to caret width. */}
             <div className="bg-secondary relative text-foreground p-2 rounded-md w-full max-w-[80%]">
               {attachedFiles.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3">
@@ -300,9 +294,7 @@ export const MessageItem = memo(
         return null
       }
 
-      // The editor owns the whole message text, because that is what the save
-      // handler writes back: a single text part. So only the first text block
-      // turns into an editor, and the rest are folded into it.
+      // Edit the whole message in one block to match the saved single text part.
       if (isEditing) {
         if (block.key !== firstTextBlockKey) return null
         return renderEditor(block.key)
@@ -340,9 +332,7 @@ export const MessageItem = memo(
                   : block.text
               }
               components={agentMarkdownComponents}
-              // The thread page reports `submitted` for the whole request, so
-              // `status === 'streaming'` alone would leave HTML artifacts
-              // thinking they are complete and re-render the iframe per token.
+              // Treat submitted requests as active to avoid per-token iframe reloads.
               isStreaming={(isStreaming || isRequestActive) && isLastBlock}
               messageId={message.id}
               isAnimating={isAnimating}
@@ -442,8 +432,7 @@ export const MessageItem = memo(
       const stages = block.agentSummary?.stages ?? []
       const finishReason = block.agentSummary?.finish_reason
       const runError = block.agentSummary?.error
-      const incompleteReason =
-        finishReason === 'max_steps' || finishReason === 'max_cycles'
+      const incompleteReason = incompleteOutcomeMessage(finishReason)
       const instanceMetrics = aggregateAgentMetrics(
         stages.map((stage) => ({
           modelInstanceId: stage.model_instance_id,
@@ -470,15 +459,13 @@ export const MessageItem = memo(
           durationLabel={t('activity.workedFor', {
             count: durationSeconds,
           })}
-          hasDetails={toolCount > 0 || stages.length > 0 || incompleteReason}
+          hasDetails={toolCount > 0 || stages.length > 0 || Boolean(incompleteReason)}
           error={runError?.message}
         >
           {incompleteReason && (
             <ActivityDetail label="Run outcome">
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-                {finishReason === 'max_steps'
-                  ? 'Step limit reached. A stage used its full model-step budget without returning a completed result.'
-                  : 'Revision limit reached. The evaluator did not return PASS; the best available executor result was preserved.'}
+                {incompleteReason}
               </div>
             </ActivityDetail>
           )}
@@ -582,9 +569,7 @@ export const MessageItem = memo(
       [message, disableReasoning, isRequestActive]
     )
 
-    // A message with only attachments has no text block to anchor the editor
-    // to — `buildTraceBlocks` drops blank text parts — so it gets a standalone
-    // editor appended below the blocks instead.
+    // Attachment-only messages need an editor outside the text blocks.
     const firstTextBlockKey = useMemo(
       () => traceBlocks.find((block) => block.kind === 'text')?.key,
       [traceBlocks]
@@ -592,7 +577,6 @@ export const MessageItem = memo(
 
     return (
       <div className="w-full mb-4">
-        {/* Render message parts */}
         {traceBlocks.map((block, index) => {
           switch (block.kind) {
             case 'text':
@@ -612,7 +596,6 @@ export const MessageItem = memo(
 
         {isEditing && !firstTextBlockKey && renderEditor('inline-editor')}
 
-        {/* Message actions for user messages */}
         {message.role === 'user' && !hideActions && !isEditing && (
           <div className="flex items-center justify-end gap-1 text-muted-foreground text-xs mt-4">
             <CopyButton text={getFullTextContent()} />
@@ -645,7 +628,6 @@ export const MessageItem = memo(
           </div>
         )}
 
-        {/* Message actions for assistant messages (non-tool) */}
         {message.role === 'assistant' && (
           <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs mt-1">
             {contextCompaction && (
@@ -715,7 +697,6 @@ export const MessageItem = memo(
           </div>
         )}
 
-        {/* Image Preview Dialog */}
         {previewImage && (
           <div
             className="fixed inset-0 z-100 bg-black/50 backdrop-blur-md flex items-center justify-center cursor-pointer"
@@ -733,7 +714,6 @@ export const MessageItem = memo(
     )
   },
   (prevProps, nextProps) => {
-    // Always re-render if streaming and this is the last message
     if (
       nextProps.isLastMessage &&
       (nextProps.status === CHAT_STATUS.STREAMING ||

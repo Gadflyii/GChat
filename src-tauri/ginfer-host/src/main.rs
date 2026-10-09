@@ -202,7 +202,7 @@ async fn run(
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tick.tick().await;
-            if let Err(e) = monitor_host.processes.lock().await.refresh().await {
+            if let Err(e) = monitor_host.refresh_processes().await {
                 eprintln!("Engine monitoring: {e}");
             }
             monitor_host.revision.fetch_add(1, Ordering::SeqCst);

@@ -41,6 +41,34 @@ const getInlineFileContents = (
   })
 }
 
+const normalizeTokenMessage = (e: ThreadMessage) => {
+  const inlineFileContents = getInlineFileContents(e.metadata)
+
+  const buildInlineText = (base: string) => {
+    if (!inlineFileContents.length) return base
+    const formatted = inlineFileContents
+      .map((f) => `File: ${f.name || 'attachment'}\n${f.content ?? ''}`)
+      .join('\n\n')
+    return base ? `${base}\n\n${formatted}` : formatted
+  }
+
+  return {
+    ...e,
+    content: e.content.map((c) => ({
+      ...c,
+      text:
+        c.type === 'text'
+          ? {
+              value: removeReasoningContent(
+                buildInlineText(c.text?.value ?? '.')
+              ),
+              annotations: [],
+            }
+          : c.text,
+    })),
+  }
+}
+
 export const useTokensCount = (
   messages: ThreadMessage[] = [],
   uploadedFiles?: Array<{
@@ -61,77 +89,49 @@ export const useTokensCount = (
   const latestCalculationRef = useRef<(() => Promise<void>) | null>(null)
   const inFlightRef = useRef(false)
   const needsRecalcRef = useRef(false)
-  const isIncreasingContextSize = useRef<boolean>(false)
   const serviceHub = useServiceHub()
   const { selectedModel, selectedProvider } = useModelProvider()
   const { prompt } = usePrompt()
 
-  // Create messages with current prompt for live calculation.
-  // This mirrors the payload sent to token counting by appending the draft
-  // user message (text plus any uploaded images) to the existing thread
-  // history so the model sees the full context that will be submitted.
+  const normalizedHistory = useMemo(
+    () => messages.map(normalizeTokenMessage),
+    [messages]
+  )
   const messagesWithPrompt = useMemo(() => {
-    const result = [...messages]
+    const result = [...normalizedHistory]
     if (prompt.trim() || (uploadedFiles && uploadedFiles.length > 0)) {
       const content = []
 
-      // Add text content if prompt exists
       if (prompt.trim()) {
         content.push({ type: ContentType.Text, text: { value: prompt } })
       }
 
-      // Add image content for uploaded files
       if (uploadedFiles && uploadedFiles.length > 0) {
         uploadedFiles.forEach((file) => {
           content.push({
             type: ContentType.Image,
             image_url: {
               url: file.dataUrl,
-              detail: 'high', // Default to high detail for token calculation
+              detail: 'high',
             },
           })
         })
       }
 
       if (content.length > 0) {
-        result.push({
-          id: 'temp-prompt',
-          thread_id: '',
-          role: 'user',
-          content,
-          created_at: Date.now(),
-        } as ThreadMessage)
+        result.push(
+          normalizeTokenMessage({
+            id: 'temp-prompt',
+            thread_id: '',
+            role: 'user',
+            content,
+            created_at: Date.now(),
+          } as ThreadMessage)
+        )
       }
     }
-    return result.map((e) => {
-      // Pull inline file contents stored on the message metadata
-      const inlineFileContents = getInlineFileContents(e.metadata)
-
-      const buildInlineText = (base: string) => {
-        if (!inlineFileContents.length) return base
-        const formatted = inlineFileContents
-          .map((f) => `File: ${f.name || 'attachment'}\n${f.content ?? ''}`)
-          .join('\n\n')
-        return base ? `${base}\n\n${formatted}` : formatted
-      }
-
-      return {
-        ...e,
-        content: e.content.map((c) => ({
-          ...c,
-          text:
-            c.type === 'text'
-              ? {
-                  value: removeReasoningContent(
-                    buildInlineText(c.text?.value ?? '.')
-                  ),
-                  annotations: [],
-                }
-              : c.text,
-        })),
-      }
-    })
-  }, [messages, prompt, uploadedFiles])
+    return result
+  }, [normalizedHistory, prompt, uploadedFiles])
 
   const getMaxTokens = useCallback(() => {
     const maxTokensValue =
@@ -146,7 +146,6 @@ export const useTokensCount = (
     return undefined
   }, [selectedModel?.settings?.ctx_len?.controller_props?.value])
 
-  // Debounced calculation that includes current prompt
   const runTokenCalculation = useCallback(async () => {
     const modelId = selectedModel?.id
     const maxTokensNum = getMaxTokens()
@@ -232,19 +231,12 @@ export const useTokensCount = (
     latestCalculationRef.current = runTokenCalculation
   }, [runTokenCalculation])
 
-  // Debounced effect that triggers when prompt or messages change
+  // Debounce token requests after draft changes.
   useEffect(() => {
-    // Clear existing timeout
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current)
     }
 
-    // Skip calculation if we're currently increasing context size
-    if (isIncreasingContextSize.current) {
-      return
-    }
-
-    // Only calculate if we have messages or a prompt
     if (
       messagesWithPrompt.length > 0 &&
       isGinferProvider(selectedProvider) &&
@@ -252,7 +244,7 @@ export const useTokensCount = (
     ) {
       debounceTimeoutRef.current = setTimeout(() => {
         void latestCalculationRef.current?.()
-      }, 500) // 500ms debounce to reduce repeated token calculations
+      }, 500)
     } else {
       setTokenData({
         tokenCount: 0,
@@ -277,9 +269,8 @@ export const useTokensCount = (
     getMaxTokens,
   ])
 
-  // Manual calculation function (for click events)
   const calculateTokens = useCallback(async () => {
-    // Trigger the debounced calculation immediately
+    // An explicit request bypasses the debounce.
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current)
     }

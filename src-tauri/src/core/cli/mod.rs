@@ -15,7 +15,9 @@ use crate::core::app::commands::resolve_jan_data_folder;
 
 // Re-export impl functions and config types so the binary can call them directly.
 // `load_ginfer_model_impl` is explicitly documented as usable without an AppHandle.
-pub use tauri_plugin_ginfer::{load_ginfer_model_impl, GinferConfig, GinferState};
+pub use tauri_plugin_ginfer::{
+    load_ginfer_model_impl, CliEndpointSettings, GinferConfig, GinferLoadRequest, GinferState,
+};
 
 /// The only inference provider the CLI runs: ginfer. Its binary and models
 /// live under `<data_folder>/<LOCAL_PROVIDER>/`.

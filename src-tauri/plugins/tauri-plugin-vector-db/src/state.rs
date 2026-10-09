@@ -15,3 +15,9 @@ impl VectorDBState {
         Self { base_dir: base }
     }
 }
+
+impl Default for VectorDBState {
+    fn default() -> Self {
+        Self::new()
+    }
+}

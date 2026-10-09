@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentDefinition } from '@/types/agent'
+import type { AgentDefinition, AgentRunRecord } from '@/types/agent'
 import { Route } from './index'
 const AgentStudioPage = Route.options.component!
 
@@ -83,6 +83,32 @@ describe('AgentStudioPage', () => {
       createDraft: vi.fn().mockResolvedValue(editableDraft),
     }
   })
+
+  it.each(['max_steps', 'loop_detected'] as const)(
+    'shows incomplete history with preserved synthesis for %s', async (reason) => {
+      const run: AgentRunRecord = {
+        schemaVersion: 3, id: 'record', runId: 'run', sessionId: 'thread', definitionId: 'team',
+        definitionName: 'Coordinator', userMessage: 'goal', kind: 'coordinator', status: 'incomplete',
+        finishReason: reason, startedAtMs: 1, finishedAtMs: 3, totalSteps: 45, maxSteps: 25,
+        finalReply: 'completed synthesis', defaultModelInstanceId: 'model', stages: [
+          { stageId: 'worker', name: 'Worker', status: reason, summary: 'fallback', stepCount: 12,
+            durationMs: 1, modelInstanceId: 'model', modelId: 'model', reasoningEffort: null,
+            inference: { promptTokens: 1, generatedTokens: 1, promptMs: 1, generationMs: 1 } },
+          { stageId: 'synthesize', name: 'Synthesize', status: 'reply', summary: 'completed synthesis',
+            stepCount: 1, durationMs: 1, modelInstanceId: 'model', modelId: 'model', reasoningEffort: null,
+            inference: { promptTokens: 1, generatedTokens: 1, promptMs: 1, generationMs: 1 } },
+        ],
+      }
+      listAgentRuns.mockResolvedValue([run])
+      render(<AgentStudioPage />)
+      fireEvent.click(await screen.findByRole('button', { name: /Runs/i }))
+      expect(await screen.findByText('Run incomplete')).toBeInTheDocument()
+      expect(screen.getByText('Available output')).toBeInTheDocument()
+      expect(screen.getAllByText('completed synthesis').length).toBeGreaterThan(0)
+      expect(screen.getByText('completed', { exact: true })).toBeInTheDocument()
+      expect(screen.getAllByText(/incomplete/).length).toBeGreaterThan(0)
+    }
+  )
 
   it('opens on a single create action when no user definitions exist', async () => {
     render(<AgentStudioPage />)

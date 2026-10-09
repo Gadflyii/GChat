@@ -56,6 +56,12 @@ pub trait FolderAccessHook: Send + Sync {
 
 #[async_trait]
 pub trait DesktopServices: Send + Sync {
+    async fn capability_search(&self, _query: &str) -> Result<Value, String> {
+        Err("Capability discovery is unavailable in this environment".into())
+    }
+    async fn capability_read(&self, _name: &str) -> Result<Value, String> {
+        Err("Capability schema lookup is unavailable in this environment".into())
+    }
     async fn memory(
         &self,
         _action: &str,
@@ -81,7 +87,7 @@ pub trait DesktopServices: Send + Sync {
     }
     async fn mcp_functions(&self) -> Result<Vec<Value>, String> { Ok(Vec::new()) }
     fn disabled_tools(&self) -> std::collections::BTreeSet<String> { Default::default() }
-    async fn mcp_identity(&self, _wire_name: &str) -> Result<(String, String), String> {
+    async fn mcp_identity(&self, _wire_name: &str, _args: &Value) -> Result<(String, String), String> {
         Err("MCP capability is unavailable".into())
     }
 }
@@ -210,6 +216,22 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
         "skill.run_script" => skill_run_script::execute(&call.args, context).await,
         "skill.view" => skill_view::execute(&call.args, context).await,
         "tool.view" => tool_view::execute(&call.args, context.loaded_tools).await,
+        "capability_search" => async {
+            let query = required_string(&call.args, "query").map_err(ToolOutcome::error)?;
+            context.desktop.capability_search(&query).await.map(|value| {
+                let mut outcome = ToolOutcome::ok(value.to_string());
+                outcome.details = Some(value);
+                outcome
+            }).map_err(ToolOutcome::error)
+        }.await,
+        "capability_read" => async {
+            let name = required_string(&call.args, "name").map_err(ToolOutcome::error)?;
+            context.desktop.capability_read(&name).await.map(|value| {
+                let mut outcome = ToolOutcome::ok(value.to_string());
+                outcome.details = Some(value);
+                outcome
+            }).map_err(ToolOutcome::error)
+        }.await,
         tool if tool.starts_with("mcp_") => context.desktop.mcp(tool, call.args.clone(), context.cancellation)
             .await.map(|value| {
                 let mut outcome = ToolOutcome::ok(value.to_string());
@@ -334,7 +356,7 @@ async fn authorize_call(
     let mut resources = prepared.resources;
     resources.extend(non_path_resources(&prepared.call));
     if prepared.call.tool.starts_with("mcp_") {
-        let (server, tool) = context.desktop.mcp_identity(&prepared.call.tool).await
+        let (server, tool) = context.desktop.mcp_identity(&prepared.call.tool, &prepared.call.args).await
             .map_err(ToolOutcome::error)?;
         resources.push(ApprovalResource { kind: "mcp".into(),
             value: format!("{server}::{tool}"), operation: "call".into() });
@@ -376,6 +398,9 @@ async fn authorize_call(
 }
 
 fn safe_preview(call: &ToolCallPayload) -> Value {
+    if call.tool == "mcp_call" {
+        return serde_json::json!({"name":call.args.get("name")});
+    }
     if matches!(
         call.tool.as_str(),
         "studio.manage" | "memory.save" | "memory.delete"

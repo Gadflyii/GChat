@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessage } from 'ai'
+import type { AgentRunSummary } from '@/types/agent'
 import { MessageItem } from '../MessageItem'
 import { seedServiceHub } from '@/test/service-hub'
 
@@ -125,5 +126,25 @@ describe('MessageItem inline editing', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' })
 
     expect(onEdit).toHaveBeenCalledWith('a1', 'corrected reply')
+  })
+})
+
+
+describe('MessageItem agent outcome', () => {
+  it('retains completed synthesis and explains an incomplete loop fallback after reload', () => {
+    const summary: AgentRunSummary = {
+      run_id: 'run', status: 'incomplete', finish_reason: 'loop_detected',
+      stages: [], tools: [], loops: [],
+    }
+    const message: UIMessage = JSON.parse(JSON.stringify({
+      id: 'agent-message', role: 'assistant', parts: [{ type: 'text', text: 'completed synthesis' }],
+      metadata: { agent_run: summary },
+    }))
+    renderMessage(message)
+    expect(screen.getByText('completed synthesis')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /activity.workedFor/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run outcome' }))
+    expect(screen.getByText(/A stage stopped after repeated tool calls made no progress/)).toBeInTheDocument()
+    expect(screen.getByText('completed synthesis')).toBeInTheDocument()
   })
 })

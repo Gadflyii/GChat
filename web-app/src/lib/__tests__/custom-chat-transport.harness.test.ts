@@ -370,6 +370,160 @@ describe('CustomChatTransport production harness', () => {
     }
   )
 
+  it.each([
+    { name: 'os_fs_read_document', server: 'gchat-native' },
+    { name: 'mcp_0123456789abcdef0123456789abcdef', server: 'documents' },
+  ])('discovers, reads and invokes $name through SDK continuations at loaded 32K capacity', async (target) => {
+    const threadId = `discovery-${target.server}`
+    const selected = {
+      ...target,
+      description: 'Read a document',
+      inputSchema: {
+        type: 'object', properties: { path: { type: 'string' } },
+        required: ['path'], additionalProperties: false,
+      },
+    }
+    const unusedSchemaMarker = 'UNSELECTED_CATALOG_SCHEMA'
+    const disabledName = 'mcp_fedcba9876543210fedcba9876543210'
+    useAppState.setState({
+      tools: [selected, {
+        name: 'os_fs_hash', server: 'gchat-native', description: 'Hash a file',
+        inputSchema: { type: 'object', properties: { path: { type: 'string', description: unusedSchemaMarker } } },
+      }, {
+        name: disabledName, server: 'disabled', description: 'Read a document',
+        inputSchema: { type: 'object' },
+      }],
+      capabilityToolNames: new Set([target.name, 'os_fs_hash', disabledName]),
+    })
+    useToolAvailable.getState().setToolDisabledForThread(threadId, 'disabled', disabledName, false)
+    useModelProvider.setState((state) => ({
+      selectedModel: { ...state.selectedModel, capabilities: ['tools'] } as never,
+    }))
+    useConversationPolicy.getState().setWorkingDir(threadId, '/workspace')
+    useConversationPolicy.getState().addExternalRoot(threadId, {
+      rootId: 'reference', name: 'Reference', path: '/reference', canEdit: false,
+    })
+    const execute = vi.fn<CapabilitiesService['execute']>(async () => ({ content: 'Budget total: 42' }))
+    const service = seedServiceHub({
+      rag: { getTools: vi.fn().mockResolvedValue([]) } as never,
+      capabilities: { getCatalog: vi.fn(), cancel: vi.fn(), execute },
+    }).capabilities()
+    const callModel = (toolName: string, input: object) => fakeStreamingModel([
+      { type: 'stream-start', warnings: [] },
+      { type: 'tool-call', toolCallId: toolName, toolName, input: JSON.stringify(input) },
+      { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    ])
+    const model = fakeStreamingModel([
+      { type: 'stream-start', warnings: [] },
+      { type: 'text-start', id: 'answer' },
+      { type: 'text-delta', id: 'answer', delta: 'The budget total is 42.' },
+      { type: 'text-end', id: 'answer' },
+      { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    ])
+    vi.mocked(model.doStream)
+      .mockImplementationOnce(vi.mocked(callModel('gchat_capability_search', { query: 'document' }).doStream))
+      .mockImplementationOnce(vi.mocked(callModel('gchat_capability_read', { name: target.name }).doStream))
+      .mockImplementationOnce(vi.mocked(callModel('gchat_capability_call', {
+        name: target.name, arguments: { path: '/reference/Budget.xlsx' },
+      }).doStream))
+    const engine = vi.spyOn(EngineManager, 'instance').mockReturnValue({
+      get: () => ({ getLoadedContext: async () => 32768 }),
+    } as unknown as EngineManager)
+    const factory = vi.spyOn(ModelFactory, 'createModel').mockImplementation(async (...args) => {
+      expect(args[4]?.configuredContextTokens).toBe(32768)
+      return model
+    })
+    const transport = new CustomChatTransport(undefined, threadId)
+    const sessionData = useChatSessions.getState().getSessionData(threadId)
+    const onError = vi.fn()
+    let chat!: Chat<UIMessage>
+    chat = new Chat<UIMessage>({
+      id: threadId, transport, onError,
+      onToolCall: ({ toolCall }) => { sessionData.tools.push(toolCall) },
+      onFinish: () => {
+        if (!sessionData.tools.length) return
+        const signal = useChatSessions.getState().getToolCallController(threadId).signal
+        void executeClaimedChatToolBatch({
+          threadId, signal, ragToolNames: new Set(),
+          capabilityToolNames: useAppState.getState().capabilityToolNames,
+          callRagTool: vi.fn(), getProjectId: () => undefined,
+          processOutput: async (content) => content,
+          callCapability: async (call) => {
+            const result = await executeChatCapability({ service, threadId, modelId: 'fixture-model', signal, ...call })
+            // An approval choice made after discovery must govern the actual call.
+            if (call.toolName === 'gchat_capability_read') {
+              useConversationPolicy.getState().setApprovalMode(threadId, 'skip')
+            }
+            return result
+          },
+          addToolOutput: (output) => chat.addToolOutput(output), onError,
+        })
+      },
+      sendAutomaticallyWhen: ({ messages }) => shouldSendToolFollowUp(messages, sessionData.toolCallAbortController),
+    })
+    useChatSessions.getState().ensureSession(threadId, transport, () => chat)
+    try {
+      await chat.sendMessage({ text: 'Read the budget document' })
+      await vi.waitFor(() => {
+        expect(chat.status).toBe('ready')
+        expect(chat.messages.at(-1)?.parts).toContainEqual(expect.objectContaining({ type: 'text', text: 'The budget total is 42.' }))
+        expect(isSessionBusy(useChatSessions.getState().sessions[threadId])).toBe(false)
+      })
+      expect(onError).not.toHaveBeenCalled()
+      expect(model.doStream).toHaveBeenCalledTimes(4)
+      expect(factory).toHaveBeenCalledTimes(4)
+      for (const [request] of vi.mocked(model.doStream).mock.calls) {
+        expect(request.tools?.map((tool) => tool.name).sort()).toEqual([
+          'gchat_capability_call', 'gchat_capability_read', 'gchat_capability_search',
+        ])
+        expect(JSON.stringify(request)).not.toContain(unusedSchemaMarker)
+      }
+      const outputs = vi.mocked(model.doStream).mock.calls[3][0].prompt
+        .filter((message) => message.role === 'tool').flatMap((message) => message.content)
+      expect(outputs).toContainEqual(expect.objectContaining({
+        toolName: 'gchat_capability_search',
+        output: { type: 'json', value: [{ name: target.name, description: 'Read a document' }] },
+      }))
+      expect(outputs).toContainEqual(expect.objectContaining({
+        toolName: 'gchat_capability_read', output: { type: 'json', value: selected },
+      }))
+      expect(outputs).toContainEqual(expect.objectContaining({
+        toolName: 'gchat_capability_call', output: { type: 'text', value: 'Budget total: 42' },
+      }))
+      expect(execute).toHaveBeenCalledOnce()
+      expect(execute.mock.calls[0][0]).toMatchObject({
+        session_id: threadId, model_id: 'fixture-model', tool_name: target.name,
+        arguments: { path: '/reference/Budget.xlsx' }, working_dir: '/workspace',
+        external_roots: [{ path: '/reference', can_edit: false }], auto_approve: true,
+        disabled_tools: [`disabled::${disabledName}`],
+      })
+    } finally {
+      engine.mockRestore()
+      factory.mockRestore()
+    }
+  })
+
+  it('rejects an exact capability disabled after its schema was read', async () => {
+    const threadId = 'disabled-after-discovery'
+    const name = 'mcp_0123456789abcdef0123456789abcdef'
+    const execute = vi.fn<CapabilitiesService['execute']>(async () => ({ content: 'Must not execute' }))
+    const service = seedServiceHub({
+      capabilities: { execute, cancel: vi.fn(), getCatalog: vi.fn() },
+    }).capabilities()
+    useAppState.setState({ tools: [{
+      name, server: 'documents', description: 'Read document', inputSchema: { type: 'object' },
+    }] })
+    const options = { service, threadId, signal: new AbortController().signal }
+    await expect(executeChatCapability({
+      ...options, toolName: 'gchat_capability_read', arguments: { name },
+    })).resolves.toMatchObject({ content: { name } })
+    useToolAvailable.getState().setToolDisabledForThread(threadId, 'documents', name, false)
+    await expect(executeChatCapability({
+      ...options, toolName: 'gchat_capability_call', arguments: { name, arguments: {} },
+    })).rejects.toThrow('unavailable or disabled')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
   it('uses loaded capacity and publishes exact request usage through finish metadata', async () => {
     const engine = vi.spyOn(EngineManager, 'instance').mockReturnValue({
       get: () => ({ getLoadedContext: async () => 131072 }),
@@ -450,6 +604,9 @@ describe('CustomChatTransport production harness', () => {
     await readChunks(await transport.sendMessages({ chatId: 'chat-a', messages: [userMessage], trigger: 'submit-message', messageId: undefined, abortSignal: undefined }) as ReadableStream<Record<string, unknown>>)
     const request = vi.mocked(model.doStream).mock.calls[0][0]
     expect(request.tools).toContainEqual(expect.objectContaining({ name: 'skill_list' }))
+    expect(request.tools?.map((tool) => tool.name).sort()).toEqual([
+      'gchat_capability_call', 'gchat_capability_read', 'gchat_capability_search', 'skill_list',
+    ])
     expect(request.prompt[0]).toMatchObject({ role: 'system', content: expect.stringContaining('Use my assistant instructions.') })
     expect(request.prompt[0]).toMatchObject({ content: expect.stringContaining('skill_list') })
     useModelProvider.setState({ selectedModel: { id: 'other-model' } as never })
@@ -525,7 +682,7 @@ describe('CustomChatTransport production harness', () => {
     expect(prepared.hasEmbeddedDocuments).toBe(false)
     const first = fakeStreamingModel([
       { type: 'stream-start', warnings: [] },
-      { type: 'tool-call', toolCallId: 'excel-read', toolName, input: JSON.stringify({ path }) },
+      { type: 'tool-call', toolCallId: 'excel-read', toolName: 'gchat_capability_call', input: JSON.stringify({ name: toolName, arguments: { path } }) },
       { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
     ])
     const model = fakeStreamingModel([
@@ -568,7 +725,7 @@ describe('CustomChatTransport production harness', () => {
     expect(JSON.stringify(request.prompt)).toContain('Revenue')
     expect(JSON.stringify(request.prompt)).toContain('42000')
     expect(JSON.stringify(request.prompt)).toContain('12000')
-    expect(request.prompt[0]).toMatchObject({ role: 'system', content: expect.stringContaining('os_fs_read_document') })
+    expect(request.prompt[0]).toMatchObject({ role: 'system', content: expect.stringContaining('gchat_capability_call') })
     expect(request.prompt[0]).toMatchObject({ role: 'system', content: expect.stringContaining(JSON.stringify(path)) })
     expect(useConversationPolicy.getState().legacyAgentThreads[threadId]).toBeUndefined()
     const savedHistory = JSON.parse(JSON.stringify(chat.messages)) as UIMessage[]
@@ -586,7 +743,7 @@ describe('CustomChatTransport production harness', () => {
     useAppState.setState({
       tools: [
         {
-          name: 'search',
+          name: 'gchat_capability_search',
           server: 'fixture',
           description: 'Search',
           inputSchema: {
@@ -596,7 +753,7 @@ describe('CustomChatTransport production harness', () => {
           },
         },
       ],
-      capabilityToolNames: new Set(['search']),
+      capabilityToolNames: new Set(),
     })
     useModelProvider.setState((state) => ({
       selectedModel: {
@@ -610,7 +767,7 @@ describe('CustomChatTransport production harness', () => {
         {
           type: 'tool-call',
           toolCallId: 'call-1',
-          toolName: 'search',
+          toolName: 'gchat_capability_search',
           input: '{"query":"alpha"',
         },
         {
@@ -636,7 +793,7 @@ describe('CustomChatTransport production harness', () => {
       expect.objectContaining({
         type: 'tool-input-available',
         toolCallId: 'call-1',
-        toolName: 'search',
+        toolName: 'gchat_capability_search',
         input: { query: 'alpha' },
       })
     )

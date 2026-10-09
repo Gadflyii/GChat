@@ -17,6 +17,7 @@ import { chatMemoryContext, supportsGChatMemory } from './memory'
 import { prepareToolResultImagesForModel } from './toolResultImages'
 import {
   buildToolsRecord,
+  buildCapabilityDiscoveryTools,
   splitAnthropicSerialToolUse,
 } from './custom-chat-transport-helpers'
 import type { MCPTool } from '@/types/completion'
@@ -287,9 +288,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         }
       }
 
-      // Use the shared catalog snapshot refreshed on capability changes.
-      // Avoid a desktop round-trip on every request's
-      // first sendMessages call.
+      // Reuse the catalog refreshed on capability changes.
       try {
         const availableMcpTools = useAppState.getState().tools
         if (Array.isArray(availableMcpTools)) {
@@ -300,7 +299,13 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       }
     }
 
-    this.tools = buildToolsRecord(ragTools, capabilityTools, disabledToolKeys)
+    const controlNames = new Set([
+      'skill_list', 'skill_view', 'skill_invoke', 'agent_list', 'agent_run', 'agent_monitor', 'agent_cancel',
+    ])
+    this.tools = {
+      ...buildToolsRecord(ragTools, capabilityTools.filter((tool) => controlNames.has(tool.name)), disabledToolKeys),
+      ...buildCapabilityDiscoveryTools(),
+    }
     this.toolsCacheKey = cacheKey
     this.toolsCacheValid = true
   }
@@ -374,9 +379,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     await this.refreshTools()
     ttftMark('gammaEnd')
 
-    // Capture the effective provider name early so the Anthropic serial
-    // tool-use repair later uses the same value that was used to create the
-    // model, even if the user switches provider mid-request.
+    // Keep the request's provider fixed if selection changes mid-stream.
     const modelId = useModelProvider.getState().selectedModel?.id
     const providerId = useModelProvider.getState().selectedProvider
     const effectiveProviderName = providerId
@@ -388,11 +391,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           .getState()
           .getProviderByName(providerId)
 
-        // Sampling parameters of the assistant this chat is bound to, injected
-        // verbatim into local-backend request bodies by ModelFactory. For
-        // Gemma 4 QAT, Google's recommended sampler (temp 1.0 / top_p 0.95 /
-        // top_k 64) is layered on at request time unless the user has tuned
-        // that assistant's sampling — non-destructive, follows the active model.
+        // Apply model recommendations while preserving thread sampling overrides.
         const sampling = getSamplingParamsForThread(this.threadId)
         const inferenceParams = withServerSampling(
           providerId,
@@ -400,23 +399,14 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           sampling.overridden
         )
 
-        // Global "Disable reasoning" setting — best-effort: dispatch the
-        // provider-specific flag that skips the thinking phase. Unknown keys
-        // are silently ignored by most providers, but we still branch per
-        // provider to stay safe with stricter APIs (e.g. Anthropic).
-        //
-        // The override is kept SEPARATE from `inferenceParams` so local-only
-        // fields (top_k, repeat_penalty, …) never leak into cloud-provider
-        // request bodies. See ModelFactory for the fetch wiring.
+        // Keep provider reasoning flags separate from local sampling fields.
         const { disableReasoning, reasoningBudget } =
           useGeneralSetting.getState()
         const reasoningOverride: Record<string, unknown> = {}
         if (disableReasoning || reasoningBudget === 'off') {
           switch (effectiveProviderName) {
             case 'ginfer':
-              // ginfer's OpenAI-compatible off level is `none` (direct
-              // response); don't also send enable_thinking — a
-              // contradictory combination is rejected.
+              // Direct responses use `none`; enable_thinking would contradict it.
               reasoningOverride.reasoning_effort = 'none'
               break
             case 'anthropic':
@@ -436,16 +426,11 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
               }
               break
             case 'moonshot':
-              // Moonshot (Kimi) accepts only high|low|medium|max|xhigh; rejects
-              // `minimal`. `low` is the closest analogue to "skip thinking".
+              // Moonshot rejects `minimal`; use its lowest supported effort.
               reasoningOverride.reasoning_effort = 'low'
               break
             default:
-              // Unknown / user-added custom providers: do NOT inject
-              // `reasoning_effort` — strict OpenAI-compatible schemas
-              // (e.g. Moonshot, some self-hosted gateways) reject unknown
-              // variants like `minimal`. The chat_template_kwargs hint is
-              // safe: most servers ignore unknown keys.
+              // Custom providers get a template hint, avoiding unsupported effort values.
               reasoningOverride.chat_template_kwargs = {
                 enable_thinking: false,
               }
@@ -522,20 +507,13 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       throw new Error('ServiceHub not initialized or model/provider missing.')
     }
 
-    // Fix for Anthropic serial tool-use (error 400): when an assistant message
-    // contains tool parts interleaved with text parts (serial tool calls),
-    // split it into separate messages so convertToModelMessages produces the
-    // tool_use / tool_result pairing that the Claude API requires.
-    // See: https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use#parallel-tool-use
+    // Split serial tool calls to preserve Anthropic tool_use/tool_result pairing.
     const messagesToConvert =
       effectiveProviderName === 'anthropic'
         ? splitAnthropicSerialToolUse(options.messages)
         : options.messages
 
-    // Convert UI messages to model messages. Non-image file parts are stripped
-    // first — the converters accept `image/*` and nothing else. Order matters:
-    // `mapUserAttachmentContext` folds document text into the message before
-    // the strip runs, so neither loses anything.
+    // Fold document text into messages before removing unsupported file parts.
     let preparedMessages = stripUnsupportedFileParts(
       this.mapUserAttachmentContext(messagesToConvert)
     )
@@ -576,10 +554,10 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       { file_attachments?: Array<{ name?: string; path?: string; native_reference?: boolean }> } | undefined)?.file_attachments?.filter((file) => file.native_reference)
     const capabilityGuidance = shouldEnableTools
       ? [
+          this.tools.gchat_capability_search && 'Discover native and connected tools with gchat_capability_search, read an exact schema with gchat_capability_read, then invoke that exact name with gchat_capability_call. Disabled tools remain unavailable. Calls use this conversation’s permissions, approvals, folders, and cancellation.',
           this.tools.skill_list && 'GChat skills are available through skill_list. Read instructions with skill_view and apply a skill using skill_invoke.',
-          this.tools.agent_list && 'Discover saved agents and worker pools with agent_list; dispatch them using agent_run. Native tools and MCP tools use the conversation permissions and connected folders.',
-          this.tools.os_fs_read_document && 'Read Excel (.xls/.xlsx), Office documents (.docx/.pptx), PDFs and other supported documents with os_fs_read_document, which extracts their content. os_fs_read reads UTF-8 text only. When a tool reports an error or denied folder access, report that specific failure and request access through the inline approval.',
-          this.tools.os_fs_read_document && attachedDocuments?.length && `Attached local documents: ${JSON.stringify(attachedDocuments.map(({name, path}) => ({name, path})))}. Read their content with os_fs_read_document when needed; these references have not been indexed for retrieval.`,
+          this.tools.agent_list && 'Discover saved agents and worker pools with agent_list; dispatch them using agent_run.',
+          attachedDocuments?.length && `Attached local documents: ${JSON.stringify(attachedDocuments.map(({name, path}) => ({name, path})))}. Read their content through capability discovery when needed; these references have not been indexed for retrieval.`,
           workspace.primaryRoot && `Conversation workspace: ${JSON.stringify(workspace.primaryRoot.path)}.`,
           workspace.externalRoots.length > 0 && `Connected folders: ${JSON.stringify(workspace.externalRoots.map(({path, canEdit}) => ({path, canEdit})))}.`,
           invocationTool === 'skill_invoke' && `Apply the selected skill ${JSON.stringify(selectedSkill)} to the current user request using skill_invoke.`,
@@ -600,12 +578,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         } }
       : this.tools
 
-    // Track stream timing and token count for token speed calculation.
-    // We start the clock on the *first generated delta* (text or reasoning),
-    // not on the `start` event, so the wall-clock fallback measures decode
-    // throughput rather than (TTFT + prefill + decode). Without this, long
-    // system prompts and MTP/dflash spin-up artificially deflate the
-    // displayed tokens/sec.
+    // Measure fallback decode speed from the first generated delta, excluding prefill.
     let streamStartTime: number | undefined
 
     const maxOutputTokens = getSamplingParamsForThread(this.threadId).params
@@ -635,9 +608,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
 
     const uiStream = result.toUIMessageStream({
       messageMetadata: ({ part }) => {
-        // Start the wall-clock timer on the first generated delta (text or
-        // reasoning), NOT on `start` — the latter fires before prefill, so
-        // including it would tank the fallback TPS on long prompts.
         if (
           !streamStartTime &&
           (part.type === 'text-delta' || part.type === 'reasoning-delta')
@@ -656,7 +626,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
             (pm?.ginferFinishReason as string | undefined) ?? null
         }
 
-        // Add usage and token speed to metadata on finish
         if (part.type === 'finish') {
           const finishPart = part as {
             type: 'finish'
@@ -667,7 +636,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           const durationMs = streamStartTime ? Date.now() - streamStartTime : 0
           const durationSec = durationMs / 1000
 
-          // Prefer reported output tokens; fall back to text delta count.
           const outputTokens = usage?.outputTokens ?? 0
           const inputTokens = usage?.inputTokens
           const contextThreadId = this.threadId ?? options.chatId
@@ -679,12 +647,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
             useContextUsage.getState().record(contextThreadId, contextUsage)
           }
 
-          // Prefer the provider-reported decode TPS (mlx-vlm `generation_tps`
-          // or timing `predicted_per_second`). Fall back to a
-          // wall-clock estimate measured from the first delta — but only if
-          // the timer ever started AND we actually produced tokens (e.g. a
-          // pure tool-call response yields 0 tokens and no delta, so the
-          // fallback would otherwise divide by zero).
+          // Prefer provider decode speed; estimate only when timed output tokens exist.
           let tokenSpeed: number
           if (tokensPerSecond > 0) {
             tokenSpeed = tokensPerSecond
@@ -702,15 +665,10 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
             finishReason: finishPart.finishReason,
             ginferFinishReason,
             activityDurationMs: Math.max(0, Date.now() - requestStartedAt),
-            // Provider-agnostic time to first token: `streamStartTime` is the
-            // first generated delta, set above. The α→θ stage breakdown in
-            // `ttft-timing` only spans the Tauri/proxy path, so this is the
-            // value that is comparable across local and cloud providers.
+            // TTFT spans request start to the first text or reasoning delta.
             ttftMs: streamStartTime
               ? Math.max(0, streamStartTime - requestStartedAt)
               : null,
-            // The model/provider a message was produced by was previously not
-            // recorded anywhere, so a finished turn could not be attributed.
             modelId,
             providerId,
             ...(contextUsage ? { contextUsage } : {}),
@@ -754,7 +712,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         return errorMessage
       },
       onFinish: ({ responseMessage }) => {
-        // Call the token usage callback with usage data when stream completes
         if (responseMessage) {
           const metadata = responseMessage.metadata as
             | Record<string, unknown>
@@ -776,8 +733,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
       chatId: string
     } & ChatRequestOptions
   ): Promise<ReadableStream<UIMessageChunk> | null> {
-    // This function normally handles reconnecting to a stream on the backend, e.g. /api/chat
-    // Since this project has no backend, we can't reconnect to a stream, so this is intentionally no-op.
+    // Transport-owned streams have no resumable endpoint.
     return null
   }
 

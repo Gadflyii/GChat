@@ -199,6 +199,35 @@ describe('useAgentRun', () => {
     expect(finished.status).toBe('cancelled')
   })
 
+  it.each(['max_steps', 'loop_detected'] as const)(
+    'keeps completed synthesis and distinct stage outcomes when the run ends %s',
+    (reason) => {
+      let state = reduceAgentRunState(createAgentRunState(), {
+        type: 'turn_started', run_id: 'run', session_id: 'thread',
+      })
+      for (const [stageId, outcome] of [['worker', reason], ['synthesize', 'reply']]) {
+        state = reduceAgentRunState(state, {
+          type: 'stage_started', stage_id: stageId, name: stageId, role: 'worker', cycle: null,
+          model_instance_id: 'model', reasoning_effort: null,
+        })
+        state = reduceAgentRunState(state, {
+          type: 'stage_finished', stage_id: stageId, name: stageId, status: outcome,
+          summary: 'preserved', step_count: 1, duration_ms: 10, model_instance_id: 'model',
+          model_id: 'model', reasoning_effort: null,
+          inference: { promptTokens: 1, generatedTokens: 1, promptMs: 1, generationMs: 1 },
+        })
+      }
+      state = reduceAgentRunState(state, { type: 'assistant_reply', text: 'completed synthesis' })
+      state = reduceAgentRunState(state, { type: 'turn_finished', reason, step_count: 2 })
+      expect(state.status).toBe('incomplete')
+      expect(state.trace.assistantText).toBe('completed synthesis')
+      const saved = JSON.parse(JSON.stringify(buildAgentRunSummary(state)))
+      expect(saved.status).toBe('incomplete')
+      expect(saved.finish_reason).toBe(reason)
+      expect(saved.stages.map((stage: { status: string }) => stage.status)).toEqual(['incomplete', 'finished'])
+    }
+  )
+
   it('tracks folder access separately from ordinary approvals', () => {
     const awaiting = reduceAgentRunState(createAgentRunState(), {
       type: 'folder_access_requested',

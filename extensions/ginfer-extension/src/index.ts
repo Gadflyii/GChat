@@ -345,15 +345,15 @@ export default class ginfer_extension extends AIEngine {
 
       let session: SessionInfo
       try {
-        session = await loadGinferModel(
+        session = await loadGinferModel({
           binaryPath,
-          await joinPath([await this.getProviderPath(), 'host']),
+          hostDirectory: await joinPath([await this.getProviderPath(), 'host']),
           modelId,
-          weightsPath,
-          cfg,
-          !!isEmbedding,
-          this.timeout
-        )
+          modelPath: weightsPath,
+          config: cfg,
+          isEmbedding: !!isEmbedding,
+          timeout: this.timeout,
+        })
       } catch (e: any) {
         const msg = e && typeof e.message === 'string' ? e.message : String(e)
         throw new Error(`Failed to load ${modelId}: ${msg}`)

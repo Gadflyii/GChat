@@ -64,11 +64,15 @@ checks. Original saved-profile restoration passed through the supported lifecycl
 The GPU/build guards and booking were released at 16:14Z; C4 owns the next
 local startup window. No further model run is active in this item.
 
-Owned source: `/ai/gchat-worktrees/oi056-current-engine`, branch
-`dev/oi056-current-engine`; Engine source: `/ai/ginfer-worktrees/gchat-oi056-engine`.
+Accepted source is main `104d4ec6e` (desktop runtime `a40d7221`). Both clean
+merged OI-056 source worktrees are retired; their committed branches and remote
+ancestors remain. Current remediation is coordinated in
+[code hygiene](../code-hygiene/README.md).
 Evidence: `/ai/gchat/out/oi056-current-engine/`, including original-profile-public,
 original-start-final-snapshot, both four-concurrent results, both UI Reload/Stop
-snapshots and runtime-update-result. The native tested build/stage/archive is
+snapshots and runtime-update-result. Cleanup released 2.479 GB net allocation; exact latest native installers and
+checksums are promoted to `/ai/gchat/out/windows`. Native baseline caches and
+evidence remain. See `cleanup-result-current.json`. The native tested build/stage/archive is
 `%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4/` (3.71 GB, retained for integration/reuse).
 App rebuild uses the existing `%LOCALAPPDATA%/GChat/windows-build/` cache and the
 exact verified 2ef archive; cached 613 resources must be replaced by the builder.

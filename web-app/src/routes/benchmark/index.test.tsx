@@ -66,7 +66,7 @@ beforeEach(() => {
     instances: [{ instance_id: 'instance', session_id: 'session', display_name: 'Muse', upstream_model_id: 'model', status: 'ready',
       configuration: { gpu_uuids: ['GPU'], max_context: 8192, concurrency: 1 },
       profile: { model_id: 'model', gpu_uuids: ['GPU'], max_context: 8192, concurrency: 1, vision: true, spec: 'auto', draft_tokens: 0, draft_tp: 0, kv_dtype: 'int8', kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false } }],
-    launch_profiles: [{ model_id: 'model', compatible_gpu_groups: [['GPU']], gpu_groups: [['GPU']], profile: { id: 'c4', name: 'C4 profile', tp: 1, max_context: 4096, concurrency: 4, options: { vision: true }, qualification: { tier: 'full-context-tested' } } }],
+    launch_profiles: [{ model_id: 'model', compatible_gpu_groups: [['GPU']], gpu_groups: [['GPU']], profile: { id: 'c4', name: 'C4 profile', tp: 1, max_context: 4096, concurrency: 4, options: { vision: true }, qualification: { tier: 'full-context-tested', engine_revision: 'fixture' } } }],
   }]))
   mocks.list.mockResolvedValue(['local', 'remote', 'offline'].map(host => ({ target_id: `ginfer/${host}/instance`, session_id: 'session', display_name: host, model_id: 'model', max_concurrency: 1, max_context: 8192, pid: null, is_embedding: false })))
 })

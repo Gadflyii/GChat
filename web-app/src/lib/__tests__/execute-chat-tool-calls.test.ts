@@ -28,6 +28,25 @@ const baseOptions = () => ({
 })
 
 describe('executeChatToolCalls', () => {
+  it('dispatches compact discovery tools through the shared capability executor', async () => {
+    const callCapability = vi.fn().mockResolvedValue({ content: [{ name: 'os_fs_read', description: 'Read files' }] })
+    const outputs: ChatToolOutput[] = []
+    await executeChatToolCalls({
+      ...baseOptions(),
+      capabilityToolNames: new Set(),
+      toolCalls: [{ toolCallId: 'discover', toolName: 'gchat_capability_search', input: { query: 'read files' } }],
+      signal: new AbortController().signal,
+      callCapability,
+      addToolOutput: (output) => { outputs.push(output) },
+    })
+    expect(callCapability).toHaveBeenCalledWith({ toolName: 'gchat_capability_search', arguments: { query: 'read files' } })
+    expect(outputs).toEqual([{
+      tool: 'gchat_capability_search',
+      toolCallId: 'discover',
+      output: [{ name: 'os_fs_read', description: 'Read files' }],
+    }])
+  })
+
   it('executes shared capability calls in order and adds output for continuation', async () => {
     const events: string[] = []
     const callCapability = vi.fn(async ({ arguments: input }) => {

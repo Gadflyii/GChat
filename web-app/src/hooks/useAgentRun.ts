@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { agentTurnStatus } from '@/lib/agent-outcome'
 import type {
   AgentEvent,
   AgentRunState,
@@ -159,15 +160,7 @@ export function reduceAgentRunState(
             stage.id === event.stage_id
               ? {
                   ...stage,
-                  status:
-                    event.status === 'cancelled'
-                      ? 'cancelled'
-                      : event.status === 'failed'
-                        ? 'failed'
-                        : event.status === 'max_steps' ||
-                            event.status === 'max_cycles'
-                          ? 'incomplete'
-                          : 'finished',
+                  status: agentTurnStatus(event.status),
                   summary: event.summary,
                   stepCount: event.step_count,
                   durationMs: event.duration_ms,
@@ -303,14 +296,7 @@ export function reduceAgentRunState(
         },
       }
     case 'turn_finished': {
-      const status =
-        event.reason === 'cancelled'
-          ? 'cancelled'
-          : event.reason === 'failed'
-            ? 'failed'
-            : event.reason === 'max_steps' || event.reason === 'max_cycles'
-              ? 'incomplete'
-              : 'finished'
+      const status = agentTurnStatus(event.reason)
       return {
         ...state,
         finishedAtMs: nowMs,

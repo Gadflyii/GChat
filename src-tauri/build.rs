@@ -1,5 +1,11 @@
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
+
+fn manifest_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .expect("missing CARGO_MANIFEST_DIR")
+}
 
 /// Embed Common Controls v6 so Windows libtest harnesses can start.
 ///
@@ -11,7 +17,7 @@ use std::path::Path;
 /// duplicate resource with id 1.
 #[cfg(all(windows, feature = "test-tauri"))]
 fn embed_windows_test_manifest() {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("windows-test.manifest");
+    let manifest = manifest_dir().join("windows-test.manifest");
     println!("cargo:rerun-if-changed={}", manifest.display());
     println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
     println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
@@ -37,6 +43,7 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(mobile)");
     println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_KEY_ID");
     println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_SEED_HEX");
+    println!("cargo:rerun-if-env-changed=CARGO_MANIFEST_DIR");
     stage_launch_profiles();
 
     #[cfg(all(windows, feature = "test-tauri"))]
@@ -78,7 +85,7 @@ fn stage_launch_profiles() {
             }
         }
     }
-    let output = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/bin/launch-profiles.json");
+    let output = manifest_dir().join("resources/bin/launch-profiles.json");
     let bytes = serde_json::to_vec_pretty(&serde_json::json!({
         "schema": "ginfer-launch-profiles-v1", "profiles": profiles,
     }))

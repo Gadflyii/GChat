@@ -5,6 +5,7 @@ Start with the root [README](../README.md) for product scope and releases, or
 
 | Topic | Reference |
 | --- | --- |
+| Current bug fixes and code hygiene | [Code hygiene](code-hygiene/README.md) |
 | Current installer refresh | [Installer refresh](installer-refresh/README.md) |
 | Shared Chat/Agent capabilities and recovery | [Agent runtime](agent-runtime/README.md) |
 | Master issues and TODOs | [Open work](open-work.md) |

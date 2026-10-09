@@ -98,12 +98,15 @@ impl ManagerState {
         let _refresh = self.refresh.lock().await;
         let listed = self.client.list().await?;
         let previous = self.view.lock().await.clone();
+        let registrations: Vec<_> = listed["registered"].as_array().into_iter().flatten().collect();
+        let ids = registrations.iter().map(|host| {
+            serde_json::from_value(host["host_id"].clone()).map_err(|error| error.to_string())
+        }).collect::<Result<Vec<Uuid>, _>>()?;
+        let snapshots = self.client.snapshots(&ids).await;
         let mut hosts = Vec::new();
-        for registration in listed["registered"].as_array().into_iter().flatten() {
+        for (registration, snapshot) in registrations.into_iter().zip(snapshots) {
             let mut host = registration.clone();
-            let id: Uuid = serde_json::from_value(host["host_id"].clone())
-                .map_err(|error| error.to_string())?;
-            match self.client.snapshot(id).await {
+            match snapshot {
                 Ok(snapshot) => {
                     host["online"] = true.into();
                     host["offline"] = false.into();

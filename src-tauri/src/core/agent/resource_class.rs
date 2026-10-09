@@ -19,6 +19,8 @@ pub enum ResourceClass {
 pub fn resource_class_for(tool_name: &str) -> ResourceClass {
     match tool_name {
         "tool.view"
+        | "capability_search"
+        | "capability_read"
         | "studio.inspect"
         | "memory.recall"
         | "skill.view"
@@ -108,5 +110,12 @@ mod tests {
     #[test]
     fn classifies_vision_as_a_serial_group() {
         assert_eq!(resource_class_for("vision.describe"), ResourceClass::Vision);
+    }
+
+    #[test]
+    fn capability_discovery_reads_do_not_receive_connector_approval() {
+        assert_eq!(resource_class_for("capability_search"), ResourceClass::PureRead);
+        assert_eq!(resource_class_for("capability_read"), ResourceClass::PureRead);
+        assert_eq!(resource_class_for("mcp_call"), ResourceClass::ApprovalGated);
     }
 }
