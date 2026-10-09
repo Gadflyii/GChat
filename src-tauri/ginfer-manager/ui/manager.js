@@ -200,7 +200,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     function fill() {
       if (mode === 'profile') {
         content.replaceChildren(select('Profile and GPU group', 'profile_choice', profiles.map(({ entry, group }, index) => [String(index),
-          `${entry.profile.name} · ${gpuNames(group)} · ${entry.profile.qualification?.tier || ''}`]), '0'))
+          `${entry.profile.name} · ${gpuNames(group)} · ${entry.profile.qualification.tier} · Engine ${entry.profile.qualification.engine_revision.slice(0, 8)}`]), '0'),
+        h('p', { class: 'muted' }, 'Profile evidence applies to its recorded Engine and workload. A changed Engine needs separate validation.'))
         return
       }
       const modelField = select('Installed model', 'model_id', models.map((entry) => [entry.id, `${modelLabel(entry)} · TP${entry.metadata?.tp_size}`]), model)

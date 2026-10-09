@@ -6,9 +6,20 @@ engine, artifact, hardware, and settings; they do not qualify later runtime buil
 The current contract is [model management](model-management.md). Outstanding release
 acceptance belongs in [open work](open-work.md), not this evidence record.
 
-## Outcome
+Current Engine work is OI-072 in the [Manager authority](ginfer-manager/README.md#current-engine-profile-repair--oi-072).
+The September fixed C4/131,072 Muse profile stays unchanged as evidence of its
+tested `922e5a8` settings. A separate automatic candidate targets installed native
+`2ef56a52a` with the same C4/context/KV/draft/graph/headroom contract. Its cold
+public-route capacity is calculated with checkpoint and growth reservations;
+startup and full-context prefix-enabled serving remain untested. The Host
+preserves null/omitted automatic sizing or positive exact bytes; measured old
+pool capacity does not become an automatic allocation override or qualify a
+newer Engine. This supersedes the fixed-pool production instruction below;
+historical measurements and their exact settings are retained.
 
-Current acceptance update: finish and merge the text-only and Vision+DFlash
+## Recorded September outcome
+
+September acceptance update: finish and merge the text-only and Vision+DFlash
 C1–C8 catalogs now, assuming the engine's Vision+DFlash restriction is corrected.
 Vision+DFlash is the default selection; never silently substitute autoregressive
 decoding or text-only operation. Preserve completed full-context evidence and
