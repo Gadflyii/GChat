@@ -1,7 +1,8 @@
 # GChat remediation and code hygiene
 
 Repository: `/ai/gchat`. Subject: `docs/code-hygiene/`. Owner: GChat coordinator.
-Main baseline: `104d4ec6e`. Integration: `dev/gchat-remediation-104d4ec6` at
+Published main code is `e239eac023`, fast-forwarded from `104d4ec6e` and pushed.
+Integration `dev/gchat-remediation-104d4ec6` remains at
 `/ai/gchat-worktrees/remediation-integration`.
 
 ## Outcome and acceptance
@@ -23,8 +24,10 @@ records unavailable physical prerequisites without making a second issue list.
 
 ## Current state and next action
 
-Source `0f06ba433` is frozen and pushed. Its composed `make verify` gate
-passes at 21:17 UTC: 2,112 frontend/core tests, 102 extension tests, all six
+All reviewed source fixes are merged and pushed on main `e239eac023`;
+`origin/main` equality is verified at 22:01 UTC. Only subject metadata/docs
+follow installed Windows product source `0f06ba433`, whose code is unchanged.
+Its composed `make verify` gate passes at 21:17 UTC: 2,112 frontend/core tests, 102 extension tests, all six
 coverage floors and supported Rust suites. The reviewed OI-106 winner
 `68315e6a3` also passes 85 focused cases, noEmit, production lint and independent
 review. Native Windows build PID 38512 terminates with exit 0 at 21:30 UTC;
@@ -60,8 +63,9 @@ initialization, shares native facade startup across sidebar, Host readiness and
 persisted provider hydration, and uses the existing Stop reservation sequence to
 invalidate delayed local or paired intake. Stop waits for an already dispatched
 native start before shutting down the singleton. Windows acceptance is complete.
-Next: assemble and inspect Linux packages, verify local X11 windows, complete
-the reviewed main merge/push and retire superseded owned outputs.
+Next: assemble and inspect Linux packages, then verify local X11 windows under
+booking 285. Completed OI-106 and profile source trees are retired; branches and
+external evidence remain.
 
 The temporary read-only tool restriction is removed. C2 stopped its sole Linux
 Muse repro at 21:08:45Z. At that check PID 826631 is absent and the RTX 5090
@@ -73,9 +77,10 @@ used the canonical GPU/build guards at WSL PIDs 838489/847974 under booking
 original profile stopped and zero Engines/API listeners. Normal GChat PID 40160,
 Manager PID 15224 and unchanged Host PID 23052 are restored without debug ports.
 Both canonical guard sessions are terminated/released and booking 284 is
-canceled after actual END; the direct result is delivered to C3 at 21:41Z. Linux's
-proposed 22:15–23:00Z assembly window awaits resource admission. Linux package/
-X11 acceptance and the reviewed main merge remain pending.
+canceled after actual END; the direct result is delivered to C3 at 21:41Z.
+Linux assembly/X11 acceptance remains pending under booking 285, 22:15–23:00Z. Source publication
+is complete. Completed OI-106 and profile source trees are retired after
+postmerge and fresh live-use checks; Linux package work remains.
 
 ## Implementation and verification
 
@@ -120,11 +125,11 @@ No margin, context, concurrency or profile promotion is justified by that result
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Active composed source and subject records; retain through main merge |
-| OI-106 / local Linux | `/ai/gchat-worktrees/oi106-selection-facade-7d9eb55` | Current reviewed source/tests; retain until integration/remote/live-use checks |
+| Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Source matches published main `e239eac023`; subject metadata edits await coordinator review, retain through Linux acceptance |
+| OI-106 / local Linux | `/ai/gchat-worktrees/oi106-selection-facade-7d9eb55` | Retired after published main and fresh live-use checks; exact local/remote source branches and external evidence retained |
 | Frontend/packages / local Linux | `/ai/gchat-worktrees/oi074-frontend-packages` | Approved physical dependency graph and prepared Linux runner; needed for final packages |
-| Profiles / local Linux | `/ai/gchat-worktrees/oi072-current-profiles` | Clean `e0112d2fc`; all content represented in integration, retire after final merge/live-use checks |
-| Coordinator / local Linux | `/ai/gchat/out/oi106-final-update-20261009` | Frozen source `0f06ba433`, Passing source/build/package/installed Windows acceptance; retained Manager `43c8d71cf` producer and exact original-profile restoration; Linux refresh/main merge pending |
+| Profiles / local Linux | `/ai/gchat-worktrees/oi072-current-profiles` | Retired; `e0112d2fc` retained on local/remote branches, content represented in published main and external evidence kept |
+| Coordinator / local Linux | `/ai/gchat/out/oi106-final-update-20261009` | Frozen source `0f06ba433`, Passing source/build/package/installed Windows acceptance; retained Manager `43c8d71cf` producer and exact original-profile restoration; Linux refresh pending; code merged/pushed on main `e239eac023` |
 | Accepted Windows evidence | `/ai/gchat/out/remediation-final-20261009`, `/ai/gchat/out/remediation-native-correction-20261009` | Installed source7d, original history, Chat, Stop and failed Start observations; retain concise evidence through promotion |
 | Native caches / Windows | `%LOCALAPPDATA%/GChat/windows-build/source`, `%LOCALAPPDATA%/GChat/release-output` | Existing app compiler/dependency cache and accepted packages; reuse |
 | Native Engine baseline / Windows | `%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4/output/ginfer-windows-x64-sm120a.zip` | Tested closed 125-payload `2ef56a52a` Engine; retain without rebuilding |
@@ -143,6 +148,10 @@ The selected Engine ZIP, current installers, reused Manager/catalog inputs and
 63 verified debug/evidence files remain. Current receipt:
 `out/oi106-final-update-20261009/cleanup-stale-builds.json`. Other owners' work, models/profiles, saved evidence
 and Tessera are excluded; unchecked/shared paths remain in the not-deleted list.
+The final two completed source trees are also retired with `git worktree remove`,
+releasing 553,762,816 B of owned WSL allocation. Their local/remote branches,
+shared dependency targets and external evidence remain. Receipt:
+`out/oi106-final-update-20261009/cleanup-completed-worktrees.json`.
 No whole-fleet cleanup claim is made.
 
 Physical results: [installer refresh](../installer-refresh/README.md),

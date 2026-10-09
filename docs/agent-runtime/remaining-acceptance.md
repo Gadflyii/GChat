@@ -4,7 +4,10 @@ This reference supports the existing entries in GInfer's [single master
 list](/ai/ginfer-worktrees/open-work/docs/maintainer/open-work.md). It records
 evidence scope and concrete check inputs; issue status, owners and prioritization
 remain in that list. Repository: GChat; subject: `docs/agent-runtime/`.
-Current installed source is `0f06ba433`; retained Manager is `43c8d71cf`
+Reviewed source fixes are merged and pushed on main `e239eac023`, with
+`origin/main` equality verified at 22:01 UTC. Installed Windows product remains
+`0f06ba433`; following changes are subject metadata/docs only. Retained Manager
+is `43c8d71cf`
 and native Engine is `2ef56a52a`. Composed `make verify` passes at 21:17 UTC,
 the native Windows build exits 0 at 21:30 UTC, and independent package
 verification passes at 21:34 UTC. The 125-payload runtime, 104 profiles with
@@ -18,8 +21,9 @@ Reload reach distinct Ready sessions with selected alias/Server running retained
 Final GUI Stop and supported exact original-profile restoration leave zero
 Engines/API listeners; normal apps are restored without debug ports.
 Receipts in that folder are `installed-verification.json` and
-`installed-lifecycle-acceptance.json`. Linux package/X11 acceptance and main
-merge remain pending; the known saved fixed-arena startup failure is unchanged.
+`installed-lifecycle-acceptance.json`. Linux package/X11 acceptance remains
+pending under booking 285, 22:15–23:00Z; the known saved fixed-arena startup
+failure is unchanged.
 
 Earlier installed `7d9eb55f9` passes package/install preservation at
 `/ai/gchat/out/remediation-final-20261009/installed-verification.json`.
@@ -27,7 +31,7 @@ Its accepted Chat workbook/discovery/compaction/continuation and original saved-
 reporting are recorded below. Its blank picker/stale status after explicit Start
 is retained failure evidence; the integrated correction now passes installed
 acceptance. The [integration authority](../code-hygiene/README.md) owns the next
-Linux package/X11 and main-merge work. Windows acceptance used the canonical
+Linux package/X11 work. Windows acceptance used the canonical
 GPU/build guards at WSL PIDs 838489/847974. C2 ended its sole
 Linux repro at 21:08:45 UTC; its lost-controller diagnostic remains invalid and
 C2 owns follow-up. Real Code, worker, connector and Hermes acceptance remains

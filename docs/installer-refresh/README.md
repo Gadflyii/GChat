@@ -48,7 +48,10 @@ Normal apps are restored without debug listeners. Evidence:
 `installed-lifecycle-acceptance.json`. This is C4/32K functional acceptance,
 not a new 128K capacity pass. Earlier `7d9eb55f9` Start reached Ready/API serving
 with blank selection/stale status; that failure remains historical evidence.
-Linux package/X11 refresh and reviewed main merge/push remain pending.
+Reviewed code is merged and pushed on main `e239eac023`; `origin/main` equality
+is verified at 22:01 UTC. Only subject metadata/docs follow installed Windows
+product `0f06ba433`. Linux package/X11 refresh remains pending under booking
+285, 22:15–23:00Z, Completed OI-106 and profile source trees are retired; source branches and evidence remain.
 
 GInfer `docs/installer-refresh/README.md` owns OI-058's portability build:
 frozen production source matches requested `f9af4cff4`, current base `f6d097566`,
@@ -100,8 +103,9 @@ open; no reduced margin, retry or capacity promotion is authorized by this resul
 Evidence: `out/code-hygiene-20261009/integration/` and
 `out/remediation-native-correction-20261009/`.
 
-Main baseline remains `104d4ec6e`; installed desktop is `0f06ba433` on the
-pushed remediation branch, with reviewed main merge pending. Both clean
+Published main code is `e239eac023`, fast-forwarded from `104d4ec6e` and pushed;
+installed
+Windows product remains `0f06ba433` with the same source code. Both clean
 merged OI-056 source worktrees are retired; their committed branches and remote
 ancestors remain. Current remediation is coordinated in
 [code hygiene](../code-hygiene/README.md).
@@ -109,8 +113,11 @@ Evidence: `/ai/gchat/out/oi056-current-engine/`, including original-profile-publ
 original-start-final-snapshot, both four-concurrent results, both UI Reload/Stop
 snapshots and runtime-update-result. Cleanup released 2.479 GB net allocation; exact latest native installers and
 checksums are promoted to `/ai/gchat/out/windows`. Native baseline caches and
-evidence remain. See `cleanup-result-current.json`. The native tested build/stage/archive is
-`%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4/` (3.71 GB, retained for integration/reuse).
+evidence remain. See `cleanup-result-current.json`. The exact tested Engine
+archive `%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4/output/ginfer-windows-x64-sm120a.zip`
+and retained debug evidence remain; its superseded build/stage/export directories
+are retired. [Code hygiene](../code-hygiene/README.md) owns that cleanup receipt
+and current disk inventory.
 App rebuild uses the existing `%LOCALAPPDATA%/GChat/windows-build/` cache and the
 exact verified 2ef archive; cached 613 resources must be replaced by the builder.
 Qwen inventory registration references its existing release-1003 artifact;
@@ -122,9 +129,9 @@ launcher was updated; no `/tmp` GPU/build lock is used. Windows source/build/pac
 Linux assembly needs its separately admitted window after actual resource handoff. Keep the physical RAM floor and compile/load exclusion.
 Failures go in GInfer's sole master `docs/maintainer/open-work.md` under its edit
 lock. Ron's newer in-session instruction authorizes the post-Windows-merge GChat bug
-and review phase now. After this client source merges, retire only verified
-owned superseded trees/builds and delegate the remaining GChat master-list
-items plus a dedicated quality/CPU/RAM/polling/thread/comment review. Preserve
+and review phase now. This client source is merged and pushed; next complete
+Linux assembly/X11 acceptance and retire only verified owned completed trees.
+Remaining physical work stays in the sole master list. Preserve
 other owners' trees and the accepted installed/build baseline; leave Server 2 alone.
 
 ## Local workstation update — accepted October 8, 2026
@@ -482,8 +489,8 @@ builder. Evidence is `out/oi070-linux-refresh/inputs.json`,
 `aligned-toolchain-preflight.log` and `lock-fixture/receipt.json`.
 
 Composed source verification and installed Windows acceptance pass at
-`0f06ba433`. Next: one Linux assembly and package/X11 acceptance, then reviewed
-main merge/push. No Linux package has been refreshed by this source work.
+`0f06ba433`; reviewed code is published on main `e239eac023`. Next: one Linux
+assembly and package/X11 acceptance under booking 285, 22:15–23:00Z, then update package evidence and the owned disk inventory. No Linux package has been refreshed by this source work.
 
 ## Accepted Linux installers — September 30, 2026
 

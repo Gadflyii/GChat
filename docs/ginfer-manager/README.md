@@ -38,8 +38,11 @@ from 26,366 to 1,705 tokens; final GUI Stop returns to zero. Supported
 Reload/Stop restores the original profile exactly and normal apps are restored
 without debug ports. Evidence:
 `/ai/gchat/out/oi106-final-update-20261009/installed-verification.json` and
-`installed-lifecycle-acceptance.json`. Linux package/X11 refresh and main merge
-remain pending. This C4/32K functional acceptance leaves the original fixed-arena
+`installed-lifecycle-acceptance.json`. Reviewed code is merged and pushed on
+main `e239eac023`; `origin/main` equality is verified at 22:01 UTC. Installed
+Windows product remains `0f06ba433`, with only subject metadata/docs following.
+Linux package/X11 refresh remains pending under booking 285, 22:15–23:00Z,
+Completed OI-106 and profile source trees are retired; source branches and evidence remain. This C4/32K functional acceptance leaves the original fixed-arena
 128K startup failure and physical qualification requirements below unchanged.
 
 ### Current Engine profile repair — OI-072
@@ -281,8 +284,8 @@ the pending automatic policy and evidence intact. Receipt:
 validator source and binary were removed. Independent review found no blocker
 in the evidence-label changes. The composed `make verify` at `0f06ba433` now
 passes; source verification does not qualify full-context capacity. Candidate
-source is represented in the integration tree, with retirement pending final
-merge/live-use checks; dependency links reuse shared caches. No disposable model,
+source is represented in published main and its completed tree is retired
+after fresh live-use checks; source branches and external evidence remain. No disposable model,
 build or GPU output was created by this source-preparation work.
 
 ### Retained startup diagnosis — OI-066

@@ -16,8 +16,11 @@ framework/platform changes and speculative SIMD are excluded.
 
 ## Current integration and accepted review
 
-Baseline is main `104d4ec6e`. Reviewed changes are integrated in
-`/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6`.
+Reviewed changes are merged and pushed on main `e239eac023`, fast-forwarded
+from `104d4ec6e`; `origin/main` equality is verified at 22:01 UTC. The integration
+tree `/ai/gchat-worktrees/remediation-integration` retains the same code; only
+following subject metadata/docs may change. Installed Windows product remains
+`0f06ba433`.
 The current composed `make verify` gate at `0f06ba433` passes at 21:17 UTC:
 2,112 frontend/core checks (six skipped), 102 extension checks, all six coverage
 floors, 553 desktop, 86 Host, six managed-adapter, 12 hardware and 29 utility
@@ -43,10 +46,10 @@ and establish no capacity promotion or native CPU/RAM improvement.
 The review tree `review-quality-104d4ec6` and supporting `review-hardware-880ecb5c`
 are retired after remote/tip/live-use checks; source branches and evidence remain.
 The integration authority owns current build/job inventory, pending Linux
-package/X11 acceptance and main merge. Windows acceptance used canonical
+package/X11 acceptance under booking 285, 22:15–23:00Z, and current disk inventory. Windows acceptance used canonical
 GPU/build guards at WSL PIDs 838489/847974; C2 ended its sole Linux repro at
 21:08:45 UTC and owns its invalid diagnostic follow-up. Windows acceptance is
-complete; Linux refresh and main merge remain open.
+complete; Linux refresh remains open.
 
 The accepted initial cleanup changes four production files:
 

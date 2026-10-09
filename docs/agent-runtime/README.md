@@ -5,6 +5,10 @@ prerequisites and distinguishes saved source evidence from installed replay.
 
 ## Current October 9 acceptance
 
+Reviewed source fixes are merged and pushed on main `e239eac023`;
+`origin/main` equality is verified at 22:01 UTC. Changes after installed
+Windows product `0f06ba433` are subject metadata/docs only.
+
 The current composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
 all six coverage floors, 553 desktop, 86 Host, six managed-adapter, 12 hardware
@@ -46,7 +50,8 @@ retained; final GUI Stop leaves zero Engines/API listeners and remains stable.
 Supported Reload/Stop restores the exact original profile; its known fixed-arena
 startup failure remains separate. Normal apps are restored without debug ports.
 The [integration authority](../code-hygiene/README.md) owns Linux package/X11
-acceptance, pending main merge and current source/build/job inventory. No
+acceptance under booking 285, 22:15–23:00Z, retained evidence and current
+source/build/job inventory. No
 original long agent run is rerun.
 
 ## OI-067 — accepted outcome correction
