@@ -31,13 +31,23 @@ OI-111–114 one at a time with short existing-fixture loops, then retire owned
 disposable outputs. Deadline: October 10 02:00 UTC. The candidate is
 `fix/gchat-host-review-bugs-0dd5d45c` at
 `/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c`, from main `0dd5d45ce`.
-Current item: OI-111, the listed durable profile-removal defect. Its owning
-fixture reproduces saved stopped profiles after restart. The narrow fix marks
-persistence dirty while holding the data mutex; the normal removal/restart and
-failed `host.json` write/retry cases pass. Independent source review accepts
-lock ordering, unrelated profiles and stable UUID mappings. Acceptance remains
-the composed checks and standalone commit/main publication. Next unresolved
-action: run those checks in an admitted CPU interval, then merge OI-111 alone.
+OI-111 is fixed and published separately on main `839d247b0`. The owning
+fixture reproduces saved stopped profiles after restart; marking persistence
+dirty under the data mutex passes normal removal/restart and failed `host.json`
+write/retry. Independent review accepts concurrency ordering and unrelated
+profiles/UUID mappings. `make verify -o verify-fast` passes desktop553/adapter6/
+Host87/Manager/hardware12/utility29; the unchanged accepted frontend gate is
+reused. Strict Host all-target Clippy passes with warnings denied. Evidence:
+`out/code-hygiene-20261009/host-review-bugs-0dd5d45c/oi111-{baseline,first-fix,verify-rust,clippy}.log`.
+OI-112 baseline is reproduced: immediate reconciliation rejects a successfully
+renamed snapshot because its revision did not advance. The candidate increments
+revision only after successful publication while holding the data mutex. The
+owning fixture passes both immediate successful reconciliation and failed-write
+name/revision preservation; all three LAN tests, five registry tests and strict
+Host all-target Clippy pass. Evidence: the same packet
+`oi112-{baseline,lan-tests,registry-tests,clippy}.log`. Independent review
+accepts the sharing/data lock order and failed publication rollback. This item
+is ready for standalone publication; next item is OI-113 queued Pause admission.
 
 Contrary review found three distinct baseline defects: closed-set aliases
 survive raw-payload removal (OI-120); an invalidating rescan loses active alias
@@ -47,7 +57,7 @@ OI-112–114, before feature work. Dependency proposals and expanded specific
 regressions are retained unapplied in
 `out/code-hygiene-20261009/host-review-bugs-0dd5d45c/`; these cases remain
 source-proven and unrun. They are not covered by the narrow OI-111 pass.
-Proceed to OI-112, then OI-113 and OI-114 after this standalone item completes.
+Proceed to OI-113 and OI-114 after this standalone item completes.
 No user models/state, GPU/model run, installer rebuild, inference controls or
 performance change is needed. The local CPU/GPU exclusive bookings run until
 00:20 UTC; compile only in an admitted quiet interval. CPU-only booking291

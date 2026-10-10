@@ -118,6 +118,7 @@ impl Host {
                 &serde_json::to_vec(&*data).map_err(|error| error.to_string())?)?;
             return Err(error);
         }
+        self.revision.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
 
@@ -150,6 +151,46 @@ impl Host {
 mod tests {
     use super::*;
     use hyper::{Body, Request, StatusCode};
+
+    #[tokio::test]
+    async fn renamed_host_snapshot_reconciles_immediately_and_failed_write_preserves_revision() {
+        use crate::engine_registry::{EngineRegistry, HostSnapshot, RegisteredHost};
+
+        let dir = tempfile::tempdir().unwrap();
+        let host = Host::open(dir.path().to_owned(), "Original host".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        host.data.lock().await.share_lan = false;
+        host.initialize_lan_sharing().await;
+        let before: HostSnapshot = serde_json::from_value(host.snapshot().await).unwrap();
+        let mut registry = EngineRegistry::default();
+        registry.register_paired(RegisteredHost {
+            host_id: before.host_id,
+            display_name: before.display_name.clone(),
+            credential_ref: "fixture-credential".into(),
+            certificate_sha256: host.data.lock().await.certificate.fingerprint(),
+        });
+        let connection = registry.connect(before.host_id).unwrap();
+        registry.reconcile(connection, before.clone()).unwrap();
+
+        let path = dir.path().join("host.json");
+        let saved = std::fs::read(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(host.set_name("Uncommitted host").await.is_err());
+        let failed: HostSnapshot = serde_json::from_value(host.snapshot().await).unwrap();
+        assert_eq!(failed, before);
+        registry.reconcile(connection, failed).unwrap();
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::write(&path, saved).unwrap();
+
+        host.set_name("  Renamed host  ").await.unwrap();
+        let renamed: HostSnapshot = serde_json::from_value(host.snapshot().await).unwrap();
+        assert_eq!(renamed.display_name, "Renamed host");
+        assert_eq!(renamed.host_id, before.host_id);
+        assert_eq!(renamed.boot_id, before.boot_id);
+        registry.reconcile(connection, renamed.clone()).unwrap();
+        assert!(renamed.revision > before.revision);
+    }
 
     #[tokio::test]
     async fn standalone_listener_remains_independent_of_managed_sharing() {
