@@ -71,24 +71,62 @@ whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
 profile controls or widened folder permissions. Restore the exact stopped
 original profile and normal apps, and prove Engine absence before guard release.
 
-Next action: finish native compilation of the frozen `37aa7beed` source,
-run the four cached ConPTY tests, then complete composed checks and installed
-Stop replay. The first attempt failed before testing because the required ICO
-was absent; its guard was released at 05:21:21 UTC. The corrected ICO staging
-passed in booking 329, but compilation was still active at the 05:44:30 watchdog.
-No test executed. The owned Job emptied, its pinned body exited, both controller
-and body were absent, and installed app identities/settings remained unchanged.
-No model was started. Root's fresh absence check released the build guard at
-05:45:01.431 UTC, 1.4 seconds after the booked boundary; that timing anomaly was
-reported. Both bookings are cancelled and no owned process or guard remains.
-Keep `pty-stop-37aa7beed` and `pty-stop-37aa7beed-retry-icon` evidence separately.
+Next action: diagnose the actual already-exited ConPTY test timeout,
+correct its owning code, and verify it before production checks or packaging.
+Frozen `37aa7beed` compiled successfully; the actual four-case run completed
+at 06:32:29 UTC with three passes and one failure: `cmd.exe /D /C "exit 7"`
+did not signal exit within five seconds. The real Stop/waiter, denied Stop
+with retained retry ownership, and startup-child cleanup tests passed. Do not
+increase that timeout, suppress the failure or infer its cause from the three
+passes. Installed Stop replay and model-backed OI-068 remain pending.
 
-The next CPU-only reservation is 06:45–07:30 UTC (327). Reuse the existing
+Independent source review accepts a test-only correction of the already-exited
+fixture. The installed portable-pty implementation enables cursor inheritance;
+the fixture must drain ConPTY output and reply to cursor-position requests,
+as required by [Microsoft's contract](https://learn.microsoft.com/en-us/windows/console/createpseudoconsole).
+The corrected fixture records actual query/reply evidence, retains all four
+real ConPTY cases and the original five-second natural-exit/exit-7 checks,
+then closes and joins its consumer before checking the retained killer.
+No product code, timeout, dependency or profile changed in this correction.
+Pipe clones do not retain the PseudoCon owner; closure/EOF lifetime was
+checked against the exact cached implementation. Its role in the saved
+timeout remains inferred until the next native execution. Current source
+must be frozen and the prepared native source/hash bindings refreshed before
+the 07:30 compile; prior PASS/failure receipts remain separate evidence.
+
+CPU-only booking 333 ended at 06:34:28.858 UTC before its 06:35 boundary.
+Both native Jobs were empty, pinned bodies exited, all six owned controller/
+body PIDs were absent and Engine count was zero before canonical build-guard
+release. User apps/settings were unchanged. The earlier no-run command
+completed Cargo 0 after 3 minutes 41 seconds, but its runner rejected an
+immediate remaining Job entry `[13996]`; that member's state is unproven.
+The reviewed retry records bounded natural drain and still requires actual
+Job 0 before promotion. Its cached no-run passed with the same executable
+(26,900,480 bytes, SHA `f462fc3e883c5ca7f108e97f3fac7c54edf048ee6d0fc87dfcb6974a1ba29a39`).
+The initial UNC invocation was rejected before launch; exact NTFS staging
+corrected it without execution-policy changes. Preserve failed and accepted
+receipts separately in `pty-stop-37aa7beed-early333-{compile,drain-compile,drain-test}`
+(native) and `release-verified-333.json` (WSL). No package/update occurred.
+
+Prior native attempts remain historical evidence: booking 325 omitted the
+required ICO and booking 329 timed out during compilation, both with zero
+executed tests. Their owned Jobs emptied and apps/settings remained unchanged.
+329's guard release was 1.4 seconds late and was reported. The preventive
+change gives compilation a separate finite budget and reserves 60 seconds
+for native cleanup plus another 60 seconds for root absence proof.
+All three earlier bookings are cancelled; no owned process or guard remains.
+
+Ron moved the local window to 07:30–08:10 UTC. Reservations 327/328 are
+cancelled; replacement 331 reserves the same later interval with both canonical
+guards for compilation/checks/package work followed by acceptance. No compile
+may run locally during the 06:45–07:30 kernel gates. Reuse the existing
 extraction, accepted ICO and native cache; do not change the release profile or
 replace real tests with a smaller crate. The continuation gives the no-run
 compile its own finite budget, followed only after actual compile/controller
-completion by the four cached tests within five minutes. Reserve at least 60
-seconds for native cleanup and root absence proof before each hard boundary.
+completion by the four cached tests within five minutes. Reserve 60
+seconds for native cleanup plus a separate 60 seconds for root absence proof
+before the booked END. The latest native phase deadline is 08:08 UTC, native
+cleanup 08:09 and root proof/release 08:10.
 This corrects the insufficient whole-compile deadline; compilation is not a
 passing test. Release unused reservation time at actual END and recheck inbox,
 booking and actual ownership before execution.
@@ -101,8 +139,10 @@ Engine closure; replace all inert test resources with verified production
 payloads before packaging. Verify current source, both package formats, Manager
 closure and preserved installed data before claiming an update.
 
-Model-backed acceptance is separately reserved for 07:30–08:10 UTC (328).
-Source verification/build cannot overlap model use. Missing physical providers
+After CPU work ends inside reservation 331, perform remaining acceptance
+sequentially. Compilation/checks and actual model use cannot overlap. The
+40-minute total build/acceptance fit is unmeasured; finish the required checks
+and preserve valid partial results instead of shrinking scope to fit. Missing physical providers
 or inputs remain explicit prerequisites; partial source checks never substitute
 for installed acceptance.
 

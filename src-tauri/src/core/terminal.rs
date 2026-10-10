@@ -2283,11 +2283,58 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn windows_terminal_killer_accepts_only_proven_already_exited_child() {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::{
+            Foundation::WAIT_OBJECT_0,
+            System::Threading::WaitForSingleObject,
+        };
+
         let mut process = WindowsPtyChild::spawn("cmd.exe", &["/D", "/C", "exit 7"]);
-        process.wait_for_exit();
-        assert_eq!(process.child.as_mut().unwrap().wait().unwrap().exit_code(), 7);
-        process.child.take();
-        process.killer.kill().unwrap();
+        let mut reader = process.master.as_ref().unwrap().try_clone_reader().unwrap();
+        let mut writer = process.writer.take().unwrap();
+        // Match the terminal's cursor report while continuously draining ConPTY output.
+        let consumer = std::thread::spawn(move || -> std::io::Result<(Vec<u8>, usize)> {
+            let mut output = Vec::new();
+            let mut replies = 0;
+            let mut buffer = [0; 256];
+            loop {
+                let count = reader.read(&mut buffer)?;
+                if count == 0 {
+                    return Ok((output, replies));
+                }
+                let search_from = output.len().saturating_sub(3);
+                output.extend_from_slice(&buffer[..count]);
+                for _ in 0..output[search_from..]
+                    .windows(4)
+                    .filter(|sequence| *sequence == b"\x1b[6n")
+                    .count()
+                {
+                    writer.write_all(b"\x1b[1;1R")?;
+                    writer.flush()?;
+                    replies += 1;
+                }
+            }
+        });
+        let mut killer = process.killer.clone();
+        let observed = unsafe { WaitForSingleObject(killer.process.as_raw_handle(), 5000) };
+        let natural_status = if observed == WAIT_OBJECT_0 {
+            Some(process.child.as_mut().unwrap().wait())
+        } else {
+            None
+        };
+        // Close ConPTY with its output consumer alive, then join before any material assertion.
+        drop(process);
+        let consumed = consumer.join().unwrap();
+        eprintln!("ConPTY natural-exit output/cursor replies: {consumed:?}");
+        let (_, replies) = consumed.unwrap();
+        assert_eq!(
+            observed, WAIT_OBJECT_0,
+            "native terminal child did not exit within five seconds"
+        );
+        assert!(replies > 0, "ConPTY did not emit a cursor-position query");
+        assert_eq!(natural_status.unwrap().unwrap().exit_code(), 7);
+        // The source child handle is closed; only the pinned duplicate remains.
+        killer.kill().unwrap();
     }
 
     #[cfg(windows)]
