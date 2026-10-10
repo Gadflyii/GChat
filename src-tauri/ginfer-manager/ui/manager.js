@@ -286,6 +286,9 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const configuration = instance.profile || instance.configuration || {}
     const running = ['ready', 'starting', 'stopping'].includes(instance.status)
     const currentFailure = online(host) && instance.status === 'failed'
+    const diagnosticSection = `instance-diagnostic:${host.host_id}:${instance.instance_id}:`
+    const diagnosticKey = `${diagnosticSection}${currentFailure ? 'current' : 'previous'}`
+    state.sections.delete(`${diagnosticSection}${currentFailure ? 'previous' : 'current'}`)
     const gpuLabels = array(configuration.gpu_uuids).map((uuid) => {
       const index = array(host.snapshot?.gpus).findIndex((gpu) => gpu.uuid === uuid)
       return `GPU ${index >= 0 ? index : '?'} · ${text(host.snapshot?.gpus?.[index]?.display_name || host.snapshot?.gpus?.[index]?.name, uuid)}`
@@ -304,7 +307,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       h('div', { class: 'facts' }, facts.map(([label, value]) => h('div', {}, label, h('strong', {}, value)))),
       instance.last_error ? h('div', {},
         currentFailure ? h('p', { class: 'section-error', role: 'alert' }, 'Engine failed. Open error details for the diagnostic.') : null,
-        h('details', { class: 'instance-diagnostic' },
+        h('details', { class: 'instance-diagnostic', 'data-section': diagnosticKey, open: state.sections.get(diagnosticKey) ?? false },
           h('summary', {}, currentFailure ? 'Startup or runtime error details' : 'Previous startup error'),
           h('pre', { class: 'mono' }, instance.last_error))) : null,
       h('div', { class: 'actions' }, button('Start', () => execute('start'), !online(host) || running),

@@ -278,7 +278,7 @@ test('stopped instances retain their full previous startup diagnostic without a 
   const cached = app.document.querySelector(`[data-instance="${stoppedId}"]`)
   assert.equal(cached.querySelector('[role="alert"]'), null)
   assert.equal(cached.querySelector('summary').textContent, 'Previous startup error')
-  assert.equal(cached.querySelector('details').open, false)
+  assert.equal(cached.querySelector('details').open, true)
   assert.equal(cached.querySelector('pre').textContent, diagnostic)
   assert.deepEqual(requests(app), [])
 })
@@ -309,6 +309,33 @@ test('current failures show a short alert and retain collapsed diagnostics after
   assert.equal(details.open, false)
   assert.equal(details.querySelector('pre').textContent, diagnostic)
   assert.equal(stopped.hosts[0].snapshot.instances[0].last_error, diagnostic)
+  assert.deepEqual(requests(app), [])
+})
+
+test('instance diagnostics retain their reading state across unrelated snapshots and collapse on phase changes', async (t) => {
+  const view = fixture()
+  const diagnostic = 'retained startup error\nfull diagnostic\nUsage: ginfer-serve --model <artifact>'
+  view.hosts[0].snapshot.instances[1].last_error = diagnostic
+  const app = await manager(t, view)
+  const details = () => app.document.querySelector(`[data-instance="${stoppedId}"] details`)
+  details().querySelector('summary').click()
+  assert.equal(details().open, true)
+  const unrelated = structuredClone(view)
+  unrelated.hosts[0].snapshot.instances[0].active_requests += 1
+  await app.publish(unrelated)
+  assert.equal(details().open, true)
+  assert.equal(details().querySelector('pre').textContent, diagnostic)
+  const failed = structuredClone(unrelated)
+  failed.hosts[0].snapshot.instances[1].status = 'failed'
+  await app.publish(failed)
+  assert.equal(details().querySelector('summary').textContent, 'Startup or runtime error details')
+  assert.equal(details().open, false)
+  details().querySelector('summary').click()
+  assert.equal(details().open, true)
+  await app.publish(unrelated)
+  assert.equal(details().querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(details().open, false)
+  assert.equal(details().querySelector('pre').textContent, diagnostic)
   assert.deepEqual(requests(app), [])
 })
 
