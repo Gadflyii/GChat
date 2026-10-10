@@ -111,6 +111,19 @@ logs remain in `output/`. This component pass does not qualify native tray,
 pairing or saved-grant restoration; the next action is the bounded S2 FIFO
 screen using this candidate and the existing isolated fixture.
 
+The prepared native gate now verifies the candidate's live registered tray
+owner, fresh accessible target and point hit before each action. Open requires
+actual window focus and menu closure; Exit requires the original PID absent.
+An unavailable owned-menu image is recorded without weakening those checks.
+This remains source preparation, with no new S2 launch or FIFO row.
+Read-only inspection of S2's Ubuntu appindicator extension shows its accessible
+name comes from icon description or Title, with no Id fallback. The locked
+GTK tray backend ignores the Manager's tooltip, supplies description `icon`,
+and maps its `title` option to panel text. Adding that option would not provide
+the intended accessible name. Actual candidate exposure remains unmeasured;
+use only fresh candidate-linked properties and targets for the native gate.
+Evidence: `out/remaining-acceptance-20261009/oi071/s2-tray-accessible-name-source-20261010.json`.
+
 Booking364's installed Windows desktop renders the embedded app correctly at
 `http://tauri.localhost`. The visible Code Stop reaches backend Exited and all
 four Code children exit, but the UI remains Stopping after 26 seconds; the new
