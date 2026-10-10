@@ -7,10 +7,10 @@ Reads env vars:
     OPENAI_BASE_URL  default "https://api.openai.com/v1"
     CURR_TAG         required, e.g. "v1.1.64"
     PREV_TAG         optional, resolved from git history if absent
-    REPO             optional, e.g. "AtomicBot-ai/GChat"
-    GH_TOKEN         optional; enables GitHub API lookups for PR authors
-                     (Contributors section) and for fetching recent published
-                     releases used as few-shot style exemplars.
+    REPO             optional source repository, e.g. "Gadflyii/GChat"
+    GH_TOKEN         optional source-read token for PR/commit contributors
+    RELEASE_REPO     optional artifact repository for published style exemplars
+    RELEASE_TOKEN    optional artifact-repository token for those release reads
 
 The generated notes are produced in the style of our most recent *published*
 releases (fetched via the GitHub API as few-shot examples) so the output
@@ -349,6 +349,8 @@ def main() -> int:
     model = os.environ.get("OPENAI_MODEL", "gpt-5-mini").strip() or "gpt-5-mini"
     repo = os.environ.get("REPO", "").strip()
     gh_token = os.environ.get("GH_TOKEN", "").strip() or None
+    release_repo = os.environ.get("RELEASE_REPO", "").strip()
+    release_token = os.environ.get("RELEASE_TOKEN", "").strip() or None
 
     prev_tag = os.environ.get("PREV_TAG", "").strip() or _resolve_prev_tag(curr_tag)
     logger.info("Previous tag: %s", prev_tag or "(none — first release)")
@@ -364,7 +366,7 @@ def main() -> int:
         logger.error("No commits found in range")
         return 1
 
-    style_examples = _collect_style_examples(repo, gh_token, curr_tag)
+    style_examples = _collect_style_examples(release_repo, release_token, curr_tag)
     logger.info("Style exemplars from past releases: %d", len(style_examples))
     style_examples_md = _render_style_examples(style_examples)
 

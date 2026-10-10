@@ -20,7 +20,10 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  RELEASE_REPOSITORY: SectileLabs/gchat
 
 jobs:
   create-draft-release:
@@ -29,11 +32,20 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
-      - name: Require SectileLabs updater repository
-        if: github.repository != 'SectileLabs/gchat'
+      - name: Require development source repository
+        if: github.repository != 'Gadflyii/GChat'
         run: |
-          echo "::error::Run releases from SectileLabs/gchat so uploaded assets match the configured updater feed."
+          echo "::error::Build releases from Gadflyii/GChat; SectileLabs/gchat stores release artifacts only."
           exit 1
+
+      - name: Require destination release credential
+        env:
+          RELEASE_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
+        run: |
+          if [[ ! "$RELEASE_TOKEN" =~ [^[:space:]] ]]; then
+            echo "::error::Configure SECTILE_RELEASE_TOKEN with Contents write access only to SectileLabs/gchat before an approved release."
+            exit 1
+          fi
 
       - name: Extract version from tag
         id: get_version
@@ -52,13 +64,14 @@ jobs:
           name: "GChat v${{ steps.get_version.outputs.version }}"
           draft: true
           prerelease: ${{ github.event_name == 'workflow_dispatch' }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ env.RELEASE_REPOSITORY }}
+          token: ${{ secrets.SECTILE_RELEASE_TOKEN }}
+          generate_release_notes: false
+          body: "Built from [Gadflyii/GChat source commit ${{ github.sha }}](https://github.com/Gadflyii/GChat/commit/${{ github.sha }})."
 
   # ──────────────────────────────────────────────────────────────
   # Polished release notes (LLM-generated from git log between tags)
-  # On failure: warning only — default GitHub-generated notes remain.
+  # On failure: warning only — source-commit provenance remains.
   # ──────────────────────────────────────────────────────────────
   enrich-release-notes:
     needs: create-draft-release
@@ -78,11 +91,11 @@ jobs:
       - name: Resolve previous published release tag
         id: prev
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
           CURR_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
         run: |
           set +e
-          PREV_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null)
+          PREV_TAG=$(gh api "repos/${RELEASE_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null)
           set -e
           if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "null" ] || [ "$PREV_TAG" = "$CURR_TAG" ]; then
             echo "No previous published release found (or equals current tag); will fall back to git history"
@@ -101,16 +114,19 @@ jobs:
           PREV_TAG: ${{ steps.prev.outputs.prev_tag }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_REPO: ${{ env.RELEASE_REPOSITORY }}
+          RELEASE_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         run: |
           set +e
           python3 scripts/release-notes/generate.py > /tmp/release-notes.md
           rc=$?
           set -e
           if [ "$rc" -ne 0 ] || [ ! -s /tmp/release-notes.md ]; then
-            echo "::warning::LLM release notes generation failed (rc=$rc); keeping default GitHub-generated notes"
+            echo "::warning::LLM release notes generation failed (rc=$rc); keeping source-commit provenance"
             echo "ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          printf '\nBuilt from [Gadflyii/GChat source commit %s](https://github.com/Gadflyii/GChat/commit/%s).\n' "$GITHUB_SHA" "$GITHUB_SHA" >> /tmp/release-notes.md
           echo "===== Generated notes ====="
           cat /tmp/release-notes.md
           echo "==========================="
@@ -119,23 +135,19 @@ jobs:
       - name: Update draft release body
         if: steps.gen.outputs.ok == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
           TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
         run: |
-          # The GitHub API occasionally returns a transient 401 for
-          # GITHUB_TOKEN requests, so retry a few times. Applying the polished
-          # notes is best-effort: the default GitHub-generated notes already
-          # exist, so a persistent failure is a warning, never a job failure
-          # (per this job's "on failure: warning only" contract).
+          # Keep source provenance if optional note enrichment fails.
           for attempt in 1 2 3 4 5; do
-            if gh release edit "$TAG" --notes-file /tmp/release-notes.md; then
+            if gh release edit "$TAG" --repo "$RELEASE_REPOSITORY" --notes-file /tmp/release-notes.md; then
               echo "Release notes applied (attempt ${attempt})."
               exit 0
             fi
             echo "::warning::gh release edit failed (attempt ${attempt}); retrying in $((attempt * 5))s"
             sleep $((attempt * 5))
           done
-          echo "::warning::Could not update the release body after retries; keeping default GitHub-generated notes"
+          echo "::warning::Could not update the release body after retries; keeping source-commit provenance"
 
   # ──────────────────────────────────────────────────────────────
   # Windows  (x86_64 — NSIS + MSI, DigiCert KeyLocker code signing)
@@ -429,7 +441,7 @@ jobs:
       - name: Upload NSIS installer to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/nsis/${{ steps.metadata.outputs.exe_name }}
@@ -439,7 +451,7 @@ jobs:
       - name: Upload MSI installer to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/msi/${{ steps.metadata.outputs.msi_name }}
@@ -449,7 +461,7 @@ jobs:
       - name: Upload NSIS updater signature to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/nsis/${{ steps.metadata.outputs.exe_name }}.sig
@@ -665,7 +677,7 @@ jobs:
       - name: Upload .AppImage to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/appimage/${{ steps.metadata.outputs.appimage_name }}
@@ -675,7 +687,7 @@ jobs:
       - name: Upload .AppImage updater signature to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/appimage/${{ steps.metadata.outputs.appimage_name }}.sig
@@ -745,7 +757,7 @@ jobs:
       - name: Upload latest.json to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./latest.json

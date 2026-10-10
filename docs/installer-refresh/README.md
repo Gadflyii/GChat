@@ -5,29 +5,30 @@
 All GChat check/download paths and release asset URLs use the configured feed:
 `https://github.com/SectileLabs/gchat/releases/latest/download/latest.json`.
 Ron explicitly designates the private, empty `SectileLabs/gchat` repository
-for release artifacts only when ready. Development source remains in
-`Gadflyii/GChat`; do not push source code to `SectileLabs/gchat`. The existing
-workflow creates drafts/uploads in its executing repository and rejects execution
-outside `SectileLabs/gchat`. That guard and publication routing must be reconciled
-with the artifacts-only destination before the next release, without relocating
-source. Draft-only behavior is retained; no cross-repository credentials, signing
-or publication are authorized by this documentation change.
+for release artifacts only when ready. Development source and the build/tag
+workflow remain in `Gadflyii/GChat`; do not push source code to the destination.
+The source-only routing correction is implemented and independently reviewed in
+this owned candidate. It is not release-qualified.
 
-Pending source correction after the current Windows acceptance priority:
-`.github/workflows/release.yml:33–35` rejects the development repository; its
-draft action (47–59), release-body edit (119–139) and six payload/signature/manifest
-upload steps (429/439/449/665/675/745) target the executing repository through
-its token and draft upload URL. This is incompatible with the artifacts-only
-decision and is not a ready publication path. Keep workflow execution/checkouts
-in `Gadflyii/GChat`, require that source repository, and explicitly route only
-approved release assets, manifest and release metadata to `SectileLabs/gchat`.
-Use source-read permissions for development checkout and a separately admitted
-destination-scoped Contents-write release credential for draft/edit/upload;
-no credential has been read, supplied or authorized for use. Query the previous
-published release in the destination while keeping commit/PR provenance in the
-source repository. Preserve draft-only behavior and exact final-payload/signature
-gates. This is a source-only proposal for coordinator review, not implemented,
-tested or executed; source relocation is forbidden.
+`.github/workflows/release.yml` requires execution in `Gadflyii/GChat`, with
+source `GITHUB_TOKEN` Contents-read permissions. Draft creation explicitly targets
+`SectileLabs/gchat`; all six payload/signature/manifest uploads use that draft's
+upload URL and separate `SECTILE_RELEASE_TOKEN`. Previous published-release queries
+and draft-body edits also explicitly target the destination. Release-note git
+history, contributors and commit links remain in the development repository;
+published style examples are read separately from the artifact repository.
+Destination-generated git notes are disabled so artifact-repository history is
+not presented as development history. Draft-only behavior and exact final
+payload/signature gates remain unchanged; no source mirror or forced tag is added.
+
+The release owner must configure `SECTILE_RELEASE_TOKEN` in the development
+repository with Contents-write access scoped only to `SectileLabs/gchat`; the
+workflow fails before draft creation when absent. Configuration/access is
+unverified: no credential was read, provisioned or used. Check the destination's
+default branch and release-tag readiness without copying development source.
+Destination readiness and anonymous access to the configured updater feed must be established for the next
+approved release without placing credentials in the app. Signing/publication
+remain separately gated; this correction does not resolve the live404 itself.
 
 Ron authorized local unsigned preparation; signing/publication await his next
 release. The release workflow and `src-tauri/latest.json.template` cover only
@@ -46,9 +47,13 @@ Retain `/ai/gchat-worktrees/oi110-sectile-feed-bd4` on
 `fix/oi110-sectile-feed-bd4` (baseline `bd4dba841`) for coordinator review and the
 unsigned copy for release preparation. Prior endpoint/repository evidence is in
 `out/remaining-acceptance-20261009/`: `oi110-endpoint-20261010T0433Z.json` and
-`oi110-release-location-20261010T0436Z.json`. Diff checking passes; no tests,
-builds, native execution, signing or publication ran.
-Later metadata/JQ admission checks are prepared, not executed, in
+`oi110-release-location-20261010T0436Z.json`. Focused local checks pass: YAML 1.2
+parsing, `bash -n` on all 25 Linux/explicit Bash run blocks, Python syntax and
+offline source/destination routing assertions
+including all six uploads and unchanged signature/metadata/manifest gate blocks.
+`git diff --check` passes. These are local syntax/source checks, not CI execution
+or credential/publication acceptance; no build, native execution, signing or
+publication ran. Later metadata/JQ release admission checks are prepared in
 `/ai/gchat/out/remaining-acceptance-20261009/oi110-release-gate-checks.txt`.
 
 ## Current engine acceptance — OI-056/OI-083, October 9, 2026
