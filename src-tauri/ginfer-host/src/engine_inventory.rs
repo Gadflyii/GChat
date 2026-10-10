@@ -103,25 +103,25 @@ fn required_nullable_digest<'de, D: serde::Deserializer<'de>>(
 
 /// Resolve a declared payload after inventory validation; never guess sibling names.
 pub fn artifact_set_payload(path: &Path, tp: u32) -> Result<PathBuf, String> {
-    inspect_artifact_set(path)?;
-    let set: ArtifactSet =
-        serde_json::from_reader(BufReader::new(File::open(path).map_err(|e| e.to_string())?))
-            .map_err(|e| e.to_string())?;
-    let entry = set
-        .artifacts
+    artifact_set_members(path)?
         .into_iter()
-        .find(|e| e.tp == tp)
-        .ok_or("degree is not declared")?;
-    path.parent()
-        .ok_or("artifact set has no parent")?
-        .join(entry.path)
-        .canonicalize()
-        .map_err(|e| e.to_string())
+        .find(|(_, metadata)| metadata.tp_size == tp)
+        .map(|(payload, _)| payload)
+        .ok_or("degree is not declared".into())
 }
 
 /// Validate the deployment declaration and every member header. The Engine,
 /// not inventory, hashes the selected payload before materialization.
 pub fn inspect_artifact_set(path: &Path) -> Result<Vec<ArtifactMetadata>, String> {
+    Ok(artifact_set_members(path)?
+        .into_iter()
+        .map(|(_, metadata)| metadata)
+        .collect())
+}
+
+/// Resolve canonical payload paths with the same closed declaration validation
+/// used by inventory and degree selection.
+pub fn artifact_set_members(path: &Path) -> Result<Vec<(PathBuf, ArtifactMetadata)>, String> {
     let set: ArtifactSet =
         serde_json::from_reader(BufReader::new(File::open(path).map_err(|e| e.to_string())?))
             .map_err(|e| format!("invalid artifact set: {e}"))?;
@@ -175,12 +175,12 @@ pub fn inspect_artifact_set(path: &Path) -> Result<Vec<ArtifactMetadata>, String
         {
             return Err("artifact set member header or size disagrees with its declaration".into());
         }
-        members.push(metadata);
+        members.push((member, metadata));
     }
-    members.sort_by_key(|m| m.tp_size);
-    let has_draft = members.iter().any(|m| m.draft_tp != 0);
+    members.sort_by_key(|(_, metadata)| metadata.tp_size);
+    let has_draft = members.iter().any(|(_, metadata)| metadata.draft_tp != 0);
     if has_draft != set.canonical_reconstructed_draft_sha256.is_some()
-        || (has_draft && members.iter().any(|m| m.draft_tp == 0))
+        || (has_draft && members.iter().any(|(_, metadata)| metadata.draft_tp == 0))
     {
         return Err("artifact set draft digest and draft TP declarations disagree".into());
     }

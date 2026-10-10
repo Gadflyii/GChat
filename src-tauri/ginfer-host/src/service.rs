@@ -1,6 +1,6 @@
 use crate::{
     engine_host::{EngineLaunch, HostProcesses, LaunchOptions},
-    engine_inventory::{inspect_artifact, inspect_artifact_set, ArtifactMetadata},
+    engine_inventory::{artifact_set_members, inspect_artifact, inspect_artifact_set, ArtifactMetadata},
     transport::HostCertificate,
 };
 use hmac::{Hmac, Mac};
@@ -8,7 +8,7 @@ use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -35,6 +35,9 @@ pub struct ModelEntry {
     pub path: PathBuf,
     pub metadata: ArtifactMetadata,
     pub artifact_set: bool,
+    // The last validated scan owns dependency facts; they are not protocol data.
+    #[serde(skip)]
+    payload: PathBuf,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LaunchRequest {
@@ -511,9 +514,13 @@ impl Host {
                     }
                 } else if artifact_set || path.extension().and_then(|s| s.to_str()) == Some("ginfer") {
                     let result = if artifact_set {
-                        inspect_artifact_set(&path)
+                        artifact_set_members(&path)
                     } else {
-                        inspect_artifact(&path).map(|m| vec![m])
+                        inspect_artifact(&path).and_then(|metadata| {
+                            path.canonicalize()
+                                .map(|payload| vec![(payload, metadata)])
+                                .map_err(|e| e.to_string())
+                        })
                     };
                     match result.and_then(|members| {
                         path.canonicalize()
@@ -521,8 +528,8 @@ impl Host {
                             .map_err(|e| e.to_string())
                     }) {
                         Ok((path, members)) => {
-                            for metadata in members {
-                                found.push((path.clone(), metadata, artifact_set));
+                            for (payload, metadata) in members {
+                                found.push((path.clone(), payload, metadata, artifact_set));
                             }
                         }
                         Err(e) => errors.push(serde_json::json!({"path":path,"error":e})),
@@ -535,7 +542,7 @@ impl Host {
         .map_err(|e| e.to_string())?;
         let mut data = self.data.lock().await;
         let mut models = BTreeMap::new();
-        for (path, metadata, artifact_set) in entries {
+        for (path, payload, metadata, artifact_set) in entries {
             let key = serde_json::to_string(&(&path, artifact_set, metadata.tp_size))
                 .map_err(|e| e.to_string())?;
             let id = *data.models.entry(key).or_insert_with(|| {
@@ -549,6 +556,7 @@ impl Host {
                     path,
                     metadata,
                     artifact_set,
+                    payload,
                 },
             );
         }
@@ -1538,17 +1546,23 @@ impl Host {
                     .parse::<Uuid>()
                     .map_err(|e| e.to_string())?;
                 let _lifecycle = self.lifecycle.lock().await;
-                let model = self
-                    .inventory
-                    .read()
-                    .await
+                let inventory = self.inventory.read().await.clone();
+                let model = inventory
                     .iter()
                     .find(|m| m.id == id)
                     .cloned()
                     .ok_or("unknown model")?;
+                let mut affected_paths = BTreeSet::from([model.path.clone()]);
+                affected_paths.extend(inventory.iter()
+                    .filter(|entry| entry.artifact_set && entry.payload == model.path)
+                    .map(|entry| entry.path.clone()));
+                let affected_ids: BTreeSet<_> = inventory.iter()
+                    .filter(|entry| affected_paths.contains(&entry.path))
+                    .map(|entry| entry.id)
+                    .collect();
                 let processes = self.processes.lock().await;
                 if processes.instances().any(|i| {
-                    i.launch.artifact == model.path
+                    affected_paths.contains(&i.launch.artifact)
                         && !matches!(
                             i.status,
                             crate::engine_registry::InstanceStatus::Stopped
@@ -1562,7 +1576,7 @@ impl Host {
                 {
                     let mut data = self.data.lock().await;
                     let previous_len = data.profiles.len();
-                    data.profiles.retain(|_, p| p.model_id != id);
+                    data.profiles.retain(|_, p| !affected_ids.contains(&p.model_id));
                     if data.profiles.len() != previous_len {
                         self.inventory_dirty.store(true, Ordering::SeqCst);
                     }

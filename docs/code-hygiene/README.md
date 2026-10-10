@@ -30,7 +30,8 @@ rows are merged in GInfer dev/next `c72edea85`. Ron's next instruction is to fix
 OI-111–114 one at a time with short existing-fixture loops, then retire owned
 disposable outputs. Deadline: October 10 02:00 UTC. The candidate is
 `fix/gchat-host-review-bugs-0dd5d45c` at
-`/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c`, from main `0dd5d45ce`.
+`/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c`, originally from main
+`0dd5d45ce`, now reusing accepted baseline `43edbcf95`.
 OI-111 is fixed and published separately on main `839d247b0`. The owning
 fixture reproduces saved stopped profiles after restart; marking persistence
 dirty under the data mutex passes normal removal/restart and failed `host.json`
@@ -71,8 +72,8 @@ delivery. Restoring the exact registry lets the next real read deliver the
 missing membership at the committed revision. All three fleet-client tests and
 strict Host all-target Clippy pass. Independent review accepts the boundary,
 fresh pins, unchanged pre-commit/cache-save errors and fixture cleanup. Evidence:
-`oi114-{baseline,fleet-client-tests,clippy}.log` in the same packet. Next action:
-standalone publication: the composed Rust gate passes at actual END00:55:22Z
+`oi114-{baseline,fleet-client-tests,clippy}.log` in the same packet. The fix is
+merged/pushed separately on main `43edbcf95`. The composed Rust gate passes at actual END00:55:22Z
 (exit0, desktop553/adapter6/Host91/Manager/hardware12/utility29), with the
 unchanged accepted frontend gate reused. Evidence: `oi114-verify-rust.log`.
 The gate ran early after the preceding exclusive owner released its booking;
@@ -88,9 +89,24 @@ profile cleanup (OI-122). Ron approved separate rows and ordered fixes after
 OI-112–114, before feature work. Dependency proposals and expanded specific
 regressions are retained unapplied in
 `out/code-hygiene-20261009/host-review-bugs-0dd5d45c/`; these cases remain
-source-proven and unrun. They are not covered by the narrow OI-111 pass.
-After OI-114 publishes, remediate OI-120, then OI-121, then OI-122
-before any feature work.
+source-proven until their owning reproductions run. They are not covered by
+the narrow OI-111 pass. OI-120 is the sole current item: reproduce removal of
+all TP1/TP2/TP4 descriptor aliases and rejection of an active alias using the
+existing managed-download fixture, then fix and verify durable cleanup while
+preserving unrelated/offline profiles and UUID mappings. Tests are prepared
+against `43edbcf95`. Both owning cases reproduce the defect: live aliases remain
+after deletion and a Starting alias permits deletion (HTTP200 instead of400).
+Independent design review accepts canonical member paths captured during complete
+closed-set validation, then exact descriptor-path/degree-ID closure for removal.
+This avoids reading unrelated offline sets during deletion and preserves UUIDs.
+The applied source is independently accepted; all 70 Host library tests and
+strict Host all-target Clippy pass, including both owning regressions. Evidence:
+`oi120-{baseline,host-lib-tests,clippy}.log` in the same packet. The final
+composed Rust gate passes at actual END01:06:10Z (exit0,
+desktop553/adapter6/Host93/Manager/hardware12/utility29); unchanged accepted
+frontend evidence is reused. Evidence: `oi120-verify-rust.log`. The build guard
+is released. This item is ready for standalone publication.
+OI-121 and OI-122 follow in order before any feature work.
 No user models/state, GPU/model run, installer rebuild, inference controls or
 performance change is needed. Compile only in admitted quiet intervals. CPU-only booking291 was released
 after focused checks; final verification used the early free interval after

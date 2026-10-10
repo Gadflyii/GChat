@@ -890,6 +890,172 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn managed_payload_removal_durably_removes_all_descriptor_aliases() {
+        use crate::service::{Host, LaunchRequest};
+        use hyper::{Body, Request, StatusCode};
+
+        let directory = tempfile::tempdir().unwrap();
+        let provider = directory.path().join("ginfer");
+        let retained_models = directory.path().join("retained-models");
+        std::fs::create_dir(&retained_models).unwrap();
+        let (release, bytes) = fixture();
+        std::fs::write(retained_models.join("keep.ginfer"), &bytes).unwrap();
+        let state = provider.join("host");
+        let engine = provider.join("bin/missing-engine");
+        let set_path = provider.join("deployment.json");
+        let unrelated_set = provider.join("unrelated-deployment.json");
+        let host = Host::open_with_model_storage(state.clone(), "Test".into(), engine.clone(),
+            vec![retained_models.clone()], vec![set_path.clone(), unrelated_set.clone()], vec![], Some(provider.clone())).await.unwrap();
+        let download = insert(&host.downloads, release.clone()).await;
+        std::fs::write(host.downloads.root().join(format!("{download}.part")), &bytes).unwrap();
+        host.downloads.transfer(download).await.unwrap();
+        let mut declared = vec![serde_json::json!({"tp":1,"draft_tp":0,
+            "path":format!("models/{}/model.ginfer", release.sha256),"bytes":release.bytes,"sha256":release.sha256})];
+        for tp in [2, 4] {
+            let metadata = serde_json::json!({"identity":release.identity,"tp_size":tp,"draft_tp":0,
+                "objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
+            let mut payload = b"NINFER\0\x03".to_vec();
+            payload.extend((metadata.len() as u64).to_le_bytes());
+            payload.extend(metadata.as_bytes());
+            payload.resize(4096, 0);
+            let name = format!("tp{tp}.ginfer");
+            std::fs::write(provider.join(&name), &payload).unwrap();
+            declared.push(serde_json::json!({"tp":tp,"draft_tp":0,"path":name,
+                "bytes":payload.len(),"sha256":hex::encode(Sha256::digest(&payload))}));
+        }
+        let descriptor = serde_json::json!({"schema":"ginfer-artifact-set-v1",
+            "identity":{"model_id":release.identity.model_id,"weights_id":release.identity.weights_id,"family_id":"a".repeat(64)},
+            "canonical_reconstructed_target_sha256":"b".repeat(64),"canonical_reconstructed_draft_sha256":null,
+            "artifacts":declared});
+        std::fs::write(&set_path, descriptor.to_string()).unwrap();
+        let unrelated_payload = provider.join("unrelated.ginfer");
+        std::fs::write(&unrelated_payload, &bytes).unwrap();
+        let mut unrelated_descriptor = descriptor.clone();
+        unrelated_descriptor["artifacts"] = serde_json::json!([
+            {"tp":1,"draft_tp":0,"path":"unrelated.ginfer","bytes":release.bytes,"sha256":release.sha256}
+        ]);
+        std::fs::write(&unrelated_set, unrelated_descriptor.to_string()).unwrap();
+        host.scan().await.unwrap();
+        let package = host.downloads.root().join(&release.sha256);
+        let removed_path = package.join("model.ginfer");
+        let models = host.inventory.read().await.clone();
+        let removed_model = models.iter().find(|model| model.path == removed_path).unwrap().id;
+        assert_eq!(models.len(), 6);
+        let retained_model = models.iter().find(|model| model.path == retained_models.join("keep.ginfer")).unwrap().id;
+        let dependent_models: Vec<_> = models.iter().filter(|model| model.path == set_path).map(|model| model.id).collect();
+        let unrelated_model = models.iter().find(|model| model.path == unrelated_set).unwrap().id;
+        assert_eq!(dependent_models.len(), 3);
+        let removed_profile = Uuid::new_v4();
+        let retained_profile = Uuid::new_v4();
+        let mut profiles = vec![
+            (removed_profile, removed_model, "GPU-removed"),
+            (retained_profile, retained_model, "GPU-retained"),
+            (Uuid::new_v4(), Uuid::new_v4(), "GPU-unavailable"),
+            (Uuid::new_v4(), unrelated_model, "GPU-unrelated-set"),
+        ];
+        for (degree, model_id) in dependent_models.iter().enumerate() {
+            profiles.push((Uuid::new_v4(), *model_id, match degree { 0 => "GPU-tp1", 1 => "GPU-tp2", _ => "GPU-tp4" }));
+        }
+        for (instance_id, model_id, gpu) in profiles {
+            host.data.lock().await.profiles.insert(instance_id, LaunchRequest {
+                instance_id: Some(instance_id), qualified_profile_id: None, model_id,
+                gpu_uuids: vec![gpu.into()], max_context: 4096, concurrency: 1,
+                options: Default::default(),
+            });
+        }
+        host.save().await.unwrap();
+        let before = host.snapshot().await;
+        let retained: Vec<_> = before["instances"].as_array().unwrap().iter()
+            .filter(|instance| {
+                let model_id = instance["profile"]["model_id"].as_str().unwrap().parse::<Uuid>().unwrap();
+                model_id != removed_model && !dependent_models.contains(&model_id)
+            }).cloned().collect();
+        assert_eq!(retained.len(), 3);
+        let mappings = host.data.lock().await.models.clone();
+        // Losing an unrelated member after scan must not block this removal
+        // or prune that descriptor's saved profile.
+        std::fs::remove_file(&unrelated_payload).unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = Request::post("/host/v1/remove-model")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"model_id":removed_model}).to_string())).unwrap();
+        let response = host.clone().route(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(!package.exists());
+        assert!(host.downloads.list().await.is_empty());
+        let after = host.snapshot().await;
+        assert_eq!(after["instances"], serde_json::json!(retained.clone()));
+        assert_eq!(after["host_id"], before["host_id"]);
+        assert_eq!(after["boot_id"], before["boot_id"]);
+        drop(host);
+
+        let reopened = Host::open_with_model_storage(state, "Ignored".into(), engine,
+            vec![retained_models], vec![set_path, unrelated_set], vec![], Some(provider)).await.unwrap();
+        let restored = reopened.snapshot().await;
+        assert_eq!(restored["instances"], serde_json::json!(retained));
+        assert_eq!(restored["host_id"], before["host_id"]);
+        assert_eq!(restored["models"].as_array().unwrap().len(), 1);
+        assert_eq!(restored["models"][0]["id"], retained_model.to_string());
+        assert_eq!(reopened.data.lock().await.models, mappings);
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn managed_payload_removal_rejects_active_dependent_artifact_set() {
+        use crate::service::{Gpu, Host, LaunchRequest};
+        use hyper::{Body, Request, StatusCode};
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let provider = directory.path().join("ginfer");
+        let engine = provider.join("bin/fixture-engine");
+        std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
+        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let set_path = provider.join("deployment.json");
+        let host = Host::open_with_model_storage(provider.join("host"), "Test".into(), engine,
+            vec![], vec![set_path.clone()], vec![Gpu {
+                uuid: "GPU-test".into(), name: "Test".into(), display_name: None,
+                memory_mib: 32768, compute_capability: Some("12.0".into()),
+            }], Some(provider.clone())).await.unwrap();
+        let (release, bytes) = fixture();
+        let download = insert(&host.downloads, release.clone()).await;
+        std::fs::write(host.downloads.root().join(format!("{download}.part")), &bytes).unwrap();
+        host.downloads.transfer(download).await.unwrap();
+        let descriptor = serde_json::json!({"schema":"ginfer-artifact-set-v1",
+            "identity":{"model_id":release.identity.model_id,"weights_id":release.identity.weights_id,"family_id":"a".repeat(64)},
+            "canonical_reconstructed_target_sha256":"b".repeat(64),"canonical_reconstructed_draft_sha256":null,
+            "artifacts":[{"tp":1,"draft_tp":0,"path":format!("models/{}/model.ginfer", release.sha256),
+                "bytes":release.bytes,"sha256":release.sha256}]});
+        std::fs::write(&set_path, descriptor.to_string()).unwrap();
+        host.scan().await.unwrap();
+        let models = host.inventory.read().await.clone();
+        let raw = models.iter().find(|model| !model.artifact_set).unwrap();
+        let dependent = models.iter().find(|model| model.artifact_set).unwrap();
+        host.launch(LaunchRequest {
+            instance_id: None, qualified_profile_id: None, model_id: dependent.id,
+            gpu_uuids: vec!["GPU-test".into()], max_context: 4096, concurrency: 1,
+            options: Default::default(),
+        }).await.unwrap();
+        let before = host.snapshot().await;
+        assert_eq!(before["instances"][0]["status"], "starting");
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = Request::post("/host/v1/remove-model")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"model_id":raw.id}).to_string())).unwrap();
+        let response = host.clone().route(request).await.unwrap();
+        let after = host.snapshot().await;
+        host.processes.lock().await.shutdown().await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(raw.path.exists());
+        assert_eq!(host.downloads.list().await.len(), 1);
+        assert_eq!(after["instances"], before["instances"]);
+        assert_eq!(after["host_id"], before["host_id"]);
+        assert_eq!(after["boot_id"], before["boot_id"]);
+    }
+
+
+    #[tokio::test]
     async fn local_install_publishes_manifest_and_identity_and_recovers_after_publication() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("ginfer/models");
