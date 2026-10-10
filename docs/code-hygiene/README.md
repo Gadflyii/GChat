@@ -47,7 +47,21 @@ name/revision preservation; all three LAN tests, five registry tests and strict
 Host all-target Clippy pass. Evidence: the same packet
 `oi112-{baseline,lan-tests,registry-tests,clippy}.log`. Independent review
 accepts the sharing/data lock order and failed publication rollback. This item
-is ready for standalone publication; next item is OI-113 queued Pause admission.
+is merged/pushed separately on main `96ba41019`.
+OI-113 baseline deterministically admits one HTTP request after successful
+Pause. The candidate claims queued jobs under the jobs mutex before filesystem
+waits and client construction; nonqueued jobs exit successfully without transfer,
+so only admitted errors reach the existing worker failure completion. Independent
+review rejected an unnecessary completion guard that hid failed installation
+journal writes; it is removed, preserving the existing failure behavior. No extra admission write is needed:
+queued/downloading both recover paused, while Pause and existing progress updates
+already save their states. The owning no-HTTP regression, real worker Pause before/
+after admission with retained bytes and Resume, and all 13 download tests pass.
+Strict Host all-target Clippy passes on the corrected source. Independent
+final review accepts admission/worker ownership, recovery and deterministic
+fixture cleanup. Evidence: `oi113-baseline.log` and
+`oi113-final-{download-tests,clippy}.log` in the same packet. This item is ready
+for standalone publication; next is OI-114 post-commit registry failure.
 
 Contrary review found three distinct baseline defects: closed-set aliases
 survive raw-payload removal (OI-120); an invalidating rescan loses active alias

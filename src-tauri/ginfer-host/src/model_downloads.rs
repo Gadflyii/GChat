@@ -335,15 +335,6 @@ impl ModelDownloads {
         let manager = self.clone();
         tokio::spawn(async move {
             let _permit = manager.serial.clone().acquire_owned().await.unwrap();
-            if !manager
-                .jobs
-                .lock()
-                .await
-                .get(&id)
-                .is_some_and(|job| job.status == "queued")
-            {
-                return;
-            }
             let result = manager.transfer(id).await;
             if let Err(error) = result {
                 let root = manager.jobs.lock().await.get(&id).map(|job| job.storage_root.clone());
@@ -388,21 +379,28 @@ impl ModelDownloads {
         self.save(&jobs)
     }
     async fn transfer(&self, id: Uuid) -> Result<(), String> {
-        let client = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(30))
-            .https_only(true)
-            .build()
-            .map_err(|e| e.to_string())?;
-        self.transfer_with_client(id, client).await
+        self.transfer_with_client(id, None).await
     }
-    async fn transfer_with_client(&self, id: Uuid, client: reqwest::Client) -> Result<(), String> {
-        let job = self
-            .jobs
-            .lock()
-            .await
-            .get(&id)
-            .ok_or("unknown download")?
-            .clone();
+    async fn transfer_with_client(&self, id: Uuid, client: Option<reqwest::Client>) -> Result<(), String> {
+        let job = {
+            let mut jobs = self.jobs.lock().await;
+            let job = jobs.get_mut(&id).ok_or("unknown download")?;
+            if job.status != "queued" {
+                return Ok(());
+            }
+            // Queued and downloading both recover as paused after restart.
+            // Pause persists its state; the first update persists progress.
+            job.status = "downloading".into();
+            job.clone()
+        };
+        let client = match client {
+            Some(client) => client,
+            None => reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(30))
+                .https_only(true)
+                .build()
+                .map_err(|e| e.to_string())?,
+        };
         let release = job.release;
         let root = job.storage_root;
         let partial = root.join(format!("{id}.part"));
@@ -953,10 +951,139 @@ mod tests {
         let id = insert(&manager, release).await;
         std::fs::write(manager.root().join(format!("{id}.part")), &bytes[..128]).unwrap();
         manager
-            .transfer_with_client(id, reqwest::Client::builder().no_proxy().build().unwrap())
+            .transfer_with_client(id, Some(reqwest::Client::builder().no_proxy().build().unwrap()))
             .await
             .unwrap();
         assert_eq!(manager.list().await[0].status, "installed");
         server.abort();
+    }
+
+    #[test]
+    fn pause_before_and_after_admission_retains_complete_partial_and_resume_installs() {
+        tokio::runtime::Builder::new_current_thread().enable_all().max_blocking_threads(1)
+            .build().unwrap().block_on(async {
+                for pause_before_admission in [true, false] {
+                    let dir = tempfile::tempdir().unwrap();
+                    let journal = dir.path().join("jobs.json");
+                    let manager = ModelDownloads::open(dir.path().join("models"), journal.clone()).unwrap();
+                    let (release, bytes) = fixture();
+                    let destination = manager.root().join(format!("{}.ginfer", release.sha256));
+                    let id = insert(&manager, release).await;
+                    let partial = manager.root().join(format!("{id}.part"));
+                    std::fs::write(&partial, &bytes).unwrap();
+                    if pause_before_admission {
+                        manager.action(id, "pause").await.unwrap();
+                        manager.transfer(id).await.unwrap();
+                    } else {
+                        let (unblock, blocked) = std::sync::mpsc::channel();
+                        let (started, ready) = tokio::sync::oneshot::channel();
+                        let blocker = tokio::task::spawn_blocking(move || {
+                            let _ = started.send(());
+                            let _ = blocked.recv();
+                        });
+                        ready.await.unwrap();
+                        manager.spawn(id);
+                        // On this current-thread runtime, the uncontended
+                        // worker holds the serial permit by its metadata await.
+                        tokio::time::timeout(Duration::from_secs(5), async {
+                            while manager.serial.available_permits() != 0 {
+                                tokio::task::yield_now().await;
+                            }
+                        }).await.unwrap();
+                        manager.action(id, "pause").await.unwrap();
+                        unblock.send(()).unwrap();
+                        blocker.await.unwrap();
+                        // Acquisition completes only after the real worker's
+                        // error finalization releases its serial ownership.
+                        let finished = tokio::time::timeout(Duration::from_secs(5), manager.serial.acquire()).await.unwrap().unwrap();
+                        drop(finished);
+                    }
+                    let paused = manager.list().await.remove(0);
+                    assert_eq!(paused.status, "paused");
+                    if pause_before_admission {
+                        assert!(paused.error.is_none());
+                    }
+                    assert!(!destination.exists());
+                    assert_eq!(std::fs::read(&partial).unwrap(), bytes);
+                    let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(&std::fs::read(&journal).unwrap()).unwrap();
+                    assert_eq!(saved[&id].status, "paused");
+
+                    manager.action(id, "resume").await.unwrap();
+                    tokio::time::timeout(Duration::from_secs(5), async {
+                        loop {
+                            if manager.list().await[0].status == "installed" { break; }
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                    }).await.unwrap();
+                    assert_eq!(std::fs::read(destination).unwrap(), bytes);
+                    assert!(!partial.exists());
+                    assert!(manager.list().await[0].error.is_none());
+                }
+            });
+    }
+
+    #[test]
+    fn successful_pause_before_transfer_update_prevents_http_and_retains_partial() {
+        use hyper::{service::service_fn, Body, Response};
+        use std::{future::Future, sync::atomic::{AtomicUsize, Ordering}, task::Poll};
+
+        tokio::runtime::Builder::new_current_thread().enable_all().max_blocking_threads(1)
+            .build().unwrap().block_on(async {
+                let (mut release, bytes) = fixture();
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                release.url = format!("http://{}/model.ginfer", listener.local_addr().unwrap());
+                let requests = Arc::new(AtomicUsize::new(0));
+                let observed = requests.clone();
+                let body = bytes[128..].to_vec();
+                let server = tokio::spawn(async move {
+                    let (socket, _) = listener.accept().await.unwrap();
+                    hyper::server::conn::Http::new().serve_connection(socket, service_fn(move |request: hyper::Request<Body>| {
+                        observed.fetch_add(1, Ordering::SeqCst);
+                        assert_eq!(request.headers()["range"], "bytes=128-");
+                        let body = body.clone();
+                        async move {
+                            Ok::<_, std::convert::Infallible>(Response::builder().status(206)
+                                .header("content-range", "bytes 128-4095/4096")
+                                .body(Body::from(body)).unwrap())
+                        }
+                    })).await.unwrap();
+                });
+                let dir = tempfile::tempdir().unwrap();
+                let journal = dir.path().join("jobs.json");
+                let manager = ModelDownloads::open(dir.path().join("models"), journal.clone()).unwrap();
+                let id = insert(&manager, release).await;
+                let partial = manager.root().join(format!("{id}.part"));
+                std::fs::write(&partial, &bytes[..128]).unwrap();
+                let client = reqwest::Client::builder().no_proxy().build().unwrap();
+
+                // Occupy the only blocking worker, then poll into the real
+                // partial-file metadata await before applying Pause.
+                let (unblock, blocked) = std::sync::mpsc::channel();
+                let (started, ready) = tokio::sync::oneshot::channel();
+                let blocker = tokio::task::spawn_blocking(move || {
+                    let _ = started.send(());
+                    let _ = blocked.recv();
+                });
+                ready.await.unwrap();
+                let mut transfer = Box::pin(manager.transfer_with_client(id, Some(client)));
+                futures_util::future::poll_fn(|cx| {
+                    assert!(matches!(transfer.as_mut().poll(cx), Poll::Pending));
+                    Poll::Ready(())
+                }).await;
+                manager.action(id, "pause").await.unwrap();
+                unblock.send(()).unwrap();
+                blocker.await.unwrap();
+                let _ = tokio::time::timeout(Duration::from_secs(5), transfer).await.unwrap();
+                server.abort();
+                let _ = server.await;
+
+                assert_eq!(requests.load(Ordering::SeqCst), 0, "a successful Pause must prevent HTTP admission");
+                assert_eq!(std::fs::read(&partial).unwrap(), bytes[..128]);
+                let job = manager.list().await.remove(0);
+                assert!(matches!(job.status.as_str(), "paused" | "pausing"));
+                assert!(job.error.is_none());
+                let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(&std::fs::read(journal).unwrap()).unwrap();
+                assert!(matches!(saved[&id].status.as_str(), "paused" | "pausing"));
+            });
     }
 }
