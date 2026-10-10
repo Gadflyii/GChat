@@ -557,14 +557,16 @@ OI-075's actual October 10 12:02 Windows baseline uses restored desktop
 101,857 content bytes and a largest message of 79,574 bytes. Evidence is
 `out/remaining-acceptance-20261009/oi075/actual-20261010-1202/result.json`
 and `native-idle.json`. First observed open reaches all 12 wrappers in 89.2 ms
-(cache state unknown; not a GPU-present timestamp). Its receipt retains a 53-ms
-long-task entry starting at 36 ms, before the observed open interval at
-307,256.3 ms; exclude that historical buffered entry from opening-phase tasks.
-No recorded long task falls within the observed open interval. Settled programmatic
-traversal takes 79.8 ms, with five frame gaps averaging
+(cache state unknown; not a GPU-present timestamp). Opening contains one 53-ms
+long task at a phase-relative offset of 36 ms. The executed harness reports
+`task.start_ms = entry.startTime - phase.start`; absolute task bounds are
+307,292.3–307,345.3 ms, within the phase at 307,256.3–307,355.2 ms. The prior
+historical-buffered exclusion misread that offset and is invalidated in
+`long-task-scope-correction.json`. The observer disables buffering and filters
+entries to the phase; raw receipts remain unchanged. Derived reports name the
+time basis and use `start_offset_ms` to prevent the same mistake.
+Settled programmatic traversal takes 79.8 ms, with five frame gaps averaging
 16.68 ms, maximum 16.7 ms; this does not measure native wheel/input latency.
-`long-task-scope-correction.json` preserves the interval comparison. Future
-measurement reports must exclude buffered entries outside the measured phase.
 
 The 30.088-second foreground idle sample has continuous animation-frame sampling
 disabled, stable identities for all 15 processes and no Engine. Its descendant
