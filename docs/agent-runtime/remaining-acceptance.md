@@ -21,7 +21,14 @@ OI-072's ordinary-token capture completed without reproducing the historical
 OI-076's two saved incident files contain neither the original warning nor its
 failed request. OI-110 is parked pending Ron's public-feed and existing-key
 signing/publication decision; no signing or publication is authorized.
-The ordered remaining checks are OI-068, OI-069, OI-071, OI-073 and OI-075.
+OI-073 is separately parked for Ron to name a disposable completed Standard
+result and website test window; no public publish, retry or deletion is allowed.
+The ordered remaining checks are OI-068, OI-069, OI-071 and OI-075.
+The registered second peer timed out on the bounded reachability check and the
+local fleet is unconfigured. Physical pool checks need designated available
+paired hosts/clients; Linux tray/vault checks need an actual provider-equipped
+desktop. Those inputs are pending. OI-075 uses the existing 12-message,
+107,089-byte long-content thread; actual UI measurements await a quiet interval.
 
 OI-068 now has actual Windows prerequisites: OpenCode **1.18.35** resolves
 through native npm shims and its underlying executable; installed GChat reports
@@ -35,8 +42,12 @@ Stopping that terminal returns `Could not stop Code terminal: The operation
 completed successfully. (os error 0)`, then the same generation reports
 Exited/code 1. Cached `portable-pty` 0.9.0's Windows cloned killer reverses the
 Win32 `TerminateProcess` success test. GCHAT-PTY-STOP owns this demonstrated
-failure and its product-side exact-handle correction. The frozen source is
-independently accepted; native execution remains pending. Four real ConPTY tests
+failure and its product-side exact-handle correction. Candidate `37aa7beed` is independently source-accepted. Its focused native
+check failed before any test at 05:20:41 UTC: Tauri requires a Windows `.ico`,
+which the fresh test staging omitted. PNG-only bundle configuration falls back
+to `icons/icon.ico`; the earlier documented prerequisite was missed during
+preparation. Reuse the accepted generated ICO in the owned test extraction
+and verify its bytes before the next admitted compile. No test pass is claimed. Four real ConPTY tests
 cover successful stop/waiter publication, already-exited handles, clone lifetime,
 live access-denied failure through actual Stop and retained-startup-child cleanup.
 Windows Stop requests termination before consuming its live session resources;
@@ -60,15 +71,40 @@ whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
 profile controls or widened folder permissions. Restore the exact stopped
 original profile and normal apps, and prove Engine absence before guard release.
 
-Next action: verify the narrow terminal correction in an admitted CPU interval,
-then complete real Code document/agent/skill/compact/restart, running-worker
-checkpoint/continuation and configured connector/Hermes execution. A separate approved CPU-only window at 05:19–05:22 UTC permits the focused native
-check with a hard deadline; staged candidate source and the existing native
-release cache are explicit, and a deadline abort is not a test pass. The reserved
-local GPU/CPU window is 06:45–07:20 UTC; source verification/build cannot overlap
-model use. Recheck the booking and actual ownership before execution. Missing
-providers or inputs remain explicit prerequisites; partial source checks never
-substitute for installed acceptance.
+Next action: finish native compilation of the frozen `37aa7beed` source,
+run the four cached ConPTY tests, then complete composed checks and installed
+Stop replay. The first attempt failed before testing because the required ICO
+was absent; its guard was released at 05:21:21 UTC. The corrected ICO staging
+passed in booking 329, but compilation was still active at the 05:44:30 watchdog.
+No test executed. The owned Job emptied, its pinned body exited, both controller
+and body were absent, and installed app identities/settings remained unchanged.
+No model was started. Root's fresh absence check released the build guard at
+05:45:01.431 UTC, 1.4 seconds after the booked boundary; that timing anomaly was
+reported. Both bookings are cancelled and no owned process or guard remains.
+Keep `pty-stop-37aa7beed` and `pty-stop-37aa7beed-retry-icon` evidence separately.
+
+The next CPU-only reservation is 06:45–07:30 UTC (327). Reuse the existing
+extraction, accepted ICO and native cache; do not change the release profile or
+replace real tests with a smaller crate. The continuation gives the no-run
+compile its own finite budget, followed only after actual compile/controller
+completion by the four cached tests within five minutes. Reserve at least 60
+seconds for native cleanup and root absence proof before each hard boundary.
+This corrects the insufficient whole-compile deadline; compilation is not a
+passing test. Release unused reservation time at actual END and recheck inbox,
+booking and actual ownership before execution.
+
+The production refresh must rebuild both Manager and Host: Manager statically
+uses the changed Host client/fleet code and its own source has changed since the
+installed `43c8d71cf`. Reusing that executable would leave accepted fixes
+uninstalled. Reuse unchanged accepted frontend/assets and the exact selected
+Engine closure; replace all inert test resources with verified production
+payloads before packaging. Verify current source, both package formats, Manager
+closure and preserved installed data before claiming an update.
+
+Model-backed acceptance is separately reserved for 07:30–08:10 UTC (328).
+Source verification/build cannot overlap model use. Missing physical providers
+or inputs remain explicit prerequisites; partial source checks never substitute
+for installed acceptance.
 
 ## Shared conversation, documents and compaction
 
@@ -154,13 +190,14 @@ failure/recovery. Do not promise global reservations: shared pool worker-limit
 accounting is process-local; other clients' inference load is Engine-owned.
 No model loads or coordinator changes were performed in this review.
 
-OI-071's retained native Linux X11 receipt
-`/ai/gchat/out/ginfer-manager/linux/native-smoke/receipt.json` explicitly used
-`--window --no-tray`, had no tray watcher or native vault and preserved the empty
-Host after Manager exit. The accepted Linux archive is `2a6e21ff2`; the later
-offline-panel change was not rebuilt into it. Its standalone pinned HTTPS/sharing
-receipt is an empty fixture without Engine execution. The missing providers are
-a native desktop tray watcher and Secret Service on a designated Linux desktop.
+OI-071 reuses the current Linux packages compiled at `54c931c68` and assembled
+at `02d369e8a`; the package and DEB/AppImage X11 receipts are under
+`/ai/gchat/out/oi070-linux-refresh/`. The actual dark window, Scan and
+close/reopen retained the same empty Host. Historical `2a6e21ff2` window/no-tray
+evidence does not supersede those packages. The current WSLg desktop has neither
+an X11 tray owner nor StatusNotifierWatcher/Secret Service bus providers.
+The missing inputs are a designated native Linux desktop, its real tray watcher
+and Secret Service; no provider installation or activation is authorized here.
 On that desktop, use the actual Manager/Host pair, pair through the native vault,
 restart Manager and restore the saved grant, then use Show/Hide and Exit tray
 actions while checking that the same Host remains alive. No provider install,
@@ -217,10 +254,9 @@ in `/ai/gchat/out/remaining-acceptance-20261009/idle-sample.json`.
 OI-075 still needs the actual representative long saved conversation selected
 and recorded, with the same build, window state and measured idle/open/scroll
 workload on Windows WebView and Linux X11. The normal restored Windows app has
-no owned debug listener; no debug restart was authorized in this window. The
-later coordinator-controlled measurement should preserve existing history and
-use browser frame/long-task observations alongside these same native process
-counters. No numerical performance floor or arbitrary conversation cap is set.
+no owned debug listener. The authorized later app-only debug restart and
+measurement must preserve existing history and use browser frame/long-task
+observations alongside these same native process counters. No numerical performance floor or arbitrary conversation cap is set.
 The source review's controlled DOM checks can distinguish redraw mechanisms,
 but cannot establish native performance gains.
 
