@@ -289,6 +289,15 @@ owned native PIDs absent, Engine/API/debug0 and canonical guards free at
 Apps and settings are unchanged; no Test, desktop build or install ran.
 
 The successor is booking380, 22:20–22:50 UTC, CPU only, stopping by 22:49.
+Ron subsequently chose Manager's existing `src-tauri/icons/icon.png` as the
+shared GChat/Manager icon. GChat's Windows/Linux tray now loads that PNG
+directly, and its Windows ICO producer uses the same source. Manager already
+embeds that PNG and keeps its existing route. The icon is reused unchanged;
+no new artwork or dependency is introduced. Source review is independent of
+the retained terminal checks. Before execution, the380 packet must bind the
+reviewed new source and two-file native overlay and generate its canonical ICO
+in the admitted slot. The historical1cc/374 application remains unchanged;
+the earlier380 proposal cannot be executed with stale source bindings.
 Ron’s current rule33 limits this run to the four changed Windows terminal cases,
 the necessary desktop build and the installed Stop/Restart replay. Reuse the
 passing Linux evidence; no full suite or unchanged passing check is rerun.
