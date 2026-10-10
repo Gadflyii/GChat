@@ -1,5 +1,30 @@
 # GChat installer refresh
 
+## SectileLabs updater feed — OI-110
+
+All GChat check/download paths and release asset URLs use the configured feed:
+`https://github.com/SectileLabs/gchat/releases/latest/download/latest.json`.
+Draft creation and uploads use the executing repository; the recorded source
+origin is `Gadflyii/GChat`, not a proven published mismatch. The workflow now
+fails before draft creation outside `SectileLabs/gchat`. The next scheduled
+release must run there with the reviewed source and existing signing key;
+cross-repository credentials are not provided. Draft-only behavior is retained.
+
+Ron authorized local unsigned preparation; signing/publication await his next
+release. `src-tauri/latest.json.template` retains only Windows/Linux placeholders.
+Its unsigned copy is `/ai/gchat/out/remaining-acceptance-20261009/oi110-latest.unsigned.json`.
+Version, date/notes, selected platforms, final asset names and signatures remain
+pending; this empty preparation artifact is not an installable manifest. Each
+published entry needs a nonempty signature verified against the unchanged key
+and exact payload. `GCHAT-UPDATER-SIGNATURE` and the recorded live 404 remain open.
+
+Retain `/ai/gchat-worktrees/oi110-sectile-feed-bd4` on
+`fix/oi110-sectile-feed-bd4` (baseline `bd4dba841`) for coordinator review and the
+unsigned copy for release preparation. Prior endpoint/repository evidence is in
+`out/remaining-acceptance-20261009/`: `oi110-endpoint-20261010T0433Z.json` and
+`oi110-release-location-20261010T0436Z.json`. Diff checking passes; no tests,
+builds, native execution, signing or publication ran.
+
 ## Current engine acceptance — OI-056/OI-083, October 9, 2026
 
 Repository: GChat; subject: `docs/installer-refresh/`. Owner: GChat coordinator.

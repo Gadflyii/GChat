@@ -33,6 +33,12 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
+      - name: Require SectileLabs updater repository
+        if: github.repository != 'SectileLabs/gchat'
+        run: |
+          echo "::error::Run releases from SectileLabs/gchat so uploaded assets match the configured updater feed."
+          exit 1
+
       - name: Extract version from tag
         id: get_version
         run: |
