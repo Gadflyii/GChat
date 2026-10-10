@@ -12,8 +12,9 @@ Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
 `bd4dba841`. Current Windows components are restored `0f06ba433` GChat desktop,
 new Manager `574d73df7`, 7d9 Host/CLI and retained Engine `2ef56a52`.
-Exact restoration and ordinary baseline UI pass; candidate desktop repair
-remains pending. Host fixes
+Exact restoration and ordinary baseline UI pass. Booking364's desktop-only
+refresh now runs compiled `574d73df7`; embedded UI loads, but Code Stop remains
+visibly Stopping after native exit. Host fixes
 OI-111–114 and OI-120–122 retain composed Rust checks at 01:50:05 UTC.
 The [integration authority](../code-hygiene/README.md)
 owns their source verification and accepted Linux packages (`54c931c68`
@@ -190,9 +191,65 @@ owning build body: relative `frontendDist`
 assets as a Directory. This is nonexecution evidence; actual build, install and
 candidate UI remain pending. The proposal is in
 `oi068-windows-20261010/production-frontend-directory-574d73df7-proposed/`.
-Next action: execute the admitted desktop/NSIS build and verify ordinary installed GChat UI before Code
-Stop replay and authorized AUTO functional acceptance. Reuse valid Manager,
-Host/CLI, Engine and state-preservation evidence at its recorded scope.
+Booking364 verifies the compiled desktop's complete provenance and embedded UI.
+NSIS completion remains unqualified. Code Stop exposes the ordering defect below;
+model-backed acceptance has not run. Reuse valid Manager, Host/CLI, Engine and
+state-preservation evidence at its recorded scope.
+
+### Embedded terminal status ordering
+
+At 16:25:45.643 UTC, native Code generation 1 reports Exited/code 1 immediately
+after the visible Stop click. At 16:26:11.753 the UI still shows Stopping, a
+disabled Stop and no Restart; the next native status remains Exited. Native
+ancestry at 16:26:12 contains only WebView descendants, with the four prior
+Code child PIDs absent. These are no-model observations. Exact files in
+`out/remaining-acceptance-20261009/oi068-windows-20261010/desktop-ui-574d-364-proposed/`:
+`18-after-stop-status-result.stdout`, `20-stop-settled-visible-result.stdout`,
+`21-stop-settled-status-result.stdout` and `23-code-stopped-native.stdout`.
+Normal restart passes at 16:31:17.227 UTC without force or another copy:
+`%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/desktop-ui-574d-364/restorenormal-result.json`.
+Engine/API/debug-listener counts are zero; state and Manager/Host/Engine bytes
+are preserved.
+
+Source establishes an unguarded cross-transport overwrite: `terminal_stop`
+captures Stopping under the session lock, drops PTY resources, and returns the
+captured snapshot. The waiter can publish Exited before that invoke reply is
+delivered; `useEmbeddedTerminal.updateStatus` accepted the older snapshot.
+The saved observation does not trace Channel arrival order, so that scheduling
+in the actual replay is inferred rather than independently measured.
+
+The isolated candidate is `/ai/gchat-worktrees/terminal-stop-ui-574d`, branch
+`fix/gchat-terminal-stop-ui`, baseline `88ba8b762` (only documentation differs
+from exact product `574d73df7`). Its
+[ordering decision](../decisions/2026-10-10-order-embedded-terminal-status.md)
+uses the existing session sequence on locked snapshots and lifecycle events.
+Successful Stop/shutdown transitions advance it; failed Windows termination
+does not. Output/replay has a separate generation/sequence cursor, and disposed
+Channel callbacks are ignored. Started, Exited and Error carry actual native
+status, including current metadata, without phase ranking or guessed exit codes.
+Frozen Windows/Linux sources and packages remain unchanged.
+
+Prepared observable regressions cover both Stop/exit delivery orders, Restart
+with fresh output after the spawn reply, duplicate replay, old-generation
+attachment, failed live Stop with retry, native reader/waiter error status and
+the shared Hermes surface. The existing real Windows denied-stop/retry test now
+checks actual Tauri Stop/status IPC sequence and unchanged native ownership.
+No build, test or model run has executed for this candidate. Source diff checking
+is the available check. Root must admit the focused frontend cases, typecheck,
+four Windows ConPTY cases and composed gate before any candidate UI replay:
+
+```sh
+yarn workspace @gchat/web-app test src/containers/__tests__/CodeTerminalHost.test.tsx src/containers/__tests__/HermesTerminalHost.test.tsx
+make typecheck
+cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features test-tauri windows_terminal_ -- --test-threads=1
+make verify
+```
+
+Reuse canonical dependency/build caches and the accepted Windows ICO prerequisite;
+do not create another installer or model fixture. Acceptance is native Exited
+matching visible Exited/Restart for the same generation, a supported restart
+with output, truthful failed-stop Running/error/retry, preserved histories and
+no inference. Until those checks pass, this is a prepared source correction.
 
 Installer review found an obsolete pre-uninstall macro that stops helpers by
 shared executable names and uses a PowerShell policy bypass. No live uninstall

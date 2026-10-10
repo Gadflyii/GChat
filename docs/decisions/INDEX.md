@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Order embedded terminal status by native sequence](2026-10-10-order-embedded-terminal-status.md)
+
 - [Prefer the validated current-user NSIS installation](2026-10-10-prefer-current-user-nsis-owner.md)
 
 - [Own GInfer model load requests](2026-10-09-own-ginfer-model-load-requests.md)

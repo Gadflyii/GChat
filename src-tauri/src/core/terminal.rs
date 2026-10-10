@@ -161,6 +161,7 @@ pub enum TerminalPhase {
 pub struct TerminalStatus {
     pub phase: TerminalPhase,
     pub generation: u64,
+    pub sequence: u64,
     pub cwd: Option<String>,
     pub launch: Option<TerminalLaunch>,
     pub exit_code: Option<u32>,
@@ -222,8 +223,7 @@ pub enum TerminalEvent {
     Started {
         generation: u64,
         sequence: u64,
-        cwd: String,
-        launch: TerminalLaunch,
+        status: TerminalStatus,
     },
     Output {
         generation: u64,
@@ -233,8 +233,7 @@ pub enum TerminalEvent {
     Exited {
         generation: u64,
         sequence: u64,
-        exit_code: u32,
-        signal: Option<String>,
+        status: TerminalStatus,
     },
     ReplayUnavailable {
         generation: u64,
@@ -244,6 +243,7 @@ pub enum TerminalEvent {
         generation: u64,
         sequence: u64,
         message: String,
+        status: TerminalStatus,
     },
 }
 
@@ -396,6 +396,7 @@ impl Session {
         TerminalStatus {
             phase: self.phase,
             generation: self.generation,
+            sequence: self.sequence,
             cwd: self.cwd.clone(),
             launch: self.launch,
             exit_code: self.exit_code,
@@ -498,6 +499,7 @@ impl TerminalSlot {
                 }
                 if session.phase == TerminalPhase::Running {
                     session.phase = TerminalPhase::Stopping;
+                    session.next_sequence();
                 }
                 session.flow_paused = false;
                 session.bridge = None;
@@ -846,10 +848,12 @@ fn start_reader(
                             && session.phase == TerminalPhase::Running
                         {
                             let sequence = session.next_sequence();
+                            let status = session.status();
                             session.publish(TerminalEvent::Error {
                                 generation,
                                 sequence,
                                 message: format!("Terminal output stopped: {error}"),
+                                status,
                             });
                         }
                         return;
@@ -895,11 +899,11 @@ fn start_waiter(
                     session.exit_code = Some(exit_code);
                     session.signal.clone_from(&signal);
                     let sequence = session.next_sequence();
+                    let status = session.status();
                     session.publish(TerminalEvent::Exited {
                         generation,
                         sequence,
-                        exit_code,
-                        signal,
+                        status,
                     });
                 }
                 Err(error) => {
@@ -907,10 +911,12 @@ fn start_waiter(
                     session.exit_code = None;
                     session.signal = None;
                     let sequence = session.next_sequence();
+                    let status = session.status();
                     session.publish(TerminalEvent::Error {
                         generation,
                         sequence,
                         message: format!("Could not wait for terminal process: {error}"),
+                        status,
                     });
                 }
             }
@@ -1239,11 +1245,11 @@ pub fn terminal_spawn<R: Runtime>(
         session.replay.reset();
 
         let sequence = session.next_sequence();
+        let status = session.status();
         session.publish(TerminalEvent::Started {
             generation,
             sequence,
-            cwd: cwd_text,
-            launch: request.launch,
+            status,
         });
     }
 
@@ -1390,6 +1396,8 @@ pub fn terminal_stop(
             startup_child = session.startup_child.take();
         }
         session.phase = TerminalPhase::Stopping;
+        // Order the command snapshot against the waiter's exit event.
+        session.next_sequence();
         session.bridge = None;
         session.flow_paused = false;
         slot.shared.flow_changed.notify_all();
@@ -2341,7 +2349,6 @@ mod tests {
     #[test]
     fn windows_terminal_denied_live_stop_preserves_shutdown_retry_ownership() {
         use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
-        use tauri::Manager;
         use windows_sys::Win32::{
             Foundation::{DuplicateHandle, WAIT_TIMEOUT},
             System::Threading::{GetCurrentProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE},
@@ -2382,9 +2389,13 @@ mod tests {
             WAIT_TIMEOUT
         );
 
-        let app = tauri::test::mock_app();
-        app.manage(TerminalState::default());
-        let slot = app.state::<TerminalState>().slot(TerminalId::Code);
+        let state = TerminalState::default();
+        let slot = state.slot(TerminalId::Code);
+        let harness = crate::test_support::IpcTestHarness::new(|builder| {
+            builder
+                .manage(state)
+                .invoke_handler(tauri::generate_handler![terminal_status, terminal_stop])
+        });
         {
             let mut session = slot.session().unwrap();
             session.phase = TerminalPhase::Running;
@@ -2395,9 +2406,13 @@ mod tests {
             session.writer = process.writer.take();
             session.master = process.master.take();
         }
-        let error = terminal_stop(app.state::<TerminalState>(), TerminalId::Code).unwrap_err();
+        let error = harness
+            .invoke::<serde_json::Value>("terminal_stop", serde_json::json!({"terminalId": "code"}))
+            .unwrap_err();
+        let error = error.as_str().unwrap();
         assert!(error.starts_with("Could not stop Code terminal:"));
         assert!(error.contains("os error 5"));
+        assert_eq!(slot.session().unwrap().status().sequence, 0);
         slot.shutdown();
         {
             let mut session = slot.session().unwrap();
@@ -2415,13 +2430,25 @@ mod tests {
             1,
             process.child.take().unwrap(),
         );
-        let stopped = terminal_stop(app.state::<TerminalState>(), TerminalId::Code).unwrap();
-        assert_eq!(stopped.phase, TerminalPhase::Stopping);
+        let stopped_wire = harness
+            .invoke::<serde_json::Value>("terminal_stop", serde_json::json!({"terminalId": "code"}))
+            .unwrap();
+        assert_eq!(stopped_wire["phase"], "stopping");
+        assert_eq!(stopped_wire["generation"], 1);
+        assert_eq!(stopped_wire["sequence"], 1);
+        let stopped_sequence = stopped_wire["sequence"].as_u64().unwrap();
         process.wait_for_exit();
         waiter.join().unwrap();
         let status = slot.session().unwrap().status();
         assert_eq!(status.phase, TerminalPhase::Exited);
         assert_eq!(status.exit_code, Some(1));
+        assert!(status.sequence > stopped_sequence);
+        let exited_wire = harness
+            .invoke::<serde_json::Value>("terminal_status", serde_json::json!({"terminalId": "code"}))
+            .unwrap();
+        assert_eq!(exited_wire["phase"], "exited");
+        assert_eq!(exited_wire["exitCode"], 1);
+        assert_eq!(exited_wire["sequence"], status.sequence);
     }
 
     #[cfg(windows)]

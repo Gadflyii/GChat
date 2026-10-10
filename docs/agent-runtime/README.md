@@ -10,8 +10,9 @@ Installer routing follows the [validated current-user NSIS decision](../decision
 Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
 and OI-120–122 retain their composed Rust gate. Current Windows components are
 the restored `0f06ba433` GChat desktop, new `574d73df7` Manager, 7d9 Host/CLI
-and retained `2ef56a52` Engine. Exact desktop restoration and ordinary UI pass;
-the candidate desktop's frontend repair remains pending as described below.
+and retained `2ef56a52` Engine. Booking364 now installs the compiled `574d73df7`
+desktop and verifies the embedded origin. Native Code Stop exits, but its UI
+remains Stopping; the isolated correction is recorded below.
 [Remaining acceptance](remaining-acceptance.md) owns the current candidate,
 actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
@@ -63,8 +64,15 @@ state is unchanged; new Manager, 7d9 Host/CLI and 2ef Engine remain intact.
 Engine/API counts are zero and guards are released. CPU-only booking353,
 15:05–15:15 UTC, has an accepted nonexecuted source proposal: relative
 `frontendDist` `../../../windows-build/source/web-app/dist` resolves to the
-exact 832 accepted assets as a Directory. Desktop/NSIS build, install and
-ordinary candidate UI verification remain pending before Code/model-backed acceptance.
+exact 832 accepted assets as a Directory. The compiled desktop's provenance and
+ordinary embedded UI are verified under booking364; NSIS completion remains
+separate. Code Stop at 16:25:45 reports Exited/code 1 for generation 1 while
+the visible UI remains Stopping at 16:26:11. Normal restart succeeds at
+16:31:17 with Engine/API0 and protected state preserved.
+The isolated `fix/gchat-terminal-stop-ui` candidate starts from `88ba8b762`
+(product-identical to `574d73df7`) and orders shared terminal snapshots/events
+by native generation and sequence. Its regressions and composed/native gates
+are pending an admitted slot; it does not claim installed acceptance.
 [Remaining acceptance](remaining-acceptance.md) records the exact owners and
 supported scan evidence. Ron authorized keeping the existing AUTO Muse profile
 after preservation verification; functional replay still requires fresh Ready
