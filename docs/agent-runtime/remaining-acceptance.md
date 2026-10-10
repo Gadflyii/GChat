@@ -6,6 +6,23 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current ordered acceptance — October 10
 
+Booking380 is active, CPU-only, 22:20–22:50 UTC, with a 22:49 stop boundary.
+The exact source remains `3aff66d62`; the accepted Linux gate is reused.
+Both canonical guards are held by keeper PID475147/start ticks11741613.
+Windows initially has only retained Host PID6788; no GChat/Manager, Engine or
+API is running. Native source/icon overlay and bound IPC inputs are verified.
+Two pre-Cargo harness failures are preserved: an absent historical PID became a
+terminating PowerShell stderr error, then the suspended child lacked its
+parent's admitted guard arguments. Explicit existence status and explicit
+child argument propagation correct those causes. Neither attempt compiled or
+ran a test. The r3 controller uses fresh output directories; Job lifetime and
+cleanup remain unchanged. The next question is whether the four actual native
+ConPTY cases pass. Desktop compilation and visible Stop/Restart replay follow
+only after that pass and only if they fit the booked boundary. The packet
+`out/remaining-acceptance-20261009/oi068-windows-20261010/` retains r2/r3
+preparations, failed receipts and actual ownership records. No installed update
+or Windows acceptance pass is claimed.
+
 The [validated NSIS owner decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md) governs the integrated custom template; failed ownership checks retain upstream MSI migration.
 
 Candidate `fix/gchat-remaining-acceptance-bd4` at
