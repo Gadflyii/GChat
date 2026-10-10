@@ -29,6 +29,33 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
+### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
+
+The October 10 public Host snapshot reports the saved instance stopped with zero
+active requests while retaining its October 9 startup error. Manager rendered
+that entire saved diagnostic as a current red error. Source now keeps stopped
+and other historical diagnostics in neutral, collapsed **Previous startup
+error** details. An online failed instance keeps a short visible failure alert
+and collapsed **Startup or runtime error details**. The complete diagnostic
+remains available in a bounded, scrollable text area; no Host error, cached
+snapshot, model profile or stored data is cleared or changed.
+
+Acceptance requires the existing Manager DOM harness to show stopped versus
+failed presentation, offline cached diagnostics, full retained text and the failed-to-stopped
+transition, followed by the coordinator's source gate and rebuilt installed
+Manager acceptance. Two focused DOM regressions are prepared but unrun during
+the October 10 10:20–11:00 UTC quiet window. Root executes admitted checks and
+integrates the reviewed branch with the installer correction after 11:00 UTC.
+This source preparation does not qualify the installed Manager or fix the
+separate Engine profile/startup issue.
+
+Evidence: `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/host-current-error-341.json`
+records `stopped`, zero active requests and the retained 9,009-byte diagnostic.
+The source branch is `fix/gchat-manager-stopped-error-7d9`, based on exact
+`7d9a8f689d5cef0c31f910872cd588941d0d674f`. Next run
+`node --test tests/ginfer-manager-ui.test.mjs` using the retained dependency
+graph, then the applicable composed source gate and installed UI acceptance.
+
 Installed Windows client `0f06ba433` passes with retained Manager producer
 `43c8d71cf` and clean Engine `2ef56a52a`. Composed `make verify`, native build,
 package verification and installed payload/user-state preservation pass.
@@ -570,6 +597,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
+| Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, two observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |
