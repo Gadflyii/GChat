@@ -11,7 +11,16 @@ Windows remains GChat `0f06ba433`, Manager `43c8d71cf`, Engine `2ef56a52`.
 [Remaining acceptance](remaining-acceptance.md) owns the current candidate,
 actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
-The current composed source gate at `0f06ba433` passes `make verify` at
+The Code Stop correction is frozen at `ccc9ab250`, including a test-only
+cursor-query responder for the real ConPTY already-exited fixture. The earlier
+`37aa7beed` native run compiled and executed four cases: three passed and the
+already-exited fixture timed out. The correction is independently source-reviewed;
+fresh native compilation and all four tests remain pending. Booking 331 permits
+sequential compile, package and acceptance work at 07:30–08:10 UTC on October 10.
+No local compilation runs during the preceding kernel gates. No new package or
+app update is installed.
+
+The installed baseline's composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
 all six coverage floors, 553 desktop, 86 Host, six managed-adapter, 12 hardware
 and 29 utility tests. Strict Clippy results are reused for unchanged Rust.
