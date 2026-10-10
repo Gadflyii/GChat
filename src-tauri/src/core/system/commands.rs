@@ -702,8 +702,7 @@ pub async fn check_jan_cli_installed() -> CliInstallStatus {
                 // dev-build artifact (i.e. skip paths containing \target\)
                 raw.lines()
                     .map(str::trim)
-                    .filter(|p| !p.is_empty() && !p.to_ascii_lowercase().contains("\\target\\"))
-                    .next()
+                    .find(|p| !p.is_empty() && !p.to_ascii_lowercase().contains("\\target\\"))
                     .map(str::to_string)
                     // fall back to the raw first line if every path looks like a build dir
                     .or_else(|| {
@@ -796,10 +795,10 @@ pub fn install_jan_cli_sync<R: Runtime>(
         }
         install_desktop_launcher_config(&install_dir, &get_jan_data_folder_path(app_handle.clone()).join("ginfer"))?;
         add_to_path_windows(&install_dir)?;
-        return Ok(CliInstallStatus {
+        Ok(CliInstallStatus {
             installed: true,
             path: Some(install_dir.join(dest_bin_name).to_string_lossy().into_owned()),
-        });
+        })
     }
 
     #[cfg(unix)]
@@ -871,7 +870,7 @@ pub fn uninstall_jan_cli() -> Result<(), String> {
         }
         remove_legacy_cli_binary(&bin_dir);
         remove_from_path_windows(&bin_dir)?;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(unix)]
@@ -1045,7 +1044,7 @@ fn strip_verbatim_prefix(path: &str) -> String {
 
 /// Add a directory to the Windows user PATH.
 #[cfg(windows)]
-fn add_to_path_windows(install_dir: &PathBuf) -> Result<(), String> {
+fn add_to_path_windows(install_dir: &Path) -> Result<(), String> {
     use std::process::Command;
 
     // Always write the normalized (non-verbatim) form to PATH.
@@ -1142,7 +1141,7 @@ fn add_to_path_windows(install_dir: &PathBuf) -> Result<(), String> {
 
 /// Remove a directory from the Windows user PATH.
 #[cfg(windows)]
-fn remove_from_path_windows(dir: &PathBuf) -> Result<(), String> {
+fn remove_from_path_windows(dir: &Path) -> Result<(), String> {
     use std::process::Command;
 
     let dir_str = dir.to_string_lossy().to_string();

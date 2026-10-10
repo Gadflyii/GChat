@@ -161,10 +161,10 @@ fn executable_name(value: &str) -> &str {
         .trim_matches(['\'', '"']);
     #[cfg(windows)]
     {
-        return name
+        name
             .strip_suffix(".exe")
             .or_else(|| name.strip_suffix(".com"))
-            .unwrap_or(name);
+            .unwrap_or(name)
     }
     #[cfg(not(windows))]
     {
