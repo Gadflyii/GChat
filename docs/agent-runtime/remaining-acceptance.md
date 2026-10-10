@@ -71,8 +71,9 @@ whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
 profile controls or widened folder permissions. Restore the exact stopped
 original profile and normal apps, and prove Engine absence before guard release.
 
-Next action: diagnose the actual already-exited ConPTY test timeout,
-correct its owning code, and verify it before production checks or packaging.
+Next action: apply the frozen `ccc9ab250` delta after admission, compile and
+execute all four native ConPTY cases, then check the current source before
+production packaging and installed Stop replay.
 Frozen `37aa7beed` compiled successfully; the actual four-case run completed
 at 06:32:29 UTC with three passes and one failure: `cmd.exe /D /C "exit 7"`
 did not signal exit within five seconds. The real Stop/waiter, denied Stop
@@ -97,6 +98,16 @@ only after actual 07:30 admission and both canonical guards; all before/after
 bytes and the applied receipt must match. Fresh CCC compile and four-case
 PASS precede Check/Clippy and production; the prior failed test cannot satisfy
 a gate. No native staging or new compilation occurred during preparation.
+
+The shared helper's new `Result` branch and earlier killer drop compile on
+Unix. Its Unix branch returns the same cloned `ProcessSignaller`, which owns
+only an optional PID and has no drop action; the new error path is unreachable
+there. Current Unix all-target check and strict Clippy cover that compilation
+boundary. Reuse the retained 553-case Unix behavior suite and unchanged Host98,
+adapter6, hardware12, utility29 and Manager/frontend gates; do not call those
+fresh CCC compilation results. Native CCC four-case PASS and current Windows
+all-target check/strict Clippy remain mandatory. This composition avoids
+repeating unaffected suites without replacing actual native verification.
 
 CPU-only booking 333 ended at 06:34:28.858 UTC before its 06:35 boundary.
 All three native Jobs were empty, pinned bodies exited, all six owned controller/
