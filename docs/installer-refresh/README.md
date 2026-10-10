@@ -4,11 +4,14 @@
 
 All GChat check/download paths and release asset URLs use the configured feed:
 `https://github.com/SectileLabs/gchat/releases/latest/download/latest.json`.
-Draft creation and uploads use the executing repository; the recorded source
-origin is `Gadflyii/GChat`, not a proven published mismatch. The workflow now
-fails before draft creation outside `SectileLabs/gchat`. The next scheduled
-release must run there with the reviewed source and existing signing key;
-cross-repository credentials are not provided. Draft-only behavior is retained.
+Ron explicitly designates the private, empty `SectileLabs/gchat` repository
+for release artifacts only when ready. Development source remains in
+`Gadflyii/GChat`; do not push source code to `SectileLabs/gchat`. The existing
+workflow creates drafts/uploads in its executing repository and rejects execution
+outside `SectileLabs/gchat`. That guard and publication routing must be reconciled
+with the artifacts-only destination before the next release, without relocating
+source. Draft-only behavior is retained; no cross-repository credentials, signing
+or publication are authorized by this documentation change.
 
 Ron authorized local unsigned preparation; signing/publication await his next
 release. The release workflow and `src-tauri/latest.json.template` cover only
