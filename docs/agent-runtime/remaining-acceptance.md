@@ -96,6 +96,16 @@ scan/persistence flush, stopped instances and no active downloads. Verify
 installed payloads and full original-thread byte preservation before acceptance.
 The prepared packet under the existing OI-068 evidence folder is preparation,
 not proof of a generated package or installed update.
+
+Model-backed replay is currently blocked while preserving the original fixed
+profile. The existing AUTO Muse profile uses the same saved GPU-group instance;
+the Host cannot save a replacement profile while stopped. `reload` always
+launches a child before saving, and a second saved instance on that GPU group
+is rejected. The earlier AUTO-to-fixed reload restoration template is withdrawn:
+it would attempt the known failing fixed startup. Keep the original unchanged;
+do not write private Host state or use that failure as a cleanup step. Package,
+installed Code Stop and model-free OI-075 checks can proceed independently.
+The existing `hermes-route-plan.json` records the deferred model actions.
 Frozen `37aa7beed` compiled successfully; the actual four-case run completed
 at 06:32:29 UTC with three passes and one failure: `cmd.exe /D /C "exit 7"`
 did not signal exit within five seconds. The real Stop/waiter, denied Stop
