@@ -40,6 +40,30 @@ published entry needs a nonempty signature verified against the unchanged key
 and exact payload. CI now requires one nonempty final updater payload and its
 nonblank freshly generated signature; metadata uses the exact re-signed path,
 and manifest generation rejects successful platforms with blank signatures.
+
+GCHAT-UPDATER-SIGNATURE's original blank-signature rejection is already inherited
+from `f7b2f43fe`. The independently reviewed follow-up also rejects an absent or
+whitespace-only final asset name for a successful platform and incomplete version,
+using the shared production `scripts/updater-manifest.jq` filter. Skipped/failed
+platform entries remain omitted; valid signatures, URLs, notes and supported
+platform structure are preserved. Exact post-signing NSIS/AppImage selection,
+required regular nonempty signature files, credentials and existing key are
+unchanged. The manifest job now gates the production filter through
+`tests/test_updater_manifest.py`: 19 offline cases cover complete Windows/Linux/
+combined metadata, failed/skipped omission, blank signatures/names and version.
+Sentinel signatures establish metadata admission only, never cryptographic validity.
+
+YAML/Python syntax and shell syntax checks pass; behavioral execution is deferred
+until the CPU quiet period ends at22:20Z. Local `jq` is absent and must be supplied
+by an already admitted environment, without dependency installation. Focused next
+check: `python3 -m unittest discover -s tests -p test_updater_manifest.py` with jq
+available. This tests the changed production filter; reuse passing routing/syntax
+evidence and run no full suite. The older prepared
+aggregate fixture must stage the new shared filter before running its copied
+workflow step; no fixture PASS or release qualification is claimed yet. This
+source-only follow-up passes coordinator and independent diff review; behavioral
+acceptance remains pending.
+
 Actual cryptographic acceptance against the unchanged public key and downloaded
 payload remains a scheduled-release gate. The recorded live 404 remains open.
 

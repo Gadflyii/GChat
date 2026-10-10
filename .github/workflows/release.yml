@@ -707,6 +707,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Gate updater manifest admission
+        run: python3 -m unittest discover -s tests -p test_updater_manifest.py
+
       - name: Generate latest.json for Tauri updater
         env:
           VERSION: ${{ needs.create-draft-release.outputs.version }}
@@ -732,24 +735,9 @@ jobs:
              --arg linux_url "$LINUX_URL" \
              --arg win_result "$WIN_RESULT" \
              --arg linux_result "$LINUX_RESULT" \
-             '.version = $version
-              | .pub_date = $pub_date
-              | (if $win_result == "success" then
-                  if ($win_sig | test("\\S")) then
-                    .platforms["windows-x86_64"].signature = $win_sig
-                    | .platforms["windows-x86_64"].url = $win_url
-                  else error("Windows updater signature is missing or blank") end
-                else
-                  del(.platforms["windows-x86_64"])
-                end)
-              | (if $linux_result == "success" then
-                  if ($linux_sig | test("\\S")) then
-                    .platforms["linux-x86_64"].signature = $linux_sig
-                    | .platforms["linux-x86_64"].url = $linux_url
-                  else error("Linux updater signature is missing or blank") end
-                else
-                  del(.platforms["linux-x86_64"])
-                end)' \
+             --arg exe_name "$EXE_NAME" \
+             --arg appimage_name "$APPIMAGE_NAME" \
+             -f scripts/updater-manifest.jq \
              src-tauri/latest.json.template > latest.json
 
           cat latest.json
