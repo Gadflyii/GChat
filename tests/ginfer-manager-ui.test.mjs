@@ -253,6 +253,92 @@ test('offline hosts preserve inventory and disable host mutations while a stale 
   assert.equal(requests(app).length, 0)
 })
 
+test('stopped instances retain their full previous startup diagnostic without a current failure alert', async (t) => {
+  const view = fixture()
+  const instance = view.hosts[0].snapshot.instances[1]
+  const diagnostic = 'engine exited unexpectedly: exit code 1\nKV arena rejected\n' + 'Usage: ginfer-serve --model <artifact>\n'.repeat(200)
+  instance.last_error = diagnostic
+  const savedProfile = structuredClone(instance.profile)
+  const app = await manager(t, view)
+  const card = app.document.querySelector(`[data-instance="${stoppedId}"]`)
+  assert.equal(card.querySelector('[role="alert"]'), null)
+  const details = card.querySelector('details')
+  assert.equal(details.querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(details.open, false)
+  details.querySelector('summary').click()
+  assert.equal(details.open, true)
+  assert.equal(details.querySelector('pre').textContent, diagnostic)
+  assert.equal(instance.last_error, diagnostic)
+  assert.deepEqual(instance.profile, savedProfile)
+  const offline = structuredClone(view)
+  offline.hosts[0].online = false
+  offline.hosts[0].offline = true
+  offline.hosts[0].snapshot.instances[1].status = 'failed'
+  await app.publish(offline)
+  const cached = app.document.querySelector(`[data-instance="${stoppedId}"]`)
+  assert.equal(cached.querySelector('[role="alert"]'), null)
+  assert.equal(cached.querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(cached.querySelector('details').open, true)
+  assert.equal(cached.querySelector('pre').textContent, diagnostic)
+  assert.deepEqual(requests(app), [])
+})
+
+test('current failures show a short alert and retain collapsed diagnostics after stopping', async (t) => {
+  const view = fixture()
+  const instance = view.hosts[0].snapshot.instances[0]
+  const diagnostic = 'engine startup timed out\nfull retained stdout\nUsage: ginfer-serve --model <artifact>'
+  instance.status = 'failed'
+  instance.active_requests = 0
+  instance.last_error = diagnostic
+  const app = await manager(t, view)
+  let card = app.document.querySelector(`[data-instance="${readyId}"]`)
+  assert.equal(card.querySelector('[role="alert"]').textContent, 'Engine failed. Open error details for the diagnostic.')
+  let details = card.querySelector('details')
+  assert.equal(details.querySelector('summary').textContent, 'Startup or runtime error details')
+  assert.equal(details.open, false)
+  details.querySelector('summary').click()
+  assert.equal(details.open, true)
+  assert.equal(details.querySelector('pre').textContent, diagnostic)
+  const stopped = structuredClone(view)
+  stopped.hosts[0].snapshot.instances[0].status = 'stopped'
+  await app.publish(stopped)
+  card = app.document.querySelector(`[data-instance="${readyId}"]`)
+  assert.equal(card.querySelector('[role="alert"]'), null)
+  details = card.querySelector('details')
+  assert.equal(details.querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(details.open, false)
+  assert.equal(details.querySelector('pre').textContent, diagnostic)
+  assert.equal(stopped.hosts[0].snapshot.instances[0].last_error, diagnostic)
+  assert.deepEqual(requests(app), [])
+})
+
+test('instance diagnostics retain their reading state across unrelated snapshots and collapse on phase changes', async (t) => {
+  const view = fixture()
+  const diagnostic = 'retained startup error\nfull diagnostic\nUsage: ginfer-serve --model <artifact>'
+  view.hosts[0].snapshot.instances[1].last_error = diagnostic
+  const app = await manager(t, view)
+  const details = () => app.document.querySelector(`[data-instance="${stoppedId}"] details`)
+  details().querySelector('summary').click()
+  assert.equal(details().open, true)
+  const unrelated = structuredClone(view)
+  unrelated.hosts[0].snapshot.instances[0].active_requests += 1
+  await app.publish(unrelated)
+  assert.equal(details().open, true)
+  assert.equal(details().querySelector('pre').textContent, diagnostic)
+  const failed = structuredClone(unrelated)
+  failed.hosts[0].snapshot.instances[1].status = 'failed'
+  await app.publish(failed)
+  assert.equal(details().querySelector('summary').textContent, 'Startup or runtime error details')
+  assert.equal(details().open, false)
+  details().querySelector('summary').click()
+  assert.equal(details().open, true)
+  await app.publish(unrelated)
+  assert.equal(details().querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(details().open, false)
+  assert.equal(details().querySelector('pre').textContent, diagnostic)
+  assert.deepEqual(requests(app), [])
+})
+
 test('custom reload can clear a failed profile\'s fixed KV pool without changing its workload or headroom', async (t) => {
   const view = fixture()
   const instance = view.hosts[0].snapshot.instances[0]

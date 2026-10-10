@@ -31,6 +31,7 @@ import type {
 const DEFAULT_STATUS: TerminalStatus = {
   phase: 'idle',
   generation: 0,
+  sequence: 0,
   replayComplete: true,
 }
 
@@ -109,7 +110,7 @@ export function useEmbeddedTerminal({
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const generationRef = useRef(0)
-  const sequenceRef = useRef(0)
+  const eventCursorRef = useRef({ generation: 0, sequence: 0 })
   const statusRef = useRef<TerminalStatus>(DEFAULT_STATUS)
   const [attached, setAttached] = useState(false)
   const [status, setStatus] = useState<TerminalStatus>(DEFAULT_STATUS)
@@ -117,6 +118,13 @@ export function useEmbeddedTerminal({
   const [replayUnavailable, setReplayUnavailable] = useState(false)
 
   const updateStatus = useCallback((next: TerminalStatus) => {
+    const current = statusRef.current
+    if (
+      next.generation < generationRef.current ||
+      (next.generation === current.generation && next.sequence < current.sequence)
+    ) {
+      return
+    }
     statusRef.current = next
     generationRef.current = next.generation
     setStatus(next)
@@ -153,32 +161,31 @@ export function useEmbeddedTerminal({
         () => undefined
       )
     })
+    let cancelled = false
     const handleEvent = (event: TerminalEvent) => {
+      if (cancelled) return
       if (
         generationRef.current !== 0 &&
         event.generation < generationRef.current
       ) {
         return
       }
-      if (event.generation !== generationRef.current) {
-        generationRef.current = event.generation
-        sequenceRef.current = 0
+      // Snapshots must not consume replay output or a new generation's events.
+      const cursor = eventCursorRef.current
+      if (event.generation !== cursor.generation) {
+        cursor.generation = event.generation
+        cursor.sequence = 0
         flow.reset()
       }
-      if (event.sequence <= sequenceRef.current) return
-      sequenceRef.current = event.sequence
+      generationRef.current = event.generation
+      if (event.sequence <= cursor.sequence) return
+      cursor.sequence = event.sequence
 
       switch (event.type) {
         case 'started':
           terminal.reset()
           setReplayUnavailable(false)
-          updateStatus({
-            phase: 'running',
-            generation: event.generation,
-            cwd: event.cwd,
-            launch: event.launch,
-            replayComplete: true,
-          })
+          updateStatus(event.status)
           break
         case 'output': {
           const bytes = base64ToBytes(event.data)
@@ -188,25 +195,20 @@ export function useEmbeddedTerminal({
         }
         case 'exited':
           flow.reset()
-          updateStatus({
-            ...statusRef.current,
-            phase: 'exited',
-            generation: event.generation,
-            exitCode: event.exit_code,
-            signal: event.signal,
-          })
+          updateStatus(event.status)
           break
         case 'replay_unavailable':
           terminal.reset()
           setReplayUnavailable(true)
           break
         case 'error':
+          if (event.status.phase === 'exited') flow.reset()
+          updateStatus(event.status)
           setError(event.message)
           break
       }
     }
 
-    let cancelled = false
     if (available) {
       void attachTerminal(terminalId, handleEvent)
         .then((next) => {

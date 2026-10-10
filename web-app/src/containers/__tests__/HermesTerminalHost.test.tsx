@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HermesTerminalHost } from '@/containers/HermesTerminalHost'
+import type { TerminalStatus } from '@/types/terminal'
 
 const mocks = vi.hoisted(() => ({
   terminalConstructed: vi.fn(),
@@ -171,6 +172,7 @@ describe('HermesTerminalHost', () => {
     mocks.attachTerminal.mockResolvedValue({
       phase: 'idle',
       generation: 0,
+      sequence: 0,
       replayComplete: true,
     })
     mocks.provisionHermes.mockResolvedValue({
@@ -182,11 +184,25 @@ describe('HermesTerminalHost', () => {
     })
     mocks.spawnTerminal.mockImplementation(async (request) => ({
       phase: 'running',
-      generation: 1,
+      generation: mocks.spawnTerminal.mock.calls.length,
+      sequence: 1,
       cwd: '/data/agent-workspace',
       launch: request.launch,
       replayComplete: true,
     }))
+  })
+
+  it('retains an exit event delivered before the Stop reply', async () => {
+    let finishStop!: (status: TerminalStatus) => void
+    mocks.stopTerminal.mockImplementation(() => new Promise<TerminalStatus>(resolve => { finishStop = resolve }))
+    render(<HermesTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('Hermes is running')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Hermes' }))
+    act(() => mocks.attachTerminal.mock.calls[0][1]({ type: 'exited', generation: 1, sequence: 4, status: { phase: 'exited', generation: 1, sequence: 4, exitCode: 1, cwd: '/data/agent-workspace', replayComplete: true } }))
+    await act(async () => { finishStop({ phase: 'stopping', generation: 1, sequence: 3, replayComplete: true }) })
+    expect(screen.getByLabelText('Hermes is exited')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Restart' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Stop Hermes' })).not.toBeInTheDocument()
   })
 
   it('confirms, shows background progress, and returns to the normal Hermes TUI', async () => {
@@ -195,8 +211,8 @@ describe('HermesTerminalHost', () => {
       progress('Downloading and installing updates')
       return new Promise((resolve) => { finishUpdate = resolve })
     })
-    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
-    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
     render(<HermesTerminalHost visible />)
     await waitFor(() => expect(screen.getByLabelText('Hermes is running')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Update Hermes' }))
@@ -217,8 +233,8 @@ describe('HermesTerminalHost', () => {
   })
 
   it('shows a retryable failure without opening an updater terminal', async () => {
-    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
-    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
     mocks.updateHermes.mockRejectedValue(new Error('Close other Hermes sessions and retry.'))
     render(<HermesTerminalHost visible />)
     await waitFor(() => expect(screen.getByLabelText('Hermes is running')).toBeInTheDocument())

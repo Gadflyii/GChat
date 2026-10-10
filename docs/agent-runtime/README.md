@@ -3,13 +3,106 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-## Current October 9 acceptance
+## Current acceptance
 
-Reviewed source fixes are merged and pushed on main `e239eac023`;
-`origin/main` equality is verified at 22:01 UTC. Changes after installed
-Windows product `0f06ba433` are subject metadata/docs only.
+Installer routing follows the [validated current-user NSIS decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).
 
-The current composed source gate at `0f06ba433` passes `make verify` at
+Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
+and OI-120–122 retain their composed Rust gate. Windows now has the accepted
+`3aff66d62` desktop, retained `574d73df7` Manager, 7d9 Host/CLI and2ef Engine.
+The installed embedded UI loads correctly. Ron accepts Code Stop/Restart after
+fresh-window392 shows Exited and then Running with output and connected tools,
+with both saved startup flags off. Normal recovery/state preservation passes;
+no model, API or debug listener remains and both guards are released. Reconnect
+still produces a blank terminal and a lost-screen-state warning; that is the
+next separate product item. [Remaining acceptance](remaining-acceptance.md)
+owns exact receipts, next action and incomplete broader OI-068 checks.
+
+Frozen source `7d9a8f689` passes actual native production at 09:37:44 UTC and
+independent package verification at 09:40 UTC. Its Code Stop correction retains
+four native ConPTY passes, including cursor-query reply and natural exit 7;
+focused Host, Unix and native all-target check/strict Clippy evidence is reused.
+The obsolete NSIS process-killing pre-uninstall hook is removed; optional
+post-uninstall data behavior is unchanged. Receipts are in the existing
+`out/remaining-acceptance-20261009/oi068-windows-20261010/` packet:
+`production-terminal-337.json` and
+`production-9a4caa1c3-337/package-verification.json`. These accepted artifacts
+precede the integrated installer-template and Manager presentation corrections.
+Booking349 completes the Manager embed and NSIS bundle refresh from `574d73df7`
+at 11:26:00.6625612 UTC. Existing compiled 7d9 GChat/Host/CLI, Engine and frontend
+payloads retain their original producer provenance.
+
+Earlier booking 337 ended at 09:58:48 UTC with
+Engine/API0 and both guards released. Booking 341 ended at 10:19:18.993484 UTC;
+its installer preflight rejected genuine MSI migration before any app stop or
+NSIS launch, and both guards are released. The baseline apps survived that
+attempt. Ron's bring-to-front request succeeded: native Manager Document
+visibility passed at 10:10:41.
+The tray had no clickable point; no agent tray click or Exit occurred.
+The exact valid HKCU64 NSIS owner coexists with a genuine same-path MSI record.
+Template `d6da84677` is integrated/pushed as `1a9044e65`; Manager historical-error
+and retained-reading-state fixes are integrated/pushed as `c20217d22` and
+`574d73df7`. Independent source reviews accept the template/follow-up; focused
+Manager Node checks pass 24/24 at 10:36:08 UTC. Pure preservation classifier
+checks pass 10/10 with two zero-error AST parses at 10:44:11.6667562 UTC;
+this is component evidence, not an installed update. CPU-only booking346 closed
+at 10:44:12 UTC with no jobs or guards remaining.
+Booking349's actual `PRODUCTION_PASS` proves body exit 0 and an empty job after
+the identified VCTIP helper teardown, with settings/apps unchanged and no model
+started. Its package verification passes. GChat R2 body/NSIS exit 0, but its
+original parent classifier FAIL remains retained alongside separate preservation
+adjudication. Manager R3 passes at 11:43:08; full installed byte/state verification
+passes at 11:45:47. Actual Manager CDP shows `http://tauri.localhost/`, stopped,
+zero active requests and no alerts.
+
+The candidate GChat desktop opened a directory listing at
+`file:///C:/Users/Ron/AppData/Local/GChat/windows-build/source/web-app/dist/`.
+The production config's absolute Windows `frontendDist` parses as a `C:` URL,
+so those frontend assets were not embedded. Byte/state verification does not
+establish frontend loading. Exact baseline `0f06ba433` desktop (`1761bdea…`)
+restoration passes at 11:56:54.9219517 UTC: GChat loads `http://tauri.localhost/`,
+shows all seven original saved threads and has no alerts. Selected protected
+state is unchanged; new Manager, 7d9 Host/CLI and 2ef Engine remain intact.
+Engine/API counts are zero and guards are released. CPU-only booking353,
+15:05–15:15 UTC, used the accepted source proposal: relative
+`frontendDist` `../../../windows-build/source/web-app/dist` resolves to the
+exact 832 accepted assets as a Directory. The compiled desktop's provenance and
+ordinary embedded UI are verified under booking364; NSIS completion remains
+separate. Code Stop at 16:25:45 reports Exited/code 1 for generation 1 while
+the visible UI remains Stopping at 16:26:11. Normal restart succeeds at
+16:31:17 with Engine/API0 and protected state preserved.
+The isolated `fix/gchat-terminal-stop-ui` candidate starts from `88ba8b762`
+(product-identical to `574d73df7`) and orders shared terminal snapshots/events
+by native generation and sequence. Independent source review accepts product
+`2684a6c70` and fixture tip `57507c234`. Root's final focused run passes 21/21
+without act warnings; typecheck, affected hook/type lint and Linux all-target
+release check/strict Clippy pass. The full web suite passes 1,962 tests across
+227 files with five skipped and unrelated diagnostics retained. These checks
+are source evidence. The composed `make verify` gate now passes on clean
+`210d642ba`: 2,120 root/frontend and 102 extension tests, all six critical
+coverage floors and all six supported Rust suite commands. Existing test
+diagnostics remain visible. Two corrected runner prerequisites (Yarn's
+extension-root state and a nonloopback local TLS route) and the actual final
+PASS are retained in the OI-068 packet. Its exact container is removed at
+17:39:49 UTC; both canonical guards are verified free and booking369 is returned
+early. Windows IPC and desktop build now pass in380; installed Stop/Restart passes
+in392. Reconnect remains open separately. Booking374 applies the exact native `1ccde5715` source overlay,
+but compilation is stopped at 18:35 UTC by the root-selected deadline before
+the four tests run. Its Job is empty, the pinned body and controller are exited,
+and both canonical guards are verified free at 18:36:44; apps and settings are
+unchanged. Booking380 reserves 22:20–22:50 UTC for compilation, tests, desktop
+build and installed replay, with cleanup by 22:49. The compile allowance is
+increased to avoid repeating that execution failure. The installed `574d73df7`
+UI still fails Stop despite native exit. [Remaining acceptance](remaining-acceptance.md#embedded-terminal-status-ordering)
+links the exact receipts and retained original warning log.
+[Remaining acceptance](remaining-acceptance.md) records the exact owners and
+supported scan evidence. Ron authorized keeping the existing AUTO Muse profile
+after preservation verification; functional replay still requires fresh Ready
+capacity, and final Stop keeps AUTO without attempting the known failing fixed
+startup. The narrow installed Code lifecycle passes; broader model-backed Code acceptance
+has not passed.
+
+The installed baseline's composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
 all six coverage floors, 553 desktop, 86 Host, six managed-adapter, 12 hardware
 and 29 utility tests. Strict Clippy results are reused for unchanged Rust.
@@ -17,7 +110,7 @@ Native Windows build exits 0 at 21:30 UTC; independent package verification
 passes at 21:34 UTC for the 125-payload Engine runtime, 104 profiles including
 103 unchanged original entries, and retained Manager `43c8d71cf`.
 Receipts: `/ai/gchat/out/oi106-final-update-20261009/composed-final-gate.json`
-and `package-verification.json`. Installed `0f06ba433` now passes preservation
+and `package-verification.json`. Prior installed `0f06ba433` passes preservation
 and actual OI-106 lifecycle/selection and continued Chat acceptance. Seven
 original threads, all models/profiles, credentials and Host identity survive.
 Receipts in the same folder are `installed-verification.json` and
@@ -49,9 +142,8 @@ and Reload reach distinct Ready sessions with selection and Server running
 retained; final GUI Stop leaves zero Engines/API listeners and remains stable.
 Supported Reload/Stop restores the exact original profile; its known fixed-arena
 startup failure remains separate. Normal apps are restored without debug ports.
-The [integration authority](../code-hygiene/README.md) owns Linux package/X11
-acceptance under booking 285, 22:15–23:00Z, retained evidence and current
-source/build/job inventory. No
+The [integration authority](../code-hygiene/README.md) records accepted Linux
+package/X11 scope, retained evidence and current source/build/job inventory. No
 original long agent run is rerun.
 
 ## OI-067 — accepted outcome correction

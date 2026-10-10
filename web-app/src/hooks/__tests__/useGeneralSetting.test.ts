@@ -40,15 +40,7 @@ describe('useGeneralSetting', () => {
     mockExtensionManager = ExtensionManager
 
     // Reset store state to defaults
-    useGeneralSetting.setState({
-      currentLanguage: 'en',
-      spellCheckChatInput: true,
-      tokenCounterCompact: true,
-      disableReasoning: false,
-      reasoningBudget: 'high',
-      preloadModelOnStartup: true,
-      huggingfaceToken: undefined,
-    })
+    useGeneralSetting.setState(useGeneralSetting.getInitialState())
 
     // Setup default mock behavior to prevent errors
     const mockGetByName = vi.fn().mockReturnValue({
@@ -68,23 +60,31 @@ describe('useGeneralSetting', () => {
     expect(result.current.spellCheckChatInput).toBe(true)
     expect(result.current.disableReasoning).toBe(false)
     expect(result.current.reasoningBudget).toBe('high')
-    expect(result.current.preloadModelOnStartup).toBe(true)
+    expect(result.current.preloadModelOnStartup).toBe(false)
     expect(result.current.huggingfaceToken).toBeUndefined()
     expect(typeof result.current.setCurrentLanguage).toBe('function')
     expect(typeof result.current.setSpellCheckChatInput).toBe('function')
     expect(typeof result.current.setHuggingfaceToken).toBe('function')
   })
 
-  it('migrates the old cold-start default once and preserves later opt-outs', () => {
-    expect(
-      migrateGeneralSettings({ preloadModelOnStartup: false }, 1)
-        .preloadModelOnStartup
-    ).toBe(true)
-    expect(
-      migrateGeneralSettings({ preloadModelOnStartup: false }, 2)
-        .preloadModelOnStartup
-    ).toBe(false)
-  })
+  it.each([0, 1])(
+    'migrates a missing model startup preference to off in schema %i',
+    (version) => {
+      expect(migrateGeneralSettings({}, version).preloadModelOnStartup).toBe(false)
+    }
+  )
+
+  it.each([0, 1, 2])(
+    'preserves explicit model startup choices in schema %i',
+    (version) => {
+      for (const preloadModelOnStartup of [true, false]) {
+        expect(
+          migrateGeneralSettings({ preloadModelOnStartup }, version)
+            .preloadModelOnStartup
+        ).toBe(preloadModelOnStartup)
+      }
+    }
+  )
 
   describe('setCurrentLanguage', () => {
     it('should set language to English', () => {

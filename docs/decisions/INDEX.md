@@ -1,5 +1,9 @@
 # Engineering Decisions (ADR)
 
+- [Order embedded terminal status by native sequence](2026-10-10-order-embedded-terminal-status.md)
+
+- [Prefer the validated current-user NSIS installation](2026-10-10-prefer-current-user-nsis-owner.md)
+
 - [Own GInfer model load requests](2026-10-09-own-ginfer-model-load-requests.md)
 - [Preserve Agent stage outcomes through final output](2026-10-09-preserve-agent-stage-outcomes.md)
 - [Load capability schemas on demand](2026-10-09-load-capability-schemas-on-demand.md)
@@ -59,7 +63,7 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-256 records, 2026-05-19 → 2026-10-09.
+258 records, 2026-05-19 → 2026-10-10.
 
 ---
 
@@ -287,8 +291,9 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-05-19** — [Use `AtomicBot-ai/atomic-llama-cpp-turboquant` as the LLM backend](2026-05-19-use-atomicbot-ai-atomic-llama-cpp-turboquant-as-the-llm-backend.md)
 - **2026-05-19** — [Ship upstream `ggml-org/llama.cpp` as a second macOS provider, no fork](2026-05-19-ship-upstream-ggml-org-llama-cpp-as-a-second-macos-provider-no.md)
 
-## Models, Hub & downloads (28)
+## Models, Hub & downloads (29)
 
+- **2026-10-10** — [Default model and API startup off](2026-10-10-default-model-and-api-startup-off.md)
 - **2026-08-30** — [Autoload the first GInfer model as the persisted default](2026-08-30-autoload-the-first-ginfer-model-as-the-persisted-default.md)
 - **2026-08-19** — [Do not preload a model on startup](2026-08-19-do-not-preload-a-model-on-startup.md)
 - **2026-08-19** — [Offer a low-spec model tier in onboarding](2026-08-19-offer-a-low-spec-model-tier-in-onboarding.md)

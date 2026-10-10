@@ -6,6 +6,7 @@ import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
+import type { TerminalSpawnRequest, TerminalStatus } from '@/types/terminal'
 
 const mocks = vi.hoisted(() => ({
   terminalConstructed: vi.fn(),
@@ -242,7 +243,7 @@ function codeThread(id: string, directory = '/project'): Thread {
 function sendRuntimeOutput(terminalId: string, text: string) {
   const attached = mocks.attachTerminal.mock.calls.find(([id]) => id === terminalId)
   if (!attached) throw new Error(`Workspace terminal is not attached: ${terminalId}`)
-  attached[1]({ type: 'output', generation: 1, sequence: 1, data: btoa(text) })
+  attached[1]({ type: 'output', generation: 1, sequence: 2, data: btoa(text) })
 }
 
 describe('CodeTerminalHost', () => {
@@ -262,6 +263,7 @@ describe('CodeTerminalHost', () => {
     mocks.attachTerminal.mockResolvedValue({
       phase: 'idle',
       generation: 0,
+      sequence: 0,
       replayComplete: true,
     })
     mocks.provisionOpenCode.mockResolvedValue({
@@ -271,13 +273,14 @@ describe('CodeTerminalHost', () => {
       viaWsl: false,
       configPath: '/home/user/.config/opencode/opencode.json',
     })
-    mocks.spawnTerminal.mockResolvedValue({
+    mocks.spawnTerminal.mockImplementation(async (request: TerminalSpawnRequest) => ({
       phase: 'running',
-      generation: 1,
-      cwd: '/data/agent-workspace',
+      generation: mocks.spawnTerminal.mock.calls.filter(([call]) => call.terminalId === request.terminalId).length,
+      sequence: 1,
+      cwd: request.cwd,
       launch: 'open_code',
       replayComplete: true,
-    })
+    }))
   })
 
   it('starts only on Code entry, attaches before launch and retains live output across navigation', async () => {
@@ -286,7 +289,7 @@ describe('CodeTerminalHost', () => {
     await act(async () => {})
     expect(mocks.spawnTerminal).not.toHaveBeenCalled()
     expect(mocks.terminalConstructed).not.toHaveBeenCalled()
-    rerender(<CodeTerminalHost visible />)
+    await act(async () => { rerender(<CodeTerminalHost visible />) })
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
     expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
@@ -298,8 +301,8 @@ describe('CodeTerminalHost', () => {
     act(() => sendRuntimeOutput('code:/data/agent-workspace', 'The running task is waiting for input.'))
     expect(within(pane).getByRole('log')).toHaveTextContent('The running task is waiting for input.')
 
-    rerender(<CodeTerminalHost visible={false} />)
-    rerender(<CodeTerminalHost visible />)
+    await act(async () => { rerender(<CodeTerminalHost visible={false} />) })
+    await act(async () => { rerender(<CodeTerminalHost visible />) })
 
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
@@ -311,8 +314,8 @@ describe('CodeTerminalHost', () => {
   })
 
   it('updates Code in the background with confirmation and returns to the TUI', async () => {
-    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
-    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
     let finishUpdate!: (value: { logPath: string }) => void
     mocks.updateCode.mockImplementation((_path, progress) => {
       progress('Downloading and installing updates')
@@ -335,9 +338,107 @@ describe('CodeTerminalHost', () => {
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2)
   })
 
+  it.each(['before', 'after'])('settles Stop when exit arrives %s its command reply and restarts with live output', async (order) => {
+    let finishStop!: (status: TerminalStatus) => void
+    const stopping: TerminalStatus = { phase: 'stopping', generation: 1, sequence: 3, replayComplete: true }
+    mocks.stopTerminal.mockImplementation(() => new Promise<TerminalStatus>(resolve => { finishStop = resolve }))
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 4, exitCode: 1, replayComplete: true })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
+    const onEvent = mocks.attachTerminal.mock.calls[0][1]
+    act(() => onEvent({ type: 'output', generation: 1, sequence: 2, data: btoa('Initial output') }))
+    fireEvent.click(screen.getByRole('button', { name: 'code:stop' }))
+
+    if (order === 'after') {
+      await act(async () => { finishStop(stopping) })
+      expect(screen.getByLabelText('code:status.stopping')).toBeInTheDocument()
+    }
+    act(() => onEvent({ type: 'exited', generation: 1, sequence: 4, status: { phase: 'exited', generation: 1, sequence: 4, exitCode: 1, cwd: '/data/agent-workspace', replayComplete: true } }))
+    if (order === 'before') await act(async () => { finishStop(stopping) })
+
+    expect(screen.getByLabelText('code:status.exited')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'code:stop' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'code:restart' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'code:restart' }))
+    await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
+
+    // The generation-2 spawn reply arrives before its Started/output events.
+    act(() => {
+      onEvent({ type: 'started', generation: 2, sequence: 1, status: { phase: 'running', generation: 2, sequence: 1, cwd: '/data/agent-workspace', launch: 'open_code', replayComplete: true } })
+      onEvent({ type: 'output', generation: 2, sequence: 2, data: btoa('Restarted output') })
+      onEvent({ type: 'exited', generation: 1, sequence: 5, status: { phase: 'exited', generation: 1, sequence: 5, exitCode: 1, cwd: '/data/agent-workspace', replayComplete: true } })
+    })
+    expect(screen.getByRole('log')).toHaveTextContent('Restarted output')
+    expect(screen.getByRole('log')).not.toHaveTextContent('Initial output')
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+  })
+
+  it('keeps a failed live Stop running and permits a successful retry', async () => {
+    mocks.stopTerminal
+      .mockRejectedValueOnce(new Error('Could not stop Code terminal: Access is denied. (os error 5)'))
+      .mockResolvedValueOnce({ phase: 'stopping', generation: 1, sequence: 3, replayComplete: true })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'code:stop' }))
+    await screen.findByText('Error: Could not stop Code terminal: Access is denied. (os error 5)')
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'code:stop' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'code:restart' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'code:stop' }))
+    await waitFor(() => expect(screen.getByLabelText('code:status.stopping')).toBeInTheDocument())
+    act(() => mocks.attachTerminal.mock.calls[0][1]({ type: 'exited', generation: 1, sequence: 4, status: { phase: 'exited', generation: 1, sequence: 4, exitCode: 1, cwd: '/data/agent-workspace', replayComplete: true } }))
+    expect(screen.getByRole('button', { name: 'code:restart' })).toBeEnabled()
+  })
+
+  it('renders replay output even when a newer attach snapshot arrives first', async () => {
+    mocks.attachTerminal.mockResolvedValue({ phase: 'running', generation: 1, sequence: 7, replayComplete: true })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
+    act(() => {
+      const onEvent = mocks.attachTerminal.mock.calls[0][1]
+      onEvent({ type: 'started', generation: 1, sequence: 1, status: { phase: 'running', generation: 1, sequence: 1, cwd: '/data/agent-workspace', launch: 'open_code', replayComplete: true } })
+      onEvent({ type: 'output', generation: 1, sequence: 2, data: btoa('Retained screen') })
+      onEvent({ type: 'output', generation: 1, sequence: 2, data: btoa('Duplicate output') })
+    })
+    expect(screen.getByRole('log')).toHaveTextContent('Retained screen')
+    expect(screen.getByRole('log')).not.toHaveTextContent('Duplicate output')
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+  })
+
+  it('ignores an old-generation attach reply after a new generation starts', async () => {
+    let finishAttach!: (status: TerminalStatus) => void
+    mocks.attachTerminal.mockImplementation(() => new Promise<TerminalStatus>(resolve => { finishAttach = resolve }))
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.attachTerminal).toHaveBeenCalledTimes(1))
+    act(() => mocks.attachTerminal.mock.calls[0][1]({
+      type: 'started', generation: 2, sequence: 1, status: { phase: 'running', generation: 2, sequence: 1, cwd: '/data/agent-workspace', launch: 'open_code', replayComplete: true },
+    }))
+    await act(async () => {
+      finishAttach({ phase: 'stopping', generation: 1, sequence: 100, replayComplete: true })
+    })
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'code:stop' })).toBeEnabled()
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+  })
+
+  it.each(['running', 'exited'] as const)('uses the native %s status accompanying an error', async (phase) => {
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
+    act(() => mocks.attachTerminal.mock.calls[0][1]({
+      type: 'error', generation: 1, sequence: 2, message: 'Native terminal error',
+      status: { phase, generation: 1, sequence: 2, replayComplete: true },
+    }))
+    expect(screen.getByText('Native terminal error')).toBeInTheDocument()
+    expect(screen.getByLabelText(`code:status.${phase}`)).toBeInTheDocument()
+    if (phase === 'running') expect(screen.getByRole('button', { name: 'code:stop' })).toBeEnabled()
+    else expect(screen.getByRole('button', { name: 'code:restart' })).toBeEnabled()
+  })
+
   it('shows an update failure with retry instead of an updater terminal', async () => {
-    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1 })
-    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1 })
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
     mocks.updateCode.mockRejectedValue(new Error('Code did not reach the requested version.'))
     render(<CodeTerminalHost visible />)
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
@@ -399,7 +500,7 @@ describe('CodeTerminalHost', () => {
       bridgePolicy: expect.objectContaining({ origin_session_id: row.id }),
     }))
     mounted.unmount()
-    mocks.attachTerminal.mockResolvedValue({ phase: 'idle', generation: 0, replayComplete: true })
+    mocks.attachTerminal.mockResolvedValue({ phase: 'idle', generation: 0, sequence: 0, replayComplete: true })
     render(<CodeTerminalHost visible />)
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2))
     expect(mocks.spawnTerminal.mock.calls[1][0].codeSessionId).toBe('ses_saved')

@@ -4,7 +4,8 @@ Repository: GChat. Owner: GChat coordinator. Subject: `docs/ginfer-manager/`.
 Open defects and TODOs belong in the [master list](../open-work.md); this record
 retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
-Installed Windows Manager producer is `43c8d71cf`. The refreshed Linux
+Installed Windows Manager producer is `574d73df7`, with actual installation,
+byte/state and stopped/no-alert presentation evidence below. The refreshed Linux
 Manager/Host is compiled from `54c931c68` and assembled at `02d369e8a`;
 independent package and native X11 acceptance pass. The older `2a6e21ff2`
 Linux proof remains historical evidence. Package paths and proof are recorded below.
@@ -29,7 +30,57 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
-Installed Windows client `0f06ba433` passes with retained Manager producer
+### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
+
+The October 10 public Host snapshot reports the saved instance stopped with zero
+active requests while retaining its October 9 startup error. Manager rendered
+that entire saved diagnostic as a current red error. Source now keeps stopped
+and other historical diagnostics in neutral, collapsed **Previous startup
+error** details. An online failed instance keeps a short visible failure alert
+and collapsed **Startup or runtime error details**. The complete diagnostic
+remains available in a bounded, scrollable text area; no Host error, cached
+snapshot, model profile or stored data is cleared or changed.
+
+Diagnostic details use the existing section-state map, keyed by Host, instance
+and current versus previous phase. Unrelated live snapshot updates preserve an
+open diagnostic while it is being read. A phase change starts collapsed, including
+a round trip back to a previous startup error.
+
+The reviewed code is integrated and pushed through root source `574d73df7`.
+Actual focused Manager Node checks pass **24/24** at October 10 10:36:08 UTC,
+covering stopped versus failed presentation, offline cached diagnostics, full
+retained text, reading state across unrelated snapshot updates and collapsed
+phase transitions. CPU-only booking346 closed at 10:44:12 with no jobs or
+guards remaining. New Manager `574d73df7` is now installed; neither its component
+checks nor successful presentation repair the separate Engine profile/startup issue.
+
+Evidence: `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/host-current-error-341.json`
+records `stopped`, zero active requests and the retained 9,009-byte diagnostic.
+Actual gate evidence is
+`/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/manager-ui-574d73df7-346.log`.
+Booking349's actual `PRODUCTION_PASS` at 11:26:00.6625612 UTC completes the
+Manager embed build from `574d73df7` and NSIS-only bundle refresh. Accepted
+compiled 7d9 GChat/Host/CLI, Engine and frontend payloads retain their original
+producer provenance. The production body exits 0 and its job is empty after
+the identified VCTIP helper teardown. Package verification passes, Manager R3
+installation passes at 11:43:08 UTC, and full installed byte/state verification
+passes at 11:45:47 UTC. Actual Manager CDP at 11:46 shows
+`http://tauri.localhost/`, stopped, zero active requests and no alerts. These
+observations do not qualify every diagnostic interaction. The candidate GChat
+frontend opened a directory listing because an absolute Windows `frontendDist`
+parsed as a `C:` URL and left assets unembedded. Exact `0f06ba433` desktop-only
+restoration passes at 11:56:54.9219517 UTC, with ordinary GChat UI, seven original
+saved threads and unchanged selected protected state. Manager 24796/hash
+`1b9f0173…` and 7d9 Host/CLI/2ef Engine remain intact; Engine/API counts are zero
+and guards are released. CPU-only booking353, 15:05–15:15 UTC, has an accepted
+nonexecuted build-body proposal: relative `frontendDist`
+`../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
+assets as a Directory. Actual desktop/NSIS build, install and ordinary candidate
+UI verification remain pending.
+The [remaining acceptance authority](../agent-runtime/remaining-acceptance.md)
+owns package/installation admission and preservation checks.
+
+Earlier installed Windows client `0f06ba433` passes with retained Manager producer
 `43c8d71cf` and clean Engine `2ef56a52a`. Composed `make verify`, native build,
 package verification and installed payload/user-state preservation pass.
 Seven original threads, all models/profiles, credentials and Host identity are
@@ -41,7 +92,8 @@ Reload/Stop restores the original profile exactly and normal apps are restored
 without debug ports. Evidence:
 `/ai/gchat/out/oi106-final-update-20261009/installed-verification.json` and
 `installed-lifecycle-acceptance.json`. Reviewed code is merged and pushed on
-Windows main `e2521e33`; installed product remains `0f06ba433`. Linux
+Windows main `e2521e33`; that accepted desktop is now restored alongside the newer
+Manager and Host/CLI. Linux
 assembly, both-format independent package verification and actual native X11
 lifecycle acceptance pass at `02d369e8a`, as recorded below. Completed OI-106 and profile
 source trees are retired; source branches and evidence remain. This C4/32K
@@ -570,6 +622,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
+| Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, three observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |

@@ -23,6 +23,70 @@ const GCHAT_OPENCODE_STARTUP: &str = include_str!("../../resources/opencode/gcha
 const GCHAT_HERMES_DARK_SKIN: &str = include_str!("../../resources/hermes/gchat-dark.yaml");
 const GCHAT_HERMES_LIGHT_SKIN: &str = include_str!("../../resources/hermes/gchat-light.yaml");
 
+#[cfg(windows)]
+#[derive(Debug, Clone)]
+struct WindowsTerminalKiller {
+    process: Arc<std::os::windows::io::OwnedHandle>,
+}
+
+#[cfg(windows)]
+impl WindowsTerminalKiller {
+    fn duplicate(process: std::os::windows::io::RawHandle) -> std::io::Result<Self> {
+        // The child still owns this handle while we duplicate it for the stop path.
+        let process = unsafe { std::os::windows::io::BorrowedHandle::borrow_raw(process) }
+            .try_clone_to_owned()?;
+        Ok(Self {
+            process: Arc::new(process),
+        })
+    }
+
+    fn terminate(process: std::os::windows::io::RawHandle) -> std::io::Result<()> {
+        use windows_sys::Win32::{
+            Foundation::WAIT_OBJECT_0,
+            System::Threading::{TerminateProcess, WaitForSingleObject},
+        };
+
+        if unsafe { TerminateProcess(process, 1) } != 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        // Access denied also occurs after exit; only the pinned handle proves that exit.
+        if unsafe { WaitForSingleObject(process, 0) } == WAIT_OBJECT_0 {
+            Ok(())
+        } else {
+            Err(error)
+        }
+    }
+}
+
+#[cfg(windows)]
+impl ChildKiller for WindowsTerminalKiller {
+    fn kill(&mut self) -> std::io::Result<()> {
+        use std::os::windows::io::AsRawHandle;
+        Self::terminate(self.process.as_raw_handle())
+    }
+
+    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
+        Box::new(self.clone())
+    }
+}
+
+fn terminal_child_killer(
+    child: &(dyn portable_pty::Child + Send + Sync),
+) -> std::io::Result<Box<dyn ChildKiller + Send + Sync>> {
+    #[cfg(windows)]
+    {
+        let process = child.as_raw_handle().ok_or_else(|| {
+            std::io::Error::other("The terminal child has no Windows process handle")
+        })?;
+        Ok(Box::new(WindowsTerminalKiller::duplicate(process)?))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(child.clone_killer())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminalId {
     Code,
@@ -97,6 +161,7 @@ pub enum TerminalPhase {
 pub struct TerminalStatus {
     pub phase: TerminalPhase,
     pub generation: u64,
+    pub sequence: u64,
     pub cwd: Option<String>,
     pub launch: Option<TerminalLaunch>,
     pub exit_code: Option<u32>,
@@ -158,8 +223,7 @@ pub enum TerminalEvent {
     Started {
         generation: u64,
         sequence: u64,
-        cwd: String,
-        launch: TerminalLaunch,
+        status: TerminalStatus,
     },
     Output {
         generation: u64,
@@ -169,8 +233,7 @@ pub enum TerminalEvent {
     Exited {
         generation: u64,
         sequence: u64,
-        exit_code: u32,
-        signal: Option<String>,
+        status: TerminalStatus,
     },
     ReplayUnavailable {
         generation: u64,
@@ -180,6 +243,7 @@ pub enum TerminalEvent {
         generation: u64,
         sequence: u64,
         message: String,
+        status: TerminalStatus,
     },
 }
 
@@ -282,6 +346,8 @@ struct Session {
     master: Option<Box<dyn MasterPty + Send>>,
     writer: Option<Box<dyn Write + Send>>,
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
+    #[cfg(windows)]
+    startup_child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     channel: Option<Channel<TerminalEvent>>,
     replay: ReplayLog,
     flow_paused: bool,
@@ -301,6 +367,8 @@ impl Default for Session {
             master: None,
             writer: None,
             killer: None,
+            #[cfg(windows)]
+            startup_child: None,
             channel: None,
             replay: ReplayLog::default(),
             flow_paused: false,
@@ -310,10 +378,25 @@ impl Default for Session {
 }
 
 impl Session {
+    #[cfg(windows)]
+    fn request_windows_stop(&mut self) -> std::io::Result<()> {
+        if let Some(killer) = self.killer.as_mut() {
+            killer.kill()?;
+        }
+        if let Some(child) = self.startup_child.as_ref() {
+            let process = child.as_raw_handle().ok_or_else(|| {
+                std::io::Error::other("The terminal child has no Windows process handle")
+            })?;
+            WindowsTerminalKiller::terminate(process)?;
+        }
+        Ok(())
+    }
+
     fn status(&self) -> TerminalStatus {
         TerminalStatus {
             phase: self.phase,
             generation: self.generation,
+            sequence: self.sequence,
             cwd: self.cwd.clone(),
             launch: self.launch,
             exit_code: self.exit_code,
@@ -398,10 +481,25 @@ impl TerminalSlot {
     }
 
     fn shutdown(&self) {
-        let (mut killer, writer, master) = match self.session() {
+        #[cfg(windows)]
+        let mut startup_child;
+        let (killer, writer, master) = match self.session() {
             Ok(mut session) => {
+                #[cfg(windows)]
+                if let Err(error) = session.request_windows_stop() {
+                    log::warn!(
+                        "Could not stop {} terminal during shutdown: {error}",
+                        self.id.label()
+                    );
+                    return;
+                }
+                #[cfg(windows)]
+                {
+                    startup_child = session.startup_child.take();
+                }
                 if session.phase == TerminalPhase::Running {
                     session.phase = TerminalPhase::Stopping;
+                    session.next_sequence();
                 }
                 session.flow_paused = false;
                 session.bridge = None;
@@ -419,6 +517,9 @@ impl TerminalSlot {
             }
         };
 
+        #[cfg(not(windows))]
+        let mut killer = killer;
+        #[cfg(not(windows))]
         if let Some(killer) = killer.as_mut() {
             if let Err(error) = killer.kill() {
                 log::debug!(
@@ -427,8 +528,15 @@ impl TerminalSlot {
                 );
             }
         }
+        drop(killer);
         drop(writer);
         drop(master);
+        #[cfg(windows)]
+        if let Some(child) = startup_child.as_mut() {
+            if let Err(error) = child.wait() {
+                log::warn!("Could not reap {} terminal child: {error}", self.id.label());
+            }
+        }
 
         if let Ok(mut threads) = self.threads.lock() {
             for handle in threads.drain(..) {
@@ -740,10 +848,12 @@ fn start_reader(
                             && session.phase == TerminalPhase::Running
                         {
                             let sequence = session.next_sequence();
+                            let status = session.status();
                             session.publish(TerminalEvent::Error {
                                 generation,
                                 sequence,
                                 message: format!("Terminal output stopped: {error}"),
+                                status,
                             });
                         }
                         return;
@@ -789,11 +899,11 @@ fn start_waiter(
                     session.exit_code = Some(exit_code);
                     session.signal.clone_from(&signal);
                     let sequence = session.next_sequence();
+                    let status = session.status();
                     session.publish(TerminalEvent::Exited {
                         generation,
                         sequence,
-                        exit_code,
-                        signal,
+                        status,
                     });
                 }
                 Err(error) => {
@@ -801,10 +911,12 @@ fn start_waiter(
                     session.exit_code = None;
                     session.signal = None;
                     let sequence = session.next_sequence();
+                    let status = session.status();
                     session.publish(TerminalEvent::Error {
                         generation,
                         sequence,
                         message: format!("Could not wait for terminal process: {error}"),
+                        status,
                     });
                 }
             }
@@ -1029,11 +1141,77 @@ pub fn terminal_spawn<R: Runtime>(
         )
     })?;
     drop(pair.slave);
-    let mut killer = child.clone_killer();
+    let mut killer = match terminal_child_killer(child.as_ref()) {
+        Ok(killer) => killer,
+        Err(error) => {
+            #[cfg(windows)]
+            let cleanup = child
+                .as_raw_handle()
+                .ok_or_else(|| std::io::Error::other("The terminal child has no process handle"))
+                .and_then(WindowsTerminalKiller::terminate);
+            #[cfg(not(windows))]
+            let cleanup = child.kill();
+            if let Err(cleanup_error) = cleanup {
+                #[cfg(windows)]
+                {
+                    // Retain the original handle if even cleanup was refused.
+                    let mut session = slot.session()?;
+                    session.generation = session.generation.saturating_add(1).max(1);
+                    session.phase = TerminalPhase::Running;
+                    session.cwd = Some(cwd_text);
+                    session.launch = Some(request.launch);
+                    session.startup_child = Some(child);
+                    session.writer = Some(writer);
+                    session.master = Some(pair.master);
+                    session.bridge = bridge;
+                }
+                return Err(format!(
+                    "Could not own {} terminal stop handle: {error}; child cleanup failed: {cleanup_error}",
+                    terminal_id.label()
+                ));
+            }
+            drop(writer);
+            drop(pair.master);
+            let _ = child.wait();
+            return Err(format!(
+                "Could not own {} terminal stop handle: {error}",
+                terminal_id.label()
+            ));
+        }
+    };
 
     if let Some(command) = launch_command {
         if let Err(error) = writer.write_all(&command).and_then(|_| writer.flush()) {
+            #[cfg(windows)]
+            let cleanup = killer.kill();
+            #[cfg(not(windows))]
             let _ = killer.kill();
+            #[cfg(windows)]
+            if let Err(cleanup_error) = cleanup {
+                // Retain the exact child and killer so shutdown can retry a refused stop.
+                let generation = {
+                    let mut session = slot.session()?;
+                    session.generation = session.generation.saturating_add(1).max(1);
+                    session.phase = TerminalPhase::Running;
+                    session.cwd = Some(cwd_text);
+                    session.launch = Some(request.launch);
+                    session.killer = Some(killer);
+                    session.writer = Some(writer);
+                    session.master = Some(pair.master);
+                    session.bridge = bridge;
+                    session.generation
+                };
+                slot.push_thread(start_waiter(
+                    terminal_id.clone(),
+                    slot.shared.clone(),
+                    generation,
+                    child,
+                ))?;
+                return Err(format!(
+                    "Could not launch {} terminal: {error}; child cleanup failed: {cleanup_error}",
+                    terminal_id.label()
+                ));
+            }
             drop(writer);
             drop(pair.master);
             let _ = child.wait();
@@ -1067,11 +1245,11 @@ pub fn terminal_spawn<R: Runtime>(
         session.replay.reset();
 
         let sequence = session.next_sequence();
+        let status = session.status();
         session.publish(TerminalEvent::Started {
             generation,
             sequence,
-            cwd: cwd_text,
-            launch: request.launch,
+            status,
         });
     }
 
@@ -1203,12 +1381,23 @@ pub fn terminal_stop(
     terminal_id: TerminalId,
 ) -> Result<TerminalStatus, String> {
     let slot = state.slot(terminal_id.clone());
-    let (status, mut killer, writer, master) = {
+    #[cfg(windows)]
+    let startup_child;
+    let (status, killer, writer, master) = {
         let mut session = slot.session()?;
         if session.phase != TerminalPhase::Running {
             return Ok(session.status());
         }
+        #[cfg(windows)]
+        {
+            session.request_windows_stop().map_err(|error| {
+                format!("Could not stop {} terminal: {error}", terminal_id.label())
+            })?;
+            startup_child = session.startup_child.take();
+        }
         session.phase = TerminalPhase::Stopping;
+        // Order the command snapshot against the waiter's exit event.
+        session.next_sequence();
         session.bridge = None;
         session.flow_paused = false;
         slot.shared.flow_changed.notify_all();
@@ -1220,13 +1409,26 @@ pub fn terminal_stop(
             session.master.take(),
         )
     };
+    #[cfg(not(windows))]
+    let mut killer = killer;
+    #[cfg(not(windows))]
     if let Some(killer) = killer.as_mut() {
         killer
             .kill()
             .map_err(|error| format!("Could not stop {} terminal: {error}", terminal_id.label()))?;
     }
+    drop(killer);
     drop(writer);
     drop(master);
+    #[cfg(windows)]
+    if let Some(child) = startup_child {
+        slot.push_thread(start_waiter(
+            terminal_id,
+            slot.shared.clone(),
+            status.generation,
+            child,
+        ))?;
+    }
     Ok(status)
 }
 
@@ -1985,6 +2187,303 @@ mod tests {
             hermes_configuration_state(temp.path()),
             Ok(OpenCodeConfigurationState::Invalid)
         );
+    }
+
+    #[cfg(windows)]
+    struct WindowsPtyChild {
+        child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
+        killer: WindowsTerminalKiller,
+        master: Option<Box<dyn MasterPty + Send>>,
+        writer: Option<Box<dyn Write + Send>>,
+    }
+
+    #[cfg(windows)]
+    impl WindowsPtyChild {
+        fn spawn(executable: &str, arguments: &[&str]) -> Self {
+            let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+            let writer = pair.master.take_writer().unwrap();
+            let mut command = CommandBuilder::new(executable);
+            command.args(arguments);
+            let child = pair.slave.spawn_command(command).unwrap();
+            drop(pair.slave);
+            let killer = WindowsTerminalKiller::duplicate(child.as_raw_handle().unwrap()).unwrap();
+            Self {
+                child: Some(child),
+                killer,
+                master: Some(pair.master),
+                writer: Some(writer),
+            }
+        }
+
+        fn wait_for_exit(&self) {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::{
+                Foundation::WAIT_OBJECT_0,
+                System::Threading::WaitForSingleObject,
+            };
+            assert_eq!(
+                unsafe { WaitForSingleObject(self.killer.process.as_raw_handle(), 5000) },
+                WAIT_OBJECT_0,
+                "native terminal child did not exit within five seconds"
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for WindowsPtyChild {
+        fn drop(&mut self) {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::{
+                Foundation::WAIT_OBJECT_0,
+                System::Threading::WaitForSingleObject,
+            };
+            let _ = self.killer.kill();
+            self.writer.take();
+            self.master.take();
+            if unsafe { WaitForSingleObject(self.killer.process.as_raw_handle(), 5000) }
+                == WAIT_OBJECT_0
+            {
+                if let Some(child) = self.child.as_mut() {
+                    let _ = child.wait();
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_terminal_killer_stops_real_conpty_child_and_retains_clone() {
+        let mut process = WindowsPtyChild::spawn(
+            "powershell.exe",
+            &[
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Start-Sleep -Seconds 15",
+            ],
+        );
+        let killer = terminal_child_killer(process.child.as_ref().unwrap().as_ref()).unwrap();
+        let mut clone = killer.clone_killer();
+        drop(killer);
+        let slot = TerminalSlot::new(TerminalId::Code);
+        {
+            let mut session = slot.session().unwrap();
+            session.phase = TerminalPhase::Running;
+            session.generation = 1;
+        }
+        let waiter = start_waiter(
+            TerminalId::Code,
+            slot.shared.clone(),
+            1,
+            process.child.take().unwrap(),
+        );
+        clone.kill().unwrap();
+        process.wait_for_exit();
+        waiter.join().unwrap();
+        let status = slot.session().unwrap().status();
+        assert_eq!(status.phase, TerminalPhase::Exited);
+        assert_eq!(status.exit_code, Some(1));
+        // The waiter has dropped the source child handle; the clone still owns its handle.
+        clone.kill().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_terminal_killer_accepts_only_proven_already_exited_child() {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::{
+            Foundation::WAIT_OBJECT_0,
+            System::Threading::WaitForSingleObject,
+        };
+
+        let mut process = WindowsPtyChild::spawn("cmd.exe", &["/D", "/C", "exit 7"]);
+        let mut reader = process.master.as_ref().unwrap().try_clone_reader().unwrap();
+        let mut writer = process.writer.take().unwrap();
+        // Match the terminal's cursor report while continuously draining ConPTY output.
+        let consumer = std::thread::spawn(move || -> std::io::Result<(Vec<u8>, usize)> {
+            let mut output = Vec::new();
+            let mut replies = 0;
+            let mut buffer = [0; 256];
+            loop {
+                let count = reader.read(&mut buffer)?;
+                if count == 0 {
+                    return Ok((output, replies));
+                }
+                let search_from = output.len().saturating_sub(3);
+                output.extend_from_slice(&buffer[..count]);
+                for _ in 0..output[search_from..]
+                    .windows(4)
+                    .filter(|sequence| *sequence == b"\x1b[6n")
+                    .count()
+                {
+                    writer.write_all(b"\x1b[1;1R")?;
+                    writer.flush()?;
+                    replies += 1;
+                }
+            }
+        });
+        let mut killer = process.killer.clone();
+        let observed = unsafe { WaitForSingleObject(killer.process.as_raw_handle(), 5000) };
+        let natural_status = if observed == WAIT_OBJECT_0 {
+            Some(process.child.as_mut().unwrap().wait())
+        } else {
+            None
+        };
+        // Close ConPTY with its output consumer alive, then join before any material assertion.
+        drop(process);
+        let consumed = consumer.join().unwrap();
+        eprintln!("ConPTY natural-exit output/cursor replies: {consumed:?}");
+        let (_, replies) = consumed.unwrap();
+        assert_eq!(
+            observed, WAIT_OBJECT_0,
+            "native terminal child did not exit within five seconds"
+        );
+        assert!(replies > 0, "ConPTY did not emit a cursor-position query");
+        assert_eq!(natural_status.unwrap().unwrap().exit_code(), 7);
+        // The source child handle is closed; only the pinned duplicate remains.
+        killer.kill().unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_terminal_denied_live_stop_preserves_shutdown_retry_ownership() {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+        use windows_sys::Win32::{
+            Foundation::{DuplicateHandle, WAIT_TIMEOUT},
+            System::Threading::{GetCurrentProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE},
+        };
+
+        let mut process = WindowsPtyChild::spawn(
+            "powershell.exe",
+            &[
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Start-Sleep -Seconds 15",
+            ],
+        );
+        let mut restricted = std::ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    process.killer.process.as_raw_handle(),
+                    GetCurrentProcess(),
+                    &mut restricted,
+                    PROCESS_SYNCHRONIZE,
+                    0,
+                    0,
+                )
+            },
+            0
+        );
+        let restricted = unsafe { OwnedHandle::from_raw_handle(restricted) };
+        let mut denied = WindowsTerminalKiller {
+            process: Arc::new(restricted),
+        };
+        assert_eq!(denied.kill().unwrap_err().raw_os_error(), Some(5));
+        assert_eq!(
+            unsafe { WaitForSingleObject(denied.process.as_raw_handle(), 0) },
+            WAIT_TIMEOUT
+        );
+
+        let state = TerminalState::default();
+        let slot = state.slot(TerminalId::Code);
+        let harness = crate::test_support::IpcTestHarness::new(|builder| {
+            builder
+                .manage(state)
+                .invoke_handler(tauri::generate_handler![terminal_status, terminal_stop])
+        });
+        {
+            let mut session = slot.session().unwrap();
+            session.phase = TerminalPhase::Running;
+            session.generation = 1;
+            session.flow_paused = true;
+            session.bridge = Some(BridgeLease("oi068-denied-live-test".into()));
+            session.killer = Some(Box::new(denied));
+            session.writer = process.writer.take();
+            session.master = process.master.take();
+        }
+        let error = harness
+            .invoke::<serde_json::Value>("terminal_stop", serde_json::json!({"terminalId": "code"}))
+            .unwrap_err();
+        let error = error.as_str().unwrap();
+        assert!(error.starts_with("Could not stop Code terminal:"));
+        assert!(error.contains("os error 5"));
+        assert_eq!(slot.session().unwrap().status().sequence, 0);
+        slot.shutdown();
+        {
+            let mut session = slot.session().unwrap();
+            assert_eq!(session.phase, TerminalPhase::Running);
+            assert!(session.flow_paused);
+            assert!(session.bridge.is_some());
+            assert!(session.writer.is_some());
+            assert!(session.master.is_some());
+            assert!(session.killer.is_some());
+            session.killer = Some(Box::new(process.killer.clone()));
+        }
+        let waiter = start_waiter(
+            TerminalId::Code,
+            slot.shared.clone(),
+            1,
+            process.child.take().unwrap(),
+        );
+        let stopped_wire = harness
+            .invoke::<serde_json::Value>("terminal_stop", serde_json::json!({"terminalId": "code"}))
+            .unwrap();
+        assert_eq!(stopped_wire["phase"], "stopping");
+        assert_eq!(stopped_wire["generation"], 1);
+        assert_eq!(stopped_wire["sequence"], 1);
+        let stopped_sequence = stopped_wire["sequence"].as_u64().unwrap();
+        process.wait_for_exit();
+        waiter.join().unwrap();
+        let status = slot.session().unwrap().status();
+        assert_eq!(status.phase, TerminalPhase::Exited);
+        assert_eq!(status.exit_code, Some(1));
+        assert!(status.sequence > stopped_sequence);
+        let exited_wire = harness
+            .invoke::<serde_json::Value>("terminal_status", serde_json::json!({"terminalId": "code"}))
+            .unwrap();
+        assert_eq!(exited_wire["phase"], "exited");
+        assert_eq!(exited_wire["exitCode"], 1);
+        assert_eq!(exited_wire["sequence"], status.sequence);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_terminal_shutdown_reaps_owned_startup_child() {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::Threading::GetExitCodeProcess;
+
+        let mut process = WindowsPtyChild::spawn(
+            "powershell.exe",
+            &[
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Start-Sleep -Seconds 15",
+            ],
+        );
+        let slot = TerminalSlot::new(TerminalId::Code);
+        {
+            let mut session = slot.session().unwrap();
+            session.phase = TerminalPhase::Running;
+            session.startup_child = process.child.take();
+            session.writer = process.writer.take();
+            session.master = process.master.take();
+        }
+        slot.shutdown();
+        process.wait_for_exit();
+        let mut code = 0;
+        assert_ne!(
+            unsafe { GetExitCodeProcess(process.killer.process.as_raw_handle(), &mut code) },
+            0
+        );
+        assert_eq!(code, 1);
+        assert!(slot.session().unwrap().startup_child.is_none());
     }
 
     #[cfg(unix)]
