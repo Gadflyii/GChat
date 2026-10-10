@@ -17,7 +17,11 @@ Its unsigned copy is `/ai/gchat/out/remaining-acceptance-20261009/oi110-latest.u
 Version, date/notes, selected platforms, final asset names and signatures remain
 pending; this empty preparation artifact is not an installable manifest. Each
 published entry needs a nonempty signature verified against the unchanged key
-and exact payload. `GCHAT-UPDATER-SIGNATURE` and the recorded live 404 remain open.
+and exact payload. CI now requires one nonempty final updater payload and its
+nonblank freshly generated signature; metadata uses the exact re-signed path,
+and manifest generation rejects successful platforms with blank signatures.
+Actual cryptographic acceptance against the unchanged public key and downloaded
+payload remains a scheduled-release gate. The recorded live 404 remains open.
 
 Retain `/ai/gchat-worktrees/oi110-sectile-feed-bd4` on
 `fix/oi110-sectile-feed-bd4` (baseline `bd4dba841`) for coordinator review and the
@@ -25,6 +29,8 @@ unsigned copy for release preparation. Prior endpoint/repository evidence is in
 `out/remaining-acceptance-20261009/`: `oi110-endpoint-20261010T0433Z.json` and
 `oi110-release-location-20261010T0436Z.json`. Diff checking passes; no tests,
 builds, native execution, signing or publication ran.
+Later metadata/JQ admission checks are prepared, not executed, in
+`/ai/gchat/out/remaining-acceptance-20261009/oi110-release-gate-checks.txt`.
 
 ## Current engine acceptance — OI-056/OI-083, October 9, 2026
 

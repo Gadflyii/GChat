@@ -378,8 +378,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          for exe in src-tauri/target/release/bundle/nsis/*-setup.exe; do
-            [ -f "$exe" ] || continue
+          shopt -s nullglob
+          installers=(src-tauri/target/release/bundle/nsis/*-setup.exe)
+          if [ "${#installers[@]}" -ne 1 ] || [ ! -f "${installers[0]}" ] || [ ! -s "${installers[0]}" ]; then
+            echo "::error::Expected one nonempty final NSIS updater payload."
+            exit 1
+          fi
+          for exe in "${installers[@]}"; do
             sigfile="${exe}.sig"
             if [ -f "$sigfile" ]; then
               rm "$sigfile"
@@ -398,8 +403,22 @@ jobs:
           cd src-tauri/target/release/bundle
 
           cd nsis
-          EXE_NAME=$(ls *.exe | head -1)
-          WIN_SIG=$(cat "${EXE_NAME}.sig" 2>/dev/null || echo "")
+          shopt -s nullglob
+          installers=(*-setup.exe)
+          if [ "${#installers[@]}" -ne 1 ] || [ ! -f "${installers[0]}" ] || [ ! -s "${installers[0]}" ]; then
+            echo "::error::Expected one nonempty final NSIS updater payload."
+            exit 1
+          fi
+          EXE_NAME="${installers[0]}"
+          if [ ! -f "${EXE_NAME}.sig" ] || [ ! -s "${EXE_NAME}.sig" ]; then
+            echo "::error::Missing or empty updater signature for ${EXE_NAME}."
+            exit 1
+          fi
+          WIN_SIG=$(cat "${EXE_NAME}.sig")
+          if [[ ! "$WIN_SIG" =~ [^[:space:]] ]]; then
+            echo "::error::Blank updater signature for ${EXE_NAME}."
+            exit 1
+          fi
           echo "exe_name=${EXE_NAME}" >> "$GITHUB_OUTPUT"
           echo "win_sig=${WIN_SIG}" >> "$GITHUB_OUTPUT"
 
@@ -428,7 +447,6 @@ jobs:
           asset_content_type: application/octet-stream
 
       - name: Upload NSIS updater signature to release
-        if: steps.metadata.outputs.win_sig != ''
         uses: actions/upload-release-asset@v1.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -599,8 +617,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          for app in src-tauri/target/release/bundle/appimage/*.AppImage; do
-            [ -f "$app" ] || continue
+          shopt -s nullglob
+          appimages=(src-tauri/target/release/bundle/appimage/*.AppImage)
+          if [ "${#appimages[@]}" -ne 1 ] || [ ! -f "${appimages[0]}" ] || [ ! -s "${appimages[0]}" ]; then
+            echo "::error::Expected one nonempty final AppImage updater payload."
+            exit 1
+          fi
+          for app in "${appimages[@]}"; do
             sigfile="${app}.sig"
             if [ -f "$sigfile" ]; then
               rm "$sigfile"
@@ -620,16 +643,21 @@ jobs:
           cd src-tauri/target/release/bundle/appimage
           echo "=== bundle/appimage/ contents ==="
           ls -la
-          APPIMAGE_NAME=$(ls *.AppImage | head -1)
-          if [ -z "$APPIMAGE_NAME" ]; then
-            echo "ERROR: no .AppImage produced"
+          shopt -s nullglob
+          appimages=(*.AppImage)
+          if [ "${#appimages[@]}" -ne 1 ] || [ ! -f "${appimages[0]}" ] || [ ! -s "${appimages[0]}" ]; then
+            echo "::error::Expected one nonempty final AppImage updater payload."
             exit 1
           fi
-          LINUX_SIG=""
-          if [ -f "${APPIMAGE_NAME}.sig" ]; then
-            LINUX_SIG=$(cat "${APPIMAGE_NAME}.sig")
-          else
-            echo "Warning: no ${APPIMAGE_NAME}.sig (Tauri updater signature missing)"
+          APPIMAGE_NAME="${appimages[0]}"
+          if [ ! -f "${APPIMAGE_NAME}.sig" ] || [ ! -s "${APPIMAGE_NAME}.sig" ]; then
+            echo "::error::Missing or empty updater signature for ${APPIMAGE_NAME}."
+            exit 1
+          fi
+          LINUX_SIG=$(cat "${APPIMAGE_NAME}.sig")
+          if [[ ! "$LINUX_SIG" =~ [^[:space:]] ]]; then
+            echo "::error::Blank updater signature for ${APPIMAGE_NAME}."
+            exit 1
           fi
           echo "appimage_name=${APPIMAGE_NAME}" >> "$GITHUB_OUTPUT"
           echo "linux_sig=${LINUX_SIG}" >> "$GITHUB_OUTPUT"
@@ -645,7 +673,6 @@ jobs:
           asset_content_type: application/octet-stream
 
       - name: Upload .AppImage updater signature to release
-        if: steps.metadata.outputs.linux_sig != ''
         uses: actions/upload-release-asset@v1.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -696,14 +723,18 @@ jobs:
              '.version = $version
               | .pub_date = $pub_date
               | (if $win_result == "success" then
-                  .platforms["windows-x86_64"].signature = $win_sig
-                  | .platforms["windows-x86_64"].url = $win_url
+                  if ($win_sig | test("\\S")) then
+                    .platforms["windows-x86_64"].signature = $win_sig
+                    | .platforms["windows-x86_64"].url = $win_url
+                  else error("Windows updater signature is missing or blank") end
                 else
                   del(.platforms["windows-x86_64"])
                 end)
               | (if $linux_result == "success" then
-                  .platforms["linux-x86_64"].signature = $linux_sig
-                  | .platforms["linux-x86_64"].url = $linux_url
+                  if ($linux_sig | test("\\S")) then
+                    .platforms["linux-x86_64"].signature = $linux_sig
+                    | .platforms["linux-x86_64"].url = $linux_url
+                  else error("Linux updater signature is missing or blank") end
                 else
                   del(.platforms["linux-x86_64"])
                 end)' \
