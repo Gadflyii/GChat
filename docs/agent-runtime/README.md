@@ -8,13 +8,15 @@ prerequisites and distinguishes saved source evidence from installed replay.
 Installer routing follows the [validated current-user NSIS decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).
 
 Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
-and OI-120–122 retain their composed Rust gate. Current Windows components are
-the compiled `574d73df7` GChat desktop, new `574d73df7` Manager, 7d9 Host/CLI
-and retained `2ef56a52` Engine. Booking364 now installs the compiled `574d73df7`
-desktop and verifies the embedded origin. Native Code Stop exits, but its UI
-remains Stopping; the isolated correction is recorded below.
-[Remaining acceptance](remaining-acceptance.md) owns the current candidate,
-actual Code prerequisite/stop failure and ordered unresolved platform checks.
+and OI-120–122 retain their composed Rust gate. Windows now has the accepted
+`3aff66d62` desktop, retained `574d73df7` Manager, 7d9 Host/CLI and2ef Engine.
+The installed embedded UI loads correctly. Ron accepts Code Stop/Restart after
+fresh-window392 shows Exited and then Running with output and connected tools,
+with both saved startup flags off. Normal recovery/state preservation passes;
+no model, API or debug listener remains and both guards are released. Reconnect
+still produces a blank terminal and a lost-screen-state warning; that is the
+next separate product item. [Remaining acceptance](remaining-acceptance.md)
+owns exact receipts, next action and incomplete broader OI-068 checks.
 
 Frozen source `7d9a8f689` passes actual native production at 09:37:44 UTC and
 independent package verification at 09:40 UTC. Its Code Stop correction retains
@@ -83,8 +85,8 @@ diagnostics remain visible. Two corrected runner prerequisites (Yarn's
 extension-root state and a nonloopback local TLS route) and the actual final
 PASS are retained in the OI-068 packet. Its exact container is removed at
 17:39:49 UTC; both canonical guards are verified free and booking369 is returned
-early. Updated Windows IPC, desktop build and installed Stop/Restart replay
-remain pending. Booking374 applies the exact native `1ccde5715` source overlay,
+early. Windows IPC and desktop build now pass in380; installed Stop/Restart passes
+in392. Reconnect remains open separately. Booking374 applies the exact native `1ccde5715` source overlay,
 but compilation is stopped at 18:35 UTC by the root-selected deadline before
 the four tests run. Its Job is empty, the pinned body and controller are exited,
 and both canonical guards are verified free at 18:36:44; apps and settings are
@@ -97,7 +99,8 @@ links the exact receipts and retained original warning log.
 supported scan evidence. Ron authorized keeping the existing AUTO Muse profile
 after preservation verification; functional replay still requires fresh Ready
 capacity, and final Stop keeps AUTO without attempting the known failing fixed
-startup. Installed Code/model-backed acceptance has not passed.
+startup. The narrow installed Code lifecycle passes; broader model-backed Code acceptance
+has not passed.
 
 The installed baseline's composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,

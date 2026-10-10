@@ -25,15 +25,37 @@ Host PID6788 is unchanged, and installed GChat retains the original574d bytes.
 Keeper475147/start11741613 exits0; both canonical guards were reacquired and
 released, and booking380 cancelled.
 
-Installed Stop/Restart/reconnect replay is **unrun**. GChat and Manager were
-already closed at entry. `settings.json.autostart_preference=disabled` controls
-app login startup; it does not establish the current WebView flags
-`setting-general.state.preloadModelOnStartup` or
-`setting-local-api-server.state.enableOnStartup`. The user question remains
-pending. Resolve that startup information and a fresh appropriate test window
-before opening apps. Reuse the compiled artifact and passing checks; do not
-rebuild or rerun them without a relevant change. The next acceptance question is
-whether the visible Code Stop/Restart and reconnect show the correct state.
+Booking391 installed the exact accepted3aff desktop and rendered the embedded UI.
+Visible Stop/native exit and Restart/output/tools bridge pass. Page reload leaves
+an empty terminal with a lost-screen-state warning while native replayComplete
+remains true; this reconnect screen fails. Ordinary desktop recovery passes at
+23:06:24 UTC with Manager/Host/state preserved and Engine/API/debug0. Both guards
+were reacquired/released and391 was returned at23:07. Evidence lives under
+`oi068-windows-20261010/desktop-ui-391/` (UI receipt, screenshot, normal recovery,
+root retirement). The actual preload flag was false and API startup flag true.
+Ron's23:05 decision makes both product defaults off and requests a fresh native
+window with both saved settings off, reusing the accepted artifact/tests with
+no rebuild. This next screen must separate original Stop acceptance from the
+new reconnect failure and cannot claim the newly edited defaults are installed.
+
+The requested fresh native window at23:11:44 retains both saved flags false.
+Visible Stop becomes Exited and Restart creates generation2 with output and
+connected GChat tools; those narrow checks pass. Reload again leaves56 empty
+DOM rows and the lost-screen-state warning while native status says Running /
+replayComplete=true. This is a separate reconnect defect, not a startup-setting
+cause. Evidence: `desktop-ui-392-fresh/ui-result.json`, native/visible checks and
+`22-reconnected-screenshot.png`. Ordinary recovery passes at23:14:07; updated
+GChat PID636, Manager37676 and Host6788 remain open with no Engine/API/debug
+listener. All helpers are terminal/absent; keeper854121 exits and both guards
+are reacquired/released. Booking392 is returned at23:16:12.
+Ron accepts the Stop correction at23:14. Submit the accepted Stop branch through
+the normal merge path without signing/publication. The next single item is
+live-channel reconnect: `terminal.rs` treats replacement as unavailable and
+then resets replay completeness; it does not retain delivered output for a new
+renderer. Add that product defect separately to the master list, use small
+regressions and one installed visible replay after its source correction.
+Broader OI-068 model/tool/worker acceptance remains incomplete. No new build,
+model request or full suite ran in391/392.
 
 Pre-Cargo failures are preserved separately: historical-PID stderr handling,
 missing admitted guard arguments in the suspended child, and a test-generated
@@ -814,8 +836,8 @@ available receipt.
 | --- | --- |
 | Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Owned tree retired after remote/tip/live-use checks; branch and concise evidence retained. |
 | Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Retired after published source and live-use checks; external evidence and branches retained in the integration authority. |
-| Windows acceptance `/ai/gchat-worktrees/terminal-stop-ui-574d`, branch `fix/gchat-terminal-stop-ui` | Native historical base `1ccde5715` plus actual two-leaf product overlay `3aff66d62`; checked source `210d642ba`. Candidate source is pushed, unmerged pending installed replay. Retain source and concise374/380 evidence. |
-| Windows acceptance `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/`, native `C:\Users\Ron\AppData\Local\GChat\remaining-acceptance-20261010/` | Actual r3 Compile/Test PASS and desktop-r4 PASS/proof retained with fresh22MiB frontend and37MiB exact developer executable for pending installed replay. Original failed attempts, catalog diagnosis/restoration and reviewed r2/r3/r4 controls are concise retained evidence. `root-retirement-380.json` proves Jobs/PIDs/guards returned; no owned jobs remain. Staged UI scripts were not invoked. Keep accepted353/367/574d/7d9 artifacts and shared caches; no rebuild is needed. |
+| Windows acceptance `/ai/gchat-worktrees/terminal-stop-ui-574d`, branch `fix/gchat-terminal-stop-ui` | Native historical base `1ccde5715` plus actual two-leaf product overlay `3aff66d62`; checked source `210d642ba`. Stop source is accepted after actual392 replay and pending normal merge. Reconnect is a separate next item; retain source and concise374/380/391/392 evidence. |
+| Windows acceptance `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/`, native `C:\Users\Ron\AppData\Local\GChat\remaining-acceptance-20261010/` | Actual r3 Compile/Test PASS and desktop-r4 PASS/proof retained with fresh22MiB frontend and37MiB exact developer executable for the accepted installed Stop screen and upcoming reconnect correction. Original failed attempts, catalog diagnosis/restoration and reviewed r2/r3/r4 controls are concise retained evidence. `root-retirement-380.json` proves Jobs/PIDs/guards returned; no owned jobs remain. 391/392 refresh/recovery scripts completed; both saved startup flags remain false. Two same-byte392 backups can retire after recovery; original accepted build remains available. Keep accepted353/367/574d/7d9 artifacts and shared caches; no rebuild is needed. |
 | `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Integrated implementation through `574d73df7`; this record owns current runtime acceptance. Retain source and reused build caches. |
 | `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; corrected candidate desktop UI acceptance remains pending. No disk-cleanliness claim. |
 | Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
