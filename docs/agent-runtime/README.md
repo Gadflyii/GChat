@@ -8,8 +8,10 @@ prerequisites and distinguishes saved source evidence from installed replay.
 Installer routing follows the [validated current-user NSIS decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).
 
 Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
-and OI-120–122 have passed their composed Rust gate but are not installed.
-Windows remains GChat `0f06ba433`, Manager `43c8d71cf`, Engine `2ef56a52`.
+and OI-120–122 retain their composed Rust gate. Current Windows components are
+the restored `0f06ba433` GChat desktop, new `574d73df7` Manager, 7d9 Host/CLI
+and retained `2ef56a52` Engine. Exact desktop restoration and ordinary UI pass;
+the candidate desktop's frontend repair remains pending as described below.
 [Remaining acceptance](remaining-acceptance.md) owns the current candidate,
 actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
@@ -22,22 +24,47 @@ post-uninstall data behavior is unchanged. Receipts are in the existing
 `out/remaining-acceptance-20261009/oi068-windows-20261010/` packet:
 `production-terminal-337.json` and
 `production-9a4caa1c3-337/package-verification.json`. These accepted artifacts
-precede the installer-template correction and pending Manager stopped-status
-presentation fix; a fresh package generation is required.
+precede the integrated installer-template and Manager presentation corrections.
+Booking349 completes the Manager embed and NSIS bundle refresh from `574d73df7`
+at 11:26:00.6625612 UTC. Existing compiled 7d9 GChat/Host/CLI, Engine and frontend
+payloads retain their original producer provenance.
 
-Installed apps remain the old baseline. Booking 337 ended at 09:58:48 UTC with
+Earlier booking 337 ended at 09:58:48 UTC with
 Engine/API0 and both guards released. Booking 341 ended at 10:19:18.993484 UTC;
 its installer preflight rejected genuine MSI migration before any app stop or
-NSIS launch, and both guards are released. Baseline GChat 21848, Manager 7296
-and retained Host 23052 remain running with no model. Ron's bring-to-front
-request succeeded: native Manager Document visibility passed at 10:10:41.
-The tray has no clickable point; no tray click or Exit occurred.
+NSIS launch, and both guards are released. The baseline apps survived that
+attempt. Ron's bring-to-front request succeeded: native Manager Document
+visibility passed at 10:10:41.
+The tray had no clickable point; no agent tray click or Exit occurred.
 The exact valid HKCU64 NSIS owner coexists with a genuine same-path MSI record.
-Reviewed/pushed template correction `d6da84677` prefers that validated NSIS
-owner for ordinary-user `/S /UPDATE`, without invoking or reconciling MSI.
-Next integrate the template and Manager presentation correction, then generate
-and independently verify a fresh package under a new admitted window. Local
-10:20–11:00 UTC is quiet: no native actions, tests, builds or model runs.
+Template `d6da84677` is integrated/pushed as `1a9044e65`; Manager historical-error
+and retained-reading-state fixes are integrated/pushed as `c20217d22` and
+`574d73df7`. Independent source reviews accept the template/follow-up; focused
+Manager Node checks pass 24/24 at 10:36:08 UTC. Pure preservation classifier
+checks pass 10/10 with two zero-error AST parses at 10:44:11.6667562 UTC;
+this is component evidence, not an installed update. CPU-only booking346 closed
+at 10:44:12 UTC with no jobs or guards remaining.
+Booking349's actual `PRODUCTION_PASS` proves body exit 0 and an empty job after
+the identified VCTIP helper teardown, with settings/apps unchanged and no model
+started. Its package verification passes. GChat R2 body/NSIS exit 0, but its
+original parent classifier FAIL remains retained alongside separate preservation
+adjudication. Manager R3 passes at 11:43:08; full installed byte/state verification
+passes at 11:45:47. Actual Manager CDP shows `http://tauri.localhost/`, stopped,
+zero active requests and no alerts.
+
+The candidate GChat desktop opened a directory listing at
+`file:///C:/Users/Ron/AppData/Local/GChat/windows-build/source/web-app/dist/`.
+The production config's absolute Windows `frontendDist` parses as a `C:` URL,
+so those frontend assets were not embedded. Byte/state verification does not
+establish frontend loading. Exact baseline `0f06ba433` desktop (`1761bdea…`)
+restoration passes at 11:56:54.9219517 UTC: GChat loads `http://tauri.localhost/`,
+shows all seven original saved threads and has no alerts. Selected protected
+state is unchanged; new Manager, 7d9 Host/CLI and 2ef Engine remain intact.
+Engine/API counts are zero and guards are released. CPU-only booking353,
+15:05–15:15 UTC, has an accepted nonexecuted source proposal: relative
+`frontendDist` `../../../windows-build/source/web-app/dist` resolves to the
+exact 832 accepted assets as a Directory. Desktop/NSIS build, install and
+ordinary candidate UI verification remain pending before Code/model-backed acceptance.
 [Remaining acceptance](remaining-acceptance.md) records the exact owners and
 supported scan evidence. Ron authorized keeping the existing AUTO Muse profile
 after preservation verification; functional replay still requires fresh Ready
@@ -52,7 +79,7 @@ Native Windows build exits 0 at 21:30 UTC; independent package verification
 passes at 21:34 UTC for the 125-payload Engine runtime, 104 profiles including
 103 unchanged original entries, and retained Manager `43c8d71cf`.
 Receipts: `/ai/gchat/out/oi106-final-update-20261009/composed-final-gate.json`
-and `package-verification.json`. Installed `0f06ba433` now passes preservation
+and `package-verification.json`. Prior installed `0f06ba433` passes preservation
 and actual OI-106 lifecycle/selection and continued Chat acceptance. Seven
 original threads, all models/profiles, credentials and Host identity survive.
 Receipts in the same folder are `installed-verification.json` and

@@ -10,10 +10,12 @@ The [validated NSIS owner decision](../decisions/2026-10-10-prefer-current-user-
 
 Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
-`bd4dba841`. Installed Windows runtime remains GChat `0f06ba433`, Manager
-`43c8d71cf`, Engine `2ef56a52`. Host fixes OI-111–114 and OI-120–122 are
-source-accepted, with composed Rust checks completed at 01:50:05 UTC; they
-have not been installed. The [integration authority](../code-hygiene/README.md)
+`bd4dba841`. Current Windows components are restored `0f06ba433` GChat desktop,
+new Manager `574d73df7`, 7d9 Host/CLI and retained Engine `2ef56a52`.
+Exact restoration and ordinary baseline UI pass; candidate desktop repair
+remains pending. Host fixes
+OI-111–114 and OI-120–122 retain composed Rust checks at 01:50:05 UTC.
+The [integration authority](../code-hygiene/README.md)
 owns their source verification and accepted Linux packages (`54c931c68`
 compiled, `02d369e8a` assembled).
 
@@ -25,16 +27,25 @@ failed request. Ron authorized OI-110 local manifest preparation for the
 SectileLabs public feed; actual existing-key signing/publication remains gated
 until his next release. He separately authorized OI-073's complete lifecycle
 and final deletion for one clearly labelled root-created disposable test
-result, preserving all 12 official series/36 points. Exact test input and
-website-owned execution remain pending; neither approval is execution evidence.
+result, preserving all 12 official series/36 points. After Ron corrected the
+partial site deployment, the explicitly authorized one-attempt installed
+submit/read/delete check passes. Public and local test data are removed;
+broader retry checks remain unrun under the current restriction.
 The ordered remaining checks are OI-068, OI-069, OI-071 and OI-075.
 The registered second peer timed out on the bounded reachability check and the
-local fleet is unconfigured. Server 2 is reported online; its newly authorized
-online verification is deferred and has not run in this acceptance. Physical
-pool checks need designated available
-paired hosts/clients; Linux tray/vault checks need an actual provider-equipped
-desktop. Those inputs are pending. OI-075 uses the existing 12-message,
-107,089-byte long-content thread; actual UI measurements await a quiet interval.
+local fleet is unconfigured. Read-only strict-key/BatchMode SSH to
+`ron@192.168.1.112` succeeded at 11:15:27 UTC as `AIS-1-2950X-L02`, UID1000
+(`out/remaining-acceptance-20261009/oi069-windows-20261010/s2-online-readonly-20261010.json`).
+That earlier query found only the GDM greeter and SSH sessions. A fresh read-only
+query at 12:19:11 UTC now proves Ron's active X11 `:1` session, both tray
+providers and Secret Service (`oi071/s2-logged-in-readonly-20261010.json`).
+The selected accepted Manager/Host pair is missing; the existing Host has a
+different SHA. No deployment, app start or provider activation has run.
+The accepted four-file archive and S2 Ubuntu 24.04.3/glibc 2.39/GTK/WebKit/Soup
+prerequisites match (`oi071/s2-compatibility-package-proposal-20261010.json`).
+Physical pool checks need designated available
+paired hosts/clients. OI-075 now has an actual restored-Windows long-content
+baseline; Linux native rendering remains unmeasured.
 
 OI-068 now has actual Windows prerequisites: OpenCode **1.18.35** resolves
 through native npm shims and its underlying executable; installed GChat reports
@@ -80,8 +91,10 @@ guard release.
 
 Frozen `7d9a8f689` passes actual production at 09:37:44 UTC and independent
 package verification at 09:40 UTC. Retain its accepted artifacts and reuse
-unchanged Rust/ConPTY evidence; the subsequent template correction and pending
-Manager stopped-status presentation fix require a fresh package generation.
+unchanged Rust/ConPTY evidence. Booking349 completes the integrated corrections
+with a Manager embed build and NSIS-only bundle from `574d73df7`. Existing
+compiled 7d9 GChat/Host/CLI, Engine and frontend payloads are reused with their
+original producer provenance.
 Evidence is in the existing OI-068
 packet (`production-terminal-337.json`,
 `production-9a4caa1c3-337/package-verification.json`). Booking 337 ended at
@@ -90,9 +103,10 @@ packet (`production-terminal-337.json`,
 released and the booking cancelled. Installer controller 37548/body 42660
 exited 1 at preflight, before any app stop or NSIS launch. Fresh absence proof
 records Job0, Engine/API0 and unchanged baseline apps/settings
-(`gchat-install-terminal-341.json`, `release-verified-341.json`). No installed
-update PASS is claimed. No native actions, tests, builds or model runs are
-allowed locally during 10:20–11:00 UTC.
+(`gchat-install-terminal-341.json`, `release-verified-341.json`). That attempt
+did not pass an installed update. GPU/model/native compilation was excluded during
+10:20–11:00 UTC. CPU-only booking346 used the actual cancelled342 gap and
+closed at 10:44:12 UTC with its jobs and guards released.
 
 Baseline apps were unexpectedly absent from the fresh pre-install owner query
 before 10:03 UTC. GChat logs record ordinary exit requested at 09:58:54;
@@ -108,23 +122,77 @@ remain unresolved; the supported Rust result does not claim a helper fix.
 
 Ron fulfilled the bring-to-front request: native Manager Document visibility
 passed at 10:10:41 (`manager-after-user-go-341.stdout`). Its tray still has no
-clickable point; no click, Exit or forced app exit occurred. GChat 21848,
-Manager 7296 and retained Host 23052 remain running, with the model stopped.
+clickable point; no agent tray click or forced app exit occurred. GChat 21848,
+Manager 7296 and retained Host 23052 survived the booking341 attempt, with the
+model stopped. Ron subsequently exited Manager before booking349 production.
 Actual registration evidence proves a genuine same-path MSI record and exact
 valid HKCU64 NSIS owner (`msi-precedence-registry-341.stdout`,
 `nsis-owner-proof-341.stdout`). The MSI rejection was a real route conflict,
-not an absent registration. Reviewed/pushed source `d6da84677` selects the
+not an absent registration. Source `d6da84677`, integrated/pushed as
+`1a9044e65`, selects the
 validated current-user NSIS owner before the stock MSI scan, preserving the
 coexisting MSI registration. Rust and Engine inputs are unchanged by that
-template correction. Manager's historical-error display for stopped instances
-is being corrected separately; no fix or installed acceptance is claimed yet.
+template correction. Manager's historical-error display and retained diagnostic
+reading state are corrected in integrated/pushed `c20217d22` and `574d73df7`.
+Independent source reviews accept the exact original template/follow-up inputs.
+Actual focused Manager Node checks pass 24/24 at 10:36:08 UTC
+(`manager-ui-574d73df7-346.log`). Pure PowerShell preservation classifier
+checks pass 10/10 at 10:44:11.6667562 UTC, with two zero-error AST parses
+(`installer-preservation-component-346-explicit.json`). The first launch failed
+before parsing or reads because default `Join-Path` evaluated an empty
+`PSScriptRoot`; passing all five paths explicitly corrected that invocation.
+These are component checks only: original booking341 body exit 1 remains FAIL,
+and its receipts were not modified. Booking346's jobs/guards are released.
+Those component results do not claim an installed replay.
 
-Next action: integrate the accepted NSIS template and completed/reviewed Manager
-presentation fix, then generate and independently verify a fresh package under
-a new admitted window after the quiet interval. Fresh owner/idle/persistence
-proof and generated NSIS route verification precede the update. Complete
-installed payload/user-state preservation before Code Stop replay and
-authorized AUTO functional acceptance.
+Booking349's actual `PRODUCTION_PASS` at 11:26:00.6625612 UTC records Manager
+producer `574d73df7`, reused binary producer `7d9a8f689`, body exit 0 and an empty
+job after exact live-identity/current-job classification and teardown of VCTIP
+40552. Settings/apps are unchanged; no model started and only retained Host
+23052 appears in the post-build app receipt. Actual native evidence is
+`/mnt/c/Users/Ron/AppData/Local/GChat/remaining-acceptance-20261010/native-574d73df7-349-production-refresh/native-test-result.json`;
+the refreshed packet is `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/production-refresh-574d73df7-349`.
+Independent package verification passes in
+`production-refresh-574d73df7-349/package-verification.json`.
+
+GChat R2 body and NSIS exit 0, with an empty job and unchanged protected state.
+Its parent classifier incorrectly treated null empty-app output as a changed
+app; the original FAIL remains in
+`native-574d73df7-350-r2-installgchat/native-test-result.json`. Separate
+`gchat-install-terminal-350-r2-adjudicated.json` proves the authorized exits
+and preservation without an installer retry. Manager R3 actually passes at
+11:43:08.6470828 UTC (`manager-install-terminal-350-r3.json`). Full installed
+payload/thread/state verification passes at 11:45:47.178232 UTC
+(`install-refresh-574d73df7-r2/installed-verification.json`); this does not
+verify frontend loading. Actual Manager CDP at 11:46 shows
+`http://tauri.localhost/`, stopped, zero active requests and no alerts
+(`manager-installed-presentation-350.json`).
+
+The user and root confirmed that the candidate GChat desktop opened a directory listing at
+`file:///C:/Users/Ron/AppData/Local/GChat/windows-build/source/web-app/dist/`.
+The saved production config's absolute Windows `frontendDist` parses as a
+`C:` Url rather than a Directory, so frontend assets are not embedded. The
+package/byte checks missed this ordinary installed UI failure. Exact desktop-only
+restoration passes at 11:56:54.9219517 UTC
+(`rollback-desktop-0f-20261010/restore-ui-verification.json`): source `0f06ba433`,
+SHA `1761bdea…`, GChat 38164/birth `2026-10-10T11:56:51.7254124Z`. The old
+42176 was already absent in the fresh scan; no forced exit or NSIS ran.
+Actual `restored-ui.json` shows `http://tauri.localhost/`, title GChat, two root
+children, all seven original saved threads and no alerts. All selected protected
+state fields are identical before/after, including threads, models, settings,
+profiles and certificates. Manager 24796/birth `2026-10-10T11:46:14.4288363Z`
+and hash `1b9f0173…` are unchanged; 7d9 Host/CLI and 2ef Engine remain intact.
+Engine/API counts are zero and guards are released.
+
+CPU-only booking353, 15:05–15:15 UTC, has an accepted source proposal for the
+owning build body: relative `frontendDist`
+`../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
+assets as a Directory. This is nonexecution evidence; actual build, install and
+candidate UI remain pending. The proposal is in
+`oi068-windows-20261010/production-frontend-directory-574d73df7-proposed/`.
+Next action: execute the admitted desktop/NSIS build and verify ordinary installed GChat UI before Code
+Stop replay and authorized AUTO functional acceptance. Reuse valid Manager,
+Host/CLI, Engine and state-preservation evidence at its recorded scope.
 
 Installer review found an obsolete pre-uninstall macro that stops helpers by
 shared executable names and uses a PowerShell policy bypass. No live uninstall
@@ -143,8 +211,9 @@ clients gracefully and stop only the exact idle Host handle after successful
 scan/persistence flush, stopped instances and no active downloads. Verify
 installed payloads and full original-thread byte preservation before acceptance.
 The 7d9 package is retained prior producer evidence. Booking-341 installer copies
-are consumed preflight evidence; the new template/Manager package and installed
-update are pending. Do not reuse those copies as current admitted installers.
+are consumed preflight evidence; booking350's transaction and full byte/state
+checks pass at the scope above, while GChat frontend repair remains pending.
+Do not reuse consumed copies as current admitted installers.
 
 Ron explicitly authorized **Use and keep AUTO** on the existing Muse instance.
 After package/install preservation of the original profile is verified, select
@@ -289,26 +358,30 @@ booking and actual ownership before execution.
 
 Owned inventory: the candidate tree is
 `/ai/gchat-worktrees/remaining-acceptance-bd4`; accepted prior package source is
-`7d9a8f689`, with Rust checks at `9a4caa1c3`. Reviewed template `d6da84677`
-and the pending Manager presentation correction need integration and a fresh
-package; no current local job or guard remains after booking341.
+`7d9a8f689`, with Rust checks at `9a4caa1c3`. Template/Manager corrections are
+integrated through `574d73df7`; booking349's Manager embed and NSIS-only bundle
+refresh passes at 11:26:00.6625612 UTC, with body exit 0 and an empty job.
+Booking341 and CPU-only booking346 are closed with jobs/guards released.
 Retain the existing native extraction and shared Windows target cache at
 `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/source` and
 `%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` for the next
-check/build; no duplicate source archive or model copy was allocated.
+desktop correction/rebuild; no model copy was allocated.
 Prepared scripts, delta, verifiers and exact command inventory are indexed
 in `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/native-ccc9ab250-preparation.json`.
-The 7d9 production/package fields pass; the new package and installed acceptance
-remain pending. Consumed 37aa/333 artifacts are retained evidence, not current
-passing gates.
+The 7d9 and refreshed349 production/package fields pass. Booking350 retains
+original R2 classifier FAIL, separate adjudication, actual Manager R3 PASS and
+full installed byte/state PASS. The candidate GChat frontend failed to load;
+exact baseline desktop-only restoration and ordinary UI now pass. Relative
+Directory correction and candidate desktop/NSIS rebuild/UI acceptance remain pending.
+Retain the native `production-refresh-574d73df7-349` packet and
+`native-574d73df7-349-production-refresh/native-test-result.json` for those next
+steps. Consumed 37aa/333 artifacts are retained evidence, not current passing gates.
 
-The production refresh must rebuild both Manager and Host: Manager statically
-uses the changed Host client/fleet code and its own source has changed since the
-installed `43c8d71cf`. Reusing that executable would leave accepted fixes
-uninstalled. Reuse unchanged accepted frontend/assets and the exact selected
-Engine closure; replace all inert test resources with verified production
-payloads before packaging. Verify current source, both package formats, Manager
-closure and preserved installed data before claiming an update.
+The refreshed package reuses the accepted 7d9 compiled GChat/Host/CLI and exact
+Engine/frontend closure. Only the Manager embed and NSIS bundle regenerated; do not
+relabel reused compiled payloads as newly compiled from `574d73df7`. Retain
+package/component/state proof separately from the failed ordinary GChat UI and
+pending corrected desktop production.
 
 After the required CPU checks and production refresh, perform remaining
 acceptance sequentially inside the admitted reservation. Compilation/checks and actual model use cannot overlap. The
@@ -405,10 +478,14 @@ OI-071 reuses the current Linux packages compiled at `54c931c68` and assembled
 at `02d369e8a`; the package and DEB/AppImage X11 receipts are under
 `/ai/gchat/out/oi070-linux-refresh/`. The actual dark window, Scan and
 close/reopen retained the same empty Host. Historical `2a6e21ff2` window/no-tray
-evidence does not supersede those packages. The current WSLg desktop has neither
-an X11 tray owner nor StatusNotifierWatcher/Secret Service bus providers.
-The missing inputs are a designated native Linux desktop, its real tray watcher
-and Secret Service; no provider installation or activation is authorized here.
+evidence does not supersede those packages. The WSLg desktop lacks the required
+providers, but the fresh 12:19:11 UTC read-only S2 query proves Ron's active X11
+`:1`, an X11 tray owner, StatusNotifierWatcher and Secret Service. Evidence is
+`out/remaining-acceptance-20261009/oi071/s2-logged-in-readonly-20261010.json`.
+The existing Host has a different SHA and the selected accepted Manager/Host
+pair is missing. The next step is to verify that exact pair's compatibility and
+launch prerequisites on the desktop Ron designated; no deployment or app start
+has run.
 On that desktop, use the actual Manager/Host pair, pair through the native vault,
 restart Manager and restore the saved grant, then use Show/Hide and Exit tray
 actions while checking that the same Host remains alive. No provider install,
@@ -416,62 +493,96 @@ Linux deployment or credential changes were attempted here.
 
 ## Installed community publication
 
-Ron authorized OI-073's complete publication/readback/retry/replay/rollback and
-receipt-deletion lifecycle for one clearly labelled root-created disposable test
-result, with final deletion. Exact valid input and website-owned execution remain
-pending. The 12 official reference series / 36 points are accepted and protected;
-no existing user benchmark is implicitly selected. Test data must retain its
-test label and must not be presented as measured community results. Community
-signing and OI-110 updater publication remain separate approvals.
+OI-073 now uses the existing installed public client and the board's public
+GET/DELETE endpoints. Ron's October 10 12:09 decision allows the app-stored
+receipt for this one row only; no MySQL, cPanel, additional credentials or new
+app deletion implementation is permitted in this check. If DELETE fails, stop
+and leave the labelled row, reporting its exact ID for Ron's manual removal.
+The missing public deletion control in GChat is a separate master issue; the
+local benchmark trash button removes only local history.
 
-The existing frontend `services/benchmark/leaderboard.test.ts` checks public
-payload fields, the complete supported C1/C4/C8 workload, malformed receipts and
-ownership persistence across a lost-response retry. Native `benchmark_submission`
-tests bind the exact result hash, challenge, expiry and key, and check the PHP
-signature vector. Actual website publication/replay/rollback belongs to the
-separate Sectile Web `site/gbench` repository; this checkout has no installed
-deletion/replay acceptance receipt.
+Read-only installed benchmark metadata finds three measured Standard results.
+Root selects `9752b311-6224-4c48-95f9-555ccaf7292d`, preserving its original
+C1/C4 configurations and warmup/measured counters. The sole disposable copy is
+`oi073-disposable-20261010-ron1000z-01`, nickname **Disposable Test Only**.
+Original runs and all 12 official reference series / 36 points remain protected.
+Public preflight confirms those 12 series and GET404 for the disposable ID.
+Evidence is in `out/remaining-acceptance-20261009/oi073/`:
+`installed-standard-metadata.json`, `selected-standard-evidence.json`,
+`board-before.json` and `disposable-before.json`. The sole local copy was created
+at 12:14:50.975Z (`disposable-local-copy.json`). One actual installed-UI submission
+failed: Ron's PHP log records undefined `engine_columns()` at server time
+12:16:14Z, only on POST submission, before INSERT; throwable handling returned
+503 and rolled back. This establishes partial site deployment as the cause.
+Original client bounds are separately 12:16:16.796672–12:16:45Z; clock agreement
+is not established and the original request/challenge ID was not exposed.
 
-With the designated test input and admitted window, publish through installed GChat's
-`submit_benchmark` command, compare public readback to that result and keep the
-returned deletion receipt private. Interrupt a response after acceptance and
-retry the same saved owner token; then perform concurrent replay and the board's
-rollback/deletion path against only that disposable result. Observe uniqueness,
-receipt recovery, retained ownership and final removal. Those are concrete
-installed/board checks; local signing tests or earlier official imports cannot
-close them. This review sent no publication request.
+`local-contract-diagnosis.json` validates the exact failed payload with PHP
+8.5.4: PASS, 37-byte ASCII run ID, nullable engine columns both null, and all 12
+accepted September 17 fleet payload scores matching. This local contract check
+does not prove the deployed site is corrected. GET404 at 12:17:56.759Z proves
+no disposable public row (`installed-publish-failure.json`); no delete receipt
+exists. `official-preservation-after-failure.json` at 12:27:44.133Z verifies all
+12 official series/36 points exactly unchanged.
+
+Ron uploaded the matching contract and checked the migration. Bubbs's explicit
+12:33:30Z GO allows one installed submit/read/delete attempt. All three pass:
+
+| Observed action | Result and evidence |
+| --- | --- |
+| Installed app submission, 12:35:11.408Z | PASS, app receipt saved; `go-installed-submit-result.json` |
+| Public readback, 12:35:40.129Z | GET200, exact **Disposable Test Only** payload, community flag, 12 official series/36 points unchanged; `go-public-readback-result.json` |
+| Receipt deletion, 12:35:58.297Z | DELETE200 using only this ID's app-stored receipt; `go-public-delete-result.json` |
+| Public absence, 12:36:34.126Z | GET404, board returns to 12 exact unchanged official rows; `go-deletion-verification.json` |
+
+The app's local trash removes only the disposable copy at 12:36:57.519Z;
+its test ownership entry is then removed. The three original runs and all
+other ownership entries remain unchanged (`go-local-cleanup-result.json`,
+`original-local-runs-preservation.json`). No receipt or signing secret appears
+in public evidence. `accepted-one-attempt-result.json` owns the accepted scope.
+Retry/idempotency, concurrent submissions, conflicting-payload preservation and
+fault injection are unrun under the one-attempt restriction; this result does
+not qualify them. The missing public Delete control remains a separate open
+issue: this check used the approved existing endpoint with the app's receipt.
+
+Reuse the existing source signature/ownership/contract checks. Updater release
+signing/publication (OI-110) is a separate decision. No new inference or official
+reference import is needed for this measured result copy.
 
 ## Native idle observation and remaining rendering measurement
 
-At 2026-10-09 16:26:20Z, a 30.09-second read-only Windows observation matched
-the exact installed GChat, Manager and Host paths on RON-9950X3D2 and aggregated
-each root's actual descendants. All 15 processes retained their PID/start time;
-GChat and Manager were visible and responding, autostart was disabled, and no
-`ginfer-serve.exe` existed. WebView runtime was 154.0.4258.62. The sample made no
-navigation, debug attachment, restart or settings/data change.
+OI-075's actual October 10 12:02 Windows baseline uses restored desktop
+`0f06ba433`, Manager `574d73df7` and existing thread
+`68ae631c-0d2a-4ba3-b8d9-f359d5e1c6db`: 12 messages, 107,089 JSONL bytes,
+101,857 content bytes and a largest message of 79,574 bytes. Evidence is
+`out/remaining-acceptance-20261009/oi075/actual-20261010-1202/result.json`
+and `native-idle.json`. First observed open reaches all 12 wrappers in 89.2 ms
+(cache state unknown; not a GPU-present timestamp). Its receipt retains a 53-ms
+long-task entry starting at 36 ms, before the observed open interval at
+307,256.3 ms; exclude that historical buffered entry from opening-phase tasks.
+No recorded long task falls within the observed open interval. Settled programmatic
+traversal takes 79.8 ms, with five frame gaps averaging
+16.68 ms, maximum 16.7 ms; this does not measure native wheel/input latency.
+`long-task-scope-correction.json` preserves the interval comparison. Future
+measurement reports must exclude buffered entries outside the measured phase.
 
-| Installed process group | Processes | CPU, percent of one logical core | Summed working set, MiB | Private commit, MiB |
-| --- | ---: | ---: | ---: | ---: |
-| GChat, root 33828 | 7 | 3.843 | 541.4 | 341.2 |
-| Manager, root 20188 | 7 | 0.363 | 376.3 | 221.7 |
-| Host, root 34448 | 1 | 0.208 | 14.4 | 7.6 |
+The 30.088-second foreground idle sample has continuous animation-frame sampling
+disabled, stable identities for all 15 processes and no Engine. Its descendant
+group counters are:
 
-The host exposes 32 logical processors; these percentages are normalized to one
-core, not total machine capacity. Working-set sums can double count shared pages;
-private bytes represent commit rather than resident physical RAM. The actual
-visible conversation and its length were not inspected. This is a native current
-view observation, not a long-conversation rendering benchmark, regression claim
-or attribution to polling. Exact process roots, counters and scope are retained
-in `/ai/gchat/out/remaining-acceptance-20261009/idle-sample.json`.
+| Installed process group | Processes | CPU, percent of one logical core | Private commit, MiB |
+| --- | ---: | ---: | ---: |
+| GChat, root 38164 | 7 | 1.713706 | 354.83 |
+| Manager, root 24796 | 7 | 0.207722 | 223.13 |
+| Host, root 6788 | 1 | 0.103861 | 6.59 |
 
-OI-075 still needs the actual representative long saved conversation selected
-and recorded, with the same build, window state and measured idle/open/scroll
-workload on Windows WebView and Linux X11. The normal restored Windows app has
-no owned debug listener. The authorized later app-only debug restart and
-measurement must preserve existing history and use browser frame/long-task
-observations alongside these same native process counters. No numerical performance floor or arbitrary conversation cap is set.
-The source review's controlled DOM checks can distinguish redraw mechanisms,
-but cannot establish native performance gains.
+Private bytes are commit, not resident physical RAM; passive/debug observer
+overhead is unmeasured. This qualifies the observed Windows long-content
+baseline only, with no performance-gain, many-message scaling or polling
+attribution claim. Linux native open/scroll/idle remains unmeasured. Preserve the
+same selected history and record the actual Linux build/window/workload before
+comparison; no numerical performance floor or conversation cap is set. The
+older unselected-view idle observation remains historical in `idle-sample.json`.
 
 ## Original diagnostic preservation
 
@@ -498,8 +609,8 @@ available receipt.
 | --- | --- |
 | Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Owned tree retired after remote/tip/live-use checks; branch and concise evidence retained. |
 | Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Current composed source; active job/build inventory in the integration authority. |
-| `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Current source and runtime documentation awaiting root integration; retain source and reused build caches. |
-| `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain accepted prior 7d9 production/package artifacts, consumed booking-341 preflight/owner/idle evidence and Office fixture. No active booking341 job/guard; new package and installed acceptance remain pending. No disk-cleanliness claim. |
+| `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Integrated implementation through `574d73df7`; this record owns current runtime acceptance. Retain source and reused build caches. |
+| `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; corrected candidate desktop UI acceptance remains pending. No disk-cleanliness claim. |
 | Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
 
 Two file-launch attempts ran no measurement: a guessed native path did not
