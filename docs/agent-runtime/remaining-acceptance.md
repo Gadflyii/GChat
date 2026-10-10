@@ -6,6 +6,8 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current ordered acceptance — October 10
 
+The [validated NSIS owner decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md) governs the integrated custom template; failed ownership checks retain upstream MSI migration.
+
 Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
 `bd4dba841`. Installed Windows runtime remains GChat `0f06ba433`, Manager

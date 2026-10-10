@@ -5,6 +5,8 @@ prerequisites and distinguishes saved source evidence from installed replay.
 
 ## Current acceptance
 
+Installer routing follows the [validated current-user NSIS decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).
+
 Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
 and OI-120–122 have passed their composed Rust gate but are not installed.
 Windows remains GChat `0f06ba433`, Manager `43c8d71cf`, Engine `2ef56a52`.
