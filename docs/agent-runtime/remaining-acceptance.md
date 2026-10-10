@@ -10,10 +10,11 @@ The [validated NSIS owner decision](../decisions/2026-10-10-prefer-current-user-
 
 Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
-`bd4dba841`. Current Windows components are restored `0f06ba433` GChat desktop,
+`bd4dba841`. Current Windows components are corrected `574d73df7` GChat desktop,
 new Manager `574d73df7`, 7d9 Host/CLI and retained Engine `2ef56a52`.
-Exact restoration and ordinary baseline UI pass; corrected candidate desktop
-compilation now passes, while its actual UI and NSIS packaging remain pending. Host fixes
+The retained baseline restoration passes; the corrected desktop now passes
+compilation, embedded-origin rendering and separate NSIS payload verification.
+The installed Code Stop presentation still fails. Host fixes
 OI-111–114 and OI-120–122 retain composed Rust checks at 01:50:05 UTC.
 The [integration authority](../code-hygiene/README.md)
 owns their source verification and accepted Linux packages (`54c931c68`
@@ -32,6 +33,22 @@ partial site deployment, the explicitly authorized one-attempt installed
 submit/read/delete check passes. Public and local test data are removed;
 broader retry checks remain unrun under the current restriction.
 The ordered remaining checks are OI-068, OI-069, OI-071 and OI-075.
+The October10 booking364 desktop refresh now passes embedded-origin rendering
+and normal nondebug restart with state and Manager/Host/Engine preserved. Code
+Stop succeeds at backend/process scope but its UI remains Stopping after26s;
+`GCHAT-CODE-STOP-STUCK-UI` remains open and the complete Code case is not accepted.
+The packet's `desktop-ui-terminal-364.json` records this split outcome and actual
+16:31:58 guard release. Booking365's corrected Linux Manager component/package
+pass and the still-unrun S2 native tray/grant check are recorded in the current
+[Manager subject](../ginfer-manager/README.md). NSIS367's producer and independent
+package check pass; bundling took 159.902512 seconds. The wrapper's final success
+allowlist omitted `NSIS_ONLY_PASS`, so its actual terminal exit 1 is retained
+separately from body exit 0, actual Job0 and package PASS. Guards were released
+at 17:04:53.939 UTC, all six observed build PIDs are absent, and booking367 was
+cancelled early. Apps and settings are unchanged. The new Code UI fix is absent
+from this installer; its composed verification is booked for 17:30–17:50 UTC.
+There has been no new model-backed walkthrough or capacity qualification.
+
 The registered second peer timed out on the bounded reachability check and the
 local fleet is unconfigured. Read-only strict-key/BatchMode SSH to
 `ron@192.168.1.112` succeeded at 11:15:27 UTC as `AIS-1-2950X-L02`, UID1000

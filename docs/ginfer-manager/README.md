@@ -5,10 +5,11 @@ Open defects and TODOs belong in the [master list](../open-work.md); this record
 retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
 Installed Windows Manager producer is `574d73df7`, with actual installation,
-byte/state and stopped/no-alert presentation evidence below. The refreshed Linux
-Manager/Host is compiled from `54c931c68` and assembled at `02d369e8a`;
-independent package and native X11 acceptance pass. The older `2a6e21ff2`
-Linux proof remains historical evidence. Package paths and proof are recorded below.
+byte/state and stopped/no-alert presentation evidence below. The accepted Linux
+Manager/Host baseline is compiled from `54c931c68` and assembled at `02d369e8a`.
+The corrected tray candidate `deaf467a1` now passes compilation and independent
+package verification; native tray acceptance is pending. Earlier Linux evidence
+remains scoped to its tested producer. Package paths and proof are recorded below.
 Documentation-only handoffs do not rebuild accepted binaries.
 
 ## Outcome and acceptance
@@ -64,15 +65,16 @@ X11 tray selection alone also does not prove AppIndicator availability.
 Windows installed producer `574d73df7`, accepted Linux packages, Host lifecycle,
 existing snapshot polling, settings and model/profile controls remain retained.
 
-Independent source review and `git diff --check` pass. The probe owns its child
-through success, failure and cancellation; synchronous setup uses Tauri's existing
-multithread runtime. Compilation and native verification remain pending: with a real watcher/tray, verify default
+Independent source review, compilation, strict Clippy and package verification
+pass. The probe owns its child through success, failure and cancellation;
+synchronous setup uses Tauri's existing multithread runtime. Native verification
+remains pending: with a real watcher/tray, verify default
 background startup, `--window`, close/hide, tray reopen and Exit while retaining
 the same Host; verify visible startup and ordinary close on an actual missing
 watcher desktop, and the explicit `--no-tray` fallback. Verify absent-tool and
-unreachable-bus fallback within the probe deadline. No fake lifecycle test,
-candidate native operation or build has run; provider/dependency changes and
-model loads remain excluded from this tray check.
+unreachable-bus fallback within the probe deadline. No candidate native
+operation has run; provider/dependency changes and model loads remain excluded
+from this tray check.
 
 October 10 admission: S2 Ron's X11 session remains active with the recovered
 session bus and XAUTHORITY path; current desktop tools and 50.6 GiB free disk
@@ -92,13 +94,49 @@ This baseline screen created no Host, model, pairing grant or fleet catalog,
 used no original state, and does not qualify the new Hide behavior. The archive
 remains staged at `/home/ron/.local/share/GInfer/oi071-manager-54c931c68`.
 Keep the same fixture available for the corrected
-artifact's full pairing/restart/lifetime check. The new Manager's focused Linux
-check, strict Clippy and build are approved for CPU-only 16:35–16:55 UTC, using
-the existing Ubuntu24 image and shared Cargo target; no dependency or Engine build.
-Windows desktop-only UI verification is approved for 16:20–16:35 UTC using the
-compiled booking353 desktop. Separate NSIS packaging is approved for
-16:55–17:20 UTC and is not a prerequisite for that UI check. Recheck disk and
-exact owners at actual admission, and keep the 2 GiB disk floor.
+artifact's full pairing/restart/lifetime check. The corrected Linux Manager now passes focused check, strict Clippy and the
+Manager/Host build in booking365. The four-member archive matches both produced
+binaries, guide and font license; both ELF64 x86-64 binaries require at most
+glibc 2.39. Product source is `deaf467a1`, compiled from clean `14592d330`.
+The first check failed because Tauri writes `ginfer-manager/gen/schemas` while
+both source aliases were read-only. A narrow writable generated-directory mount
+at each alias corrected this build setup; product files were unchanged.
+Check took 3.41 seconds, Clippy 2.01 seconds and build 52.76 seconds.
+The exact owned container was removed at 16:37:49 UTC and the canonical build
+guard was reacquired and released. No Engine, frontend, dependency or model build
+ran. The archive is retained at
+`out/remaining-acceptance-20261009/oi071/build-365-deaf467a1-proposed/output-r2/manager/`
+with `manager-package-verification.json` beside that directory. First-failure
+logs remain in `output/`. This component pass does not qualify native tray,
+pairing or saved-grant restoration; the next action is the bounded S2 FIFO
+screen using this candidate and the existing isolated fixture.
+
+Booking364's installed Windows desktop renders the embedded app correctly at
+`http://tauri.localhost`. The visible Code Stop reaches backend Exited and all
+four Code children exit, but the UI remains Stopping after 26 seconds; the new
+`GCHAT-CODE-STOP-STUCK-UI` row owns that separate defect. Normal nondebug GChat
+restart and saved-state/component preservation pass at 16:31:17 UTC; its guards
+are released at 16:31:58 UTC. No model or installer ran in booking364.
+Separate NSIS367 packaging and independent package verification now pass.
+The actual bundle-call/validation interval was 159.902512 seconds, with the
+owned packager using 99.7% of one logical CPU during its two-second sample.
+Booking353 measured 4m28s compilation and left at most 84 seconds for packaging;
+it did not measure a 13-minute NSIS run. No packaging performance defect is
+demonstrated by these results.
+
+The wrapper's final success allowlist omitted `NSIS_ONLY_PASS`: body exit 0,
+normal Job0 and fresh package PASS coexist with its actual controller exit 1.
+That exit is preserved rather than relabelled. The native body/controller and
+four observed children are absent; apps and settings remain unchanged, with
+zero Engine/API processes. Both guards were released at 17:04:53.939 UTC and
+booking367 was cancelled. Evidence is
+`out/remaining-acceptance-20261009/oi068-windows-20261010/nsis-367-current-result.json`.
+The one-line next-use correction is independently reviewed and retained as
+`nsis-controller-next-use-allowlist.patch` in that packet; the expired booking's
+original script and raw exit remain unchanged. No successful bundle was rerun.
+The installer retains Manager349/Host/CLI/Engine/profile closure and verifies
+the fresh embedded desktop; it excludes the new Code UI ordering fix.
+Native S2 tray/grant acceptance and that fix's installed replay remain pending.
 
 ### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
 
@@ -705,7 +743,8 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
 | S2 native provider fixture / GChat coordinator | `/home/ron/.local/share/GInfer/oi071-manager-54c931c68` | Accepted54 baseline; FIFO806 completed with native secure-storage readiness PASS, timeout124 and exact Manager absent. Tray Open/Exit remains unqualified. Retain fixture/evidence for corrected-artifact pairing/lifetime acceptance; original Host/state/models preserved, no Host/model/grant created. |
-| Linux tray lifecycle / GChat coordinator | `/ai/gchat-worktrees/oi071-linux-tray` | Source candidate from `85f0bac2047c70cfa219ea8ef334367faf966138`, branch `fix/gchat-oi071-linux-tray`; shared tray close/start flow and this subject record. Retain for independent review and admitted compilation/native tray checks; no build, dependencies, models or live job allocated. |
+| Linux tray lifecycle / GChat coordinator | `/ai/gchat-worktrees/oi071-linux-tray` | Source candidate from `85f0bac2047c70cfa219ea8ef334367faf966138`, branch `fix/gchat-oi071-linux-tray`; product `deaf467a1`, compiled from `14592d330`. Component/package gates pass; retain unmerged source for native tray/grant acceptance. No live job or model. |
+| Linux tray build365 / GChat coordinator | `/ai/gchat/out/remaining-acceptance-20261009/oi071/build-365-deaf467a1-proposed/` | `output-r2/manager/` retains the accepted 5,085,204-byte four-file candidate archive. Both binaries require at most glibc2.39. `output/` retains the read-only generated-directory setup failure. Exact container is removed; shared Cargo cache remains. |
 | Retired stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Removed October 10 after clean/upstream/live-use checks; source is integrated at `574d73df7`, and branch `fix/gchat-manager-stopped-error-7d9` remains published at `ce6b9ff40`. Installed and focused-check evidence retained. |
 | Retired current-user NSIS / GChat coordinator | `/ai/gchat-worktrees/current-user-nsis-7d9` | Removed October 10 after clean/upstream/live-use checks; product patch is integrated at `1a9044e65`, and branch `fix/gchat-current-user-nsis-7d9` remains published at `d6da84677`. Both retired trees released 551,276,544 allocated file bytes; accepted packages, active candidates and shared caches remain intact. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
@@ -715,7 +754,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Retired after accepted Windows package/install; shared cache junction detached first |
 | Offline source candidate | `/ai/gchat-worktrees/manager-offline-status` | Reviewed source retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | Windows accepted package/proof | `/ai/gchat/out/ginfer-manager/windows/` | Current archive/guide/hashes and earlier public native proof |
-| Windows desktop353 / GChat coordinator | `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/native-574d73df7-353-frontend-directory` | Retain Cargo desktop PASS and partial NSIS `BOUNDED_ABORT`, terminal/release receipts, unchanged installed apps/state and shared build cache. Approved desktop-only UI 16:20–16:35, separate NSIS 16:55–17:20; neither has run. No new model/build duplication. |
+| Windows desktop/NSIS / GChat coordinator | `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/production-nsis-only-574d73df7-proposed/` | Retain compiled353 desktop, installed364 embedded UI/split Code Stop evidence, fresh367 568,903,887-byte installer and package proof, actual wrapper exit1 and correction, terminal/release receipts. Original353 packaging abort stays historical. All build processes are absent and guards released; original state, component baseline and shared cache retained. |
 | Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Refreshed Manager compiled `54c931c68`, guide/checksums; earlier native proof retained as historical evidence |
 | Linux refresh packet | `/ai/gchat/out/oi070-linux-refresh/` | Accepted `02d369e8a` assembly, compiled `54c931c68`, independent package/native proof; old packet path retained as stable symlink |
 | Offline task evidence | `/ai/gchat/out/manager-offline-status-20261008/` | Required gate, Clippy, native build, installed UI/identity, cleanup receipts |
