@@ -1,43 +1,68 @@
-# Evidence and prepared installed checks
+# Remaining installed acceptance
 
-This reference supports the existing entries in GInfer's [single master
-list](/ai/ginfer-worktrees/open-work/docs/maintainer/open-work.md). It records
-evidence scope and concrete check inputs; issue status, owners and prioritization
-remain in that list. Repository: GChat; subject: `docs/agent-runtime/`.
-Reviewed source fixes are merged and pushed on main `e239eac023`, with
-`origin/main` equality verified at 22:01 UTC. Installed Windows product remains
-`0f06ba433`; following changes are subject metadata/docs only. Retained Manager
-is `43c8d71cf`
-and native Engine is `2ef56a52a`. Composed `make verify` passes at 21:17 UTC,
-the native Windows build exits 0 at 21:30 UTC, and independent package
-verification passes at 21:34 UTC. The 125-payload runtime, 104 profiles with
-103 unchanged original entries and the reused Manager producer verify.
-Receipts: `/ai/gchat/out/oi106-final-update-20261009/composed-final-gate.json`
-and `package-verification.json`. Installed source `0f06ba433` now passes
-preservation and actual sidebar Stop/Start/Reload, selection/status and continued
-Chat checks. Seven original threads, all models/profiles, credentials and Host
-identity survive. Stop remains stable with zero Engines/API listeners; Start and
-Reload reach distinct Ready sessions with selected alias/Server running retained.
-Final GUI Stop and supported exact original-profile restoration leave zero
-Engines/API listeners; normal apps are restored without debug ports.
-Receipts in that folder are `installed-verification.json` and
-`installed-lifecycle-acceptance.json`. Linux package/X11 acceptance remains
-pending under booking 285, 22:15–23:00Z; the known saved fixed-arena startup
-failure is unchanged.
+Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
+`docs/maintainer/open-work.md` is the sole issue-status authority. This record
+owns acceptance scope, preserved evidence and actual prerequisites.
 
-Earlier installed `7d9eb55f9` passes package/install preservation at
-`/ai/gchat/out/remediation-final-20261009/installed-verification.json`.
-Its accepted Chat workbook/discovery/compaction/continuation and original saved-run
-reporting are recorded below. Its blank picker/stale status after explicit Start
-is retained failure evidence; the integrated correction now passes installed
-acceptance. The [integration authority](../code-hygiene/README.md) owns the next
-Linux package/X11 work. Windows acceptance used the canonical
-GPU/build guards at WSL PIDs 838489/847974. C2 ended its sole
-Linux repro at 21:08:45 UTC; its lost-controller diagnostic remains invalid and
-C2 owns follow-up. Real Code, worker, connector and Hermes acceptance remains
-partial. Physical fleet, Linux native providers and community publication retain
-their prerequisites below. Server 2 is untouched; Ron's OI-077
-profile-presentation work remains parked.
+## Current ordered acceptance — October 10
+
+Candidate `fix/gchat-remaining-acceptance-bd4` at
+`/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
+`bd4dba841`. Installed Windows runtime remains GChat `0f06ba433`, Manager
+`43c8d71cf`, Engine `2ef56a52`. Host fixes OI-111–114 and OI-120–122 are
+source-accepted, with composed Rust checks completed at 01:50:05 UTC; they
+have not been installed. The [integration authority](../code-hygiene/README.md)
+owns their source verification and accepted Linux packages (`54c931c68`
+compiled, `02d369e8a` assembled).
+
+OI-072's ordinary-token capture completed without reproducing the historical
+118 MiB loss; attribution remains unresolved in its
+[single current authority](/ai/kernel-agent/run_workdir/local/oi072-runtime-53516bb5/ginfer/docs/oi072-runtime/README.md).
+OI-076's two saved incident files contain neither the original warning nor its
+failed request. OI-110 is parked pending Ron's public-feed and existing-key
+signing/publication decision; no signing or publication is authorized.
+The ordered remaining checks are OI-068, OI-069, OI-071, OI-073 and OI-075.
+
+OI-068 now has actual Windows prerequisites: OpenCode **1.18.35** resolves
+through native npm shims and its underlying executable; installed GChat reports
+ready/installed/configured with `viaWsl=false`. Hermes is present with unchanged
+custom Muse configuration and advertised 65,536-token context. Actual Code
+navigation resumes stock session `ses_ee1fb639bffetRmwKyDR4L0ZOH`, shows its Code
+sidebar icon and reports the GChat bridge connected. No model request was sent;
+this does not qualify shared tool execution, compaction or continuation.
+
+Stopping that terminal returns `Could not stop Code terminal: The operation
+completed successfully. (os error 0)`, then the same generation reports
+Exited/code 1. Cached `portable-pty` 0.9.0's Windows cloned killer reverses the
+Win32 `TerminateProcess` success test. GCHAT-PTY-STOP owns this demonstrated
+failure and its product-side exact-handle correction, now under implementation
+and independent review. Do not suppress the error or edit dependency caches.
+
+Graceful GChat-only recovery completed at 04:52:04 UTC. Ordinary GChat PID
+30972 is visible; original Host 23052 and Manager 15224 retain their creation
+identities. Engine/API counts are zero, port 9271 is closed, settings/autostart
+are preserved and all observed debug-app descendants have exited. Receipts:
+`/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/`
+(`native-command-prerequisites.json`, `code-resolved-state.json`, `stop-code.json`,
+`after-stop-state.json`, `normal-app-restoration.json`). These are prerequisite
+and recovery receipts, not full OI-068 acceptance.
+
+Reuse accepted ordinary Chat workbook/discovery/manual and automatic compaction/
+continuation, original-run reporting and stock persistence evidence below.
+Preserve user histories, definitions, settings, profiles, grants, existing agent
+budgets, caller identity and actual loaded capacity. A model-backed check needs
+a compatible actually Ready instance and both canonical GPU/build guards for its
+whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
+profile controls or widened folder permissions. Restore the exact stopped
+original profile and normal apps, and prove Engine absence before guard release.
+
+Next action: verify the narrow terminal correction in an admitted CPU interval,
+then complete real Code document/agent/skill/compact/restart, running-worker
+checkpoint/continuation and configured connector/Hermes execution. The reserved
+local GPU/CPU window is 06:45–07:20 UTC; source verification/build cannot overlap
+model use. Recheck the booking and actual ownership before execution. Missing
+providers or inputs remain explicit prerequisites; partial source checks never
+substitute for installed acceptance.
 
 ## Shared conversation, documents and compaction
 

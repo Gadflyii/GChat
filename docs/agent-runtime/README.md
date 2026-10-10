@@ -3,11 +3,13 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-## Current October 9 acceptance
+## Current acceptance
 
-Reviewed source fixes are merged and pushed on main `e239eac023`;
-`origin/main` equality is verified at 22:01 UTC. Changes after installed
-Windows product `0f06ba433` are subject metadata/docs only.
+Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
+and OI-120–122 have passed their composed Rust gate but are not installed.
+Windows remains GChat `0f06ba433`, Manager `43c8d71cf`, Engine `2ef56a52`.
+[Remaining acceptance](remaining-acceptance.md) owns the current candidate,
+actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
 The current composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
@@ -49,9 +51,8 @@ and Reload reach distinct Ready sessions with selection and Server running
 retained; final GUI Stop leaves zero Engines/API listeners and remains stable.
 Supported Reload/Stop restores the exact original profile; its known fixed-arena
 startup failure remains separate. Normal apps are restored without debug ports.
-The [integration authority](../code-hygiene/README.md) owns Linux package/X11
-acceptance under booking 285, 22:15–23:00Z, retained evidence and current
-source/build/job inventory. No
+The [integration authority](../code-hygiene/README.md) records accepted Linux
+package/X11 scope, retained evidence and current source/build/job inventory. No
 original long agent run is rerun.
 
 ## OI-067 — accepted outcome correction
