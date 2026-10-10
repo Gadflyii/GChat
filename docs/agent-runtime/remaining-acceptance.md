@@ -235,9 +235,12 @@ with fresh output after the spawn reply, duplicate replay, old-generation
 attachment, failed live Stop with retry, native reader/waiter error status and
 the shared Hermes surface. The existing real Windows denied-stop/retry test now
 checks actual Tauri Stop/status IPC sequence and unchanged native ownership.
-No build, test or model run has executed for this candidate. Source diff checking
-is the available check. Root must admit the focused frontend cases, typecheck,
-four Windows ConPTY cases and composed gate before any candidate UI replay:
+Independent source review accepts the fix. Root's admitted focused frontend run
+passes 21/21 at 16:44 UTC (`code-ui-stop-focused-2684.log` in the existing OI-068
+packet). Two act warnings in the existing entry/navigation fixture prompted an
+async act wrapper around each navigation; its rerun is pending. No Rust build or
+model run has executed for this candidate. Root must admit typecheck, the four
+Windows ConPTY cases and composed gate before any candidate UI replay:
 
 ```sh
 yarn workspace @gchat/web-app test src/containers/__tests__/CodeTerminalHost.test.tsx src/containers/__tests__/HermesTerminalHost.test.tsx

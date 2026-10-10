@@ -289,7 +289,7 @@ describe('CodeTerminalHost', () => {
     await act(async () => {})
     expect(mocks.spawnTerminal).not.toHaveBeenCalled()
     expect(mocks.terminalConstructed).not.toHaveBeenCalled()
-    rerender(<CodeTerminalHost visible />)
+    await act(async () => { rerender(<CodeTerminalHost visible />) })
     await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
     expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1)
@@ -301,8 +301,8 @@ describe('CodeTerminalHost', () => {
     act(() => sendRuntimeOutput('code:/data/agent-workspace', 'The running task is waiting for input.'))
     expect(within(pane).getByRole('log')).toHaveTextContent('The running task is waiting for input.')
 
-    rerender(<CodeTerminalHost visible={false} />)
-    rerender(<CodeTerminalHost visible />)
+    await act(async () => { rerender(<CodeTerminalHost visible={false} />) })
+    await act(async () => { rerender(<CodeTerminalHost visible />) })
 
     expect(mocks.terminalConstructed).toHaveBeenCalledTimes(1)
     expect(mocks.attachTerminal).toHaveBeenCalledTimes(1)
