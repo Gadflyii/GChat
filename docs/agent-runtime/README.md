@@ -11,14 +11,13 @@ Windows remains GChat `0f06ba433`, Manager `43c8d71cf`, Engine `2ef56a52`.
 [Remaining acceptance](remaining-acceptance.md) owns the current candidate,
 actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
-The Code Stop correction is frozen at `ccc9ab250`, including a test-only
-cursor-query responder for the real ConPTY already-exited fixture. The earlier
-`37aa7beed` native run compiled and executed four cases: three passed and the
-already-exited fixture timed out. The correction is independently source-reviewed;
-fresh native compilation and all four tests remain pending. Booking 331 permits
-sequential compile, package and acceptance work at 07:30–08:10 UTC on October 10.
-No local compilation runs during the preceding kernel gates. No new package or
-app update is installed.
+The Code Stop correction has four actual native ConPTY test passes at
+`ccc9ab250`, including the cursor-query reply and natural exit-7 fixture.
+Current frozen source `9a4caa1c3` adds the boxed Host owner and four Windows
+network and desktop helper corrections needed by strict Clippy. Focused Host
+tests, current Unix checks and current native all-target check/strict Clippy pass. Installed
+Windows apps are unchanged. Booking 331 ends at 08:10 UTC; production refresh
+and installed acceptance continue in booking 337, 09:15–10:00 UTC.
 
 The installed baseline's composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,

@@ -71,9 +71,10 @@ whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
 profile controls or widened folder permissions. Restore the exact stopped
 original profile and normal apps, and prove Engine absence before guard release.
 
-Next action: apply the frozen `ccc9ab250` delta after admission, compile and
-execute all four native ConPTY cases, then check the current source before
-production packaging and installed Stop replay.
+Next action: finish strict native checks on frozen `9a4caa1c3`, then build and
+verify the complete production packages, update the local apps and replay Code
+Stop. Booking 331 ends at 08:10 UTC; production and model-backed acceptance
+continue in booking 337, 09:15–10:00 UTC, without overlapping other owners.
 Frozen `37aa7beed` compiled successfully; the actual four-case run completed
 at 06:32:29 UTC with three passes and one failure: `cmd.exe /D /C "exit 7"`
 did not signal exit within five seconds. The real Stop/waiter, denied Stop
@@ -90,8 +91,9 @@ real ConPTY cases and the original five-second natural-exit/exit-7 checks,
 then closes and joins its consumer before checking the retained killer.
 No product code, timeout, dependency or profile changed in this correction.
 Pipe clones do not retain the PseudoCon owner; closure/EOF lifetime was
-checked against the exact cached implementation. Its role in the saved
-timeout remains inferred until the next native execution. Frozen source `ccc9ab250` is committed and pushed. The independently reviewed
+checked against the exact cached implementation. Actual CCC execution records
+the cursor query, one reply and natural exit code 7; all four real ConPTY
+tests pass at 07:46:54 UTC. Frozen source `ccc9ab250` is committed and pushed. The independently reviewed
 prepared packet uses the existing exact `37aa7beed` archive/extraction plus
 an immutable two-file delta (109,407 bytes) to that source. Root applies it
 only after actual 07:30 admission and both canonical guards; all before/after
@@ -116,14 +118,52 @@ was applied at 07:31:34. Native Cargo finished 0 after 3m27s, but the runner
 failed its lifecycle gate: an identity-proven owned MSVC `VCTIP.EXE` child
 remained after the ten-second natural drain. Final Job0, pinned body exit and
 controller terminal1 are proven; all three owned PIDs are absent. Preserve
-this failed receipt rather than promoting it. The existing runner is being
-corrected to validate command/artifact completion separately, then allow bounded
+this failed receipt rather than promoting it. The existing runner correction is independently accepted (`48602e1479` /
+`b129932d99`) and staged byte-for-byte, with consumed scripts preserved. It
+validates command/artifact completion separately, then allows bounded
 teardown only of freshly pinned, verified MSVC telemetry helpers. Unknown members,
 actual test failures and deadline/RAM errors remain failures. No product source,
-profile, timeout, global telemetry setting or installed app changed. Fresh runner
-verification and four real ConPTY tests are still pending. Current Unix all-target
-check and strict all-target Clippy pass. Receipts: `compile-root-terminal-331.json`
-and `compile-fresh-native-absence-331.json` in the existing OI-068 packet.
+profile, timeout, global telemetry setting or installed app changed. The fresh
+compile passes at 07:46:18 and four actual tests pass at 07:46:54, with normal
+controller exit and Job0. No telemetry helper teardown was needed by these
+cached successful runs. Current CCC Unix check and strict Clippy also pass.
+Receipts: `compile-vctip-root-terminal-331.json`,
+`test-vctip-root-terminal-331.json` and `ccc-unix-check-clippy-result-331.json`
+in the existing OI-068 packet; initial failed receipts remain retained.
+
+Strict Windows Clippy then exposes two platform-specific blockers. CCC
+all-target check passes, but `Owner::Desktop(LocalHost)` is 288 bytes versus
+56 for Service. Source `5988620a1` boxes desktop ownership and preserves its
+Serde fields/tag/defaults; independent review, three registry tests, the
+existing first-import/grant test, current Unix all-target check and strict
+Clippy pass. Native 598 check passes and clears that warning, then rejects
+four unnecessary argument-array borrows in Windows network helpers. Source
+`a7a268455` removes only those four borrows; command arguments and Linux
+compiled code are unchanged. The next native pass clears those errors and
+exposes eight Windows-only desktop helper warnings. Source `9a4caa1c3`
+corrects their redundant borrows/returns, first-match iterator and borrowed
+path parameters without changing arguments, platform control flow or data.
+Independent review accepts both corrections. Current 9a native all-target
+check and strict Clippy pass at 08:07:08 UTC, with normal controller exit0,
+Job0 and pinned body exit. Reuse CCC four-test evidence only for unchanged
+terminal/Cargo/build inputs and 598 Unix checks for unchanged Linux compiled
+code; do not label either a fresh 9a execution. Packages and installed replay
+remain pending. The master list owns the corresponding native lint defects.
+
+Current331 ends at 08:08:44.295 UTC: fresh native inspection proves all 14
+owned controller/body identities absent, Engine0 and API0 before canonical
+build/GPU guard release. Booking331 is cancelled; installed apps/settings
+remain unchanged. Actual receipts: `9a-checkclippy-root-terminal-331.json`,
+`final-native-absence-331.json` and `release-verified-331.json`. Production
+uses booking337, 09:15–10:00 UTC, and reuses valid source gates rather than
+repeating tests. Original331 source-application provenance remains separate
+from new337 admission and guard ownership.
+
+The bounded owned-disk review found no verified disposable candidate; zero
+bytes deleted. Retain current source/cache/evidence and list shared, unmerged
+or unclear paths in `hygiene-not-deleted-20261010.txt` in the same packet.
+Filesystem traversal stopped at 08:07:35 UTC; no activity continues into
+another owner's exclusive window.
 
 CPU-only booking 333 ended at 06:34:28.858 UTC before its 06:35 boundary.
 All three native Jobs were empty, pinned bodies exited, all six owned controller/
@@ -163,7 +203,7 @@ passing test. Release unused reservation time at actual END and recheck inbox,
 booking and actual ownership before execution.
 
 Owned inventory for this continuation: the clean candidate tree is
-`/ai/gchat-worktrees/remaining-acceptance-bd4`; frozen source is `ccc9ab250`.
+`/ai/gchat-worktrees/remaining-acceptance-bd4`; frozen source is `9a4caa1c3`.
 Retain the existing native extraction and shared Windows target cache at
 `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/source` and
 `%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` for the next
@@ -181,8 +221,8 @@ Engine closure; replace all inert test resources with verified production
 payloads before packaging. Verify current source, both package formats, Manager
 closure and preserved installed data before claiming an update.
 
-After CPU work ends inside reservation 331, perform remaining acceptance
-sequentially. Compilation/checks and actual model use cannot overlap. The
+After the required CPU checks and production refresh, perform remaining
+acceptance sequentially inside the admitted reservation. Compilation/checks and actual model use cannot overlap. The
 40-minute total build/acceptance fit is unmeasured; finish the required checks
 and preserve valid partial results instead of shrinking scope to fit. Missing physical providers
 or inputs remain explicit prerequisites; partial source checks never substitute
