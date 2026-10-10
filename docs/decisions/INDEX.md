@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Draft Gbot shared runtime and Cua workspaces](2026-10-10-draft-gbot-shared-runtime-and-cua-workspaces.md) — proposed
+
 - [Own GInfer model load requests](2026-10-09-own-ginfer-model-load-requests.md)
 - [Preserve Agent stage outcomes through final output](2026-10-09-preserve-agent-stage-outcomes.md)
 - [Load capability schemas on demand](2026-10-09-load-capability-schemas-on-demand.md)
@@ -59,7 +61,7 @@ decision is reversed, add a new one that says which record it supersedes.
 2. Add one line to the right section of this index.
 3. Do **not** paste the record body into `AGENTS.md`.
 
-256 records, 2026-05-19 → 2026-10-09.
+291 records, 2026-05-19 → 2026-10-10.
 
 ---
 
