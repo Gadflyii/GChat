@@ -40,10 +40,16 @@ and collapsed **Startup or runtime error details**. The complete diagnostic
 remains available in a bounded, scrollable text area; no Host error, cached
 snapshot, model profile or stored data is cleared or changed.
 
+Diagnostic details use the existing section-state map, keyed by Host, instance
+and current versus previous phase. Unrelated live snapshot updates preserve an
+open diagnostic while it is being read. A phase change starts collapsed, including
+a round trip back to a previous startup error.
+
 Acceptance requires the existing Manager DOM harness to show stopped versus
-failed presentation, offline cached diagnostics, full retained text and the failed-to-stopped
-transition, followed by the coordinator's source gate and rebuilt installed
-Manager acceptance. Two focused DOM regressions are prepared but unrun during
+failed presentation, offline cached diagnostics, full retained text, reading state
+across an unrelated instance update and collapsed phase transitions, followed by
+the coordinator's source gate and rebuilt installed Manager acceptance. Three
+focused DOM regressions are prepared but unrun during
 the October 10 10:20–11:00 UTC quiet window. Root executes admitted checks and
 integrates the reviewed branch with the installer correction after 11:00 UTC.
 This source preparation does not qualify the installed Manager or fix the
@@ -597,7 +603,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
-| Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, two observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
+| Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, three observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |
