@@ -109,6 +109,22 @@ fresh CCC compilation results. Native CCC four-case PASS and current Windows
 all-target check/strict Clippy remain mandatory. This composition avoids
 repeating unaffected suites without replacing actual native verification.
 
+Actual booking 331 admission at 07:30 holds canonical build/GPU guards with
+keeper PID 2215772, start ticks 6398839. Ordinary native Ron has Engine0/API0
+and 95 GB free RAM; original app identities are unchanged. The exact CCC delta
+was applied at 07:31:34. Native Cargo finished 0 after 3m27s, but the runner
+failed its lifecycle gate: an identity-proven owned MSVC `VCTIP.EXE` child
+remained after the ten-second natural drain. Final Job0, pinned body exit and
+controller terminal1 are proven; all three owned PIDs are absent. Preserve
+this failed receipt rather than promoting it. The existing runner is being
+corrected to validate command/artifact completion separately, then allow bounded
+teardown only of freshly pinned, verified MSVC telemetry helpers. Unknown members,
+actual test failures and deadline/RAM errors remain failures. No product source,
+profile, timeout, global telemetry setting or installed app changed. Fresh runner
+verification and four real ConPTY tests are still pending. Current Unix all-target
+check and strict all-target Clippy pass. Receipts: `compile-root-terminal-331.json`
+and `compile-fresh-native-absence-331.json` in the existing OI-068 packet.
+
 CPU-only booking 333 ended at 06:34:28.858 UTC before its 06:35 boundary.
 All three native Jobs were empty, pinned bodies exited, all six owned controller/
 body PIDs were absent and Engine count was zero before canonical build-guard
