@@ -741,7 +741,7 @@ async fn manager_first_import_uses_registered_owners_configured_data_and_preserv
     std::fs::write(&source, &bytes).unwrap();
     let executable = std::env::current_exe().unwrap();
     let owner =
-        ginfer_host::local_host_registry::Owner::Desktop(ginfer_host::local_host::LocalHost {
+        ginfer_host::local_host_registry::Owner::Desktop(Box::new(ginfer_host::local_host::LocalHost {
             binary: executable.clone(),
             engine: executable,
             engine_runtimes: Default::default(),
@@ -752,7 +752,7 @@ async fn manager_first_import_uses_registered_owners_configured_data_and_preserv
             name: "Local".into(),
             nvidia_smi: "nvidia-smi".into(),
             listen: "127.0.0.1:7443".parse().unwrap(),
-        });
+        }));
     let vault = Arc::new(Vault::default());
     vault
         .set(host.client_id, "existing grant credential")

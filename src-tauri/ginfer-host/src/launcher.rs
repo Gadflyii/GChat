@@ -88,7 +88,7 @@ impl InstalledConfiguration {
                 name: "This computer".into(), nvidia_smi: "nvidia-smi".into(),
                 listen: std::net::SocketAddr::new(address, origin.port_or_known_default().ok_or("missing host port")?),
             };
-            crate::local_host_registry::Owner::Desktop(local)
+            crate::local_host_registry::Owner::Desktop(Box::new(local))
         } else {
             crate::local_host_registry::Owner::Service { directory: self.data_dir, origin: self.host_url }
         };

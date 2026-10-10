@@ -52,7 +52,7 @@ pub struct LocalHost {
 impl LocalHost {
     pub async fn ensure_shared_running(self) -> Result<LocalControl, String> {
         crate::local_host_registry::resolve(Some(
-            crate::local_host_registry::Owner::Desktop(self),
+            crate::local_host_registry::Owner::Desktop(Box::new(self)),
         )).await?.connect().await
     }
 
