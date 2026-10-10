@@ -6,6 +6,29 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current ordered acceptance — October 10
 
+Installer source candidate `fix/gchat-current-user-nsis-7d9`, owned at
+`/ai/gchat-worktrees/current-user-nsis-7d9`, retains accepted Rust/ConPTY inputs
+and adds a pinned custom NSIS template with validated current-user NSIS
+precedence. Actual installation remains unchanged. At 10:13:26 UTC the typed
+installer refused WiX migration before stopping apps or launching an installer.
+The [10:19:45 NSIS owner proof](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/nsis-owner-proof-341.stdout)
+confirms matching HKCU64 product/uninstall records and the actual GChat
+uninstaller. The [MSI proof](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/msi-precedence-registry-341.stdout)
+also identifies a genuine HKLM registration at the same directory; it is not an
+unrelated installation. The [decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md)
+requires retaining normal MSI migration when the NSIS owner is not validated.
+
+Next installer action: independent source review, then admitted package-only
+regeneration from the accepted binaries and generated-template verification.
+Installed acceptance must demonstrate current-user NSIS update without running
+the old uninstaller or MSI migration, unchanged models/profiles/credentials and
+histories, the authorized AUTO profile and functional installed Code Stop.
+No build, test, staging or installation runs during the 10:20–11:00 quiet period.
+The coexisting MSI registration is preserved; subsequent MSI repair/uninstall
+can still modify the shared installation. No registry deletion or reconciliation
+is part of this change. Retain this source tree and the existing OI-068 evidence;
+no new build or model copies were allocated.
+
 Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
 `bd4dba841`. Installed Windows runtime remains GChat `0f06ba433`, Manager
@@ -68,16 +91,15 @@ Preserve user histories, definitions, settings, profiles, grants, existing agent
 budgets, caller identity and actual loaded capacity. A model-backed check needs
 a compatible actually Ready instance and both canonical GPU/build guards for its
 whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
-profile controls or widened folder permissions. Restore the exact stopped
-original profile and normal apps, and prove Engine absence before guard release.
+profile controls or widened folder permissions. Final Stop keeps the explicitly
+authorized AUTO profile; restore normal apps and prove Engine absence before
+guard release.
 
-Next action: build and independently verify the complete production packages
-from frozen `7d9a8f689`, update the local apps and replay Code Stop. Native
-all-target check and strict Clippy already pass on unchanged Rust source
-`9a4caa1c3`; do not repeat those gates or the four passing CCC ConPTY tests.
-Booking 331 ended at 08:08:44 UTC with both guards released. Production and
-model-backed acceptance use booking 337, 09:15–10:00 UTC, without overlapping
-other owners.
+Accepted `7d9a8f689` production and package checks passed in booking 337; the
+booking-341 invocation refused MSI migration before launch. The next installer
+action and preservation criteria are specified above. Native all-target check
+and strict Clippy pass on unchanged Rust source `9a4caa1c3`; do not repeat those
+gates or the four passing CCC ConPTY tests for this template-only change.
 
 Installer review found an obsolete pre-uninstall macro that stops helpers by
 shared executable names and uses a PowerShell policy bypass. No live uninstall
@@ -88,7 +110,8 @@ Rust/ConPTY inputs. GCHAT-UNINSTALL-PROCESS-SCOPE is on the master list.
 
 Use the supported NSIS `/S /UPDATE` path to skip the installed old NSIS
 uninstaller. Verify the freshly generated script's `currentUser` and
-`RequestExecutionLevel user` behavior, exclude matching WiX/MSI migration, and
+`RequestExecutionLevel user` behavior, validate exact current NSIS owner
+precedence before the WiX scan, and
 require no running current-user `gchat.exe` before launch to avoid the template's
 name-based fallback. No `/R`, elevation or policy bypass. Close the verified
 clients gracefully and stop only the exact idle Host handle after successful
@@ -97,15 +120,12 @@ installed payloads and full original-thread byte preservation before acceptance.
 The prepared packet under the existing OI-068 evidence folder is preparation,
 not proof of a generated package or installed update.
 
-Model-backed replay is currently blocked while preserving the original fixed
-profile. The existing AUTO Muse profile uses the same saved GPU-group instance;
-the Host cannot save a replacement profile while stopped. `reload` always
-launches a child before saving, and a second saved instance on that GPU group
-is rejected. The earlier AUTO-to-fixed reload restoration template is withdrawn:
-it would attempt the known failing fixed startup. Keep the original unchanged;
-do not write private Host state or use that failure as a cleanup step. Package,
-installed Code Stop and model-free OI-075 checks can proceed independently.
-The existing `hermes-route-plan.json` records the deferred model actions.
+Ron authorized retaining the existing AUTO Muse profile after preservation
+verification. Model-backed replay still needs fresh actual Ready capacity and
+both guards; final Stop keeps AUTO. The earlier AUTO-to-fixed reload restoration
+template is withdrawn because it would attempt the known failing fixed startup.
+Do not write private Host state or use that failure as a cleanup step. Installed
+Code Stop and model-free OI-075 can proceed independently of model admission.
 Frozen `37aa7beed` compiled successfully; the actual four-case run completed
 at 06:32:29 UTC with three passes and one failure: `cmd.exe /D /C "exit 7"`
 did not signal exit within five seconds. The real Stop/waiter, denied Stop

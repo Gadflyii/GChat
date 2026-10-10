@@ -11,6 +11,14 @@ Windows remains GChat `0f06ba433`, Manager `43c8d71cf`, Engine `2ef56a52`.
 [Remaining acceptance](remaining-acceptance.md) owns the current candidate,
 actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
+Current installer source work uses the
+[validated NSIS owner decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).
+The ordinary update refused a genuine coexisting MSI registration before any
+installer or app stop. Actual HKCU64 NSIS ownership is now proven; its custom
+template gives that validated owner precedence and retains MSI migration as the
+fallback. Source review, package-only regeneration and installed preservation
+checks remain pending. Accepted Rust and ConPTY evidence is unchanged.
+
 The Code Stop correction has four actual native ConPTY test passes at
 `ccc9ab250`, including the cursor-query reply and natural exit-7 fixture.
 Verified Rust source `9a4caa1c3` adds the boxed Host owner and four Windows
@@ -19,10 +27,12 @@ tests, current Unix checks and current native all-target check/strict Clippy pas
 Windows apps are unchanged; booking 331 ended at 08:08:44 UTC with both guards
 released. Frozen package source `7d9a8f689` additionally removes the obsolete
 NSIS process-killing pre-uninstall hook. Its optional post-uninstall data behavior
-is unchanged, and Rust/ConPTY inputs retain their accepted evidence. Production
-refresh and installed acceptance use booking 337, 09:15–10:00 UTC. The supported
-ordinary-user NSIS `/S /UPDATE` route skips the old NSIS uninstaller; admission
-must exclude WiX migration and running GChat processes.
+is unchanged, and Rust/ConPTY inputs retain their accepted evidence. Its actual
+production and independent package checks passed in booking 337; installed
+apps remain unchanged after the booking-341 pre-launch refusal. The custom
+template now awaits review and admitted package-only regeneration. The validated
+ordinary-user NSIS `/S /UPDATE` route must skip both the old uninstaller and MSI
+migration, with all owned apps closed before installation.
 
 The installed baseline's composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
