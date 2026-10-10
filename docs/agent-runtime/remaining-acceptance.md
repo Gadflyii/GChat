@@ -19,13 +19,17 @@ OI-072's ordinary-token capture completed without reproducing the historical
 118 MiB loss; attribution remains unresolved in its
 [single current authority](/ai/kernel-agent/run_workdir/local/oi072-runtime-53516bb5/ginfer/docs/oi072-runtime/README.md).
 OI-076's two saved incident files contain neither the original warning nor its
-failed request. OI-110 is parked pending Ron's public-feed and existing-key
-signing/publication decision; no signing or publication is authorized.
-OI-073 is separately parked for Ron to name a disposable completed Standard
-result and website test window; no public publish, retry or deletion is allowed.
+failed request. Ron authorized OI-110 local manifest preparation for the
+SectileLabs public feed; actual existing-key signing/publication remains gated
+until his next release. He separately authorized OI-073's complete lifecycle
+and final deletion for one clearly labelled root-created disposable test
+result, preserving all 12 official series/36 points. Exact test input and
+website-owned execution remain pending; neither approval is execution evidence.
 The ordered remaining checks are OI-068, OI-069, OI-071 and OI-075.
 The registered second peer timed out on the bounded reachability check and the
-local fleet is unconfigured. Physical pool checks need designated available
+local fleet is unconfigured. Server 2 is reported online; its newly authorized
+online verification is deferred and has not run in this acceptance. Physical
+pool checks need designated available
 paired hosts/clients; Linux tray/vault checks need an actual provider-equipped
 desktop. Those inputs are pending. OI-075 uses the existing 12-message,
 107,089-byte long-content thread; actual UI measurements await a quiet interval.
@@ -68,16 +72,57 @@ Preserve user histories, definitions, settings, profiles, grants, existing agent
 budgets, caller identity and actual loaded capacity. A model-backed check needs
 a compatible actually Ready instance and both canonical GPU/build guards for its
 whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
-profile controls or widened folder permissions. Restore the exact stopped
-original profile and normal apps, and prove Engine absence before guard release.
+profile controls or widened folder permissions. Final Stop keeps the explicitly
+authorized AUTO profile; restore normal apps and prove Engine absence before
+guard release.
 
-Next action: build and independently verify the complete production packages
-from frozen `7d9a8f689`, update the local apps and replay Code Stop. Native
-all-target check and strict Clippy already pass on unchanged Rust source
-`9a4caa1c3`; do not repeat those gates or the four passing CCC ConPTY tests.
-Booking 331 ended at 08:08:44 UTC with both guards released. Production and
-model-backed acceptance use booking 337, 09:15–10:00 UTC, without overlapping
-other owners.
+Frozen `7d9a8f689` passes actual production at 09:37:44 UTC and independent
+package verification at 09:40 UTC. Retain its accepted artifacts and reuse
+unchanged Rust/ConPTY evidence; the subsequent template correction and pending
+Manager stopped-status presentation fix require a fresh package generation.
+Evidence is in the existing OI-068
+packet (`production-terminal-337.json`,
+`production-9a4caa1c3-337/package-verification.json`). Booking 337 ended at
+09:58:48 UTC with Engine/API0 and guard release. Booking 341 ended at
+10:19:18.993484 UTC: keeper 3053354/start ticks 7297225 stopped, both guards
+released and the booking cancelled. Installer controller 37548/body 42660
+exited 1 at preflight, before any app stop or NSIS launch. Fresh absence proof
+records Job0, Engine/API0 and unchanged baseline apps/settings
+(`gchat-install-terminal-341.json`, `release-verified-341.json`). No installed
+update PASS is claimed. No native actions, tests, builds or model runs are
+allowed locally during 10:20–11:00 UTC.
+
+Baseline apps were unexpectedly absent from the fresh pre-install owner query
+before 10:03 UTC. GChat logs record ordinary exit requested at 09:58:54;
+the reason and Manager's exit cause are unattributed. Stale owner identities
+were rejected before installation. Supported baseline Start reopened GChat
+21848/birth `2026-10-10T10:04:36.3895448Z` on debug port 9271 and Manager
+7296/birth `2026-10-10T10:04:36.3985529Z` on 9272; Host 23052 retains its
+original identity. `owners-for-install-341.json` records the fresh owners.
+Supported pinned Rust POST scan and snapshot passed at 09:55:39 for Host
+`4941572e-7ccf-48b7-a950-de8d4dd731c6`, with stopped instances, zero requests
+and no downloads (`host-scan-installed-337.json`). C#/PowerShell helper aborts
+remain unresolved; the supported Rust result does not claim a helper fix.
+
+Ron fulfilled the bring-to-front request: native Manager Document visibility
+passed at 10:10:41 (`manager-after-user-go-341.stdout`). Its tray still has no
+clickable point; no click, Exit or forced app exit occurred. GChat 21848,
+Manager 7296 and retained Host 23052 remain running, with the model stopped.
+Actual registration evidence proves a genuine same-path MSI record and exact
+valid HKCU64 NSIS owner (`msi-precedence-registry-341.stdout`,
+`nsis-owner-proof-341.stdout`). The MSI rejection was a real route conflict,
+not an absent registration. Reviewed/pushed source `d6da84677` selects the
+validated current-user NSIS owner before the stock MSI scan, preserving the
+coexisting MSI registration. Rust and Engine inputs are unchanged by that
+template correction. Manager's historical-error display for stopped instances
+is being corrected separately; no fix or installed acceptance is claimed yet.
+
+Next action: integrate the accepted NSIS template and completed/reviewed Manager
+presentation fix, then generate and independently verify a fresh package under
+a new admitted window after the quiet interval. Fresh owner/idle/persistence
+proof and generated NSIS route verification precede the update. Complete
+installed payload/user-state preservation before Code Stop replay and
+authorized AUTO functional acceptance.
 
 Installer review found an obsolete pre-uninstall macro that stops helpers by
 shared executable names and uses a PowerShell policy bypass. No live uninstall
@@ -88,24 +133,30 @@ Rust/ConPTY inputs. GCHAT-UNINSTALL-PROCESS-SCOPE is on the master list.
 
 Use the supported NSIS `/S /UPDATE` path to skip the installed old NSIS
 uninstaller. Verify the freshly generated script's `currentUser` and
-`RequestExecutionLevel user` behavior, exclude matching WiX/MSI migration, and
-require no running current-user `gchat.exe` before launch to avoid the template's
+`RequestExecutionLevel user` behavior and validated current-user NSIS precedence
+before the WiX/MSI scan; do not invoke MSI migration or alter its registration.
+Require no running current-user `gchat.exe` before launch to avoid the template's
 name-based fallback. No `/R`, elevation or policy bypass. Close the verified
 clients gracefully and stop only the exact idle Host handle after successful
 scan/persistence flush, stopped instances and no active downloads. Verify
 installed payloads and full original-thread byte preservation before acceptance.
-The prepared packet under the existing OI-068 evidence folder is preparation,
-not proof of a generated package or installed update.
+The 7d9 package is retained prior producer evidence. Booking-341 installer copies
+are consumed preflight evidence; the new template/Manager package and installed
+update are pending. Do not reuse those copies as current admitted installers.
 
-Model-backed replay is currently blocked while preserving the original fixed
-profile. The existing AUTO Muse profile uses the same saved GPU-group instance;
-the Host cannot save a replacement profile while stopped. `reload` always
-launches a child before saving, and a second saved instance on that GPU group
-is rejected. The earlier AUTO-to-fixed reload restoration template is withdrawn:
-it would attempt the known failing fixed startup. Keep the original unchanged;
-do not write private Host state or use that failure as a cleanup step. Package,
-installed Code Stop and model-free OI-075 checks can proceed independently.
-The existing `hermes-route-plan.json` records the deferred model actions.
+Ron explicitly authorized **Use and keep AUTO** on the existing Muse instance.
+After package/install preservation of the original profile is verified, select
+the existing `rtx5090-muse-nvfp4-dflash-nvfp4-tp1-c4-128k-nvfp4-windows-automatic-current`
+profile through supported Host controls using the fresh current session lock.
+Keep C4/131072, NVFP4 KV, the existing headroom, sampling and saved-agent budgets;
+only the arena policy becomes automatic. Before model-backed acceptance, verify
+the same selected instance/session is Ready with `configuration.max_context`
+and Engine-reported `model_metadata.max_model_len` both at least 65536. This
+authorizes functional replay, not physical 131K qualification or an execution
+PASS. Final supported Stop keeps AUTO saved. The earlier AUTO-to-fixed reload
+restoration template remains withdrawn: do not launch the known failing fixed
+profile or write private Host state. The existing `hermes-route-plan.json`
+records the authorized actions pending preservation and Ready verification.
 Frozen `37aa7beed` compiled successfully; the actual four-case run completed
 at 06:32:29 UTC with three passes and one failure: `cmd.exe /D /C "exit 7"`
 did not signal exit within five seconds. The real Stop/waiter, denied Stop
@@ -179,16 +230,17 @@ check and strict Clippy pass at 08:07:08 UTC, with normal controller exit0,
 Job0 and pinned body exit. Reuse CCC four-test evidence only for unchanged
 terminal/Cargo/build inputs and 598 Unix checks for unchanged Linux compiled
 code; do not label either a fresh 9a execution. Packages and installed replay
-remain pending. The master list owns the corresponding native lint defects.
+were still pending at that gate; the current production/package result is above.
+The master list owns the corresponding native lint defects.
 
-Current331 ends at 08:08:44.295 UTC: fresh native inspection proves all 14
+Booking331 ended at 08:08:44.295 UTC: fresh native inspection proved all 14
 owned controller/body identities absent, Engine0 and API0 before canonical
 build/GPU guard release. Booking331 is cancelled; installed apps/settings
 remain unchanged. Actual receipts: `9a-checkclippy-root-terminal-331.json`,
 `final-native-absence-331.json` and `release-verified-331.json`. Production
-uses booking337, 09:15–10:00 UTC, and reuses valid source gates rather than
-repeating tests. Original331 source-application provenance remains separate
-from new337 admission and guard ownership.
+completed under booking337 using the accepted source gates. Original331
+source-application provenance remains separate from production337, ended
+installer341 and future admission/guard ownership.
 
 The bounded owned-disk review found no verified disposable candidate; zero
 bytes deleted. Retain current source/cache/evidence and list shared, unmerged
@@ -233,17 +285,20 @@ This corrects the insufficient whole-compile deadline; compilation is not a
 passing test. Release unused reservation time at actual END and recheck inbox,
 booking and actual ownership before execution.
 
-Owned inventory for this continuation: the candidate tree is
-`/ai/gchat-worktrees/remaining-acceptance-bd4`; frozen package source is
-`7d9a8f689`, with accepted Rust checks at `9a4caa1c3`.
+Owned inventory: the candidate tree is
+`/ai/gchat-worktrees/remaining-acceptance-bd4`; accepted prior package source is
+`7d9a8f689`, with Rust checks at `9a4caa1c3`. Reviewed template `d6da84677`
+and the pending Manager presentation correction need integration and a fresh
+package; no current local job or guard remains after booking341.
 Retain the existing native extraction and shared Windows target cache at
 `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/source` and
 `%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` for the next
 check/build; no duplicate source archive or model copy was allocated.
 Prepared scripts, delta, verifiers and exact command inventory are indexed
 in `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/native-ccc9ab250-preparation.json`.
-All build/package/installed acceptance fields remain pending. Consumed
-37aa/333 artifacts are retained evidence, not current passing gates.
+The 7d9 production/package fields pass; the new package and installed acceptance
+remain pending. Consumed 37aa/333 artifacts are retained evidence, not current
+passing gates.
 
 The production refresh must rebuild both Manager and Host: Manager statically
 uses the changed Host client/fleet code and its own source has changed since the
@@ -359,11 +414,13 @@ Linux deployment or credential changes were attempted here.
 
 ## Installed community publication
 
-OI-073 requires a designated disposable completed Standard Benchmark result,
-installed community signing configuration and the board owner's publication
-window. The 12 official reference series / 36 points are already accepted and
-must remain untouched. Synthetic fixture data must not be published as measured
-community results.
+Ron authorized OI-073's complete publication/readback/retry/replay/rollback and
+receipt-deletion lifecycle for one clearly labelled root-created disposable test
+result, with final deletion. Exact valid input and website-owned execution remain
+pending. The 12 official reference series / 36 points are accepted and protected;
+no existing user benchmark is implicitly selected. Test data must retain its
+test label and must not be presented as measured community results. Community
+signing and OI-110 updater publication remain separate approvals.
 
 The existing frontend `services/benchmark/leaderboard.test.ts` checks public
 payload fields, the complete supported C1/C4/C8 workload, malformed receipts and
@@ -373,7 +430,7 @@ signature vector. Actual website publication/replay/rollback belongs to the
 separate Sectile Web `site/gbench` repository; this checkout has no installed
 deletion/replay acceptance receipt.
 
-With the designated result and board window, publish through installed GChat's
+With the designated test input and admitted window, publish through installed GChat's
 `submit_benchmark` command, compare public readback to that result and keep the
 returned deletion receipt private. Interrupt a response after acceptance and
 retry the same saved owner token; then perform concurrent replay and the board's
@@ -439,7 +496,8 @@ available receipt.
 | --- | --- |
 | Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Owned tree retired after remote/tip/live-use checks; branch and concise evidence retained. |
 | Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Current composed source; active job/build inventory in the integration authority. |
-| `/ai/gchat/out/remaining-acceptance-20261009/` | Retain bounded idle receipt/command and the accepted Office fixture; no live job or build. |
+| `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Current source and runtime documentation awaiting root integration; retain source and reused build caches. |
+| `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain accepted prior 7d9 production/package artifacts, consumed booking-341 preflight/owner/idle evidence and Office fixture. No active booking341 job/guard; new package and installed acceptance remain pending. No disk-cleanliness claim. |
 | Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
 
 Two file-launch attempts ran no measurement: a guessed native path did not

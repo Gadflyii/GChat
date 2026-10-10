@@ -11,18 +11,36 @@ Windows remains GChat `0f06ba433`, Manager `43c8d71cf`, Engine `2ef56a52`.
 [Remaining acceptance](remaining-acceptance.md) owns the current candidate,
 actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
-The Code Stop correction has four actual native ConPTY test passes at
-`ccc9ab250`, including the cursor-query reply and natural exit-7 fixture.
-Verified Rust source `9a4caa1c3` adds the boxed Host owner and four Windows
-network and desktop helper corrections needed by strict Clippy. Focused Host
-tests, current Unix checks and current native all-target check/strict Clippy pass. Installed
-Windows apps are unchanged; booking 331 ended at 08:08:44 UTC with both guards
-released. Frozen package source `7d9a8f689` additionally removes the obsolete
-NSIS process-killing pre-uninstall hook. Its optional post-uninstall data behavior
-is unchanged, and Rust/ConPTY inputs retain their accepted evidence. Production
-refresh and installed acceptance use booking 337, 09:15–10:00 UTC. The supported
-ordinary-user NSIS `/S /UPDATE` route skips the old NSIS uninstaller; admission
-must exclude WiX migration and running GChat processes.
+Frozen source `7d9a8f689` passes actual native production at 09:37:44 UTC and
+independent package verification at 09:40 UTC. Its Code Stop correction retains
+four native ConPTY passes, including cursor-query reply and natural exit 7;
+focused Host, Unix and native all-target check/strict Clippy evidence is reused.
+The obsolete NSIS process-killing pre-uninstall hook is removed; optional
+post-uninstall data behavior is unchanged. Receipts are in the existing
+`out/remaining-acceptance-20261009/oi068-windows-20261010/` packet:
+`production-terminal-337.json` and
+`production-9a4caa1c3-337/package-verification.json`. These accepted artifacts
+precede the installer-template correction and pending Manager stopped-status
+presentation fix; a fresh package generation is required.
+
+Installed apps remain the old baseline. Booking 337 ended at 09:58:48 UTC with
+Engine/API0 and both guards released. Booking 341 ended at 10:19:18.993484 UTC;
+its installer preflight rejected genuine MSI migration before any app stop or
+NSIS launch, and both guards are released. Baseline GChat 21848, Manager 7296
+and retained Host 23052 remain running with no model. Ron's bring-to-front
+request succeeded: native Manager Document visibility passed at 10:10:41.
+The tray has no clickable point; no tray click or Exit occurred.
+The exact valid HKCU64 NSIS owner coexists with a genuine same-path MSI record.
+Reviewed/pushed template correction `d6da84677` prefers that validated NSIS
+owner for ordinary-user `/S /UPDATE`, without invoking or reconciling MSI.
+Next integrate the template and Manager presentation correction, then generate
+and independently verify a fresh package under a new admitted window. Local
+10:20–11:00 UTC is quiet: no native actions, tests, builds or model runs.
+[Remaining acceptance](remaining-acceptance.md) records the exact owners and
+supported scan evidence. Ron authorized keeping the existing AUTO Muse profile
+after preservation verification; functional replay still requires fresh Ready
+capacity, and final Stop keeps AUTO without attempting the known failing fixed
+startup. Installed Code/model-backed acceptance has not passed.
 
 The installed baseline's composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
