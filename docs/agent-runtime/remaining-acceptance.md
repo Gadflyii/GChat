@@ -289,6 +289,30 @@ owned native PIDs absent, Engine/API/debug0 and canonical guards free at
 Apps and settings are unchanged; no Test, desktop build or install ran.
 
 The successor is booking380, 22:20–22:50 UTC, CPU only, stopping by 22:49.
+Ron’s current rule33 limits this run to the four changed Windows terminal cases,
+the necessary desktop build and the installed Stop/Restart replay. Reuse the
+passing Linux evidence; no full suite or unchanged passing check is rerun.
+The independently source-accepted packet is indexed by
+[`code-380-preparation.json`](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/code-380-preparation.json)
+(SHA `2d83109c13a8c5f58054093a603d2c304575c0b06c7f84066f6db923174f8f78`)
+and its existing [activation commands](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/code-380-activation-commands.txt).
+Native source remains frozen `1ccde5715`, including the historical booking374
+APPLIED receipt (`db4fcdd00ac531bde866174b32e31771bedc619f40437309133f1629f8336579`);
+coordinator documentation is separately `399b08daf`. No source is reapplied.
+The actual [374 retirement proof](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/root-retirement-374.json)
+(`d7157ed9a82ec3e7181930dbd51fafbb0a41e998fedaad8c0229dd80629b0e58`)
+and raw failure remain required historical inputs. Compile admission requires
+at least **600 seconds remaining immediately before Cargo**, with a 900-second
+phase maximum; cached four-case execution retains its 300-second maximum.
+The copied NativeJob classes and complete cleanup tails are byte-identical to374.
+Desktop commands end by22:45, native cleanup by22:46, root terminal proof
+by22:47, and visible replay plus ordinary-app recovery by22:49. Fresh380
+keepers, exact source/input checks, real four IPC passes and external controller
+terminal0 are prerequisites; no Windows execution or producer/UI pass is claimed.
+The combined30-minute budget remains uncertain: late compilation/checks defer
+remaining desktop/UI work without weakening gates, changing Release/LTO or
+replacing retained production resources.
+
 It retains the applied source and composed gate, preserves the failed attempt,
 uses fresh output paths and gives Compile at least ten minutes. Four actual
 Windows ConPTY IPC cases, updated desktop build and visible Stop/Restart replay
@@ -299,7 +323,8 @@ not replace the installed replay or establish the recorded Channel arrival
 order. Required Windows command, after root admission:
 
 ```sh
-cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features test-tauri windows_terminal_ -- --test-threads=1
+cargo test --release --no-default-features --features test-tauri --lib core::terminal::tests::windows_terminal_ --no-run
+cargo test --release --no-default-features --features test-tauri --lib core::terminal::tests::windows_terminal_ -- --test-threads=1 --nocapture
 ```
 
 Reuse canonical dependency/build caches and the accepted Windows ICO prerequisite;
@@ -724,7 +749,9 @@ available receipt.
 | Owner / exact path | Purpose and retention |
 | --- | --- |
 | Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Owned tree retired after remote/tip/live-use checks; branch and concise evidence retained. |
-| Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Current composed source; active job/build inventory in the integration authority. |
+| Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Retired after published source and live-use checks; external evidence and branches retained in the integration authority. |
+| Windows acceptance `/ai/gchat-worktrees/terminal-stop-ui-574d`, branch `fix/gchat-terminal-stop-ui` | Native producer freeze `1ccde5715`; composed checked source `210d642ba`; coordinator docs `399b08daf` are separate. Retain this unmerged candidate and all374 failure/source proofs. |
+| Windows acceptance `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/`, native `C:\Users\Ron\AppData\Local\GChat\remaining-acceptance-20261010/` | Source-accepted380 proposals and full file/patch hashes are indexed by `code-380-preparation.json`; fresh native `pty-stop-code-210d-380-{compile,test}`, `frontend-code-1ccde5715-380`, `desktop-code-1ccde5715-380`, `desktop-ui-code-1ccde5715-380` are future owned outputs only. No380 job exists; root admission/execution remains pending. Keep all accepted353/367/574d/7d9 artifacts, actual374 APPLIED/FAIL and shared caches. |
 | `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Integrated implementation through `574d73df7`; this record owns current runtime acceptance. Retain source and reused build caches. |
 | `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; corrected candidate desktop UI acceptance remains pending. No disk-cleanliness claim. |
 | Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
