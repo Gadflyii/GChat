@@ -71,10 +71,15 @@ the visible UI remains Stopping at 16:26:11. Normal restart succeeds at
 16:31:17 with Engine/API0 and protected state preserved.
 The isolated `fix/gchat-terminal-stop-ui` candidate starts from `88ba8b762`
 (product-identical to `574d73df7`) and orders shared terminal snapshots/events
-by native generation and sequence. Independent source review accepts it; root's
-focused frontend run passes 21/21 at 16:44 UTC. The existing navigation fixture
-has a prepared act-warning correction, pending rerun; typecheck and composed/
-native gates remain pending. This does not claim installed acceptance.
+by native generation and sequence. Independent source review accepts product
+`2684a6c70` and fixture tip `57507c234`. Root's final focused run passes 21/21
+without act warnings; typecheck, affected hook/type lint and Linux all-target
+release check/strict Clippy pass. The full web suite passes 1,962 tests across
+227 files with five skipped and unrelated diagnostics retained. These checks
+are source evidence; full `make verify`, updated Windows IPC/native checks and
+installed Stop replay remain pending. The installed `574d73df7` UI still fails
+Stop despite native exit. [Remaining acceptance](remaining-acceptance.md#embedded-terminal-status-ordering)
+links the exact receipts and retained original warning log.
 [Remaining acceptance](remaining-acceptance.md) records the exact owners and
 supported scan evidence. Ron authorized keeping the existing AUTO Muse profile
 after preservation verification; functional replay still requires fresh Ready

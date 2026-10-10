@@ -235,16 +235,32 @@ with fresh output after the spawn reply, duplicate replay, old-generation
 attachment, failed live Stop with retry, native reader/waiter error status and
 the shared Hermes surface. The existing real Windows denied-stop/retry test now
 checks actual Tauri Stop/status IPC sequence and unchanged native ownership.
-Independent source review accepts the fix. Root's admitted focused frontend run
-passes 21/21 at 16:44 UTC (`code-ui-stop-focused-2684.log` in the existing OI-068
-packet). Two act warnings in the existing entry/navigation fixture prompted an
-async act wrapper around each navigation; its rerun is pending. No Rust build or
-model run has executed for this candidate. Root must admit typecheck, the four
-Windows ConPTY cases and composed gate before any candidate UI replay:
+Independent source review accepts product `2684a6c70`; fixture tip `57507c234`
+only wraps the existing navigation updates in async act. Root's final admitted
+focused run passes 21/21 at 16:45:35 UTC without act warnings. Typecheck exits 0;
+affected hook/type ESLint exits 0 at 16:46 (the current lint configuration ignores
+tests). Preserve both `code-ui-stop-focused-2684.log`, with the original two act
+warnings, and corrected `code-ui-stop-focused-5750.log`, plus
+`code-ui-stop-typecheck-2684.log` and `code-ui-stop-lint-5750.log`, in the existing
+OI-068 packet.
+
+The reused booking365 container passes Linux all-target release/locked/offline
+`test-tauri` check in 41.72 seconds and strict Clippy in 10.67 seconds. Its exact
+container is removed at 16:49:39 UTC and the canonical build guard is reacquired
+and released. `build-365-terminal-2684-proposed/output/focused-check-result.json`
+records those source checks and their exclusions. Full web-suite evidence is
+`code-ui-stop-web-suite-5750.log`: 227 files and 1,962 tests pass, five tests are
+skipped, and unrelated act, DialogDescription and Shiki URL diagnostics remain
+visible. This suite is not warning-free.
+
+No model run or updated Windows build/IPC test has executed for this candidate.
+Full `make verify`, the four updated Windows ConPTY cases, new installer
+qualification and installed visible Stop/Restart replay remain pending. Current
+installed `574d73df7` still retains the actual UI FAIL above; source checks do
+not replace it or establish the recorded Channel arrival order. Required
+remaining commands, after root admission:
 
 ```sh
-yarn workspace @gchat/web-app test src/containers/__tests__/CodeTerminalHost.test.tsx src/containers/__tests__/HermesTerminalHost.test.tsx
-make typecheck
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features test-tauri windows_terminal_ -- --test-threads=1
 make verify
 ```
