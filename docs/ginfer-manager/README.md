@@ -71,7 +71,32 @@ background startup, `--window`, close/hide, tray reopen and Exit while retaining
 the same Host; verify visible startup and ordinary close on an actual missing
 watcher desktop, and the explicit `--no-tray` fallback. Verify absent-tool and
 unreachable-bus fallback within the probe deadline. No fake lifecycle test,
-native operation, build, provider/dependency change or model load has run.
+candidate native operation or build has run; provider/dependency changes and
+model loads remain excluded from this tray check.
+
+October 10 admission: S2 Ron's X11 session remains active with the recovered
+session bus and XAUTHORITY path; current desktop tools and 50.6 GiB free disk
+are verified in `out/remaining-acceptance-20261009/oi071/s2-remote-admission-readonly-20261010.json`.
+A separate campaign owns its running Engine and FIFO slot. No GChat process is
+running there before this screen. FIFO row 806 ran the accepted `54c931c68`
+Manager in a fresh child-local XDG fixture from 14:34:43 to 14:42:43 UTC.
+The actual Pair dialog's Check secure storage reported ready; Cancel dismissed
+the dialog without pairing. The fixed 480-second timeout ended the process
+with code 124, and its exact PID was absent afterward. Native tray Open/Exit
+remains unqualified because automation could not safely identify its icon.
+The installed AT-SPI typelib and already-running accessibility registry now
+provide a possible exact-name/bounds route for native tray clicks. Actual item
+exposure remains unproven; use no guessed coordinates or private callbacks.
+Evidence: `out/remaining-acceptance-20261009/oi071/s2-row806-native-storage-tray-20261010.json`.
+This baseline screen created no Host, model, pairing grant or fleet catalog,
+used no original state, and does not qualify the new Hide behavior. The archive
+remains staged at `/home/ron/.local/share/GInfer/oi071-manager-54c931c68`.
+Keep the same fixture available for the corrected
+artifact's full pairing/restart/lifetime check. The new Manager's focused Linux
+checks and build are reserved on local CPUs at 15:50–16:10 UTC, using the
+existing Ubuntu24 image and shared Cargo target; no dependency or Engine build.
+Windows desktop/NSIS remains at 15:05–15:15. Recheck disk and exact owners at
+actual admission, and keep the 2 GiB disk floor.
 
 ### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
 
@@ -666,8 +691,10 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
+| S2 native provider fixture / GChat coordinator | `/home/ron/.local/share/GInfer/oi071-manager-54c931c68` | Accepted54 baseline; FIFO806 completed with native secure-storage readiness PASS, timeout124 and exact Manager absent. Tray Open/Exit remains unqualified. Retain fixture/evidence for corrected-artifact pairing/lifetime acceptance; original Host/state/models preserved, no Host/model/grant created. |
 | Linux tray lifecycle / GChat coordinator | `/ai/gchat-worktrees/oi071-linux-tray` | Source candidate from `85f0bac2047c70cfa219ea8ef334367faf966138`, branch `fix/gchat-oi071-linux-tray`; shared tray close/start flow and this subject record. Retain for independent review and admitted compilation/native tray checks; no build, dependencies, models or live job allocated. |
-| Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, three observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
+| Retired stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Removed October 10 after clean/upstream/live-use checks; source is integrated at `574d73df7`, and branch `fix/gchat-manager-stopped-error-7d9` remains published at `ce6b9ff40`. Installed and focused-check evidence retained. |
+| Retired current-user NSIS / GChat coordinator | `/ai/gchat-worktrees/current-user-nsis-7d9` | Removed October 10 after clean/upstream/live-use checks; product patch is integrated at `1a9044e65`, and branch `fix/gchat-current-user-nsis-7d9` remains published at `d6da84677`. Both retired trees released 551,276,544 allocated file bytes; accepted packages, active candidates and shared caches remain intact. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |

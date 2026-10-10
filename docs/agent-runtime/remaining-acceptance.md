@@ -39,8 +39,14 @@ local fleet is unconfigured. Read-only strict-key/BatchMode SSH to
 That earlier query found only the GDM greeter and SSH sessions. A fresh read-only
 query at 12:19:11 UTC now proves Ron's active X11 `:1` session, both tray
 providers and Secret Service (`oi071/s2-logged-in-readonly-20261010.json`).
-The selected accepted Manager/Host pair is missing; the existing Host has a
-different SHA. No deployment, app start or provider activation has run.
+The accepted Manager/Host pair is now staged in a separate S2 child-XDG fixture;
+the existing Host and its ordinary state remain intact. FIFO row 806 ran the
+baseline Manager at 14:34:43–14:42:43 UTC. Native Check secure storage displayed
+ready; Cancel dismissed the Pair dialog without pairing. The fixed timeout
+ended it with code 124 and the exact Manager PID was absent afterward. Tray
+Open/Exit remains unqualified because no safe icon target was available.
+This screen created no Host, model or pairing grant; it does not qualify the
+new tray lifecycle correction.
 The accepted four-file archive and S2 Ubuntu 24.04.3/glibc 2.39/GTK/WebKit/Soup
 prerequisites match (`oi071/s2-compatibility-package-proposal-20261010.json`).
 Physical pool checks need designated available
@@ -84,8 +90,10 @@ continuation, original-run reporting and stock persistence evidence below.
 Preserve user histories, definitions, settings, profiles, grants, existing agent
 budgets, caller identity and actual loaded capacity. A model-backed check needs
 a compatible actually Ready instance and both canonical GPU/build guards for its
-whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
-profile controls or widened folder permissions. Final Stop keeps the explicitly
+whole lifetime. No UAC, provider/dependency installation, original Server 2 state
+changes, reduced profile controls or widened folder permissions. The authorized
+S2 native tray/vault fixture uses its FIFO and leaves other owners' jobs intact.
+Final Stop keeps the explicitly
 authorized AUTO profile; restore normal apps and prove Engine absence before
 guard release.
 
@@ -187,9 +195,12 @@ Engine/API counts are zero and guards are released.
 CPU-only booking353, 15:05–15:15 UTC, has an accepted source proposal for the
 owning build body: relative `frontendDist`
 `../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
-assets as a Directory. This is nonexecution evidence; actual build, install and
+assets as a Directory. This is nonexecution evidence; actual build, desktop refresh and
 candidate UI remain pending. The proposal is in
 `oi068-windows-20261010/production-frontend-directory-574d73df7-proposed/`.
+After that build passes, the approved 16:10–16:25 UTC window refreshes only
+the desktop executable. Keep installed Manager, Host, Engine and saved state;
+produce and verify NSIS separately without executing it in this refresh.
 Next action: execute the admitted desktop/NSIS build and verify ordinary installed GChat UI before Code
 Stop replay and authorized AUTO functional acceptance. Reuse valid Manager,
 Host/CLI, Engine and state-preservation evidence at its recorded scope.
@@ -482,14 +493,17 @@ evidence does not supersede those packages. The WSLg desktop lacks the required
 providers, but the fresh 12:19:11 UTC read-only S2 query proves Ron's active X11
 `:1`, an X11 tray owner, StatusNotifierWatcher and Secret Service. Evidence is
 `out/remaining-acceptance-20261009/oi071/s2-logged-in-readonly-20261010.json`.
-The existing Host has a different SHA and the selected accepted Manager/Host
-pair is missing. The next step is to verify that exact pair's compatibility and
-launch prerequisites on the desktop Ron designated; no deployment or app start
-has run.
+The accepted Manager/Host pair is now staged in the isolated S2 fixture.
+FIFO806's actual baseline Manager screen passes native secure-storage readiness;
+its timeout124 and exact PID absence are recorded in
+`oi071/s2-row806-native-storage-tray-20261010.json`. No Host or grant was created,
+and tray Open/Exit remains unqualified. The corrected Linux Manager build is
+reserved for 15:50–16:10 UTC; its actual lifecycle and pairing checks remain next.
 On that desktop, use the actual Manager/Host pair, pair through the native vault,
 restart Manager and restore the saved grant, then use Show/Hide and Exit tray
-actions while checking that the same Host remains alive. No provider install,
-Linux deployment or credential changes were attempted here.
+actions while checking that the same Host remains alive. No provider install or
+original deployment/credential change was attempted; only the readiness probe's
+temporary native-vault set/read/delete was exercised.
 
 ## Installed community publication
 
@@ -612,6 +626,7 @@ available receipt.
 | Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Owned tree retired after remote/tip/live-use checks; branch and concise evidence retained. |
 | Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Current composed source; active job/build inventory in the integration authority. |
 | `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Integrated implementation through `574d73df7`; this record owns current runtime acceptance. Retain source and reused build caches. |
+| Retired `/ai/gchat-worktrees/current-user-nsis-7d9` and `/ai/gchat-worktrees/manager-stopped-error-7d9` | Removed after integrated-patch, clean/upstream and live-use checks. Published branches and acceptance evidence remain; 551,276,544 allocated file bytes released. Current candidates, packages and shared caches retained. |
 | `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; corrected candidate desktop UI acceptance remains pending. No disk-cleanliness claim. |
 | Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
 
