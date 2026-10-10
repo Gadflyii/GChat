@@ -71,10 +71,31 @@ whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
 profile controls or widened folder permissions. Restore the exact stopped
 original profile and normal apps, and prove Engine absence before guard release.
 
-Next action: finish strict native checks on frozen `9a4caa1c3`, then build and
-verify the complete production packages, update the local apps and replay Code
-Stop. Booking 331 ends at 08:10 UTC; production and model-backed acceptance
-continue in booking 337, 09:15–10:00 UTC, without overlapping other owners.
+Next action: build and independently verify the complete production packages
+from frozen `7d9a8f689`, update the local apps and replay Code Stop. Native
+all-target check and strict Clippy already pass on unchanged Rust source
+`9a4caa1c3`; do not repeat those gates or the four passing CCC ConPTY tests.
+Booking 331 ended at 08:08:44 UTC with both guards released. Production and
+model-backed acceptance use booking 337, 09:15–10:00 UTC, without overlapping
+other owners.
+
+Installer review found an obsolete pre-uninstall macro that stops helpers by
+shared executable names and uses a PowerShell policy bypass. No live uninstall
+or unrelated-process loss was observed. Source `7d9a8f689` removes that macro;
+the optional post-uninstall data block is byte-identical. Independent review
+accepts the cached NSIS template's conditional macro insertion and unchanged
+Rust/ConPTY inputs. GCHAT-UNINSTALL-PROCESS-SCOPE is on the master list.
+
+Use the supported NSIS `/S /UPDATE` path to skip the installed old NSIS
+uninstaller. Verify the freshly generated script's `currentUser` and
+`RequestExecutionLevel user` behavior, exclude matching WiX/MSI migration, and
+require no running current-user `gchat.exe` before launch to avoid the template's
+name-based fallback. No `/R`, elevation or policy bypass. Close the verified
+clients gracefully and stop only the exact idle Host handle after successful
+scan/persistence flush, stopped instances and no active downloads. Verify
+installed payloads and full original-thread byte preservation before acceptance.
+The prepared packet under the existing OI-068 evidence folder is preparation,
+not proof of a generated package or installed update.
 Frozen `37aa7beed` compiled successfully; the actual four-case run completed
 at 06:32:29 UTC with three passes and one failure: `cmd.exe /D /C "exit 7"`
 did not signal exit within five seconds. The real Stop/waiter, denied Stop
@@ -202,8 +223,9 @@ This corrects the insufficient whole-compile deadline; compilation is not a
 passing test. Release unused reservation time at actual END and recheck inbox,
 booking and actual ownership before execution.
 
-Owned inventory for this continuation: the clean candidate tree is
-`/ai/gchat-worktrees/remaining-acceptance-bd4`; frozen source is `9a4caa1c3`.
+Owned inventory for this continuation: the candidate tree is
+`/ai/gchat-worktrees/remaining-acceptance-bd4`; frozen package source is
+`7d9a8f689`, with accepted Rust checks at `9a4caa1c3`.
 Retain the existing native extraction and shared Windows target cache at
 `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/source` and
 `%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` for the next

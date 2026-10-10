@@ -13,11 +13,16 @@ actual Code prerequisite/stop failure and ordered unresolved platform checks.
 
 The Code Stop correction has four actual native ConPTY test passes at
 `ccc9ab250`, including the cursor-query reply and natural exit-7 fixture.
-Current frozen source `9a4caa1c3` adds the boxed Host owner and four Windows
+Verified Rust source `9a4caa1c3` adds the boxed Host owner and four Windows
 network and desktop helper corrections needed by strict Clippy. Focused Host
 tests, current Unix checks and current native all-target check/strict Clippy pass. Installed
-Windows apps are unchanged. Booking 331 ends at 08:10 UTC; production refresh
-and installed acceptance continue in booking 337, 09:15–10:00 UTC.
+Windows apps are unchanged; booking 331 ended at 08:08:44 UTC with both guards
+released. Frozen package source `7d9a8f689` additionally removes the obsolete
+NSIS process-killing pre-uninstall hook. Its optional post-uninstall data behavior
+is unchanged, and Rust/ConPTY inputs retain their accepted evidence. Production
+refresh and installed acceptance use booking 337, 09:15–10:00 UTC. The supported
+ordinary-user NSIS `/S /UPDATE` route skips the old NSIS uninstaller; admission
+must exclude WiX migration and running GChat processes.
 
 The installed baseline's composed source gate at `0f06ba433` passes `make verify` at
 21:17 UTC: 2,112 frontend/core checks (six skipped), 102 extension checks,
