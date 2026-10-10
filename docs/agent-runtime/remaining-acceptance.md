@@ -57,6 +57,20 @@ regressions and one installed visible replay after its source correction.
 Broader OI-068 model/tool/worker acceptance remains incomplete. No new build,
 model request or full suite ran in391/392.
 
+Both source startup defaults are now false on `fix/gchat-startup-defaults`.
+Legacy missing keys resolve false; explicit saved true/false choices survive.
+The owning hook regressions pass15 selected cases in1.30s;44 unrelated cases
+were excluded by the name filter, not treated as passes. Production hooks pass
+ESLint; its configured test-file exclusions remain explicit. The Yarn launcher
+could not write the shared install-state cache, so the existing installed
+ESLint binary supplied the source check without package changes. No desktop
+rebuild ran; the installed flags and unbuilt default change are different scopes.
+The [startup decision](../decisions/2026-10-10-default-model-and-api-startup-off.md)
+replaces the old automatic opt-in policy. The working tree now owns this narrow
+startup branch; accepted Stop branch `fix/gchat-terminal-stop-ui` remains at
+`ac3c7a5db` for normal merge. Next source work belongs to a separate reconnect
+candidate, with no change to the accepted installed baseline.
+
 Pre-Cargo failures are preserved separately: historical-PID stderr handling,
 missing admitted guard arguments in the suspended child, and a test-generated
 empty staged catalog. Explicit existence status and child argument propagation
