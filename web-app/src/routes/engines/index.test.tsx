@@ -44,7 +44,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('Engines host intake and launch controls', () => {
-  it('keeps launch and details independently collapsed without hiding host controls', () => {
+  it('keeps launch and details independently collapsed without hiding host controls', async () => {
     render(<Page />)
     const launch = screen.getByText('Launch Server Instance', { selector: 'summary' })
     const details = screen.getByText('Server details', { selector: 'summary' })
@@ -57,13 +57,15 @@ describe('Engines host intake and launch controls', () => {
     fireEvent.click(launch)
     expect(details.closest('details')).toHaveAttribute('open')
     expect(launch.closest('details')).not.toHaveAttribute('open')
+    await screen.findByText('Secure credential storage is ready for LAN pairing.')
   })
 
-  it('shows the automatic local host without a forget action', () => {
+  it('shows the automatic local host without a forget action', async () => {
     mocks.local = true
     renderExpandedPage()
     expect(screen.getByText('Local host')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Forget' })).not.toBeInTheDocument()
+    await screen.findByText('Secure credential storage is ready for LAN pairing.')
   })
   it('shares independently of discovery', async () => {
     mocks.local = true
@@ -76,10 +78,11 @@ describe('Engines host intake and launch controls', () => {
     await waitFor(() => expect(share).toBeEnabled())
   })
 
-  it('does not change sharing on a remote host', () => {
+  it('does not change sharing on a remote host', async () => {
     renderExpandedPage()
     expect(screen.getByRole('checkbox', { name: 'Share this host' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Generate pairing code' })).not.toBeInTheDocument()
+    await screen.findByText('Secure credential storage is ready for LAN pairing.')
   })
 
   it('offers Pair and Ignore for a discovered host without requiring address selection', async () => {
@@ -211,7 +214,7 @@ describe('Engines host intake and launch controls', () => {
     }))
   })
 
-  it('retains unavailable host inventory without permitting a new load', () => {
+  it('retains unavailable host inventory without permitting a new load', async () => {
     mocks.error = 'error sending request for url (https://192.168.1.111:7444/host/v1/snapshot): tcp connect error: connection refused (os error 10061)'
     renderExpandedPage()
     fireEvent.click(screen.getByText('Custom server settings'))
@@ -222,6 +225,7 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/error sending request/)).not.toBeInTheDocument()
     expect(mocks.command).not.toHaveBeenCalledWith('launch', expect.anything())
+    await screen.findByText('Secure credential storage is ready for LAN pairing.')
   })
   it('blocks pairing when storage is unavailable even after skipping setup', async () => {
     mocks.command.mockResolvedValue({ ready: false, platform: 'linux', can_install: false })

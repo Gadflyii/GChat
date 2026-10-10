@@ -216,6 +216,42 @@ Canonical build guards are released; all owned check processes ended before
 new defect fixes and measured performance changes use separate master-list
 items and branches.
 
+## Web-test diagnostic fixtures
+
+The active `fix/gchat-web-test-hygiene` candidate at
+`/ai/gchat-worktrees/web-test-hygiene-399b` starts from `399b08daf`
+(product `1ccde5715`). Its outcome is meaningful fixture synchronization and
+local asset/native-preview boundaries for the actual act, DialogDescription and
+Shiki diagnostics retained by the passing booking369 gate. Product behavior,
+dependency and shared mock values, console/fetch behavior and dedicated
+highlighting, WASM-asset and cancellation checks stay unchanged. No test is
+skipped or muted.
+
+The source-reviewed three-fixture proposal is
+`out/remaining-acceptance-20261009/oi068-windows-20261010/web-test-diagnostics-next.patch`.
+The actual diagnostic source is
+`build-369-terminal-2684-r3/output/make-verify.log` in that packet; its
+`current-result.json` remains baseline evidence rather than candidate evidence.
+The proposal is applied. Shared teardown now unmounts consumers before clearing
+native mocks and resetting their service store. Source inspection establishes
+the previous live-subscriber reset ordering; warning reduction is unmeasured.
+Direct fixture updates cover credential readiness, message persistence, first
+history search, modal mutation, shared project loading and model statistics.
+Layout and tool-disclosure fixtures keep their real text/preview assertions
+through file-local highlighter and native IPC boundaries.
+
+The retained gate contains 118 act warnings, one DialogDescription warning, one
+missing artifact IPC error and four Shiki URL errors. Five HtmlArtifact act
+warnings have no established individual source cause; the last Shiki error is
+attributed only to `code-block.tsx` by that log. The existing diagnostic inventory
+and smallest focused selector are in
+`out/remaining-acceptance-20261009/oi068-windows-20261010/web-test-hygiene-source-399b.json`.
+Root and independent source review accept the candidate. The highlighter waits
+require a marker emitted by resolved fixture HTML, so synchronous fallback text
+cannot satisfy them. Next is the focused check after the 22:20 UTC CPU quiet
+boundary. Candidate tests are **unrun**; no full-suite run,
+native app action or model run is admitted by this preparation.
+
 ## Implementation and verification
 
 The [quality review](gchat-quality.md) records the accepted source changes and
@@ -269,6 +305,7 @@ Process visibility and bounded path scope are recorded in
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
+| Web-test fixtures / local Linux | `/ai/gchat-worktrees/web-test-hygiene-399b`, `fix/gchat-web-test-hygiene` | Active source-only candidate from `399b08daf`; no build or live job; retain through source review and root-admitted verification |
 | Review coordinator / local Linux | `/ai/gchat-worktrees/review-host-manager-a7003488` | Retired after accepted main0dd5d45ce publication and fresh zero-reference checks; branch/build/evidence retained |
 | Remediation coordinator / local Linux | `/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c` | Accepted OI-111–114/120–122 source candidate; local/remote branch and external logs stay. Filesystem retirement and protected paths are tracked in the existing `out/manager-kv-startup-20261008/drain-hygiene-not-deleted.md` |
 | Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Retired after committed/pushed ancestry and live-use checks; two unique coverage summaries retained externally |

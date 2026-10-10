@@ -374,7 +374,9 @@ describe('Dialog Components', () => {
           <DialogHeader>
             <DialogTitle>Dialog Title</DialogTitle>
           </DialogHeader>
-          <p id="custom-description">Custom description text</p>
+          <DialogDescription>
+            <span id="custom-description">Custom description text</span>
+          </DialogDescription>
         </DialogContent>
       </Dialog>
     )
@@ -383,6 +385,7 @@ describe('Dialog Components', () => {
 
     const dialogContent = screen.getByRole('dialog')
     expect(dialogContent).toHaveAttribute('aria-describedby', 'custom-description')
+    expect(dialogContent).toHaveAccessibleDescription('Custom description text')
   })
 
   it('applies data-slot attributes to components', async () => {
