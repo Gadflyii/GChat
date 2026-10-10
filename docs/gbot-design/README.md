@@ -4,8 +4,10 @@ Gbot is a persistent assistant feature to be embedded in GChat and also included
 in the paid Arbitor product. That product placement is confirmed; the runtime
 and workspace design below remains proposed. Gbot would retain
 its identity, conversations, tasks and working memory, use the shared agent
-runtime, and operate a computer workspace on a local machine, a LAN host or a
-cloud VM. Closing the GChat window would leave the service and its work running.
+runtime, and operate a computer workspace on a local machine or LAN host within
+GChat's current scope. Closing the GChat window would leave the service and its
+work running. Earlier cloud possibilities are retained below without a product
+assignment or support claim.
 
 Status: initial design, October 10, 2026. The requested deliverable is this draft;
 implementation, dependency installation and VM provisioning are outside this
@@ -14,15 +16,19 @@ dependency versions remain to be selected.
 
 ## Product placement
 
-GChat owns the embedded Gbot feature described here. Gbot is also part of the
-paid Arbitor product; this draft does not define Arbitor's wider product scope.
+GChat is the open release: its front end, lightweight infrastructure management,
+LAN-only operation, agent builder and support, prebuilt skills and integrations,
+and embedded Gbot feature form the base product. Arbitor is a paid product built
+on GChat, adding security, logging, cost management, rules engines and related
+paid layers. All GChat work carries into Arbitor; paid features do not belong in
+GChat.
+
 The persistent service is an execution component of the feature, not a decision
 to ship a separate Gbot application.
 
-Commercial features, usage limits, licensing and distribution remain undecided.
-The confirmed placement does not establish GChat pricing, a paywall, feature
-tiers or shared commercial terms between GChat and Arbitor. Cua component license
-review remains a separate adoption requirement.
+Those product categories are confirmed. Exact pricing, license, distribution,
+limits and feature details remain unspecified. Cua component license review
+remains a separate adoption requirement.
 
 GInfer OI-145 CPU inference is separate work. This Gbot draft neither selects
 its implementation nor makes CPU inference a prerequisite for computer control;
@@ -32,13 +38,13 @@ inference assignments and computer workspaces remain distinct.
 
 | Area | Current direction | Status |
 | --- | --- | --- |
-| Product placement | Embedded GChat feature and part of paid Arbitor. | Confirmed; commercial boundaries remain open |
+| Product placement | GChat open base with embedded Gbot; paid Arbitor builds on all GChat work and adds its paid layers. | Confirmed; exact terms and details remain open |
 | Agent capabilities | Reuse GChat's agent definitions, skills, tools, connectors and inference work pools. | Proposed; follows the user's shared-runtime direction |
-| Computer workspace | Attach an existing VM or provision one where the selected provider supports it. | Requested design scope |
+| Computer workspace | Attach a local/LAN VM or provision one where the selected local/LAN provider supports it. | GChat scope; provider choice pending |
 | Computer control | Use Cua Driver for capture and input; use Cua SDK for supported lifecycle operations. | Proposed foundation |
 | Persistent execution | Run the coordinator as a service independently of the GChat desktop process. | Proposed |
-| Initial connection | Linux workspace with SSH carrying remote MCP and command/file access. | Proposed first integration |
-| Other environments | Windows guests and Windows 365 use the same workspace contract after their session and connection requirements are established. | Candidates, not qualified support |
+| Initial connection | Local/LAN Linux workspace with SSH carrying remote MCP and command/file access. | Proposed first integration |
+| Other environments | Local/LAN Windows guests require session and connection qualification; cloud VMs and Windows 365 have no product assignment. | Historical cloud candidates are outside current GChat LAN scope |
 
 The design is ready for discussion when it explains the service boundaries,
 workspace requirements, SSH's role, persistence, control ownership and open
@@ -54,7 +60,7 @@ flowchart LR
     Bot --> Tools["Shared skills, tools and connectors"]
     Bot --> Adapter["Workspace adapter"]
     Adapter --> SDK["Cua SDK: supported lifecycle operations"]
-    Adapter <--> Guest["Local, LAN or cloud workspace"]
+    Adapter <--> Guest["Local or LAN workspace"]
     Guest --> Driver["Cua Driver in the desktop session"]
 ```
 
@@ -63,8 +69,15 @@ adapter translates the existing capability executor's calls into operations on
 the selected workspace. Cua supplies the computer mechanics; Gbot supplies task
 semantics, permissions, scheduling, memory and presentation.
 
+Keep the GChat base clean, with explicit extension points at the shared runtime,
+workspace and infrastructure-management boundaries for Arbitor's paid layers.
+Arbitor reuses the base contracts and behavior; its security, logging, cost and
+rules implementations remain outside GChat. The extension interfaces and paid
+feature details still require design; no plugin mechanism or code is selected
+by this draft.
+
 Inference stays separate from computer execution. A workspace can use a ready
-GInfer instance elsewhere; it does not require a local inference GPU. Desktop
+GInfer instance on the LAN; it does not require a local inference GPU. Desktop
 capture and input alone do not establish that an assigned model can interpret
 images, plan reliable GUI actions or satisfy the task. Reasoning directly over
 screenshots requires an appropriate model and a ready Vision route; control
@@ -107,6 +120,9 @@ the intended browser, applications and workload determine those requirements.
 Separate three responsibilities: creating or starting a machine, installing or
 starting its worker, and carrying computer/tool operations. Attaching an existing
 VM needs the latter two; it does not require a provider provisioning integration.
+The proposed GChat connection below stays within local/LAN scope. The originally
+requested cloud VM and Windows 365 possibilities are retained as unassigned
+options outside that scope; they are not qualified Arbitor support either.
 
 ### SSH for the first Linux workspace
 
@@ -131,10 +147,10 @@ SSH can tunnel it; authentication and task ownership remain enforced by Gbot.
 | --- | --- | --- |
 | Local VM | Local hypervisor connection plus guest worker or SSH | Use Cua SDK where the chosen runtime is supported. A desktop must remain available while the bot works. |
 | LAN VM | SSH to its guest or an authenticated worker | The hypervisor and inference host can be different machines. |
-| Ordinary cloud Linux VM | SSH initially; worker connection later if needed | Attach an existing machine without requiring provider-specific creation support. |
-| DigitalOcean Droplet | Existing Droplet attached over SSH | DigitalOcean documents SSH access to its Linux VMs. Provisioning and a graphical guest image are separate integration choices. |
-| Windows VM | Worker in the intended user desktop session | Remote shell availability, capture, input and behavior after remote-desktop disconnect need separate checks. |
-| Windows 365 Cloud PC | Candidate worker installed in its user session, with an outbound connection where permitted | Validate installation policy, unattended desktop availability and task continuity. Do not assume a publicly reachable SSH endpoint or ordinary inbound RDP. |
+| Local/LAN Windows VM | Worker in the intended user desktop session | Remote shell availability, capture, input and behavior after remote-desktop disconnect need separate checks. |
+| Ordinary cloud Linux VM | Historical possibility: SSH, then a worker connection if needed | Outside current GChat LAN scope; product assignment and qualification undecided. |
+| DigitalOcean Droplet | Historical possibility: existing Droplet over SSH | Outside current GChat LAN scope; provisioning, graphical image and product assignment undecided. |
+| Windows 365 Cloud PC | Historical possibility: worker in its user session | Outside current GChat LAN scope; product assignment, installation policy and unattended-session behavior undecided. |
 
 DigitalOcean describes Droplets as Linux VMs accessed through SSH; that does not
 establish a preinstalled graphical desktop or Cua provider integration.
@@ -147,17 +163,21 @@ does not promise compatibility from the availability of remote desktop alone.
 [Cloud PC access](https://learn.microsoft.com/en-us/windows-365/end-user-access-cloud-pc),
 [Windows 365 connectivity](https://learn.microsoft.com/en-us/windows-365/enterprise/understanding-remote-desktop-protocol-traffic)
 
-Cloud placement does not guarantee continuous service: the coordinator, guest
-and model endpoint must all remain available. A cloud workspace connected to an
+For those unassigned possibilities, cloud placement does not guarantee continuous
+service: the coordinator, guest and model endpoint must all remain available.
+A cloud workspace connected to an
 inference workstation cannot continue inference while that workstation is off.
 
 ## Cua component selection
 
-Use the SDK for supported machine lifecycle and service connections and Driver
-for desktop capture/input. Cua's documented own-cloud path covers AWS, Google
-Cloud and Modal and uses a Cua account/relay. Its default sandbox lifetime is
-eight hours. Persistent Gbot workspaces need deliberate lifetime and disk
-retention settings. A self-hosted SSH connection is a separate proposed path.
+Use the SDK for supported local/LAN machine lifecycle and service connections and
+Driver for desktop capture/input. For the unassigned historical cloud options,
+Cua's documented own-cloud path covers AWS, Google Cloud and Modal and uses a
+Cua account/relay. Its default sandbox lifetime is
+eight hours. That provider route is outside current GChat LAN scope and does not
+assign cloud support to Arbitor. Persistent Gbot workspaces need deliberate
+lifetime and disk retention settings. Self-hosted local/LAN SSH is the proposed
+GChat path.
 [Cua SDK](https://github.com/trycua/cua/blob/main/libs/cua/README.md),
 [Cua cloud deployment](https://cua.ai/docs/cua-sdk/guides/your-cloud)
 
@@ -218,7 +238,8 @@ silently shutting down an inference work pool used by other tasks.
 
 ## Initial implementation sequence
 
-1. Establish one Linux workspace's Cua version, desktop session and transport.
+1. Establish one local/LAN Linux workspace's Cua version, desktop session and
+   transport.
    Demonstrate capture, input, command/file access and reconnect with a small
    dedicated fixture. This qualifies the connection, not the persistent bot.
 2. Move shared execution ownership into the service and connect GChat to it.
@@ -226,8 +247,8 @@ silently shutting down an inference work pool used by other tasks.
    history, approvals and actual guest process state.
 3. Add bot memory, schedules and the computer view through that same runtime.
    Verify takeover, cancellation, context compaction and durable results.
-4. Extend the workspace contract to additional tested environments. Keep VM
-   provisioning separate from attachment so provider support grows only where
+4. Extend the workspace contract to additional tested local/LAN environments.
+   Keep VM provisioning separate from attachment so provider support grows only where
    needed.
 
 Implementation acceptance must include an actual selected workspace and model:
@@ -238,16 +259,17 @@ by this design work.
 
 ## Open decisions
 
-- Which Linux VM and desktop should be the first supported workspace?
+- Which local/LAN Linux VM and desktop should be the first supported workspace?
 - Which Cua version and enabled components should we adopt, and do we want its
-  managed relay/Spaces stack or the proposed SSH integration?
+  local/LAN streaming components or the proposed SSH integration?
 - Where should the first Gbot service run: the user's workstation or an always-on
-  local/cloud host?
+  LAN host?
 - Should bots initially share a computer with serialized desktop control, or
   receive separate workspaces?
-- Is Windows 365 a required first release environment or a later qualification?
-- Which commercial features, limits, license and distribution model belong to
-  GChat's embedded feature and Arbitor's paid product?
+- Where, if anywhere, should the historical cloud VM and Windows 365 possibilities
+  belong? They remain outside current GChat LAN scope and unassigned to Arbitor.
+- What are the exact paid-feature details, limits, pricing, license and
+  distribution model for Arbitor, and the release terms for the open GChat base?
 
 ## Current record and inventory
 
@@ -261,7 +283,9 @@ links to it without duplicating the plan.
 | GChat coordinator, local workstation | `/ai/gchat-worktrees/gbot-design-20261010`, branch `docs/gbot-design` | Active draft and focused document checks; retain while the design is discussed |
 
 Current result: initial design and connection analysis, with GChat/Arbitor product
-placement confirmed. Workspace/provider and commercial choices remain open.
+placement and the open-base/paid-layer boundary confirmed. Local/LAN workspace
+providers, extension interfaces and exact commercial terms remain open; historical
+cloud possibilities remain unassigned.
 Readback, local Markdown
 link resolution and `git diff --check` pass. No VM, dependency, computer-control
 test, build or model job is allocated. Next action: resolve the first
