@@ -13,6 +13,22 @@ with the artifacts-only destination before the next release, without relocating
 source. Draft-only behavior is retained; no cross-repository credentials, signing
 or publication are authorized by this documentation change.
 
+Pending source correction after the current Windows acceptance priority:
+`.github/workflows/release.yml:33–35` rejects the development repository; its
+draft action (47–59), release-body edit (119–139) and six payload/signature/manifest
+upload steps (429/439/449/665/675/745) target the executing repository through
+its token and draft upload URL. This is incompatible with the artifacts-only
+decision and is not a ready publication path. Keep workflow execution/checkouts
+in `Gadflyii/GChat`, require that source repository, and explicitly route only
+approved release assets, manifest and release metadata to `SectileLabs/gchat`.
+Use source-read permissions for development checkout and a separately admitted
+destination-scoped Contents-write release credential for draft/edit/upload;
+no credential has been read, supplied or authorized for use. Query the previous
+published release in the destination while keeping commit/PR provenance in the
+source repository. Preserve draft-only behavior and exact final-payload/signature
+gates. This is a source-only proposal for coordinator review, not implemented,
+tested or executed; source relocation is forbidden.
+
 Ron authorized local unsigned preparation; signing/publication await his next
 release. The release workflow and `src-tauri/latest.json.template` cover only
 the supported Windows/Linux products; macOS jobs and manifest branches are removed.
