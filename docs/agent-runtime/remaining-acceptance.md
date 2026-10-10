@@ -293,21 +293,36 @@ Ron subsequently chose Manager's existing `src-tauri/icons/icon.png` as the
 shared GChat/Manager icon. GChat's Windows/Linux tray now loads that PNG
 directly, and its Windows ICO producer uses the same source. Manager already
 embeds that PNG and keeps its existing route. The icon is reused unchanged;
-no new artwork or dependency is introduced. Source review is independent of
-the retained terminal checks. Before execution, the380 packet must bind the
+no new artwork or dependency is introduced. The previous and canonical PNGs
+represent identical pixels; canonical generation may legitimately produce the
+same ICO bytes. Direct PNG tray loading and one source authority are the change.
+Source review is independent of the retained terminal checks. Before execution, the380 packet must bind the
 reviewed new source and two-file native overlay and generate its canonical ICO
 in the admitted slot. The historical1cc/374 application remains unchanged;
 the earlier380 proposal cannot be executed with stale source bindings.
 Ron’s current rule33 limits this run to the four changed Windows terminal cases,
 the necessary desktop build and the installed Stop/Restart replay. Reuse the
 passing Linux evidence; no full suite or unchanged passing check is rerun.
-The independently source-accepted packet is indexed by
+Root and independent source review accept the revised icon packet; the
+previously accepted380 lifetime is retained. The packet is indexed by
 [`code-380-preparation.json`](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/code-380-preparation.json)
-(SHA `2d83109c13a8c5f58054093a603d2c304575c0b06c7f84066f6db923174f8f78`)
+(SHA `565a2748dc557331669031196691e9f97bd1f89b33cf11be5346a229c51b7925`)
 and its existing [activation commands](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/code-380-activation-commands.txt).
-Native source remains frozen `1ccde5715`, including the historical booking374
-APPLIED receipt (`db4fcdd00ac531bde866174b32e31771bedc619f40437309133f1629f8336579`);
-coordinator documentation is separately `399b08daf`. No source is reapplied.
+The [source review](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/code-380-icon-source-review.json)
+records the corrected icon preflight and resource checks. Native execution remains
+pending actual root admission.
+The380 packet now binds committed `3aff66d62` product source with exactly two
+reviewed icon leaves over retained native `1ccde5715`. Historical booking374
+APPLIED receipt remains preserved (`db4fcdd00ac531bde866174b32e31771bedc619f40437309133f1629f8336579`);
+later documentation is separate and is not copied into the native mirror.
+No old ten-file overlay is reapplied; the admitted380 helper applies only the
+two icon leaves, then the owned Compile Job generates a fresh canonical ICO
+using existing Python/Pillow. Only the candidate ICO is exempted from the
+historical resource digest loop; Test/Desktop consume its fresh canonical
+receipt, while every other accepted resource check remains intact.
+Byte-identical ICO output is valid; actual canonical producer invocation is
+required. The historical ICO remains preserved in the
+accepted compiler cache. Actual icon generation and all380 gates remain pending.
 The actual [374 retirement proof](/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/root-retirement-374.json)
 (`d7157ed9a82ec3e7181930dbd51fafbb0a41e998fedaad8c0229dd80629b0e58`)
 and raw failure remain required historical inputs. Compile admission requires
@@ -759,7 +774,7 @@ available receipt.
 | --- | --- |
 | Remaining acceptance `/ai/gchat-worktrees/remaining-acceptance`, branch `dev/gchat-remaining-acceptance-104d4ec6` | Owned tree retired after remote/tip/live-use checks; branch and concise evidence retained. |
 | Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Retired after published source and live-use checks; external evidence and branches retained in the integration authority. |
-| Windows acceptance `/ai/gchat-worktrees/terminal-stop-ui-574d`, branch `fix/gchat-terminal-stop-ui` | Native producer freeze `1ccde5715`; composed checked source `210d642ba`; coordinator docs `399b08daf` are separate. Retain this unmerged candidate and all374 failure/source proofs. |
+| Windows acceptance `/ai/gchat-worktrees/terminal-stop-ui-574d`, branch `fix/gchat-terminal-stop-ui` | Native historical base `1ccde5715` plus prepared two-leaf product overlay `3aff66d62`; composed checked source `210d642ba`; coordinator docs `399b08daf` are separate. Retain this unmerged candidate and all374 failure/source proofs. |
 | Windows acceptance `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/`, native `C:\Users\Ron\AppData\Local\GChat\remaining-acceptance-20261010/` | Source-accepted380 proposals and full file/patch hashes are indexed by `code-380-preparation.json`; fresh native `pty-stop-code-210d-380-{compile,test}`, `frontend-code-1ccde5715-380`, `desktop-code-1ccde5715-380`, `desktop-ui-code-1ccde5715-380` are future owned outputs only. No380 job exists; root admission/execution remains pending. Keep all accepted353/367/574d/7d9 artifacts, actual374 APPLIED/FAIL and shared caches. |
 | `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Integrated implementation through `574d73df7`; this record owns current runtime acceptance. Retain source and reused build caches. |
 | `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; corrected candidate desktop UI acceptance remains pending. No disk-cleanliness claim. |
