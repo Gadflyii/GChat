@@ -101,24 +101,6 @@ fn required_nullable_digest<'de, D: serde::Deserializer<'de>>(
     Option::<String>::deserialize(deserializer)
 }
 
-/// Resolve a declared payload after inventory validation; never guess sibling names.
-pub fn artifact_set_payload(path: &Path, tp: u32) -> Result<PathBuf, String> {
-    artifact_set_members(path)?
-        .into_iter()
-        .find(|(_, metadata)| metadata.tp_size == tp)
-        .map(|(payload, _)| payload)
-        .ok_or("degree is not declared".into())
-}
-
-/// Validate the deployment declaration and every member header. The Engine,
-/// not inventory, hashes the selected payload before materialization.
-pub fn inspect_artifact_set(path: &Path) -> Result<Vec<ArtifactMetadata>, String> {
-    Ok(artifact_set_members(path)?
-        .into_iter()
-        .map(|(_, metadata)| metadata)
-        .collect())
-}
-
 /// Resolve canonical payload paths with the same closed declaration validation
 /// used by inventory and degree selection.
 pub fn artifact_set_members(path: &Path) -> Result<Vec<(PathBuf, ArtifactMetadata)>, String> {
@@ -330,23 +312,23 @@ mod tests {
                 {"tp":2,"draft_tp":0,"path":"two.ginfer","bytes":8u64*1024*1024*1024,"sha256":"d".repeat(64)}]});
         std::fs::write(&set_path, set.to_string()).unwrap();
         assert_eq!(
-            inspect_artifact_set(&set_path)
+            artifact_set_members(&set_path)
                 .unwrap()
                 .iter()
-                .map(|m| m.tp_size)
+                .map(|(_, metadata)| metadata.tp_size)
                 .collect::<Vec<_>>(),
             vec![1, 2]
         );
         let mut invalid = set.clone();
         invalid["artifacts"][1]["tp"] = 1.into();
         std::fs::write(&set_path, invalid.to_string()).unwrap();
-        assert!(inspect_artifact_set(&set_path)
+        assert!(artifact_set_members(&set_path)
             .unwrap_err()
             .contains("duplicate"));
         let mut invalid = set.clone();
         invalid["artifacts"][1]["path"] = "one.ginfer".into();
         std::fs::write(&set_path, invalid.to_string()).unwrap();
-        assert!(inspect_artifact_set(&set_path)
+        assert!(artifact_set_members(&set_path)
             .unwrap_err()
             .contains("disagrees"));
         let mut invalid = set.clone();
@@ -355,13 +337,13 @@ mod tests {
             .unwrap()
             .remove("canonical_reconstructed_draft_sha256");
         std::fs::write(&set_path, invalid.to_string()).unwrap();
-        assert!(inspect_artifact_set(&set_path)
+        assert!(artifact_set_members(&set_path)
             .unwrap_err()
             .contains("missing field"));
         let mut invalid = set;
         invalid["canonical_reconstructed_draft_sha256"] = "e".repeat(64).into();
         std::fs::write(&set_path, invalid.to_string()).unwrap();
-        assert!(inspect_artifact_set(&set_path)
+        assert!(artifact_set_members(&set_path)
             .unwrap_err()
             .contains("disagree"));
     }

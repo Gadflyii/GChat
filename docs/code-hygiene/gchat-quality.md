@@ -38,8 +38,13 @@ rename reconciliation, queued Pause admission and post-commit fleet success.
 All four are merged/pushed separately; the independently accepted fleet
 fix passes its final composed Rust gate (desktop553/Host91 and remaining
 platform suites). [Current state](README.md) links the
-exact commits and evidence. Three additional removal defects remain OI-120–122,
-ordered after these fixes and before features. The master list also owns the
+exact commits and evidence. OI-120's all-degree alias removal and valid active
+alias protection are also independently verified and published. OI-121 now owns
+launched dependencies across rescan/rewrite while preserving current stopped
+bindings and failed-launch rollback; independent review, Host74, strict Clippy
+and composed Rust verification pass. OI-122's failed download-journal cleanup
+is next before features.
+The master list also owns the
 unmeasured resource opportunities (OI-115–119 and linked rows). No native CPU/RAM
 gain, thread leak or SIMD opportunity is established.
 

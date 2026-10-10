@@ -76,6 +76,7 @@ async fn attached_local_instance_and_ready_host_snapshot_share_one_code_choice()
         processes
             .launch(EngineLaunch {
                 instance_id,
+                artifact_dependencies: vec![artifact.clone()],
                 artifact,
                 artifact_set: false,
                 model_id: MODEL_ID.into(),

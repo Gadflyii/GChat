@@ -1,6 +1,6 @@
 use crate::{
     engine_host::{EngineLaunch, HostProcesses, LaunchOptions},
-    engine_inventory::{artifact_set_members, inspect_artifact, inspect_artifact_set, ArtifactMetadata},
+    engine_inventory::{artifact_set_members, inspect_artifact, ArtifactMetadata},
     transport::HostCertificate,
 };
 use hmac::{Hmac, Mac};
@@ -723,14 +723,21 @@ impl Host {
             .instance_id
             .or(existing)
             .unwrap_or_else(Uuid::new_v4);
-        let metadata = if model.artifact_set {
-            inspect_artifact_set(&model.path)?
-                .into_iter()
-                .find(|m| m.tp_size == model.metadata.tp_size)
-                .ok_or("artifact set no longer declares selected degree")?
-        } else {
-            inspect_artifact(&model.path)?
-        };
+        let path = model.path.clone();
+        let artifact_set = model.artifact_set;
+        let members = tokio::task::spawn_blocking(move || {
+            if artifact_set {
+                artifact_set_members(&path)
+            } else {
+                let metadata = inspect_artifact(&path)?;
+                Ok(vec![(path.canonicalize().map_err(|e| e.to_string())?, metadata)])
+            }
+        }).await.map_err(|e| e.to_string())??;
+        let (payload, metadata) = members.iter()
+            .find(|(_, metadata)| !model.artifact_set || metadata.tp_size == model.metadata.tp_size)
+            .cloned()
+            .ok_or("artifact set no longer declares selected degree")?;
+        let artifact_dependencies = members.into_iter().map(|(path, _)| path).collect();
         if metadata != model.metadata {
             return Err(
                 "artifact changed since inventory scan; refresh inventory before loading".into(),
@@ -765,12 +772,7 @@ impl Host {
             {
                 return Err("GPU group is not qualified for this profile".into());
             }
-            let path = if model.artifact_set {
-                crate::engine_inventory::artifact_set_payload(&model.path, metadata.tp_size)?
-            } else {
-                model.path.clone()
-            };
-            tokio::task::spawn_blocking(move || profile.verify_payload(&path))
+            tokio::task::spawn_blocking(move || profile.verify_payload(&payload))
                 .await
                 .map_err(|e| e.to_string())??;
         }
@@ -791,6 +793,7 @@ impl Host {
         Ok(EngineLaunch {
             instance_id: id,
             artifact: model.path,
+            artifact_dependencies,
             artifact_set: model.artifact_set,
             model_id: format!(
                 "{}/{}",
@@ -832,6 +835,7 @@ impl Host {
                 Err(stop_error) => format!("could not persist launch profile: {error}; new process could not be stopped: {stop_error}"),
             });
         }
+        self.processes.lock().await.mark_profile_persisted(id);
         self.revision.fetch_add(1, Ordering::SeqCst);
         Ok(id)
     }
@@ -1560,23 +1564,34 @@ impl Host {
                     .filter(|entry| affected_paths.contains(&entry.path))
                     .map(|entry| entry.id)
                     .collect();
+                let present_ids: BTreeSet<_> = inventory.iter().map(|entry| entry.id).collect();
                 let processes = self.processes.lock().await;
-                if processes.instances().any(|i| {
-                    affected_paths.contains(&i.launch.artifact)
-                        && !matches!(
-                            i.status,
-                            crate::engine_registry::InstanceStatus::Stopped
-                                | crate::engine_registry::InstanceStatus::Failed
-                        )
-                }) {
-                    return Err("stop every instance using this package before removing it".into());
+                let mut active_ids = BTreeSet::new();
+                let mut stopped_dependency_ids = BTreeSet::new();
+                for instance in processes.instances() {
+                    let uses_payload = instance.launch.artifact_dependencies.contains(&model.path);
+                    if matches!(instance.status,
+                        crate::engine_registry::InstanceStatus::Stopped
+                            | crate::engine_registry::InstanceStatus::Failed
+                    ) {
+                        if instance.profile_persisted && uses_payload {
+                            stopped_dependency_ids.insert(instance.instance_id);
+                        }
+                    } else {
+                        if uses_payload {
+                            return Err("stop every instance using this package before removing it".into());
+                        }
+                        active_ids.insert(instance.instance_id);
+                    }
                 }
                 drop(processes);
                 self.downloads.remove_installed(&model.path).await?;
                 {
                     let mut data = self.data.lock().await;
                     let previous_len = data.profiles.len();
-                    data.profiles.retain(|_, p| !affected_ids.contains(&p.model_id));
+                    data.profiles.retain(|id, p| active_ids.contains(id)
+                        || (!affected_ids.contains(&p.model_id)
+                            && (present_ids.contains(&p.model_id) || !stopped_dependency_ids.contains(id))));
                     if data.profiles.len() != previous_len {
                         self.inventory_dirty.store(true, Ordering::SeqCst);
                     }

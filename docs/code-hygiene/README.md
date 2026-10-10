@@ -31,7 +31,7 @@ OI-111–114 one at a time with short existing-fixture loops, then retire owned
 disposable outputs. Deadline: October 10 02:00 UTC. The candidate is
 `fix/gchat-host-review-bugs-0dd5d45c` at
 `/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c`, originally from main
-`0dd5d45ce`, now reusing accepted baseline `43edbcf95`.
+`0dd5d45ce`, now reusing accepted baseline `d4303f976`.
 OI-111 is fixed and published separately on main `839d247b0`. The owning
 fixture reproduces saved stopped profiles after restart; marking persistence
 dirty under the data mutex passes normal removal/restart and failed `host.json`
@@ -90,7 +90,7 @@ OI-112–114, before feature work. Dependency proposals and expanded specific
 regressions are retained unapplied in
 `out/code-hygiene-20261009/host-review-bugs-0dd5d45c/`; these cases remain
 source-proven until their owning reproductions run. They are not covered by
-the narrow OI-111 pass. OI-120 is the sole current item: reproduce removal of
+the narrow OI-111 pass. OI-120 reproduces removal of
 all TP1/TP2/TP4 descriptor aliases and rejection of an active alias using the
 existing managed-download fixture, then fix and verify durable cleanup while
 preserving unrelated/offline profiles and UUID mappings. Tests are prepared
@@ -105,8 +105,33 @@ strict Host all-target Clippy pass, including both owning regressions. Evidence:
 composed Rust gate passes at actual END01:06:10Z (exit0,
 desktop553/adapter6/Host93/Manager/hardware12/utility29); unchanged accepted
 frontend evidence is reused. Evidence: `oi120-verify-rust.log`. The build guard
-is released. This item is ready for standalone publication.
-OI-121 and OI-122 follow in order before any feature work.
+is released. This item is merged/pushed separately on main `d4303f976`.
+OI-121 is fixed and independently accepted. Baseline `d4303f976` reproduces
+lost active protection after missing-sibling rescan and descriptor rewrite
+(3PASS/2FAIL, END01:21:55Z; `oi121-baseline.log`). Each launched process now
+owns immutable canonical dependencies from one fresh complete validation;
+selected metadata and qualification hash use that same result. Active profiles
+survive unrelated deletion. Current model UUIDs govern stopped cleanup;
+historical dependencies supplement it only for missing model UUIDs and a
+successfully published launch generation. Failed replacement restores the old
+profile without granting the new generation cleanup authority. Private facts
+stay out of JSON; obsolete validation wrappers are removed.
+Independent review caught a healthy stopped alias redirected A-to-B being pruned
+by the first candidate. The owning control reproduces profile=null after removing
+A (0PASS/1FAIL, END01:37:27Z; `oi121-stopped-rewrite-baseline.log`). Restricting
+historical cleanup to missing model UUIDs fixes it. All 74 Host library tests,
+strict all-target Clippy and final composed Rust checks pass (desktop553/
+adapter6/Host97/Manager0/hardware12/utility29, existing desktop7/Host3 live tests
+ignored), actual END01:40:08Z. Evidence: `oi121-final-{host-lib-tests,clippy,verify-rust}.log`;
+unchanged accepted frontend evidence is reused. The rejected first gate is not
+winner evidence. No check process or build guard remains.
+C2's granted 01:30–01:40 startup interval was respected. Its actual early
+END01:36:16Z, cancelled300, empty NVML list and free canonical guard permitted
+the resumed CPU-only check. Booking294 covers01:40–02:00; approved extension
+to02:10 awaits alignment with kernel-tune's current02:01 booking before use.
+OI-122 is the next sole item: reproduce the download-journal error after physical
+package deletion, then make profile cleanup and durable recovery coherent. No
+journal-failure fix or pass is claimed yet. OI-115–119 remain parked for speed work.
 No user models/state, GPU/model run, installer rebuild, inference controls or
 performance change is needed. Compile only in admitted quiet intervals. CPU-only booking291 was released
 after focused checks; final verification used the early free interval after

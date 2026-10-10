@@ -199,6 +199,8 @@ impl LaunchOptions {
 pub struct EngineLaunch {
     pub instance_id: Uuid,
     pub artifact: PathBuf,
+    #[serde(skip)]
+    pub artifact_dependencies: Vec<PathBuf>,
     pub artifact_set: bool,
     pub model_id: String,
     /// Full physical UUIDs obtained from the host GPU inventory.
@@ -219,6 +221,7 @@ pub struct ManagedInstance {
     /// Confirmed engine metadata, unavailable until readiness validation passes.
     pub model_metadata: Option<serde_json::Value>,
     pub launch: EngineLaunch,
+    pub(crate) profile_persisted: bool,
     child: Option<Child>,
     api_key: String,
     started: tokio::time::Instant,
@@ -444,6 +447,7 @@ impl HostProcesses {
                 last_error: None,
                 model_metadata: None,
                 launch,
+                profile_persisted: false,
                 child: Some(child),
                 api_key,
                 started: tokio::time::Instant::now(),
@@ -456,6 +460,10 @@ impl HostProcesses {
 
     pub fn instances(&self) -> impl Iterator<Item = &ManagedInstance> {
         self.instances.values()
+    }
+
+    pub(crate) fn mark_profile_persisted(&mut self, id: Uuid) {
+        self.instances.get_mut(&id).expect("launched instance exists").profile_persisted = true;
     }
 
     pub fn reserved_gpus(&self, except: Option<Uuid>) -> BTreeSet<String> {
@@ -606,7 +614,8 @@ mod tests {
         let artifact = dir.path().join("fixture.ginfer");
         std::fs::write(&artifact, b"fixture").unwrap();
         let launch = |gpu: &str, port| EngineLaunch {
-            instance_id: Uuid::new_v4(), artifact: artifact.clone(), artifact_set: false,
+            instance_id: Uuid::new_v4(), artifact: artifact.clone(),
+            artifact_dependencies: vec![artifact.clone()], artifact_set: false,
             model_id: "fixture".into(), gpu_uuids: vec![gpu.into()], tp: 1, port,
             max_context: 4096, concurrency: 1, options: LaunchOptions::default(),
         };
@@ -650,6 +659,7 @@ mod tests {
         let launch = |id| EngineLaunch {
             instance_id: id,
             artifact: artifact.clone(),
+            artifact_dependencies: vec![artifact.clone()],
             artifact_set: false,
             model_id: "muse".into(),
             gpu_uuids: vec!["GPU-test".into()],
