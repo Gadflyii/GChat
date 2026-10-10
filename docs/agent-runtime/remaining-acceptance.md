@@ -35,8 +35,12 @@ Stopping that terminal returns `Could not stop Code terminal: The operation
 completed successfully. (os error 0)`, then the same generation reports
 Exited/code 1. Cached `portable-pty` 0.9.0's Windows cloned killer reverses the
 Win32 `TerminateProcess` success test. GCHAT-PTY-STOP owns this demonstrated
-failure and its product-side exact-handle correction, now under implementation
-and independent review. Do not suppress the error or edit dependency caches.
+failure and its product-side exact-handle correction. The frozen source is
+independently accepted; native execution remains pending. Four real ConPTY tests
+cover successful stop/waiter publication, already-exited handles, clone lifetime,
+live access-denied failure through actual Stop and retained-startup-child cleanup.
+Windows Stop requests termination before consuming its live session resources;
+Unix semantics and the dependency version are unchanged. Do not suppress the error or edit dependency caches.
 
 Graceful GChat-only recovery completed at 04:52:04 UTC. Ordinary GChat PID
 30972 is visible; original Host 23052 and Manager 15224 retain their creation
@@ -58,7 +62,9 @@ original profile and normal apps, and prove Engine absence before guard release.
 
 Next action: verify the narrow terminal correction in an admitted CPU interval,
 then complete real Code document/agent/skill/compact/restart, running-worker
-checkpoint/continuation and configured connector/Hermes execution. The reserved
+checkpoint/continuation and configured connector/Hermes execution. A separate approved CPU-only window at 05:19–05:22 UTC permits the focused native
+check with a hard deadline; staged candidate source and the existing native
+release cache are explicit, and a deadline abort is not a test pass. The reserved
 local GPU/CPU window is 06:45–07:20 UTC; source verification/build cannot overlap
 model use. Recheck the booking and actual ownership before execution. Missing
 providers or inputs remain explicit prerequisites; partial source checks never
