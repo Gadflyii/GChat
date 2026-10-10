@@ -8,7 +8,7 @@ Start with the root [README](../README.md) for product scope and releases, or
 | Current bug fixes and code hygiene | [Code hygiene](code-hygiene/README.md) |
 | Current installer refresh | [Installer refresh](installer-refresh/README.md) |
 | Shared Chat/Agent capabilities and recovery | [Agent runtime](agent-runtime/README.md) |
-| Persistent Gbot assistants and computer workspaces | [Gbot design draft](gbot/README.md) |
+| Persistent Gbot assistants and computer workspaces | [Gbot design draft](gbot-design/README.md) |
 | Master issues and TODOs | [Open work](open-work.md) |
 | Verification and its limits | [Critical flows](testing-critical-flows.md) |
 | Model/profile ownership and launcher | [Model management](model-management.md) |

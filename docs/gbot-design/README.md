@@ -1,6 +1,8 @@
 # Gbot design draft
 
-Gbot is a proposed persistent assistant operated through GChat. It would retain
+Gbot is a persistent assistant feature to be embedded in GChat and also included
+in the paid Arbitor product. That product placement is confirmed; the runtime
+and workspace design below remains proposed. Gbot would retain
 its identity, conversations, tasks and working memory, use the shared agent
 runtime, and operate a computer workspace on a local machine, a LAN host or a
 cloud VM. Closing the GChat window would leave the service and its work running.
@@ -10,10 +12,27 @@ implementation, dependency installation and VM provisioning are outside this
 step. Cua's SDK and Driver are the proposed foundation. Provider support and
 dependency versions remain to be selected.
 
+## Product placement
+
+GChat owns the embedded Gbot feature described here. Gbot is also part of the
+paid Arbitor product; this draft does not define Arbitor's wider product scope.
+The persistent service is an execution component of the feature, not a decision
+to ship a separate Gbot application.
+
+Commercial features, usage limits, licensing and distribution remain undecided.
+The confirmed placement does not establish GChat pricing, a paywall, feature
+tiers or shared commercial terms between GChat and Arbitor. Cua component license
+review remains a separate adoption requirement.
+
+GInfer OI-145 CPU inference is separate work. This Gbot draft neither selects
+its implementation nor makes CPU inference a prerequisite for computer control;
+inference assignments and computer workspaces remain distinct.
+
 ## Design direction
 
 | Area | Current direction | Status |
 | --- | --- | --- |
+| Product placement | Embedded GChat feature and part of paid Arbitor. | Confirmed; commercial boundaries remain open |
 | Agent capabilities | Reuse GChat's agent definitions, skills, tools, connectors and inference work pools. | Proposed; follows the user's shared-runtime direction |
 | Computer workspace | Attach an existing VM or provision one where the selected provider supports it. | Requested design scope |
 | Computer control | Use Cua Driver for capture and input; use Cua SDK for supported lifecycle operations. | Proposed foundation |
@@ -227,10 +246,12 @@ by this design work.
 - Should bots initially share a computer with serialized desktop control, or
   receive separate workspaces?
 - Is Windows 365 a required first release environment or a later qualification?
+- Which commercial features, limits, license and distribution model belong to
+  GChat's embedded feature and Arbitor's paid product?
 
 ## Current record and inventory
 
-Repository: GChat, subject `docs/gbot/`. This README is the current design
+Repository: GChat, subject `docs/gbot-design/`. This README is the current design
 authority; the [decision record](../decisions/2026-10-10-draft-gbot-shared-runtime-and-cua-workspaces.md)
 links to it without duplicating the plan.
 
@@ -239,7 +260,9 @@ links to it without duplicating the plan.
 | GChat coordinator, local workstation | `/ai/gchat` at `bd4dba841` when this draft started | Stable source; unchanged by the draft |
 | GChat coordinator, local workstation | `/ai/gchat-worktrees/gbot-design-20261010`, branch `docs/gbot-design` | Active draft and focused document checks; retain while the design is discussed |
 
-Current result: initial design and connection analysis. Readback, local Markdown
+Current result: initial design and connection analysis, with GChat/Arbitor product
+placement confirmed. Workspace/provider and commercial choices remain open.
+Readback, local Markdown
 link resolution and `git diff --check` pass. No VM, dependency, computer-control
 test, build or model job is allocated. Next action: resolve the first
 workspace and Cua component choices with the user before implementation.
