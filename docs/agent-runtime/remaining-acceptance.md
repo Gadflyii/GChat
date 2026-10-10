@@ -275,9 +275,24 @@ OI-068 packet's `build-369-terminal-2684-r3/current-result.json`; the two earlie
 setup results remain beside it. No model, app restart or dependency installation
 was required.
 
-The updated four Windows ConPTY IPC cases, updated desktop build and installed
-visible Stop/Restart replay are booked for 18:25–18:50 UTC, CPU only, with stop
-by 18:49. Native admission and execution remain pending; current installed
+The exact ten-leaf native `1ccde5715` source overlay is applied in booking374.
+Actual Compile is bounded-aborted at 18:35:00 UTC before test execution: root
+selected a deadline only 4 minutes 22 seconds after native body startup, while
+the final Rust compiler starts at 18:31:08 and does not finish before it. This
+is an execution-budget failure, not a demonstrated compiler or product defect.
+The original result is retained in native
+`pty-stop-code-210d-374-compile/native-test-result.json`; the same OI-068 packet's
+`native-374-bounded-abort-observation.json`, `release-verified-374.json` and
+`guard-return-374.json` prove controller terminal1, empty Job, pinned body exit,
+owned native PIDs absent, Engine/API/debug0 and canonical guards free at
+18:36:44 UTC. The keeper exits 0 and booking374 is returned early.
+Apps and settings are unchanged; no Test, desktop build or install ran.
+
+The successor is booking380, 22:20–22:50 UTC, CPU only, stopping by 22:49.
+It retains the applied source and composed gate, preserves the failed attempt,
+uses fresh output paths and gives Compile at least ten minutes. Four actual
+Windows ConPTY IPC cases, updated desktop build and visible Stop/Restart replay
+remain required; execution is not admitted outside that slot. Current installed
 `574d73df7` still retains the actual UI FAIL above. The accepted earlier NSIS
 packet contains that source, not the new correction. Source verification does
 not replace the installed replay or establish the recorded Channel arrival

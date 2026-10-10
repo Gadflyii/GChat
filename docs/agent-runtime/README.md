@@ -84,8 +84,14 @@ extension-root state and a nonloopback local TLS route) and the actual final
 PASS are retained in the OI-068 packet. Its exact container is removed at
 17:39:49 UTC; both canonical guards are verified free and booking369 is returned
 early. Updated Windows IPC, desktop build and installed Stop/Restart replay
-remain pending in the 18:25–18:50 CPU-only slot, stopping by 18:49. The installed
-`574d73df7` UI still fails Stop despite native exit. [Remaining acceptance](remaining-acceptance.md#embedded-terminal-status-ordering)
+remain pending. Booking374 applies the exact native `1ccde5715` source overlay,
+but compilation is stopped at 18:35 UTC by the root-selected deadline before
+the four tests run. Its Job is empty, the pinned body and controller are exited,
+and both canonical guards are verified free at 18:36:44; apps and settings are
+unchanged. Booking380 reserves 22:20–22:50 UTC for compilation, tests, desktop
+build and installed replay, with cleanup by 22:49. The compile allowance is
+increased to avoid repeating that execution failure. The installed `574d73df7`
+UI still fails Stop despite native exit. [Remaining acceptance](remaining-acceptance.md#embedded-terminal-status-ordering)
 links the exact receipts and retained original warning log.
 [Remaining acceptance](remaining-acceptance.md) records the exact owners and
 supported scan evidence. Ron authorized keeping the existing AUTO Muse profile

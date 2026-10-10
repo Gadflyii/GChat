@@ -257,6 +257,16 @@ No margin, context, concurrency or profile promotion is justified by that result
 
 ## Evidence and owned disk inventory
 
+The October 10 18:30–18:38 UTC GChat ownership survey reaches local, Ada4090
+(.143), Server 2 (.112), Server 1 (.109) and laptop (.153). No additional verified
+retired build or source candidate is found: **0 GB freed on each host**. The 19
+recorded retired local paths remain absent; historical reclamation is not counted
+again. Unmerged source, current Windows acceptance inputs, accepted packages,
+shared caches, master-cited evidence, original state and the current S2 fixture
+remain protected. All inspected filesystems have more than 2 GiB available.
+Process visibility and bounded path scope are recorded in
+`out/disk-hygiene-20261010/`; this does not establish whole-host cleanliness.
+
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
 | Review coordinator / local Linux | `/ai/gchat-worktrees/review-host-manager-a7003488` | Retired after accepted main0dd5d45ce publication and fresh zero-reference checks; branch/build/evidence retained |
