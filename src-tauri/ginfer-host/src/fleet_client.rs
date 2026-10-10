@@ -459,9 +459,9 @@ impl FleetClient {
         };
         // Canonical success stands even when an offline member's derived report
         // cannot be refreshed. The next read reports and retries these host issues.
-        let _ = self
-            .sync_membership(&fleet, &self.client.registered().await?)
-            .await;
+        if let Ok(registered) = self.client.registered().await {
+            let _ = self.sync_membership(&fleet, &registered).await;
+        }
         Ok(fleet)
     }
 }

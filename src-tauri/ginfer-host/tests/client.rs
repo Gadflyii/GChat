@@ -61,6 +61,7 @@ async fn tls(host: Arc<Host>) -> (String, tokio::task::JoinHandle<()>) {
 #[derive(Default)]
 struct SnapshotGate {
     armed: std::sync::atomic::AtomicBool,
+    authority_armed: std::sync::atomic::AtomicBool,
     connections: std::sync::atomic::AtomicUsize,
     snapshot_override: Mutex<Option<Value>>,
     entered: tokio::sync::Notify,
@@ -103,16 +104,16 @@ async fn tls_at(
                                 let gate = gate.clone();
                                 async move {
                                     let snapshot = req.uri().path() == "/host/v1/snapshot";
+                                    let authority = req.method() == hyper::Method::POST && req.uri().path() == "/host/v1/fleet/authority";
                                     let mut response = host.route(req).await?;
-                                    if let Some(gate) = gate.filter(|_| snapshot) {
-                                        if response.status().is_success() {
+                                    if let Some(gate) = gate.filter(|_| snapshot || authority) {
+                                        if snapshot && response.status().is_success() {
                                             if let Some(body) = gate.snapshot_override.lock().unwrap().clone() {
                                                 response = ginfer_host::service::json(hyper::StatusCode::OK, body);
                                             }
                                         }
-                                        if gate
-                                            .armed
-                                            .swap(false, std::sync::atomic::Ordering::SeqCst)
+                                        if (snapshot && gate.armed.swap(false, std::sync::atomic::Ordering::SeqCst))
+                                            || (authority && response.status().is_success() && gate.authority_armed.swap(false, std::sync::atomic::Ordering::SeqCst))
                                         {
                                             gate.entered.notify_one();
                                             gate.release.notified().await;
@@ -968,6 +969,78 @@ async fn fleet_deadline_keeps_a_stalled_vault_actionable_and_preserves_cached_po
     assert!(recovered.host_issues.is_empty());
     assert_eq!(recovered.snapshot, Some(cached));
     server.abort();
+}
+
+#[tokio::test]
+async fn committed_fleet_edit_survives_registry_read_error_and_membership_retries() {
+    use ginfer_host::{
+        fleet::{AuthorityLocator, FleetMember, FleetOperation, FleetSnapshot, FleetUpdate, FleetView},
+        fleet_client::FleetClient,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let coordinator = Host::open(root.path().join("coordinator"), "Coordinator".into(),
+        std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+    let member = Host::open(root.path().join("member"), "Member".into(),
+        std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+    let gate = Arc::new(SnapshotGate::default());
+    let (coordinator_origin, coordinator_server) = tls(coordinator.clone()).await;
+    let (member_origin, member_server) = tls_with_snapshot_gate(member.clone(), Some(gate.clone())).await;
+    coordinator.lan_sharing.lock().await.standalone = Some(reqwest::Url::parse(&coordinator_origin).unwrap().port().unwrap());
+    member.lan_sharing.lock().await.standalone = Some(reqwest::Url::parse(&member_origin).unwrap().port().unwrap());
+    let registry = root.path().join("registry.json");
+    let client = Arc::new(Client::new(Some(registry.clone()), Arc::new(Vault::default())));
+    for origin in [&coordinator_origin, &member_origin] {
+        client.pair(PairRequest { host_id: None, base_url: Some(origin.clone()),
+            client_name: "Commit fixture".into() }).await.unwrap();
+    }
+    let coordinator_id = coordinator.data.lock().await.host_id;
+    let member_id = member.data.lock().await.host_id;
+    let authority = AuthorityLocator { host_id: coordinator_id, origins: vec![coordinator_origin],
+        certificate_sha256: coordinator.data.lock().await.certificate.fingerprint() };
+    let fleet = Arc::new(FleetClient::new(client.clone()));
+    fleet.configure(coordinator_id, authority).await.unwrap();
+    let initial = fleet.read().await.unwrap().snapshot.unwrap();
+    let update = FleetUpdate { expected_revision: initial.revision,
+        operation: FleetOperation::EnrollMember { member: FleetMember {
+            host: AuthorityLocator { host_id: member_id, origins: vec![member_origin],
+                certificate_sha256: member.data.lock().await.certificate.fingerprint() },
+            display_name: "Member".into(),
+        } } };
+    gate.authority_armed.store(true, std::sync::atomic::Ordering::SeqCst);
+    let updating = fleet.clone();
+    let pending = tokio::spawn(async move { updating.update(update).await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), gate.entered.notified()).await.unwrap();
+    // The member's successful authority response occurs after the canonical
+    // update and the local cache write, before membership's registry reload.
+    let committed = match &coordinator.data.lock().await.fleet {
+        FleetView::Coordinator { fleet } => fleet.clone(),
+        _ => panic!("configured coordinator must own its catalog"),
+    };
+    let saved = std::fs::read(&registry).unwrap();
+    let document: Value = serde_json::from_slice(&saved).unwrap();
+    let cached: FleetSnapshot = serde_json::from_value(document["fleet_snapshot"].clone()).unwrap();
+    std::fs::write(&registry, b"not valid JSON").unwrap();
+    gate.release.notify_one();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), pending).await.unwrap().unwrap();
+    let pending_membership = member.data.lock().await.fleet_membership.clone();
+    std::fs::write(&registry, saved).unwrap();
+    let recovered = fleet.read().await;
+    let membership = member.data.lock().await.fleet_membership.clone();
+    coordinator_server.abort();
+    member_server.abort();
+    let _ = coordinator_server.await;
+    let _ = member_server.await;
+
+    assert_eq!(cached, committed);
+    assert_eq!(committed.revision, initial.revision + 1);
+    assert!(committed.members.iter().any(|entry| entry.host.host_id == member_id));
+    assert!(pending_membership.is_none());
+    assert_eq!(result.expect("a committed canonical edit must still report success"), committed);
+    let recovered = recovered.unwrap();
+    assert!(recovered.connected);
+    assert!(recovered.host_issues.is_empty());
+    assert_eq!(recovered.snapshot, Some(committed.clone()));
+    assert_eq!(membership, Some(committed.membership(member_id).unwrap()));
 }
 
 #[tokio::test]

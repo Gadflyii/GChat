@@ -32,13 +32,16 @@ repeating completed suites. Full scope and contrary failure are recorded in
 `out/code-hygiene-20261009/review-host-manager-a7003488/gate-result.json`, with
 the independent verdict in `independent-review.md`.
 
-Four baseline bugs (OI-111–114) are source-demonstrated and remain outside behavior-identical
-cleanup: removed-model profile persistence, rename without a revision,
-queued-download Pause overwritten during admission, and a fleet edit reporting
-failure after its canonical commit. Their fixture reproduction proposals and
-all resource opportunities are on the sole master list (OI-115–119 and linked existing rows). No native CPU/RAM gain,
-thread leak or SIMD opportunity is established. Separate behavioral fixes and
-measured performance work must preserve their stated contracts.
+The review identified four baseline defects (OI-111–114). All now have owning
+reproductions and passing focused fixes: removed-profile persistence, immediate
+rename reconciliation, queued Pause admission and post-commit fleet success.
+The first three are merged/pushed separately; the independently accepted fleet
+fix passes its final composed Rust gate (desktop553/Host91 and remaining
+platform suites) for standalone publication. [Current state](README.md) links the
+exact commits and evidence. Three additional removal defects remain OI-120–122,
+ordered after these fixes and before features. The master list also owns the
+unmeasured resource opportunities (OI-115–119 and linked rows). No native CPU/RAM
+gain, thread leak or SIMD opportunity is established.
 
 Windows product `0f06ba433` remains accepted and installed with preserved user
 state. Linux product compile `54c931c68` / packaging `02d369e8a` is accepted

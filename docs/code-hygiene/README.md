@@ -25,7 +25,7 @@ records unavailable physical prerequisites without making a second issue list.
 
 ## Current bug-remediation phase
 
-The Host/Manager review is merged and pushed on main `0dd5d45ce`. The master
+The Host/Manager review was merged and pushed as main `0dd5d45ce`. The master
 rows are merged in GInfer dev/next `c72edea85`. Ron's next instruction is to fix
 OI-111–114 one at a time with short existing-fixture loops, then retire owned
 disposable outputs. Deadline: October 10 02:00 UTC. The candidate is
@@ -61,7 +61,25 @@ Strict Host all-target Clippy passes on the corrected source. Independent
 final review accepts admission/worker ownership, recovery and deterministic
 fixture cleanup. Evidence: `oi113-baseline.log` and
 `oi113-final-{download-tests,clippy}.log` in the same packet. This item is ready
-for standalone publication; next is OI-114 post-commit registry failure.
+and is merged/pushed separately on main `893682288`.
+OI-114 baseline reproduces the post-commit error using two real TLS Hosts,
+a paired Client/Vault and a gate on the member authority response. Canonical
+snapshot and the durable local cache agree before invalidating only the owned
+registry. The candidate contains the later registry-read failure, returns the
+committed snapshot, and uses only fresh successful registrations for membership
+delivery. Restoring the exact registry lets the next real read deliver the
+missing membership at the committed revision. All three fleet-client tests and
+strict Host all-target Clippy pass. Independent review accepts the boundary,
+fresh pins, unchanged pre-commit/cache-save errors and fixture cleanup. Evidence:
+`oi114-{baseline,fleet-client-tests,clippy}.log` in the same packet. Next action:
+standalone publication: the composed Rust gate passes at actual END00:55:22Z
+(exit0, desktop553/adapter6/Host91/Manager/hardware12/utility29), with the
+unchanged accepted frontend gate reused. Evidence: `oi114-verify-rust.log`.
+The gate ran early after the preceding exclusive owner released its booking;
+the unused 01:05–01:08 booking is cancelled and the build guard is released.
+Owned hygiene finds no further safe stale removal. The candidate remains needed
+for ordered OI-120–122; source/evidence and shared builds stay.
+No installed-app or package refresh is claimed for these source fixes.
 
 Contrary review found three distinct baseline defects: closed-set aliases
 survive raw-payload removal (OI-120); an invalidating rescan loses active alias
@@ -71,11 +89,13 @@ OI-112–114, before feature work. Dependency proposals and expanded specific
 regressions are retained unapplied in
 `out/code-hygiene-20261009/host-review-bugs-0dd5d45c/`; these cases remain
 source-proven and unrun. They are not covered by the narrow OI-111 pass.
-Proceed to OI-113 and OI-114 after this standalone item completes.
+After OI-114 publishes, remediate OI-120, then OI-121, then OI-122
+before any feature work.
 No user models/state, GPU/model run, installer rebuild, inference controls or
-performance change is needed. The local CPU/GPU exclusive bookings run until
-00:20 UTC; compile only in an admitted quiet interval. CPU-only booking291
-covers 00:20–00:40. OI-115–119 remain the unmeasured speed-phase list; OI-072
+performance change is needed. Compile only in admitted quiet intervals. CPU-only booking291 was released
+after focused checks; final verification used the early free interval after
+C1 released292, and unused296 is cancelled. CPU-only294 covers 01:40–02:00
+for subsequent source regression checks if needed. OI-115–119 remain the unmeasured speed-phase list; OI-072
 remains separate with C2. The candidate reuses nine dependency aliases from the
 retained OI-074 physical graph and the shared `/ai/gchat/src-tauri/target`; no
 new dependency installation or model copy is created.
@@ -184,6 +204,14 @@ No margin, context, concurrency or profile promotion is justified by that result
 | Native Engine baseline / Windows | `%LOCALAPPDATA%/GInfer/gchat-oi056-f9af4/output/ginfer-windows-x64-sm120a.zip` | Tested closed 125-payload `2ef56a52a` Engine; retain without rebuilding |
 | Linux inputs | `/ai/ginfer/out/linux-installer-20260930/runtime-set` | Retained `05a286ba` four 167-payload Qwen/Muse images, glibc2.39; no Flash/current-engine qualification claim |
 | Shared state | `/ai/gchat/src-tauri/target`, `/ai/gchat/node_modules` | Shared compiler/dependency caches; outside disposable cleanup scope |
+
+The OI-111–114 hygiene check finds no additional safe stale target. Current
+Windows installers, tested Engine ZIP, reused Manager producer and compiler
+cache remain; prior retired Engine source/build paths are still absent. The
+active candidate, reused dependency graph, shared Cargo targets and other
+coordinators' trees are retained. This light metadata pass deletes 0 bytes;
+remote hosts and full Windows live-use are not rechecked. Current retention
+notes are in `out/manager-kv-startup-20261008/drain-hygiene-not-deleted.md`.
 
 The OI-056 source trees and generated-only compact directory are retired after
 source preservation, reclaiming 2.479 GB net allocation. The OI-067 tree and five
