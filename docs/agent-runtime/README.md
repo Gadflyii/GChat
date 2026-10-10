@@ -76,9 +76,16 @@ by native generation and sequence. Independent source review accepts product
 without act warnings; typecheck, affected hook/type lint and Linux all-target
 release check/strict Clippy pass. The full web suite passes 1,962 tests across
 227 files with five skipped and unrelated diagnostics retained. These checks
-are source evidence; full `make verify`, updated Windows IPC/native checks and
-installed Stop replay remain pending. The installed `574d73df7` UI still fails
-Stop despite native exit. [Remaining acceptance](remaining-acceptance.md#embedded-terminal-status-ordering)
+are source evidence. The composed `make verify` gate now passes on clean
+`210d642ba`: 2,120 root/frontend and 102 extension tests, all six critical
+coverage floors and all six supported Rust suite commands. Existing test
+diagnostics remain visible. Two corrected runner prerequisites (Yarn's
+extension-root state and a nonloopback local TLS route) and the actual final
+PASS are retained in the OI-068 packet. Its exact container is removed at
+17:39:49 UTC; both canonical guards are verified free and booking369 is returned
+early. Updated Windows IPC, desktop build and installed Stop/Restart replay
+remain pending in the 18:25–18:50 CPU-only slot, stopping by 18:49. The installed
+`574d73df7` UI still fails Stop despite native exit. [Remaining acceptance](remaining-acceptance.md#embedded-terminal-status-ordering)
 links the exact receipts and retained original warning log.
 [Remaining acceptance](remaining-acceptance.md) records the exact owners and
 supported scan evidence. Ron authorized keeping the existing AUTO Muse profile

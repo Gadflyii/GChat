@@ -253,16 +253,38 @@ records those source checks and their exclusions. Full web-suite evidence is
 skipped, and unrelated act, DialogDescription and Shiki URL diagnostics remain
 visible. This suite is not warning-free.
 
-No model run or updated Windows build/IPC test has executed for this candidate.
-Full `make verify`, the four updated Windows ConPTY cases, new installer
-qualification and installed visible Stop/Restart replay remain pending. Current
-installed `574d73df7` still retains the actual UI FAIL above; source checks do
-not replace it or establish the recorded Channel arrival order. Required
-remaining commands, after root admission:
+The composed Linux `make verify` gate passes on clean source `210d642ba`.
+It includes 2,120 root/frontend tests (six skipped), 102 extension tests, all six
+critical coverage floors and all six supported Rust suite commands: 553 desktop,
+six GInfer plugin, 98 Host, 12 hardware and 29 utility tests pass; Manager's
+current test target compiles but contains no tests. Seven desktop and three Host
+cases remain ignored by their existing platform/fixture rules. Existing act,
+DialogDescription and Shiki URL test diagnostics remain visible; the gate is
+not warning-free. Its independent three-fixture cleanup patch is source-reviewed,
+unapplied and untested.
+
+Two runner setup failures are retained. The first omitted Yarn's extension-root
+node_modules state; the corrected runner preflights and mounts that complete
+aligned directory read-only. Docker's disabled network then prevented the real
+shared-fleet test from choosing a nonloopback address. The final runner uses the
+existing bridge for its local TLS fixture, retaining offline dependency controls
+and the unchanged test. The actual final container exits 0, is removed at
+17:39:49 UTC, and its original PID is absent. Root reacquires/releases both
+canonical guards and cancels booking369 at 17:40. Evidence is the existing
+OI-068 packet's `build-369-terminal-2684-r3/current-result.json`; the two earlier
+setup results remain beside it. No model, app restart or dependency installation
+was required.
+
+The updated four Windows ConPTY IPC cases, updated desktop build and installed
+visible Stop/Restart replay are booked for 18:25–18:50 UTC, CPU only, with stop
+by 18:49. Native admission and execution remain pending; current installed
+`574d73df7` still retains the actual UI FAIL above. The accepted earlier NSIS
+packet contains that source, not the new correction. Source verification does
+not replace the installed replay or establish the recorded Channel arrival
+order. Required Windows command, after root admission:
 
 ```sh
 cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features test-tauri windows_terminal_ -- --test-threads=1
-make verify
 ```
 
 Reuse canonical dependency/build caches and the accepted Windows ICO prerequisite;
