@@ -10,7 +10,7 @@ The [validated NSIS owner decision](../decisions/2026-10-10-prefer-current-user-
 
 Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
-`bd4dba841`. Current Windows components are restored `0f06ba433` GChat desktop,
+`bd4dba841`. Current Windows components are compiled `574d73df7` GChat desktop,
 new Manager `574d73df7`, 7d9 Host/CLI and retained Engine `2ef56a52`.
 Exact restoration and ordinary baseline UI pass. Booking364's desktop-only
 refresh now runs compiled `574d73df7`; embedded UI loads, but Code Stop remains
@@ -185,11 +185,12 @@ profiles and certificates. Manager 24796/birth `2026-10-10T11:46:14.4288363Z`
 and hash `1b9f0173…` are unchanged; 7d9 Host/CLI and 2ef Engine remain intact.
 Engine/API counts are zero and guards are released.
 
-CPU-only booking353, 15:05–15:15 UTC, has an accepted source proposal for the
+CPU-only booking353, 15:05–15:15 UTC, used the accepted source proposal for the
 owning build body: relative `frontendDist`
 `../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
-assets as a Directory. This is nonexecution evidence; actual build, install and
-candidate UI remain pending. The proposal is in
+assets as a Directory. That preparation alone was nonexecution evidence; the
+completed desktop's byte/provenance proof and booking364 UI are recorded below.
+The NSIS build remains incomplete. The proposal is in
 `oi068-windows-20261010/production-frontend-directory-574d73df7-proposed/`.
 Booking364 verifies the compiled desktop's complete provenance and embedded UI.
 NSIS completion remains unqualified. Code Stop exposes the ordering defect below;

@@ -9,7 +9,7 @@ Installer routing follows the [validated current-user NSIS decision](../decision
 
 Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
 and OI-120–122 retain their composed Rust gate. Current Windows components are
-the restored `0f06ba433` GChat desktop, new `574d73df7` Manager, 7d9 Host/CLI
+the compiled `574d73df7` GChat desktop, new `574d73df7` Manager, 7d9 Host/CLI
 and retained `2ef56a52` Engine. Booking364 now installs the compiled `574d73df7`
 desktop and verifies the embedded origin. Native Code Stop exits, but its UI
 remains Stopping; the isolated correction is recorded below.
@@ -62,7 +62,7 @@ restoration passes at 11:56:54.9219517 UTC: GChat loads `http://tauri.localhost/
 shows all seven original saved threads and has no alerts. Selected protected
 state is unchanged; new Manager, 7d9 Host/CLI and 2ef Engine remain intact.
 Engine/API counts are zero and guards are released. CPU-only booking353,
-15:05–15:15 UTC, has an accepted nonexecuted source proposal: relative
+15:05–15:15 UTC, used the accepted source proposal: relative
 `frontendDist` `../../../windows-build/source/web-app/dist` resolves to the
 exact 832 accepted assets as a Directory. The compiled desktop's provenance and
 ordinary embedded UI are verified under booking364; NSIS completion remains
