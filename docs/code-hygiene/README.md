@@ -28,10 +28,11 @@ records unavailable physical prerequisites without making a second issue list.
 The Host/Manager review was merged and pushed as main `0dd5d45ce`. The master
 rows are merged in GInfer dev/next `c72edea85`. Ron's next instruction is to fix
 OI-111–114 one at a time with short existing-fixture loops, then retire owned
-disposable outputs. Deadline: October 10 02:00 UTC. The candidate is
+disposable outputs. Deadline: October 10 02:00 UTC; OI-111–114 completed before
+it. The repairs use
 `fix/gchat-host-review-bugs-0dd5d45c` at
 `/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c`, originally from main
-`0dd5d45ce`, now reusing accepted baseline `d4303f976`.
+`0dd5d45ce`, reusing each accepted baseline without recreating the tree.
 OI-111 is fixed and published separately on main `839d247b0`. The owning
 fixture reproduces saved stopped profiles after restart; marking persistence
 dirty under the data mutex passes normal removal/restart and failed `host.json`
@@ -78,18 +79,19 @@ merged/pushed separately on main `43edbcf95`. The composed Rust gate passes at a
 unchanged accepted frontend gate reused. Evidence: `oi114-verify-rust.log`.
 The gate ran early after the preceding exclusive owner released its booking;
 the unused 01:05–01:08 booking is cancelled and the build guard is released.
-Owned hygiene finds no further safe stale removal. The candidate remains needed
-for ordered OI-120–122; source/evidence and shared builds stay.
+Owned hygiene finds no further safe stale removal. The same candidate served
+ordered OI-120–122; source history, external evidence
+and shared builds remain retained through candidate retirement.
 No installed-app or package refresh is claimed for these source fixes.
 
 Contrary review found three distinct baseline defects: closed-set aliases
 survive raw-payload removal (OI-120); an invalidating rescan loses active alias
 protection (OI-121); a download-journal failure after physical deletion skips
 profile cleanup (OI-122). Ron approved separate rows and ordered fixes after
-OI-112–114, before feature work. Dependency proposals and expanded specific
-regressions are retained unapplied in
-`out/code-hygiene-20261009/host-review-bugs-0dd5d45c/`; these cases remain
-source-proven until their owning reproductions run. They are not covered by
+OI-112–114, before feature work. The original dependency and regression
+proposals are retained in
+`out/code-hygiene-20261009/host-review-bugs-0dd5d45c/`; all three now have
+separate owning reproductions and verified fixes below. They are not covered by
 the narrow OI-111 pass. OI-120 reproduces removal of
 all TP1/TP2/TP4 descriptor aliases and rejection of an active alias using the
 existing managed-download fixture, then fix and verify durable cleanup while
@@ -127,16 +129,40 @@ unchanged accepted frontend evidence is reused. The rejected first gate is not
 winner evidence. No check process or build guard remains.
 C2's granted 01:30–01:40 startup interval was respected. Its actual early
 END01:36:16Z, cancelled300, empty NVML list and free canonical guard permitted
-the resumed CPU-only check. Booking294 covers01:40–02:00; approved extension
-to02:10 awaits alignment with kernel-tune's current02:01 booking before use.
-OI-122 is the next sole item: reproduce the download-journal error after physical
-package deletion, then make profile cleanup and durable recovery coherent. No
-journal-failure fix or pass is claimed yet. OI-115–119 remain parked for speed work.
+the resumed CPU-only check. Booking294 covered the final CPU gates and is
+cancelled at actual END01:50:05Z;
+the proposed extension was not needed.
+OI-121 is published on clean main/origin `155c61f34`. OI-122 is fixed and
+independently accepted. Its owning managed 4 KiB package/descriptor fixture
+reproduces physical
+deletion and empty in-memory jobs with raw/alias profiles still saved
+(0PASS/1FAIL, END01:43:24Z; `oi122-baseline.log`). The selected boundary returns
+an explicit completed-deletion outcome with any journal error, then always runs
+exact profile cleanup and Host persistence before reporting that error.
+ModelDownloads owns a pending journal write, retried under its jobs mutex by
+existing scans; successful persistence alone clears it. Host and download saves
+are attempted independently, retaining both errors when both fail. Acceptance
+requires immediate profile cleanup and repaired I/O plus scan/reopen to preserve
+the deleted state. Exit before successful journal retry does not imply crash-
+atomic journal durability. No blanket pruning of missing/offline state or new
+serialized deletion intent is introduced. The corrected source passes all 75
+Host library tests and strict all-target
+Clippy at actual END01:48:23Z; the owning test also verifies immediate registry
+reconciliation while the journal fault remains, then repaired scan/reopen
+recovery. Independent production and fixture review accepts the winner. Final
+composed
+Rust verification passes at actual END01:50:05Z (exit0, desktop553/adapter6/
+Host98/Manager0/hardware12/utility29; existing desktop7/Host3 live tests ignored),
+reusing unchanged accepted frontend evidence. Evidence:
+`oi122-{host-lib-tests,clippy,verify-rust}.log`. No owned check process, GPU/model
+or build guard remains. Publish this source and master row, then retire the
+completed owned candidate; its branch/history and external evidence remain.
+OI-115–119 remain parked for speed work.
 No user models/state, GPU/model run, installer rebuild, inference controls or
 performance change is needed. Compile only in admitted quiet intervals. CPU-only booking291 was released
-after focused checks; final verification used the early free interval after
-C1 released292, and unused296 is cancelled. CPU-only294 covers 01:40–02:00
-for subsequent source regression checks if needed. OI-115–119 remain the unmeasured speed-phase list; OI-072
+after focused checks; subsequent gates used admitted quiet intervals. All
+owned checks and the canonical build guard ended at01:50:05Z; booking294 is
+cancelled and no extension or GPU reservation is needed. OI-115–119 remain the unmeasured speed-phase list; OI-072
 remains separate with C2. The candidate reuses nine dependency aliases from the
 retained OI-074 physical graph and the shared `/ai/gchat/src-tauri/target`; no
 new dependency installation or model copy is created.
@@ -234,6 +260,7 @@ No margin, context, concurrency or profile promotion is justified by that result
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
 | Review coordinator / local Linux | `/ai/gchat-worktrees/review-host-manager-a7003488` | Retired after accepted main0dd5d45ce publication and fresh zero-reference checks; branch/build/evidence retained |
+| Remediation coordinator / local Linux | `/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c` | Accepted OI-111–114/120–122 source candidate; local/remote branch and external logs stay. Filesystem retirement and protected paths are tracked in the existing `out/manager-kv-startup-20261008/drain-hygiene-not-deleted.md` |
 | Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Retired after committed/pushed ancestry and live-use checks; two unique coverage summaries retained externally |
 | Coordinator / local Linux | `/ai/gchat/out/oi070-linux-refresh` | Accepted Linux package/native proof, six-doc inputs and runner; old packet path is a stable symlink, temporary extracts/state retired after final checks; published packages retained |
 | OI-106 / local Linux | `/ai/gchat-worktrees/oi106-selection-facade-7d9eb55` | Retired after published main and fresh live-use checks; exact local/remote source branches and external evidence retained |
@@ -246,11 +273,13 @@ No margin, context, concurrency or profile promotion is justified by that result
 | Linux inputs | `/ai/ginfer/out/linux-installer-20260930/runtime-set` | Retained `05a286ba` four 167-payload Qwen/Muse images, glibc2.39; no Flash/current-engine qualification claim |
 | Shared state | `/ai/gchat/src-tauri/target`, `/ai/gchat/node_modules` | Shared compiler/dependency caches; outside disposable cleanup scope |
 
-The OI-111–114 hygiene check finds no additional safe stale target. Current
+The OI-111–114/120–122 hygiene check retains accepted packages and shared builds.
+Current
 Windows installers, tested Engine ZIP, reused Manager producer and compiler
 cache remain; prior retired Engine source/build paths are still absent. The
-active candidate, reused dependency graph, shared Cargo targets and other
-coordinators' trees are retained. This light metadata pass deletes 0 bytes;
+reused dependency graph, shared Cargo targets and other coordinators' trees
+remain protected; the completed candidate can retire after source publication.
+This light metadata pass deletes 0 bytes;
 remote hosts and full Windows live-use are not rechecked. Current retention
 notes are in `out/manager-kv-startup-20261008/drain-hygiene-not-deleted.md`.
 

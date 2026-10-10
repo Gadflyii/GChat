@@ -563,8 +563,23 @@ impl Host {
         *self.inventory.write().await = models.into_values().collect();
         *self.inventory_errors.write().await = errors;
         drop(data);
-        if self.inventory_dirty.load(Ordering::SeqCst) { self.save().await?; }
-        self.revision.fetch_add(1, Ordering::SeqCst);
+        let host_persistence = if self.inventory_dirty.load(Ordering::SeqCst) {
+            self.save().await
+        } else {
+            Ok(())
+        };
+        if host_persistence.is_ok() {
+            self.revision.fetch_add(1, Ordering::SeqCst);
+        }
+        let download_persistence = self.downloads.flush_pending().await;
+        match (host_persistence, download_persistence) {
+            (Err(host_error), Err(journal_error)) => return Err(format!(
+                "could not persist Host state: {host_error}; could not persist download journal: {journal_error}"
+            )),
+            (Err(error), Ok(())) => return Err(error),
+            (Ok(()), Err(error)) => return Err(format!("could not persist download journal: {error}")),
+            (Ok(()), Ok(())) => {}
+        }
         Ok(())
     }
     pub async fn refresh_processes(&self) -> Result<(), String> {
@@ -1585,7 +1600,7 @@ impl Host {
                     }
                 }
                 drop(processes);
-                self.downloads.remove_installed(&model.path).await?;
+                let removed = self.downloads.remove_installed(&model.path).await?;
                 {
                     let mut data = self.data.lock().await;
                     let previous_len = data.profiles.len();
@@ -1596,7 +1611,15 @@ impl Host {
                         self.inventory_dirty.store(true, Ordering::SeqCst);
                     }
                 }
-                self.scan().await?;
+                let cleanup = self.scan().await;
+                match (removed.journal_error, cleanup) {
+                    (Some(journal_error), Err(cleanup_error)) => return Err(format!(
+                        "package removed but download journal could not be saved: {journal_error}; Host cleanup could not finish: {cleanup_error}"
+                    )),
+                    (Some(error), Ok(())) => return Err(format!("package removed but download journal could not be saved: {error}")),
+                    (None, Err(error)) => return Err(error),
+                    (None, Ok(())) => {}
+                }
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
             ("GET", "/host/v1/model-catalog") => {

@@ -42,8 +42,11 @@ exact commits and evidence. OI-120's all-degree alias removal and valid active
 alias protection are also independently verified and published. OI-121 now owns
 launched dependencies across rescan/rewrite while preserving current stopped
 bindings and failed-launch rollback; independent review, Host74, strict Clippy
-and composed Rust verification pass. OI-122's failed download-journal cleanup
-is next before features.
+and composed Rust verification pass. OI-122 now distinguishes completed
+deletion from journal durability failure, persists exact profile cleanup and
+retries pending journal writes; Host75, immediate registry reconciliation,
+repaired scan/reopen, strict Clippy, independent review and composed Rust checks
+pass. Current source fixes are complete; owned candidate retirement follows.
 The master list also owns the
 unmeasured resource opportunities (OI-115–119 and linked rows). No native CPU/RAM
 gain, thread leak or SIMD opportunity is established.

@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     path::PathBuf,
-    sync::Arc,
+    sync::{atomic::{AtomicBool, Ordering}, Arc},
     time::{Duration, Instant},
 };
 use tokio::{
@@ -154,10 +154,15 @@ pub struct Download {
     #[serde(default)]
     pub storage_root: PathBuf,
 }
+pub struct RemovedPackage {
+    pub journal_error: Option<String>,
+}
+
 pub struct ModelDownloads {
     root: std::sync::RwLock<PathBuf>,
     state_path: PathBuf,
     jobs: Mutex<BTreeMap<Uuid, Download>>,
+    pending_journal: AtomicBool,
     serial: Arc<Semaphore>,
     local_layout: bool,
 }
@@ -209,6 +214,7 @@ impl ModelDownloads {
             root: std::sync::RwLock::new(root),
             state_path,
             jobs: Mutex::new(jobs),
+            pending_journal: AtomicBool::new(false),
             serial: Arc::new(Semaphore::new(1)),
             local_layout,
         });
@@ -224,7 +230,19 @@ impl ModelDownloads {
         write_private(
             &self.state_path,
             &serde_json::to_vec(jobs).map_err(|e| e.to_string())?,
-        )
+        )?;
+        self.pending_journal.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+    pub(crate) async fn flush_pending(&self) -> Result<(), String> {
+        if !self.pending_journal.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        let jobs = self.jobs.lock().await;
+        if self.pending_journal.load(Ordering::SeqCst) {
+            self.save(&jobs)?;
+        }
+        Ok(())
     }
     pub async fn list(&self) -> Vec<Download> {
         self.jobs.lock().await.values().cloned().collect()
@@ -309,7 +327,7 @@ impl ModelDownloads {
         }
         Ok(())
     }
-    pub async fn remove_installed(&self, path: &std::path::Path) -> Result<(), String> {
+    pub async fn remove_installed(&self, path: &std::path::Path) -> Result<RemovedPackage, String> {
         let path = tokio::fs::canonicalize(path).await.map_err(|e| e.to_string())?;
         let mut jobs = self.jobs.lock().await;
         let id = jobs
@@ -329,7 +347,8 @@ impl ModelDownloads {
             tokio::fs::remove_file(&path).await.map_err(|e| e.to_string())?;
         }
         jobs.remove(&id);
-        self.save(&jobs)
+        self.pending_journal.store(true, Ordering::SeqCst);
+        Ok(RemovedPackage { journal_error: self.save(&jobs).err() })
     }
     fn spawn(self: &Arc<Self>, id: Uuid) {
         let manager = self.clone();
@@ -887,6 +906,114 @@ mod tests {
             assert_eq!(restored["models"][0]["id"], retained_model.to_string());
             assert_eq!(reopened.data.lock().await.models, mappings);
         }
+    }
+
+    #[tokio::test]
+    async fn managed_payload_removal_cleans_profiles_after_download_journal_write_failure() {
+        use crate::{
+            engine_registry::{EngineRegistry, HostSnapshot, RegisteredHost},
+            service::{Host, LaunchRequest},
+        };
+        use hyper::{Body, Request, StatusCode};
+
+        let directory = tempfile::tempdir().unwrap();
+        let provider = directory.path().join("ginfer");
+        let retained_models = directory.path().join("retained-models");
+        std::fs::create_dir(&retained_models).unwrap();
+        let (release, bytes) = fixture();
+        std::fs::write(retained_models.join("keep.ginfer"), &bytes).unwrap();
+        let state = provider.join("host");
+        let engine = provider.join("bin/missing-engine");
+        let set_path = provider.join("deployment.json");
+        let host = Host::open_with_model_storage(state.clone(), "Test".into(), engine.clone(),
+            vec![retained_models.clone()], vec![set_path.clone()], vec![], Some(provider.clone())).await.unwrap();
+        let download = insert(&host.downloads, release.clone()).await;
+        std::fs::write(host.downloads.root().join(format!("{download}.part")), &bytes).unwrap();
+        host.downloads.transfer(download).await.unwrap();
+        let descriptor = serde_json::json!({"schema":"ginfer-artifact-set-v1",
+            "identity":{"model_id":release.identity.model_id,"weights_id":release.identity.weights_id,"family_id":"a".repeat(64)},
+            "canonical_reconstructed_target_sha256":"b".repeat(64),"canonical_reconstructed_draft_sha256":null,
+            "artifacts":[{"tp":1,"draft_tp":0,"path":format!("models/{}/model.ginfer", release.sha256),
+                "bytes":release.bytes,"sha256":release.sha256}]});
+        std::fs::write(&set_path, descriptor.to_string()).unwrap();
+        host.scan().await.unwrap();
+        let package = host.downloads.root().join(&release.sha256);
+        let models = host.inventory.read().await.clone();
+        let raw = models.iter().find(|model| model.path == package.join("model.ginfer")).unwrap().id;
+        let alias = models.iter().find(|model| model.artifact_set).unwrap().id;
+        let retained_model = models.iter().find(|model| model.path == retained_models.join("keep.ginfer")).unwrap().id;
+        let retained_profile = Uuid::new_v4();
+        for (instance_id, model_id, gpu) in [
+            (Uuid::new_v4(), raw, "GPU-raw"),
+            (Uuid::new_v4(), alias, "GPU-alias"),
+            (retained_profile, retained_model, "GPU-retained"),
+        ] {
+            host.data.lock().await.profiles.insert(instance_id, LaunchRequest {
+                instance_id: Some(instance_id), qualified_profile_id: None, model_id,
+                gpu_uuids: vec![gpu.into()], max_context: 4096, concurrency: 1,
+                options: Default::default(),
+            });
+        }
+        host.save().await.unwrap();
+        let before = host.snapshot().await;
+        let before_typed: HostSnapshot = serde_json::from_value(before.clone()).unwrap();
+        let mut registry = EngineRegistry::default();
+        registry.register_paired(RegisteredHost {
+            host_id: before_typed.host_id,
+            display_name: before_typed.display_name.clone(),
+            credential_ref: "fixture-credential".into(),
+            certificate_sha256: host.data.lock().await.certificate.fingerprint(),
+        });
+        let connection = registry.connect(before_typed.host_id).unwrap();
+        registry.reconcile(connection, before_typed).unwrap();
+        let retained = before["instances"].as_array().unwrap().iter()
+            .find(|instance| instance["instance_id"] == retained_profile.to_string()).unwrap().clone();
+        let mappings = host.data.lock().await.models.clone();
+        let journal = provider.join("model-downloads.json");
+        let saved_journal = std::fs::read(&journal).unwrap();
+        std::fs::remove_file(&journal).unwrap();
+        std::fs::create_dir(&journal).unwrap();
+        let journal_error = std::fs::write(&journal, b"{}").unwrap_err().to_string();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = Request::post("/host/v1/remove-model")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"model_id":raw}).to_string())).unwrap();
+        let response = host.clone().route(request).await.unwrap();
+        let status = response.status();
+        let body: serde_json::Value = serde_json::from_slice(
+            &hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
+        let package_removed = !package.exists();
+        let jobs_after_failure = host.downloads.list().await;
+        let after_failure = host.snapshot().await;
+        let after_typed: HostSnapshot = serde_json::from_value(after_failure.clone()).unwrap();
+        let reconciliation = registry.reconcile(connection, after_typed);
+        let persisted_after_failure: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(state.join("host.json")).unwrap()).unwrap();
+        std::fs::remove_dir(&journal).unwrap();
+        std::fs::write(&journal, saved_journal).unwrap();
+        let retry = host.scan().await;
+        drop(host);
+        let reopened = Host::open_with_model_storage(state, "Ignored".into(), engine,
+            vec![retained_models], vec![set_path], vec![], Some(provider)).await.unwrap();
+        let restored = reopened.snapshot().await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        reconciliation.unwrap();
+        assert!(body["error"].as_str().unwrap().contains(&journal_error));
+        assert!(package_removed);
+        assert!(jobs_after_failure.is_empty());
+        assert_eq!(after_failure["instances"], serde_json::json!([retained.clone()]));
+        assert!(after_failure["revision"].as_u64().unwrap() > before["revision"].as_u64().unwrap());
+        assert_eq!(persisted_after_failure["profiles"].as_object().unwrap().len(), 1);
+        assert_eq!(persisted_after_failure["profiles"][retained_profile.to_string()], retained["profile"]);
+        retry.unwrap();
+        assert!(reopened.downloads.list().await.is_empty());
+        assert_eq!(restored["instances"], serde_json::json!([retained]));
+        assert_eq!(restored["models"].as_array().unwrap().len(), 1);
+        assert_eq!(restored["models"][0]["id"], retained_model.to_string());
+        assert_eq!(restored["host_id"], before["host_id"]);
+        assert_eq!(after_failure["boot_id"], before["boot_id"]);
+        assert_eq!(reopened.data.lock().await.models, mappings);
     }
 
     #[tokio::test]
