@@ -90,12 +90,16 @@ then closes and joins its consumer before checking the retained killer.
 No product code, timeout, dependency or profile changed in this correction.
 Pipe clones do not retain the PseudoCon owner; closure/EOF lifetime was
 checked against the exact cached implementation. Its role in the saved
-timeout remains inferred until the next native execution. Current source
-must be frozen and the prepared native source/hash bindings refreshed before
-the 07:30 compile; prior PASS/failure receipts remain separate evidence.
+timeout remains inferred until the next native execution. Frozen source `ccc9ab250` is committed and pushed. The independently reviewed
+prepared packet uses the existing exact `37aa7beed` archive/extraction plus
+an immutable two-file delta (109,407 bytes) to that source. Root applies it
+only after actual 07:30 admission and both canonical guards; all before/after
+bytes and the applied receipt must match. Fresh CCC compile and four-case
+PASS precede Check/Clippy and production; the prior failed test cannot satisfy
+a gate. No native staging or new compilation occurred during preparation.
 
 CPU-only booking 333 ended at 06:34:28.858 UTC before its 06:35 boundary.
-Both native Jobs were empty, pinned bodies exited, all six owned controller/
+All three native Jobs were empty, pinned bodies exited, all six owned controller/
 body PIDs were absent and Engine count was zero before canonical build-guard
 release. User apps/settings were unchanged. The earlier no-run command
 completed Cargo 0 after 3 minutes 41 seconds, but its runner rejected an
@@ -130,6 +134,17 @@ cleanup 08:09 and root proof/release 08:10.
 This corrects the insufficient whole-compile deadline; compilation is not a
 passing test. Release unused reservation time at actual END and recheck inbox,
 booking and actual ownership before execution.
+
+Owned inventory for this continuation: the clean candidate tree is
+`/ai/gchat-worktrees/remaining-acceptance-bd4`; frozen source is `ccc9ab250`.
+Retain the existing native extraction and shared Windows target cache at
+`%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/source` and
+`%LOCALAPPDATA%/GChat/windows-build/source/src-tauri/target` for the next
+check/build; no duplicate source archive or model copy was allocated.
+Prepared scripts, delta, verifiers and exact command inventory are indexed
+in `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/native-ccc9ab250-preparation.json`.
+All build/package/installed acceptance fields remain pending. Consumed
+37aa/333 artifacts are retained evidence, not current passing gates.
 
 The production refresh must rebuild both Manager and Host: Manager statically
 uses the changed Host client/fleet code and its own source has changed since the
