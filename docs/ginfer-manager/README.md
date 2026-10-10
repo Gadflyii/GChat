@@ -30,6 +30,49 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
+### Linux tray lifecycle — OI-071
+
+The accepted Linux `54c931c68` Manager and current source gate initial
+background hiding and close-to-tray handling behind Windows-only compilation.
+Linux therefore closes the Manager on `WM_DELETE_WINDOW` even after creating
+its tray. The isolated candidate shares those existing tray-conditioned paths
+between Windows and Linux: a nonempty Host snapshot on the first refresh hides
+the window by default, `--window` retains initial visibility, and close hides
+and prevents window destruction when the tray was created. On Linux, construction
+first requires an available StatusNotifierWatcher. Missing/unreachable watcher,
+missing probe tool, `--no-tray` and tray-construction failure retain a visible
+window and ordinary close behavior.
+Tray Open restores the window; Exit ends only Manager and retains Host.
+
+Candidate `/ai/gchat-worktrees/oi071-linux-tray`, branch
+`fix/gchat-oi071-linux-tray`, starts at `85f0bac2047c70cfa219ea8ef334367faf966138`.
+The runtime removes the two superseded Windows-only gates and their unused-value
+suppressions, and adds one Linux startup watcher probe before tray construction.
+Tauri/Tao/Wry and keyring do not expose usable GIO/D-Bus APIs through their public
+reexports; the probe uses optional installed `gdbus` with fixed arguments to call
+the session bus daemon's `org.freedesktop.DBus.NameHasOwner` for
+`org.kde.StatusNotifierWatcher`. It does not activate a provider. Only a successful
+`(true,)` reply enables tray construction. The existing Tokio runtime bounds the
+whole command/output wait to one second, including bus connection, and kills a
+timed-out child with a further bounded 250 ms reap attempt and kill-on-drop
+backstop. That deadline does not prove reaping; any residual child remains owned
+by Tokio's existing Unix reaper.
+There is no repeated availability polling or new declared runtime dependency.
+Tray construction alone is insufficient: cached `tray-icon` GTK construction
+sets the indicator active and writes the icon without requiring a watcher.
+X11 tray selection alone also does not prove AppIndicator availability.
+Windows installed producer `574d73df7`, accepted Linux packages, Host lifecycle,
+existing snapshot polling, settings and model/profile controls remain retained.
+
+Independent source review and `git diff --check` pass. The probe owns its child
+through success, failure and cancellation; synchronous setup uses Tauri's existing
+multithread runtime. Compilation and native verification remain pending: with a real watcher/tray, verify default
+background startup, `--window`, close/hide, tray reopen and Exit while retaining
+the same Host; verify visible startup and ordinary close on an actual missing
+watcher desktop, and the explicit `--no-tray` fallback. Verify absent-tool and
+unreachable-bus fallback within the probe deadline. No fake lifecycle test,
+native operation, build, provider/dependency change or model load has run.
+
 ### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
 
 The October 10 public Host snapshot reports the saved instance stopped with zero
@@ -575,8 +618,9 @@ version-matched offline documents. That historical Engine reports unknown
 embedded commit/dirty fields; exact baseline bytes/manifests establish its
 provenance. There is no Flash, new Engine capacity, model or GPU qualification
 claim, and Server 2 is untouched. See [installer refresh](../installer-refresh/README.md).
-Linux package/native lifecycle acceptance is complete. Next continue
-Host/Manager review from Bubbs’s 22:43 handoff.
+Linux package/window lifecycle acceptance remains accepted baseline evidence.
+The real-tray lifecycle correction and verification above are the next OI-071
+action; the historical window-only check does not qualify that behavior.
 
 Both packages contain Manager, matching Host, guide and font license. They
 contain no inference engine or models. Registered service/Desktop ownership
@@ -622,6 +666,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
+| Linux tray lifecycle / GChat coordinator | `/ai/gchat-worktrees/oi071-linux-tray` | Source candidate from `85f0bac2047c70cfa219ea8ef334367faf966138`, branch `fix/gchat-oi071-linux-tray`; shared tray close/start flow and this subject record. Retain for independent review and admitted compilation/native tray checks; no build, dependencies, models or live job allocated. |
 | Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, three observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |

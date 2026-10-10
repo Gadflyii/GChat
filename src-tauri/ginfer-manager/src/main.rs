@@ -287,6 +287,50 @@ async fn manager_request(app: tauri::AppHandle, request: ManagerRequest) -> Resu
     Ok(json!({"result":result,"view":view}))
 }
 
+#[cfg(target_os = "linux")]
+fn linux_tray_watcher_available() -> bool {
+    use tokio::io::AsyncReadExt;
+
+    let available = tauri::async_runtime::block_on(async {
+        // AppIndicator construction can succeed without a desktop watcher.
+        let mut child = match tokio::process::Command::new("gdbus")
+            .args([
+                "call", "--session", "--timeout", "1",
+                "--dest", "org.freedesktop.DBus",
+                "--object-path", "/org/freedesktop/DBus",
+                "--method", "org.freedesktop.DBus.NameHasOwner",
+                "org.kde.StatusNotifierWatcher",
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(_) => return false,
+        };
+        let mut stdout = child.stdout.take().expect("piped watcher probe output");
+        let mut output = Vec::new();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            let (_, status) = tokio::try_join!(stdout.read_to_end(&mut output), child.wait())?;
+            Ok::<_, std::io::Error>(status.success() && output == b"(true,)\n")
+        }).await;
+        match result {
+            Ok(Ok(available)) => available,
+            _ => {
+                let _ = child.start_kill();
+                let _ = tokio::time::timeout(std::time::Duration::from_millis(250), child.wait()).await;
+                false
+            }
+        }
+    });
+    if !available {
+        eprintln!("Manager tray watcher unavailable; using the window");
+    }
+    available
+}
+
 fn main() {
     let no_tray = std::env::args().any(|arg| arg == "--no-tray");
     let start_window = std::env::args().any(|arg| arg == "--window");
@@ -305,7 +349,10 @@ fn main() {
         .invoke_handler(tauri::generate_handler![manager_snapshot, manager_request])
         .setup(move |app| {
             let handle = app.handle().clone();
-            if !no_tray {
+            let tray_enabled = !no_tray;
+            #[cfg(target_os = "linux")]
+            let tray_enabled = tray_enabled && linux_tray_watcher_available();
+            if tray_enabled {
                 let open = MenuItem::with_id(app, "open", "Open Server Manager", true, None::<&str>)?;
                 let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)?;
                 let share = CheckMenuItem::with_id(app, "share", "Share this host", false, false, None::<&str>)?;
@@ -353,12 +400,10 @@ fn main() {
                 loop {
                     match publish(&handle).await {
                         Ok(view) => {
-                            #[cfg(windows)]
                             if initial && !start_window && handle.state::<ManagerState>().tray_ready.load(Ordering::SeqCst)
                                 && view["hosts"].as_array().is_some_and(|hosts| !hosts.is_empty()) {
                                 if let Some(window) = handle.get_webview_window("main") { let _ = window.hide(); }
                             }
-                            let _ = (&view, start_window, initial);
                         }
                         Err(error) => { let _ = handle.emit("manager-error", error); }
                     }
@@ -369,14 +414,12 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            #[cfg(windows)]
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.app_handle().state::<ManagerState>().tray_ready.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.hide();
                 }
             }
-            let _ = (window, event);
         })
         .run(tauri::generate_context!())
         .expect("GInfer Server Manager desktop runtime");
