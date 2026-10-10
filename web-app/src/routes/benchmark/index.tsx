@@ -627,13 +627,14 @@ function BenchmarkPage() {
                       >
                         {runs.map((run) => <option key={run.run_id} value={run.run_id}>{runLabel(run)}</option>)}
                       </select>
-                      <Button variant="ghost" size="icon-sm" aria-label="Delete selected benchmark" onClick={() => selectedRun && deleteRun(selectedRun.run_id)}>
+                      <Button variant="ghost" size="icon-sm" aria-label="Delete selected local benchmark" title="Delete local history only; published results remain on the leaderboard" onClick={() => selectedRun && deleteRun(selectedRun.run_id)}>
                         <IconTrash />
                       </Button>
                     </div>
                   )}
                 </div>
 
+                <BenchmarkLeaderboard run={selectedRun} />
                 {selectedRun ? (
                   <div className="space-y-5">
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -642,7 +643,6 @@ function BenchmarkPage() {
                       <div className="rounded-lg bg-muted/45 p-3"><div className="text-xs text-muted-foreground">KV / speculative</div><div className="mt-1 text-sm font-medium">{selectedRun.session.kv_dtype} · {selectedRun.session.spec}{selectedRun.session.draft_tp ? ` DTP${selectedRun.session.draft_tp}` : ''}</div></div>
                       <div className="rounded-lg bg-muted/45 p-3"><div className="text-xs text-muted-foreground">Runtime</div><div className="mt-1 text-sm font-medium">CUDA Graph {selectedRun.session.cuda_graph ? 'on' : 'off'} · {formatSeconds((selectedRun.completed_at_ms - selectedRun.started_at_ms) / 1000)}</div></div>
                     </div>
-                    <BenchmarkLeaderboard key={selectedRun.run_id} run={selectedRun} />
                     <ThroughputChart points={selectedRun.points} />
                     <ResultsTable points={selectedRun.points} />
                     <p className="text-xs leading-relaxed text-muted-foreground">

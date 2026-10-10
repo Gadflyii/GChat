@@ -5,6 +5,33 @@ import { localStorageKey } from '@/constants/localStorage'
 export const GBENCH_URL = 'https://sectilelabs.ai/gbench'
 export const GBENCH_PUBLISHING_ENABLED = true
 
+type OwnerReceipt = { run_id: string; delete_token: string; owner_token?: string }
+
+export function ownedLeaderboardResults(): OwnerReceipt[] {
+  const receipts = JSON.parse(localStorage.getItem(localStorageKey.gbenchReceipts) || '{}')
+  if (!receipts || typeof receipts !== 'object' || Array.isArray(receipts)) throw new Error('Invalid saved leaderboard ownership receipts.')
+  return Object.entries(receipts).flatMap(([id, value]) => {
+    const receipt = value as Partial<OwnerReceipt> | null
+    return /^[A-Za-z0-9_-]{8,80}$/.test(id) && receipt?.run_id === id &&
+      typeof receipt.delete_token === 'string' && /^[a-f0-9]{64}$/.test(receipt.delete_token)
+      ? [receipt as OwnerReceipt] : []
+  })
+}
+
+export async function deleteLeaderboardResult(runId: string): Promise<void> {
+  const receipt = ownedLeaderboardResults().find(receipt => receipt.run_id === runId)
+  if (!receipt) throw new Error('No saved deletion receipt for this leaderboard result.')
+  await invoke<void>('delete_benchmark', { runId, deleteToken: receipt.delete_token })
+  // A failed/lost DELETE retains ownership; only confirmed deletion clears this entry.
+  try {
+    const receipts = JSON.parse(localStorage.getItem(localStorageKey.gbenchReceipts) || '{}')
+    delete receipts[runId]
+    localStorage.setItem(localStorageKey.gbenchReceipts, JSON.stringify(receipts))
+  } catch {
+    throw new Error('The public result was removed, but its local receipt could not be cleared. Retry removal to finish cleanup.')
+  }
+}
+
 function configuration(c: BenchmarkConfiguration): BenchmarkConfiguration {
   return { engine_build: c.engine_build, model: c.model, weights: c.weights,
     tp: c.tp, draft_tp: c.draft_tp, max_context: c.max_context, max_concurrency: c.max_concurrency,

@@ -16,6 +16,7 @@ vi.mock('@/stores/engine-hosts-store', () => {
 import { Route, ThroughputChart } from './index'
 import { onBenchmarkProgress } from '@/services/benchmark/tauri'
 import { useBenchmarkStore } from '@/stores/benchmark-store'
+import { localStorageKey } from '@/constants/localStorage'
 const Page = Route.options.component as ComponentType
 
 it('scales generation independently of prompt throughput with labeled axes', () => {
@@ -84,7 +85,25 @@ it('keeps saved results visible without an online server', async () => {
   expect(screen.getByText('Saved Muse run')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
+
+it('keeps receipt-owned public removal available after deleting the last local result', async () => {
+  const id = 'owned-local-history'
+  const receipts = JSON.stringify({ [id]: { run_id: id, delete_token: 'a'.repeat(64) } })
+  localStorage.setItem(localStorageKey.gbenchReceipts, receipts)
+  useBenchmarkStore.setState({ runs: [{ benchmark_id: 'custom', hardware: null, methodology: 'ginfer-resident-max-perf-v1', run_id: id, started_at_ms: 1, completed_at_ms: 1001, points: [],
+    session: { display_name: 'Saved local run', pid: null, target_id: 'ginfer/local/instance', session_id: 'session', model_id: 'model', model_path: '/model.ginfer', max_context: 8192, max_concurrency: 1, vision: true, spec: 'auto', draft_tokens: 0, draft_tp: 0, kv_dtype: 'int8', prefill_chunk: 0, cuda_graph: true },
+  }], selectedRunId: id })
+  const view = render(<Page />)
+  await screen.findByRole('link', { name: `View result ${id}` })
+  fireEvent.click(screen.getByRole('button', { name: 'Delete selected local benchmark' }))
+  expect(useBenchmarkStore.getState().runs).toEqual([])
+  expect(localStorage.getItem(localStorageKey.gbenchReceipts)).toBe(receipts)
+  expect(screen.getByRole('button', { name: 'Remove from leaderboard' })).toBeInTheDocument()
+  view.unmount()
+  render(<Page />)
+  expect(await screen.findByRole('link', { name: `View result ${id}` })).toBeInTheDocument()
+})
 
 it('offers the new workloads and every supported concurrency outside Standard Benchmark', async () => {
   mocks.list.mockResolvedValue([{ target_id: 'ginfer/local/instance', model_id: 'model', max_concurrency: 8, max_context: 131072, pid: null, is_embedding: false }])

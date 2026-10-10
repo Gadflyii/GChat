@@ -1,15 +1,15 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { BenchmarkResult } from '@/services/benchmark/tauri'
-import { buildSubmission, GBENCH_PUBLISHING_ENABLED, GBENCH_URL, submitStandardBenchmark } from '@/services/benchmark/leaderboard'
+import { buildSubmission, GBENCH_PUBLISHING_ENABLED, GBENCH_URL, submitStandardBenchmark, ownedLeaderboardResults, deleteLeaderboardResult } from '@/services/benchmark/leaderboard'
 
-export function BenchmarkLeaderboard({ run }: { run: BenchmarkResult }) {
+function BenchmarkSubmission({ run, onSubmitted }: { run: BenchmarkResult; onSubmitted: () => void }) {
   const [nickname, setNickname] = useState('')
   const [consent, setConsent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState<string | null>(null)
   if (run.benchmark_id !== 'standard') return null
   const hardware = run.hardware
   let preview: ReturnType<typeof buildSubmission> | null = null
@@ -18,8 +18,8 @@ export function BenchmarkLeaderboard({ run }: { run: BenchmarkResult }) {
   const submit = async () => {
     setSubmitting(true)
     try {
-      const receipt = await submitStandardBenchmark(run, nickname)
-      setSubmitted(receipt.run_id)
+      await submitStandardBenchmark(run, nickname)
+      onSubmitted()
       toast.success('Your benchmark is on the leaderboard!')
     } catch (error) { toast.error('Could not submit benchmark', { description: String(error) }) }
     finally { setSubmitting(false) }
@@ -39,12 +39,62 @@ export function BenchmarkLeaderboard({ run }: { run: BenchmarkResult }) {
       {preview && <details className="mt-2"><summary className="cursor-pointer">Full submission preview</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{JSON.stringify(preview, null, 2)}</pre></details>}
     </details>
     <div className="mt-4 flex flex-wrap items-end gap-3">
-      <label className="min-w-52 flex-1 text-sm">Enter public nickname<Input className="mt-1" value={nickname} maxLength={32} onChange={e => setNickname(e.target.value)} autoComplete="off" disabled={submitting || !!submitted} /></label>
-      <Button disabled={!GBENCH_PUBLISHING_ENABLED || !consent || !preview || submitting || !!submitted || !nickname.trim()} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit to leaderboard'}</Button>
+      <label className="min-w-52 flex-1 text-sm">Enter public nickname<Input className="mt-1" value={nickname} maxLength={32} onChange={e => setNickname(e.target.value)} autoComplete="off" disabled={submitting} /></label>
+      <Button disabled={!GBENCH_PUBLISHING_ENABLED || !consent || !preview || submitting || !nickname.trim()} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit to leaderboard'}</Button>
     </div>
     <label className="mt-3 flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />I want to publish this nickname, hardware information, configuration, and scores.</label>
     {!GBENCH_PUBLISHING_ENABLED && <p className="mt-2 text-sm text-muted-foreground">Leaderboard coming soon. Publishing is not enabled yet.</p>}
     {validationError && <p className="mt-2 text-sm text-muted-foreground">{validationError}</p>}
-    {submitted && <a className="mt-2 inline-block text-sm text-primary underline" href={`${GBENCH_URL}/?run=${encodeURIComponent(submitted)}`} target="_blank" rel="noreferrer">View your result</a>}
   </section>
+}
+
+export function BenchmarkLeaderboard({ run }: { run?: BenchmarkResult }) {
+  const [receipts, setReceipts] = useState<ReturnType<typeof ownedLeaderboardResults>>([])
+  const [receiptError, setReceiptError] = useState<string | null>(null)
+  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const refreshReceipts = useCallback(() => {
+    try { setReceipts(ownedLeaderboardResults()); setReceiptError(null) }
+    catch { setReceiptError('Could not read saved leaderboard ownership receipts. Local results are unchanged.') }
+  }, [])
+  useEffect(() => { refreshReceipts() }, [refreshReceipts])
+  const remove = async () => {
+    if (!selectedReceipt || removing) return
+    setRemoving(true)
+    try {
+      await deleteLeaderboardResult(selectedReceipt)
+      refreshReceipts()
+      setSelectedReceipt(null)
+      toast.success('Removed from the leaderboard. Your local benchmark result is kept.')
+    } catch (error) {
+      toast.error('Could not finish leaderboard removal', { description: error instanceof Error ? error.message : String(error) })
+    } finally { setRemoving(false) }
+  }
+  return <div className="space-y-4">
+    {receiptError && <p role="alert" className="text-sm text-destructive">{receiptError}</p>}
+    {run?.benchmark_id === 'standard' && !receiptError && !receipts.some(receipt => receipt.run_id === run.run_id) &&
+      <BenchmarkSubmission key={run.run_id} run={run} onSubmitted={refreshReceipts} />}
+    {receipts.length > 0 && <section aria-label="Published benchmark results" className="rounded-lg border border-border p-4">
+      <h3 className="font-medium">Your published results</h3>
+      <p className="mt-1 text-sm text-muted-foreground">These results remain on the leaderboard even if their local history is deleted.</p>
+      <ul className="mt-3 space-y-2">
+        {receipts.map(receipt => <li key={receipt.run_id} className="flex flex-wrap items-center justify-between gap-2">
+          <a className="break-all text-sm text-primary underline" href={`${GBENCH_URL}/?run=${encodeURIComponent(receipt.run_id)}`} target="_blank" rel="noreferrer">View result {receipt.run_id}</a>
+          <Button variant="outline" size="sm" disabled={removing} onClick={() => setSelectedReceipt(receipt.run_id)}>Remove from leaderboard</Button>
+        </li>)}
+      </ul>
+    </section>}
+    <Dialog open={selectedReceipt !== null} onOpenChange={open => { if (!open && !removing) setSelectedReceipt(null) }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remove this result from the leaderboard?</DialogTitle>
+          <DialogDescription>This removes the published result {selectedReceipt} from G.bench. Your local benchmark history and other published results are kept.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" disabled={removing} onClick={() => setSelectedReceipt(null)}>Cancel</Button>
+          <Button variant="destructive" disabled={removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove published result'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>
 }

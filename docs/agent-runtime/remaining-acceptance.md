@@ -137,28 +137,34 @@ Linux deployment or credential changes were attempted here.
 
 ## Installed community publication
 
-OI-073 requires a designated disposable completed Standard Benchmark result,
-installed community signing configuration and the board owner's publication
-window. The 12 official reference series / 36 points are already accepted and
-must remain untouched. Synthetic fixture data must not be published as measured
-community results.
+The authorized one-attempt OI-073 lifecycle passed on October10: installed
+submission, exact public readback, receipt-authenticated DELETE and GET404
+cleanup. The disposable `oi073-disposable-20261010-ron1000z-01` is gone; all12
+official series /36 points and original local results remain unchanged. Reuse
+`out/remaining-acceptance-20261009/oi073/accepted-one-attempt-result.json` and its
+linked preservation receipts. Retry/concurrent/conflict publication checks
+were not authorized by that final GO and must not be added to this task.
 
-The existing frontend `services/benchmark/leaderboard.test.ts` checks public
-payload fields, the complete supported C1/C4/C8 workload, malformed receipts and
-ownership persistence across a lost-response retry. Native `benchmark_submission`
-tests bind the exact result hash, challenge, expiry and key, and check the PHP
-signature vector. Actual website publication/replay/rollback belongs to the
-separate Sectile Web `site/gbench` repository; this checkout has no installed
-deletion/replay acceptance receipt.
+GCHAT-LEADERBOARD-DELETE addresses the missing app removal control. Candidate
+`/ai/gchat-worktrees/gbench-delete-bd4`, branch `fix/gchat-gbench-delete-bd4`,
+starts from `bd4dba841`. A receipt-owned Published results section remains
+available after local-history deletion or eviction and restores on page reopen.
+Removal requires confirmation and uses only that run's saved receipt through
+the fixed native DELETE endpoint; local history and other receipts are kept.
+Confirmed public success clears only the corresponding receipt. A failed or
+lost response keeps ownership for retry; local persistence failure reports
+that the public result was removed but local cleanup remains pending. Existing
+PHP `api.php:93–98` accepts the same valid receipt and returns deleted:true even
+after the row was removed, making that cleanup retry safe.
 
-With the designated result and board window, publish through installed GChat's
-`submit_benchmark` command, compare public readback to that result and keep the
-returned deletion receipt private. Interrupt a response after acceptance and
-retry the same saved owner token; then perform concurrent replay and the board's
-rollback/deletion path against only that disposable result. Observe uniqueness,
-receipt recovery, retained ownership and final removal. Those are concrete
-installed/board checks; local signing tests or earlier official imports cannot
-close them. This review sent no publication request.
+The source patch and focused validation plan are retained in the existing
+OI-073 packet as `gchat-leaderboard-delete-bd4.patch` and
+`gchat-delete-candidate-inventory.json`. New service/UI/local-HTTP regressions
+cover receipt ownership, confirmation, retry, local-history independence and
+response validation. They remain **unrun** until an admitted CPU slot; run only
+the changed cases under rule33. This candidate has no build or live job. No
+public request, credential/site change, model load or signing occurred; the
+installed app still lacks this control until the verified candidate is shipped.
 
 ## Native idle observation and remaining rendering measurement
 

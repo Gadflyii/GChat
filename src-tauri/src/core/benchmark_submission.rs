@@ -42,6 +42,34 @@ async fn response_json(response: reqwest::Response) -> Result<serde_json::Value,
     Ok(body)
 }
 
+fn leaderboard_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder().timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none()).build().map_err(|e| e.to_string())
+}
+
+async fn delete_submission(client: &reqwest::Client, api: &str, run_id: &str, delete_token: &str) -> Result<(), String> {
+    if !(8..=80).contains(&run_id.len())
+        || !run_id.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-')) {
+        return Err("Invalid leaderboard Run ID".into());
+    }
+    if !is_hex(delete_token, 64) { return Err("Invalid leaderboard deletion receipt".into()); }
+    let response = client.delete(format!("{api}/submissions/{run_id}"))
+        .bearer_auth(delete_token).send().await.map_err(|e| e.to_string())?;
+    let status = response.status();
+    let body: serde_json::Value = response.json().await.map_err(|_| "Invalid leaderboard deletion response")?;
+    if !status.is_success() {
+        return Err(body["error"].as_str().unwrap_or("Leaderboard deletion failed").to_owned());
+    }
+    if body["deleted"] != true { return Err("Invalid leaderboard deletion response".into()); }
+    Ok(())
+}
+
+/// Deletion uses the saved ownership receipt, independently of release signing.
+#[tauri::command]
+pub async fn delete_benchmark(run_id: String, delete_token: String) -> Result<(), String> {
+    delete_submission(&leaderboard_client()?, API, &run_id, &delete_token).await
+}
+
 /// Only the fixed leaderboard destination is reachable; the private key never crosses IPC.
 #[tauri::command]
 pub async fn submit_benchmark(payload: String, owner_token: String) -> Result<Receipt, String> {
@@ -60,8 +88,7 @@ pub async fn submit_benchmark(payload: String, owner_token: String) -> Result<Re
         .try_into().map_err(|_| "Invalid leaderboard signing configuration")?;
     let key = SigningKey::from_bytes(&seed);
     let hash = hex::encode(Sha256::digest(format!("{payload}\n{owner_token}").as_bytes()));
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(20))
-        .redirect(reqwest::redirect::Policy::none()).build().map_err(|e| e.to_string())?;
+    let client = leaderboard_client()?;
     let challenge: Challenge = serde_json::from_value(response_json(client.post(format!("{API}/challenges"))
         .json(&serde_json::json!({"payload_hash":hash,"key_id":key_id})).send().await.map_err(|e| e.to_string())?).await?)
         .map_err(|_| "Invalid leaderboard challenge")?;
@@ -82,6 +109,50 @@ pub async fn submit_benchmark(payload: String, owner_token: String) -> Result<Re
 mod tests {
     use super::*;
     use ed25519_dalek::Verifier;
+
+    #[tokio::test]
+    async fn receipt_deletion_uses_the_owned_route_and_requires_confirmed_success() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for (status, body, expected) in [
+            ("200 OK", r#"{"deleted":true}"#, Ok(())),
+            ("403 Forbidden", r#"{"error":"Invalid deletion receipt."}"#, Err("Invalid deletion receipt.")),
+            ("303 See Other", r#"{"error":"Redirect refused"}"#, Err("Redirect refused")),
+            ("200 OK", r#"{"deleted":false}"#, Err("Invalid leaderboard deletion response")),
+        ] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let api = format!("http://{}/api/v1", listener.local_addr().unwrap());
+            let server = tokio::spawn(async move {
+                tokio::time::timeout(Duration::from_secs(3), async {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let mut request = Vec::new();
+                    let mut buffer = [0; 1024];
+                    while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                        let count = stream.read(&mut buffer).await.unwrap();
+                        assert!(count > 0 && request.len() < 16384);
+                        request.extend_from_slice(&buffer[..count]);
+                    }
+                    let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nLocation: /must-not-follow\r\nConnection: close\r\n\r\n{body}", body.len());
+                    stream.write_all(response.as_bytes()).await.unwrap();
+                    String::from_utf8(request).unwrap()
+                }).await.unwrap()
+            });
+            let token = "a".repeat(64);
+            let result = delete_submission(&leaderboard_client().unwrap(), &api, "owned-run-123", &token).await;
+            let request = server.await.unwrap();
+            assert!(request.starts_with("DELETE /api/v1/submissions/owned-run-123 HTTP/1.1\r\n"));
+            assert!(request.to_ascii_lowercase().contains(&format!("authorization: bearer {token}\r\n")));
+            assert_eq!(result.as_ref().map(|_| ()).map_err(|error| error.as_str()), expected);
+        }
+    }
+
+    #[tokio::test]
+    async fn deletion_rejects_invalid_ownership_before_transport() {
+        let client = leaderboard_client().unwrap();
+        for id in ["../other-run", "short", "owned-run?other", "owned/run-123"] {
+            assert_eq!(delete_submission(&client, "http://127.0.0.1:1", id, &"a".repeat(64)).await.unwrap_err(), "Invalid leaderboard Run ID");
+        }
+        assert_eq!(delete_submission(&client, "http://127.0.0.1:1", "owned-run-123", "invalid-token").await.unwrap_err(), "Invalid leaderboard deletion receipt");
+    }
 
     #[test]
     fn public_client_cannot_use_the_official_nickname() {

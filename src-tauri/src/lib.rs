@@ -84,6 +84,7 @@ pub fn run() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
         core::benchmark_submission::submit_benchmark,
+        core::benchmark_submission::delete_benchmark,
         core::engine_hosts::engine_hosts_command,
         // FS commands - Deperecate soon
         core::filesystem::commands::join_path,
