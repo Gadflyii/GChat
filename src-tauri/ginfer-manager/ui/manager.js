@@ -174,12 +174,19 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     }
     const name = field('Client name', 'client_name', state.view.client_name || '', 'text', { required: '', maxlength: 80 })
     const address = field('Host address', 'base_url', '', 'url', { required: '', placeholder: 'https://192.168.1.10:7444' })
-    const secureStatus = h('p', { class: 'section-error', role: 'status' })
+    const secureStatus = h('p', { class: 'muted', role: 'status' })
     dialog('Pair a host',
       'Pairing saves the verified host certificate and this client’s grant in shared native storage. Secure storage must be available.',
       [name, address, button('Check secure storage', async () => {
+        secureStatus.textContent = ''
+        secureStatus.className = 'muted'
+        secureStatus.setAttribute('role', 'status')
         try { await run({ action: 'secure_storage' }, 'Secure storage is ready'); secureStatus.textContent = 'Secure storage is ready' }
-        catch (error) { secureStatus.textContent = String(error) }
+        catch (error) {
+          secureStatus.className = 'section-error'
+          secureStatus.setAttribute('role', 'alert')
+          secureStatus.textContent = String(error)
+        }
       }), secureStatus], 'Pair', (form) => run({ action: 'pair', host_id: null,
         base_url: fieldValue(form, 'base_url'), client_name: fieldValue(form, 'client_name') }, 'Host paired'))
   }

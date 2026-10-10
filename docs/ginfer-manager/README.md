@@ -124,6 +124,23 @@ the intended accessible name. Actual candidate exposure remains unmeasured;
 use only fresh candidate-linked properties and targets for the native gate.
 Evidence: `out/remaining-acceptance-20261009/oi071/s2-tray-accessible-name-source-20261010.json`.
 
+The Pair dialog's secure-storage readiness message incorrectly used error
+styling. The reviewed correction uses neutral status text for readiness, a red
+alert only after failure, and clears the previous failure on retry. A focused
+DOM fixture covers success, failure and recovery; execution remains deferred
+until the admitted CPU window. Its only required check is
+`node --test --test-name-pattern='secure storage results' tests/ginfer-manager-ui.test.mjs`.
+No secure-storage or pairing contract changes. This source correction does not
+qualify the physical tray or saved-grant lifecycle.
+
+A separate reviewed proposal patches the existing `tray-icon` 0.21.3 GTK backend
+to retain Manager's accessible name. Adding its Cargo source override requires
+Ron’s explicit decision under GChat `AGENTS.md` §6.6. The proposed directory
+`src-tauri/vendor/tray-icon` and configuration have not been created; other
+Manager work proceeds independently. The exact proposal and patch are retained
+in `out/remaining-acceptance-20261009/oi071/tray-icon-backend-integration-proposed.txt`
+and `tray-icon-0.21.3-gtk-accessible-name-proposed.patch` in the same packet.
+
 Booking364's installed Windows desktop renders the embedded app correctly at
 `http://tauri.localhost`. The visible Code Stop reaches backend Exited and all
 four Code children exit, but the UI remains Stopping after 26 seconds; the new
