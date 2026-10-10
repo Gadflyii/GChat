@@ -11,7 +11,8 @@ release must run there with the reviewed source and existing signing key;
 cross-repository credentials are not provided. Draft-only behavior is retained.
 
 Ron authorized local unsigned preparation; signing/publication await his next
-release. `src-tauri/latest.json.template` retains only Windows/Linux placeholders.
+release. The release workflow and `src-tauri/latest.json.template` cover only
+the supported Windows/Linux products; macOS jobs and manifest branches are removed.
 Its unsigned copy is `/ai/gchat/out/remaining-acceptance-20261009/oi110-latest.unsigned.json`.
 Version, date/notes, selected platforms, final asset names and signatures remain
 pending; this empty preparation artifact is not an installable manifest. Each
