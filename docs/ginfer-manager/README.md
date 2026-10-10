@@ -117,8 +117,8 @@ actual window focus and menu closure; Exit requires the original PID absent.
 An unavailable owned-menu image is recorded without weakening those checks.
 This remains source preparation, with no new S2 launch or FIFO row.
 Read-only inspection of S2's Ubuntu appindicator extension shows its accessible
-name comes from icon description or Title, with no Id fallback. The locked
-GTK tray backend ignores the Manager's tooltip, supplies description `icon`,
+name comes from icon description or Title, with no Id fallback. The original
+locked GTK tray backend ignores the Manager's tooltip, supplies description `icon`,
 and maps its `title` option to panel text. Adding that option would not provide
 the intended accessible name. Actual candidate exposure remains unmeasured;
 use only fresh candidate-linked properties and targets for the native gate.
@@ -133,13 +133,32 @@ until the admitted CPU window. Its only required check is
 No secure-storage or pairing contract changes. This source correction does not
 qualify the physical tray or saved-grant lifecycle.
 
-A separate reviewed proposal patches the existing `tray-icon` 0.21.3 GTK backend
-to retain Manager's accessible name. Adding its Cargo source override requires
-Ron’s explicit decision under GChat `AGENTS.md` §6.6. The proposed directory
-`src-tauri/vendor/tray-icon` and configuration have not been created; other
-Manager work proceeds independently. The exact proposal and patch are retained
-in `out/remaining-acceptance-20261009/oi071/tray-icon-backend-integration-proposed.txt`
-and `tray-icon-0.21.3-gtk-accessible-name-proposed.patch` in the same packet.
+Ron explicitly approved the reviewed `tray-icon` source override under GChat
+`AGENTS.md` §6.6. `src-tauri/vendor/tray-icon` now contains the locked 0.21.3
+source from upstream `a0081a3b833ab3382d2c8d2142df76ccaabaadf6`, with both
+licenses retained. Its GTK backend owns the configured tooltip and applies it
+as the native icon description at construction, tooltip changes and subsequent
+icon replacement. Existing main-thread and mutable AppIndicator ownership remain
+intact; no raw-pointer access or panel text is introduced. Non-Linux code,
+dependency versions and edges are unchanged. The workspace override also binds
+GChat's transitive tray dependency to this source.
+
+The static lock change removes only tray-icon's registry source/checksum. Offline
+resolution, Linux Manager check/strict Clippy and package generation remain
+pending until the admitted CPU window at 22:20 UTC. Retained build365 does not
+contain this patch. Actual fresh candidate SNI properties, unique native target,
+Open focus/menu closure and Exit PID absence remain required under S2 FIFO;
+Hide/pairing/saved-grant acceptance remains unqualified. Ron selected Manager's
+existing canonical `src-tauri/icons/icon.png` as the shared application icon.
+Manager already selects `../icons/icon.png` in its Tauri bundle configuration;
+locked code generation embeds that PNG as the default window icon, which the
+tray builder uses. Its UI brand and Windows icon producer use the same PNG.
+The Manager route is retained without a second decode or new asset; GChat's
+explicit shared-icon routing is handled separately. Icon assets are unchanged.
+The reviewed integration manifest and
+patch remain in `out/remaining-acceptance-20261009/oi071/` as
+`tray-icon-backend-integration-proposed.txt` and
+`tray-icon-0.21.3-gtk-accessible-name-proposed.patch`.
 
 Booking364's installed Windows desktop renders the embedded app correctly at
 `http://tauri.localhost`. The visible Code Stop reaches backend Exited and all
