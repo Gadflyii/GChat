@@ -32,10 +32,10 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ### Linux tray lifecycle — OI-071
 
-The accepted Linux `54c931c68` Manager and current source gate initial
+The accepted Linux `54c931c68` Manager gates initial
 background hiding and close-to-tray handling behind Windows-only compilation.
 Linux therefore closes the Manager on `WM_DELETE_WINDOW` even after creating
-its tray. The isolated candidate shares those existing tray-conditioned paths
+its tray. Reviewed source `deaf467a1` shares those existing tray-conditioned paths
 between Windows and Linux: a nonempty Host snapshot on the first refresh hides
 the window by default, `--window` retains initial visibility, and close hides
 and prevents window destruction when the tray was created. On Linux, construction
@@ -93,10 +93,12 @@ used no original state, and does not qualify the new Hide behavior. The archive
 remains staged at `/home/ron/.local/share/GInfer/oi071-manager-54c931c68`.
 Keep the same fixture available for the corrected
 artifact's full pairing/restart/lifetime check. The new Manager's focused Linux
-checks and build are reserved on local CPUs at 15:50–16:10 UTC, using the
-existing Ubuntu24 image and shared Cargo target; no dependency or Engine build.
-Windows desktop/NSIS remains at 15:05–15:15. Recheck disk and exact owners at
-actual admission, and keep the 2 GiB disk floor.
+check, strict Clippy and build are approved for CPU-only 16:35–16:55 UTC, using
+the existing Ubuntu24 image and shared Cargo target; no dependency or Engine build.
+Windows desktop-only UI verification is approved for 16:20–16:35 UTC using the
+compiled booking353 desktop. Separate NSIS packaging is approved for
+16:55–17:20 UTC and is not a prerequisite for that UI check. Recheck disk and
+exact owners at actual admission, and keep the 2 GiB disk floor.
 
 ### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
 
@@ -140,11 +142,22 @@ parsed as a `C:` URL and left assets unembedded. Exact `0f06ba433` desktop-only
 restoration passes at 11:56:54.9219517 UTC, with ordinary GChat UI, seven original
 saved threads and unchanged selected protected state. Manager 24796/hash
 `1b9f0173…` and 7d9 Host/CLI/2ef Engine remain intact; Engine/API counts are zero
-and guards are released. CPU-only booking353, 15:05–15:15 UTC, has an accepted
-nonexecuted build-body proposal: relative `frontendDist`
+and guards are released. CPU-only booking353, 15:05–15:15 UTC, compiled the
+corrected desktop: relative `frontendDist`
 `../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
-assets as a Directory. Actual desktop/NSIS build, install and ordinary candidate
-UI verification remain pending.
+assets as a Directory. Cargo passed from 15:07:07.607 to 15:11:35.887 UTC
+(4m28s). NSIS packaging remained incomplete when the independent 15:13 UTC
+deadline killed the owned job, only about 84 seconds after Cargo finished. The
+overall result remains `BOUNDED_ABORT`, not a package pass. The job is empty;
+fresh controller/body/helper absence is proven at 15:13:44 UTC, and the own
+keeper released at 15:14:21 UTC. No installation or new candidate UI result is
+claimed. Retain `production-terminal-353.json`, `release-verified-353.json` and
+native `native-574d73df7-353-frontend-directory` under the existing
+`oi068-windows-20261010` evidence roots. The user approves this compiled
+`574d73df7` desktop for desktop-only UI verification at 16:20–16:35 UTC,
+retaining installed Manager, Host, Engine and saved state. Separate NSIS
+packaging at 16:55–17:20 UTC remains pending and does not gate that UI check.
+Native tray qualification and model-backed acceptance remain pending.
 The [remaining acceptance authority](../agent-runtime/remaining-acceptance.md)
 owns package/installation admission and preservation checks.
 
@@ -702,6 +715,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Retired after accepted Windows package/install; shared cache junction detached first |
 | Offline source candidate | `/ai/gchat-worktrees/manager-offline-status` | Reviewed source retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | Windows accepted package/proof | `/ai/gchat/out/ginfer-manager/windows/` | Current archive/guide/hashes and earlier public native proof |
+| Windows desktop353 / GChat coordinator | `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/native-574d73df7-353-frontend-directory` | Retain Cargo desktop PASS and partial NSIS `BOUNDED_ABORT`, terminal/release receipts, unchanged installed apps/state and shared build cache. Approved desktop-only UI 16:20–16:35, separate NSIS 16:55–17:20; neither has run. No new model/build duplication. |
 | Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Refreshed Manager compiled `54c931c68`, guide/checksums; earlier native proof retained as historical evidence |
 | Linux refresh packet | `/ai/gchat/out/oi070-linux-refresh/` | Accepted `02d369e8a` assembly, compiled `54c931c68`, independent package/native proof; old packet path retained as stable symlink |
 | Offline task evidence | `/ai/gchat/out/manager-offline-status-20261008/` | Required gate, Clippy, native build, installed UI/identity, cleanup receipts |

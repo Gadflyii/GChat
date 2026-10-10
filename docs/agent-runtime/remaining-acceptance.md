@@ -12,8 +12,8 @@ Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
 `bd4dba841`. Current Windows components are restored `0f06ba433` GChat desktop,
 new Manager `574d73df7`, 7d9 Host/CLI and retained Engine `2ef56a52`.
-Exact restoration and ordinary baseline UI pass; candidate desktop repair
-remains pending. Host fixes
+Exact restoration and ordinary baseline UI pass; corrected candidate desktop
+compilation now passes, while its actual UI and NSIS packaging remain pending. Host fixes
 OI-111–114 and OI-120–122 retain composed Rust checks at 01:50:05 UTC.
 The [integration authority](../code-hygiene/README.md)
 owns their source verification and accepted Linux packages (`54c931c68`
@@ -192,16 +192,25 @@ profiles and certificates. Manager 24796/birth `2026-10-10T11:46:14.4288363Z`
 and hash `1b9f0173…` are unchanged; 7d9 Host/CLI and 2ef Engine remain intact.
 Engine/API counts are zero and guards are released.
 
-CPU-only booking353, 15:05–15:15 UTC, has an accepted source proposal for the
-owning build body: relative `frontendDist`
+CPU-only booking353, 15:05–15:15 UTC, compiled the corrected desktop: relative
+`frontendDist`
 `../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
-assets as a Directory. This is nonexecution evidence; actual build, desktop refresh and
-candidate UI remain pending. The proposal is in
-`oi068-windows-20261010/production-frontend-directory-574d73df7-proposed/`.
-After that build passes, the approved 16:10–16:25 UTC window refreshes only
-the desktop executable. Keep installed Manager, Host, Engine and saved state;
-produce and verify NSIS separately without executing it in this refresh.
-Next action: execute the admitted desktop/NSIS build and verify ordinary installed GChat UI before Code
+assets as a Directory. Cargo passes from 15:07:07.607 to 15:11:35.887 UTC
+(4m28s). The independent 15:13 UTC deadline killed the owned job with NSIS
+packaging incomplete, only about 84 seconds after Cargo completion. Overall
+native result is still `BOUNDED_ABORT`/exit 1; no complete installer, package
+qualification, installation or new UI result is claimed. Job membership is
+empty, fresh controller/body/helper absence passes at 15:13:44 UTC, and the
+own keeper released at 15:14:21 UTC. Retain actual
+`oi068-windows-20261010/production-terminal-353.json`,
+`release-verified-353.json` and native
+`%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/native-574d73df7-353-frontend-directory/`.
+The user approves this compiled `574d73df7` desktop for desktop-only UI
+verification at 16:20–16:35 UTC. Refresh only the desktop executable; keep
+installed Manager, Host, Engine and saved state. Separate NSIS packaging is
+approved for 16:55–17:20 UTC and is not a prerequisite for the UI check. Linux
+Manager check, strict Clippy and build are approved for CPU-only 16:35–16:55 UTC.
+Next action: verify ordinary installed candidate GChat UI before Code
 Stop replay and authorized AUTO functional acceptance. Reuse valid Manager,
 Host/CLI, Engine and state-preservation evidence at its recorded scope.
 
@@ -383,7 +392,8 @@ The 7d9 and refreshed349 production/package fields pass. Booking350 retains
 original R2 classifier FAIL, separate adjudication, actual Manager R3 PASS and
 full installed byte/state PASS. The candidate GChat frontend failed to load;
 exact baseline desktop-only restoration and ordinary UI now pass. Relative
-Directory correction and candidate desktop/NSIS rebuild/UI acceptance remain pending.
+Directory correction desktop compilation passes in booking353; candidate UI
+acceptance and separate NSIS packaging remain pending.
 Retain the native `production-refresh-574d73df7-349` packet and
 `native-574d73df7-349-production-refresh/native-test-result.json` for those next
 steps. Consumed 37aa/333 artifacts are retained evidence, not current passing gates.
@@ -392,7 +402,7 @@ The refreshed package reuses the accepted 7d9 compiled GChat/Host/CLI and exact
 Engine/frontend closure. Only the Manager embed and NSIS bundle regenerated; do not
 relabel reused compiled payloads as newly compiled from `574d73df7`. Retain
 package/component/state proof separately from the failed ordinary GChat UI and
-pending corrected desktop production.
+completed corrected desktop compilation and pending UI/separate NSIS acceptance.
 
 After the required CPU checks and production refresh, perform remaining
 acceptance sequentially inside the admitted reservation. Compilation/checks and actual model use cannot overlap. The
@@ -497,8 +507,9 @@ The accepted Manager/Host pair is now staged in the isolated S2 fixture.
 FIFO806's actual baseline Manager screen passes native secure-storage readiness;
 its timeout124 and exact PID absence are recorded in
 `oi071/s2-row806-native-storage-tray-20261010.json`. No Host or grant was created,
-and tray Open/Exit remains unqualified. The corrected Linux Manager build is
-reserved for 15:50–16:10 UTC; its actual lifecycle and pairing checks remain next.
+and tray Open/Exit remains unqualified. The corrected Linux Manager check,
+strict Clippy and build are approved for CPU-only 16:35–16:55 UTC; its actual
+lifecycle and pairing checks remain next.
 On that desktop, use the actual Manager/Host pair, pair through the native vault,
 restart Manager and restore the saved grant, then use Show/Hide and Exit tray
 actions while checking that the same Host remains alive. No provider install or
@@ -627,7 +638,7 @@ available receipt.
 | Coordinator `/ai/gchat-worktrees/remediation-integration`, branch `dev/gchat-remediation-104d4ec6` | Current composed source; active job/build inventory in the integration authority. |
 | `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Integrated implementation through `574d73df7`; this record owns current runtime acceptance. Retain source and reused build caches. |
 | Retired `/ai/gchat-worktrees/current-user-nsis-7d9` and `/ai/gchat-worktrees/manager-stopped-error-7d9` | Removed after integrated-patch, clean/upstream and live-use checks. Published branches and acceptance evidence remain; 551,276,544 allocated file bytes released. Current candidates, packages and shared caches retained. |
-| `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; corrected candidate desktop UI acceptance remains pending. No disk-cleanliness claim. |
+| `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; booking353 compiled desktop PASS, partial NSIS `BOUNDED_ABORT` and terminal/release receipts remain retained in `native-574d73df7-353-frontend-directory`. Candidate desktop UI 16:20–16:35 and separate NSIS 16:55–17:20 remain pending. No disk-cleanliness claim. |
 | Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
 
 Two file-launch attempts ran no measurement: a guessed native path did not
