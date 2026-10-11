@@ -48,6 +48,8 @@ impl GuestBinary {
 pub struct KvmSpec {
     pub id: Uuid,
     pub cpus: u16,
+    #[serde(default)]
+    pub host_cpus: Vec<u16>,
     pub memory_mib: u32,
     pub disk_gib: u32,
     pub ssh_port: u16,
@@ -65,6 +67,14 @@ impl KvmSpec {
             })?;
         if self.id.is_nil()
             || self.cpus == 0
+            || (!self.host_cpus.is_empty()
+                && (self.host_cpus.len() < usize::from(self.cpus)
+                    || self
+                        .host_cpus
+                        .iter()
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len()
+                        != self.host_cpus.len()))
             || self.memory_mib < 2048
             || self.disk_gib == 0
             || self.ssh_port == 0
@@ -245,7 +255,27 @@ impl PreparedVm {
                 || io::Error::new(io::ErrorKind::InvalidInput, "VM paths must be UTF-8"),
             )?))
         };
-        Ok(format!("<domain type='kvm'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu><os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><interface type='user'><model type='virtio'/><backend type='passt'/><portForward proto='tcp' address='127.0.0.1'><range start='{port}' to='22'/></portForward></interface><video><model type='none'/></video><serial type='pty'><target port='0'/></serial><console type='serial'><target type='serial' port='0'/></console></devices></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
+        let pinning = if self.spec.host_cpus.is_empty() {
+            String::new()
+        } else {
+            let set = self
+                .spec
+                .host_cpus
+                .iter()
+                .map(u16::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            let vcpus = self
+                .spec
+                .host_cpus
+                .iter()
+                .take(usize::from(self.spec.cpus))
+                .enumerate()
+                .map(|(vcpu, cpu)| format!("<vcpupin vcpu='{vcpu}' cpuset='{cpu}'/>"))
+                .collect::<String>();
+            format!("<cputune>{vcpus}<emulatorpin cpuset='{set}'/></cputune>")
+        };
+        Ok(format!("<domain type='kvm'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu>{pinning}<os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><interface type='user'><model type='virtio'/><backend type='passt'/><portForward proto='tcp' address='127.0.0.1'><range start='{port}' to='22'/></portForward></interface><video><model type='none'/></video><serial type='pty'><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console></devices></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
     }
 
     async fn lease(&self) -> io::Result<File> {
@@ -272,15 +302,16 @@ impl PreparedVm {
 
     async fn command(&self, tools: &KvmTools, action: &str) -> io::Result<String> {
         let identity = session_command(tools, "domuuid")
-            .arg(self.spec.id.to_string())
+            .arg(format!("gbot-{}", self.spec.id))
             .output()
             .await?;
         if !identity.status.success()
             || String::from_utf8_lossy(&identity.stdout).trim() != self.spec.id.to_string()
         {
-            return Err(io::Error::other(
-                "owned VM is not registered in the user's libvirt session",
-            ));
+            return Err(io::Error::other(format!(
+                "owned VM identity lookup failed: {}",
+                String::from_utf8_lossy(&identity.stderr).trim()
+            )));
         }
         let output = session_command(tools, action)
             .arg(self.spec.id.to_string())
@@ -389,6 +420,7 @@ mod tests {
         KvmSpec {
             id: Uuid::new_v4(),
             cpus: 2,
+            host_cpus: vec![112, 113],
             memory_mib: 4096,
             disk_gib: 40,
             ssh_port: 2222,
@@ -460,6 +492,7 @@ mod tests {
         fs::write(vm.directory.join("prepared"), "1").await.unwrap();
         let domain = vm.domain_xml().unwrap();
         assert!(domain.contains("<domain type='kvm'>"));
+        assert!(domain.contains("<vcpupin vcpu='0' cpuset='112'/><vcpupin vcpu='1' cpuset='113'/><emulatorpin cpuset='112,113'/></cputune>"));
         assert!(domain.contains("<backend type='passt'/><portForward proto='tcp' address='127.0.0.1'><range start='2222' to='22'/></portForward>"));
         assert!(
             !domain.contains("bridge")
@@ -469,7 +502,7 @@ mod tests {
         let virsh = root.path().join("virsh");
         let state = root.path().join("state");
         fs::write(&state, "shut off\n").await.unwrap();
-        fs::write(&virsh, format!("#!/bin/sh\nset -eu\ntest \"$1\" = --connect\ntest \"$2\" = qemu:///session\ntest \"$4\" = {}\ncase \"$3\" in\n domuuid) printf '%s\\n' {};;\n domstate) cat '{}';;\n start) printf 'running\\n' > '{}';;\n shutdown|destroy) printf 'shut off\\n' > '{}';;\n undefine) :;;\n *) exit 2;;\nesac\n", vm.spec.id, vm.spec.id, state.display(), state.display(), state.display())).await.unwrap();
+        fs::write(&virsh, format!("#!/bin/sh\nset -eu\ntest \"$1\" = --connect\ntest \"$2\" = qemu:///session\ncase \"$3\" in\n domuuid) test \"$4\" = gbot-{}; printf '%s\\n' {};;\n domstate) cat '{}';;\n start) printf 'running\\n' > '{}';;\n shutdown|destroy) printf 'shut off\\n' > '{}';;\n undefine) :;;\n *) exit 2;;\nesac\n", vm.spec.id, vm.spec.id, state.display(), state.display(), state.display())).await.unwrap();
         fs::set_permissions(&virsh, std::fs::Permissions::from_mode(0o755))
             .await
             .unwrap();

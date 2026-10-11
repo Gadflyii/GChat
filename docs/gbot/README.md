@@ -605,7 +605,9 @@ of Gbot service lifetime. Disks, seed, XML and setup records are under
 `/ai/gbot-vms`; libvirt keeps normal per-user domain registrations. Unregister
 the exact stopped owned UUID before deleting its files. Never remove other
 users' domains or claim directory removal alone clears registration. Stop both
-guests during any booked S1 CPU benchmark.
+guests during CPU-throughput benchmarks on all or overlapping cores. Disjoint
+GPU runs can coexist only with explicit guest vCPU/emulator pins. The first
+guest is pinned to112–113 (coordinator clarification1954Z).
 
 Two guests serve different purposes. `gchat-linux-accept` is stock Ubuntu 24.04
 Desktop/GNOME, 4 vCPU / 8 GiB / 40 GiB, with a post-install clean snapshot.
@@ -624,15 +626,19 @@ JSON-worker assumption. User viewer input/clipboard starts disabled. Actual
 capture, input and takeover require their physical gates.
 
 Named source gates: first-boot/session/SSH-only assertions, the KVM domain
-XML/lifecycle fixture, strict owning Clippy. The earlier raw-QEMU prototype
-passed its two focused cases; it is superseded by the approved libvirt stack
-and is not evidence for that stack. Linux package build uses cached Ubuntu
-24.04 tooling and the retained complete historical05a engine image set:
+XML/lifecycle fixture, strict owning Clippy. Libvirt source `91c0a7249` passes
+2/2 focused cases and strict all-target Clippy; the opt-in guest gate builds
+(`libvirt2-{fixtures,clippy,build}.log` in the evidence folder). This supersedes
+the raw-QEMU prototype. DEB/AppImage and Manager archive are built from exact
+main0705 with minimal archive inspection passed; see the package receipt.
+They use cached Ubuntu24.04 tooling and the retained historical05a engine set:
 current GChat UI/package acceptance only, no current-engine/Flash qualification.
 No signing or publication.
 
-Next action: finish the source integration, then create the one owned Debian
-guest on S1. Gate: a real desktop frame plus one harmless AT-SPI action,
+Next action: create the one owned Debian guest on S1 in a finite CPU-quiet
+window. Coordinator approved the first gate alongside the disjoint GPU timing run,
+with guest vCPU/emulator affinity112–113. The unused slot1046 was cancelled;
+a replacement finite slot covers the actual launch. No VM has launched yet. Gate: a real desktop frame plus one harmless AT-SPI action,
 text-only; no screenshots fed to an unqualified model. Use official Linux
 x86_64 Driver release0.34.1 at the pinned source revision with a recorded
 SHA-256. Fall back from Xvnc only after a recorded failing action. Evidence and
@@ -646,3 +652,29 @@ credential is copied. The guest is stopped before the CPU booking ends.
 This qualifies guest setup/Cua at its stated scope; replacing the service's
 merged `gbot-guest --stdio` assumption with Cua MCP and direct command/file
 channels remains an explicit integration item, not a delivered Ready state.
+
+Current owned S1 paths: `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2`
+(341508096 bytes, checked against official SHA512SUMS), the private
+`controller/` native-vault fixture folder, `kvm-ready-fixture`, the reviewed
+`s1-guest-gate.sh`, and `evidence/`. No VM/domain exists yet. Local temporary
+Cua unpack and gate binary are retained for the pending physical gate;
+retire them after qualification. No shared model, GPU profile or release
+artifact was copied or deleted.
+
+First physical preparation at1955Z refused the domain before VM start:
+libvirt does not accept `console type=serial` as a character-device backend.
+The adapter now uses `type=pty` with `target type=serial`. The fixture also
+removes its vault entry after failed preparation, and the private keyring
+control folder must be0700. Failed setup UUID
+`fcb3271e-830e-40cb-b4c2-8ce170863f9f` remains stopped/unregistered for concise
+failure evidence; no capture/input was attempted. Reuse the passing pin gates;
+the corrected real libvirt define/start is the live question.
+
+The corrected domain defined successfully at1958Z but the identity check
+failed before start: real `virsh domuuid` accepts a domain name/ID, not a UUID,
+while `domstate` does accept UUIDs. The adapter now looks up its generated owned
+name and compares the returned UUID, retaining UUID-based actions. The fixture
+models that real CLI distinction. Failed UUID
+`d83415c6-ba2c-4a44-aaca-9915b167859d` was confirmed shut off; its fixture
+credential cleanup succeeded. Undefine it before the corrected cold first-boot
+attempt; retain concise XML/setup/error evidence and remove unused overlay/seed.
