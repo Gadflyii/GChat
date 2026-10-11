@@ -676,3 +676,9 @@ OI-057 packages passed minimal archive inspection; the stock Ubuntu Desktop
 installed Wayland/Xorg gate remains owed. No signing, publication, calibration
 or native Windows changes. The official Cua0.34.1 archive's recorded SHA256 is
 `a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.
+
+The first slirp start (cold UUIDffd07806) failed before boot because a legacy
+QEMU `-device` is initialized before libvirt's JSON PCI controllers, occupying
+their root slot. The NIC now uses JSON `-device` form, which queues it after
+those controllers. A bounded QEMU parser/controller check accepts that shape;
+the affected XML/lifecycle fixture and real start remain the relevant gates.
