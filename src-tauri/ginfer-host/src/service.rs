@@ -134,7 +134,7 @@ pub struct Host {
     inventory_dirty: AtomicBool,
     pub gpus: Vec<Gpu>,
     pub boot_id: Uuid,
-    pub revision: AtomicU64,
+    pub revision: Arc<AtomicU64>,
     pub directory: PathBuf,
     pub model_dirs: Vec<PathBuf>,
     pub artifact_sets: Vec<PathBuf>,
@@ -327,11 +327,26 @@ impl Host {
             &path,
             &serde_json::to_vec(&data).map_err(|e| e.to_string())?,
         )?;
-        let processes = HostProcesses::new(
+        let mut processes = HostProcesses::new(
             engine,
             gpus.iter().map(|g| g.uuid.clone()).collect(),
             Duration::from_secs(600),
         )?;
+        processes.configure_runtimes(
+            Default::default(),
+            gpus.iter()
+                .filter_map(|gpu| {
+                    gpu.compute_capability
+                        .as_ref()
+                        .map(|sm| (gpu.uuid.clone(), sm.clone()))
+                })
+                .collect(),
+        )?;
+        let revision = Arc::new(AtomicU64::new(1));
+        processes.hardware_profile = Some(crate::hardware_profile::HardwareProfiles::open(
+            directory.clone(),
+            revision.clone(),
+        )?);
         let downloads = match desktop_provider {
             Some(provider) => crate::model_downloads::ModelDownloads::open_local(
                 provider.join("models"),
@@ -364,7 +379,7 @@ impl Host {
             inventory_dirty: AtomicBool::new(false),
             gpus,
             boot_id: Uuid::new_v4(),
-            revision: AtomicU64::new(1),
+            revision,
             directory,
             model_dirs,
             artifact_sets,
@@ -374,6 +389,13 @@ impl Host {
         });
         host.scan().await?;
         Ok(host)
+    }
+    pub async fn shutdown_hardware_profile(&self) -> Result<(), String> {
+        let job = self.processes.lock().await.hardware_profile.clone();
+        if let Some(job) = job {
+            job.shutdown().await?;
+        }
+        Ok(())
     }
     pub async fn save(&self) -> Result<(), String> {
         let data = self.data.lock().await;
@@ -650,12 +672,27 @@ impl Host {
             "port":sharing.standalone.unwrap_or(sharing.port),"error":sharing.error});
         drop(sharing);
         let processes = self.processes.lock().await;
+        let (hardware_profile, revision) = match &processes.hardware_profile {
+            Some(job) => {
+                let (status, revision) = job.observation(processes.profiling_cli(&job.group()));
+                (Some(status), revision)
+            }
+            None => (None, self.revision.load(Ordering::SeqCst)),
+        };
         let reserved = processes.reserved_gpus(None);
-        let observations: Vec<_> = processes.instances().map(|i| (
-            i.instance_id, i.session_id, i.status.clone(), i.last_error.clone(),
-            i.launch.clone(), i.model_metadata.clone(),
-        )).collect();
-        let revision = self.revision.load(Ordering::SeqCst);
+        let observations: Vec<_> = processes
+            .instances()
+            .map(|i| {
+                (
+                    i.instance_id,
+                    i.session_id,
+                    i.status.clone(),
+                    i.last_error.clone(),
+                    i.launch.clone(),
+                    i.model_metadata.clone(),
+                )
+            })
+            .collect();
         drop(processes);
         let profiles = data.profiles.clone();
         let host_id = data.host_id;
@@ -672,29 +709,48 @@ impl Host {
         let mut model_index: BTreeMap<_, Vec<_>> = BTreeMap::new();
         for model in &models {
             let metadata = &model.metadata;
-            model_index.entry((metadata.identity.model_id.as_str(), metadata.identity.weights_id.as_str(),
-                metadata.tp_size, metadata.draft_tp, metadata.size_bytes)).or_default().push(model);
+            model_index
+                .entry((
+                    metadata.identity.model_id.as_str(),
+                    metadata.identity.weights_id.as_str(),
+                    metadata.tp_size,
+                    metadata.draft_tp,
+                    metadata.size_bytes,
+                ))
+                .or_default()
+                .push(model);
         }
         let mut available_profiles = vec![];
         for profile in &launch_profiles {
-            let key = (profile.identity.model_id.as_str(), profile.identity.weights_id.as_str(),
-                profile.tp, profile.draft_tp, profile.artifact_bytes);
+            let key = (
+                profile.identity.model_id.as_str(),
+                profile.identity.weights_id.as_str(),
+                profile.tp,
+                profile.draft_tp,
+                profile.artifact_bytes,
+            );
             if let Some(matching) = model_index.get(&key) {
                 let groups = profile.gpu_groups(&self.gpus, &reserved);
                 let compatible = profile.gpu_groups(&self.gpus, &Default::default());
                 for model in matching {
-                available_profiles.push(serde_json::json!({"profile":profile,"model_id":model.id,
+                    available_profiles
+                        .push(serde_json::json!({"profile":profile,"model_id":model.id,
                     "gpu_groups":groups,"compatible_gpu_groups":compatible}));
                 }
             }
         }
         let instance_ids: BTreeSet<_> = observations.iter().map(|(id, ..)| *id).collect();
-        let mut instances: Vec<_> = observations.iter().map(|(id, session, status, error, launch, metadata)| serde_json::json!({
-            "instance_id": id, "session_id": session, "display_name": launch.model_id,
-            "upstream_model_id": launch.model_id, "status": status, "last_error": error,
-            "configuration": launch, "model_metadata": metadata,
-            "profile": profiles.get(id),
-        })).collect();
+        let mut instances: Vec<_> = observations
+            .iter()
+            .map(|(id, session, status, error, launch, metadata)| {
+                serde_json::json!({
+                    "instance_id": id, "session_id": session, "display_name": launch.model_id,
+                    "upstream_model_id": launch.model_id, "status": status, "last_error": error,
+                    "configuration": launch, "model_metadata": metadata,
+                    "profile": profiles.get(id),
+                })
+            })
+            .collect();
         for (id, profile) in &profiles {
             if !instance_ids.contains(id) {
                 instances.push(serde_json::json!({
@@ -726,6 +782,7 @@ impl Host {
             "fleet":fleet,
             "fleet_membership":membership,
             "clients":usage["clients"],"local_administrator":usage["local_administrator"],
+            "hardware_profile":hardware_profile,
             "instances":instances,"gpus":self.gpus,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "launch_profiles":available_profiles,"profile_error":*self.profile_error.read().await,
@@ -813,10 +870,16 @@ impl Host {
                 artifact_set_members(&path)
             } else {
                 let metadata = inspect_artifact(&path)?;
-                Ok(vec![(path.canonicalize().map_err(|e| e.to_string())?, metadata)])
+                Ok(vec![(
+                    path.canonicalize().map_err(|e| e.to_string())?,
+                    metadata,
+                )])
             }
-        }).await.map_err(|e| e.to_string())??;
-        let (payload, metadata) = members.iter()
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        let (payload, metadata) = members
+            .iter()
             .find(|(_, metadata)| !model.artifact_set || metadata.tp_size == model.metadata.tp_size)
             .cloned()
             .ok_or("artifact set no longer declares selected degree")?;
@@ -1484,6 +1547,42 @@ impl Host {
             }
         }
         match (req.method().as_str(), path.as_str()) {
+            ("POST", "/host/v1/hardware-profile") => {
+                let request: crate::hardware_profile::HardwareProfileRequest =
+                    serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+                let saved = self
+                    .data
+                    .lock()
+                    .await
+                    .profiles
+                    .values()
+                    .map(|profile| profile.gpu_uuids.clone())
+                    .collect();
+                let processes = self.processes.lock().await;
+                if request.action == crate::hardware_profile::HardwareProfileAction::Ensure
+                    && request.gpu_uuids.is_none()
+                {
+                    processes.ensure_hardware_if_idle(saved)?;
+                }
+                let result = if request.action
+                    == crate::hardware_profile::HardwareProfileAction::Ensure
+                    && request.gpu_uuids.is_none()
+                {
+                    processes
+                        .hardware_profile
+                        .as_ref()
+                        .ok_or("Hardware profiling is not configured")?
+                        .status(None)
+                } else {
+                    processes.hardware_profile_action(request)?
+                };
+                drop(processes);
+                self.revision.fetch_add(1, Ordering::SeqCst);
+                Ok(json(
+                    StatusCode::OK,
+                    serde_json::to_value(result).map_err(|e| e.to_string())?,
+                ))
+            }
             ("POST", "/host/v1/local-engine") => {
                 if !self.local_administrator(req).await {
                     return Ok(json(
@@ -1648,10 +1747,14 @@ impl Host {
                     .cloned()
                     .ok_or("unknown model")?;
                 let mut affected_paths = BTreeSet::from([model.path.clone()]);
-                affected_paths.extend(inventory.iter()
-                    .filter(|entry| entry.artifact_set && entry.payload == model.path)
-                    .map(|entry| entry.path.clone()));
-                let affected_ids: BTreeSet<_> = inventory.iter()
+                affected_paths.extend(
+                    inventory
+                        .iter()
+                        .filter(|entry| entry.artifact_set && entry.payload == model.path)
+                        .map(|entry| entry.path.clone()),
+                );
+                let affected_ids: BTreeSet<_> = inventory
+                    .iter()
                     .filter(|entry| affected_paths.contains(&entry.path))
                     .map(|entry| entry.id)
                     .collect();
@@ -1670,7 +1773,9 @@ impl Host {
                         }
                     } else {
                         if uses_payload {
-                            return Err("stop every instance using this package before removing it".into());
+                            return Err(
+                                "stop every instance using this package before removing it".into(),
+                            );
                         }
                         active_ids.insert(instance.instance_id);
                     }
@@ -1680,9 +1785,12 @@ impl Host {
                 {
                     let mut data = self.data.lock().await;
                     let previous_len = data.profiles.len();
-                    data.profiles.retain(|id, p| active_ids.contains(id)
-                        || (!affected_ids.contains(&p.model_id)
-                            && (present_ids.contains(&p.model_id) || !stopped_dependency_ids.contains(id))));
+                    data.profiles.retain(|id, p| {
+                        active_ids.contains(id)
+                            || (!affected_ids.contains(&p.model_id)
+                                && (present_ids.contains(&p.model_id)
+                                    || !stopped_dependency_ids.contains(id)))
+                    });
                     if data.profiles.len() != previous_len {
                         self.inventory_dirty.store(true, Ordering::SeqCst);
                     }
@@ -1784,6 +1892,18 @@ impl Host {
             ("GET", "/host/v1/snapshot") => Ok(json(StatusCode::OK, self.snapshot().await)),
             ("POST", "/host/v1/scan") => {
                 self.scan().await?;
+                let groups = self
+                    .data
+                    .lock()
+                    .await
+                    .profiles
+                    .values()
+                    .map(|profile| profile.gpu_uuids.clone())
+                    .collect();
+                self.processes
+                    .lock()
+                    .await
+                    .ensure_hardware_if_idle(groups)?;
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
             ("POST", "/host/v1/instances") => {
@@ -1900,17 +2020,41 @@ mod target_launch_tests {
         let (dir, host, _) = installed_flash("groupwise-int", false).await;
         let state = dir.path().join("state");
         let path = state.join("host.json");
-        std::fs::copy(dir.path().join("models/flash.ginfer"), dir.path().join("models/second.ginfer")).unwrap();
+        std::fs::copy(
+            dir.path().join("models/flash.ginfer"),
+            dir.path().join("models/second.ginfer"),
+        )
+        .unwrap();
         std::fs::remove_file(&path).unwrap();
         std::fs::create_dir(&path).unwrap();
         assert!(host.scan().await.is_err());
-        let failed_ids: BTreeMap<_, _> = host.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        let failed_ids: BTreeMap<_, _> = host
+            .inventory
+            .read()
+            .await
+            .iter()
+            .map(|model| (model.path.clone(), model.id))
+            .collect();
         assert_eq!(failed_ids.len(), 2);
         std::fs::remove_dir(&path).unwrap();
         host.scan().await.unwrap();
-        let restarted = Host::open(state, "Ignored".into(), std::env::current_exe().unwrap(),
-            vec![dir.path().join("models")], vec![], vec![]).await.unwrap();
-        let restored_ids: BTreeMap<_, _> = restarted.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        let restarted = Host::open(
+            state,
+            "Ignored".into(),
+            std::env::current_exe().unwrap(),
+            vec![dir.path().join("models")],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
+        let restored_ids: BTreeMap<_, _> = restarted
+            .inventory
+            .read()
+            .await
+            .iter()
+            .map(|model| (model.path.clone(), model.id))
+            .collect();
         assert_eq!(restored_ids, failed_ids);
     }
 
@@ -2003,15 +2147,32 @@ mod resource_tests {
         bytes.extend(metadata.as_bytes());
         bytes.resize(4096, 0);
         std::fs::write(models.join("model.ginfer"), &bytes).unwrap();
-        let gpus = (0..4).map(|index| Gpu {
-            uuid: format!("GPU-fixture-{index}"), name: "Fixture GPU".into(),
-            display_name: None, memory_mib: 32768, compute_capability: Some("12.0".into()),
-        }).collect();
-        let host = Host::open(dir.path().join("state"), "Resource fixture".into(), engine,
-            vec![models], vec![], gpus).await.unwrap();
+        let gpus = (0..4)
+            .map(|index| Gpu {
+                uuid: format!("GPU-fixture-{index}"),
+                name: "Fixture GPU".into(),
+                display_name: None,
+                memory_mib: 32768,
+                compute_capability: Some("12.0".into()),
+            })
+            .collect();
+        let host = Host::open(
+            dir.path().join("state"),
+            "Resource fixture".into(),
+            engine,
+            vec![models],
+            vec![],
+            gpus,
+        )
+        .await
+        .unwrap();
         let request = LaunchRequest {
-            instance_id: None, qualified_profile_id: None, model_id: host.inventory.read().await[0].id,
-            gpu_uuids: vec!["GPU-fixture-0".into()], max_context: 8192, concurrency: 1,
+            instance_id: None,
+            qualified_profile_id: None,
+            model_id: host.inventory.read().await[0].id,
+            gpu_uuids: vec!["GPU-fixture-0".into()],
+            max_context: 8192,
+            concurrency: 1,
             options: LaunchOptions::default(),
         };
         (dir, host, request)
@@ -2048,9 +2209,13 @@ mod resource_tests {
         let server = tokio::spawn(upstream);
         host.refresh_processes().await.unwrap();
         let token = host.data.lock().await.pairing_admin_token.clone();
-        let call = |suffix: &str, bytes: Vec<u8>| Request::post(format!("/host/v1/instances/{id}/inference/{suffix}"))
-            .header("authorization", format!("Bearer {token}"))
-            .header("content-type", "text/plain").body(Body::from(bytes)).unwrap();
+        let call = |suffix: &str, bytes: Vec<u8>| {
+            Request::post(format!("/host/v1/instances/{id}/inference/{suffix}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "text/plain")
+                .body(Body::from(bytes))
+                .unwrap()
+        };
         let mut original = serde_json::json!({"model":"caller-alias", "messages":[{"role":"user", "content":"Unicode 🐦\nquoted \"text\""}], "padding":""});
         let prefix_bytes = serde_json::to_vec(&original).unwrap().len();
         original["padding"] = "x".repeat(1024 * 1024 - prefix_bytes).into();
@@ -2062,9 +2227,24 @@ mod resource_tests {
         let status = response.status();
         let response_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
         measurement.finish("service_resource_inference_body_one_mib");
-        let benchmark = host.clone().route(call("v1/ginfer/benchmark", br#"{"model":"benchmark-owned"}"#.to_vec())).await.unwrap();
-        let invalid_object = host.clone().route(call("v1/chat/completions", b"[]".to_vec())).await.unwrap();
-        let invalid_json = host.clone().route(call("v1/chat/completions", b"{broken".to_vec())).await.unwrap();
+        let benchmark = host
+            .clone()
+            .route(call(
+                "v1/ginfer/benchmark",
+                br#"{"model":"benchmark-owned"}"#.to_vec(),
+            ))
+            .await
+            .unwrap();
+        let invalid_object = host
+            .clone()
+            .route(call("v1/chat/completions", b"[]".to_vec()))
+            .await
+            .unwrap();
+        let invalid_json = host
+            .clone()
+            .route(call("v1/chat/completions", b"{broken".to_vec()))
+            .await
+            .unwrap();
         let captured = received.lock().unwrap().clone();
         host.processes.lock().await.shutdown().await.unwrap();
         server.abort();
@@ -2115,18 +2295,41 @@ mod resource_tests {
             }, status: "installed".into(), received: 4096, bytes_per_second: 0,
             error: None, path: Some(payload.clone()), storage_root: host.downloads.root(),
         };
-        std::fs::write(dir.path().join("state/model-downloads.json"),
-            serde_json::to_vec(&BTreeMap::from([(id, download)])).unwrap()).unwrap();
+        std::fs::write(
+            dir.path().join("state/model-downloads.json"),
+            serde_json::to_vec(&BTreeMap::from([(id, download)])).unwrap(),
+        )
+        .unwrap();
         let executable = dir.path().join("engine");
         drop(host);
         let broken = dir.path().join("models/broken.ginfer");
         std::fs::write(&broken, b"invalid fixture").unwrap();
         let missing = dir.path().join("missing.ginfer");
         let models_alias = dir.path().join("models/.");
-        let host = Host::open(dir.path().join("state"), "Ignored".into(), executable,
-            vec![dir.path().join("models"), models_alias.clone(), package, payload.clone(), missing.clone()], vec![], vec![]).await.unwrap();
+        let host = Host::open(
+            dir.path().join("state"),
+            "Ignored".into(),
+            executable,
+            vec![
+                dir.path().join("models"),
+                models_alias.clone(),
+                package,
+                payload.clone(),
+                missing.clone(),
+            ],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
         host.data.lock().await.local_artifacts.push(payload.clone());
-        let ids: BTreeMap<_, _> = host.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        let ids: BTreeMap<_, _> = host
+            .inventory
+            .read()
+            .await
+            .iter()
+            .map(|model| (model.path.clone(), model.id))
+            .collect();
         println!("RESOURCE_SCAN_PHASE_BEGIN managed_packages=1 visible_models=2 duplicate_sources=root/job/local/configured");
         let measurement = crate::resource_measurement::Measurement::start();
         host.scan().await.unwrap();
@@ -2152,7 +2355,11 @@ mod resource_tests {
     #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
     async fn service_resource_snapshot_matches_catalog_and_reserved_instances() {
         let (dir, host, request) = fixture().await;
-        std::fs::copy(dir.path().join("models/model.ginfer"), dir.path().join("models/second.ginfer")).unwrap();
+        std::fs::copy(
+            dir.path().join("models/model.ginfer"),
+            dir.path().join("models/second.ginfer"),
+        )
+        .unwrap();
         host.scan().await.unwrap();
         let models = host.inventory.read().await.clone();
         let mut catalog = Vec::new();
@@ -2231,17 +2438,25 @@ mod resource_tests {
                 }
             })) }
         }));
-        tokio::spawn(upstream)
+            tokio::spawn(upstream)
         };
         let server = serve(port);
         host.refresh_processes().await.unwrap();
         let token = host.data.lock().await.pairing_admin_token.clone();
-        let inference = || Request::post(format!("/host/v1/instances/{id}/inference/v1/chat/completions"))
-            .header("authorization", format!("Bearer {token}")).body(Body::from("{}")).unwrap();
+        let inference = || {
+            Request::post(format!(
+                "/host/v1/instances/{id}/inference/v1/chat/completions"
+            ))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap()
+        };
         let first = host.clone().route(inference()).await.unwrap();
         let second = host.clone().route(inference()).await.unwrap();
         let stop = Request::post(format!("/host/v1/instances/{id}/stop"))
-            .header("authorization", format!("Bearer {token}")).body(Body::from("{}")).unwrap();
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap();
         let mut stopping = Box::pin(host.clone().route(stop));
         let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let capture = polls.clone();
@@ -2555,27 +2770,59 @@ mod lifecycle_tests {
             }
             assert_eq!(observed, expected.into_iter().collect());
         }
-        tokio::time::timeout(Duration::from_millis(500), wait_for_stage(&mut arrivals, "health", [id, second_id]))
-            .await.unwrap();
-        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot()).await.unwrap();
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            wait_for_stage(&mut arrivals, "health", [id, second_id]),
+        )
+        .await
+        .unwrap();
+        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot())
+            .await
+            .unwrap();
         assert_eq!(snapshot["instances"][0]["status"], "starting");
         assert_eq!(snapshot["instances"][1]["status"], "starting");
         assert!(!refresh.is_finished());
         let stop = Request::post(format!("/host/v1/instances/{id}/stop"))
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::from(serde_json::json!({"expected_session_id":session}).to_string())).unwrap();
-        assert!(tokio::time::timeout(Duration::from_millis(500), host.clone().route(stop))
-            .await.unwrap().unwrap().status().is_success());
-        for gate in health_gates { gate.add_permits(1); }
-        tokio::time::timeout(Duration::from_millis(500), wait_for_stage(&mut arrivals, "models", [id, second_id]))
-            .await.unwrap();
+            .body(Body::from(
+                serde_json::json!({"expected_session_id":session}).to_string(),
+            ))
+            .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), host.clone().route(stop))
+                .await
+                .unwrap()
+                .unwrap()
+                .status()
+                .is_success()
+        );
+        for gate in health_gates {
+            gate.add_permits(1);
+        }
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            wait_for_stage(&mut arrivals, "models", [id, second_id]),
+        )
+        .await
+        .unwrap();
         let reload = Request::post(format!("/host/v1/instances/{second_id}/reload"))
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::from(serde_json::json!({"expected_session_id":second_session}).to_string())).unwrap();
-        assert!(tokio::time::timeout(Duration::from_millis(500), host.clone().route(reload))
-            .await.unwrap().unwrap().status().is_success());
+            .body(Body::from(
+                serde_json::json!({"expected_session_id":second_session}).to_string(),
+            ))
+            .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), host.clone().route(reload))
+                .await
+                .unwrap()
+                .unwrap()
+                .status()
+                .is_success()
+        );
         assert!(!refresh.is_finished());
-        for gate in model_gates { gate.add_permits(1); }
+        for gate in model_gates {
+            gate.add_permits(1);
+        }
         refresh.await.unwrap().unwrap();
         let after_probes = host.snapshot().await;
         assert_eq!(after_probes["instances"][0]["status"], "stopped");

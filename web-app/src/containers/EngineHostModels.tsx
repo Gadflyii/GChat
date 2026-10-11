@@ -7,6 +7,7 @@ import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineHostSharing } from '@/containers/EngineHostSharing'
 import { EngineInstanceSettings } from '@/containers/EngineInstanceSettings'
 import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
+import { EngineHardwareProfile, hardwareProfileBusy } from '@/containers/EngineHardwareProfile'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
@@ -16,6 +17,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [context, setContext] = useState(8192)
   const [concurrency, setConcurrency] = useState(1)
   const [busy, setBusy] = useState(false)
+  const profiling = hardwareProfileBusy(snapshot?.hardware_profile)
   const [activeId, setActiveId] = useState('')
   const active = activeId === 'additional' ? undefined : snapshot?.instances.find(i => i.instance_id === activeId) ??
     snapshot?.instances.find(i => i.status === 'ready') ?? snapshot?.instances[0]
@@ -61,9 +63,9 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         </select></label> : <p className="text-sm">{hostInstanceLabel(active, snapshot)} · {active.status}</p>}
         </div>
         <div className="flex items-center gap-2">
-        <Button variant="outline" disabled={busy || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start</Button>
+        <Button variant="outline" disabled={busy || profiling || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start</Button>
         <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(active.status)} onClick={() => void act('stop', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })}>Stop</Button>
-        <Button variant="outline" disabled={busy || !!error || active.status !== 'ready'} onClick={() => {
+        <Button variant="outline" disabled={busy || profiling || !!error || active.status !== 'ready'} onClick={() => {
           if (window.confirm('Reload this instance with its saved settings after current requests drain?')) void act('restart', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })
         }}>Reload</Button>
         </div>
@@ -72,6 +74,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
       }}>Forget</Button>}
     </div>
+    {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} gpus={snapshot.gpus} offline={!!error} disabled={busy}
+      action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} />}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
       <summary className="cursor-pointer font-medium">Launch Server Instance</summary>
@@ -141,7 +145,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Disable CUDA Graphs</label>
         </div>
       </details>
-      <div className="flex gap-2"><Button disabled={busy || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
+      <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
         const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
         if (editing && !window.confirm('Apply these model and launch settings? This restarts the selected instance after its current requests drain.')) return
         void act(editing ? 'reload' : 'launch', editing ? { instance_id: editing, body: { configuration, expected_session_id: editingSession } } : { body: configuration })

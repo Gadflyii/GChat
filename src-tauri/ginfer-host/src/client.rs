@@ -582,6 +582,21 @@ impl Client {
         self.refresh().await?;
         Ok(self.state.lock().await.saved.values().cloned().collect())
     }
+    pub async fn hardware_profile(
+        &self,
+        host_id: Uuid,
+        request: crate::hardware_profile::HardwareProfileRequest,
+    ) -> Result<crate::hardware_profile::HardwareProfileStatus, ClientError> {
+        let body = serde_json::to_value(request)
+            .map_err(|error| ClientError::Problem(error.to_string()))?;
+        let result = tokio::time::timeout(std::time::Duration::from_secs(10),
+            self.request_json(host_id, reqwest::Method::POST,
+                "/host/v1/hardware-profile", Some(&body)),
+        ).await.map_err(|_| ClientError::Problem(
+            "Hardware profiling handoff did not respond; inspect Host status before retrying".into(),
+        ))??;
+        serde_json::from_value(result).map_err(|error| ClientError::Problem(error.to_string()))
+    }
     pub async fn list(&self) -> Result<Value, String> {
         let local_error = self.attach_local().await.err();
         let mut result = self.command("list", json!({})).await?;
@@ -1018,6 +1033,14 @@ impl Client {
                 .snapshot(argument_id(&args, "host_id")?)
                 .await
                 .map_err(String::from),
+            "hardware_profile" => {
+                let id = argument_id(&args, "host_id")?;
+                let request: crate::hardware_profile::HardwareProfileRequest = serde_json::from_value(
+                    args.get("body").cloned().ok_or("hardware profile action is required")?,
+                ).map_err(|error| error.to_string())?;
+                let status = self.hardware_profile(id, request).await.map_err(String::from)?;
+                serde_json::to_value(status).map_err(|error| error.to_string())
+            }
             "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action"
             | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
                 let id = argument_id(&args, "host_id")?;

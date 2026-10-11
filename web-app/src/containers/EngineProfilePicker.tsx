@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import type { EngineSnapshot } from '@/services/engines'
+import { hardwareProfileBusy } from '@/containers/EngineHardwareProfile'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 
 const selectStyle: CSSProperties = {
@@ -31,6 +32,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
   const [modelChoice, setModelChoice] = useState<{ instanceId: string; modelId: string } | null>(null)
   const modelId = modelChoice?.instanceId === instanceId ? modelChoice.modelId
     : instance?.profile?.model_id ?? snapshot.models[0]?.id ?? ''
+  const controlsDisabled = disabled || hardwareProfileBusy(snapshot.hardware_profile)
   const [choice, setChoice] = useState('')
   const [gpuChoice, setGpuChoice] = useState<{ instanceId: string; key: string } | null>(null)
   const occupied = new Set(snapshot.instances
@@ -67,21 +69,21 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
     <div className={`grid min-w-0 gap-3 ${hostSelector || controlledInstanceId === undefined ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
     {hostSelector}
     {controlledInstanceId === undefined && <label className="min-w-0 text-sm">Server Host
-      <select style={selectStyle} className="mt-1 w-full rounded border bg-background p-2" disabled={disabled} value={instanceId}
+      <select style={selectStyle} className="mt-1 w-full rounded border bg-background p-2" disabled={controlsDisabled} value={instanceId}
         onChange={e => { setInstanceId(e.target.value); setModelChoice(null); setGpuChoice(null); setChoice('') }}>
         <option value="">{snapshot.display_name} · New instance</option>
         {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{snapshot.display_name} · {hostInstanceLabel(i, snapshot)} · {i.status}</option>)}
       </select>
     </label>}
     <label className="min-w-0 text-sm">Model
-      <select style={selectStyle} aria-label={labelPrefix ? `${labelPrefix} model` : undefined} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={disabled} value={modelId}
+      <select style={selectStyle} aria-label={labelPrefix ? `${labelPrefix} model` : undefined} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled} value={modelId}
         onChange={e => { setModelChoice({ instanceId, modelId: e.target.value }); setChoice('') }}>
         {!snapshot.models.some(model => model.id === modelId) && <option value={modelId}>{modelId ? 'Saved model unavailable' : 'Choose an installed model'}</option>}
         {snapshot.models.map(model => <option key={model.id} value={model.id}>{hostModelLabel(model)}</option>)}
       </select>
     </label>
     <label className="min-w-0 text-sm">GPU / GPU group
-      <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={disabled || !!instance || !groups.length} value={gpuKey ?? ''}
+      <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !!instance || !groups.length} value={gpuKey ?? ''}
         onChange={e => { setGpuChoice({ instanceId, key: e.target.value }); setChoice('') }}>
         {!gpuKey && <option value="">No available GPUs</option>}
         {groups.map(group => <option key={groupKey(group)} value={groupKey(group)} disabled={group.some(gpu => occupied.has(gpu))}>
@@ -91,7 +93,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
       </select>
     </label>
     <label className="min-w-0 text-sm">Hardware profile
-      <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={disabled || !choices.length} value={selected?.key ?? ''} onChange={e => setChoice(e.target.value)}>
+      <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !choices.length} value={selected?.key ?? ''} onChange={e => setChoice(e.target.value)}>
         <option value="">{currentSettings && !pending ? `Current settings · C${instance?.configuration.concurrency ?? 1} · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} context` : 'Choose a profile'}</option>
         {choices.map(({ entry, key }) => <option key={key} value={key}>
           {entry.profile.name} · {entry.profile.options.vision ? 'Vision + text (default)' : 'Text only'} · TP{entry.profile.tp} · C{entry.profile.concurrency} · {entry.profile.max_context.toLocaleString()} context · {entry.profile.qualification.tier === 'full-context-tested' ? 'Full-context tested' : entry.profile.qualification.tier === 'calculated-startup-smoke' ? 'Calculated + startup/smoke checked' : 'Calculated — pending validation'} · Engine {entry.profile.qualification.engine_revision.slice(0, 8)}
@@ -112,13 +114,13 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
         : matching.length ? 'No profiles match this model on the selected GPU group. Select a compatible GPU group or install matching profiles. Existing instances keep their assigned GPUs; create a new instance to use another group.'
           : 'No installed profile matches this host and its exact model artifacts. Check the model identity, quantization, draft format and TP degree—not just the filename. Install the matching model and profile catalog, then refresh. Custom launch settings remain available below.'
     }</p>}
-    {(!currentSettings || pending) && <Button disabled={disabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={() => {
-      if (!selected) return
+    {(!currentSettings || pending) && <Button disabled={controlsDisabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={() => {
+      if (!selected || controlsDisabled) return
       if (restarting && !window.confirm('Switch this instance to the selected model and profile? Serving restarts after its current requests drain.')) return
       void launch({ profile_id: selected.entry.profile.id, model_id: selected.entry.model_id,
         gpu_uuids: selected.group, instance_id: instanceId || null, force: false,
         ...(instanceId ? { expected_session_id: snapshot.instances.find(i => i.instance_id === instanceId)?.session_id } : {}) })
     }}>{currentSettings ? 'Apply & Restart Server' : restarting ? 'Apply profile and restart' : 'Start Server Instance'}</Button>}
-    {pending && <Button variant="outline" disabled={disabled} onClick={() => { setModelChoice(null); setGpuChoice(null); setChoice('') }}>Keep running settings</Button>}
+    {pending && <Button variant="outline" disabled={controlsDisabled} onClick={() => { setModelChoice(null); setGpuChoice(null); setChoice('') }}>Keep running settings</Button>}
   </div>
 }

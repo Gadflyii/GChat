@@ -2,23 +2,27 @@
 //! only processes spawned here can be stopped here.
 
 use super::engine_registry::InstanceStatus;
+use std::sync::{Arc, Mutex};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     path::PathBuf,
     time::Duration,
 };
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
 use uuid::Uuid;
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncRead, AsyncReadExt};
 
 pub fn validate_runtimes(runtimes: &BTreeMap<String, PathBuf>) -> Result<(), String> {
     for (architecture, path) in runtimes {
         if !matches!(architecture.as_str(), "8.0" | "8.6" | "8.9" | "12.0") {
-            return Err(format!("Unsupported runtime compute capability: {architecture}"));
+            return Err(format!(
+                "Unsupported runtime compute capability: {architecture}"
+            ));
         }
         if !path.is_absolute() || !path.is_file() {
-            return Err(format!("Runtime for {architecture} must be an existing absolute executable path"));
+            return Err(format!(
+                "Runtime for {architecture} must be an existing absolute executable path"
+            ));
         }
     }
     Ok(())
@@ -72,22 +76,35 @@ impl ExitDrain {
                 *slot = None;
             }
         }
-        let mut tail = self.pending.diagnostics.lock().unwrap_or_else(|e| e.into_inner());
+        let mut tail = self
+            .pending
+            .diagnostics
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let detail = String::from_utf8_lossy(tail.make_contiguous());
         ExitObservation {
             instance_id: self.instance_id,
             session_id: self.session_id,
-            last_error: format!("engine exited unexpectedly: {}\n{}", self.pending.exit, detail.trim()),
+            last_error: format!(
+                "engine exited unexpectedly: {}\n{}",
+                self.pending.exit,
+                detail.trim()
+            ),
         }
     }
 }
 
-fn capture_output(reader: impl AsyncRead + Unpin + Send + 'static, diagnostics: Diagnostics) -> tokio::task::JoinHandle<()> {
+fn capture_output(
+    reader: impl AsyncRead + Unpin + Send + 'static,
+    diagnostics: Diagnostics,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut reader = reader;
         let mut chunk = [0u8; 4096];
         while let Ok(count) = reader.read(&mut chunk).await {
-            if count == 0 { break; }
+            if count == 0 {
+                break;
+            }
             eprint!("{}", String::from_utf8_lossy(&chunk[..count]));
             let mut tail = diagnostics.lock().unwrap_or_else(|e| e.into_inner());
             let excess = (tail.len() + count).saturating_sub(DIAGNOSTIC_TAIL_BYTES);
@@ -156,7 +173,10 @@ impl LaunchOptions {
             && (matches!(self.spec.as_str(), "none" | "mtp")
                 || (self.spec == "dflash" && self.draft_tokens != 15))
         {
-            return Err("adaptive draft policy requires automatic DFlash or explicit DFlash width 15".into());
+            return Err(
+                "adaptive draft policy requires automatic DFlash or explicit DFlash width 15"
+                    .into(),
+            );
         }
         if self.prefill_chunk != 0 && !self.prefill_chunk.is_multiple_of(128) {
             return Err("prefill chunk must be a multiple of 128, or automatic".into());
@@ -182,11 +202,16 @@ impl LaunchOptions {
         }
         let maximum = match identity.model_id.as_str() {
             "qwen3.8-flash-next" => {
-                if !matches!(identity.weights_id.as_str(), "groupwise-int" | "smol-q2g64" | "nvfp4") {
+                if !matches!(
+                    identity.weights_id.as_str(),
+                    "groupwise-int" | "smol-q2g64" | "nvfp4"
+                ) {
                     return Err("Flash has no registered weights class for this artifact".into());
                 }
                 if draft_tp != 0 {
-                    return Err("Flash MTP uses the target TP group, not a separate draft TP group".into());
+                    return Err(
+                        "Flash MTP uses the target TP group, not a separate draft TP group".into(),
+                    );
                 }
                 if self.spec == "dflash" || self.draft_policy == "adaptive" {
                     return Err("Flash supports MTP or none with auto or fixed draft policy".into());
@@ -284,6 +309,7 @@ pub struct ManagedInstance {
     diagnostics: Diagnostics,
     output_readers: OutputReaders,
     pending_exit: Option<Arc<PendingExit>>,
+    hardware_profile_path: Option<PathBuf>,
 }
 
 pub struct HostProcesses {
@@ -294,6 +320,7 @@ pub struct HostProcesses {
     instances: BTreeMap<Uuid, ManagedInstance>,
     client: reqwest::Client,
     startup_timeout: Duration,
+    pub(crate) hardware_profile: Option<Arc<crate::hardware_profile::HardwareProfiles>>,
 }
 
 pub(crate) struct StartupProbe {
@@ -358,12 +385,24 @@ impl HostProcesses {
             instances: BTreeMap::new(),
             client,
             startup_timeout,
+            hardware_profile: None,
         })
     }
 
-    pub fn configure_runtimes(&mut self, runtimes: BTreeMap<String, PathBuf>, gpu_architectures: BTreeMap<String, String>) -> Result<(), String> {
+    pub fn configure_runtimes(
+        &mut self,
+        runtimes: BTreeMap<String, PathBuf>,
+        gpu_architectures: BTreeMap<String, String>,
+    ) -> Result<(), String> {
         validate_runtimes(&runtimes)?;
-        if self.instances.values().any(|instance| instance.child.is_some()) {
+        if self.hardware_profile.as_ref().is_some_and(|job| job.busy()) {
+            return Err("Wait for hardware profiling before changing its runtimes".into());
+        }
+        if self
+            .instances
+            .values()
+            .any(|instance| instance.child.is_some())
+        {
             return Err("Stop active instances before changing runtime assignments".into());
         }
         self.runtimes = runtimes;
@@ -372,21 +411,144 @@ impl HostProcesses {
     }
 
     fn executable_for(&self, gpus: &[String]) -> Result<&PathBuf, String> {
-        if self.runtimes.is_empty() { return Ok(&self.executable); }
-        let architecture = gpus.first().and_then(|gpu| self.gpu_architectures.get(gpu))
+        if self.runtimes.is_empty() {
+            return Ok(&self.executable);
+        }
+        let architecture = gpus
+            .first()
+            .and_then(|gpu| self.gpu_architectures.get(gpu))
             .ok_or("Selected GPU has no known compute capability")?;
-        if gpus.iter().any(|gpu| self.gpu_architectures.get(gpu) != Some(architecture)) {
+        if gpus
+            .iter()
+            .any(|gpu| self.gpu_architectures.get(gpu) != Some(architecture))
+        {
             return Err("A GPU group must use one compute architecture".into());
         }
-        self.runtimes.get(architecture).ok_or_else(|| format!("No engine runtime configured for compute capability {architecture}"))
+        self.runtimes.get(architecture).ok_or_else(|| {
+            format!("No engine runtime configured for compute capability {architecture}")
+        })
+    }
+
+    pub(crate) fn profiling_cli(&self, gpus: &[String]) -> Option<PathBuf> {
+        let architecture = gpus.first().and_then(|gpu| self.gpu_architectures.get(gpu))?;
+        if gpus.iter().any(|gpu| self.gpu_architectures.get(gpu) != Some(architecture)) { return None; }
+        let executable = self.executable_for(gpus).ok()?;
+        let name = if cfg!(windows) {
+            "ginfer-serve.exe"
+        } else {
+            "ginfer-serve"
+        };
+        if executable.file_name()? != name {
+            return None;
+        }
+        let cli = executable.with_file_name(if cfg!(windows) {
+            "ginfer.exe"
+        } else {
+            "ginfer"
+        });
+        cli.is_file().then_some(cli)
+    }
+    pub(crate) fn hardware_profile_action(
+        &self,
+        request: crate::hardware_profile::HardwareProfileRequest,
+    ) -> Result<crate::hardware_profile::HardwareProfileStatus, String> {
+        use crate::hardware_profile::HardwareProfileAction;
+        let job = self
+            .hardware_profile
+            .as_ref()
+            .ok_or("Hardware profiling is not configured")?;
+        if request.action == HardwareProfileAction::Ensure && request.gpu_uuids.is_none() {
+            self.ensure_hardware_if_idle(vec![])?;
+            return Ok(job.status(None));
+        }
+        let gpus = request.gpu_uuids.unwrap_or_else(|| job.group());
+        if gpus.is_empty() { return Ok(job.status(None)); }
+        if request.action == HardwareProfileAction::Cancel {
+            job.start(request.action,None,gpus)?;
+            return Ok(job.status(None));
+        }
+        if !matches!(gpus.len(), 1 | 2 | 4)
+            || gpus.iter().collect::<BTreeSet<_>>().len() != gpus.len()
+            || gpus.iter().any(|gpu| !self.known_gpus.contains(gpu))
+        {
+            return Err("Choose an exact ordered group of one, two, or four known GPUs".into());
+        }
+        if let Some(first) = gpus.first().and_then(|gpu| self.gpu_architectures.get(gpu)) {
+            if gpus
+                .iter()
+                .any(|gpu| self.gpu_architectures.get(gpu) != Some(first))
+            {
+                return Err("A profiling GPU group must use one compute architecture".into());
+            }
+        }
+        if request.action != HardwareProfileAction::Cancel
+            && !job.busy()
+            && self
+                .instances
+                .values()
+                .any(|instance| instance.child.is_some())
+        {
+            return Err("Stop active model instances before profiling hardware".into());
+        }
+        let cli = self.profiling_cli(&gpus);
+        job.start(request.action, cli.clone(), gpus)?;
+        Ok(job.status(cli))
+    }
+    pub(crate) fn ensure_hardware_if_idle(
+        &self,
+        saved_groups: Vec<Vec<String>>,
+    ) -> Result<(), String> {
+        use crate::hardware_profile::group_key;
+        if self
+            .instances
+            .values()
+            .any(|instance| instance.child.is_some())
+        {
+            return Ok(());
+        }
+        let job = self
+            .hardware_profile
+            .as_ref()
+            .ok_or("Hardware profiling is not configured")?;
+        let mut groups = std::collections::BTreeMap::new();
+        for gpus in job.configured_groups()?.into_iter().chain(saved_groups) {
+            groups.entry(group_key(&gpus)).or_insert(gpus);
+        }
+        let mut configurations = Vec::new();
+        for gpus in groups.into_values() {
+            if !matches!(gpus.len(), 1 | 2 | 4)
+                || gpus.iter().collect::<BTreeSet<_>>().len() != gpus.len()
+                || gpus.iter().any(|gpu| !self.known_gpus.contains(gpu))
+            {
+                return Err("Saved deployment GPU group is unavailable".into());
+            }
+            let config = job.configuration(self.profiling_cli(&gpus), &gpus)?;
+            config.store(job.directory())?;
+            configurations.push(config);
+        }
+        job.ensure_groups(configurations)
     }
 
     /// Local clients may select an installed engine without replacing live instances.
     pub fn configure_executable(&mut self, path: PathBuf) -> Result<(), String> {
-        if !self.runtimes.is_empty() { return Err("This host uses per-architecture runtimes; update its runtime assignments and restart the host".into()); }
-        if !path.is_absolute() || !path.is_file() { return Err("engine executable must be an existing absolute file path".into()); }
-        if self.executable != path && self.instances.values().any(|instance| instance.child.is_some()) {
-            return Err("Stop the host's active instances before changing its engine executable".into());
+        if !self.runtimes.is_empty() {
+            return Err("This host uses per-architecture runtimes; update its runtime assignments and restart the host".into());
+        }
+        if !path.is_absolute() || !path.is_file() {
+            return Err("engine executable must be an existing absolute file path".into());
+        }
+        if self.hardware_profile.as_ref().is_some_and(|job| job.busy()) {
+            return Err("Wait for hardware profiling before changing its runtime".into());
+        }
+        if self.executable != path
+            && self
+                .instances
+                .values()
+                .any(|instance| instance.child.is_some())
+        {
+            return Err(
+                "Stop the host's active instances before changing its engine executable".into(),
+            );
         }
         self.executable = path;
         Ok(())
@@ -399,7 +561,22 @@ impl HostProcesses {
     }
 
     pub fn validate_launch(&self, launch: &EngineLaunch, replacing: bool) -> Result<(), String> {
-        if !self.executable_for(&launch.gpu_uuids)?.is_file() { return Err("Install the configured engine executable before loading a model".into()); }
+        if self.hardware_profile.as_ref().is_some_and(|job| job.busy()) {
+            return Err("Hardware profiling reserves this host; wait for completion or cancel it before loading a model".into());
+        }
+        if let Some(job) = &self.hardware_profile {
+            if job.is_stale(&launch.gpu_uuids) { return Err("Hardware changed — re-profile this GPU group before loading a model".into()); }
+            let profile =
+                job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids)?;
+            if !profile.profile_path.is_file() {
+                return Err(
+                    "Install the hardware profile for this GPU group before loading a model".into(),
+                );
+            }
+        }
+        if !self.executable_for(&launch.gpu_uuids)?.is_file() {
+            return Err("Install the configured engine executable before loading a model".into());
+        }
         launch.options.validate(launch.tp)?;
         if self
             .instances
@@ -447,13 +624,24 @@ impl HostProcesses {
         let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         let executable = self.executable_for(&launch.gpu_uuids)?;
         let mut command = Command::new(executable);
+        let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
+        if let Some(path) = &hardware_profile_path { command.arg("--hardware-profile").arg(path); }
         #[cfg(windows)]
         command.creation_flags(0x08000000); // Background serving has no console window.
         if let Some(directory) = executable.parent() {
-            let variable = if cfg!(windows) { "PATH" } else { "LD_LIBRARY_PATH" };
+            let variable = if cfg!(windows) {
+                "PATH"
+            } else {
+                "LD_LIBRARY_PATH"
+            };
             let mut paths = vec![directory.to_path_buf()];
-            if let Some(existing) = std::env::var_os(variable) { paths.extend(std::env::split_paths(&existing)); }
-            command.env(variable, std::env::join_paths(paths).map_err(|e| e.to_string())?);
+            if let Some(existing) = std::env::var_os(variable) {
+                paths.extend(std::env::split_paths(&existing));
+            }
+            command.env(
+                variable,
+                std::env::join_paths(paths).map_err(|e| e.to_string())?,
+            );
         }
         if launch.artifact_set {
             command
@@ -491,8 +679,14 @@ impl HostProcesses {
             .map_err(|e| format!("could not start engine: {e}"))?;
         let diagnostics = Arc::new(Mutex::new(VecDeque::with_capacity(DIAGNOSTIC_TAIL_BYTES)));
         let output_readers = OutputReaders(vec![
-            Some(capture_output(child.stdout.take().expect("piped stdout"), diagnostics.clone())),
-            Some(capture_output(child.stderr.take().expect("piped stderr"), diagnostics.clone())),
+            Some(capture_output(
+                child.stdout.take().expect("piped stdout"),
+                diagnostics.clone(),
+            )),
+            Some(capture_output(
+                child.stderr.take().expect("piped stderr"),
+                diagnostics.clone(),
+            )),
         ]);
         let session_id = Uuid::new_v4();
         self.instances.insert(
@@ -511,6 +705,7 @@ impl HostProcesses {
                 diagnostics,
                 output_readers,
                 pending_exit: None,
+                hardware_profile_path,
             },
         );
         Ok(session_id)
@@ -581,7 +776,10 @@ impl HostProcesses {
     }
 
     pub(crate) async fn pending_readiness(&mut self) -> Result<ProcessObservations, String> {
-        let mut observations = ProcessObservations { readiness: Vec::new(), exits: Vec::new() };
+        let mut observations = ProcessObservations {
+            readiness: Vec::new(),
+            exits: Vec::new(),
+        };
         for instance in self.instances.values_mut() {
             if let Some(pending) = &instance.pending_exit {
                 observations.exits.push(ExitDrain {
@@ -644,6 +842,13 @@ impl HostProcesses {
         {
             return;
         }
+        if let (Some(job), Some(profile)) = (&self.hardware_profile, &instance.hardware_profile_path) {
+            job.mark_stale(
+                &instance.launch.gpu_uuids,
+                profile,
+                &observation.last_error,
+            );
+        }
         instance.last_error = Some(observation.last_error);
         if instance.status == InstanceStatus::Stopping {
             instance.status = InstanceStatus::Failed;
@@ -651,12 +856,17 @@ impl HostProcesses {
         instance.pending_exit = None;
     }
 
-    pub(crate) fn confirm_readiness(&mut self, observation: ReadyObservation) -> Result<(), String> {
+    pub(crate) fn confirm_readiness(
+        &mut self,
+        observation: ReadyObservation,
+    ) -> Result<(), String> {
         let Some(instance) = self.instances.get_mut(&observation.instance_id) else {
             return Ok(());
         };
         // A delayed response must not qualify a stopped or replacement session.
-        if instance.session_id != observation.session_id || instance.status != InstanceStatus::Starting {
+        if instance.session_id != observation.session_id
+            || instance.status != InstanceStatus::Starting
+        {
             return Ok(());
         }
         let Some(child) = instance.child.as_mut() else {
@@ -709,10 +919,22 @@ mod tests {
         payload.push(b'\n');
         std::fs::write(&artifact, &payload).unwrap();
         let expected = String::from_utf8_lossy(&payload[payload.len() - 16_384..]);
-        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
-            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
-        *host.processes.lock().await = HostProcesses::new(executable,
-            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let host = crate::service::Host::open(
+            directory.path().join("host"),
+            "fixture".into(),
+            executable.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+        *host.processes.lock().await = HostProcesses::new(
+            executable,
+            BTreeSet::from(["GPU-fixture".into()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
         let id = Uuid::new_v4();
         let measurement = crate::resource_measurement::Measurement::start();
         {
@@ -735,19 +957,44 @@ mod tests {
         use std::{future::Future, task::Poll};
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("engine");
-        std::fs::write(&executable, "#!/bin/sh\n(sleep 0.5; printf 'late diagnostic\\n') &\nexit 7\n").unwrap();
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\n(sleep 0.5; printf 'late diagnostic\\n') &\nexit 7\n",
+        )
+        .unwrap();
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
         let artifact = directory.path().join("fixture.ginfer");
         std::fs::write(&artifact, b"fixture").unwrap();
-        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
-            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
-        *host.processes.lock().await = HostProcesses::new(executable,
-            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let host = crate::service::Host::open(
+            directory.path().join("host"),
+            "fixture".into(),
+            executable.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+        *host.processes.lock().await = HostProcesses::new(
+            executable,
+            BTreeSet::from(["GPU-fixture".into()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
         let id = Uuid::new_v4();
         {
             let mut processes = host.processes.lock().await;
             processes.launch(fixture_launch(&artifact, id)).unwrap();
-            processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap().wait().await.unwrap();
+            processes
+                .instances
+                .get_mut(&id)
+                .unwrap()
+                .child
+                .as_mut()
+                .unwrap()
+                .wait()
+                .await
+                .unwrap();
         }
         let (entered, ready) = tokio::sync::oneshot::channel();
         let observer = host.clone();
@@ -782,17 +1029,32 @@ mod tests {
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
         let artifact = directory.path().join("fixture.ginfer");
         std::fs::write(&artifact, b"fixture").unwrap();
-        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
-            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
-        *host.processes.lock().await = HostProcesses::new(executable,
-            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let host = crate::service::Host::open(
+            directory.path().join("host"),
+            "fixture".into(),
+            executable.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+        *host.processes.lock().await = HostProcesses::new(
+            executable,
+            BTreeSet::from(["GPU-fixture".into()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
         let id = Uuid::new_v4();
         let (mut writer, reader) = tokio::io::duplex(4096);
         let (session, exit) = {
             let mut processes = host.processes.lock().await;
             let session = processes.launch(fixture_launch(&artifact, id)).unwrap();
             let instance = processes.instances.get_mut(&id).unwrap();
-            instance.output_readers = OutputReaders(vec![Some(capture_output(reader, instance.diagnostics.clone()))]);
+            instance.output_readers = OutputReaders(vec![Some(capture_output(
+                reader,
+                instance.diagnostics.clone(),
+            ))]);
             let child = instance.child.as_mut().unwrap();
             child.kill().await.unwrap();
             (session, child.try_wait().unwrap().unwrap())
@@ -813,9 +1075,15 @@ mod tests {
         let mut retry = Box::pin(host.refresh_processes());
         std::future::poll_fn(|context| match retry.as_mut().poll(context) {
             Poll::Pending => Poll::Ready(()),
-            Poll::Ready(result) => panic!("Stop must retain the cancelled session drain: {result:?}"),
-        }).await;
-        writer.write_all(b"final diagnostic after Stop\n").await.unwrap();
+            Poll::Ready(result) => {
+                panic!("Stop must retain the cancelled session drain: {result:?}")
+            }
+        })
+        .await;
+        writer
+            .write_all(b"final diagnostic after Stop\n")
+            .await
+            .unwrap();
         writer.shutdown().await.unwrap();
         retry.await.unwrap();
         let snapshot = host.snapshot().await;
@@ -835,38 +1103,55 @@ mod tests {
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
         let artifact = directory.path().join("fixture.ginfer");
         std::fs::write(&artifact, b"fixture").unwrap();
-        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
-            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
-        *host.processes.lock().await = HostProcesses::new(executable,
-            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let host = crate::service::Host::open(
+            directory.path().join("host"),
+            "fixture".into(),
+            executable.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+        *host.processes.lock().await = HostProcesses::new(
+            executable,
+            BTreeSet::from(["GPU-fixture".into()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
         let id = Uuid::new_v4();
         let (mut writer, reader) = tokio::io::duplex(4096);
         let session = {
             let mut processes = host.processes.lock().await;
             let session = processes.launch(fixture_launch(&artifact, id)).unwrap();
             let instance = processes.instances.get_mut(&id).unwrap();
-            instance.output_readers = OutputReaders(vec![Some(capture_output(reader, instance.diagnostics.clone()))]);
+            instance.output_readers = OutputReaders(vec![Some(capture_output(
+                reader,
+                instance.diagnostics.clone(),
+            ))]);
             instance.child.as_mut().unwrap().kill().await.unwrap();
             session
         };
         let mut first_refresh = Box::pin(host.refresh_processes());
-        std::future::poll_fn(|context| {
-            match first_refresh.as_mut().poll(context) {
-                Poll::Pending => Poll::Ready(()),
-                Poll::Ready(result) => panic!("open reader must delay exit publication: {result:?}"),
-            }
-        }).await;
-        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot()).await.unwrap();
+        std::future::poll_fn(|context| match first_refresh.as_mut().poll(context) {
+            Poll::Pending => Poll::Ready(()),
+            Poll::Ready(result) => panic!("open reader must delay exit publication: {result:?}"),
+        })
+        .await;
+        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot())
+            .await
+            .unwrap();
         assert_eq!(snapshot["instances"][0]["status"], "stopping");
         assert!(snapshot["instances"][0]["last_error"].is_null());
         drop(first_refresh);
         let mut second_refresh = Box::pin(host.refresh_processes());
-        std::future::poll_fn(|context| {
-            match second_refresh.as_mut().poll(context) {
-                Poll::Pending => Poll::Ready(()),
-                Poll::Ready(result) => panic!("cancelled observation must retain the reader: {result:?}"),
+        std::future::poll_fn(|context| match second_refresh.as_mut().poll(context) {
+            Poll::Pending => Poll::Ready(()),
+            Poll::Ready(result) => {
+                panic!("cancelled observation must retain the reader: {result:?}")
             }
-        }).await;
+        })
+        .await;
         tokio::time::timeout(Duration::from_millis(500), async {
             let mut processes = host.processes.lock().await;
             processes.stop(id).await.unwrap();
@@ -888,28 +1173,55 @@ mod tests {
         let mut runtimes = BTreeMap::new();
         for architecture in ["8.0", "8.6"] {
             let executable = dir.path().join(format!("engine-{architecture}"));
-            std::fs::write(&executable, format!("#!/bin/sh\necho {architecture}:$CUDA_VISIBLE_DEVICES\nexec sleep 60\n")).unwrap();
+            std::fs::write(
+                &executable,
+                format!("#!/bin/sh\necho {architecture}:$CUDA_VISIBLE_DEVICES\nexec sleep 60\n"),
+            )
+            .unwrap();
             std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
             runtimes.insert(architecture.into(), executable);
         }
-        let mut host = HostProcesses::new(dir.path().join("unused-default"),
-            BTreeSet::from(["GPU-80".into(), "GPU-86".into(), "GPU-89".into()]), Duration::from_secs(10)).unwrap();
-        host.configure_runtimes(runtimes, BTreeMap::from([
-            ("GPU-80".into(), "8.0".into()), ("GPU-86".into(), "8.6".into()), ("GPU-89".into(), "8.9".into()),
-        ])).unwrap();
+        let mut host = HostProcesses::new(
+            dir.path().join("unused-default"),
+            BTreeSet::from(["GPU-80".into(), "GPU-86".into(), "GPU-89".into()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
+        host.configure_runtimes(
+            runtimes,
+            BTreeMap::from([
+                ("GPU-80".into(), "8.0".into()),
+                ("GPU-86".into(), "8.6".into()),
+                ("GPU-89".into(), "8.9".into()),
+            ]),
+        )
+        .unwrap();
         let artifact = dir.path().join("fixture.ginfer");
         std::fs::write(&artifact, b"fixture").unwrap();
         let launch = |gpu: &str, port| EngineLaunch {
-            instance_id: Uuid::new_v4(), artifact: artifact.clone(),
-            artifact_dependencies: vec![artifact.clone()], artifact_set: false,
-            model_id: "fixture".into(), gpu_uuids: vec![gpu.into()], tp: 1, port,
-            max_context: 4096, concurrency: 1, options: LaunchOptions::default(),
+            instance_id: Uuid::new_v4(),
+            artifact: artifact.clone(),
+            artifact_dependencies: vec![artifact.clone()],
+            artifact_set: false,
+            model_id: "fixture".into(),
+            gpu_uuids: vec![gpu.into()],
+            tp: 1,
+            port,
+            max_context: 4096,
+            concurrency: 1,
+            options: LaunchOptions::default(),
         };
-        assert!(host.launch(launch("GPU-89", 40103)).unwrap_err().contains("No engine runtime"));
+        assert!(host
+            .launch(launch("GPU-89", 40103))
+            .unwrap_err()
+            .contains("No engine runtime"));
         let mut mixed = launch("GPU-80", 40104);
         mixed.tp = 2;
         mixed.gpu_uuids.push("GPU-86".into());
-        assert!(host.launch(mixed).unwrap_err().contains("one compute architecture"));
+        assert!(host
+            .launch(mixed)
+            .unwrap_err()
+            .contains("one compute architecture"));
         for (gpu, sm, port) in [("GPU-80", "8.0", 40101), ("GPU-86", "8.6", 40102)] {
             let request = launch(gpu, port);
             let id = request.instance_id;

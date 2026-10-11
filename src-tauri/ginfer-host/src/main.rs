@@ -55,13 +55,247 @@ struct Args {
 }
 
 fn parse_runtime(value: &str) -> Result<(String, PathBuf), String> {
-    let (architecture, path) = value.split_once('=').ok_or("runtime must be COMPUTE_CAPABILITY=/absolute/executable")?;
+    let (architecture, path) = value
+        .split_once('=')
+        .ok_or("runtime must be COMPUTE_CAPABILITY=/absolute/executable")?;
     let entry = (architecture.to_owned(), PathBuf::from(path));
-    ginfer_host::engine_host::validate_runtimes(&std::collections::BTreeMap::from([entry.clone()]))?;
+    ginfer_host::engine_host::validate_runtimes(&std::collections::BTreeMap::from(
+        [entry.clone()],
+    ))?;
     Ok(entry)
 }
 
+#[derive(Parser)]
+#[command(about = "Prepare the current user's shared Host-owned hardware installation")]
+struct PrepareHardware {
+    #[arg(long)]
+    data_dir: Option<PathBuf>,
+    /// Existing installed launcher configuration; preserves desktop provider storage.
+    #[arg(long, conflicts_with_all = ["data_dir", "desktop_provider"])]
+    installed_configuration: Option<PathBuf>,
+    /// Verified installed native ginfer CLI, never ginfer-serve.
+    #[arg(long)]
+    engine: PathBuf,
+    #[arg(long)]
+    hardware_profile: Option<PathBuf>,
+    #[arg(long)]
+    desktop_provider: Option<PathBuf>,
+    #[arg(long, default_value = "https://127.0.0.1:7443")]
+    host_url: String,
+    #[arg(long, default_value = "nvidia-smi")]
+    nvidia_smi: PathBuf,
+    /// Use the installed GChat four-image Linux runtime set (single-image installs omit this).
+    #[arg(long)]
+    runtime_set: bool,
+    /// Exact ordered deployment GPU UUID grant (repeat for TP2/TP4).
+    #[arg(long)]
+    gpu: Vec<String>,
+    #[arg(long)]
+    reprofile: bool,
+}
+async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
+    use ginfer_host::hardware_profile::{Configuration, HardwareProfileAction};
+    let (directory, provider, origin, configured_engine) =
+        if let Some(path) = args.installed_configuration {
+            let config: ginfer_host::launcher::InstalledConfiguration =
+                serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+            let desktop = config.desktop;
+            (
+                config.data_dir,
+                desktop.as_ref().map(|d| d.provider.clone()),
+                config.host_url,
+                desktop.map(|d| d.engine),
+            )
+        } else {
+            (
+                args.data_dir
+                    .ok_or("--data-dir or --installed-configuration is required")?,
+                args.desktop_provider,
+                args.host_url,
+                None,
+            )
+        };
+    let supplied_engine = args.engine;
+    let cli_name = if cfg!(windows) {
+        "ginfer.exe"
+    } else {
+        "ginfer"
+    };
+    if supplied_engine
+        .file_name()
+        .map_or(true, |name| name != cli_name)
+    {
+        return Err("--engine must select the installed ginfer CLI".into());
+    }
+    let engine = configured_engine.unwrap_or_else(|| {
+        supplied_engine.with_file_name(if cfg!(windows) {
+            "ginfer-serve.exe"
+        } else {
+            "ginfer-serve"
+        })
+    });
+    let url = reqwest::Url::parse(&origin).map_err(|e| e.to_string())?;
+    if url.scheme() != "https"
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err("prepare-hardware requires the local HTTPS Host origin".into());
+    }
+    let address: std::net::IpAddr = url
+        .host_str()
+        .ok_or("local Host address is missing")?
+        .trim_matches(['[', ']'])
+        .parse()
+        .map_err(|_| "local Host origin must use a loopback IP address")?;
+    let owner = match ginfer_host::local_host_registry::registered().await? {
+        Some(owner) => owner,
+        None => {
+            #[cfg(target_os = "linux")]
+            let engine_runtimes = if args.runtime_set {
+                ginfer_host::local_host::desktop_runtimes(
+                    provider
+                        .as_ref()
+                        .ok_or("--runtime-set requires desktop provider storage")?,
+                )?
+            } else {
+                Default::default()
+            };
+            #[cfg(not(target_os = "linux"))]
+            let engine_runtimes = Default::default();
+            let local = ginfer_host::local_host::LocalHost {
+                binary: std::env::current_exe().map_err(|e| e.to_string())?,
+                engine,
+                engine_runtimes,
+                directory: directory.clone(),
+                desktop_provider: provider,
+                models: vec![],
+                artifact_sets: vec![],
+                name: ginfer_host::local_host::computer_name()?,
+                nvidia_smi: args.nvidia_smi,
+                listen: std::net::SocketAddr::new(
+                    address,
+                    url.port_or_known_default()
+                        .ok_or("local Host port is missing")?,
+                ),
+            };
+            ginfer_host::local_host_registry::resolve(Some(
+                ginfer_host::local_host_registry::Owner::Desktop(Box::new(local)),
+            ))
+            .await?
+        }
+    };
+    let directory = match &owner {
+        ginfer_host::local_host_registry::Owner::Desktop(local) => local.directory.clone(),
+        ginfer_host::local_host_registry::Owner::Service { directory, .. } => directory.clone(),
+    };
+    let control = owner.connect().await?;
+    let before = control.snapshot().await?;
+    if matches!(
+        before["hardware_profile"]["status"].as_str(),
+        Some("running" | "cancelling")
+    ) {
+        println!("{}", before["hardware_profile"]);
+        return Ok(());
+    }
+    if args.gpu.is_empty() && !args.reprofile {
+        if args.hardware_profile.is_some() {
+            return Err("--hardware-profile requires an explicit --gpu deployment".into());
+        }
+        let result = control
+            .request(
+                "/host/v1/hardware-profile",
+                Some(serde_json::json!({"action":"ensure"})),
+            )
+            .await?;
+        println!("{result}");
+        return Ok(());
+    }
+    let gpus = if args.gpu.is_empty() {
+        serde_json::from_value::<Vec<String>>(before["hardware_profile"]["gpu_uuids"].clone())
+            .map_err(|e| e.to_string())?
+    } else {
+        args.gpu
+    };
+    if gpus.is_empty() {
+        return Err("Choose an explicit GPU group before refreshing its hardware profile".into());
+    }
+    let configuration = Configuration {
+        gpu_uuids: gpus.clone(),
+        engine: supplied_engine,
+        profile_path: args.hardware_profile.unwrap_or_else(|| {
+            ginfer_host::hardware_profile::group_profile_path(&directory, &gpus)
+        }),
+    };
+    if let ginfer_host::local_host_registry::Owner::Desktop(local) = &owner {
+        let selected = if local.engine_runtimes.is_empty() {
+            local.engine.clone()
+        } else {
+            let architecture = gpus
+                .first()
+                .and_then(|gpu| {
+                    before["gpus"]
+                        .as_array()?
+                        .iter()
+                        .find(|fact| fact["uuid"].as_str() == Some(gpu))?["compute_capability"]
+                        .as_str()
+                })
+                .ok_or("Selected GPU has no compute architecture")?;
+            local
+                .engine_runtimes
+                .get(architecture)
+                .cloned()
+                .ok_or("No runtime installed for the selected GPU group")?
+        };
+        let expected = selected.with_file_name(if cfg!(windows) {
+            "ginfer.exe"
+        } else {
+            "ginfer"
+        });
+        if expected != configuration.engine {
+            return Err(
+                "The registered Host owns a different profiling runtime; select its installed CLI"
+                    .into(),
+            );
+        }
+    }
+    if matches!(
+        owner,
+        ginfer_host::local_host_registry::Owner::Service { .. }
+    ) {
+        return Err("Configure the registered service owner's profiling runtime locally before preparing its hardware profile".into());
+    }
+    configuration.store(&directory)?;
+    let action = if args.reprofile {
+        HardwareProfileAction::Refresh
+    } else {
+        HardwareProfileAction::Ensure
+    };
+    let result = control
+        .request(
+            "/host/v1/hardware-profile",
+            Some(serde_json::json!({"action":action,"gpu_uuids":gpus})),
+        )
+        .await?;
+    println!("{result}");
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "prepare-hardware")
+    {
+        let args = PrepareHardware::parse_from(std::env::args_os().skip(1));
+        return tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?
+            .block_on(prepare_hardware(args))
+            .map_err(|e| std::io::Error::other(e).into());
+    }
     #[cfg(windows)]
     if std::env::args_os().any(|arg| arg == "--windows-service") {
         windows_service::dispatch()?;
@@ -181,8 +415,17 @@ async fn run(
         args.desktop_provider,
     )
     .await?;
-    host.processes.lock().await.configure_runtimes(engine_runtimes,
-        host.gpus.iter().filter_map(|gpu| gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))).collect())?;
+    host.processes.lock().await.configure_runtimes(
+        engine_runtimes,
+        host.gpus
+            .iter()
+            .filter_map(|gpu| {
+                gpu.compute_capability
+                    .as_ref()
+                    .map(|sm| (gpu.uuid.clone(), sm.clone()))
+            })
+            .collect(),
+    )?;
     let listener = tokio::net::TcpListener::bind(args.listen)
         .await
         .map_err(|e| e.to_string())?;
@@ -274,6 +517,7 @@ async fn run(
     while connections.join_next().await.is_some() {}
     maintenance.abort_all();
     while maintenance.join_next().await.is_some() {}
+    host.shutdown_hardware_profile().await?;
     host.processes.lock().await.shutdown().await?;
     outcome
 }
@@ -302,7 +546,12 @@ async fn shutdown_signal() {
 }
 
 fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
-    match u32::from_str_radix(pci_device_id.trim_start_matches("0x").trim_start_matches("0X"), 16) {
+    match u32::from_str_radix(
+        pci_device_id
+            .trim_start_matches("0x")
+            .trim_start_matches("0X"),
+        16,
+    ) {
         Ok(0x20c210de) => Some("NVIDIA CMP 170HX"),
         _ => None,
     }
@@ -311,11 +560,17 @@ fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use std::future::Future;
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
 
     #[test]
     fn cmp_alias_uses_device_identity_not_generic_driver_name() {
-        assert_eq!(super::gpu_display_alias("0x20C210DE"), Some("NVIDIA CMP 170HX"));
+        assert_eq!(
+            super::gpu_display_alias("0x20C210DE"),
+            Some("NVIDIA CMP 170HX")
+        );
         assert_eq!(super::gpu_display_alias("0x220410DE"), None);
         assert_eq!(super::gpu_display_alias("N/A"), None);
     }
@@ -371,8 +626,16 @@ mod tests {
     #[tokio::test]
     async fn empty_host_monitor_resource_pass() {
         let directory = tempfile::tempdir().unwrap();
-        let host = ginfer_host::service::Host::open(directory.path().into(), "Empty monitor".into(),
-            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let host = ginfer_host::service::Host::open(
+            directory.path().into(),
+            "Empty monitor".into(),
+            std::env::current_exe().unwrap(),
+            vec![],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
         let initial = host.revision.load(std::sync::atomic::Ordering::SeqCst);
         let start = std::time::Instant::now();
         let refreshed = super::refresh_nonempty_processes(&host).await.unwrap();

@@ -5,6 +5,7 @@ Set-StrictMode -Version Latest
 $root = Join-Path ([IO.Path]::GetTempPath()) ('ginfer-setup-test-' + [Guid]::NewGuid().ToString('N'))
 $savedAppData = $env:APPDATA
 $savedLocalAppData = $env:LOCALAPPDATA
+$savedPrepareArguments = $env:GINFER_SETUP_TEST_ARGUMENTS
 try {
     $env:APPDATA = Join-Path $root 'roaming'
     $env:LOCALAPPDATA = Join-Path $root 'local'
@@ -14,7 +15,19 @@ try {
     }
     $script = Join-Path $bundle 'scripts\setup-ginfer-windows.ps1'
     Copy-Item -LiteralPath $Setup -Destination $script
-    [IO.File]::WriteAllText((Join-Path $bundle 'bin\ginfer-host.exe'), 'fixture; never executed')
+    $env:GINFER_SETUP_TEST_ARGUMENTS = Join-Path $root 'prepare-arguments.txt'
+    # An inert CLI fixture records the real installer invocation; it starts no
+    # Host, profiling producer, model or service.
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+public static class SetupHardwareHandoff {
+    public static void Main(string[] args) {
+        File.WriteAllLines(Environment.GetEnvironmentVariable("GINFER_SETUP_TEST_ARGUMENTS"), args);
+        Console.WriteLine("{\"status\":\"idle\",\"gpu_uuids\":[]}");
+    }
+}
+'@ -OutputAssembly (Join-Path $bundle 'bin\ginfer-host.exe') -OutputType ConsoleApplication
     $profiles = '{"schema":"ginfer-launch-profiles-v1","profiles":[]}'
     [IO.File]::WriteAllText((Join-Path $bundle 'bin\launch-profiles.json'), $profiles)
     $files = @()
@@ -28,12 +41,16 @@ try {
     $target = Join-Path $env:LOCALAPPDATA 'GInfer'
     & $script -NoPath
     if (Test-Path $target) { throw 'Preview wrote installation files' }
-    & $script -Install -NoPath
+    if (Test-Path $env:GINFER_SETUP_TEST_ARGUMENTS) { throw 'Preview requested hardware preparation' }
+    & $script -Install -NoPath -GpuUuids @('GPU-second', 'GPU-first')
     $config = Get-Content (Join-Path $target 'bin\ginfer-launch.json') -Raw | ConvertFrom-Json
     if ($config.desktop.provider -ne (Join-Path $env:APPDATA 'GInfer\data')) { throw 'Wrong default provider' }
     if (Test-Path $config.desktop.provider) { throw 'Setup must not create host/model storage' }
     if (-not (Test-Path (Join-Path $target 'bin\ginfer-host.exe'))) { throw 'Host is not a launcher sibling' }
     if ([IO.File]::ReadAllText((Join-Path $target 'bin\launch-profiles.json')) -ne $profiles) { throw 'Profile catalog was not installed' }
+    $arguments = [IO.File]::ReadAllLines($env:GINFER_SETUP_TEST_ARGUMENTS)
+    $expected = @('prepare-hardware', '--engine', (Join-Path $target 'bin\ginfer.exe'), '--installed-configuration', (Join-Path $target 'bin\ginfer-launch.json'), '--gpu', 'GPU-second', '--gpu', 'GPU-first')
+    if (($arguments -join "`n") -cne ($expected -join "`n")) { throw 'First installation did not hand off the typed installed configuration' }
     $rejected = $false
     try { & $script -Install -NoPath } catch { $rejected = $true }
     if (-not $rejected) { throw 'Setup overwrote an existing installation' }
@@ -46,14 +63,20 @@ try {
     & $script -InstallDirectory $second -Install -NoPath
     if (Test-Path (Join-Path $second 'bin\ginfer-launch.json')) { throw 'Setup created a competing owner configuration' }
     if ([IO.File]::ReadAllText($locator) -ne $record) { throw 'Setup altered the registered owner' }
+    $arguments = [IO.File]::ReadAllLines($env:GINFER_SETUP_TEST_ARGUMENTS)
+    $expected = @('prepare-hardware', '--engine', (Join-Path $second 'bin\ginfer.exe'), '--data-dir', (Join-Path $env:APPDATA 'GInfer\data\host'), '--desktop-provider', (Join-Path $env:APPDATA 'GInfer\data'))
+    if (($arguments -join "`n") -cne ($expected -join "`n")) { throw 'Existing-owner handoff changed the explicit installed CLI or seed paths' }
+    $lastHandoff = [IO.File]::ReadAllText($env:GINFER_SETUP_TEST_ARGUMENTS)
     [IO.File]::AppendAllText((Join-Path $bundle 'runtime\bin\ginfer.exe'), 'corrupted')
     $bad = Join-Path $root 'rejected'
     $rejected = $false
     try { & $script -InstallDirectory $bad -Install -NoPath } catch { $rejected = $true }
     if (-not $rejected -or (Test-Path $bad)) { throw 'Invalid runtime was installed' }
-    Write-Output 'PASS: default paths, preview, complete sibling installation, owner preservation, overwrite and integrity rejection.'
+    if ([IO.File]::ReadAllText($env:GINFER_SETUP_TEST_ARGUMENTS) -cne $lastHandoff) { throw 'Invalid runtime requested hardware preparation' }
+    Write-Output 'PASS: default paths, preview, runtime handoff, owner preservation, overwrite and integrity rejection.'
 } finally {
     $env:APPDATA = $savedAppData
     $env:LOCALAPPDATA = $savedLocalAppData
+    $env:GINFER_SETUP_TEST_ARGUMENTS = $savedPrepareArguments
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 }

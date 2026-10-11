@@ -48,6 +48,8 @@ pub struct HostSnapshot {
     pub revision: u64,
     pub display_name: String,
     pub instances: Vec<InstanceSnapshot>,
+    #[serde(default)]
+    pub hardware_profile: Option<crate::hardware_profile::HardwareProfileStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -227,6 +229,7 @@ mod tests {
                 upstream_model_id: "muse".into(),
                 status: InstanceStatus::Ready,
             }],
+            hardware_profile: None,
         };
         (selection, snapshot)
     }
@@ -278,6 +281,33 @@ mod tests {
         assert!(apply(&mut registry, selection.host_id, snapshot.clone()).is_err());
         snapshot.boot_id = Uuid::new_v4();
         apply(&mut registry, selection.host_id, snapshot).unwrap();
+    }
+
+    #[test]
+    fn profiling_transitions_require_a_fresh_snapshot_revision() {
+        let mut registry = EngineRegistry::default();
+        let (selection, mut snapshot) = paired(&mut registry);
+        snapshot.hardware_profile = Some(crate::hardware_profile::HardwareProfileStatus {
+            status: "running".into(), job_id: Some(Uuid::new_v4()), pid: Some(42),
+            reprofile: true, started_unix_ms: Some(100), finished_unix_ms: None,
+            profile_path: "hardware.json".into(), checkpoint_available: false,
+            gpu_uuids: vec!["GPU-B".into(), "GPU-A".into()], engine_path: Some("bin/ginfer".into()),
+            pending_gpu_groups: vec![vec!["GPU-C".into()]],
+            stale_groups: vec![crate::hardware_profile::HardwareProfileStaleGroup {
+                gpu_uuids: vec!["GPU-C".into()], profile_path: "other.json".into(),
+                expected_duration_ms: Some(1_800_000),
+            }],
+            diagnostic_tail: "Measuring".into(), error: None, available: true,
+        });
+        apply(&mut registry, selection.host_id, snapshot.clone()).unwrap();
+        snapshot.hardware_profile.as_mut().unwrap().status = "completed".into();
+        assert_eq!(apply(&mut registry, selection.host_id, snapshot.clone()).unwrap_err(),
+            "host snapshot changed without a revision change");
+        assert_eq!(registry.snapshots[&selection.host_id].hardware_profile.as_ref().unwrap().status,
+            "running");
+        snapshot.revision += 1;
+        apply(&mut registry, selection.host_id, snapshot.clone()).unwrap();
+        assert_eq!(registry.snapshots[&selection.host_id], snapshot);
     }
 
     #[test]

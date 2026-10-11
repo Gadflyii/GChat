@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/setup-ginfer-linux.py'
 spec = importlib.util.spec_from_file_location('linux_setup', SCRIPT)
@@ -31,9 +32,21 @@ class LinuxSetup(unittest.TestCase):
             (bundle / 'runtime/runtime-manifest.json').write_text(json.dumps({
                 'schema': 'ginfer-linux-runtime-v1', 'platform': 'linux-x64', 'files': files}))
             target, provider, config, links = [root / name for name in ('install', 'provider', 'config', 'links')]
-            setup.install(bundle, target, provider, config, links)
+            ambient_environment = setup.os.environ.copy()
+            child_environment = {**ambient_environment, 'XDG_CONFIG_HOME': str(config)}
+            handoff = mock.Mock(stdout='{"status":"running"}')
+            with mock.patch.object(setup.subprocess, 'run', return_value=handoff) as run:
+                setup.install(bundle, target, provider, config, links)
+                run.assert_not_called()
             self.assertFalse(target.exists())
-            setup.install(bundle, target, provider, config, links, True)
+            with mock.patch.object(setup.subprocess, 'run', return_value=handoff) as run:
+                setup.install(bundle, target, provider, config, links, True, ('GPU-second', 'GPU-first'))
+                run.assert_called_once_with([
+                    str(target / 'bin/ginfer-host'), 'prepare-hardware', '--engine',
+                    str(target / 'bin/ginfer'), '--installed-configuration',
+                    str(target / 'bin/ginfer-launch.json'), '--gpu', 'GPU-second', '--gpu', 'GPU-first'],
+                    check=True, capture_output=True, text=True, env=child_environment)
+            self.assertEqual(dict(setup.os.environ), ambient_environment)
             self.assertEqual((links / 'ginfer').resolve(), target / 'bin/ginfer')
             launch = json.loads((target / 'bin/ginfer-launch.json').read_text())
             self.assertEqual(launch['desktop']['provider'], str(provider))
@@ -47,12 +60,26 @@ class LinuxSetup(unittest.TestCase):
                       'directory': str(root / 'existing'), 'origin': 'https://127.0.0.1:7443'}}
             locator.write_text(json.dumps(record))
             second = root / 'second'
-            setup.install(bundle, second, provider, config, root / 'second-links', True)
+            with mock.patch.object(setup.subprocess, 'run', return_value=handoff) as run:
+                setup.install(bundle, second, provider, config, root / 'second-links', True)
+                run.assert_called_once_with([
+                    str(second / 'bin/ginfer-host'), 'prepare-hardware', '--engine',
+                    str(second / 'bin/ginfer'), '--data-dir', str(provider / 'host'),
+                    '--desktop-provider', str(provider)], check=True, capture_output=True, text=True,
+                    env=child_environment)
             self.assertFalse((second / 'bin/ginfer-launch.json').exists())
             self.assertEqual(json.loads(locator.read_text()), record)
+            interrupted = root / 'handoff-failed'
+            with mock.patch.object(setup.subprocess, 'run', side_effect=setup.subprocess.CalledProcessError(1, 'fixture')):
+                with self.assertRaises(setup.subprocess.CalledProcessError):
+                    setup.install(bundle, interrupted, provider, config, root / 'failed-links', True)
+            self.assertTrue((interrupted / 'bin/ginfer').is_file())
+            self.assertEqual(json.loads(locator.read_text()), record)
             (bundle / 'runtime/bin/ginfer').write_bytes(b'corrupted')
-            with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
-                setup.install(bundle, root / 'bad', provider, config, root / 'bad-links', True)
+            with mock.patch.object(setup.subprocess, 'run') as run:
+                with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
+                    setup.install(bundle, root / 'bad', provider, config, root / 'bad-links', True)
+                run.assert_not_called()
             self.assertFalse((root / 'bad').exists())
 
 

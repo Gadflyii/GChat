@@ -62,20 +62,18 @@ pub async fn shared_client() -> Result<Arc<Client>, String> {
     Ok(client().clone())
 }
 pub async fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    let data_folder = crate::core::app::commands::get_jan_data_folder_path(app.clone());
     #[cfg(test)]
     let _ = client_slot().set(Arc::new(Client::new(
-        Some(
-            crate::core::app::commands::get_jan_data_folder_path(app.clone())
-                .join("ginfer/shared-hosts.json"),
-        ),
+        Some(data_folder.join("ginfer/shared-hosts.json")),
         Arc::new(NativeVault),
     )));
+    initialize_data_folder(&data_folder).await
+}
+async fn initialize_data_folder(data_folder: &std::path::Path) -> Result<(), String> {
     client().initialize().await?;
     client()
-        .import_legacy(
-            &crate::core::app::commands::get_jan_data_folder_path(app.clone())
-                .join("ginfer/hosts.json"),
-        )
+        .import_legacy(&data_folder.join("ginfer/hosts.json"))
         .await
 }
 async fn secret(id: Uuid) -> Result<String, String> {
@@ -108,6 +106,85 @@ async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     Ok(body)
 }
 
+fn installed_desktop_host(
+    data_folder: &std::path::Path,
+    _resource_directory: &std::path::Path,
+) -> Result<ginfer_host::local_host::LocalHost, String> {
+    let provider = data_folder.join("ginfer");
+    #[cfg(target_os = "linux")]
+    let engine_runtimes = ginfer_host::local_host::desktop_runtimes(&provider)?;
+    #[cfg(not(target_os = "linux"))]
+    let engine_runtimes = Default::default();
+    #[cfg(target_os = "linux")]
+    let binary = provider.join("bin/ginfer-host");
+    #[cfg(not(target_os = "linux"))]
+    let binary = _resource_directory
+        .join("resources/bin")
+        .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" });
+    #[cfg(target_os = "linux")]
+    let engine = provider.join("linux/sm120a/bin/ginfer-serve");
+    #[cfg(not(target_os = "linux"))]
+    let engine = provider.join("bin").join(if cfg!(windows) {
+        "ginfer-serve.exe"
+    } else {
+        "ginfer-serve"
+    });
+    Ok(ginfer_host::local_host::LocalHost {
+        binary,
+        engine,
+        directory: provider.join("host"),
+        desktop_provider: Some(provider),
+        engine_runtimes,
+        models: vec![],
+        artifact_sets: vec![],
+        name: ginfer_host::local_host::computer_name()?,
+        nvidia_smi: "nvidia-smi".into(),
+        listen: "127.0.0.1:7443".parse().unwrap(),
+    })
+}
+
+async fn ensure_desktop_host<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<ginfer_host::launcher::LocalControl, String> {
+    use tauri::Manager;
+    installed_desktop_host(
+        &crate::core::app::commands::get_jan_data_folder_path(app.clone()),
+        &app.path().resource_dir().map_err(|e| e.to_string())?,
+    )?
+    .ensure_shared_running()
+    .await
+}
+
+/// Called only after a verified runtime installation changes its payload.
+pub async fn prepare_installed_hardware<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
+    use tauri::Manager;
+    prepare_installed_hardware_from_paths(
+        crate::core::app::commands::get_jan_data_folder_path(app.clone()),
+        app.path().resource_dir().map_err(|e| e.to_string())?,
+        None,
+    ).await
+}
+
+pub async fn prepare_installed_hardware_from_paths(
+    data_folder: std::path::PathBuf,
+    resource_directory: std::path::PathBuf,
+    gpu_uuids: Option<Vec<String>>,
+) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
+    installed_desktop_host(&data_folder, &resource_directory)?
+        .ensure_shared_running().await?;
+    initialize_data_folder(&data_folder).await?;
+    let host_id = client().local_host().await?.ok_or("Local Host is unavailable")?;
+    client()
+        .hardware_profile(host_id, ginfer_host::hardware_profile::HardwareProfileRequest {
+            action: ginfer_host::hardware_profile::HardwareProfileAction::Ensure,
+            gpu_uuids,
+        })
+        .await
+        .map_err(String::from)
+}
+
 #[tauri::command]
 pub async fn engine_hosts_command<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -115,10 +192,8 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     args: Value,
 ) -> Result<Value, String> {
     if action.starts_with("local_model_") {
-        #[cfg(not(target_os = "linux"))]
-        use tauri::Manager;
-        let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
         if action == "local_model_adopt" {
+            let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
             let report = tokio::task::spawn_blocking(move || {
                 crate::core::ginfer_models::adopt_root_ginfer_models_in(&root)
             })
@@ -126,46 +201,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
             .map_err(|e| e.to_string())??;
             return serde_json::to_value(report).map_err(|e| e.to_string());
         }
-        let provider = root.join("ginfer");
-        #[cfg(target_os = "linux")]
-        let engine_runtimes = ginfer_host::local_host::desktop_runtimes(&provider)?;
-        #[cfg(not(target_os = "linux"))]
-        let engine_runtimes = Default::default();
-        #[cfg(target_os = "linux")]
-        let binary = provider.join("bin/ginfer-host");
-        #[cfg(not(target_os = "linux"))]
-        let binary = app
-            .path()
-            .resource_dir()
-            .map_err(|e| e.to_string())?
-            .join("resources/bin")
-            .join(if cfg!(windows) {
-                "ginfer-host.exe"
-            } else {
-                "ginfer-host"
-            });
-        #[cfg(target_os = "linux")]
-        let engine = provider.join("linux/sm120a/bin/ginfer-serve");
-        #[cfg(not(target_os = "linux"))]
-        let engine = provider.join("bin").join(if cfg!(windows) {
-            "ginfer-serve.exe"
-        } else {
-            "ginfer-serve"
-        });
-        let control = ginfer_host::local_host::LocalHost {
-            binary,
-            engine,
-            directory: provider.join("host"),
-            desktop_provider: Some(provider),
-            engine_runtimes,
-            models: vec![],
-            artifact_sets: vec![],
-            name: ginfer_host::local_host::computer_name()?,
-            nvidia_smi: "nvidia-smi".into(),
-            listen: "127.0.0.1:7443".parse().unwrap(),
-        }
-        .ensure_shared_running()
-        .await?;
+        let control = ensure_desktop_host(&app).await?;
         return match action.as_str() {
             "local_model_downloads" => control.request("/host/v1/downloads", None).await,
             "local_model_download" => {

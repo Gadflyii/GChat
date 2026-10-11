@@ -20,7 +20,10 @@ const renderKey = (view) => JSON.stringify([
     return [host.host_id, host.name, host.local, host.online, host.offline, host.error,
       host.base_url, host.certificate_sha256, snapshot && [
         snapshot.display_name, snapshot.gpus, snapshot.models, snapshot.launch_profiles,
-        snapshot.lan_sharing, snapshot.model_management, snapshot.inventory_errors,
+        snapshot.lan_sharing, snapshot.model_management, snapshot.hardware_profile,
+        host.online && ['running', 'cancelling'].includes(snapshot.hardware_profile?.status) && snapshot.hardware_profile.started_unix_ms != null
+          ? Math.floor((Date.now() - snapshot.hardware_profile.started_unix_ms) / 1000) : null,
+        snapshot.inventory_errors,
         snapshot.profile_error, snapshot.fleet, snapshot.fleet_membership,
         array(snapshot.instances).map((instance) => [instance.instance_id, instance.session_id,
           instance.display_name, instance.status, instance.configuration, instance.profile,
@@ -60,7 +63,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     } catch { /* Only successful writes are cached; the next observation retries. */ }
   }
   const state = { view: { hosts: [], discovered: [], fleet: null }, selected: readPreference('host', null),
-    ignored: new Set(readPreference('ignored', [])), sections: new Map(), catalogs: new Map(),
+    ignored: new Set(readPreference('ignored', [])), sections: new Map(), catalogs: new Map(), profileGroups: new Map(),
     busy: false, notice: '', error: '', errorSource: null, dialog: null, stopped: false }
   const subscriptions = []
   let snapshotKey
@@ -96,6 +99,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   const note = (content) => h('p', { class: 'muted' }, content)
   const badge = (status) => h('span', { class: `badge ${status}` }, text(status, 'unknown'))
   const online = (host) => host?.online === true
+  const profiling = (host) => ['running', 'cancelling'].includes(host?.snapshot?.hardware_profile?.status)
   function observation() {
     if (indexedView === state.view) return indexes
     const hosts = array(state.view.hosts)
@@ -260,6 +264,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   }
 
   function launchDialog(host, instance = null) {
+    if (profiling(host)) return
     const snapshot = host.snapshot || {}
     const models = array(snapshot.models)
     const modelById = firstMap(models, (entry) => entry.id)
@@ -325,6 +330,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       [radios, content, ...(instance?.active_requests > 0 ? [h('label', { class: 'check' },
         h('input', { type: 'checkbox', name: 'force' }), `Interrupt ${instance.active_requests} active request(s)`)] : [])],
       instance ? 'Reload' : 'Start', (form) => {
+        const latest = observation().hosts.get(host.host_id)
+        if (!online(latest) || profiling(latest)) throw new Error('Wait until the Host is online and hardware profiling has stopped before launching a model.')
         const guard = instance ? { instance_id: instance.instance_id, expected_session_id: instance.session_id ?? null, force: checked(form, 'force') } : {}
         if (mode === 'profile') {
           const choice = profiles[Number(fieldValue(form, 'profile_choice'))]
@@ -373,6 +380,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       return h('div', {}, label, content)
     })
     const execute = async (operation) => {
+      if (operation === 'start' && profiling(observation().hosts.get(host.host_id))) return
       try { await run(hostRequest(host, 'instance', { instance_id: instance.instance_id, operation,
         expected_session_id: instance.session_id ?? null, force: false }), operation === 'start' ? 'Model starting' : 'Instance stopped') }
       catch { /* The native error remains visible. */ }
@@ -385,12 +393,82 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         h('details', { class: 'instance-diagnostic', 'data-section': diagnosticKey, open: state.sections.get(diagnosticKey) ?? false },
           h('summary', {}, currentFailure ? 'Startup or runtime error details' : 'Previous startup error'),
           h('pre', { class: 'mono' }, instance.last_error))) : null,
-      h('div', { class: 'actions' }, button('Start', () => execute('start'), !online(host) || running),
+      h('div', { class: 'actions' }, button('Start', () => execute('start'), !online(host) || profiling(host) || running),
         button('Stop', () => execute('stop'), !online(host) || !running || instance.status === 'stopping'),
         button('Reload', () => {
           const latest = observation().instances.get(instanceKey({ host_id: host.host_id, instance_id: instance.instance_id }))
           launchDialog(latest?.host || host, latest?.instance || instance)
-        }, !online(host) || instance.status === 'stopping' || !array(host.snapshot?.models).length)))
+        }, !online(host) || profiling(host) || instance.status === 'stopping' || !array(host.snapshot?.models).length)))
+  }
+
+  function hardwareProfileSection(host) {
+    const profile = host.snapshot?.hardware_profile
+    if (!profile) return null
+    const running = profiling(host)
+    const resumable = profile.job_id != null && array(profile.gpu_uuids).length > 0 && ['interrupted', 'cancelled', 'failed'].includes(profile.status)
+    const end = profile.finished_unix_ms ?? (running && online(host) ? Date.now() : null)
+    const elapsed = profile.started_unix_ms == null || end == null ? null
+      : Math.max(0, Math.floor((end - profile.started_unix_ms) / 1000))
+    const blocked = !online(host)
+    const gpus = array(host.snapshot?.gpus)
+    const known = gpus.filter(gpu => gpu.name && gpu.compute_capability)
+    const selected = state.profileGroups.get(host.host_id) || []
+    const selectedGpus = selected.map(uuid => known.find(gpu => gpu.uuid === uuid))
+    const validGroup = [1, 2, 4].includes(selected.length) && selectedGpus.every(gpu => gpu &&
+      gpu.name === selectedGpus[0]?.name && gpu.compute_capability === selectedGpus[0]?.compute_capability)
+    const groupLabel = (group) => group.map(uuid => {
+      const index = gpus.findIndex(gpu => gpu.uuid === uuid)
+      return index < 0 ? uuid : `GPU ${index + 1}: ${gpus[index].display_name || gpus[index].name} (${uuid})`
+    }).join(' + ')
+    const choose = (uuid, checked) => {
+      state.profileGroups.set(host.host_id, checked ? [...selected, uuid] : selected.filter(value => value !== uuid))
+      render()
+    }
+    const execute = async (action) => {
+      const args = { action, ...(['ensure', 'refresh'].includes(action) ? { gpu_uuids: selected } : {}) }
+      try { await run(hostRequest(host, 'hardware_profile', args), action === 'cancel' ? 'Profiling cancellation requested' : 'Hardware profile job accepted') }
+      catch { /* Shared action errors remain visible. */ }
+    }
+    return h('section', { class: 'card', 'aria-label': 'Hardware profile' },
+      h('h2', {}, 'Hardware profile'),
+      h('p', { role: 'status' }, `${profile.status}${elapsed == null ? '' : ` · ${elapsed.toLocaleString()} seconds elapsed`}${online(host) ? '' : ' · last reported, host offline'}`),
+      array(profile.gpu_uuids).length ? note(`Job GPU group: ${groupLabel(profile.gpu_uuids)}`) : null,
+      profile.engine_path ? note(`Job Engine: ${profile.engine_path}`) : null,
+      array(profile.pending_gpu_groups).length ? h('div', {}, note('Pending saved deployment groups'),
+        h('ul', {}, profile.pending_gpu_groups.map(group => h('li', {}, `TP${group.length}: ${groupLabel(group)}`))),
+        note('Cancel stops the current job and queue. Resume continues the retained work.')) : null,
+      array(profile.stale_groups).map(group => h('section', { class: 'card', 'aria-label': `Stale GPU group ${groupLabel(group.gpu_uuids)}` },
+        h('p', {}, `Hardware changed — re-profile · ${group.expected_duration_ms == null
+          ? 'recent full installs took 22–73 minutes; time varies by hardware'
+          : `~${Math.ceil(group.expected_duration_ms / 60000)} minutes`}`),
+        note(`TP${group.gpu_uuids.length}: ${groupLabel(group.gpu_uuids)}`),
+        h('p', { class: 'muted mono' }, group.profile_path),
+        button('Select group to re-profile', () => { state.profileGroups.set(host.host_id, [...group.gpu_uuids]); render() }, blocked || running))),
+      running ? h('progress', { 'aria-label': 'Hardware profiling in progress' }) : null,
+      note('Recent full installs took 22–73 minutes; time varies by hardware. Closing this window leaves the Host job running. Model launches wait until profiling stops.'),
+      profile.status === 'completed' ? note('Hardware profiling completed. This does not qualify a model or its full-context capacity.') : null,
+      resumable ? note(profile.checkpoint_available
+        ? 'A saved checkpoint is available. Resume validates its inputs before continuing; checkpoint presence alone does not prove compatibility.'
+        : 'Resume retries the saved job inputs. The producer validates any retained progress before continuing.') : null,
+      !profile.available && !running ? note('Choose a GPU group; the Host checks that a compatible hardware profiler is installed.') : null,
+      profile.error ? h('p', { class: 'section-error', role: 'alert' }, profile.error) : null,
+      profile.diagnostic_tail ? h('details', { class: 'instance-diagnostic', 'data-section': `hardware-profile-log:${host.host_id}`, open: state.sections.get(`hardware-profile-log:${host.host_id}`) ?? false },
+        h('summary', {}, 'Profiling log'), h('pre', { class: 'mono' }, profile.diagnostic_tail)) : null,
+      !running ? h('fieldset', { disabled: state.busy || blocked }, h('legend', {}, 'Choose GPU group'),
+        note("Select 1, 2 or 4 GPUs of the same model and compute capability. The Host binds the profile to the selected GPU set and TP degree."),
+        [...new Set(known.map(gpu => gpu.compute_capability))].map(sm => h('div', {}, note(`SM ${sm}`),
+          known.filter(gpu => gpu.compute_capability === sm).map(gpu => h('label', { class: 'check' },
+            h('input', { type: 'checkbox', checked: selected.includes(gpu.uuid), 'aria-label': groupLabel([gpu.uuid]),
+              disabled: !selected.includes(gpu.uuid) && selectedGpus[0] &&
+                (gpu.name !== selectedGpus[0].name || gpu.compute_capability !== selectedGpus[0].compute_capability),
+              onchange: event => choose(gpu.uuid, event.target.checked) }), groupLabel([gpu.uuid])))),
+        selected.length ? [note(`Selected group: ${groupLabel(selected)}`), button('Clear GPU selection', () => { state.profileGroups.set(host.host_id, []); render() }, blocked)] : null,
+        !validGroup ? note('Choose an explicit homogeneous GPU group before preparing or refreshing.') : null) : null,
+      h('div', { class: 'actions' },
+        profile.status === 'idle' ? button('Prepare hardware profile', () => execute('ensure'), blocked || !validGroup) : null,
+        profile.status !== 'idle' && !running ? button('Refresh hardware profile', () => execute('refresh'), blocked || !validGroup) : null,
+        resumable ? button('Resume profiling', () => execute('resume'), blocked) : null,
+        running ? button(profile.status === 'cancelling' ? 'Cancelling profiling…' : array(profile.pending_gpu_groups).length ? 'Cancel profiling and queue' : 'Cancel profiling', () => execute('cancel'), !online(host) || profile.status === 'cancelling') : null))
   }
 
   function modelsSection(host) {
@@ -700,9 +778,10 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     } else {
       append(main, h('div', { class: 'heading' }, h('div', {}, h('h1', {}, host.snapshot?.display_name || host.name),
         h('div', { class: 'muted mono' }, host.base_url)), h('div', { class: 'actions' }, badge(online(host) ? 'ready' : host.offline ? 'offline' : 'failed'),
-        button('Start a model…', () => launchDialog(host), !online(host) || !array(host.snapshot?.models).length, 'primary'))),
+        button('Start a model…', () => launchDialog(host), !online(host) || profiling(host) || !array(host.snapshot?.models).length, 'primary'))),
       !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
         host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,
+      hardwareProfileSection(host),
       array(host.snapshot?.instances).length ? array(host.snapshot.instances).map((instance) => instanceCard(host, instance))
         : h('div', { class: 'empty' }, h('strong', {}, 'No instances'), 'Choose an installed model to start one. Models never start automatically.'),
       modelsSection(host), sharingSection(host), clientsSection(host), fleetSection(host))
