@@ -7,19 +7,22 @@ not a prerequisite.
 
 Status: Ron approved the design; it is merged into GChat main. October 11 step 1
 implements the local-first service skeleton, vault-held SSH sessions, guest-tools
-contract and SSH-tunnelled view channel. Development VMs are not yet available.
+contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparation below replaces earlier S1/S2
+acceptance-host proposals; the Debian image and Host tools are staged, with
+first dedicated-guest gate passed. Integrated Gbot service admission is still pending.
 The focused contracts and actual loopback SSH fixture pass;
-no real desktop input, provisioning or native Windows execution is authorized.
+No user desktop input or native Windows execution is authorized. Ron separately
+approved the isolated S1 Debian guest and its harmless accessibility gate below.
 
 ## Decided product scope
 
 | Area | First-release decision |
 | --- | --- |
 | Service location | Local PC, recommended; another PC on the LAN is the alternative. No cloud service location in v1. |
-| Bot's computer | Separate local VM, another computer on the LAN, a user-rented cloud Ubuntu VM, or an existing M365 Cloud PC. |
+| Bot's computer | Separate local VM, another computer on the LAN, a user-rented cloud Debian 13 VM, or an existing M365 Cloud PC. |
 | Local VM | Hyper-V on Windows; KVM on Linux. The bot never operates the user's own desktop through this option. |
 | Cloud setup | Hetzner is the low-cost recommendation; DigitalOcean is the familiar US option. Both use provider API creation and the same cloud-init setup. Azure, AWS and GCP use guided setup. |
-| Cloud guest | Plain Ubuntu, lightweight X11 session, bot worker and SSH-only inbound access. No full desktop environment or exposed VNC/RDP port. |
+| Cloud guest | Debian 13, lightweight desktop environment (XFCE on TigerVNC Xvnc), session units, Cua MCP over SSH and SSH-only inbound access. No exposed VNC/RDP port. |
 | Desktop view | Localhost VNC through SSH for local VMs and LAN/cloud computers; view-only by default, explicit Take over / Hand back. M365 uses its supported connection. |
 | Sizing and price | Linux default 2 vCPU / 4 GB; 2 GB minimum. Read live regional prices and show monthly cost before creation. No fixed price or stale plan alias. Windows follows its OS requirements. |
 | Persistence | Tasks, history and results survive service restart, PC sleep and client reconnect. Resume only after reconciling actual state. |
@@ -27,6 +30,20 @@ no real desktop input, provisioning or native Windows execution is authorized.
 | Computer foundation | Pin Cua SDK and Driver to one source revision; use direct SSH on the LAN, without a cloud relay. |
 | Credentials | GChat's native vault owns GChat-managed credentials; task records retain references, not secrets. |
 | Development machines | Small Linux and Windows VMs on this desktop and S1 where their hypervisor supports them; Ron's running M365 Cloud PC. No machine is provisioned by this document. |
+
+Each bot has its own name, computer, inference assignment and connector
+settings; more than one bot is allowed. A new bot starts with **no connector
+accounts**. Its mail/calendar/drive and other accounts are explicitly linked
+and held in the vault under that bot's identity. It never automatically inherits
+the user's GChat connector accounts. Agent, skill and tool definitions remain
+shared, with one executor. These are decided requirements, not claims that
+the per-bot connector UI is implemented.
+
+Each bot gets its own sidebar channel next to Chat, Studio and Code. The bot
+channel owns its conversation history, tasks, approvals and desktop view,
+separate from ordinary model chats and Code sessions. Multiple bots retain
+separate channels and assignments. This UI is planned, not delivered by the
+workspace transport skeleton.
 
 GChat remains the open base: front end, lightweight infrastructure management,
 LAN host management, agent builder/support, prebuilt skills and integrations.
@@ -80,7 +97,7 @@ stopping its computer.
 | Service: Another LAN PC | Discover or enter the PC, authenticate/pair it, check supported runtime and vault, and register the same service there. Keep state and credential references on that PC. | Offline, denied pairing or unsupported host: retain the choice and offer reconnect/change PC; no cloud relay fallback. |
 | Bot PC: Local VM | Check Hyper-V/KVM, firmware virtualization, host resources and disk; help enable the selected hypervisor. Create a separate persistent guest, bootstrap its worker/session, establish SSH and test view/input. Windows guest setup also checks OS image, license and session readiness. | Unsupported Windows edition, disabled virtualization, pending reboot, unavailable KVM permissions, guest boot or worker failure: show the exact stage and next action. Never fall back to controlling the host desktop. |
 | Bot PC: Another LAN computer | Discover or enter a dedicated computer/VM, confirm its desktop account and authority to install the worker, verify SSH identity, install/configure the worker and view endpoint with consent, test command/file/desktop access. | SSH unavailable, changed host identity, denied install, missing/locked desktop or blocked capture/input: stop that capability and guide reconnect, sign-in or authorized setup. Shell access alone is not Ready for GUI tasks. |
-| Bot PC: Cloud hosted | Select provider/account/region; query live image/size/price/quota, show cost, then create owned Ubuntu resources and run the shared first-boot setup. Test SSH, completed cloud-init, worker, desktop and viewer. | Expired credentials, quota/capacity, invalid quote, ambiguous creation, boot/provisioning or firewall failure: retain resource IDs, reconcile before retry, and offer repair or removal of this setup's resources. Never silently create a second VM. |
+| Bot PC: Cloud hosted | Select provider/account/region; query live image/size/price/quota, show cost, then create owned Debian resources and run the shared first-boot setup. Test SSH, completed cloud-init, worker, desktop and viewer. | Expired credentials, quota/capacity, invalid quote, ambiguous creation, boot/provisioning or firewall failure: retain resource IDs, reconcile before retry, and offer repair or removal of this setup's resources. Never silently create a second VM. |
 | Bot PC: M365 Cloud PC | Sign in through the supported Microsoft connection, select an assigned Cloud PC, check tenant permissions and desktop session, then qualify the chosen control route and takeover. No VM purchase is part of this path. | No assignment, MFA/conditional access, install/network policy, unavailable session or capture protection: explain the specific prerequisite and offer sign-in/admin assistance. Never bypass tenant controls. |
 
 The service and computer may be on different machines. In that case setup checks
@@ -125,8 +142,15 @@ silently use a client-machine file tool.
 
 Inference assignments stay separate from computers. The guest does not need a
 GPU, and a remote bot PC does not keep a local model running while its service
-or inference workstation sleeps. Screenshot reasoning needs a suitable model
-and a ready Vision route; accessibility/text tasks may use a suitable text model.
+or inference workstation sleeps. The model runs on an assigned GInfer host/instance, never in the guest.
+Screenshot reasoning requires a qualified Vision route; Vision is still
+unqualified on the current artifacts (master OI-027/OI-029). Until qualification,
+bot desktop work uses AT-SPI accessibility data, shell and files. The initial
+Qwen screenshot study found 0–1000 normalized click coordinates even when pixels
+were requested; a future Vision adapter must request that frame and convert
+`x / 1000 * width`, `y / 1000 * height` before input
+([study](/ai/coordination/vision-check/result.md)). A user can
+view the desktop without claiming screenshot-driven model capability.
 Do not silently change model context, step budgets or sampling on reconnect.
 
 Client/service connections use authenticated local IPC or paired LAN TLS and
@@ -144,7 +168,10 @@ Pin the initial SDK/Driver evaluation to Cua monorepo revision
 `0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc`, identified by Driver release
 `cua-driver-rs-v0.34.1`. Both selected components come from this revision; SDK
 package versions are independent and must not be called 0.34.1 by inference.
-The pin is a design selection, not an installed dependency or qualification.
+The Linux guest selects the official binary-only release archive, SHA256
+`a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.
+Only the MIT Driver and cursor helper are extracted; no optional Wayland
+helpers or enterprise components are installed. This does not qualify Vision.
 [Driver release](https://github.com/trycua/cua/releases/tag/cua-driver-rs-v0.34.1),
 [pinned Driver](https://github.com/trycua/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-driver/README.md),
 [pinned SDK](https://github.com/trycua/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/README.md).
@@ -159,7 +186,7 @@ workspace and live display before further input.
 
 Use SDK lifecycle operations only for backends and components the pin actually
 provides. Hyper-V/KVM and Hetzner/DigitalOcean provisioning adapters, Gbot's
-worker protocol, durable tasks and Microsoft connection are GChat work; do not
+session contract, durable tasks and Microsoft connection are GChat work; do not
 label them existing Cua integrations. Neither a managed Cua account nor relay
 is needed for direct LAN SSH.
 
@@ -191,10 +218,10 @@ never equate a live worker process with an available desktop.
 
 ## User-owned cloud computers
 
-The automated paths create plain Ubuntu through the user's own provider account.
+The automated paths create Debian 13 through the user's own provider account.
 Hetzner's CPX-class choice is the low-cost recommendation, and DigitalOcean is
 the familiar US alternative. Azure, AWS and GCP guide the user through the same
-Ubuntu/SSH requirements and attach the resulting machine; they do not promise
+Debian/SSH requirements and attach the resulting machine; they do not promise
 provider-specific automatic provisioning in v1.
 
 Default Linux allocation is 2 vCPU / 4 GB, with 2 GB as the minimum option. Query
@@ -205,8 +232,8 @@ storage after approval.
 
 | Provider | Live information and creation behavior |
 | --- | --- |
-| Hetzner | Join current server types/region availability with pricing, currency, VAT and Primary IP/storage/backups. Select a current CPX-class 2 vCPU / 4 GB plan if available; do not substitute another size without review. Create with Ubuntu image, SSH public key, first-boot user data, owned labels and firewall. |
-| DigitalOcean | Enumerate available sizes and regions with vCPUs, memory in MB, disk, transfer and monthly/hourly price. Create the chosen Ubuntu Droplet with public key, user data and an owned tag bound to its prepared firewall. |
+| Hetzner | Join current server types/region availability with pricing, currency, VAT and Primary IP/storage/backups. Select a current CPX-class 2 vCPU / 4 GB plan if available; do not substitute another size without review. Create with Debian 13 image, SSH public key, first-boot user data, owned labels and firewall. |
+| DigitalOcean | Enumerate available sizes and regions with vCPUs, memory in MB, disk, transfer and monthly/hourly price. Create the chosen Debian 13 Droplet with public key, user data and an owned tag bound to its prepared firewall. |
 | Azure / AWS / GCP | Guided account, region, size and cost review; supply the shared first-boot specification and restricted SSH rules. Validate the resulting machine before attachment. |
 
 At setup time, display the retrieved monthly estimate, currency, region, size,
@@ -224,10 +251,9 @@ part of setup, not Arbitor's paid cost-management product.
 [Droplet pricing](https://docs.digitalocean.com/products/droplets/details/pricing/).
 
 Both automated providers use one first-boot cloud-init specification: install
-an X11 server and lightweight window manager, session D-Bus/accessibility,
-required applications, pinned Driver, guest task worker and same-session VNC.
-Use a persistent bot home and owned service units; install no full desktop
-environment. Fetch pinned packages without putting private API tokens, passwords
+TigerVNC Xvnc and XFCE, session D-Bus/accessibility, required applications, pinned
+Driver, systemd user session units and same-session VNC. Use a persistent bot home and
+owned session units; the dedicated bot desktop is separate from the host desktop. Fetch pinned packages without putting private API tokens, passwords
 or SSH private keys in cloud-init. Provider credentials and generated private
 keys stay in GChat's vault; user data receives only the necessary public key.
 
@@ -348,7 +374,7 @@ not delete the user's conversation or pending work.
    capabilities, permissions, history and inference assignments.
 4. Implement the novice walkthrough, Hyper-V/KVM adapters and LAN attachment;
    validate incomplete setup recovery and explicit VM ownership/removal.
-5. Implement Hetzner and DigitalOcean using the shared Ubuntu/cloud-init contract,
+5. Implement Hetzner and DigitalOcean using the shared Debian/cloud-init contract,
    with live cost review and resource reconciliation. Add guided Azure/AWS/GCP
    attachment and run the same desktop/session/control checks per path.
 
@@ -495,7 +521,7 @@ Take over / Hand back. Windows/M365 physical checks follow Ron's authorized
 desktop windows. These gates establish connection behavior, not cloud setup,
 unattended task persistence, model quality or release coverage.
 
-The source-only worker connection and operation-recovery protocol are implemented
+The source-only SSH connection and initial operation-recovery contract are implemented
 below. Next unresolved implementation choices are the viewer component/license
 and M365's actual permitted route. Resolve them against the pinned component contracts before
 adopting dependencies; no second agent executor or paid Arbitor layer is needed
@@ -516,14 +542,14 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
 supersedes the initial draft's unassigned-cloud scope without changing runtime
-code. Approved design `9c8c3b8ca` is merged; current implementation baseline is
-GChat main `254c0f8fd`; tested source remains `1a5771def`.
+code. Approved design `9c8c3b8ca` is merged; current main baseline is `0705f31a6`; initial step-1 tested source is
+`1a5771def`, and the dedicated-guest candidate below is `fa63cb8df`.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
 | GChat coordinator / local workstation | Branch `feat/gbot-workspace-connection-42d`, merged in main `254c0f8fd` | Clean, pushed source tree retired after ancestry verification; no live guest or service. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-workspace-20261011/` | Focused gate and merged-tree retirement evidence; shared build cache retained. |
-| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-ssh-key-import-c21`, branch `fix/gbot-ssh-key-import-c21` | Tested import follow-up, retained until reviewed main integration; no live service or guest. |
+| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-ssh-key-import-c21`, branch `fix/gbot-ssh-key-import-c21` | Merged in main 0705; source tree may be retired after clean/ancestry verification. No live service or guest. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-ssh-key-import-20261011/` | Two focused gate results, logs and dependency decision; no keys or model/VM copies. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-design-20261011/` | Concise input/research and document-check evidence; no binary, model or VM copy. |
 
@@ -541,8 +567,8 @@ source is `1a5771def`, from main `42d8c401e`; evidence is
 The loopback fixture verifies pinned vault-key authentication, generated guest
 command/file operations, cancellation, keepalive, forwarding and shutdown. A
 lost reply followed by service restart reconciles one completed file effect
-without dispatching it again. Native-vault provider availability remains
-unqualified. The import follow-up above qualifies encrypted/RSA behavior against
+without dispatching it again. Native-vault provider availability was unqualified in that initial loopback;
+the dedicated-guest gate below now covers an isolated Linux Secret Service collection. The import follow-up above qualifies encrypted/RSA behavior against
 the hermetic SSH server; it does not establish a physical vault provider.
 The CPU booking ended at 16:48:48 UTC; owned containers and generated guest files
 are gone and the canonical build guard was returned. The shared build cache is
@@ -555,3 +581,95 @@ The raw view tunnel is bidirectional transport. It must not be advertised as a
 read-only desktop panel: VNC input/clipboard mediation and takeover exclusivity
 remain part of the later dedicated-guest integration. A worker restart or unknown
 operation ID cannot authorize replay of a possibly completed external effect.
+
+### Current KVM and Linux desktop preparation
+
+**Dedicated-guest gate passed on S1.** The product adapter created a Debian 13
+VM; vault-key SSH, Cua MCP desktop capture and a harmless AT-SPI menu action
+with independent dialog readback passed. The guest is stopped, no owned QEMU
+process remains, and the fixture credential is removed. This is guest setup/Cua
+qualification, not an integrated Gbot Ready claim.
+
+Repository: GChat; subject: `docs/gbot/`. Authority:
+`/ai/coordination/gbot-vm-plan-20261011.md` through the 20:10Z network decision.
+Candidate `feat/gbot-kvm-cloud-init-c21`, baseline main 0705, tested production
+`fa63cb8df`. Evidence: `/ai/gchat/out/gbot-kvm-prep-20261011/result.json` and
+`s1-evidence/`. No signing/publication, native Windows, human desktop input,
+model inference or Vision qualification. OI-057 stock Ubuntu Desktop acceptance
+and Gbot service integration remain separate open work.
+
+The adapter owns guests through qemu:///session. One QEMU-commandline slirp
+netdev and JSON virtio NIC provide a recorded ephemeral SSH port on 127.0.0.1.
+There is no XML NIC: `virsh domiflist` is empty by design. Port0 in a new request
+is resolved before the durable setup record is written; reopen preserves it.
+A bind conflict fails startup without silently choosing another port. The
+Debian BIOS image needs an emulated VGA device, while the bot desktop runs on
+TigerVNC Xvnc :1. No host GPU is passed through.
+
+Cloud-init installs the pinned Cua driver and XFCE, then starts the systemd user
+manager and waits for the notify-type desktop unit. Launcher helpers never
+inherit NOTIFY_SOCKET; only the final script notification follows X-server
+validation, desktop.env publication and XFCE launch. The boot marker requires
+an active unit. The service uses that DISPLAY/XAUTHORITY/private D-Bus environment
+for Cua MCP through SSH; commands/files retain their SSH channel ownership.
+There is no new native guest-worker binary. VNC is localhost-only and pointer,
+key and clipboard input starts disabled. Integrated viewer/Take over and durable
+service recovery have not been qualified by this gate.
+
+Acceptance evidence:
+
+| Check | Observed result |
+| --- | --- |
+| Fresh guest | Debian 13 genericcloud20261001-2618,2 vCPU/4 GiB; owned UUID `6b870517-eb42-431d-b56b-2d5835f4e8dc`. |
+| Native fixture vault / SSH | Generated Ed25519 key stored/reloaded through isolated Secret Service; host identity bound to owned console; authentication passed; no private-key file or user credential copy. |
+| Desktop frame | Real 1280×800 Cua image, visually inspected; dedicated Gbot-Readiness terminal visible. |
+| Accessibility action | Terminal PID 3975, Help→About dispatched through accessibility; fresh window list proves a new About xfce4-terminal dialog for the same PID. Action reply alone was not treated as verification. |
+| Stop / credential cleanup | Native stop reports Stopped; fresh process scan finds no owned QEMU; NativeVault delete succeeds. Fixture provider processes are absent. |
+| Source gates | Three affected setup/XML/lifecycle/selected-port cases passed; later owning XML and first-boot cases passed after their source changes; final strict all-target Clippy and fixture build passed. No full suite or repeated unchanged passing gates. |
+
+The unchanged CPU-pin route was observed on earlier real guests: every QEMU
+thread stayed on112–113. The accepted setup/domain retain those pins; its final
+process check was after normal stop. This is no performance claim. Stop dev
+guests for CPU-throughput work on overlapping/all cores; a disjoint GPU run
+can coexist only with explicit vCPU/emulator affinity. CPU bookings are released.
+
+Cold-start findings and preventive changes:
+
+| Cause | Concrete correction / evidence |
+| --- | --- |
+| Invalid console backend and domuuid argument | Pty backend with serial target; lookup generated name and compare UUID. Real define/identity/start plus owning fixture pass. |
+| Stock Ubuntu passt AppArmor denies user-session paths | Approved slirp backend; no policy edit, bridge, firewall or system daemon change. `cold3/` evidence. |
+| Legacy NIC initializes before libvirt JSON PCI controllers | JSON NIC preserves controller order; `cold4/` and json-nic fixture. |
+| No-video BIOS guest resets before Linux | VGA-only screen reaches Linux/cloud-init; actual corrected boot passes. `boot5/{serial.log,vga-serial.log,grub.cfg}`. |
+| User-manager/bus race and premature helper readiness | dbus-user-session, synchronous manager start, owner-only notification and active-unit marker; `user6/`, `ready7/`, final MCP and service diagnostics. |
+
+S1 is verified AIS-2-8592-L01, ron@192.168.1.109. Only the seven approved Host
+packages were installed: qemu-system-x86, qemu-utils, cloud-image-utils,
+libvirt-daemon, libvirt-daemon-driver-qemu, libvirt-clients and passt (unused).
+KVM access is intact; libvirt-daemon-system is absent and system libvirt services
+are inactive. Unregister the exact stopped owned UUID before deleting disks.
+The fixture session's private libvirt configuration remains with its stopped
+baseline; ordinary Gbot service integration must use its own consistent session
+environment. This gate does not establish restoration across that integration.
+
+| Owner / host | Exact path | State / retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21` | Pushed candidate; retain until reviewed merge. |
+| GChat / local | `/ai/gchat/out/gbot-kvm-prep-20261011/` | Concise source/results/MCP/frame evidence and tested fixture binary; disposable Cua download/unpack retired after verification. |
+| GChat / S1 | `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2` | Exact 341508096-byte base verified against official SHA512SUMS; one copy. |
+| GChat / S1 | `/ai/gbot-vms/6b870517-eb42-431d-b56b-2d5835f4e8dc/` | Accepted stopped guest, disk/seed/setup/XML retained; no usable fixture credential remains. |
+| GChat / S1 | `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/controller/xdg-config/`, `/ai/gbot-vms/kvm-ready-fixture` | Saved findings and session registration; tested baseline. Failed overlays/seed removed after owned unregister; private fixture keyrings retired after provider exit. |
+| GChat / local | `/ai/gchat/out/oi057-linux-packages-20261011/` | DEB/AppImage/Manager artifacts from main 0705; minimal archive checks pass. Historical05a runtime, no current-engine/Flash qualification. |
+
+Official Cua 0.34.1 binary revision is 0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc;
+archive SHA256 is `a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.
+Only MIT driver/cursor components are installed; optional helpers are excluded.
+Next unresolved action: replace the service's `gbot-guest --stdio` JSON-worker
+assumption with Cua MCP and direct SSH command/file routes while preserving
+session identity, capabilities, cancellation and unknown-operation recovery.
+
+Retirement receipt: `retirement.json` and `s1-evidence/fixture-retirement.json`.
+Both merged SSH-import and package source trees are retired; package artifacts,
+concise results and the accepted stopped guest/tested fixture remain. Nine
+private fixture-keyring folders are removed after confirming provider exit.
+Only this task's local/S1 paths were cleaned; no fleet-wide cleanliness claim.
