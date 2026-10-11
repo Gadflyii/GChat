@@ -5,6 +5,7 @@ use reqwest::{header::HeaderMap, Method, Url};
 use serde_json::{json, Map, Value};
 use tokio_util::sync::CancellationToken;
 
+use super::accounts::ServiceAccount;
 use super::{AccountsState, ConnectorTool, Provider};
 
 const GRAPH: &str = "https://graph.microsoft.com/v1.0";
@@ -222,7 +223,7 @@ pub fn tools() -> Vec<ConnectorTool> {
         list("microsoft.outlook.list_attachments", "List message attachment metadata. Scope: Mail.Read.", "outlook", &[("message_id", string())], &["message_id"]),
         tool("microsoft.outlook.read_attachment", "Read attachment metadata and contentBytes for a fileAttachment. Scope: Mail.Read.", "outlook", false, &[("message_id", string()), ("attachment_id", string())], &["message_id", "attachment_id"]),
         tool("microsoft.outlook.attach_file", "Add a base64 file attachment smaller than 3 MB to a draft. Scope: Mail.ReadWrite.", "outlook", true, &[("message_id", string()), ("name", string()), ("content_base64", string()), ("content_type", string())], &["message_id", "name", "content_base64", "content_type"]),
-        list("microsoft.calendar.list", "List calendars. Scope: Calendars.Read.", "calendar", &[page.clone()], &[]),
+        list("microsoft.calendar.list", "List calendars. Scope: Calendars.Read.", "calendar", std::slice::from_ref(&page), &[]),
         tool("microsoft.calendar.create_calendar", "Create an additional calendar. Scope: Calendars.ReadWrite.", "calendar", true, &[("name", string())], &["name"]),
         tool("microsoft.calendar.rename_calendar", "Rename an exact calendar. Scope: Calendars.ReadWrite.", "calendar", true, &[("calendar_id", string()), ("name", string())], &["calendar_id", "name"]),
         tool("microsoft.calendar.delete_calendar", "Delete a non-default calendar and its events. Scope: Calendars.ReadWrite.", "calendar", true, &[("calendar_id", string())], &["calendar_id"]),
@@ -233,7 +234,7 @@ pub fn tools() -> Vec<ConnectorTool> {
         tool("microsoft.calendar.update", "Update specified event fields; attendee changes can send invitations. Scope: Calendars.ReadWrite.", "calendar", true, &[("event_id", string()), ("event", changes(event(&[])))], &["event_id", "event"]),
         tool("microsoft.calendar.delete", "Delete an event; deleting an organizer meeting sends cancellation. Scope: Calendars.ReadWrite.", "calendar", true, &[("event_id", string())], &["event_id"]),
         tool("microsoft.calendar.free_busy", "Read free/busy for up to 20 SMTP addresses. Work/school accounts only. Scope: Calendars.ReadBasic (Calendars.Read also grants access).", "calendar", false, &[("schedules", json!({"type":"array", "items":string(), "minItems":1, "maxItems":20})), ("start", time()), ("end", time()), ("interval_minutes", json!({"type":"integer", "minimum":5, "maximum":1440}))], &["schedules", "start", "end"]),
-        list("microsoft.contacts.list", "List Outlook contacts. Scope: Contacts.Read.", "contacts", &[page.clone()], &[]),
+        list("microsoft.contacts.list", "List Outlook contacts. Scope: Contacts.Read.", "contacts", std::slice::from_ref(&page), &[]),
         tool("microsoft.contacts.read", "Read an Outlook contact. Scope: Contacts.Read.", "contacts", false, &[("contact_id", string())], &["contact_id"]),
         tool("microsoft.contacts.create", "Create an Outlook contact. Scope: Contacts.ReadWrite.", "contacts", true, &[("contact", contact(&["givenName"]))], &["contact"]),
         tool("microsoft.contacts.update", "Update specified Outlook contact fields. Scope: Contacts.ReadWrite.", "contacts", true, &[("contact_id", string()), ("contact", changes(contact(&[])))], &["contact_id", "contact"]),
@@ -260,7 +261,7 @@ pub fn tools() -> Vec<ConnectorTool> {
         list("microsoft.teams.channel_replies", "List replies to an exact channel message. Work/school only. Scope: ChannelMessage.Read.All.", "teams", &[channel[0].clone(), channel[1].clone(), ("message_id", string())], &["team_id", "channel_id", "message_id"]),
         tool("microsoft.teams.post_channel", "Post a user-visible channel message. Work/school only. Scope: ChannelMessage.Send.", "teams", true, &[channel[0].clone(), channel[1].clone(), ("content", string()), ("content_type", choice(&["text", "html"]))], &["team_id", "channel_id", "content", "content_type"]),
         tool("microsoft.teams.reply_channel", "Reply to an exact channel message. Work/school only. Scope: ChannelMessage.Send.", "teams", true, &[channel[0].clone(), channel[1].clone(), ("message_id", string()), ("content", string()), ("content_type", choice(&["text", "html"]))], &["team_id", "channel_id", "message_id", "content", "content_type"]),
-        list("microsoft.teams.chats", "List the user's chats. Work/school only. Scope: Chat.ReadBasic.", "teams", &[page.clone()], &[]),
+        list("microsoft.teams.chats", "List the user's chats. Work/school only. Scope: Chat.ReadBasic.", "teams", std::slice::from_ref(&page), &[]),
         list("microsoft.teams.chat_messages", "List messages in an exact chat. Work/school only. Scope: Chat.Read.", "teams", &[("chat_id", string()), page.clone()], &["chat_id"]),
         tool("microsoft.teams.read_chat_message", "Read an exact chat message. Work/school only. Scope: Chat.Read.", "teams", false, &[("chat_id", string()), ("message_id", string())], &["chat_id", "message_id"]),
         tool("microsoft.teams.post_chat", "Send a user-visible message in an exact chat. Work/school only. Scope: ChatMessage.Send.", "teams", true, &[("chat_id", string()), ("content", string()), ("content_type", choice(&["text", "html"]))], &["chat_id", "content", "content_type"]),
@@ -1192,9 +1193,11 @@ pub async fn execute(
         url.query_pairs_mut().append_pair("$select", "isDraft");
         let message = accounts
             .request_json(
-                Provider::Microsoft,
-                account,
-                "outlook",
+                ServiceAccount {
+                    provider: Provider::Microsoft,
+                    account_id: account,
+                    service: "outlook",
+                },
                 Method::GET,
                 url.as_str(),
                 None,
@@ -1215,9 +1218,11 @@ pub async fn execute(
         }
         let bytes = accounts
             .request_bytes(
-                Provider::Microsoft,
-                account,
-                descriptor.service,
+                ServiceAccount {
+                    provider: Provider::Microsoft,
+                    account_id: account,
+                    service: descriptor.service,
+                },
                 request.method,
                 request.url.as_str(),
                 headers,
@@ -1245,9 +1250,11 @@ pub async fn execute(
     } else {
         accounts
             .request_json(
-                Provider::Microsoft,
-                account,
-                descriptor.service,
+                ServiceAccount {
+                    provider: Provider::Microsoft,
+                    account_id: account,
+                    service: descriptor.service,
+                },
                 request.method,
                 request.url.as_str(),
                 request.json,

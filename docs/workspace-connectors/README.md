@@ -114,8 +114,16 @@ read/write acceptance require real registered client IDs and a user-approved tes
 account; these prerequisites are not available yet. Source fixtures cannot be
 reported as live sign-in or provider qualification.
 
-Next: generate the Settings route and run affected formatting, native checks and
-focused fixtures. C3 returned the workstation at 00:31:43 UTC and cancelled 396.
+Next: finish the failing type/Clippy gates after correcting the route literal,
+MSRV-compatible predicates and typed provider/account/service argument groups.
+All requested focused cases passed on `3aeac1903`: auth 9, provider 10, runtime 5,
+UI 12; skill seeding and Settings navigation also passed, as did native check.
+Rerun account/provider cases and native check/Clippy because their Rust source
+changed. Reuse passing runtime/UI/skill/navigation cases: dispatch, UI behavior
+and resources are unchanged; the route literal annotation only affects typing.
+The focused retry answers whether the corrected owning account contract still
+constructs the same requests and satisfies type/lint requirements.
+C3 returned the workstation at 00:31:43 UTC and cancelled 396.
 GChat CPU-only booking 397 is 00:41–01:06 UTC on October 11, CPUs 0–31; no GPU/model.
 Evidence is owned under `/ai/gchat/out/workspace-connectors-20261011/gate-397/`;
 reuse the existing Ubuntu image, aligned dependency graph and Cargo cache.

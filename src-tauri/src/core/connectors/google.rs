@@ -1,5 +1,5 @@
 //! Google Workspace REST tools. Account consent and caller approval belong to the shared runtime.
-use super::{AccountsState, ConnectorTool, Provider};
+use super::{accounts::ServiceAccount, AccountsState, ConnectorTool, Provider};
 use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
     Engine,
@@ -960,8 +960,12 @@ pub async fn execute(
             ));
         }
     }
-    let account = s(args, "account_id");
     let service = descriptor.service;
+    let account = ServiceAccount {
+        provider: Provider::Google,
+        account_id: s(args, "account_id"),
+        service,
+    };
     let mut method = Method::GET;
     let mut body = None;
     let mut url;
@@ -1062,15 +1066,7 @@ pub async fn execute(
                         .append_pair("metadataHeaders", field);
                 }
                 let parent = accounts
-                    .request_json(
-                        Provider::Google,
-                        account,
-                        "gmail",
-                        Method::GET,
-                        parent_url.as_str(),
-                        None,
-                        cancel,
-                    )
+                    .request_json(account, Method::GET, parent_url.as_str(), None, cancel)
                     .await?;
                 let headers = parent["payload"]["headers"]
                     .as_array()
@@ -1227,15 +1223,7 @@ pub async fn execute(
                 meta.query_pairs_mut()
                     .append_pair("fields", "id,name,mimeType,size");
                 let metadata = accounts
-                    .request_json(
-                        Provider::Google,
-                        account,
-                        service,
-                        Method::GET,
-                        meta.as_str(),
-                        None,
-                        cancel,
-                    )
+                    .request_json(account, Method::GET, meta.as_str(), None, cancel)
                     .await?;
                 if metadata["mimeType"]
                     .as_str()
@@ -1246,9 +1234,7 @@ pub async fn execute(
                 url.query_pairs_mut().append_pair("alt", "media");
                 let bytes = accounts
                     .request_bytes(
-                        Provider::Google,
                         account,
-                        service,
                         Method::GET,
                         url.as_str(),
                         HeaderMap::new(),
@@ -1299,9 +1285,7 @@ pub async fn execute(
                         multipart(&metadata, s(args, "mime_type"), s(args, "data_base64"))?;
                     let response = accounts
                         .request_bytes(
-                            Provider::Google,
                             account,
-                            service,
                             method,
                             upload.as_str(),
                             headers,
@@ -1378,9 +1362,7 @@ pub async fn execute(
             .append_pair("mimeType", s(args, "mime_type"));
         let bytes = accounts
             .request_bytes(
-                Provider::Google,
                 account,
-                service,
                 Method::GET,
                 url.as_str(),
                 HeaderMap::new(),
@@ -1537,15 +1519,7 @@ pub async fn execute(
                 let mut warmup = url.clone();
                 warmup.query_pairs_mut().append_pair("query", "");
                 accounts
-                    .request_json(
-                        Provider::Google,
-                        account,
-                        service,
-                        Method::GET,
-                        warmup.as_str(),
-                        None,
-                        cancel,
-                    )
+                    .request_json(account, Method::GET, warmup.as_str(), None, cancel)
                     .await?;
                 url.query_pairs_mut().append_pair("query", s(args, "query"));
             }
@@ -1639,15 +1613,7 @@ pub async fn execute(
         return Err("Unsupported Google operation".into());
     }
     accounts
-        .request_json(
-            Provider::Google,
-            account,
-            service,
-            method,
-            url.as_str(),
-            body,
-            cancel,
-        )
+        .request_json(account, method, url.as_str(), body, cancel)
         .await
 }
 

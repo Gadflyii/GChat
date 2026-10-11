@@ -38,6 +38,13 @@ impl Provider {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct ServiceAccount<'a> {
+    pub provider: Provider,
+    pub account_id: &'a str,
+    pub service: &'a str,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Access {
@@ -104,6 +111,12 @@ pub struct AuthRequest {
     pub services: Vec<String>,
     pub access: Access,
     pub account_id: Option<String>,
+}
+
+struct AuthExchange<'a> {
+    redirect: &'a str,
+    verifier: &'a str,
+    code: &'a str,
 }
 
 #[derive(Clone, Serialize)]
@@ -371,7 +384,7 @@ impl AccountsState {
             if document
                 .accounts
                 .get(id)
-                .is_none_or(|account| account.provider != provider)
+                .map_or(true, |account| account.provider != provider)
             {
                 return Err("Unknown provider account".into());
             }
@@ -630,9 +643,11 @@ impl AccountsState {
                         .finish_auth(
                             &config,
                             &request,
-                            &redirect,
-                            &verifier,
-                            &code,
+                            AuthExchange {
+                                redirect: &redirect,
+                                verifier: &verifier,
+                                code: &code,
+                            },
                             requested_scopes,
                             &cancellation,
                         )
@@ -704,9 +719,7 @@ impl AccountsState {
         &self,
         config: &ProviderConfig,
         request: &AuthRequest,
-        redirect: &str,
-        verifier: &str,
-        code: &str,
+        exchange: AuthExchange<'_>,
         requested: Vec<String>,
         cancellation: &CancellationToken,
     ) -> Result<String, String> {
@@ -725,9 +738,9 @@ impl AccountsState {
                 config,
                 vec![
                     ("grant_type", "authorization_code".into()),
-                    ("code", code.into()),
-                    ("redirect_uri", redirect.into()),
-                    ("code_verifier", verifier.into()),
+                    ("code", exchange.code.into()),
+                    ("redirect_uri", exchange.redirect.into()),
+                    ("code_verifier", exchange.verifier.into()),
                 ],
                 cancellation,
             )
@@ -764,7 +777,7 @@ impl AccountsState {
         if request
             .account_id
             .as_ref()
-            .is_some_and(|id| existing.as_ref().is_none_or(|account| &account.id != id))
+            .is_some_and(|id| existing.as_ref().map_or(true, |account| &account.id != id))
         {
             return Err(
                 "Sign-in returned a different account; the existing account was preserved".into(),
@@ -1032,9 +1045,7 @@ impl AccountsState {
 
     pub async fn request_json(
         &self,
-        provider: Provider,
-        account_id: &str,
-        service: &str,
+        account: ServiceAccount<'_>,
         method: Method,
         url: &str,
         body: Option<Value>,
@@ -1054,16 +1065,7 @@ impl AccountsState {
             );
         }
         let bytes = self
-            .request_bytes(
-                provider,
-                account_id,
-                service,
-                method,
-                url,
-                headers,
-                body,
-                cancellation,
-            )
+            .request_bytes(account, method, url, headers, body, cancellation)
             .await?;
         if bytes.is_empty() {
             Ok(Value::Null)
@@ -1074,15 +1076,18 @@ impl AccountsState {
 
     pub async fn request_bytes(
         &self,
-        provider: Provider,
-        account_id: &str,
-        service: &str,
+        account: ServiceAccount<'_>,
         method: Method,
         url: &str,
         headers: HeaderMap,
         body: Option<Vec<u8>>,
         cancellation: &CancellationToken,
     ) -> Result<Vec<u8>, String> {
+        let ServiceAccount {
+            provider,
+            account_id,
+            service,
+        } = account;
         if cancellation.is_cancelled() {
             return Err("Workspace request cancelled".into());
         }

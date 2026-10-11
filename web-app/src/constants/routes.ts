@@ -16,7 +16,7 @@ export const route = {
     extensions: '/settings/extensions',
     local_api_server: '/settings/local-api-server',
     mcp_servers: '/settings/mcp-servers',
-    workspace_connections: '/settings/workspace-connections',
+    workspace_connections: '/settings/workspace-connections' as const,
     https_proxy: '/settings/https-proxy',
     hardware: '/settings/hardware',
     assistant: '/settings/assistant',
