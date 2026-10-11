@@ -90,7 +90,15 @@ impl MaxPerfProfile {
         Self {
             id: format!("{PROFILE_ID}-v{PROFILE_VERSION}-{}", model_class.as_str()),
             reference: MaxPerfProfileRef::new(model_class),
-            name: format!("GBench Max Perf · {}", model_class.as_str()),
+            name: format!(
+                "GBench Max Perf · {}",
+                match model_class {
+                    MaxPerfModelClass::Qwen27IntDflashQ4 => "Qwen 3.8 27B INT",
+                    MaxPerfModelClass::Qwen27Nvfp4DflashQ4 => "Qwen 3.8 27B NVFP4",
+                    MaxPerfModelClass::FlashSmolMtp => "Qwen 3.8 Flash SMOL",
+                    MaxPerfModelClass::FlashIntMtp => "Qwen 3.8 Flash INT",
+                }
+            ),
             max_context: 8181,
             concurrency: 8,
             tp: 1,

@@ -70,7 +70,7 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
     <div className="space-y-3 rounded-lg border p-4">
       <h3 className="font-medium">GBench Max Perf</h3>
       <p className="text-sm text-muted-foreground">The Standard Benchmark profile uses 8,181 context tokens, capacity for eight requests, TP1, and the release KV and draft settings. It is separate from capacity profiles and does not claim hardware qualification.</p>
-      {selected?.benchmark_profile && <p className="text-sm">Running profile: GBench Max Perf v{selected.benchmark_profile.version} · {selected.benchmark_profile.model_class}</p>}
+      {selected?.benchmark_profile && <p className="text-sm">Running profile: GBench Max Perf v{selected.benchmark_profile.version}</p>}
       <label className="block text-sm">Max Perf profile
         <select className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={maxPerfDisabled || capacityPending || !maxPerfChoices.length}
           value={maxPerf?.key ?? ''} onChange={event => {
