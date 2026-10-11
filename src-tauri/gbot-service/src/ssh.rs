@@ -1,7 +1,6 @@
 //! Vault-backed SSH transport for one explicitly selected guest session.
 //!
-//! Worker channels use newline-delimited JSON: Hello, Request, Reply. Only the
-//! fixed guest entrypoint is passed to SSH's shell; operation arguments are data.
+//! Cua desktop control uses pinned MCP; commands/files have independent channels.
 //! A view carries raw guest-loopback bytes and establishes no desktop capability.
 
 use std::{
@@ -22,9 +21,8 @@ use russh::{
     },
     Channel, Disconnect,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
     sync::{oneshot, watch, Mutex, Notify},
     task::{JoinHandle, JoinSet},
@@ -38,7 +36,8 @@ use crate::{
     vault::{Secret, Vault, VaultError},
 };
 
-const WORKER_COMMAND: &str = "gbot-guest --stdio";
+mod guest;
+pub use guest::DesktopTool;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SshPolicy {
@@ -98,7 +97,7 @@ impl fmt::Display for SshError {
             Self::AuthenticationRejected => f.write_str("Guest rejected the selected SSH credential"),
             Self::Transport => f.write_str("Guest SSH transport failed"),
             Self::TimedOut => f.write_str("Guest SSH connection or liveness check timed out"),
-            Self::Protocol => f.write_str("Guest worker did not return the expected protocol message"),
+            Self::Protocol => f.write_str("Guest transport did not return the expected protocol message"),
             Self::Closed => f.write_str("Guest SSH connection is closed"),
             Self::CleanupUnproven => f.write_str("Guest SSH transport cleanup could not be confirmed"),
             Self::UncertainOutcome { .. } => f.write_str("Guest operation outcome is unknown; inspect its operation identity before retrying"),
@@ -278,7 +277,6 @@ impl client::Handler for Peer {
 }
 
 type Client = client::Handle<Peer>;
-type Worker = BufReader<russh::ChannelStream<client::Msg>>;
 
 // Every shared client reference is a lease. Its release wakes the connection
 // owner after dropping the reference, including cancelled request/view tasks.
@@ -313,6 +311,8 @@ impl Drop for ClientLease {
 /// Drop initiates shutdown; only `close().await` proves that owned tasks ended.
 pub struct SshSession {
     hello: GuestHello,
+    mcp: Mutex<Option<guest::Mcp>>,
+    tools: Vec<DesktopTool>,
     shared: Arc<ConnectionOwner>,
     policy: SshPolicy,
 }
@@ -417,28 +417,7 @@ impl SshSession {
 
     pub async fn request(&self, request: GuestRequest) -> Result<GuestReply, SshError> {
         request.validate(&self.hello)?;
-        let client = self.client()?;
-        let (mut worker, hello) = worker(&client, self.hello.identity).await?;
-        request.validate(&hello)?;
-        let mut bytes = serde_json::to_vec(&request).map_err(|_| SshError::Protocol)?;
-        bytes.push(b'\n');
-        // A partial write, lost reply or invalid reply may follow a real effect.
-        // Preserve the operation identity for service-owned reconciliation.
-        let uncertain = || SshError::UncertainOutcome {
-            operation_id: request.operation_id,
-        };
-        worker
-            .get_mut()
-            .write_all(&bytes)
-            .await
-            .map_err(|_| uncertain())?;
-        worker.get_mut().flush().await.map_err(|_| uncertain())?;
-        let reply: GuestReply = read_json(&mut worker).await.map_err(|_| uncertain())?;
-        reply.validate(&request).map_err(|_| uncertain())?;
-        // The validated reply already establishes the outcome; an EOF-send
-        // failure cannot turn that known result back into an unknown effect.
-        let _ = worker.get_mut().shutdown().await;
-        Ok(reply)
+        self.guest_request(&request).await
     }
 
     pub async fn ping(&self) -> Result<(), SshError> {
@@ -652,13 +631,11 @@ async fn establish(
         if !auth.success() {
             return Err(SshError::AuthenticationRejected);
         }
-        let (worker, hello) = worker(&client, expected).await?;
-        drop(worker);
-        Ok(hello)
+        guest::open(&client, expected).await
     }
     .await;
-    let hello = match inspection {
-        Ok(hello) => hello,
+    let (mcp, hello, tools) = match inspection {
+        Ok(ready) => ready,
         Err(error) => {
             let _ = socket.shutdown(Shutdown::Both);
             // Authentication/inspection failures retain the owned session join.
@@ -716,6 +693,8 @@ async fn establish(
     });
     Ok(SshSession {
         hello,
+        mcp: Mutex::new(Some(mcp)),
+        tools,
         shared: Arc::new(ConnectionOwner {
             client: StdMutex::new(Some(client)),
             socket,
@@ -790,48 +769,6 @@ impl Drop for OpeningChannel {
             drop(channel.into_stream());
         }
     }
-}
-
-async fn worker(
-    client: &Client,
-    expected: SessionIdentity,
-) -> Result<(Worker, GuestHello), SshError> {
-    let mut opening = OpeningChannel(Some(
-        client
-            .channel_open_session()
-            .await
-            .map_err(|_| SshError::Transport)?,
-    ));
-    let channel = opening.0.as_mut().ok_or(SshError::Protocol)?;
-    channel
-        .exec(true, WORKER_COMMAND)
-        .await
-        .map_err(|_| SshError::Transport)?;
-    // Request acceptance precedes worker stdout in the SSH protocol.
-    loop {
-        match channel.wait().await {
-            Some(russh::ChannelMsg::Success) => break,
-            Some(russh::ChannelMsg::WindowAdjusted { .. }) => {}
-            _ => return Err(SshError::Protocol),
-        }
-    }
-    let channel = opening.0.take().ok_or(SshError::Protocol)?;
-    let mut worker = BufReader::new(channel.into_stream());
-    let hello: GuestHello = read_json(&mut worker).await?;
-    hello.validate(&expected)?;
-    Ok((worker, hello))
-}
-
-async fn read_json<T: DeserializeOwned>(worker: &mut Worker) -> Result<T, SshError> {
-    let mut bytes = Vec::new();
-    worker
-        .read_until(b'\n', &mut bytes)
-        .await
-        .map_err(|_| SshError::Transport)?;
-    if bytes.last() != Some(&b'\n') {
-        return Err(SshError::Protocol);
-    }
-    serde_json::from_slice(&bytes).map_err(|_| SshError::Protocol)
 }
 
 struct ViewTunnel {

@@ -673,3 +673,27 @@ Both merged SSH-import and package source trees are retired; package artifacts,
 concise results and the accepted stopped guest/tested fixture remain. Nine
 private fixture-keyring folders are removed after confirming provider exit.
 Only this task's local/S1 paths were cleaned; no fleet-wide cleanliness claim.
+
+
+### Current service integration
+
+Repository GChat, candidate `feat/gbot-cua-service-be226` from merged main
+`be2267586`, owned tree `/ai/gchat-worktrees/gbot-cua-service-be226`.
+Deliverable: production service connects to the approved guest through pinned
+Cua MCP over SSH; one dense-INT model task opens Mousepad, types a line, saves
+`~/hello.txt`, and verifies the bytes through SSH. Text-only AT-SPI; no human
+session, Vision, Windows, cloud provisioning, or performance claims.
+
+The service replaces the nonexistent JSON-worker executable. Desktop operations
+use MCP; commands/files use independent SSH channels with per-operation receipts
+under the guest account. Transient systemd user units own command process groups
+across SSH loss; cancellation stops only that operation's unit. An atomic claim
+prevents duplicate dispatch. A desktop action without a completion receipt
+remains unknown and cannot be replayed automatically. Session binding records
+the desktop unit's InvocationID; restarting it requires a new session identity.
+
+Acceptance proposed to the coordinator: focused pinned MCP/tool and direct SSH
+command/file/cancel/lost-reply cases, strict Clippy, then one integrated dedicated
+guest/model task and independent SSH file readback. Next unresolved action:
+implement and run those gates; accepted dense-INT runtime/GPU assignment pending.
+Evidence root `/ai/gchat/out/gbot-cua-service-20261011/`; no live guest/model yet.
