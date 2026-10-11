@@ -2289,7 +2289,7 @@ mod resource_tests {
         let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
         let workers = runtime.metrics().num_workers();
         runtime.block_on(async {
-            let (_dir, host, launch) = fixture().await;
+            let (dir, host, launch) = fixture().await;
             let model = host.inventory.read().await[0].clone();
             let profiles: Vec<crate::launch_profiles::LaunchProfile> = (0..174).map(|index| {
                 serde_json::from_value(serde_json::json!({
@@ -2306,12 +2306,32 @@ mod resource_tests {
             std::fs::write(&catalog_path, &catalog_bytes).unwrap();
             host.scan().await.unwrap();
             assert_eq!(host.launch_profiles.read().await.len(), 174);
+            // Sleep children exercise management without model/hardware admission.
+            // Preserve the Host hardware owner for measured Scan.
+            let hardware = host.processes.lock().await.hardware_profile.clone();
+            let mut synthetic = HostProcesses::new(
+                dir.path().join("engine"),
+                host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
+                Duration::from_secs(600),
+            ).unwrap();
+            synthetic.configure_runtimes(Default::default(), host.gpus.iter().filter_map(|gpu| {
+                gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))
+            }).collect()).unwrap();
             let mut instances = Vec::new();
             for index in 0..4 {
                 let mut launch = launch.clone();
                 launch.gpu_uuids = vec![format!("GPU-fixture-{index}")];
-                instances.push(host.launch(launch).await.unwrap());
+                let prepared = host.prepare_launch(&launch).await.unwrap();
+                let id = prepared.instance_id;
+                synthetic.launch(prepared).unwrap();
+                launch.instance_id = Some(id);
+                host.data.lock().await.profiles.insert(id, launch);
+                synthetic.mark_profile_persisted(id);
+                instances.push(id);
             }
+            synthetic.hardware_profile = hardware;
+            *host.processes.lock().await = synthetic;
+            host.save().await.unwrap();
             let job_ids: Vec<_> = (0..100).map(|_| Uuid::new_v4()).collect();
             let release = crate::model_downloads::Release {
                 name:"Synthetic queued transfer, never started".into(), identity:model.metadata.identity.clone(),
@@ -2450,7 +2470,7 @@ mod resource_tests {
                 })
             }).collect();
             println!("CONCURRENT_HOST_RESOURCE_RESULT {}", serde_json::json!({
-                "scope":"native Linux test process; actual authenticated Host route, excludes socket/TLS and daemon maintenance; four synthetic nongpu children",
+                "scope":"native Linux test process; actual authenticated Host route, excludes socket/TLS, daemon maintenance and model/hardware admission; four public-process-owner synthetic nongpu children",
                 "workers":"production default","worker_count":workers,"catalog_profiles":174,"instances":4,"journal_entries":100,
                 "allocator_scope":"System with irreversible accounting bypass; one atomic dispatch branch per allocation, no counting spinlock",
                 "journal_writes_in_scope":1,"journal_bytes":std::fs::metadata(journal).unwrap().len(),"elapsed_ns":elapsed_ns,
