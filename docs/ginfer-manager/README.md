@@ -11,7 +11,7 @@ independent package and native X11 acceptance pass. The older `2a6e21ff2`
 Linux proof remains historical evidence. Package paths and proof are recorded below.
 Documentation-only handoffs do not rebuild accepted binaries.
 
-## Current item — hardware profile installation
+## Accepted hardware profile installation
 
 Deliverable: one Host-owned resumable profile-v2 job, invoked by the GChat
 installer and hardware-inventory refresh, visible in GChat and Manager. Model
@@ -107,13 +107,14 @@ owned Host/profiler processes and canonical guards were released. Evidence:
 `installed-gate-d2994568f/reuse-resume-result.json` and its public status records
 under the subject evidence directory.
 
-The implementation is merge-ready. Deadline 08:00 UTC. Ron's standing rule
+Merged and pushed on GChat main `b55f1f73f`. Ron's standing rule
 excludes native Windows development builds/runs. The already installed Windows GNU target passes from Linux; normal
 completion, cancellation, actual Host-loss lifetime, MSVC and native installer
 checks remain owed to his scheduled pre-release Windows gate.
 
-Owned inventory: this candidate and the accepted OI105 node/core graph are
-retained for the current item. Merged clean OI076 and OI072 candidate trees were
+Owned inventory: the clean merged hardware-profile source tree was retired
+after publication, ancestry and live-use checks; branch/source and tested Host
+binary remain retained. The accepted OI105 node/core graph stays read-only. Merged clean OI076 and OI072 candidate trees were
 retired October 11 after ancestry/publication and live-job checks, reclaiming
 555,421,696 allocated bytes; branches and external evidence remain. No owned
 profiling job is running. The shared Rust cache remains at

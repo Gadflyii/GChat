@@ -6,7 +6,32 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-076 warning diagnostics
+## Current item — CLI configuration selection
+
+Deliverable: generic CLI commands use the same desktop/installer configuration
+selector and saved data folder. Reading configuration must not create a sibling
+`gchat` directory that changes the desktop's selected configuration. Preserve
+existing desktop precedence, valid custom folders and default fallback on Linux
+and Windows. Models, model lookup, runtime discovery and server-state paths all
+consume that one resolver.
+
+Candidate `/ai/gchat-worktrees/cli-config-selection-b55`, branch
+`fix/gchat-cli-config-b55`, from merged main `b55f1f73f`. Acceptance assigned by
+bubbs: focused CLI/resolver tests and one actual Linux custom-folder CLI run,
+CPU only, deadline06:30 UTC. No native Windows build/run, models/GPU, release,
+signing or publication. Master CLI/resolver rows and OI115–119 were read; the
+latter concern Host/Manager modules and do not overlap the affected app/CLI
+configuration modules or build script.
+
+The current app-data root derives from the owning bundle identifier emitted by
+the existing build script, including an explicit Tauri identifier override.
+Generic CLI and installer use the same existing configuration selector. The
+superseded CLI root creation and internal legacy resolver name are removed.
+No configuration, folder, model or runtime is moved or deleted. Next: focused
+resolver/CLI proof and one actual custom-folder discovery. Evidence belongs in
+`/ai/gchat/out/cli-config-selection-20261011/`. No job or hardware grant is held.
+
+## Accepted OI-076 warning diagnostics
 
 Deliverable: make the existing context/format warning self-diagnosing without
 changing admission, classification, message conversion or UI behavior. The
@@ -42,8 +67,8 @@ UI error formatter. Logging moved to its original failure event, preserving
 the SDK's console output and formatter. Both failed logs remain in the same
 evidence folder; neither passing check was repeated. The injected SDK failures
 still produce expected console errors, including test sentinels; the new native
-records omit them. OI-076 is diagnostics in place on the candidate, waiting for
-the next occurrence after merge. OI-072 is the next ONE item; deadline 06:00 UTC.
+records omit them. OI-076 diagnostics are merged on main `36ac89441`, waiting for the next
+occurrence. The source tree was retired; Git and saved evidence are retained.
 
 ## Accepted short formatted Chat replies
 
