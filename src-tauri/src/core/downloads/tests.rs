@@ -142,6 +142,142 @@ fn preflight_test_item(url: String, size: Option<u64>) -> DownloadItem {
         sha256: None,
         size,
         model_id: None,
+        model_storage_root: None,
+    }
+}
+
+#[test]
+fn managed_download_routes_only_the_exact_model_artifact() {
+    let data = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let mut item = preflight_test_item("https://example.invalid/model.ginfer".into(), Some(6));
+    item.model_id = Some("fixture/tiny-model".into());
+    item.save_path = "ginfer/models/fixture/tiny-model/model.ginfer".into();
+    let logical = data.path().join(&item.save_path);
+    let expected = artifacts.path().join("fixture/tiny-model/model.ginfer");
+    assert_eq!(
+        resolve_download_save_path_in(data.path(), &item, true).unwrap(),
+        logical
+    );
+    for invalid_root in ["", "relative/root"] {
+        item.model_storage_root = Some(invalid_root.into());
+        assert!(resolve_download_save_path_in(data.path(), &item, false).is_err());
+    }
+    item.model_storage_root = Some(artifacts.path().to_str().unwrap().into());
+    assert_eq!(
+        resolve_download_save_path_in(data.path(), &item, false).unwrap(),
+        expected
+    );
+    assert!(!expected.parent().unwrap().exists());
+
+    item.model_id = None;
+    assert!(resolve_download_save_path_in(data.path(), &item, false)
+        .unwrap_err()
+        .contains("requires an exact managed"));
+    item.model_storage_root = None;
+    assert_eq!(
+        resolve_download_save_path_in(data.path(), &item, false).unwrap(),
+        logical
+    );
+    item.model_id = Some("another-model".into());
+    item.model_storage_root = Some(artifacts.path().to_str().unwrap().into());
+    assert!(resolve_download_save_path_in(data.path(), &item, false)
+        .unwrap_err()
+        .contains("requires an exact managed"));
+    item.model_storage_root = None;
+    assert_eq!(
+        resolve_download_save_path_in(data.path(), &item, false).unwrap(),
+        logical
+    );
+    item.save_path = "downloads/notes.txt".into();
+    item.model_storage_root = Some(artifacts.path().to_str().unwrap().into());
+    assert!(resolve_download_save_path_in(data.path(), &item, false)
+        .unwrap_err()
+        .contains("requires an exact managed"));
+    item.model_storage_root = None;
+    assert_eq!(
+        resolve_download_save_path_in(data.path(), &item, false).unwrap(),
+        data.path().join("downloads/notes.txt")
+    );
+}
+
+#[test]
+fn managed_download_rejects_invalid_ids_and_preserves_download_containment() {
+    let data = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let mut item = preflight_test_item("https://example.invalid/model.ginfer".into(), Some(6));
+    for invalid in ["", "../model", "/model", "model//part", "model\\part"] {
+        item.model_id = Some(invalid.into());
+        assert!(resolve_download_save_path_in(data.path(), &item, false).is_err());
+    }
+    item.save_path = artifacts.path().join("outside.ginfer").to_str().unwrap().into();
+    for model_id in [None, Some("fixture/tiny-model".into())] {
+        item.model_id = model_id;
+        assert!(resolve_download_save_path_in(data.path(), &item, false)
+            .unwrap_err()
+            .contains("outside of GChat data folder"));
+    }
+    item.model_id = Some("fixture/tiny-model".into());
+    item.model_storage_root = Some(artifacts.path().to_str().unwrap().into());
+    assert!(resolve_download_save_path_in(data.path(), &item, false)
+        .unwrap_err()
+        .contains("outside of GChat data folder"));
+    item.save_path = "ginfer/models/fixture/other/../tiny-model/model.ginfer".into();
+    assert!(resolve_download_save_path_in(data.path(), &item, false)
+        .unwrap_err()
+        .contains("without traversal"));
+}
+
+#[cfg(unix)]
+#[test]
+fn managed_download_preserves_filesystem_alias_containment() {
+    let data = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(artifacts.path(), data.path().join("escape")).unwrap();
+    let mut item = preflight_test_item("https://example.invalid/model.ginfer".into(), Some(6));
+    item.model_id = Some("fixture/tiny-model".into());
+    item.save_path = "escape/model.ginfer".into();
+    assert!(resolve_download_save_path_in(data.path(), &item, false)
+        .unwrap_err()
+        .contains("outside of GChat data folder"));
+
+    let alias = artifacts.path().join("data-alias");
+    std::os::unix::fs::symlink(data.path(), &alias).unwrap();
+    item.save_path = alias.join("notes.txt").to_str().unwrap().into();
+    assert_eq!(
+        resolve_download_save_path_in(data.path(), &item, false).unwrap(),
+        alias.join("notes.txt")
+    );
+}
+
+#[test]
+fn managed_download_requires_explicit_restart_when_redirect_leaves_a_partial() {
+    let data = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let mut item = preflight_test_item("https://example.invalid/model.ginfer".into(), Some(6));
+    item.model_id = Some("fixture/tiny-model".into());
+    item.save_path = "ginfer/models/fixture/tiny-model/model.ginfer".into();
+    let logical = data.path().join(&item.save_path);
+    std::fs::create_dir_all(logical.parent().unwrap()).unwrap();
+    for extension in ["ginfer.tmp", "ginfer.url"] {
+        let retained = logical.with_extension(extension);
+        std::fs::write(&retained, b"retained original download").unwrap();
+        item.model_storage_root = Some(artifacts.path().to_str().unwrap().into());
+        assert!(resolve_download_save_path_in(data.path(), &item, true)
+            .unwrap_err()
+            .contains("Restart with resume=false"));
+        assert_eq!(
+            resolve_download_save_path_in(data.path(), &item, false).unwrap(),
+            artifacts.path().join("fixture/tiny-model/model.ginfer")
+        );
+        item.model_storage_root = None;
+        assert_eq!(
+            resolve_download_save_path_in(data.path(), &item, true).unwrap(),
+            logical
+        );
+        assert_eq!(std::fs::read(&retained).unwrap(), b"retained original download");
+        assert!(!artifacts.path().join("fixture").exists());
+        std::fs::remove_file(retained).unwrap();
     }
 }
 
@@ -318,6 +454,7 @@ async fn download_succeeds_when_preflight_head_always_fails() {
         sha256: None,
         size: None,
         model_id: Some("test/ato-302".to_string()),
+        model_storage_root: None,
     };
     let app = mock_app();
 
@@ -407,6 +544,7 @@ async fn run_interrupted_download_test(
         sha256: None,
         size: Some(6),
         model_id: Some("test/model".to_string()),
+        model_storage_root: None,
     };
     let app = mock_app();
     download_single_file_for_test(app.handle().clone(), &item, &save_path, 6)
@@ -612,6 +750,7 @@ fn test_download_item_with_ssl_proxy() {
         sha256: None,
         size: None,
         model_id: None,
+        model_storage_root: None,
     };
 
     assert!(download_item.proxy.is_some());
@@ -632,6 +771,7 @@ fn test_client_creation_with_ssl_settings() {
         sha256: None,
         size: None,
         model_id: None,
+        model_storage_root: None,
     };
 
     let header_map = HeaderMap::new();
@@ -680,6 +820,7 @@ fn test_download_item_creation() {
         sha256: None,
         size: None,
         model_id: None,
+        model_storage_root: None,
     };
 
     assert_eq!(item.url, "https://example.com/file.tar.gz");
@@ -735,28 +876,47 @@ async fn restarts_an_interrupted_download_when_content_range_is_mismatched() {
 }
 
 #[tokio::test]
-async fn downloads_model_fixture_and_enforces_size_and_hash_contract() {
+async fn managed_download_writes_resolved_root_and_enforces_contract() {
     let (url, server) = spawn_model_contract_server().await;
-    let save_path = test_download_path("tiny-model.gguf");
+    let data = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
     let item = DownloadItem {
         url,
-        save_path: save_path.to_string_lossy().into_owned(),
+        save_path: "ginfer/models/fixture/tiny-model/model.ginfer".into(),
         proxy: None,
         sha256: Some(
             "bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721".to_string(),
         ),
         size: Some(6),
         model_id: Some("fixture/tiny-model".to_string()),
+        model_storage_root: Some(artifacts.path().to_str().unwrap().into()),
     };
+    let logical = data.path().join(&item.save_path);
+    std::fs::create_dir_all(logical.parent().unwrap()).unwrap();
+    let retained_partial = logical.with_extension("ginfer.tmp");
+    let retained_url = logical.with_extension("ginfer.url");
+    std::fs::write(&retained_partial, b"old partial").unwrap();
+    std::fs::write(&retained_url, &item.url).unwrap();
+    let save_path = resolve_download_save_path_in(data.path(), &item, false).unwrap();
+    assert_eq!(
+        save_path,
+        artifacts.path().join("fixture/tiny-model/model.ginfer")
+    );
     let app = mock_app();
 
-    download_single_file_for_test(app.handle().clone(), &item, &save_path, 6)
+    let downloaded = download_single_file_for_test(app.handle().clone(), &item, &save_path, 6)
         .await
         .unwrap();
-    validate_downloaded_file_for_test(&item, &save_path, app.handle())
+    assert_eq!(downloaded, save_path);
+    validate_downloaded_file_for_test(&item, &downloaded, app.handle())
         .await
         .unwrap();
     assert_eq!(tokio::fs::read(&save_path).await.unwrap(), b"abcdef");
+    assert!(!save_path.with_extension("ginfer.tmp").exists());
+    assert!(!save_path.with_extension("ginfer.url").exists());
+    assert_eq!(std::fs::read(&retained_partial).unwrap(), b"old partial");
+    assert_eq!(std::fs::read(&retained_url).unwrap(), item.url.as_bytes());
+    assert!(!logical.exists());
 
     let mut wrong_contract = item.clone();
     wrong_contract.sha256 = Some("0".repeat(64));
@@ -768,7 +928,6 @@ async fn downloads_model_fixture_and_enforces_size_and_hash_contract() {
     );
 
     server.abort();
-    let _ = tokio::fs::remove_dir_all(save_path.parent().unwrap()).await;
 }
 
 #[test]

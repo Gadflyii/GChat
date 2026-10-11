@@ -67,6 +67,19 @@ interface GinferAdoptionReport {
   rejected: Array<{ filename: string; reason: string }>
 }
 
+interface GinferModelLocation {
+  modelId: string
+  modelDir: string
+  manifestPath: string
+}
+
+interface GinferModelImportLocation {
+  modelDir: string
+  artifactPath: string
+  manifestPath: string
+  modelPath: string
+}
+
 /**
  * Modality capabilities of the registered .ginfer artifacts: every
  * published family (Qwen, Muse Glimmer) is multimodal — media routes
@@ -158,6 +171,17 @@ export default class ginfer_extension extends AIEngine {
     return this.providerPath
   }
 
+  private async modelsRoot(): Promise<string | undefined> {
+    const configured = String(this.config?.model_path ?? '').trim()
+    return configured ? joinPath([configured, 'models']) : undefined
+  }
+
+  private async modelLocations(): Promise<GinferModelLocation[]> {
+    return invoke<GinferModelLocation[]>('ginfer_model_locations', {
+      modelsRoot: await this.modelsRoot(),
+    })
+  }
+
   private async adoptRootArtifacts(): Promise<void> {
     const report = await invoke<GinferAdoptionReport>(
       'adopt_root_ginfer_models'
@@ -176,16 +200,14 @@ export default class ginfer_extension extends AIEngine {
 
   override async get(modelId: string): Promise<modelInfo | undefined> {
     await this.adoptRootArtifacts()
-    const path = await joinPath([
-      await this.getProviderPath(),
-      'models',
-      modelId,
-      'model.yml',
-    ])
+    const location = (await this.modelLocations()).find(
+      (item) => item.modelId === modelId
+    )
+    if (!location || !(await fs.existsSync(location.manifestPath))) return undefined
 
-    if (!(await fs.existsSync(path))) return undefined
-
-    const modelConfig = await invoke<GinferModelConfig>('read_yaml', { path })
+    const modelConfig = await invoke<GinferModelConfig>('read_yaml', {
+      path: location.manifestPath,
+    })
     const resolvedPath = await joinPath([
       await getJanDataFolderPath(),
       modelConfig.model_path,
@@ -208,39 +230,13 @@ export default class ginfer_extension extends AIEngine {
 
   override async list(): Promise<modelInfo[]> {
     await this.adoptRootArtifacts()
-    const modelsDir = await joinPath([await this.getProviderPath(), 'models'])
-    if (!(await fs.existsSync(modelsDir))) {
-      await fs.mkdir(modelsDir)
-    }
-
-    const modelIds: string[] = []
-    let stack = [modelsDir]
-    while (stack.length > 0) {
-      const currentDir = stack.pop()!
-
-      const modelConfigPath = await joinPath([currentDir, 'model.yml'])
-      if (await fs.existsSync(modelConfigPath)) {
-        modelIds.push(
-          currentDir.slice(modelsDir.length + 1).replace(/\\/g, '/')
-        )
-        continue
-      }
-
-      const children = await fs.readdirSync(currentDir)
-      for (const child of children) {
-        const childPath = await joinPath([currentDir, child])
-        const dirInfo = await fs.fileStat(childPath)
-        if (!dirInfo.isDirectory) continue
-        stack.push(childPath)
-      }
-    }
+    const locations = await this.modelLocations()
 
     const gchatDataFolderPath = await getJanDataFolderPath()
     const modelInfos: modelInfo[] = []
-    for (const modelId of modelIds) {
-      const path = await joinPath([modelsDir, modelId, 'model.yml'])
+    for (const { modelId, manifestPath } of locations) {
       const modelConfig = await invoke<GinferModelConfig>('read_yaml', {
-        path,
+        path: manifestPath,
       })
       const resolvedPath = await joinPath([
         gchatDataFolderPath,
@@ -313,13 +309,12 @@ export default class ginfer_extension extends AIEngine {
         }
       }
 
-      const modelDir = await joinPath([
-        await this.getProviderPath(),
-        'models',
-        modelId,
-      ])
-      let weightsPath = await joinPath([modelDir, 'model.ginfer'])
-      const modelYmlPath = await joinPath([modelDir, 'model.yml'])
+      const location = (await this.modelLocations()).find(
+        (item) => item.modelId === modelId
+      )
+      if (!location) throw new Error(`Model ${modelId} does not exist`)
+      let weightsPath = await joinPath([location.modelDir, 'model.ginfer'])
+      const modelYmlPath = location.manifestPath
       if (await fs.existsSync(modelYmlPath)) {
         const modelConfig = await invoke<GinferModelConfig>('read_yaml', {
           path: modelYmlPath,
@@ -532,32 +527,23 @@ export default class ginfer_extension extends AIEngine {
   }
 
   override async delete(modelId: string): Promise<void> {
-    const modelDir = await joinPath([
-      await this.getProviderPath(),
-      'models',
+    await invoke<void>('delete_ginfer_model', {
       modelId,
-    ])
-
-    if (!(await fs.existsSync(await joinPath([modelDir, 'model.yml'])))) {
-      throw new Error(`Model ${modelId} does not exist`)
-    }
-
-    await fs.rm(modelDir)
+      modelsRoot: await this.modelsRoot(),
+    })
   }
 
   override async update(
     modelId: string,
     model: Partial<modelInfo>
   ): Promise<void> {
-    const configPath = await joinPath([
-      await this.getProviderPath(),
-      'models',
-      modelId,
-      'model.yml',
-    ])
-    if (!(await fs.existsSync(configPath))) {
+    const location = (await this.modelLocations()).find(
+      (item) => item.modelId === modelId
+    )
+    if (!location || !(await fs.existsSync(location.manifestPath))) {
       throw new Error(`Model ${modelId} does not exist`)
     }
+    const configPath = location.manifestPath
     const modelConfig = await invoke<GinferModelConfig>('read_yaml', {
       path: configPath,
     })
@@ -582,14 +568,17 @@ export default class ginfer_extension extends AIEngine {
     // message, not a 16-23 GiB download it can never load.
     await this.assertHardware()
 
-    const modelsDir = await joinPath([
-      await this.getProviderPath(),
-      'models',
-      modelId,
-    ])
-    const savePath = await joinPath([modelsDir, 'model.ginfer'])
-    // Data-folder-relative location of the weights, used for the download
-    // manager and recorded in model.yml (resolved against the data folder).
+    const modelsRoot = await this.modelsRoot()
+    const location = await invoke<GinferModelImportLocation>(
+      'ginfer_model_import_location',
+      { modelId, modelsRoot }
+    )
+    const previous = (await invoke<GinferModelLocation[]>(
+      'ginfer_model_locations', { modelsRoot }
+    )).find((item) => item.modelId === modelId)
+    const modelsDir = location.modelDir
+    const savePath = location.artifactPath
+    // The downloader resolves this logical managed-model path using the same native owner.
     const relativePath = `${this.providerId}/models/${modelId}/model.ginfer`
 
     const isRemote =
@@ -613,6 +602,7 @@ export default class ginfer_extension extends AIEngine {
           sha256: opts.modelSha256,
           size: opts.modelSize,
           model_id: modelId,
+          model_storage_root: modelsRoot,
         },
       ]
 
@@ -709,15 +699,19 @@ export default class ginfer_extension extends AIEngine {
     const size_bytes = (await fs.fileStat(savePath)).size
 
     // Merge into an existing model.yml: a user-renamed model keeps its name.
-    const ymlPath = await joinPath([modelsDir, 'model.yml'])
+    const ymlPath = location.manifestPath
     let existing: Partial<GinferModelConfig> = {}
     if (await fs.existsSync(ymlPath)) {
       existing = await invoke<GinferModelConfig>('read_yaml', { path: ymlPath })
+    } else if (previous && await fs.existsSync(previous.manifestPath)) {
+      existing = await invoke<GinferModelConfig>('read_yaml', {
+        path: previous.manifestPath,
+      })
     }
 
     const modelConfig: GinferModelConfig = {
       ...existing,
-      model_path: relativePath,
+      model_path: location.modelPath,
       name: existing.name && existing.name !== modelId ? existing.name : modelId,
       size_bytes,
       sha256: opts.modelSha256,

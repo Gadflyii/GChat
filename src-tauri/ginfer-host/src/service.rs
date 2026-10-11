@@ -506,6 +506,8 @@ impl Host {
         let mut roots = self.model_dirs.clone();
         roots.extend(self.data.lock().await.local_artifacts.iter().cloned());
         roots.push(self.downloads.root().to_path_buf());
+        roots.push(self.downloads.default_root().to_path_buf());
+        let original_root = self.downloads.original_root().to_path_buf();
         roots.extend(
             self.downloads
                 .list()
@@ -516,6 +518,9 @@ impl Host {
         let sets = self.artifact_sets.clone();
         let (entries, errors) = tokio::task::spawn_blocking(move || {
             let mut pending: Vec<_> = roots.into_iter().map(|p| (p, false)).chain(sets.into_iter().map(|p|(p,true))).collect();
+            if original_root.exists() {
+                pending.push((original_root, false));
+            }
             let mut found = Vec::new();
             let mut errors = Vec::new();
             type DirectoryListing = Result<Vec<Result<std::ffi::OsString, String>>, String>;
@@ -1831,6 +1836,10 @@ impl Host {
                 if !root.is_absolute() {
                     return Err("model storage must be an absolute path".into());
                 }
+                let checked_root = root.clone();
+                tokio::task::spawn_blocking(move || {
+                    crate::model_storage::require_native_model_storage(&checked_root)
+                }).await.map_err(|e| e.to_string())??;
                 tokio::fs::create_dir_all(&root)
                     .await
                     .map_err(|e| e.to_string())?;

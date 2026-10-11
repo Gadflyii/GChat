@@ -1,10 +1,13 @@
 use super::models::{DownloadEvent, DownloadItem, ProgressTracker, ProxyConfig};
 use crate::core::app::commands::get_jan_data_folder_path;
+use crate::core::ginfer_models::{
+    model_import_location_at_root, model_import_location_in, validate_model_id,
+};
 use futures_util::StreamExt;
 use jan_utils::{canonicalize_existing_prefix, normalize_path};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_RANGE, RANGE};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 use tauri::{Emitter, Runtime};
 use tokio::fs::File;
@@ -16,6 +19,65 @@ use url::Url;
 
 pub fn err_to_string<E: std::fmt::Display>(e: E) -> String {
     format!("Error: {e}")
+}
+
+pub(super) fn resolve_download_save_path_in(
+    data: &Path,
+    item: &DownloadItem,
+    resume: bool,
+) -> Result<PathBuf, String> {
+    if let Some(id) = &item.model_id {
+        validate_model_id(id)?;
+    }
+    let requested = data.join(&item.save_path);
+    let logical = normalize_path(&requested);
+    // Resolve filesystem aliases before enforcing ordinary download containment.
+    if !canonicalize_existing_prefix(&logical).starts_with(&canonicalize_existing_prefix(data)) {
+        return Err(format!(
+            "Path {} is outside of GChat data folder {}",
+            logical.display(),
+            data.display()
+        ));
+    }
+    let Some(id) = &item.model_id else {
+        if item.model_storage_root.is_some() {
+            return Err(
+                "model_storage_root requires an exact managed model.ginfer destination".into(),
+            );
+        }
+        return Ok(logical);
+    };
+    let managed = data.join("ginfer/models").join(id).join("model.ginfer");
+    if logical != normalize_path(&managed) {
+        if item.model_storage_root.is_some() {
+            return Err(
+                "model_storage_root requires an exact managed model.ginfer destination".into(),
+            );
+        }
+        return Ok(logical);
+    }
+    if requested != managed || requested.components().any(|c| c == Component::ParentDir) {
+        return Err(
+            "Managed model save_path must name its exact model.ginfer location without traversal"
+                .into(),
+        );
+    }
+    let location = match &item.model_storage_root {
+        Some(root) => model_import_location_at_root(data, id, Path::new(root))?,
+        None => model_import_location_in(data, id)?,
+    };
+    let actual = PathBuf::from(location.artifact_path);
+    if resume && canonicalize_existing_prefix(&actual) != canonicalize_existing_prefix(&logical) {
+        let partial = logical.with_extension("ginfer.tmp");
+        let url = logical.with_extension("ginfer.url");
+        if partial.try_exists().map_err(err_to_string)? || url.try_exists().map_err(err_to_string)? {
+            return Err(format!(
+                "Managed model storage changed from {} to {}; existing partial download was retained. Restart with resume=false to download into the new location",
+                logical.display(), actual.display()
+            ));
+        }
+    }
+    Ok(actual)
 }
 
 const MAX_STREAM_RETRIES: u32 = 5;
@@ -547,23 +609,7 @@ pub async fn _download_files_internal(
     let mut download_tasks = Vec::new();
 
     for (index, item) in items.iter().enumerate() {
-        let save_path = jan_data_folder.join(&item.save_path);
-        let save_path = normalize_path(&save_path);
-
-        // Compare the paths as the filesystem sees them, not as they were
-        // spelled. On atomic Fedora variants `/home` is a symlink to
-        // `/var/home`, so a target inside the data folder reached under the
-        // other name looked like an escape attempt and blocked the download.
-        let resolved_save_path = canonicalize_existing_prefix(&save_path);
-        let resolved_data_folder = canonicalize_existing_prefix(&jan_data_folder);
-
-        if !resolved_save_path.starts_with(&resolved_data_folder) {
-            return Err(format!(
-                "Path {} is outside of GChat data folder {}",
-                save_path.display(),
-                jan_data_folder.display()
-            ));
-        }
+        let save_path = resolve_download_save_path_in(&jan_data_folder, item, resume)?;
 
         // Spawn download task for each file
         let item_clone = item.clone();

@@ -6,7 +6,50 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## CLI configuration selection — verified, merge-ready
+## Current item — WSL model placement
+
+Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
+Candidate `/ai/gchat-worktrees/wsl-model-placement-c4ddb0`, branch
+`fix/gchat-wsl-model-placement-c4ddb0`, from merged main `c4ddb0a6d`.
+
+Deliverable: installer/downloader place managed model artifacts on the Linux
+filesystem under WSL, with coherent model discovery and launch paths. The
+retained OI-144-9P same-engine/artifact/profile comparison is 42.259s Ready from
+ext4 versus 237.278s from E:9p. Approximately 94% of that gap is attributed to
+nonoverlapping materialization stages; no engine reader change is selected.
+The current task owns storage placement, not a new performance campaign.
+
+Acceptance assigned by bubbs: focused placement/installer/downloader fixtures
+and one actual Linux run; deadline 08:00 UTC. No model/GPU, native Windows
+build/run, full calibration, release, signing or publication. Preserve existing
+model data and user configuration; do not silently copy or delete large existing
+artifacts. Before source changes, read the master rows for actual downloader,
+installer and model-root files and fold overlapping review findings. Selected design: one Host-owned resolver detects WSL and the actual filesystem
+of the requested root. Implicit 9p roots redirect new managed writes to a native
+XDG/HOME root namespaced by the canonical original root. Explicit Windows-backed
+storage and resuming its old jobs refuse with an actionable message. Existing
+artifacts, journals and partials remain unchanged. New manifests stay beside their
+artifacts and use absolute paths outside the saved app data folder. A shared native
+catalog supplies desktop and CLI discovery across selected, original and installed
+job roots; Host scanning includes them. Ordinary download containment remains intact.
+
+Next unresolved action: finish and review the connected Host, native catalog,
+CLI and desktop download/import paths, including configured storage, preserved
+old partials, duplicate IDs and protected package removal; then run only the
+assigned focused fixtures and one Linux placement/discovery invocation.
+
+Evidence: C3's retained
+`/ai/kernel-agent/run_workdir/local/direct-read-wake-670d1c68a/evidence/oi144-9p/README.md`
+and the master OI-144-9P row. Source implementation is frozen for the focused gate; no tests/builds or live
+jobs yet. Root-scoped paused-job dedup permits a fresh native transfer without
+changing the old job. Existing directory aliases remain readable with canonical
+ancestor cycle detection. Import admission protects installed Host payloads and
+refuses linked write targets; deletion retains Host ownership and refuses
+ambiguous copies. Independent source review precedes execution. Owned inventory: this candidate source, accepted CLI binary/evidence in
+`/ai/gchat/out/cli-config-selection-20261011/`, shared caches retained. CLI
+private metadata is removed; its source branch and Git history remain retained.
+
+## Accepted CLI configuration selection
 
 Deliverable: generic CLI commands use the same desktop/installer configuration
 selector and saved data folder. Reading configuration creates no competing
@@ -37,8 +80,8 @@ The assigned gate passes on Linux, actual 05:48:54–05:50:05 UTC:
 Evidence: `/ai/gchat/out/cli-config-selection-20261011/` (`gate.log`,
 `result.json`, `custom-folder.stdout/stderr`). The tested binary
 `gchat-cli-8d4602951` is retained as the accepted CLI baseline; private fixture
-metadata is disposable. Candidate source remains until the normal reviewed
-merge. Shared Cargo/toolchain caches are retained. No native Windows build/run,
+metadata is disposable. Source is merged and pushed on main `c4ddb0a6d`; the clean/pushed CLI
+worktree is retired after its accepted ancestry and zero live consumers are verified. Shared Cargo/toolchain caches are retained. No native Windows build/run,
 GPU/model, release, signing or publication was part of this gate.
 
 The local disk hold deferred waiting schedulers before any compiler/test ran.
