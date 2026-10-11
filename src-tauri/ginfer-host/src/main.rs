@@ -130,10 +130,7 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
     } else {
         "ginfer"
     };
-    if supplied_engine
-        .file_name()
-        .map_or(true, |name| name != cli_name)
-    {
+    if supplied_engine.file_name() != Some(std::ffi::OsStr::new(cli_name)) {
         return Err("--engine must select the installed ginfer CLI".into());
     }
     let engine = configured_engine.unwrap_or_else(|| {
