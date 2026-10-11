@@ -102,8 +102,56 @@ functional acceptance leaves the original fixed-arena
 
 ### Current Engine profile repair — OI-072
 
-The installed Engine is now native `2ef56a52a`. The original fixed-pool profile
-remains saved exactly and stopped. OI-072 must deliver Muse TP1, C4/131,072,
+October 11 decision: the source-only catalog/evidence audit is complete. Physical
+qualification is pending the release gate Ron schedules; the changing development
+Engine is not qualified tonight. The pending configuration is Muse TP1,
+C4/131,072, native NVFP4 long KV and native NVFP4 DFlash, prefill 1,024, graphs
+and public prefix reuse enabled, Vision off and the unchanged 300 MiB guard.
+The release gate selects and records the actual Engine, exact package and GPU
+group before the retained cold four-request/full-context check. AUTO functional
+authorization stays in force; neither Ready nor a short lifecycle pass promotes
+capacity evidence. OI-072-RUNTIME remains the separate historical memory-owner
+question. No Engine, catalog value, profile tier or launch behavior changed in
+this audit.
+
+Host validation checks the declared tier's counts/calculation/headroom facts;
+it does not read archived measurements or compare `engine_revision` with the
+selected executable. Availability matches identity, TP/draft degree and size.
+Launch then verifies the exact payload SHA256, context/concurrency/options and
+platform/SKU/SM/selected GPU group. Engine startup owns live memory and topology.
+These checks preserve historical settings; they do not make historical evidence
+current qualification. GChat, Manager and the text launcher already show the
+recorded Engine/workload and changed-Engine disclaimer. Any future current-match
+verdict must come from Host observations, not guessed client version comparison.
+Owning paths: `ginfer-host/src/{launch_profiles.rs,service.rs,engine_host.rs}`,
+`EngineProfilePicker.tsx` and `ginfer-manager/ui/manager.js`.
+
+Saved Windows `catalogs.json` contains 103 entries: 23 full-context-tested, four
+startup/smoke and 76 calculated/pending. The native Muse C1–C8 resource reports
+are September passes, not in-progress tests or qualification of a later Engine.
+Its C4 record uses package SHA256
+`6d6cc348c75a75c60ca011d267eb389dcbb8530f6c51a680dad911d25365b61f`,
+22,447,498,752 bytes, RTX5090 and Engine `922e5a879`: four 131,009-token prompts,
+256 returned/252 decode tokens, 13 B4 graph rounds, zero reuse and 373,293,056
+minimum free bytes. That direct placement workload used full reset with no
+public checkpoint reservation. It does not qualify the current prefix-enabled
+public route. October 9 AUTO startup/lifecycle passed on `2ef56a52a`; its cold
+wave aborted below the same guard. October 10's four completed responses used
+53 prefix tokens on one lane and do not close cold-independent qualification.
+Retained evidence remains linked below and in
+[profile evidence](../model-profile-evidence.md).
+
+Audit candidate: `/ai/gchat-worktrees/oi072-evidence-d9b`, branch
+`docs/gchat-oi072-evidence-d9b`, baseline `d9b802e4c`; docs only, no build/model
+or live job. Historical GInfer catalog source
+`/ai/ginfer-worktrees/gchat-oi072-catalog` at `61c62903e` remains clean and
+retained. Next ONE item is resumable profile-v2 installation from the GChat
+installer and hardware-change refresh; no new OI-072 physical run is authorized
+before Ron's release gate.
+
+The retained October 9 repair used native `2ef56a52a`. The original fixed-pool
+profile was saved exactly and restored stopped after those checks. Its required
+configuration was Muse TP1, C4/131,072,
 NVFP4 long KV and native NVFP4 DFlash, 1,024-token prefill, graphs enabled and
 Vision disabled through the public prefix-enabled serving route. Context,
 concurrency, the 300 MiB guard and sampling behavior are not reduced. Engine

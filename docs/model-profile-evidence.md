@@ -6,12 +6,15 @@ engine, artifact, hardware, and settings; they do not qualify later runtime buil
 The current contract is [model management](model-management.md). Outstanding release
 acceptance belongs in [open work](open-work.md), not this evidence record.
 
-Current Engine work is OI-072 in the [Manager authority](ginfer-manager/README.md#current-engine-profile-repair--oi-072).
+Current OI-072 disposition is in the [Manager authority](ginfer-manager/README.md#current-engine-profile-repair--oi-072): source-only audit complete; exact Muse
+TP1 C4/131,072 NVFP4/native-draft physical qualification waits for Ron's release
+gate. No development Engine or artifact matrix is promoted by this audit.
 The September fixed C4/131,072 Muse profile stays unchanged as evidence of its
 tested `922e5a8` settings. A separate automatic candidate targets installed native
 `2ef56a52a` with the same C4/context/KV/draft/graph/headroom contract. Its cold
 public-route capacity is calculated with checkpoint and growth reservations;
-startup and full-context prefix-enabled serving remain untested. The Host
+October 9 AUTO startup/lifecycle passed on that Engine, but cold full-context
+prefix-enabled serving remains unqualified. The Host
 preserves null/omitted automatic sizing or positive exact bytes; measured old
 pool capacity does not become an automatic allocation override or qualify a
 newer Engine. This supersedes the fixed-pool production instruction below;
@@ -142,8 +145,10 @@ measurement established the execution allowance; Linux values were not reused
 as qualification. The separate SM120a build uses the same recorded runtime and
 current benchmark sizing patch. Evidence is under
 `profiles/windows-sm120a/rtx5090/muse-native-nvfp4-c1-ctx131072-explicit-margin300m-final-fit/`.
-C2–C8 native Windows fits remain in progress; host lifecycle and GUI checks are
-still separate requirements.
+The retained Windows catalog and archived resource reports subsequently completed
+native Muse C2–C8 fits on that September Engine. This corrects the earlier
+in-progress statement; current public-route, Host lifecycle and GUI qualification
+remain separate requirements and are not inferred from those resource reports.
 
 Use artifact layout calculations and measured startup/workspace/graph residency
 to select the largest context candidate at each point, capped at 262,144 tokens
