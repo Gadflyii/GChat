@@ -12,6 +12,13 @@ owns metadata-only generation, exact results, limitations and deleted fixture.
 
 ## Current acceptance
 
+OI-073's new public-removal control passes its focused source/native gates and
+one actual Linux candidate-app submit/read/delete. The confirmation removes only
+the receipt-owned public result, keeping local history and unrelated ownership.
+All12 official series/36 points remain unchanged. The disposable row and private
+fixture are removed; main merge is next. The [current deletion record](remaining-acceptance.md#current-oi-073-app-public-deletion-gate-accepted)
+owns exact scope, evidence and the deferred Windows release gate.
+
 Installer routing follows the [validated current-user NSIS decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).
 
 Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114

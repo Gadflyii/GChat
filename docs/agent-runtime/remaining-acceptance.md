@@ -776,52 +776,78 @@ restart Manager and restore the saved grant, then use Show/Hide and Exit tray
 actions while checking that the same Host remains alive. No provider install,
 Linux deployment or credential changes were attempted here.
 
-## Current OI-073 app public deletion
+## Current OI-073 app public deletion: gate accepted
 
 Repository `/ai/gchat`; subject `docs/agent-runtime/`; candidate
 `/ai/gchat-worktrees/gbench-delete-bd4`, branch `fix/gchat-gbench-delete-bd4`.
-Prepared product `c6fcfe34f` is composed with current main `3bccdb243`.
-The merge preserves connector/model commands plus the new deletion command;
-the owning IPC fixture is updated for ten previously omitted main commands.
-No published result, original history or dependency version changes here.
+Product `c6fcfe34f` is composed with main `3bccdb243` as `3a4ca23af`; route-only
+fixture correction `35e8e8882` supplies main's `hardwareProfileBusy` mock.
+Connector/model commands and the new deletion command are preserved together;
+the owning IPC fixture includes ten formerly omitted main commands.
+Next: coordinator main merge, then retire this clean owned tree after verifying
+that merge. No release, signing, installer publication or Windows refresh.
 
-Bubbs/Ron's October 11 07:27:35 UTC decision authorizes focused cases and one
-new labelled disposable submit/delete against the app's GBench path, deadline
-10:00 UTC. The product's only network path is the fixed community API
-`https://sectilelabs.ai/gbench/api/v1`; no alternate deployed staging endpoint
-is recorded. Use that existing app path, existing community signing and only
-the disposable's saved ownership receipt. No new credentials, official signing,
-site/DB/cPanel access, inference or native Windows build/run is selected.
-The twelve official reference series and all their points remain protected.
+Bubbs/Ron's October 11 07:27:35 UTC decision authorized focused cases and one
+new labelled disposable submit/delete against the app's existing community API
+`https://sectilelabs.ai/gbench/api/v1`. No alternate deployed test endpoint was
+recorded. The app used its existing community signing and only the disposable's
+saved deletion receipt. No official credentials, site/DB/cPanel access, inference,
+calibration or native Windows build/run was used.
 
-A receipt-owned Published results section survives local-history deletion or
-eviction and restores on page reopen. Removal requires confirmation and uses
-only that run's saved receipt through native `delete_benchmark`; local history
-and other receipts remain. Confirmed public success clears the corresponding
-receipt; failed/lost responses retain it. Local persistence failure separately
-reports that public removal succeeded but local cleanup remains pending.
-The site's existing `api.php:93–98` accepts the same valid receipt after row
-removal, permitting explicit cleanup retry; no such live retry is in this gate.
+Published results restore from ownership receipts even after local-history
+removal. The new Remove button confirms the exact ID, calls native
+`delete_benchmark` and keeps local history and other receipts. Only confirmed
+public success clears that receipt; failed/lost responses retain ownership.
+A local persistence failure reports public success with local cleanup pending.
+The existing site accepts a valid receipt after deletion for explicit cleanup
+retry; no live retry or fault injection was included in this gate.
 
-Gate: four receipt-deletion service cases, four owning component cases, the
-local-history route case, affected IPC registration cases, affected lint/types,
-two native local-HTTP/validation cases and strict native Clippy. Then one real
-candidate-app submit, exact readback with `official:false`, Published results
-confirmation/native removal and GET404; compare all twelve official records
-and preserve unrelated local/receipt entries. No full suites, retries, conflict
-matrix or benchmark rerun. A failed public DELETE stops and reports that exact
-ID without a second attempt or administrative removal.
+Eleven focused frontend cases and both native local-HTTP/validation cases pass,
+with changed-source lint, strict native Clippy and the fresh frontend's typecheck.
+Frontend production passes in13.95s; native desktop production passes in2m59s.
+The 48,986,656-byte candidate35e desktop embeds the fresh assets and reuses only
+the accepted54c931c68/02d369e8a package's resource closure. This does not qualify
+current Host/Engine, model/GPU behavior or native Windows.
 
-Inventory: prepared source and prior completed public lifecycle are retained.
-New focused/build/live evidence belongs under the existing
-`out/remaining-acceptance-20261009/oi073/app-delete-20261011/` packet. Reuse cached
-Linux dependencies/compilation and the accepted `54c931c68` package only as a
-runtime-resource donor; compile the candidate desktop/frontend for its new
-control. Use an isolated Linux fixture folder, keep originals untouched and
-remove only owned disposable test/runtime outputs after their processes stop.
-Current gate/live checks remain unrun; no current build, app, booking or guard.
-Next unresolved action: commit composed source, run focused CPU-only checks,
-then build the single desktop and execute the one public lifecycle.
+One actual Linux/WSLg WebKit2.52.6 candidate window is visible and focused with
+its native bridge. Private XDG/config/data, an executable private CLI and an
+exact provider locator at17443 preserve HOME and original user state; both
+model/API startup flags and LAN discovery are off for the gate. The generated
+local result copies the designated measured Standard evidence without an
+inference rerun. Its complete actual UI submission preview equals that original
+public projection with only the new ID and nickname changed.
+
+The ordinary Submit button publishes `oi073-app-delete-20261011-01`, nickname
+`Disposable App Delete Test`, once at07:59:58 UTC. GET200 returns the exact
+reviewed payload with `official:false`. The new Remove button opens the exact-ID
+confirmation; its single confirmation finishes at08:01:05 UTC. Native success
+clears that receipt, keeps identical local history and preserves the unrelated
+pending receipt. GET404 confirms removal; complete canonical records for all
+12 official series and36 points remain identical. Zero public retries ran.
+The final native observation confirms the dialog and target control are absent.
+
+Evidence under `out/remaining-acceptance-20261009/oi073/app-delete-20261011/`:
+`result.json`, `frontend-gate-result.json`, native logs,
+`desktop-producer-result.json`, `ui-preview-comparison.json`,
+`ui-submit-result.json`, `public-test-readback.json`, `ui-delete-result.json`,
+`ui-final-state-result.json` and `public-after-comparison.json`.
+The initial route mock failure and producer admission stops remain separately
+recorded: cached fingerprint ownership, read-only TypeScript temporary output,
+missing cached `/work` alias and missing source-local license. The corrected
+producer uses the accepted root/cache aliases and verifies every declared
+resource before compilation; no passing frontend/native cell is repeated.
+The inspector preparation needed the existing HTTP transport variable and the
+actual benchmark route; the input selector now checks its effective type.
+A100ms observation still saw the closing dialog's exit animation; the final
+observation proves normal closure without another deletion or source change.
+
+Owned inventory: this committed source, accepted candidate desktop/resource
+closure and concise evidence are retained pending merge; the original DEB and
+shared build/dependency caches are unchanged. All owned app/Host/child processes
+are absent and the canonical build guard is reacquired/released by08:03 UTC;
+CPU452/453 are cancelled at actual return. The isolated fixture is deleted after
+absence, reclaiming13,254,656 allocated bytes and retaining no ownership token.
+`ui-process-return.json` and `ui-fixture-retirement.json` record cleanup.
 
 ## Accepted October 10 community publication
 
