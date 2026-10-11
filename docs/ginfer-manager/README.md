@@ -35,8 +35,8 @@ Ordinary Forget at 13:02:20Z returns no credential cleanup warning. UUID-scoped
 Secret Service metadata changes from one item to zero at 13:03:05Z, and the
 coordinator's ordinary revoke endpoint removes only that disposable grant.
 No secret contents are inspected. The worker's final normal Close and graceful
-Host shutdown finish at 13:03:37Z. Final process/port verification and retained
-small evidence are recorded in `out/s2-acceptance-20261011/native-worker-evidence/`.
+Host shutdown finish at 13:03:37Z. Final process/port verification passes; retained
+small evidence is recorded in `out/s2-acceptance-20261011/native-worker-evidence/`.
 The separate source-proven Manager omission of credential cleanup warnings is
 open; this successful cleanup does not exercise its error branch.
 
@@ -63,10 +63,13 @@ exits and both canonical locks return at 13:00:22Z. This older runtime predates
 the current startup fixes; it is historical evidence, not a new current-engine
 claim. The 13:01Z decision authorizes exactly one unchanged local launch with
 C3's accepted `candidate-ready-quote-4c63-120a/apps/ginfer-serve` and its matching
-sibling library closure (source-equivalent to `8317c64f2`). Next unresolved
-question: does that current runtime admit the unchanged launch? Full shared
-catalog/assignments, simultaneous two-host dispatch, saturation, cancellation
-and disconnect/recovery still require two actual Ready instances.
+sibling library closure (source-equivalent to `8317c64f2`). That launch reaches
+Ready with exactly the same request settings and stops normally at 13:12:28Z;
+both guards are reacquired/released and booking 496 is cancelled. No inference
+claim follows from this startup check. The old local failure is not current.
+Next unresolved action: C3 diagnoses the saved current S2 RAM-headroom failure;
+full shared catalog/assignments, simultaneous two-host dispatch, saturation,
+cancellation and disconnect/recovery require two actual Ready instances.
 
 The local WSLg client uses its genuine service-owner local grant; S2 uses its
 native-vault grant. Both see the same coordinator before models are Ready.
@@ -82,11 +85,27 @@ Evidence: `/ai/gchat/out/s2-acceptance-20261011/` contains source/package gates,
 | --- | --- | --- |
 | GChat coordinator / local | `/ai/gchat-worktrees/s2-acceptance-058` | Current candidate; retain until reviewed integration |
 | GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011` | Concise gate evidence and current UI candidate; retain accepted evidence |
-| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi071-pair-tray-20261011` | Owned package/fixtures; retire after final worker process audit and local evidence retention |
-| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-serve-66452662d` | Owned source/app-only build; retire after gate and runtime absence proof |
-| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-worker-20261011` | Disposable native fixture; finished 13:03:37Z, retire after retaining cited evidence |
-| GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011/local-worker` | Private stopped fixture; current runtime rerun and UI check only; no model/profile copies |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi071-pair-tray-20261011` | Retired after native process/port audit and local evidence retention |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-serve-66452662d` | Retired; clean source is an ancestor of official dev/next, failed runtime evidence retained |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-worker-20261011` | Retired after grant cleanup and retained cited evidence; no user data |
+| GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011/local-worker` | Retired after ordinary app/Host exit; public configuration receipts retained in local-evidence/ |
 | C3 / local and S2 | Exact artifact/profile/runtime paths in evidence | Read-only borrowed prerequisites; never delete |
+
+Cleanup completes after both native apps/Hosts exit and owned listeners close.
+The S2 source/build/fixtures free 4,971,196,416 available bytes; private local
+fixtures and staging copies are removed separately. Cited small evidence,
+accepted desktop baselines and the corrected UI candidate remain. Models,
+profiles and other owners' paths are untouched. The copied source's stale S2
+remote is not used as ancestry authority: its clean commit is verified against
+the official GInfer dev/next reference before deletion. Receipts are
+`s2-retirement-result.json`, `local-retirement-result.json` and
+`native-worker-evidence/source-retirement-authority.json`.
+
+Source review also identifies a separate Host settings mismatch: the zero
+`host_kv_cache_bytes` request is omitted from argv, so current Flash selects an
+AUTO prefix pool instead of explicit disabled zero. It is recorded as
+GCHAT-HOST-ZERO-PREFIX-CACHE. This is not established as the S2 startup cause;
+no setting, argv fix, guard or additional run is applied in this gate.
 
 ## Accepted hardware profile installation
 
