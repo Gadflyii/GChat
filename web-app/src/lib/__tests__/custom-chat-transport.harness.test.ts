@@ -2,7 +2,8 @@ import { EngineManager, MessageStatus, type ThreadMessage } from '@gchat/core'
 import { useContextUsage } from '@/hooks/useContextUsage'
 import type { UIMessage } from '@ai-sdk/react'
 import { InvalidPromptError, TypeValidationError, type LanguageModel } from 'ai'
-import * as tauriCore from '@tauri-apps/api/core'
+import type { InvokeArgs } from '@tauri-apps/api/core'
+import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
@@ -567,7 +568,8 @@ describe('CustomChatTransport production harness', () => {
     const threadId = 'warning-chat'
     const promptSecret = 'private-prompt-sentinel'
     const toolSecret = 'private-tool-result-sentinel'
-    const invoke = vi.spyOn(tauriCore, 'invoke').mockResolvedValue(undefined)
+    const invoke = vi.fn<(command: string, args?: InvokeArgs) => unknown>().mockReturnValue(undefined)
+    mockIPC(invoke)
     const engine = vi.spyOn(EngineManager, 'instance').mockReturnValue({
       get: () => ({ getLoadedContext: async () => 131072 }),
     } as unknown as EngineManager)
@@ -782,7 +784,7 @@ describe('CustomChatTransport production harness', () => {
     } finally {
       createModel.mockRestore()
       engine.mockRestore()
-      invoke.mockRestore()
+      clearMocks()
     }
   })
 
