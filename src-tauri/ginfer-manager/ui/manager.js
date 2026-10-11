@@ -461,7 +461,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
             h('input', { type: 'checkbox', checked: selected.includes(gpu.uuid), 'aria-label': groupLabel([gpu.uuid]),
               disabled: !selected.includes(gpu.uuid) && selectedGpus[0] &&
                 (gpu.name !== selectedGpus[0].name || gpu.compute_capability !== selectedGpus[0].compute_capability),
-              onchange: event => choose(gpu.uuid, event.target.checked) }), groupLabel([gpu.uuid])))),
+              onchange: event => choose(gpu.uuid, event.target.checked) }), groupLabel([gpu.uuid]))))),
         selected.length ? [note(`Selected group: ${groupLabel(selected)}`), button('Clear GPU selection', () => { state.profileGroups.set(host.host_id, []); render() }, blocked)] : null,
         !validGroup ? note('Choose an explicit homogeneous GPU group before preparing or refreshing.') : null) : null,
       h('div', { class: 'actions' },
