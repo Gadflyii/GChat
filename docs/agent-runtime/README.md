@@ -3,14 +3,20 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-[Managed Code configuration isolation](remaining-acceptance.md#current-code-configuration-isolation)
-is implemented and reviewed in `6a8d81383`, awaiting coordinator merge. Eight
-focused cases, strict Clippy, frontend checks and the Linux desktop pass. The
-actual managed OpenCode process loads the selected configuration, connects its
-GChat bridge and completes one real-model API turn with HOME unchanged. All 11
-existing standalone configuration entries remain unchanged. The embedded Linux
-TUI is blank and did not accept the PTY prompt; its separate product row remains
-open. Normal Stop and private-root cleanup are complete, with no owned live job.
+Current work is [the Linux Code TUI correction](remaining-acceptance.md#current-linux-code-tui-correction):
+the reproduced esbuild lowering defect is corrected in tested source `f2de958f3`.
+The production-bundled parser fixture passes 1/1; affected lint, frontend
+typecheck/build and the corrected Linux desktop build pass. The named live Linux
+gate passes at 11:36Z: the TUI renders, one typed prompt persists, and the same
+session answers `ok` with normal completion and no tools. The full requested
+marker was not returned; no model-quality claim is made. Normal Code/Host Stop,
+app/Host exit, closed private listeners, unchanged standalone configuration and
+guard return are verified. The private test root is removed; reviewed merge remains pending.
+No Windows or release change occurred. The existing frontend chunk
+warning remains an OI-074 item. Configuration ownership is
+merged and pushed on main `7fe8363b1`; its eight focused checks and actual
+unchanged-HOME configuration/model/bridge routing evidence remain accepted.
+Its source tree is retired; tested desktop/resources and evidence are preserved.
 
 The [three walkthrough defect corrections](remaining-acceptance.md#accepted-walkthrough-defect-correction)
 are merged/pushed on main1e61155b4: Builder finishes after its successful reviewed save, mounted
@@ -23,9 +29,10 @@ complete; no owned model/app/Host/guard/booking remains. No Windows or release c
 The [accepted OI-068 baseline](remaining-acceptance.md#accepted-oi-068-linux-smol-functional-walkthrough)
 on main869a368b1 preserves actual Host Ready, Chat MD/XLSX reading/continuation,
 reviewed saved-agent execution, manual Chat compaction/continuation and final Stop.
-Main `1e61155b4` corrects its three agent/history defects. OI-068 remains
-PARTIAL for the blank Code TUI, Hermes/Windows and broader active-worker scope. The
-prior walkthrough reproduced the global OpenCode write. The correction above prevents
+Main `1e61155b4` corrects its three agent/history defects. The named Linux Code
+TUI scope now passes; OI-068 remains PARTIAL for Hermes/Windows and broader
+active-worker compaction scope. The prior walkthrough reproduced the global
+OpenCode write. The correction above prevents
 it in the new check; the earlier before-image remains unknown and no restoration
 is claimed.
 

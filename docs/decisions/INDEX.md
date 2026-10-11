@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Preserve logical assignment in desktop bundles](2026-10-11-preserve-desktop-logical-assignment.md)
+
 - **2026-10-11** — [Keep managed OpenCode configuration in the GChat data folder](2026-10-11-isolate-managed-opencode-configuration.md)
 
 - **2026-10-11** — [Complete agent authoring and preserve tool outcomes](2026-10-11-complete-agent-authoring-and-preserve-tool-outcomes.md)
