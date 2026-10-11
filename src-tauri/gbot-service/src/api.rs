@@ -5,12 +5,13 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Method, Request, Response, StatusCode,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     contract::{GuestRequest, SessionIdentity, WorkspaceConfig},
     service::{Service, ServiceError},
+    ssh::SshError,
     vault::{Secret, Vault, VaultError},
     workspace::{WorkspaceError, WorkspaceRuntime},
 };
@@ -42,6 +43,13 @@ pub struct Api {
     listener: std::net::TcpListener,
     endpoint: SocketAddr,
     runtime: Arc<WorkspaceRuntime>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SshKeyImportRequest {
+    private_key: String,
+    passphrase: Option<String>,
 }
 
 impl Api {
@@ -192,6 +200,23 @@ async fn route(
     }
     let response = match (request.method(), request.uri().path()) {
         (&Method::GET, "/v1/state") => json_response(StatusCode::OK, &service.snapshot().await),
+        (&Method::POST, "/v1/credentials/ssh") => {
+            match parse_body::<SshKeyImportRequest>(request).await {
+                Some(import) => match runtime
+                    .import_ssh_key(
+                        Secret::new(import.private_key.into_bytes()),
+                        import
+                            .passphrase
+                            .map(|value| Secret::new(value.into_bytes())),
+                    )
+                    .await
+                {
+                    Ok(imported) => json_response(StatusCode::CREATED, &imported),
+                    Err(error) => key_import_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/workspaces") => {
             let config = match hyper::body::to_bytes(request.into_body()).await {
                 Ok(bytes) => serde_json::from_slice::<WorkspaceConfig>(&bytes).ok(),
@@ -308,6 +333,28 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
     error_response(status, code, &error.to_string())
 }
 
+fn key_import_error(error: WorkspaceError) -> Response<Body> {
+    let (status, code) = match &error {
+        WorkspaceError::Transport(SshError::PassphraseRequired) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "ssh_passphrase_required")
+        }
+        WorkspaceError::Transport(SshError::InvalidPassphrase) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "ssh_invalid_passphrase")
+        }
+        WorkspaceError::Transport(
+            SshError::InvalidCredential | SshError::UnsupportedCredentialAlgorithm,
+        ) => (StatusCode::BAD_REQUEST, "ssh_invalid_key"),
+        WorkspaceError::Transport(SshError::Vault(_)) => {
+            (StatusCode::SERVICE_UNAVAILABLE, "ssh_vault_unavailable")
+        }
+        WorkspaceError::Transport(SshError::ImportFailed) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "ssh_import_failed")
+        }
+        _ => return workspace_error(error),
+    };
+    error_response(status, code, &error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,10 +365,17 @@ mod tests {
         },
         vault::VaultFuture,
     };
-    use std::{collections::BTreeMap, sync::Mutex, time::Duration};
+    use std::{
+        collections::BTreeMap,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Mutex,
+        },
+        time::Duration,
+    };
 
     #[derive(Default)]
-    struct MemoryVault(Mutex<BTreeMap<Uuid, Vec<u8>>>);
+    struct MemoryVault(Mutex<BTreeMap<Uuid, Vec<u8>>>, AtomicBool);
 
     impl Vault for MemoryVault {
         fn get(&self, reference: Uuid) -> VaultFuture<'_, Option<Secret>> {
@@ -338,6 +392,9 @@ mod tests {
 
         fn put(&self, reference: Uuid, secret: Secret) -> VaultFuture<'_, ()> {
             Box::pin(async move {
+                if self.1.load(Ordering::Acquire) {
+                    return Err(VaultError::AccessDenied);
+                }
                 self.0
                     .lock()
                     .unwrap()
@@ -374,6 +431,174 @@ mod tests {
         fn delete(&self, _: Uuid) -> VaultFuture<'_, ()> {
             Box::pin(async { Err(VaultError::AccessDenied) })
         }
+    }
+
+    #[tokio::test]
+    async fn ssh_key_import_authentication_errors_and_vault_only_storage() {
+        use russh::keys::{ssh_key::LineEnding, Algorithm, PrivateKey};
+
+        let directory = tempfile::tempdir().unwrap();
+        let state_path = directory.path().join("gbot/state.json");
+        let service = Arc::new(Service::open(state_path.clone()).await.unwrap());
+        let service_id = service.snapshot().await.service_id;
+        let vault = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let endpoint = api.endpoint();
+        let token = vault.0.lock().unwrap()[&service_id].clone();
+        let bearer = format!("Bearer {}", std::str::from_utf8(&token).unwrap());
+        let (shutdown, stopped) = tokio::sync::oneshot::channel();
+        let serving = tokio::spawn(api.serve(async move {
+            let _ = stopped.await;
+        }));
+        let client = hyper::Client::new();
+        let passphrase = "fixture-one-time-passphrase";
+        let key =
+            PrivateKey::random(&mut russh::keys::key::safe_rng(), Algorithm::Ed25519).unwrap();
+        let encrypted = key
+            .encrypt(&mut russh::keys::key::safe_rng(), passphrase)
+            .unwrap()
+            .to_openssh(LineEnding::LF)
+            .unwrap();
+        let plain = key.to_openssh(LineEnding::LF).unwrap();
+        for (auth, password, status, code) in [
+            (
+                false,
+                Some(passphrase),
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+            ),
+            (
+                true,
+                None,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "ssh_passphrase_required",
+            ),
+            (
+                true,
+                Some("wrong-passphrase"),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "ssh_invalid_passphrase",
+            ),
+        ] {
+            let mut request = Request::builder()
+                .method(Method::POST)
+                .uri(format!("http://{endpoint}/v1/credentials/ssh"));
+            if auth {
+                request = request.header(AUTHORIZATION, bearer.as_str());
+            }
+            let response = client.request(request.body(Body::from(serde_json::to_vec(
+                &serde_json::json!({"private_key": encrypted.as_str(), "passphrase": password})
+            ).unwrap())).unwrap()).await.unwrap();
+            assert_eq!(response.status(), status);
+            let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            let error: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(error["error"]["code"], code);
+            assert!(!bytes
+                .windows(passphrase.len())
+                .any(|window| window == passphrase.as_bytes()));
+            assert!(!bytes
+                .windows(plain.len())
+                .any(|window| window == plain.as_bytes()));
+            assert_eq!(vault.0.lock().unwrap().len(), 1);
+        }
+        for (payload, code) in [
+            (
+                serde_json::json!({"private_key": "invalid-private-key"}),
+                "ssh_invalid_key",
+            ),
+            (
+                serde_json::json!({"private_key": encrypted.as_str(), "passphrase": passphrase,
+                "credential_ref": service_id}),
+                "invalid_request",
+            ),
+        ] {
+            let response = client
+                .request(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri(format!("http://{endpoint}/v1/credentials/ssh"))
+                        .header(AUTHORIZATION, bearer.as_str())
+                        .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            let error: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(error["error"]["code"], code);
+            assert!(!bytes
+                .windows(passphrase.len())
+                .any(|window| window == passphrase.as_bytes()));
+            assert!(!bytes
+                .windows(plain.len())
+                .any(|window| window == plain.as_bytes()));
+            assert_eq!(vault.0.lock().unwrap().len(), 1);
+        }
+        for denied in [true, false] {
+            vault.1.store(denied, Ordering::Release);
+            let response = client
+                .request(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri(format!("http://{endpoint}/v1/credentials/ssh"))
+                        .header(AUTHORIZATION, bearer.as_str())
+                        .body(Body::from(
+                            serde_json::to_vec(&serde_json::json!({
+                                "private_key": encrypted.as_str(), "passphrase": passphrase
+                            }))
+                            .unwrap(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                if denied {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::CREATED
+                }
+            );
+            let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            assert!(!bytes
+                .windows(passphrase.len())
+                .any(|window| window == passphrase.as_bytes()));
+            assert!(!bytes
+                .windows(plain.len())
+                .any(|window| window == plain.as_bytes()));
+            let result: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            if denied {
+                assert_eq!(result["error"]["code"], "ssh_vault_unavailable");
+                assert_eq!(vault.0.lock().unwrap().len(), 1);
+            } else {
+                assert!(result.get("private_key").is_none());
+                assert!(result.get("passphrase").is_none());
+                let reference: VaultCredentialRef =
+                    serde_json::from_value(result["credential_ref"].clone()).unwrap();
+                let stored = vault.get(reference.as_uuid()).await.unwrap().unwrap();
+                let imported = PrivateKey::from_openssh(stored.expose_secret()).unwrap();
+                assert!(!imported.is_encrypted());
+                assert!(imported.public_key() == key.public_key());
+                assert_eq!(vault.0.lock().unwrap().len(), 2);
+            }
+        }
+        shutdown.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), serving)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        let persisted = std::fs::read(&state_path).unwrap();
+        assert!(!persisted
+            .windows(passphrase.len())
+            .any(|window| window == passphrase.as_bytes()));
+        assert!(!persisted
+            .windows(plain.len())
+            .any(|window| window == plain.as_bytes()));
+        assert!(service.snapshot().await.workspaces.is_empty());
+        assert!(tokio::net::TcpStream::connect(endpoint).await.is_err());
     }
 
     #[tokio::test]
