@@ -1,5 +1,7 @@
 pub mod api;
 pub mod contract;
+#[cfg(target_os = "linux")]
+pub mod kvm;
 pub mod service;
 pub mod ssh;
 pub mod store;

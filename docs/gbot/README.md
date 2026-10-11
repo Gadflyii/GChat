@@ -7,7 +7,8 @@ not a prerequisite.
 
 Status: Ron approved the design; it is merged into GChat main. October 11 step 1
 implements the local-first service skeleton, vault-held SSH sessions, guest-tools
-contract and SSH-tunnelled view channel. Development VMs are not yet available.
+contract and SSH-tunnelled view channel. Development VMs are not yet available; the approved S1 user-mode KVM preparation
+below replaces earlier S1/S2 acceptance-host proposals.
 The focused contracts and actual loopback SSH fixture pass;
 no real desktop input, provisioning or native Windows execution is authorized.
 
@@ -19,7 +20,7 @@ no real desktop input, provisioning or native Windows execution is authorized.
 | Bot's computer | Separate local VM, another computer on the LAN, a user-rented cloud Ubuntu VM, or an existing M365 Cloud PC. |
 | Local VM | Hyper-V on Windows; KVM on Linux. The bot never operates the user's own desktop through this option. |
 | Cloud setup | Hetzner is the low-cost recommendation; DigitalOcean is the familiar US option. Both use provider API creation and the same cloud-init setup. Azure, AWS and GCP use guided setup. |
-| Cloud guest | Plain Ubuntu, lightweight X11 session, bot worker and SSH-only inbound access. No full desktop environment or exposed VNC/RDP port. |
+| Cloud guest | Plain Ubuntu 24.04, lightweight desktop environment (XFCE on Xorg), bot worker and SSH-only inbound access. No exposed VNC/RDP port. |
 | Desktop view | Localhost VNC through SSH for local VMs and LAN/cloud computers; view-only by default, explicit Take over / Hand back. M365 uses its supported connection. |
 | Sizing and price | Linux default 2 vCPU / 4 GB; 2 GB minimum. Read live regional prices and show monthly cost before creation. No fixed price or stale plan alias. Windows follows its OS requirements. |
 | Persistence | Tasks, history and results survive service restart, PC sleep and client reconnect. Resume only after reconciling actual state. |
@@ -224,10 +225,9 @@ part of setup, not Arbitor's paid cost-management product.
 [Droplet pricing](https://docs.digitalocean.com/products/droplets/details/pricing/).
 
 Both automated providers use one first-boot cloud-init specification: install
-an X11 server and lightweight window manager, session D-Bus/accessibility,
-required applications, pinned Driver, guest task worker and same-session VNC.
-Use a persistent bot home and owned service units; install no full desktop
-environment. Fetch pinned packages without putting private API tokens, passwords
+Xorg and XFCE, session D-Bus/accessibility, required applications, pinned
+Driver, guest task worker and same-session VNC. Use a persistent bot home and
+owned session units; the dedicated bot desktop is separate from the host desktop. Fetch pinned packages without putting private API tokens, passwords
 or SSH private keys in cloud-init. Provider credentials and generated private
 keys stay in GChat's vault; user data receives only the necessary public key.
 
@@ -555,3 +555,36 @@ The raw view tunnel is bidirectional transport. It must not be advertised as a
 read-only desktop panel: VNC input/clipboard mediation and takeover exclusivity
 remain part of the later dedicated-guest integration. A worker restart or unknown
 operation ID cannot authorize replay of a possibly completed external effect.
+
+### Current KVM and Linux desktop preparation
+
+Repository: GChat; subject: `docs/gbot/`. October 11 approved plan:
+`/ai/coordination/gbot-vm-plan-20261011.md`. Candidate
+`feat/gbot-kvm-cloud-init-c21` at
+`/ai/gchat-worktrees/gbot-kvm-cloud-init-c21`, baseline main `0705f31a6`.
+Deliverable: the shared Ubuntu 24.04 first-boot specification and Gbot-owned
+KVM adapter, plus unsigned current-main Linux DEB/AppImage for OI-057.
+No host package installation or VM execution until Ron approves.
+
+S1 (`ron@192.168.1.109`, verified AIS-2-8592-L01) already grants Ron read/write
+access to `/dev/kvm`. Required host apt packages are `qemu-system-x86`,
+`qemu-utils`, `cloud-image-utils` and their normal dependency closure. SeaBIOS
+is sufficient; OVMF, libvirtd, bridges and host firewall changes are excluded.
+All S1 development guest state lives under `/ai/gbot-vms`. Stop both guests
+during any booked S1 CPU benchmark.
+
+Two separate guests are planned. `gchat-linux-accept` is stock Ubuntu 24.04
+Desktop/GNOME, 4 vCPU / 8 GiB / 40 GiB, with a clean post-install snapshot.
+Its installed acceptance runs in both GNOME Wayland and Ubuntu on Xorg:
+launch/render, one Chat completion through an accepted Host, generated session
+save/reopen across restart, and normal exit. `gbot-linux-dev` is created by
+the product KVM adapter from the shared cloud-init: Ubuntu 24.04 server cloud
+image, 2 vCPU / 4 GiB, XFCE on Xorg, worker and localhost VNC over SSH.
+Neither guest shares a person's desktop or uses GPUs.
+
+Source gate proposal: shared first-boot/session/SSH-only assertions, KVM argv
+and owned process lifetime fixture, and strict owning Clippy. Package build
+uses cached Ubuntu 24.04 tooling, no signing/publication. Physical gates wait
+for package approval and isolated guest creation; no source fixture qualifies
+real capture, input or takeover. Next action: finish preparation and obtain the
+VM package decision.

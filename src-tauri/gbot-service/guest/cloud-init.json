@@ -1,0 +1,135 @@
+{
+  "package_update": true,
+  "package_upgrade": false,
+  "hostname": "gbot",
+  "manage_etc_hosts": true,
+  "users": [
+    {
+      "name": "gbot",
+      "gecos": "Gbot",
+      "shell": "/bin/bash",
+      "lock_passwd": true,
+      "ssh_authorized_keys": []
+    }
+  ],
+  "ssh_pwauth": false,
+  "disable_root": true,
+  "packages": [
+    "openssh-server",
+    "xserver-xorg",
+    "xserver-xorg-video-qxl",
+    "xfce4",
+    "xfce4-terminal",
+    "lightdm",
+    "dbus-x11",
+    "at-spi2-core",
+    "x11vnc",
+    "firefox",
+    "curl",
+    "ca-certificates",
+    "ufw",
+    "libxtst6",
+    "libxrandr2",
+    "libxcomposite1",
+    "libxi6",
+    "libatk-bridge2.0-0t64",
+    "libgl1"
+  ],
+  "write_files": [
+    {
+      "path": "/etc/lightdm/lightdm.conf.d/50-gbot.conf",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Seat:*]\nautologin-user=gbot\nautologin-user-timeout=0\nuser-session=gbot\nautologin-session=gbot\nxserver-command=X -nolisten tcp\n"
+    },
+    {
+      "path": "/usr/share/xsessions/gbot.desktop",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Desktop Entry]\nName=Gbot XFCE\nExec=/usr/local/bin/gbot-desktop-session\nType=Application\nDesktopNames=XFCE\n"
+    },
+    {
+      "path": "/usr/local/bin/gbot-desktop-session",
+      "owner": "root:root",
+      "permissions": "0755",
+      "content": "#!/bin/sh\nset -eu\nexport GTK_MODULES=gail:atk-bridge\nexport QT_ACCESSIBILITY=1\nexport NO_AT_BRIDGE=0\nexport PATH=/opt/gbot/bin:$PATH\ndbus-update-activation-environment --systemd DISPLAY XAUTHORITY GTK_MODULES QT_ACCESSIBILITY NO_AT_BRIDGE PATH\ninstall -d -m 700 \"$XDG_RUNTIME_DIR/gbot\"\numask 077\nprintf 'DISPLAY=%s\\nXAUTHORITY=%s\\nDBUS_SESSION_BUS_ADDRESS=%s\\n' \"$DISPLAY\" \"$XAUTHORITY\" \"$DBUS_SESSION_BUS_ADDRESS\" > \"$XDG_RUNTIME_DIR/gbot/desktop.env\"\nexec startxfce4\n"
+    },
+    {
+      "path": "/usr/local/bin/gbot-view",
+      "owner": "root:root",
+      "permissions": "0755",
+      "content": "#!/bin/sh\nset -eu\nexec x11vnc -display \"$DISPLAY\" -auth \"$XAUTHORITY\" -localhost -rfbport 5900 -forever -shared -nopw -viewonly\n"
+    },
+    {
+      "path": "/etc/xdg/autostart/gbot-view.desktop",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Desktop Entry]\nType=Application\nName=Gbot desktop view\nExec=/usr/local/bin/gbot-view\nOnlyShowIn=XFCE;\n"
+    },
+    {
+      "path": "/usr/local/bin/gbot-guest",
+      "owner": "root:root",
+      "permissions": "0755",
+      "content": "#!/bin/sh\nset -eu\nexport XDG_RUNTIME_DIR=/run/user/$(id -u)\nwhile IFS='=' read -r name value; do\n  case \"$name\" in\n    DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS) export \"$name=$value\" ;;\n    *) exit 1 ;;\n  esac\ndone < \"$XDG_RUNTIME_DIR/gbot/desktop.env\"\nexport GTK_MODULES=gail:atk-bridge QT_ACCESSIBILITY=1 NO_AT_BRIDGE=0\nexport PATH=/opt/gbot/bin:$PATH\nexec /opt/gbot/bin/gbot-guest \"$@\"\n"
+    },
+    {
+      "path": "/etc/ssh/sshd_config.d/00-gbot.conf",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUsers gbot\n"
+    },
+    {
+      "path": "/usr/local/sbin/gbot-install-binaries",
+      "owner": "root:root",
+      "permissions": "0755",
+      "content": "# populated from reviewed artifact URLs and SHA-256 digests\n"
+    }
+  ],
+  "runcmd": [
+    [
+      "install",
+      "-d",
+      "-m",
+      "755",
+      "/var/lib/gbot"
+    ],
+    [
+      "ufw",
+      "default",
+      "deny",
+      "incoming"
+    ],
+    [
+      "ufw",
+      "default",
+      "allow",
+      "outgoing"
+    ],
+    [
+      "ufw",
+      "allow",
+      "22/tcp"
+    ],
+    [
+      "ufw",
+      "--force",
+      "enable"
+    ],
+    [
+      "/usr/local/sbin/gbot-install-binaries"
+    ],
+    [
+      "systemctl",
+      "enable",
+      "--now",
+      "ssh"
+    ],
+    [
+      "systemctl",
+      "enable",
+      "--now",
+      "lightdm"
+    ]
+  ],
+  "final_message": "Gbot first-boot setup finished. Verify cloud-init, SSH, worker and the same-session desktop before Ready."
+}
