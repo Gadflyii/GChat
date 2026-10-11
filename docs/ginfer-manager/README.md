@@ -6,11 +6,64 @@ retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
 Installed Windows Manager producer is `574d73df7`, with actual installation,
 byte/state and stopped/no-alert presentation evidence below. The accepted Linux
-Manager/Host baseline is compiled from `54c931c68` and assembled at `02d369e8a`.
-The corrected tray candidate `deaf467a1` now passes compilation and independent
-package verification; native tray acceptance is pending. Earlier Linux evidence
-remains scoped to its tested producer. Package paths and proof are recorded below.
-Documentation-only handoffs do not rebuild accepted binaries.
+package binds Manager `6b199362d` and Host `257252131`; handoff `09e7b2fb6`
+contains their reviewed source and current acceptance account. Earlier package
+and Linux evidence remains scoped to its tested producer. The current tray
+identity diagnosis and one authorized native gate are below; no application
+registration failure has been established. Documentation and harness fixes reuse
+the accepted binaries.
+
+## Current Linux tray registration fix
+
+Deliverable: diagnose `GCHAT-MANAGER-LINUX-TRAY-NO-SNI` from the actual retry877
+and fix the demonstrated owner. Source baseline is the tested Manager
+`6b199362d`, composed into handoff `09e7b2fb6`; candidate
+`/ai/gchat-worktrees/linux-tray-registration-09e`, branch
+`fix/gchat-linux-tray-registration-09e`. Main is unchanged. Subject authority is
+this folder. Evidence belongs in `out/linux-tray-registration-20261011/`.
+
+Acceptance: one focused case protecting the demonstrated cause, plus one live
+S2 X11 run with a fresh process-owned StatusNotifier registration and working
+Hide/Open/Exit. All S2 app jobs use the existing FIFO runner5130, at most30min;
+no model, calibration, Windows build, dependency install or release. Existing877
+evidence is reused rather than repeating an unchanged trial. A local isolated
+repro may distinguish the cause but does not qualify native tray actions.
+
+Recovery:877's exact Manager remained alive, with an empty stderr log, on Ron's
+active X11 session8475. Tauri retains the tray clone in its resource table.
+The installed GNOME watcher serializes registrations as `service@/object/path`.
+The old context/helper instead split at the first slash, passed `service@` to
+GetNameOwner, and swallowed NameHasNoOwner as a stale entry before PID matching.
+A read-only check confirms the old lookup fails while the correct service has a
+live owner. Thus877's `zero_owned_SNI` and874's ownerless diagnosis do not prove
+an absent Manager registration. Those earlier absence claims are invalidated.
+
+Preventive change: share one watcher-entry parser between the corrected context
+and native input helpers, retain raw registration/service/owner/PID observations
+before filtering, and protect GNOME serialization with a focused fixture. Keep
+exact process birth/executable and native target guards. Product code is unchanged
+unless the corrected live gate demonstrates a product failure.
+
+Next unresolved question: does the accepted Manager6b export its own fresh SNI
+and complete native Hide/Open/Exit on S2? The new private fixture is
+`/mnt/data/ai/gchat-linux-tray-registration-20261011`; the accepted four-file
+archive is `out/s2-acceptance-20261011/manager-build-6b199362d-120030/manager/ginfer-manager-linux-x64.tar.gz`.
+Queue one bounded no-model check behind the existing FIFO job, using the current
+X11/session bus with unchanged HOME and private XDG config/data/cache. No build,
+model, application patch or new desktop session is justified yet.
+
+Effective gate: `timeout --signal=TERM --kill-after=20s 230 taskset -c 0-31
+/usr/bin/python3 /mnt/data/ai/gchat-linux-tray-registration-20261011/package/s2-tray-gate.py`.
+The driver rejects a changed FIFO birth, inactive session or changed package,
+keeps HOME unchanged and records the fresh SNI before native input. Internal
+work bound is180s; ordinary Exit must remove Manager while retaining Host, then
+owned Host stops normally. Four original config/binary fingerprints must remain
+unchanged. Source fixture3/3 and corrected-helper syntax checks pass. No model
+or application job has run yet. FIFO882 was queued14:27:44Z behind881 with that
+exact command; acceptance remains pending. Two independent source reviews find
+the corrected identity and native ownership/input guards coherent. Gate code and
+admission are retained in the subject evidence folder, not product app changes.
+
 
 ## Current S2 pairing and tray acceptance — OI-069 / OI-071
 
@@ -40,15 +93,13 @@ small evidence is recorded in `out/s2-acceptance-20261011/native-worker-evidence
 The separate source-proven Manager omission of credential cleanup warnings is
 open; this successful cleanup does not exercise its error branch.
 
-Tray qualification remains open. Native 873 fails before input on a harness
-process-visibility assumption; 874 fails before input on an ownerless watcher
-entry. Ron corrects the earlier headless claim: S2 has an active desktop. The
-one authorized retry 877 ignores confirmed stale registrations but finds no
-candidate-owned SNI registration over 10 seconds. No Pair or tray input occurs.
-All four owned processes are absent and private port 17443 is free. This is the
-GChat Linux tray-registration defect, not an absent desktop; no fourth attempt
-is authorized. Constructor success precedes asynchronous AppIndicator
-registration, so source `tray_ready` alone does not prove a registered icon.
+Tray qualification remains open. Native873 fails before input on a harness
+process-visibility assumption. Native874 and877 use the faulty watcher-entry
+parser described above; their missing safe target cannot establish stale entries
+or missing registration. Ron's active desktop is confirmed. No Pair or tray input
+occurs; all four owned processes are absent and private port17443 is free.
+October11 14:11Z authorizes diagnosis, the owning fix and one corrected live
+Hide/Open/Exit gate. Constructor success alone is not registration evidence.
 
 The real two-worker gate is blocked before Ready. Exact clean GInfer `66452662d`
 builds its app-only SM86 server in FIFO 872 at 12:22:41Z; its native ELF closure
