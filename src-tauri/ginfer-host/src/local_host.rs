@@ -206,6 +206,29 @@ impl LocalHost {
     }
 }
 
+#[cfg(target_os = "linux")]
+pub fn desktop_runtimes(provider: &std::path::Path) -> Result<std::collections::BTreeMap<String, PathBuf>, String> {
+    let root = provider.join("linux");
+    let set: serde_json::Value = serde_json::from_slice(&std::fs::read(root.join("runtime-set.json"))
+        .map_err(|e| format!("GChat Linux engine runtime set is unavailable: {e}"))?)
+        .map_err(|e| format!("Invalid GChat Linux engine runtime set: {e}"))?;
+    if set["schema"] != "ginfer-linux-runtime-set-v1" || set["platform"] != "linux-x64" {
+        return Err("Unsupported GChat Linux engine runtime set".into());
+    }
+    let declared = set["runtimes"].as_object().ok_or("GChat Linux engine runtime map is missing")?;
+    let expected = [("8.0", "sm80"), ("8.6", "sm86"), ("8.9", "sm89"), ("12.0", "sm120a")];
+    if declared.len() != expected.len() { return Err("GChat Linux engine runtime map is incomplete".into()); }
+    let mut runtimes = std::collections::BTreeMap::new();
+    for (architecture, directory) in expected {
+        if declared.get(architecture).and_then(|entry| entry.as_str()) != Some(directory) {
+            return Err(format!("GChat Linux engine runtime map has an invalid {architecture} entry"));
+        }
+        runtimes.insert(architecture.into(), root.join(directory).join("bin/ginfer-serve"));
+    }
+    crate::engine_host::validate_runtimes(&runtimes)?;
+    Ok(runtimes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,27 +380,4 @@ mod tests {
         server.abort();
         let _ = server.await;
     }
-}
-
-#[cfg(target_os = "linux")]
-pub fn desktop_runtimes(provider: &std::path::Path) -> Result<std::collections::BTreeMap<String, PathBuf>, String> {
-    let root = provider.join("linux");
-    let set: serde_json::Value = serde_json::from_slice(&std::fs::read(root.join("runtime-set.json"))
-        .map_err(|e| format!("GChat Linux engine runtime set is unavailable: {e}"))?)
-        .map_err(|e| format!("Invalid GChat Linux engine runtime set: {e}"))?;
-    if set["schema"] != "ginfer-linux-runtime-set-v1" || set["platform"] != "linux-x64" {
-        return Err("Unsupported GChat Linux engine runtime set".into());
-    }
-    let declared = set["runtimes"].as_object().ok_or("GChat Linux engine runtime map is missing")?;
-    let expected = [("8.0", "sm80"), ("8.6", "sm86"), ("8.9", "sm89"), ("12.0", "sm120a")];
-    if declared.len() != expected.len() { return Err("GChat Linux engine runtime map is incomplete".into()); }
-    let mut runtimes = std::collections::BTreeMap::new();
-    for (architecture, directory) in expected {
-        if declared.get(architecture).and_then(|entry| entry.as_str()) != Some(directory) {
-            return Err(format!("GChat Linux engine runtime map has an invalid {architecture} entry"));
-        }
-        runtimes.insert(architecture.into(), root.join(directory).join("bin/ginfer-serve"));
-    }
-    crate::engine_host::validate_runtimes(&runtimes)?;
-    Ok(runtimes)
 }

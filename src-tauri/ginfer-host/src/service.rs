@@ -934,17 +934,19 @@ impl Host {
             id,
         };
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        while !force {
-            let notified = idle.notified();
-            tokio::pin!(notified);
-            // Register before inspecting the count so the last release cannot
-            // be lost between the check and the await.
-            notified.as_mut().enable();
-            if !self.traffic.lock().unwrap().get(&id).is_some_and(|traffic| traffic.count > 0) {
-                break;
-            }
-            if tokio::time::timeout_at(deadline, notified).await.is_err() {
-                return Err("instance still has active requests; retry after completion or choose force-stop".into());
+        if !force {
+            loop {
+                let notified = idle.notified();
+                tokio::pin!(notified);
+                // Register before inspecting the count so the last release cannot
+                // be lost between the check and the await.
+                notified.as_mut().enable();
+                if !self.traffic.lock().unwrap().get(&id).is_some_and(|traffic| traffic.count > 0) {
+                    break;
+                }
+                if tokio::time::timeout_at(deadline, notified).await.is_err() {
+                    return Err("instance still has active requests; retry after completion or choose force-stop".into());
+                }
             }
         }
         let result = self.processes.lock().await.stop(id).await;
