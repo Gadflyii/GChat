@@ -407,6 +407,75 @@ describe('CodeTerminalHost', () => {
     expect(mocks.spawnTerminal).not.toHaveBeenCalled()
   })
 
+  it.each(['before', 'after'])('rebuilds a replaced terminal view when the attach snapshot arrives %s replay', async (order) => {
+    const snapshot: TerminalStatus = { phase: 'running', generation: 1, sequence: 4, replayComplete: true }
+    mocks.attachTerminal.mockResolvedValue(snapshot)
+    const mounted = render(<CodeTerminalHost visible />)
+    await screen.findByLabelText('code:status.running')
+    const previousChannel = mocks.attachTerminal.mock.calls[0][1]
+    const previousScreen = screen.getByRole('log')
+    act(() => previousChannel({ type: 'output', generation: 1, sequence: 2, data: btoa('Old renderer') }))
+    mounted.unmount()
+
+    let finishAttach!: (status: TerminalStatus) => void
+    mocks.attachTerminal.mockImplementation(() => new Promise<TerminalStatus>(resolve => { finishAttach = resolve }))
+    const replacement = render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.attachTerminal).toHaveBeenCalledTimes(2))
+    const onEvent = mocks.attachTerminal.mock.calls[1][1]
+    const chunks = ['\x1b[2J\x1b[H', 'Retained task\r\n', '\x1b[3;7HWaiting for input']
+    const replay = () => {
+      onEvent({ type: 'started', generation: 1, sequence: 1, status: { ...snapshot, sequence: 1 } })
+      chunks.forEach((text, index) => onEvent({ type: 'output', generation: 1, sequence: index + 2, data: btoa(text) }))
+    }
+    if (order === 'before') await act(async () => { finishAttach(snapshot) })
+    act(replay)
+    if (order === 'after') await act(async () => { finishAttach(snapshot) })
+    const currentScreen = screen.getByRole('log')
+    expect(currentScreen).not.toBe(previousScreen)
+    expect(currentScreen.textContent).toBe(chunks.join(''))
+    expect(mocks.terminalConstructed).toHaveBeenCalledTimes(2)
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+
+    // Repeated history must not reset or duplicate the current xterm screen.
+    act(() => {
+      replay()
+      previousChannel({ type: 'output', generation: 1, sequence: 5, data: btoa('Disposed channel') })
+      onEvent({ type: 'output', generation: 1, sequence: 5, data: btoa('\r\nLive continuation') })
+    })
+    expect(currentScreen.textContent).toBe(chunks.join('') + '\r\nLive continuation')
+    await act(async () => { replacement.rerender(<CodeTerminalHost visible={false} />) })
+    await act(async () => { replacement.rerender(<CodeTerminalHost visible />) })
+    expect(screen.getByRole('log')).toBe(currentScreen)
+    expect(mocks.attachTerminal).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['before', 'after'])('keeps unavailable history truthful when the attach snapshot arrives %s its event', async (order) => {
+    const snapshot: TerminalStatus = { phase: 'running', generation: 1, sequence: 7, replayComplete: false }
+    let finishAttach!: (status: TerminalStatus) => void
+    mocks.attachTerminal.mockImplementation(() => new Promise<TerminalStatus>(resolve => { finishAttach = resolve }))
+    const mounted = render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.attachTerminal).toHaveBeenCalledTimes(1))
+    const onEvent = mocks.attachTerminal.mock.calls[0][1]
+    if (order === 'before') await act(async () => { finishAttach(snapshot) })
+    act(() => onEvent({ type: 'replay_unavailable', generation: 1, sequence: 7 }))
+    if (order === 'after') await act(async () => { finishAttach(snapshot) })
+    expect(screen.getByText('code:replayUnavailable')).toBeInTheDocument()
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+    act(() => onEvent({ type: 'error', generation: 1, sequence: 8, message: 'Same-generation status', status: { ...snapshot, sequence: 8 } }))
+    expect(screen.getByText('code:replayUnavailable')).toBeInTheDocument()
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+    mounted.unmount()
+
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.attachTerminal).toHaveBeenCalledTimes(2))
+    act(() => mocks.attachTerminal.mock.calls[1][1]({ type: 'replay_unavailable', generation: 1, sequence: 9 }))
+    await act(async () => { finishAttach({ ...snapshot, sequence: 9 }) })
+    expect(screen.getByText('code:replayUnavailable')).toBeInTheDocument()
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+    expect(screen.getByRole('log').textContent).toBe('')
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+  })
+
   it('ignores an old-generation attach reply after a new generation starts', async () => {
     let finishAttach!: (status: TerminalStatus) => void
     mocks.attachTerminal.mockImplementation(() => new Promise<TerminalStatus>(resolve => { finishAttach = resolve }))

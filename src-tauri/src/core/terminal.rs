@@ -410,17 +410,27 @@ impl Session {
         self.sequence
     }
 
+    fn begin_generation(&mut self) -> u64 {
+        self.generation = self.generation.saturating_add(1).max(1);
+        self.phase = TerminalPhase::Running;
+        self.sequence = 0;
+        self.exit_code = None;
+        self.signal = None;
+        self.flow_paused = false;
+        self.replay.reset();
+        self.generation
+    }
+
     fn publish(&mut self, event: TerminalEvent) {
+        // Retain the complete generation before attempting live delivery.
+        if self.replay.complete {
+            self.replay.push(event.clone());
+        }
         if let Some(channel) = self.channel.as_ref() {
             if let Err(error) = channel.send(event) {
                 log::debug!("Embedded terminal channel disconnected: {error}");
                 self.channel = None;
-                // A later frontend has no xterm parser state from this session,
-                // so a byte tail is not a valid reconstruction of the screen.
-                self.replay.mark_unavailable();
             }
-        } else {
-            self.replay.push(event);
         }
     }
 }
@@ -932,8 +942,7 @@ pub fn terminal_attach(
 ) -> Result<TerminalStatus, String> {
     let slot = state.slot(terminal_id.clone());
     let mut session = slot.session()?;
-    let replacing_live_view = session.channel.is_some() && session.generation != 0;
-    if session.replay.complete && !replacing_live_view {
+    if session.replay.complete {
         for event in &session.replay.events {
             on_event.send(event.clone()).map_err(|error| {
                 format!(
@@ -957,8 +966,9 @@ pub fn terminal_attach(
                 )
             })?;
     }
-    session.replay.reset();
     session.channel = Some(on_event);
+    session.flow_paused = false;
+    slot.shared.flow_changed.notify_all();
     Ok(session.status())
 }
 
@@ -1156,8 +1166,7 @@ pub fn terminal_spawn<R: Runtime>(
                 {
                     // Retain the original handle if even cleanup was refused.
                     let mut session = slot.session()?;
-                    session.generation = session.generation.saturating_add(1).max(1);
-                    session.phase = TerminalPhase::Running;
+                    session.begin_generation();
                     session.cwd = Some(cwd_text);
                     session.launch = Some(request.launch);
                     session.startup_child = Some(child);
@@ -1191,8 +1200,7 @@ pub fn terminal_spawn<R: Runtime>(
                 // Retain the exact child and killer so shutdown can retry a refused stop.
                 let generation = {
                     let mut session = slot.session()?;
-                    session.generation = session.generation.saturating_add(1).max(1);
-                    session.phase = TerminalPhase::Running;
+                    session.begin_generation();
                     session.cwd = Some(cwd_text);
                     session.launch = Some(request.launch);
                     session.killer = Some(killer);
@@ -1229,20 +1237,13 @@ pub fn terminal_spawn<R: Runtime>(
     let generation;
     {
         let mut session = slot.session()?;
-        generation = session.generation.saturating_add(1).max(1);
-        session.phase = TerminalPhase::Running;
-        session.generation = generation;
-        session.sequence = 0;
+        generation = session.begin_generation();
         session.cwd = Some(cwd_text.clone());
         session.launch = Some(request.launch);
-        session.exit_code = None;
-        session.signal = None;
         session.master = Some(pair.master);
         session.writer = Some(writer);
         session.killer = Some(killer);
         session.bridge = bridge;
-        session.flow_paused = false;
-        session.replay.reset();
 
         let sequence = session.next_sequence();
         let status = session.status();
@@ -1940,6 +1941,292 @@ mod tests {
         }
     }
 
+    fn recording_channel() -> (Channel<TerminalEvent>, Arc<Mutex<Vec<serde_json::Value>>>) {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let recorded = events.clone();
+        let channel = Channel::new(move |body| {
+            recorded.lock().unwrap().push(body.deserialize().unwrap());
+            Ok(())
+        });
+        (channel, events)
+    }
+
+    #[test]
+    fn terminal_attach_replays_the_complete_generation_across_live_replacements() {
+        use tauri::Manager;
+
+        let state = TerminalState::default();
+        let slot = state.slot(TerminalId::Code);
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        {
+            let mut session = slot.session().unwrap();
+            session.phase = TerminalPhase::Running;
+            session.generation = 1;
+            let sequence = session.next_sequence();
+            let status = session.status();
+            session.publish(TerminalEvent::Started {
+                generation: 1,
+                sequence,
+                status,
+            });
+        }
+        let (first_channel, first) = recording_channel();
+        terminal_attach(app.state(), TerminalId::Code, first_channel).unwrap();
+        for bytes in [
+            b"\x1b[?1049h\x1b[2J".as_slice(),
+            b"\x1b[Hsaved screen".as_slice(),
+        ] {
+            let mut session = slot.session().unwrap();
+            let sequence = session.next_sequence();
+            session.publish(TerminalEvent::Output {
+                generation: 1,
+                sequence,
+                data: BASE64.encode(bytes),
+            });
+        }
+        let expected = first.lock().unwrap().clone();
+        assert_eq!(expected.len(), 3);
+        let (second_channel, second) = recording_channel();
+        let status = terminal_attach(app.state(), TerminalId::Code, second_channel).unwrap();
+        assert_eq!(status.generation, 1);
+        assert_eq!(status.sequence, 3);
+        assert!(status.replay_complete);
+        assert_eq!(*second.lock().unwrap(), expected);
+        {
+            let mut session = slot.session().unwrap();
+            let sequence = session.next_sequence();
+            session.publish(TerminalEvent::Output {
+                generation: 1,
+                sequence,
+                data: BASE64.encode(b"continued"),
+            });
+        }
+        assert_eq!(first.lock().unwrap().len(), 3);
+        let expected = second.lock().unwrap().clone();
+        assert_eq!(expected.last().unwrap()["sequence"], 4);
+        let (third_channel, third) = recording_channel();
+        let status = terminal_attach(app.state(), TerminalId::Code, third_channel).unwrap();
+        assert_eq!(status.sequence, 4);
+        assert!(status.replay_complete);
+        assert_eq!(*third.lock().unwrap(), expected);
+    }
+
+    #[test]
+    fn terminal_attach_retains_output_after_channel_failure_and_failed_replacement() {
+        use tauri::Manager;
+
+        let state = TerminalState::default();
+        let slot = state.slot(TerminalId::Code);
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let disconnected = || {
+            Channel::new(|_| {
+                Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "renderer closed").into())
+            })
+        };
+        terminal_attach(app.state(), TerminalId::Code, disconnected()).unwrap();
+        {
+            let mut session = slot.session().unwrap();
+            session.phase = TerminalPhase::Running;
+            session.generation = 1;
+            let sequence = session.next_sequence();
+            let status = session.status();
+            session.publish(TerminalEvent::Started {
+                generation: 1,
+                sequence,
+                status,
+            });
+            let sequence = session.next_sequence();
+            session.publish(TerminalEvent::Output {
+                generation: 1,
+                sequence,
+                data: BASE64.encode(b"\x1b[Hretained screen"),
+            });
+        }
+        let (recovered_channel, recovered) = recording_channel();
+        assert!(
+            terminal_attach(app.state(), TerminalId::Code, recovered_channel)
+                .unwrap()
+                .replay_complete
+        );
+        let replayed = recovered.lock().unwrap().clone();
+        assert_eq!(replayed.len(), 2);
+        assert_eq!(replayed[0]["type"], "started");
+        assert_eq!(replayed[1]["data"], BASE64.encode(b"\x1b[Hretained screen"));
+        terminal_set_flow(
+            app.state(),
+            TerminalFlowRequest {
+                terminal_id: TerminalId::Code,
+                generation: 1,
+                paused: true,
+            },
+        )
+        .unwrap();
+        assert!(
+            terminal_attach(app.state(), TerminalId::Code, disconnected())
+                .unwrap_err()
+                .contains("renderer closed")
+        );
+        assert!(slot.session().unwrap().flow_paused);
+        terminal_set_flow(
+            app.state(),
+            TerminalFlowRequest {
+                terminal_id: TerminalId::Code,
+                generation: 1,
+                paused: false,
+            },
+        )
+        .unwrap();
+        {
+            let mut session = slot.session().unwrap();
+            let sequence = session.next_sequence();
+            session.publish(TerminalEvent::Output {
+                generation: 1,
+                sequence,
+                data: BASE64.encode(b"still connected"),
+            });
+        }
+        let expected = recovered.lock().unwrap().clone();
+        assert_eq!(expected.len(), 3);
+        assert_eq!(expected[2]["sequence"], 3);
+        let (replacement_channel, replacement) = recording_channel();
+        let status = terminal_attach(app.state(), TerminalId::Code, replacement_channel).unwrap();
+        assert_eq!(status.sequence, 3);
+        assert!(status.replay_complete);
+        assert_eq!(*replacement.lock().unwrap(), expected);
+    }
+
+    #[test]
+    fn terminal_attach_keeps_overflow_unavailable_across_replacements() {
+        use tauri::Manager;
+
+        let state = TerminalState::default();
+        let slot = state.slot(TerminalId::Code);
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let (channel, live) = recording_channel();
+        terminal_attach(app.state(), TerminalId::Code, channel).unwrap();
+        {
+            let mut session = slot.session().unwrap();
+            session.phase = TerminalPhase::Running;
+            session.generation = 1;
+            let sequence = session.next_sequence();
+            session.publish(output_event(sequence, REPLAY_CAPACITY_BYTES));
+            let sequence = session.next_sequence();
+            session.publish(output_event(sequence, 1));
+        }
+        assert_eq!(live.lock().unwrap().len(), 2);
+        assert!(
+            !terminal_status(app.state(), TerminalId::Code)
+                .unwrap()
+                .replay_complete
+        );
+        for sequence in [3, 4] {
+            let (channel, events) = recording_channel();
+            let status = terminal_attach(app.state(), TerminalId::Code, channel).unwrap();
+            assert_eq!(status.generation, 1);
+            assert_eq!(status.sequence, sequence);
+            assert!(!status.replay_complete);
+            assert_eq!(
+                *events.lock().unwrap(),
+                vec![serde_json::json!({
+                    "type": "replay_unavailable", "generation": 1, "sequence": sequence,
+                })]
+            );
+            assert!(
+                !terminal_status(app.state(), TerminalId::Code)
+                    .unwrap()
+                    .replay_complete
+            );
+        }
+        {
+            let mut session = slot.session().unwrap();
+            session.phase = TerminalPhase::Exited;
+            session.exit_code = Some(7);
+            session.signal = Some("TERM".into());
+            let generation = session.begin_generation();
+            let sequence = session.next_sequence();
+            let status = session.status();
+            session.publish(TerminalEvent::Started {
+                generation,
+                sequence,
+                status,
+            });
+        }
+        let (channel, events) = recording_channel();
+        let status = terminal_attach(app.state(), TerminalId::Code, channel).unwrap();
+        assert_eq!(status.generation, 2);
+        assert_eq!(status.sequence, 1);
+        assert_eq!(status.exit_code, None);
+        assert_eq!(status.signal, None);
+        assert!(status.replay_complete);
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["type"], "started");
+        assert_eq!(events[0]["generation"], 2);
+    }
+
+    #[test]
+    fn terminal_attach_releases_inherited_output_pause_and_wakes_reader() {
+        use tauri::Manager;
+
+        let state = TerminalState::default();
+        let slot = state.slot(TerminalId::Code);
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        slot.session().unwrap().begin_generation();
+        let (channel, _) = recording_channel();
+        terminal_attach(app.state(), TerminalId::Code, channel).unwrap();
+        terminal_set_flow(
+            app.state(),
+            TerminalFlowRequest {
+                terminal_id: TerminalId::Code,
+                generation: 1,
+                paused: true,
+            },
+        )
+        .unwrap();
+
+        let shared = slot.shared.clone();
+        let (waiting, entered) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let mut session = shared.session.lock().unwrap();
+            waiting.send(()).unwrap();
+            while session.flow_paused {
+                let (next, timeout) = shared
+                    .flow_changed
+                    .wait_timeout(session, std::time::Duration::from_secs(2))
+                    .unwrap();
+                session = next;
+                if timeout.timed_out() {
+                    return false;
+                }
+            }
+            true
+        });
+        // Sent with the session lock held, so attachment must follow the wait.
+        entered
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        let (replacement, _) = recording_channel();
+        let attached = terminal_attach(app.state(), TerminalId::Code, replacement);
+        let resumed = reader.join().unwrap();
+        assert!(attached.unwrap().replay_complete);
+        assert!(
+            resumed,
+            "the replacement must release and notify the paused reader"
+        );
+    }
+
     #[test]
     fn replay_log_refuses_a_truncated_terminal_tail() {
         let mut replay = ReplayLog::default();
@@ -2218,8 +2505,7 @@ mod tests {
         fn wait_for_exit(&self) {
             use std::os::windows::io::AsRawHandle;
             use windows_sys::Win32::{
-                Foundation::WAIT_OBJECT_0,
-                System::Threading::WaitForSingleObject,
+                Foundation::WAIT_OBJECT_0, System::Threading::WaitForSingleObject,
             };
             assert_eq!(
                 unsafe { WaitForSingleObject(self.killer.process.as_raw_handle(), 5000) },
@@ -2234,8 +2520,7 @@ mod tests {
         fn drop(&mut self) {
             use std::os::windows::io::AsRawHandle;
             use windows_sys::Win32::{
-                Foundation::WAIT_OBJECT_0,
-                System::Threading::WaitForSingleObject,
+                Foundation::WAIT_OBJECT_0, System::Threading::WaitForSingleObject,
             };
             let _ = self.killer.kill();
             self.writer.take();
@@ -2293,8 +2578,7 @@ mod tests {
     fn windows_terminal_killer_accepts_only_proven_already_exited_child() {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::{
-            Foundation::WAIT_OBJECT_0,
-            System::Threading::WaitForSingleObject,
+            Foundation::WAIT_OBJECT_0, System::Threading::WaitForSingleObject,
         };
 
         let mut process = WindowsPtyChild::spawn("cmd.exe", &["/D", "/C", "exit 7"]);
@@ -2444,7 +2728,10 @@ mod tests {
         assert_eq!(status.exit_code, Some(1));
         assert!(status.sequence > stopped_sequence);
         let exited_wire = harness
-            .invoke::<serde_json::Value>("terminal_status", serde_json::json!({"terminalId": "code"}))
+            .invoke::<serde_json::Value>(
+                "terminal_status",
+                serde_json::json!({"terminalId": "code"}),
+            )
             .unwrap();
         assert_eq!(exited_wire["phase"], "exited");
         assert_eq!(exited_wire["exitCode"], 1);
