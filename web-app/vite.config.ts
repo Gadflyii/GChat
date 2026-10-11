@@ -39,6 +39,10 @@ export default defineConfig(({ mode }) => {
         '@gchat/conversational-extension': path.resolve(__dirname, '../extensions/conversational-extension/src/index.ts'),
       },
     },
+    // Preserve supported syntax; esbuild lowering breaks xterm mode queries.
+    esbuild: {
+      supported: { 'logical-assignment': true },
+    },
     define: {
       IS_TAURI: JSON.stringify(process.env.IS_TAURI),
       IS_DEV: JSON.stringify(process.env.IS_DEV),
