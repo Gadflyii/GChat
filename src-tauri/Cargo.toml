@@ -1,5 +1,5 @@
 [workspace]
-members = ["ginfer-host", "ginfer-manager"]
+members = ["ginfer-host", "ginfer-manager", "gbot-service"]
 exclude = ["vendor/tray-icon"]
 default-members = ["."]
 resolver = "2"
