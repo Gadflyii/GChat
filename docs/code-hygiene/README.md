@@ -50,7 +50,7 @@ Allocation bytes are requested Rust allocator bytes, not RSS/private memory.
 
 | Owning operation | Original → candidate | Observable control |
 | --- | --- | --- |
-| Fragmented 8 KiB SSE | 352 → 0.669 ms; 50 → 34 allocations | Exact events and malformed-frame errors |
+| 8 KiB SSE in one-byte fragments | 352 → 0.669 ms; 50 → 34 allocations | Exact events and malformed-frame errors |
 | Snapshot action during 500 ms exit-reader gate | 501 → 0.121 ms | Final diagnostics, cancellation and replacement session |
 | Noisy 65,537-byte child tail | 173,096 → 128,704 requested bytes | Exact retained 16 KiB and echo behavior |
 | Four-field response handle | 3 → 2 allocations; 88 → 24 requested bytes | Handle shape and identity |
@@ -67,16 +67,17 @@ Allocation bytes are requested Rust allocator bytes, not RSS/private memory.
 | Native Manager projection, 8 hosts × 174 profiles | 71,051 → 16,026 allocations; thread CPU 18.5 → 12.9 ms; requested bytes 10,121,110 → 3,904,775 | Exactly equal 313,340-byte serialized snapshot |
 | Paired-client UI activity refresh in JSDOM | 134 → 0 created elements; 1 → 0 root replacements/storage writes; 135 → 0 flatten calls | Current labels, latest action guards, focus and visibility |
 
-The existing 1 MiB forwarding fixture initially measured no useful saving:
-170 → 173 allocations and approximately 19 ms in both sources. A test-only
-live-allocation counter then measured 3,857,403 → 3,857,579 peak bytes above the
-start, also no gain. That counter covers requested Rust allocations only,
-excluding native allocations, allocator overhead and OS RSS. Inspection showed
-reqwest already synchronously serializes `.json`; `f51816632` removes redundant
-manual serialization while retaining the earlier raw-body release and capped
-exact-length reservation. Its final one-body fixture and affected strict Clippy
-are pending the next finite canonical build-guard gap; no unsupported memory
-saving is claimed.
+The 1 MiB forwarding fixture passes a prepared Request directly to the Host
+route and consumes the response. Its interval includes the same-process mock
+upstream; inbound HTTP/request construction is excluded. With the identical new
+live-allocation helper, original `4016165eb` versus final production `f51816632`
+measures 170 → 171 allocations, 11,335,566 → 11,335,702 requested bytes, and
+3,857,403 → 3,857,539 peak bytes above start: no demonstrated gain. The counter
+covers process-wide requested Rust allocation layouts, excluding native memory,
+allocator overhead and OS RSS; it does not isolate Host heap. The single-chunk
+input also cannot demonstrate fragmented-body growth savings. Early raw-buffer
+release remains explicit lifetime cleanup. Reqwest already synchronously owns
+JSON serialization; the redundant manual path was removed.
 
 ### Verification and next action
 
@@ -85,6 +86,9 @@ Valid candidate gates: 16 resource fixtures, 60 focused correctness controls and
 fixtures and one original UI case; three candidate-only UI cases are explicitly
 skipped. Host/Manager all-target check and strict Clippy, plus focused JavaScript
 lint, pass with zero warnings at `fed89a83f`. Snapshot byte equality passes.
+The final one-body fixture passes at `f51816632`, and Host/Manager all-target
+strict Clippy passes again after the forwarding/helper changes, zero warnings.
+Evidence: `candidate/{body-final,host-clippy-final,manager-clippy-final}.log`.
 No full suite or installed/native Windows acceptance is claimed.
 
 The first candidate attempt accidentally reused the original Cargo binary at a
@@ -94,10 +98,13 @@ read the actual source on each switch; candidate compilation and its distinct
 105-test inventory were verified before accepting measurements. Setup/fixture
 failures are corrected in the owning scripts/source, without warning suppression.
 
-CPU booking400 ended before 02:04 UTC and is cancelled; no GChat job, build-guard
-holder or waiter remains. C4 owns the current build guard. Next: the single final
-body check and strict lint when the coordinator supplies a finite gap, then send
-the measured source for GChat main merge. No passing unchanged check is repeated.
+CPU booking400 ended before 02:04 UTC and is cancelled. Early final admission
+returned75 before any compile/test while C2 held the canonical build guard.
+After that reservation cleared, ordinary CPU16–31 admission completed the final
+fixture and lint by 02:33:31 UTC; its container exited0 and is absent. The unused
+02:45–02:50 fallback booking404 is cancelled. No GChat job, guard holder or waiter
+remains. Next: normal GChat main merge, with OI-116/118 limits retained and the
+C1 served donor pending. No passing unchanged check was repeated.
 
 OI-116 retains Linux `df` pending explicit rustix 1.1.4 direct-dependency approval.
 The prepared patch is outside the source; Windows uses its native API, whose
@@ -120,8 +127,10 @@ Keep the two resource sources, ResponseStore source and small accepted binaries,
 shared build/dependency caches, every cited evidence packet, models, profiles,
 user state and release artifacts. October 11 remote hygiene verified S1, S2,
 Ada4090 and laptop reachable, with no own retirement candidate. Four clean,
-merged and pushed local historical source trees are being retired after exact
-live-use and shared-cache checks; their branch refs and external evidence stay.
+merged and pushed local historical source trees are retired after exact live-use
+and shared-cache checks: 1,154,691,072 allocated bytes removed. Their branch refs
+and external evidence stay. Matching-owner no-force Git removal fixes the
+root-output permission failures; no ignored shared-cache symlink is followed.
 Receipts: `out/review-resources-20261011/disk-{local,remote}-survey.md` and the
 coordinated `/ai/coordination/disk-hygiene-20261011/GChat.md`. No fleet-wide
 cleanliness or current native artifact-size claim is made.
