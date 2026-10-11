@@ -67,7 +67,7 @@ impl KvmSpec {
             || self.disk_gib == 0
             || self.ssh_port == 0
             || self.driver_revision != CUA_REVISION
-            || key.comment().contains(['\r', '\n'])
+            || key.comment().to_string().contains(['\r', '\n'])
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -426,9 +426,9 @@ mod tests {
     use super::*;
 
     fn spec() -> KvmSpec {
-        let key = russh::keys::ssh_key::PrivateKey::random(
-            &mut russh::keys::ssh_key::rand_core::OsRng,
-            russh::keys::ssh_key::Algorithm::Ed25519,
+        let key = russh::keys::PrivateKey::random(
+            &mut russh::keys::key::safe_rng(),
+            russh::keys::Algorithm::Ed25519,
         )
         .unwrap();
         let binary = GuestBinary {
