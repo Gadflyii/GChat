@@ -359,6 +359,56 @@ durable recovery, vault-only GChat secrets, and cost/resource cleanup. Platform
 builds, actual cloud spend and Windows installation remain governed by Ron's
 separate authorization and release schedule.
 
+### Current SSH key import follow-up
+
+Repository: GChat; subject: `docs/gbot/`. Current item is
+`GBOT-SSH-KEY-IMPORT`, authorized October 11 at 18:15 UTC. Baseline is
+main `c21ea4258`; candidate is branch `fix/gbot-ssh-key-import-c21` at
+`/ai/gchat-worktrees/gbot-ssh-key-import-c21`.
+
+Deliverable: import passphrase-encrypted OpenSSH keys and RSA keys through the
+authenticated local service. Ask for the passphrase once at import, decrypt only
+in memory and hold the usable key in the native vault. Workspace records retain
+only its reference. Gbot-generated keys remain Ed25519; RSA is import only.
+Missing/wrong passphrases and unavailable storage get typed errors without
+returning secret data. Reconnect retrieves the vault key without a passphrase.
+
+Named acceptance: one focused HTTP import/error/vault-only case; one actual
+in-process SSH import/authentication/reconnect case; strict Clippy for the owning
+crate. Existing unrelated passing checks are reused. No desktop, VM, provisioning,
+model/GPU, native Windows or release/publication work is included. The exact
+`russh` 0.63.1 RSA feature closure is approved; no unrelated dependency changes.
+RSA selects SHA-2 signatures, never a silent SHA-1 fallback.
+
+Tested source `11e08a67e` passes both named cases: HTTP import/error/vault-only
+storage in 0.80 seconds, and encrypted Ed25519, encrypted RSA and plain RSA
+import/authentication/reconnect in 2.81 seconds. The latter opens six fresh
+connections using only vault references. Missing/wrong passphrases leave the
+vault unchanged. Strict all-target Clippy passes. Evidence:
+`/ai/gchat/out/gbot-ssh-key-import-20261011/result.json` and its three focused logs.
+The server verifies RSA signatures and advertises SHA-2; its callback exposes
+the authenticated key, without directly observing the wire signature hash.
+
+The authenticated `POST /v1/credentials/ssh` accepts `private_key` and optional
+`passphrase`, then returns `credential_ref` and comment-free `public_key` only.
+It creates a fresh reference; callers cannot overwrite another vault entry.
+`ssh_passphrase_required` and `ssh_invalid_passphrase` are 422 errors;
+`ssh_invalid_key` is 400 and `ssh_vault_unavailable` is 503. The passphrase never
+enters the vault or workspace state. Normalized usable key bytes enter only the
+native vault. Input remains OpenSSH containers; other PEM/PPK formats are not
+admitted by this slice. No key file or global SSH agent is used.
+
+The approved feature adds only `rsa` 0.10.0-rc.18, `pkcs1` 0.8.0-rc.4 and
+`crypto-primes` 0.7.2; existing locked package versions are unchanged. The RSA and
+PKCS1 crates are release candidates. Recheck final versions before any GChat
+release; do not change these pins during this source gate. See the
+[credential decision](../decisions/2026-10-11-import-gbot-ssh-keys-through-native-vault.md).
+
+The CPU booking ended at 18:26:19 UTC; the owned container is absent, generated
+key files never existed, and the canonical build guard is returned. Shared
+caches remain. Next action: reviewed main integration. Native vault providers
+and physical guest/Windows/M365 behavior remain owed to their existing gates.
+
 ### Step 1: GChat workspace connection
 
 October 11 implementation is **source-only until the development VMs exist**.
@@ -395,9 +445,10 @@ backend. The library requires Rust 1.85; the service requires 1.89 for the share
 OS file lock that prevents two processes from owning its state. The selected
 toolchain is 1.98. Fixtures must
 demonstrate key authentication, exec/file transfer, cancellation, keepalive and
-forwarding before this dependency is accepted for the slice. Initial credential
-handling admits unencrypted OpenSSH keys held in the vault; encrypted-key
-passphrase import remains a gap, without a key-file or global-agent workaround.
+forwarding before this dependency is accepted for the slice. Credential import
+now accepts plain or encrypted OpenSSH Ed25519, ECDSA and RSA keys, unlocks them
+once and stores the usable key in the vault. The focused follow-up above closes
+the earlier encrypted/RSA transport gap without a key-file or global-agent path.
 Physical frame/input/takeover,
 Windows and M365 gates await dedicated guests and Ron's release authorization.
 
@@ -444,16 +495,16 @@ Take over / Hand back. Windows/M365 physical checks follow Ron's authorized
 desktop windows. These gates establish connection behavior, not cloud setup,
 unattended task persistence, model quality or release coverage.
 
-Next unresolved implementation choices are the minimal worker connection and
-operation-recovery protocol, the viewer component/license, and M365's actual
-permitted route. Resolve them against the pinned component contracts before
+The source-only worker connection and operation-recovery protocol are implemented
+below. Next unresolved implementation choices are the viewer component/license
+and M365's actual permitted route. Resolve them against the pinned component contracts before
 adopting dependencies; no second agent executor or paid Arbitor layer is needed
 for this slice.
 
 ## Remaining engineering choices
 
 - M365's actual permitted route, client integration and embedded viewing surface.
-- The minimal worker/process recovery protocol and authenticated viewer bridge.
+- Dedicated-guest worker integration and the authenticated desktop viewer bridge.
 - Exact local VM images, owned session boot policy and viewer components/licenses.
 - Guest application packaging and reasonable OS-disk defaults for the first tasks.
 
@@ -472,6 +523,8 @@ GChat main `254c0f8fd`; tested source remains `1a5771def`.
 | --- | --- | --- |
 | GChat coordinator / local workstation | Branch `feat/gbot-workspace-connection-42d`, merged in main `254c0f8fd` | Clean, pushed source tree retired after ancestry verification; no live guest or service. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-workspace-20261011/` | Focused gate and merged-tree retirement evidence; shared build cache retained. |
+| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-ssh-key-import-c21`, branch `fix/gbot-ssh-key-import-c21` | Tested import follow-up, retained until reviewed main integration; no live service or guest. |
+| GChat coordinator / local workstation | `/ai/gchat/out/gbot-ssh-key-import-20261011/` | Two focused gate results, logs and dependency decision; no keys or model/VM copies. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-design-20261011/` | Concise input/research and document-check evidence; no binary, model or VM copy. |
 
 Deliverable: the local-first service skeleton, vault-backed SSH transport,
@@ -488,8 +541,9 @@ source is `1a5771def`, from main `42d8c401e`; evidence is
 The loopback fixture verifies pinned vault-key authentication, generated guest
 command/file operations, cancellation, keepalive, forwarding and shutdown. A
 lost reply followed by service restart reconciles one completed file effect
-without dispatching it again. Native-vault provider availability, encrypted-key
-passphrase import and RSA authentication remain unqualified or unsupported.
+without dispatching it again. Native-vault provider availability remains
+unqualified. The import follow-up above qualifies encrypted/RSA behavior against
+the hermetic SSH server; it does not establish a physical vault provider.
 The CPU booking ended at 16:48:48 UTC; owned containers and generated guest files
 are gone and the canonical build guard was returned. The shared build cache is
 retained. No existing desktop, model, profile or host configuration was a target.
