@@ -1003,6 +1003,7 @@ mod tests {
         begun(&arguments).await;
         let repeated = request(&host, HardwareProfileAction::Ensure).await.unwrap();
         let launch = EngineLaunch {
+            benchmark_profile: None,
             instance_id: Uuid::new_v4(),
             artifact: arguments.clone(),
             artifact_dependencies: vec![],
@@ -1156,6 +1157,7 @@ mod tests {
         std::fs::write(&serve,"#!/bin/sh\nprintf '%s\n' \"hardware profile does not match selected startup hardware: $2; selected GPU inventory changed; run ginfer profile-hardware --reprofile to update the installed profile\" >&2\nexit 1\n").unwrap();
         std::fs::set_permissions(&serve, std::fs::Permissions::from_mode(0o700)).unwrap();
         let launch = EngineLaunch {
+            benchmark_profile: None,
             instance_id: Uuid::new_v4(),
             artifact: directory.path().join("ginfer"),
             artifact_dependencies: vec![],
@@ -1234,6 +1236,7 @@ mod tests {
             .unwrap();
         let first = job.status(None);
         let launch = EngineLaunch {
+            benchmark_profile: None,
             instance_id: Uuid::new_v4(),
             artifact: directory.path().join("ginfer"),
             artifact_dependencies: vec![],

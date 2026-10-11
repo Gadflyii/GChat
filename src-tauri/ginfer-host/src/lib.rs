@@ -13,6 +13,7 @@ pub mod local_host;
 pub mod local_host_registry;
 pub mod model_downloads;
 pub mod model_storage;
+pub mod max_perf;
 pub mod response_route;
 pub mod service;
 pub mod service_owner;

@@ -32,6 +32,7 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 import { engineAlias } from '@/services/engines'
 import { BenchmarkServerSettings } from '@/containers/BenchmarkServerSettings'
 import { BenchmarkLeaderboard } from '@/containers/BenchmarkLeaderboard'
+import { maxPerfSessionMismatch } from '@/services/benchmark/leaderboard'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.benchmark.index as any)({
@@ -55,7 +56,7 @@ const PRESETS: Preset[] = [
   {
     id: 'quick',
     name: 'Standard Benchmark',
-    description: 'Max Perf: 2K prompt, 500 output tokens, C1/C4/C8.',
+    description: 'Max Perf: 8,181 context, capacity 8; 2K prompt, 500 output, C1/C4/C8.',
     promptTokens: 2048,
     outputTokens: 500,
     concurrencies: [1, 4, 8],
@@ -317,6 +318,8 @@ function BenchmarkPage() {
   const selectedSession = sessions.find((session) => session.target_id === selectedTarget)
   const selectedIsLocal = useEngineHosts(state => state.hosts.some(host => host.local && selectedTarget?.startsWith(`ginfer/${host.host_id}/`)))
   const maxConcurrency = effectiveConcurrency(selectedSession)
+  const standardMismatch = presetId === 'quick' && selectedSession
+    ? maxPerfSessionMismatch(selectedSession) : null
   const selectedRun = runs.find((run) => run.run_id === selectedRunId) ?? runs[0]
 
   const refreshSessions = useCallback(async () => {
@@ -369,7 +372,7 @@ function BenchmarkPage() {
 
   useEffect(() => {
     setConcurrencies((values) => {
-      if (presetId === 'quick') return [1, 4, 8].filter(value => value <= maxConcurrency)
+      if (presetId === 'quick') return [1, 4, 8]
       const valid = values.filter((value) => value <= maxConcurrency)
       return valid.length > 0 ? valid : [1]
     })
@@ -380,14 +383,16 @@ function BenchmarkPage() {
     setPromptTokens(preset.promptTokens)
     setOutputTokens(preset.outputTokens)
     setConcurrencies(
-      preset.concurrencies.filter((value) => value <= maxConcurrency)
+      preset.id === 'quick' ? preset.concurrencies
+        : preset.concurrencies.filter((value) => value <= maxConcurrency)
     )
     setWarmupRounds(preset.warmupRounds)
     setMeasuredRounds(preset.measuredRounds)
   }
 
   const availableConcurrency = useMemo(
-    () => (presetId === 'quick' ? [1, 4, 8] : [1, 2, 3, 4, 5, 6, 7, 8]).filter((value) => value <= maxConcurrency),
+    () => presetId === 'quick' ? [1, 4, 8]
+      : [1, 2, 3, 4, 5, 6, 7, 8].filter((value) => value <= maxConcurrency),
     [maxConcurrency, presetId]
   )
 
@@ -402,7 +407,7 @@ function BenchmarkPage() {
   }
 
   const startBenchmark = async () => {
-    if (!selectedSession || activeRunId || pendingSettings || loadingSessions) return
+    if (!selectedSession || activeRunId || pendingSettings || loadingSessions || standardMismatch) return
     const runId = crypto.randomUUID()
     setActiveRunId(runId)
     setProgress({
@@ -417,6 +422,7 @@ function BenchmarkPage() {
         benchmark_id: presetId === 'quick' ? 'standard' : presetId === 'standard' ? 'serving' : presetId === 'generation' ? 'big-bench' : presetId,
         run_id: runId,
         session_pid: selectedSession.pid,
+        expected_session_id: selectedSession.session_id,
         prompt_tokens: promptTokens,
         max_output_tokens: outputTokens,
         concurrencies,
@@ -505,11 +511,12 @@ function BenchmarkPage() {
                       <IconSquare /> Stop
                     </Button>
                   ) : (
-                    <Button onClick={() => void startBenchmark()} disabled={!selectedSession || pendingSettings || loadingSessions || concurrencies.length === 0}>
+                    <Button onClick={() => void startBenchmark()} disabled={!selectedSession || pendingSettings || loadingSessions || !!standardMismatch || concurrencies.length === 0}>
                       <IconPlayerPlay /> Run benchmark
                     </Button>
                   )}
                 </div>
+                {standardMismatch && <p role="alert" className="mt-4 text-sm text-muted-foreground">{standardMismatch}</p>}
                 {maxConcurrency === 1 && selectedSession && (
                   <div className="mt-4 flex gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2.5 text-sm text-amber-700 dark:text-amber-300">
                     <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />

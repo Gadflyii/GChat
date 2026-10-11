@@ -475,6 +475,7 @@ async fn inference_usage_releases_on_completion_cancellation_and_rejection() {
         serde_json::from_slice(&hyper::body::to_bytes(paired.into_body()).await.unwrap()).unwrap();
     let token = paired["token"].as_str().unwrap();
     let request = ginfer_host::service::LaunchRequest {
+        benchmark_profile: None,
         instance_id: None,
         qualified_profile_id: None,
         model_id: host.inventory.read().await[0].id,

@@ -114,7 +114,7 @@ fn capture_output(
     })
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct LaunchOptions {
     pub vision: bool,
@@ -298,6 +298,8 @@ pub struct EngineLaunch {
     pub port: u16,
     pub max_context: u32,
     pub concurrency: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub benchmark_profile: Option<crate::max_perf::MaxPerfProfileRef>,
     #[serde(flatten)]
     pub options: LaunchOptions,
 }
@@ -907,6 +909,7 @@ mod tests {
 
     fn fixture_launch(artifact: &std::path::Path, instance_id: Uuid) -> EngineLaunch {
         EngineLaunch {
+            benchmark_profile: None,
             instance_id, artifact: artifact.to_owned(),
             artifact_dependencies: vec![artifact.to_owned()], artifact_set: false,
             model_id: "fixture".into(), gpu_uuids: vec!["GPU-fixture".into()],
@@ -962,6 +965,7 @@ mod tests {
         ];
         for (input, enabled, cache_bytes) in cases {
             let request = crate::service::LaunchRequest {
+                benchmark_profile: None,
                 instance_id: None, qualified_profile_id: None, model_id: Uuid::new_v4(),
                 gpu_uuids: gpus.clone(), max_context: 4096, concurrency: 1,
                 options: serde_json::from_value(input).unwrap(),
@@ -1307,6 +1311,7 @@ mod tests {
         let artifact = dir.path().join("fixture.ginfer");
         std::fs::write(&artifact, b"fixture").unwrap();
         let launch = |gpu: &str, port| EngineLaunch {
+            benchmark_profile: None,
             instance_id: Uuid::new_v4(),
             artifact: artifact.clone(),
             artifact_dependencies: vec![artifact.clone()],
@@ -1363,6 +1368,7 @@ mod tests {
         .unwrap();
         let id = Uuid::new_v4();
         let launch = |id| EngineLaunch {
+            benchmark_profile: None,
             instance_id: id,
             artifact: artifact.clone(),
             artifact_dependencies: vec![artifact.clone()],

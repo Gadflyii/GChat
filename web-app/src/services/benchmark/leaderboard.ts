@@ -1,9 +1,10 @@
-import type { BenchmarkConfiguration, BenchmarkResult, BenchmarkWave } from './tauri'
+import type { BenchmarkConfiguration, BenchmarkResult, BenchmarkSessionInfo, BenchmarkWave } from './tauri'
+import type { BenchmarkModelClass, BenchmarkProfileReference } from '@/services/engines'
 import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
 
 export const GBENCH_URL = 'https://sectilelabs.ai/gbench'
-export const GBENCH_PUBLISHING_ENABLED = true
+export const GBENCH_PUBLISHING_ENABLED = false
 
 type OwnerReceipt = { run_id: string; delete_token: string; owner_token?: string }
 
@@ -47,6 +48,47 @@ function wave(w: BenchmarkWave): BenchmarkWave {
     decode_seconds: w.decode_seconds, wall_seconds: w.wall_seconds }
 }
 
+const maxPerfPolicies: Record<BenchmarkModelClass, { model: string; weights: string; kv: string; spec: string; tokens: number; draftTp: number }> = {
+  'qwen27-int-dflash-q4': { model: 'qwen3.8-27b', weights: 'groupwise-int-dflash2-q4', kv: 'int8', spec: 'dflash', tokens: 7, draftTp: 1 },
+  'qwen27-nvfp4-dflash-q4': { model: 'qwen3.8-27b', weights: 'nvfp4-dflash2-q4', kv: 'nvfp4', spec: 'dflash', tokens: 7, draftTp: 1 },
+  'flash-smol-mtp': { model: 'qwen3.8-flash-next', weights: 'smol-q2g64', kv: 'int8', spec: 'mtp', tokens: 3, draftTp: 0 },
+  'flash-int-mtp': { model: 'qwen3.8-flash-next', weights: 'groupwise-int', kv: 'int8', spec: 'mtp', tokens: 3, draftTp: 0 },
+}
+
+function maxPerfPolicy(reference?: BenchmarkProfileReference | null) {
+  if (reference?.id !== 'gbench-max-perf' || reference.version !== 1 ||
+      !Object.prototype.hasOwnProperty.call(maxPerfPolicies, reference.model_class)) {
+    throw new Error('Standard Benchmark requires a recorded GBench Max Perf v1 profile for a supported model class.')
+  }
+  return maxPerfPolicies[reference.model_class]
+}
+
+function validateMaxPerfSession(session: BenchmarkResult['session']) {
+  const policy = maxPerfPolicy(session.benchmark_profile)
+  const identityKnown = session.target_id.startsWith('ginfer/')
+    ? typeof session.session_id === 'string' && session.session_id.length > 0
+    : Number.isInteger(session.pid) && Number(session.pid) > 0 && session.target_id === `local:${session.pid}`
+  if (!identityKnown || session.model_id !== `${policy.model}/${policy.weights}` ||
+      session.max_context !== 8181 || session.max_concurrency !== 8 || session.tp !== 1 ||
+      session.kv_dtype !== policy.kv || session.spec !== policy.spec || session.draft_tokens !== policy.tokens ||
+      session.draft_tp !== policy.draftTp || session.draft_policy !== 'fixed' ||
+      session.cuda_graph !== true || session.vision !== true) {
+    throw new Error('The selected session does not match its GBench Max Perf profile. Apply the profile and refresh the ready server.')
+  }
+  return policy
+}
+
+export function maxPerfSessionMismatch(session: BenchmarkSessionInfo | BenchmarkResult['session']): string | null {
+  try {
+    const cudaGraph = 'cuda_graph' in session ? session.cuda_graph
+      : typeof session.no_cuda_graph === 'boolean' ? !session.no_cuda_graph : undefined
+    if (typeof cudaGraph !== 'boolean') return 'The selected session has no reported CUDA graph status. Refresh an updated Host.'
+    validateMaxPerfSession({ ...session, display_name: session.display_name ?? session.model_id,
+      session_id: session.session_id ?? null, cuda_graph: cudaGraph })
+    return null
+  } catch (error) { return error instanceof Error ? error.message : String(error) }
+}
+
 export function buildSubmission(run: BenchmarkResult, nickname: string) {
   if (run.benchmark_id !== 'standard' || run.methodology !== 'ginfer-resident-max-perf-v1') throw new Error('Only Standard Benchmark results can be submitted.')
   const name = nickname.trim()
@@ -56,8 +98,20 @@ export function buildSubmission(run: BenchmarkResult, nickname: string) {
   const h = run.hardware
   if (!h || !h.gpus.length || !run.points.length) throw new Error('This run has no complete inference-host hardware record. Run Standard Benchmark on an updated host.')
   const config = configuration(run.points[0].evidence.configuration)
-  const expected = [1, 4, 8].filter(c => c <= config.max_concurrency)
-  if (JSON.stringify(run.points.map(p => p.concurrency)) !== JSON.stringify(expected)) throw new Error('Standard Benchmark must complete every supported C1/C4/C8 point.')
+  const corpus = run.points[0].evidence.corpus
+  if (typeof config.engine_build !== 'string' || !config.engine_build.trim().length || typeof corpus !== 'string' || !corpus.trim().length) {
+    throw new Error('The Standard Benchmark result requires an Engine build and corpus identity.')
+  }
+  const policy = validateMaxPerfSession(run.session)
+  if (JSON.stringify(run.points.map(p => p.concurrency)) !== JSON.stringify([1, 4, 8])) throw new Error('Standard Benchmark must complete C1, C4 and C8 in order.')
+  if (config.model !== policy.model || config.weights !== policy.weights ||
+      config.tp !== run.session.tp || config.draft_tp !== run.session.draft_tp ||
+      config.max_context !== run.session.max_context || config.max_concurrency !== run.session.max_concurrency ||
+      config.kv_dtype !== run.session.kv_dtype || config.spec !== run.session.spec ||
+      config.draft_tokens !== run.session.draft_tokens || config.draft_policy !== run.session.draft_policy ||
+      config.cuda_graph !== run.session.cuda_graph || config.vision !== run.session.vision) {
+    throw new Error('The benchmark configuration does not match the actual selected Max Perf session.')
+  }
   return {
     schema: 'gbench-submission-v1', benchmark_id: 'standard', methodology: run.methodology,
     run_id: run.run_id, nickname: name,
@@ -67,9 +121,18 @@ export function buildSubmission(run: BenchmarkResult, nickname: string) {
       gpus: h.gpus.map(g => ({ model: g.model, vram_mib: g.vram_mib, sm: g.sm })) },
     configuration: config,
     points: run.points.map(p => {
-      if (p.requested_prompt_tokens !== 2048 || p.requested_output_tokens !== 500 ||
+      if (p.evidence.schema !== 'ginfer-resident-benchmark-v1' ||
+          p.evidence.corpus !== corpus ||
+          (Object.prototype.hasOwnProperty.call(p.evidence.configuration, 'prefix_reuse') && p.evidence.configuration.prefix_reuse !== true) ||
+          p.requested_prompt_tokens !== 2048 || p.requested_output_tokens !== 500 ||
           p.evidence.warmup.length !== 1 || p.evidence.measured.length !== 1 ||
           JSON.stringify(configuration(p.evidence.configuration)) !== JSON.stringify(config)) throw new Error('The result does not match the Standard Benchmark contract.')
+      for (const actual of [...p.evidence.warmup, ...p.evidence.measured]) {
+        if (![actual.computed_tokens, actual.cached_tokens, actual.output_tokens].every(value => Number.isInteger(value) && value >= 0) ||
+            actual.computed_tokens + actual.cached_tokens !== 2048 * p.concurrency || actual.output_tokens !== 500 * p.concurrency) {
+          throw new Error('The benchmark wave does not match the Standard token workload.')
+        }
+      }
       return { concurrency: p.concurrency, corpus: p.evidence.corpus,
         warmup: wave(p.evidence.warmup[0]), measured: wave(p.evidence.measured[0]) }
     }),

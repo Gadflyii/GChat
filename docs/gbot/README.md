@@ -466,11 +466,12 @@ Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
 supersedes the initial draft's unassigned-cloud scope without changing runtime
 code. Approved design `9c8c3b8ca` is merged; current implementation baseline is
-GChat main `42d8c401e`.
+GChat main `254c0f8fd`; tested source remains `1a5771def`.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-workspace-connection-42d`, branch `feat/gbot-workspace-connection-42d` | Source-only step-1 candidate; no live guest or service. |
+| GChat coordinator / local workstation | Branch `feat/gbot-workspace-connection-42d`, merged in main `254c0f8fd` | Clean, pushed source tree retired after ancestry verification; no live guest or service. |
+| GChat coordinator / local workstation | `/ai/gchat/out/gbot-workspace-20261011/` | Focused gate and merged-tree retirement evidence; shared build cache retained. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-design-20261011/` | Concise input/research and document-check evidence; no binary, model or VM copy. |
 
 Deliverable: the local-first service skeleton, vault-backed SSH transport,
@@ -493,7 +494,7 @@ The CPU booking ended at 16:48:48 UTC; owned containers and generated guest file
 are gone and the canonical build guard was returned. The shared build cache is
 retained. No existing desktop, model, profile or host configuration was a target.
 
-Next action: reviewed main integration. Dedicated-guest desktop capture/input,
+Step 1 is merged. Dedicated-guest desktop capture/input,
 takeover, Windows and M365 connection qualification await their approved guests.
 
 The raw view tunnel is bidirectional transport. It must not be advertised as a
