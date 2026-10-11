@@ -1,103 +1,207 @@
-//! Opt-in dedicated-guest gate; credentials stay in an isolated native vault.
+//! Opt-in production-service gate against a dedicated guest and a booked model.
 #[cfg(target_os = "linux")]
 mod linux {
     use gbot_service::{
+        contract::*,
         kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, CUA_REVISION},
+        service::Service,
         vault::{NativeVault, Secret, Vault},
+        workspace::WorkspaceRuntime,
     };
-    use russh::{
-        client,
-        keys::{PrivateKey, PrivateKeyWithHashAlg, PublicKey, PublicKeyOrCertificate},
-    };
+    use hyper::{Body, Client, Request};
+    use russh::keys::{PrivateKey, PublicKey};
     use serde_json::{json, Value};
-    use std::{error::Error, path::PathBuf, sync::Arc, time::Duration};
+    use std::{
+        error::Error,
+        path::{Path, PathBuf},
+        sync::Arc,
+        time::Duration,
+    };
     use tokio::{
         io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+        net::{TcpStream, UnixListener},
         process::Command,
     };
     use uuid::Uuid;
     type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
-    struct Peer(PublicKey);
-    impl client::Handler for Peer {
-        type Error = russh::Error;
-        async fn check_server_key(
-            &mut self,
-            key: &PublicKeyOrCertificate,
-        ) -> std::result::Result<bool, Self::Error> {
-            Ok(
-                matches!(key, PublicKeyOrCertificate::PublicKey { key, .. } if key.key_data() == self.0.key_data()),
-            )
+
+    async fn operation(
+        runtime: &WorkspaceRuntime,
+        identity: SessionIdentity,
+        kind: GuestOperationKind,
+    ) -> Result<GuestResult> {
+        let reply = runtime
+            .request(GuestRequest {
+                identity,
+                operation_id: OperationId::new(),
+                operation: kind,
+            })
+            .await?;
+        match reply.outcome {
+            GuestOutcome::Success { result } => Ok(result),
+            GuestOutcome::Error { error } => Err(format!("guest operation: {error:?}").into()),
         }
     }
-    type Mcp = BufReader<russh::ChannelStream<client::Msg>>;
-    async fn mcp(mcp: &mut Mcp, request: Value, root: &std::path::Path) -> Result<Value> {
-        let id = request["id"].clone();
-        mcp.get_mut()
-            .write_all(format!("{request}\n").as_bytes())
-            .await?;
-        mcp.get_mut().flush().await?;
-        if id.is_null() {
-            return Ok(Value::Null);
+    async fn desktop(
+        runtime: &WorkspaceRuntime,
+        identity: SessionIdentity,
+        name: &str,
+        arguments: Value,
+    ) -> Result<Value> {
+        match operation(
+            runtime,
+            identity,
+            GuestOperationKind::Desktop {
+                tool: name.into(),
+                arguments,
+            },
+        )
+        .await?
+        {
+            GuestResult::Desktop { result } => Ok(result),
+            _ => Err("unexpected desktop reply".into()),
         }
+    }
+    fn text_only(mut result: Value) -> Value {
+        if let Some(content) = result["content"].as_array_mut() {
+            content.retain(|item| item["type"] != "image");
+        }
+        result
+    }
+    async fn model_task(
+        runtime: &WorkspaceRuntime,
+        identity: SessionIdentity,
+        url: &str,
+        evidence: &Path,
+    ) -> Result<()> {
+        let catalog = runtime.desktop_tools(identity).await?;
+        let names = [
+            "list_windows",
+            "get_window_state",
+            "invoke_menu",
+            "type_text",
+            "set_value",
+            "press_key",
+            "click",
+            "verify_state",
+        ];
+        let mut tools: Vec<Value> = catalog.iter().filter(|tool| names.contains(&tool.name.as_str())).map(|tool|
+            json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.input_schema}})).collect();
+        tools.push(json!({"type":"function","function":{"name":"open_editor","description":"Open Mousepad on the dedicated bot desktop. Use this once, then accessibility tools to type and save.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}));
+        let mut messages = vec![
+            json!({"role":"system","content":"You operate a dedicated Linux bot computer through AT-SPI accessibility tools. Open Mousepad, type exactly one line: Hello from Gbot. Save it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop accessibility, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving."}),
+            json!({"role":"user","content":"Please create the text file now."}),
+        ];
+        let client = Client::new();
+        let mut turn = 0;
         loop {
-            let mut line = String::new();
-            if mcp.read_line(&mut line).await? == 0 {
-                return Err("Cua MCP closed before reply".into());
+            turn += 1;
+            let request = Request::post(format!("{}/v1/chat/completions",url.trim_end_matches('/'))).header("content-type","application/json")
+                .body(Body::from(serde_json::to_vec(&json!({"model":"qwen38_27b_int_df2","messages":messages,"tools":tools,"tool_choice":"auto"}))?))?;
+            let response = client.request(request).await?;
+            let status = response.status();
+            let bytes = hyper::body::to_bytes(response.into_body()).await?;
+            tokio::fs::write(evidence.join(format!("model-{turn}.json")), &bytes).await?;
+            if !status.is_success() {
+                return Err(
+                    format!("model HTTP {status}: {}", String::from_utf8_lossy(&bytes)).into(),
+                );
             }
-            let reply: Value = serde_json::from_str(&line)?;
-            if reply["id"] != id {
-                continue;
+            let reply: Value = serde_json::from_slice(&bytes)?;
+            let message = reply["choices"][0]["message"].clone();
+            if !message.is_object() {
+                return Err("model returned no assistant message".into());
             }
-            tokio::fs::write(
-                root.join(format!("mcp-{id}.json")),
-                serde_json::to_vec_pretty(&reply)?,
-            )
-            .await?;
-            if !reply["error"].is_null() {
-                return Err("Cua MCP returned JSON-RPC error; see saved reply".into());
-            }
-            println!("MCP reply {id} saved");
-            return Ok(reply);
-        }
-    }
-    fn payload(reply: &Value) -> Value {
-        let result = &reply["result"];
-        if result["structuredContent"].is_object() {
-            return result["structuredContent"].clone();
-        }
-        for content in result["content"].as_array().into_iter().flatten() {
-            if let Some(text) = content["text"].as_str() {
-                if let Ok(value) = serde_json::from_str(text) {
-                    return value;
-                }
-            }
-        }
-        result.clone()
-    }
-    fn target(value: &Value) -> Option<(u64, Value)> {
-        match value {
-            Value::Object(map) => {
-                if map
-                    .get("title")
-                    .and_then(Value::as_str)
-                    .is_some_and(|s| s.contains("Gbot-Readiness"))
-                {
-                    if let Some(pid) = map.get("pid").and_then(Value::as_u64) {
-                        return map.get("window_id").cloned().map(|window| (pid, window));
+            messages.push(message.clone());
+            let Some(calls) = message["tool_calls"]
+                .as_array()
+                .filter(|calls| !calls.is_empty())
+            else {
+                break;
+            };
+            for call in calls {
+                let name = call["function"]["name"]
+                    .as_str()
+                    .ok_or("missing tool name")?;
+                let arguments: Value = serde_json::from_str(
+                    call["function"]["arguments"]
+                        .as_str()
+                        .ok_or("missing tool arguments")?,
+                )?;
+                let result = if name == "open_editor" {
+                    let result = operation(
+                        runtime,
+                        identity,
+                        GuestOperationKind::Exec {
+                            program: "/usr/local/bin/gbot-in-session".into(),
+                            args: vec![
+                                "systemd-run".into(),
+                                "--user".into(),
+                                "--quiet".into(),
+                                "--collect".into(),
+                                "--unit=gbot-editor".into(),
+                                "/usr/local/bin/gbot-in-session".into(),
+                                "mousepad".into(),
+                            ],
+                            cwd: GuestPath("/home/gbot".into()),
+                            env: Default::default(),
+                        },
+                    )
+                    .await;
+                    match result {
+                        Ok(value) => serde_json::to_value(value)?,
+                        Err(error) => json!({"error":error.to_string()}),
                     }
-                }
-                map.values().find_map(target)
+                } else if names.contains(&name) {
+                    match desktop(runtime, identity, name, arguments).await {
+                        Ok(value) => text_only(value),
+                        Err(error) => json!({"error":error.to_string()}),
+                    }
+                } else {
+                    json!({"error":"tool is not in the text-only accessibility gate"})
+                };
+                tokio::fs::write(
+                    evidence.join(format!(
+                        "tool-{turn}-{}.json",
+                        call["id"].as_str().ok_or("missing tool-call identity")?
+                    )),
+                    serde_json::to_vec_pretty(&result)?,
+                )
+                .await?;
+                messages.push(
+                    json!({"role":"tool","tool_call_id":call["id"],"content":result.to_string()}),
+                );
             }
-            Value::Array(items) => items.iter().find_map(target),
-            _ => None,
+            println!("Model turn {turn}: {} tools", calls.len());
+        }
+        tokio::fs::write(
+            evidence.join("conversation.json"),
+            serde_json::to_vec_pretty(&messages)?,
+        )
+        .await?;
+        match operation(
+            runtime,
+            identity,
+            GuestOperationKind::Read {
+                path: GuestPath("/home/gbot/hello.txt".into()),
+                offset: 0,
+                length: 4096,
+            },
+        )
+        .await?
+        {
+            GuestResult::Read { data }
+                if data == b"Hello from Gbot." || data == b"Hello from Gbot.\n" =>
+            {
+                tokio::fs::write(evidence.join("hello.txt"), data).await?;
+                println!("PASS: model task saved the line; independent SSH readback matched");
+                Ok(())
+            }
+            other => Err(format!("saved file did not match the requested line: {other:?}").into()),
         }
     }
-    fn call(id: u32, name: &str, arguments: Value) -> Value {
-        json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":name,"arguments":arguments}})
-    }
-    async fn gate(vm: &PreparedVm, private: PrivateKey, evidence: &std::path::Path) -> Result<()> {
-        let tools = KvmTools::default();
-        vm.start(&tools).await?;
+    async fn gate(vm: &PreparedVm, reference: Uuid, evidence: &Path) -> Result<()> {
+        vm.start(&KvmTools::default()).await?;
         let tty = Command::new("virsh")
             .args([
                 "--connect",
@@ -111,12 +215,13 @@ mod linux {
             return Err("owned guest console unavailable".into());
         }
         let tty = String::from_utf8(tty.stdout)?.trim().to_owned();
-        let raw = Command::new("stty")
+        if !Command::new("stty")
             .args(["-F", &tty, "raw", "-echo"])
             .status()
-            .await?;
-        if !raw.success() {
-            return Err("cannot read the owned guest console".into());
+            .await?
+            .success()
+        {
+            return Err("cannot read owned console".into());
         }
         let mut console = BufReader::new(tokio::fs::File::open(tty).await?).lines();
         let mut log = tokio::fs::File::create(evidence.join("serial.log")).await?;
@@ -124,133 +229,96 @@ mod linux {
             let line = console
                 .next_line()
                 .await?
-                .ok_or("guest console closed before boot completion")?;
+                .ok_or("guest console closed before Ready")?;
             log.write_all(format!("{line}\n").as_bytes()).await?;
             if let Some((_, key)) = line.split_once("GBOT_READY_KEY ") {
                 break PublicKey::from_openssh(key.trim())?;
             }
         };
         log.flush().await?;
-        println!("First boot complete; SSH host key bound to owned console");
-        let mut client = client::connect(
-            Arc::new(client::Config {
-                keepalive_interval: Some(Duration::from_secs(15)),
-                keepalive_max: 3,
-                ..Default::default()
-            }),
-            ("127.0.0.1", vm.spec.ssh_port),
-            Peer(key),
-        )
-        .await?;
-        let auth = client
-            .authenticate_publickey("gbot", PrivateKeyWithHashAlg::new(Arc::new(private), None))
-            .await?;
-        if !auth.success() {
-            return Err("guest authentication refused".into());
-        }
-        let result = desktop_gate(&mut client, evidence).await;
-        let diagnostics = async {
-            let channel = client.channel_open_session().await?;
-            channel.exec(true, "(cat /tmp/gbot-cua-gate.stderr; XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user status gbot-desktop.service --no-pager; journalctl --user -u gbot-desktop.service -n 60 --no-pager) 2>&1").await?;
-            let mut bytes = Vec::new();
-            channel.into_stream().read_to_end(&mut bytes).await?;
-            tokio::fs::write(evidence.join("guest-diagnostics.txt"), bytes).await?;
-            Ok::<(), Box<dyn Error + Send + Sync>>(())
-        }.await;
-        if let Err(error) = diagnostics {
+        let key = key.to_openssh()?;
+        let mut fields = key.split_whitespace();
+        let identity = SessionIdentity {
+            workspace_id: WorkspaceId(vm.spec.id),
+            session_id: SessionId::new(),
+        };
+        let service = Arc::new(Service::open(evidence.join("service.json")).await?);
+        let runtime = Arc::new(WorkspaceRuntime::new(
+            service.clone(),
+            Arc::new(NativeVault),
+        ));
+        let result = async {
+            runtime
+                .register_workspace(WorkspaceConfig {
+                    id: identity.workspace_id,
+                    name: "Dedicated Cua gate".into(),
+                    service_pc: ServicePc::Local,
+                    bot_pc: BotPc::LocalVm {
+                        host_id: service.snapshot().await.service_id,
+                        vm_id: vm.spec.id.to_string(),
+                        hypervisor: Hypervisor::Kvm,
+                    },
+                    connection: WorkspaceConnection::Ssh(SshConnection {
+                        endpoint: SshEndpoint {
+                            hostname: "127.0.0.1".into(),
+                            port: vm.spec.ssh_port,
+                            user: "gbot".into(),
+                        },
+                        pinned_host_key: SshHostPublicKey {
+                            algorithm: fields.next().ok_or("host algorithm missing")?.into(),
+                            public_key: fields.next().ok_or("host key missing")?.into(),
+                        },
+                        credential_ref: VaultCredentialRef(reference),
+                    }),
+                })
+                .await?;
+            let hello = runtime.connect(identity).await?;
             tokio::fs::write(
-                evidence.join("guest-diagnostics-error.txt"),
-                error.to_string(),
+                evidence.join("hello.json"),
+                serde_json::to_vec_pretty(&hello)?,
             )
             .await?;
-        }
-        let _ = client
-            .disconnect(russh::Disconnect::ByApplication, "gate finished", "en")
-            .await;
-        let _ = client.await;
-        result
-    }
-    async fn desktop_gate(
-        client: &mut client::Handle<Peer>,
-        evidence: &std::path::Path,
-    ) -> Result<()> {
-        let terminal = client.channel_open_session().await?;
-        terminal
-        .exec(
-            true,
-            "/usr/local/bin/gbot-in-session xfce4-terminal --disable-server --title Gbot-Readiness",
-        )
-        .await?;
-        let mut channel = client.channel_open_session().await?;
-        channel
-            .exec(true, "/usr/local/bin/gbot-cua 2>/tmp/gbot-cua-gate.stderr")
+            let tools = runtime.desktop_tools(identity).await?;
+            tokio::fs::write(
+                evidence.join("tools.json"),
+                serde_json::to_vec_pretty(&tools)?,
+            )
             .await?;
-        loop {
-            match channel.wait().await {
-                Some(russh::ChannelMsg::Success) => break,
-                Some(russh::ChannelMsg::WindowAdjusted { .. }) => (),
-                _ => return Err("Cua exec refused".into()),
+            let view = runtime.open_view(identity).await?;
+            let mut stream = TcpStream::connect(view).await?;
+            let mut version = [0u8; 12];
+            stream.read_exact(&mut version).await?;
+            if !version.starts_with(b"RFB ") {
+                return Err("view channel is not RFB".into());
             }
+            runtime.close_view(identity).await?;
+            let frame = desktop(&runtime, identity, "get_desktop_state", json!({})).await?;
+            if frame["isError"] == true
+                || !frame["content"]
+                    .as_array()
+                    .is_some_and(|items| items.iter().any(|item| item["type"] == "image"))
+            {
+                return Err("no real desktop frame".into());
+            }
+            tokio::fs::write(
+                evidence.join("desktop.json"),
+                serde_json::to_vec_pretty(&frame)?,
+            )
+            .await?;
+            let listener = UnixListener::bind(evidence.join("model-start.sock"))?;
+            println!(
+                "READY_FOR_MODEL {}",
+                evidence.join("model-start.sock").display()
+            );
+            let (stream, _) = listener.accept().await?;
+            let mut url = String::new();
+            BufReader::new(stream).read_line(&mut url).await?;
+            model_task(&runtime, identity, url.trim(), evidence).await
         }
-        let mut stream = BufReader::new(channel.into_stream());
-        mcp(&mut stream, json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"gbot-owned-guest-gate","version":"1"}}}), evidence).await?;
-        mcp(
-            &mut stream,
-            json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
-            evidence,
-        )
-        .await?;
-        let desktop = mcp(
-            &mut stream,
-            call(2, "get_desktop_state", json!({})),
-            evidence,
-        )
-        .await?;
-        if desktop["result"]["isError"] == true
-            || !desktop["result"]["content"]
-                .as_array()
-                .is_some_and(|items| items.iter().any(|item| item["type"] == "image"))
-        {
-            return Err("desktop capture produced no real image".into());
-        }
-        let windows = mcp(&mut stream, call(3, "list_windows", json!({})), evidence).await?;
-        let (pid, window) =
-            target(&payload(&windows)).ok_or("dedicated terminal was not discovered")?;
-        let state = mcp(
-            &mut stream,
-            call(
-                4,
-                "get_window_state",
-                json!({"pid":pid,"window_id":window,"include_screenshot":false}),
-            ),
-            evidence,
-        )
-        .await?;
-        let state = payload(&state);
-        if state["degraded"] == true || !state.to_string().contains("Help") {
-            return Err("terminal accessibility tree unavailable".into());
-        }
-        let action = mcp(
-            &mut stream,
-            call(
-                5,
-                "invoke_menu",
-                json!({"pid":pid,"window_id":window,"path":["Help","About"]}),
-            ),
-            evidence,
-        )
-        .await?;
-        if action["result"]["isError"] == true {
-            return Err("harmless AT-SPI menu action refused".into());
-        }
-        let after = mcp(&mut stream, call(6, "list_windows", json!({})), evidence).await?;
-        if !payload(&after).to_string().to_lowercase().contains("about") {
-            return Err("AT-SPI action had no independently observed About dialog".into());
-        }
-        stream.get_mut().shutdown().await?;
-        drop(stream);
-        drop(terminal.into_stream());
-        println!("PASS: real frame plus AT-SPI About action and dialog readback");
+        .await;
+        let close = runtime.close().await;
+        result?;
+        close?;
         Ok(())
     }
     #[tokio::main]
@@ -259,6 +327,7 @@ mod linux {
         let root = PathBuf::from(args.next().ok_or("VM root required")?);
         let image = PathBuf::from(args.next().ok_or("exact image required")?);
         let evidence = root.join("evidence");
+        tokio::fs::create_dir_all(&evidence).await?;
         let reference = Uuid::new_v4();
         let private = PrivateKey::random(
             &mut russh::keys::key::safe_rng(),
@@ -276,9 +345,8 @@ mod linux {
             .ok_or("fixture credential missing")?;
         let private = PrivateKey::from_openssh(saved.expose_secret())?;
         drop(saved);
-        let spec = KvmSpec { id:Uuid::new_v4(), cpus:2, host_cpus:vec![112,113], memory_mib:4096, disk_gib:40, ssh_port:0,
-        ssh_public_key:private.public_key().to_openssh()?, browser_package:"firefox-esr".into(),
-        driver:GuestBinary { url:"https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.34.1/cua-driver-rs-0.34.1-linux-x86_64-binary.tar.gz".into(),sha256:"a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee".into() }, driver_revision:CUA_REVISION.into() };
+        let spec = KvmSpec {id:Uuid::new_v4(),cpus:2,host_cpus:vec![112,113],memory_mib:4096,disk_gib:40,ssh_port:0,ssh_public_key:private.public_key().to_openssh()?,browser_package:"firefox-esr".into(),driver:GuestBinary {url:"https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.34.1/cua-driver-rs-0.34.1-linux-x86_64-binary.tar.gz".into(),sha256:"a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee".into()},driver_revision:CUA_REVISION.into()};
+        drop(private);
         let vm = match PreparedVm::prepare(&root, &image, spec, &KvmTools::default()).await {
             Ok(vm) => vm,
             Err(error) => {
@@ -288,24 +356,22 @@ mod linux {
         };
         tokio::fs::write(evidence.join("guest.json"), serde_json::to_vec_pretty(&vm)?).await?;
         let result =
-            tokio::time::timeout(Duration::from_secs(900), gate(&vm, private, &evidence)).await;
+            tokio::time::timeout(Duration::from_secs(1800), gate(&vm, reference, &evidence)).await;
         let stop = vm.force_stop(&KvmTools::default()).await;
         let cleanup = NativeVault.delete(reference).await;
-        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass": matches!(result,Ok(Ok(()))),"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"vm_id":vm.spec.id,"scope":"dedicated guest/adapter/Cua/native fixture vault; service JSON-worker replacement is still owed"}))?).await?;
+        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":matches!(result,Ok(Ok(()))),"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"vm_id":vm.spec.id,"scope":"production service + pinned Cua MCP + native vault + view + text-only real-model task/SSH readback; no performance/Vision claim"}))?).await?;
         stop?;
         cleanup?;
         result??;
         Ok(())
     }
 }
-
 #[cfg(target_os = "linux")]
 fn main() -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
     linux::run()
 }
-
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    eprintln!("The dedicated KVM guest gate requires Linux");
+    eprintln!("Dedicated KVM guest gate requires Linux");
     std::process::exit(1);
 }
