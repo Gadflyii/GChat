@@ -3,6 +3,14 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+The [installed Ubuntu Desktop acceptance](remaining-acceptance.md#accepted-ubuntu-desktop-packages--oi-057)
+passes for retained GChat 2.0.42 DEB/AppImage on native GNOME Wayland and Xorg:
+visible rendering, ordinary Chat through the accepted Host, saved-answer reopen
+across app restart and normal exit. The model/Host/private VM are stopped and
+bookings released. This is functional desktop acceptance; the packages' historical
+Engine bundle and release qualification remain separate. Evidence and the private
+keyring-fixture limitation are recorded in that section.
+
 Current source-only terminal work is [whole-window Unix PTY geometry](remaining-acceptance.md#current-unix-pty-window-geometry-correction).
 The frontend now sends full container pixels and reports pixel-only changes at
 unchanged rows/columns. Its focused fixture is unrun; coordinator review and the
