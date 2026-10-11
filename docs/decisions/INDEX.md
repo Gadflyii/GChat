@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Design local-first Gbot and guided computer setup](2026-10-11-design-local-first-gbot-and-computer-setup.md) — product inputs decided; implementation pending
+
 - [Draft Gbot shared runtime and Cua workspaces](2026-10-10-draft-gbot-shared-runtime-and-cua-workspaces.md) — proposed
 - **2026-10-11** — [Preserve logical assignment in desktop bundles](2026-10-11-preserve-desktop-logical-assignment.md)
 
