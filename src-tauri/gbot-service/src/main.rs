@@ -47,8 +47,23 @@ enum KvmCommand {
         #[arg(long)]
         spec: PathBuf,
     },
-    /// Run a prepared guest in the foreground; Ctrl-C stops only this guest.
-    Run {
+    /// Start the owned libvirt guest; it survives this command/service exiting.
+    Start {
+        #[arg(long)]
+        directory: PathBuf,
+    },
+    Status {
+        #[arg(long)]
+        directory: PathBuf,
+    },
+    Stop {
+        #[arg(long)]
+        directory: PathBuf,
+        #[arg(long)]
+        force: bool,
+    },
+    /// Unregister only a stopped owned domain; retain its disk and setup files.
+    Unregister {
         #[arg(long)]
         directory: PathBuf,
     },
@@ -67,14 +82,29 @@ async fn kvm(command: KvmCommand) -> Result<(), Box<dyn std::error::Error>> {
             let vm = PreparedVm::prepare(&root, &image, spec, &KvmTools::default()).await?;
             println!("{}", serde_json::to_string(&vm)?);
         }
-        KvmCommand::Run { directory } => {
+        KvmCommand::Start { directory } => {
             let vm = PreparedVm::open(&directory).await?;
-            let running = vm.start(&KvmTools::default()).await?;
-            println!(
-                "{}",
-                serde_json::json!({"vm_id": vm.spec.id, "pid": running.id(), "ssh": format!("127.0.0.1:{}", vm.spec.ssh_port)})
-            );
-            running.until_shutdown().await?;
+            println!("{:?}", vm.start(&KvmTools::default()).await?);
+        }
+        KvmCommand::Status { directory } => {
+            let vm = PreparedVm::open(&directory).await?;
+            println!("{:?}", vm.state(&KvmTools::default()).await?);
+        }
+        KvmCommand::Stop { directory, force } => {
+            let vm = PreparedVm::open(&directory).await?;
+            let tools = KvmTools::default();
+            let state = if force {
+                vm.force_stop(&tools).await?
+            } else {
+                vm.shutdown(&tools).await?
+            };
+            println!("{state:?}");
+        }
+        KvmCommand::Unregister { directory } => {
+            PreparedVm::open(&directory)
+                .await?
+                .unregister(&KvmTools::default())
+                .await?;
         }
     }
     Ok(())

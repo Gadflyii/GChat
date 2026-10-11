@@ -3,13 +3,8 @@ use std::{
     fs::File,
     io,
     path::{Path, PathBuf},
-    process::Stdio,
 };
-use tokio::{
-    fs,
-    process::{Child, Command},
-    time::{timeout, Duration},
-};
+use tokio::{fs, process::Command};
 use uuid::Uuid;
 
 pub const CUA_REVISION: &str = "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc";
@@ -57,7 +52,7 @@ pub struct KvmSpec {
     pub disk_gib: u32,
     pub ssh_port: u16,
     pub ssh_public_key: String,
-    pub worker: GuestBinary,
+    pub browser_package: String,
     pub driver: GuestBinary,
     pub driver_revision: String,
 }
@@ -73,6 +68,12 @@ impl KvmSpec {
             || self.memory_mib < 2048
             || self.disk_gib == 0
             || self.ssh_port == 0
+            || self.browser_package.is_empty()
+            || !self
+                .browser_package
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"+.-".contains(&b))
+            || self.browser_package.starts_with('-')
             || self.driver_revision != CUA_REVISION
             || key.comment().to_string().contains(['\r', '\n'])
         {
@@ -81,22 +82,25 @@ impl KvmSpec {
                 "invalid KVM guest settings or unpinned Driver",
             ));
         }
-        self.worker.validate()?;
         self.driver.validate()
     }
 
     pub fn cloud_init(&self) -> io::Result<String> {
         self.validate()?;
         let mut value: serde_json::Value = serde_json::from_str(CLOUD_INIT)?;
+        value["packages"]
+            .as_array_mut()
+            .ok_or_else(|| io::Error::other("guest package list is invalid"))?
+            .push(self.browser_package.clone().into());
         value["hostname"] = format!("gbot-{}", self.id.simple()).into();
         value["users"][0]["ssh_authorized_keys"] = serde_json::json!([self.ssh_public_key]);
         let installer = value["write_files"]
             .as_array_mut()
             .ok_or_else(|| io::Error::other("guest setup is invalid"))?
             .iter_mut()
-            .find(|f| f["path"] == "/usr/local/sbin/gbot-install-binaries")
+            .find(|f| f["path"] == "/usr/local/sbin/gbot-install-driver")
             .ok_or_else(|| io::Error::other("guest installer is missing"))?;
-        installer["content"] = format!("#!/bin/sh\nset -eu\ninstall -d -m 755 /opt/gbot/bin\n{}{}touch /var/lib/gbot/installed\n", install_binary("gbot-guest", &self.worker), install_binary("cua-driver", &self.driver)).into();
+        installer["content"] = format!("#!/bin/sh\nset -eu\ninstall -d -m 755 /opt/gbot/bin\n{}touch /var/lib/gbot/installed\n", install_driver(&self.driver)).into();
         Ok(format!(
             "#cloud-config\n{}\n",
             serde_json::to_string_pretty(&value)?
@@ -104,13 +108,13 @@ impl KvmSpec {
     }
 }
 
-fn install_binary(name: &str, binary: &GuestBinary) -> String {
-    format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{}' -o '/opt/gbot/bin/{}.part'\nprintf '%s  %s\\n' '{}' '/opt/gbot/bin/{}.part' | sha256sum --check --status\nchmod 755 '/opt/gbot/bin/{}.part'\nmv '/opt/gbot/bin/{}.part' '/opt/gbot/bin/{}'\n", binary.url, name, binary.sha256, name, name, name, name)
+fn install_driver(binary: &GuestBinary) -> String {
+    format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{}' -o /opt/gbot/cua-driver.tar.gz\nprintf '%s  %s\\n' '{}' /opt/gbot/cua-driver.tar.gz | sha256sum --check --status\ntar -xzf /opt/gbot/cua-driver.tar.gz -C /opt/gbot/bin cua-driver cua-cursor-theme\nchmod 755 /opt/gbot/bin/cua-driver /opt/gbot/bin/cua-cursor-theme\nrm /opt/gbot/cua-driver.tar.gz\n", binary.url, binary.sha256)
 }
 
 #[derive(Clone, Debug)]
 pub struct KvmTools {
-    pub qemu: PathBuf,
+    pub virsh: PathBuf,
     pub image: PathBuf,
     pub cloud_localds: PathBuf,
 }
@@ -118,7 +122,7 @@ pub struct KvmTools {
 impl Default for KvmTools {
     fn default() -> Self {
         Self {
-            qemu: "qemu-system-x86_64".into(),
+            virsh: "virsh".into(),
             image: "qemu-img".into(),
             cloud_localds: "cloud-localds".into(),
         }
@@ -131,17 +135,22 @@ pub struct PreparedVm {
     pub spec: KvmSpec,
 }
 
-fn qemu_path(path: &Path) -> io::Result<String> {
-    let value = path
-        .to_str()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "QEMU paths must be UTF-8"))?;
-    if value.contains([',', '\r', '\n']) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "QEMU paths cannot contain commas or newlines",
-        ));
-    }
-    Ok(value.into())
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VmState {
+    Running,
+    Paused,
+    Stopped,
+    Crashed,
+    Transitioning,
+}
+
+fn xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('\"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 impl PreparedVm {
@@ -160,10 +169,8 @@ impl PreparedVm {
                 "base image must live under the owned VM root",
             ));
         }
-        qemu_path(&image)?;
         let directory = root.join(spec.id.to_string());
-        qemu_path(&directory)?;
-        // Never reuse a partially created guest as a fresh setup.
+        // Failed creation stays discoverable; never create a duplicate guest on retry.
         fs::create_dir(&directory).await?;
         let vm = Self { directory, spec };
         fs::write(
@@ -180,7 +187,7 @@ impl PreparedVm {
         run_checked(
             Command::new(&tools.image)
                 .args(["create", "-f", "qcow2", "-F", "qcow2", "-b"])
-                .arg(&image)
+                .arg(image)
                 .arg(vm.directory.join("disk.qcow2"))
                 .arg(format!("{}G", vm.spec.disk_gib)),
         )
@@ -192,6 +199,27 @@ impl PreparedVm {
                 .arg(vm.directory.join("meta-data")),
         )
         .await?;
+        let domain = vm.directory.join("domain.xml");
+        fs::write(&domain, vm.domain_xml()?).await?;
+        let registered = session_command(tools, "list")
+            .args(["--all", "--uuid"])
+            .output()
+            .await?;
+        if !registered.status.success() {
+            return Err(io::Error::other(
+                "cannot inspect the user's libvirt session",
+            ));
+        }
+        if String::from_utf8_lossy(&registered.stdout)
+            .lines()
+            .any(|id| id.trim() == vm.spec.id.to_string())
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "VM identity is already registered; reconcile it before retrying",
+            ));
+        }
+        run_checked(session_command(tools, "define").arg(domain)).await?;
         fs::write(vm.directory.join("prepared"), b"1\n").await?;
         Ok(vm)
     }
@@ -210,83 +238,131 @@ impl PreparedVm {
         Ok(vm)
     }
 
-    pub fn args(&self) -> io::Result<Vec<String>> {
+    pub fn domain_xml(&self) -> io::Result<String> {
         self.spec.validate()?;
-        let path = |name| qemu_path(&self.directory.join(name));
-        let qmp = path("qmp.sock")?;
-        if qmp.len() >= 104 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "VM directory is too long for its monitor socket",
-            ));
-        }
-        Ok(vec![
-            "-name".into(),
-            format!("gbot-{}", self.spec.id),
-            "-machine".into(),
-            "q35,accel=kvm".into(),
-            "-cpu".into(),
-            "host".into(),
-            "-smp".into(),
-            self.spec.cpus.to_string(),
-            "-m".into(),
-            self.spec.memory_mib.to_string(),
-            "-drive".into(),
-            format!("file={},format=qcow2,if=virtio", path("disk.qcow2")?),
-            "-drive".into(),
-            format!(
-                "file={},format=raw,if=virtio,readonly=on",
-                path("seed.img")?
-            ),
-            "-netdev".into(),
-            format!(
-                "user,id=net0,hostfwd=tcp:127.0.0.1:{}-:22",
-                self.spec.ssh_port
-            ),
-            "-device".into(),
-            "virtio-net-pci,netdev=net0".into(),
-            "-vga".into(),
-            "qxl".into(),
-            "-display".into(),
-            "none".into(),
-            "-monitor".into(),
-            "none".into(),
-            "-qmp".into(),
-            format!("unix:{qmp},server=on,wait=off"),
-            "-serial".into(),
-            format!("file:{}", path("serial.log")?),
-        ])
+        let path = |name| -> io::Result<String> {
+            Ok(xml(self.directory.join(name).to_str().ok_or_else(
+                || io::Error::new(io::ErrorKind::InvalidInput, "VM paths must be UTF-8"),
+            )?))
+        };
+        Ok(format!("<domain type='kvm'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu><os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><interface type='user'><model type='virtio'/><backend type='passt'/><portForward proto='tcp' address='127.0.0.1'><range start='{port}' to='22'/></portForward></interface><video><model type='none'/></video><serial type='pty'><target port='0'/></serial><console type='serial'><target type='serial' port='0'/></console></devices></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
     }
 
-    pub async fn start(&self, tools: &KvmTools) -> io::Result<RunningVm> {
+    async fn lease(&self) -> io::Result<File> {
         fs::metadata(self.directory.join("prepared")).await?;
-        let lock = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(self.directory.join("owner.lock"))?;
-        lock.try_lock().map_err(|_| {
-            io::Error::new(io::ErrorKind::WouldBlock, "this VM already has an owner")
-        })?;
-        let output = File::options()
-            .create(true)
-            .append(true)
-            .open(self.directory.join("qemu.log"))?;
-        let child = Command::new(&tools.qemu)
-            .args(self.args()?)
-            .stdin(Stdio::null())
-            .stdout(output.try_clone()?)
-            .stderr(output)
+        let path = self.directory.join("owner.lock");
+        tokio::task::spawn_blocking(move || {
+            let lock = File::options()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(path)?;
+            lock.try_lock().map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "VM lifecycle action is already in progress",
+                )
+            })?;
+            Ok(lock)
+        })
+        .await
+        .map_err(io::Error::other)?
+    }
+
+    async fn command(&self, tools: &KvmTools, action: &str) -> io::Result<String> {
+        let identity = session_command(tools, "domuuid")
+            .arg(self.spec.id.to_string())
+            .output()
+            .await?;
+        if !identity.status.success()
+            || String::from_utf8_lossy(&identity.stdout).trim() != self.spec.id.to_string()
+        {
+            return Err(io::Error::other(
+                "owned VM is not registered in the user's libvirt session",
+            ));
+        }
+        let output = session_command(tools, action)
+            .arg(self.spec.id.to_string())
             .kill_on_drop(true)
-            .spawn()?;
-        Ok(RunningVm::own(child, self.directory.clone(), lock))
+            .output()
+            .await?;
+        if !output.status.success() {
+            return Err(io::Error::other(
+                "libvirt VM action failed; inspect the owned guest before retrying",
+            ));
+        }
+        String::from_utf8(output.stdout)
+            .map_err(|_| io::Error::other("libvirt returned invalid output"))
+    }
+
+    pub async fn state(&self, tools: &KvmTools) -> io::Result<VmState> {
+        match self.command(tools, "domstate").await?.trim() {
+            "running" | "idle" => Ok(VmState::Running),
+            "paused" | "pmsuspended" => Ok(VmState::Paused),
+            "shut off" => Ok(VmState::Stopped),
+            "crashed" => Ok(VmState::Crashed),
+            "in shutdown" => Ok(VmState::Transitioning),
+            _ => Err(io::Error::other("VM state is unavailable")),
+        }
+    }
+
+    pub async fn start(&self, tools: &KvmTools) -> io::Result<VmState> {
+        let _lease = self.lease().await?;
+        match self.state(tools).await? {
+            VmState::Running => return Ok(VmState::Running),
+            VmState::Stopped => {}
+            _ => {
+                return Err(io::Error::other(
+                    "VM is not stopped; reconcile before starting",
+                ))
+            }
+        }
+        self.command(tools, "start").await?;
+        self.state(tools).await
+    }
+
+    pub async fn shutdown(&self, tools: &KvmTools) -> io::Result<VmState> {
+        let _lease = self.lease().await?;
+        if self.state(tools).await? == VmState::Stopped {
+            return Ok(VmState::Stopped);
+        }
+        self.command(tools, "shutdown").await?;
+        // Acknowledged ACPI shutdown is not proof the guest has stopped.
+        self.state(tools).await
+    }
+
+    pub async fn force_stop(&self, tools: &KvmTools) -> io::Result<VmState> {
+        let _lease = self.lease().await?;
+        if self.state(tools).await? != VmState::Stopped {
+            self.command(tools, "destroy").await?;
+        }
+        self.state(tools).await
+    }
+
+    pub async fn unregister(&self, tools: &KvmTools) -> io::Result<()> {
+        let _lease = self.lease().await?;
+        if self.state(tools).await? != VmState::Stopped {
+            return Err(io::Error::other(
+                "stop the owned VM before unregistering it",
+            ));
+        }
+        self.command(tools, "undefine").await?;
+        fs::remove_file(self.directory.join("prepared")).await
     }
 }
 
+fn session_command(tools: &KvmTools, action: &str) -> Command {
+    let mut command = Command::new(&tools.virsh);
+    command
+        .args(["--connect", "qemu:///session", action])
+        .env("LC_ALL", "C")
+        .kill_on_drop(true);
+    command
+}
+
 async fn run_checked(command: &mut Command) -> io::Result<()> {
-    let status = command.kill_on_drop(true).status().await?;
-    if status.success() {
+    if command.kill_on_drop(true).status().await?.success() {
         Ok(())
     } else {
         Err(io::Error::other(
@@ -295,142 +371,10 @@ async fn run_checked(command: &mut Command) -> io::Result<()> {
     }
 }
 
-enum VmControl {
-    Stop(Duration, tokio::sync::oneshot::Sender<io::Result<()>>),
-    Force(tokio::sync::oneshot::Sender<io::Result<()>>),
-}
-
-pub struct RunningVm {
-    pid: u32,
-    control: tokio::sync::mpsc::Sender<VmControl>,
-    owner: tokio::task::JoinHandle<io::Result<std::process::ExitStatus>>,
-}
-
-impl RunningVm {
-    fn own(mut child: Child, directory: PathBuf, lock: File) -> Self {
-        let pid = child.id().expect("spawned child has a PID");
-        let (control, mut receiver) = tokio::sync::mpsc::channel(1);
-        let owner = tokio::spawn(async move {
-            // Retain the lease until the owned process is reaped, including client loss.
-            let _lease = lock;
-            loop {
-                tokio::select! {
-                    result = child.wait() => return result,
-                    message = receiver.recv() => match message {
-                        Some(VmControl::Stop(grace, reply)) => {
-                            let result = powerdown(&directory, &mut child, grace).await;
-                            let stopped = result.is_ok();
-                            let _ = reply.send(result);
-                            if stopped { return child.wait().await; }
-                        },
-                        Some(VmControl::Force(reply)) => {
-                            let result = child.kill().await;
-                            let _ = reply.send(result);
-                            return child.wait().await;
-                        },
-                        None => { child.kill().await?; return child.wait().await; }
-                    }
-                }
-            }
-        });
-        Self {
-            pid,
-            control,
-            owner,
-        }
-    }
-
-    pub fn id(&self) -> u32 {
-        self.pid
-    }
-
-    pub fn exited(&self) -> bool {
-        self.owner.is_finished()
-    }
-
-    pub async fn stop(&self, grace: Duration) -> io::Result<()> {
-        let (reply, result) = tokio::sync::oneshot::channel();
-        self.control
-            .send(VmControl::Stop(grace, reply))
-            .await
-            .map_err(|_| io::Error::other("VM owner has exited"))?;
-        result
-            .await
-            .map_err(|_| io::Error::other("VM owner did not acknowledge shutdown"))?
-    }
-
-    pub async fn until_shutdown(self) -> io::Result<()> {
-        let Self {
-            control, mut owner, ..
-        } = self;
-        let result = tokio::select! {
-            result = &mut owner => return result.map_err(io::Error::other)?.map(|_| ()),
-            result = tokio::signal::ctrl_c() => result,
-        };
-        result?;
-        // Foreground owner loss is an explicit stop of this guest, never a daemon.
-        drop(control);
-        owner.await.map_err(io::Error::other)??;
-        Ok(())
-    }
-
-    pub async fn force_stop(self) -> io::Result<()> {
-        let (reply, result) = tokio::sync::oneshot::channel();
-        if self.control.send(VmControl::Force(reply)).await.is_ok() {
-            result
-                .await
-                .map_err(|_| io::Error::other("VM owner did not acknowledge stop"))??;
-        }
-        self.owner.await.map_err(io::Error::other)??;
-        Ok(())
-    }
-}
-
-async fn powerdown(directory: &Path, child: &mut Child, grace: Duration) -> io::Result<()> {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    let shutdown = async {
-        let stream = tokio::net::UnixStream::connect(directory.join("qmp.sock")).await?;
-        let mut monitor = BufReader::new(stream);
-        let mut line = String::new();
-        monitor.read_line(&mut line).await?;
-        if serde_json::from_str::<serde_json::Value>(&line)?["QMP"].is_null() {
-            return Err(io::Error::other("invalid QEMU monitor greeting"));
-        }
-        for (id, command) in [("init", "qmp_capabilities"), ("stop", "system_powerdown")] {
-            monitor
-                .get_mut()
-                .write_all(format!("{{\"execute\":\"{command}\",\"id\":\"{id}\"}}\n").as_bytes())
-                .await?;
-            loop {
-                line.clear();
-                if monitor.read_line(&mut line).await? == 0 {
-                    return Err(io::Error::other(
-                        "QEMU monitor closed before shutdown acknowledgement",
-                    ));
-                }
-                let response: serde_json::Value = serde_json::from_str(&line)?;
-                if response["id"] == id {
-                    if response.get("error").is_some() {
-                        return Err(io::Error::other("QEMU refused shutdown"));
-                    }
-                    break;
-                }
-            }
-        }
-        child.wait().await?;
-        Ok(())
-    };
-    timeout(grace, shutdown).await.map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::TimedOut,
-            "guest has not powered down; explicit force stop required",
-        )
-    })?
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     fn spec() -> KvmSpec {
         let key = russh::keys::PrivateKey::random(
@@ -449,7 +393,7 @@ mod tests {
             disk_gib: 40,
             ssh_port: 2222,
             ssh_public_key: key.public_key().to_openssh().unwrap(),
-            worker: binary.clone(),
+            browser_package: "firefox-esr".into(),
             driver: binary,
             driver_revision: CUA_REVISION.into(),
         }
@@ -467,14 +411,13 @@ mod tests {
         let packages = data["packages"].as_array().unwrap();
         for package in [
             "xfce4",
-            "lightdm",
-            "xserver-xorg",
+            "tigervnc-standalone-server",
             "dbus-x11",
             "at-spi2-core",
-            "x11vnc",
         ] {
             assert!(packages.contains(&serde_json::json!(package)));
         }
+        assert!(!packages.contains(&serde_json::json!("x11vnc")));
         let files = data["write_files"].as_array().unwrap();
         let session = files
             .iter()
@@ -483,17 +426,15 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(session.contains("dbus-update-activation-environment"));
-        let vnc = files
-            .iter()
-            .find(|v| v["path"] == "/usr/local/bin/gbot-view")
-            .unwrap()["content"]
-            .as_str()
-            .unwrap();
-        assert!(vnc.contains("-localhost") && vnc.contains("-viewonly"));
-        assert!(!vnc.contains("0.0.0.0"));
+        assert!(
+            session.contains("-localhost yes")
+                && session.contains("-AcceptKeyEvents=0")
+                && session.contains("-AcceptPointerEvents=0")
+        );
+        assert!(!session.contains("0.0.0.0"));
         let install = files
             .iter()
-            .find(|v| v["path"] == "/usr/local/sbin/gbot-install-binaries")
+            .find(|v| v["path"] == "/usr/local/sbin/gbot-install-driver")
             .unwrap()["content"]
             .as_str()
             .unwrap();
@@ -503,64 +444,46 @@ mod tests {
         unpinned.driver_revision = "latest".into();
         assert!(unpinned.cloud_init().is_err());
         let mut bad = settings;
-        bad.worker.url = "http://example.test/key'".into();
+        bad.driver.url = "http://example.test/key'".into();
         assert!(bad.cloud_init().is_err());
-        bad.worker.url = "https://example.test/worker?token=private".into();
+        bad.driver.url = "https://example.test/worker?token=private".into();
         assert!(bad.cloud_init().is_err());
     }
 
     #[tokio::test]
-    async fn kvm_argv_and_owned_lifetime_need_no_hypervisor() {
+    async fn kvm_xml_and_owned_lifecycle_need_no_hypervisor() {
         let root = tempfile::tempdir().unwrap();
         let vm = PreparedVm {
             directory: root.path().into(),
             spec: spec(),
         };
         fs::write(vm.directory.join("prepared"), "1").await.unwrap();
-        let args = vm.args().unwrap();
-        assert!(args.iter().any(|v| v == "q35,accel=kvm"));
-        assert!(args
-            .iter()
-            .any(|v| v == "user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22"));
-        assert!(!args
-            .iter()
-            .any(|v| v.contains("bridge") || v.contains("vfio") || v.contains("vnc")));
+        let domain = vm.domain_xml().unwrap();
+        assert!(domain.contains("<domain type='kvm'>"));
+        assert!(domain.contains("<backend type='passt'/><portForward proto='tcp' address='127.0.0.1'><range start='2222' to='22'/></portForward>"));
+        assert!(
+            !domain.contains("bridge")
+                && !domain.contains("hostdev")
+                && !domain.contains("graphics")
+        );
+        let virsh = root.path().join("virsh");
+        let state = root.path().join("state");
+        fs::write(&state, "shut off\n").await.unwrap();
+        fs::write(&virsh, format!("#!/bin/sh\nset -eu\ntest \"$1\" = --connect\ntest \"$2\" = qemu:///session\ntest \"$4\" = {}\ncase \"$3\" in\n domuuid) printf '%s\\n' {};;\n domstate) cat '{}';;\n start) printf 'running\\n' > '{}';;\n shutdown|destroy) printf 'shut off\\n' > '{}';;\n undefine) :;;\n *) exit 2;;\nesac\n", vm.spec.id, vm.spec.id, state.display(), state.display(), state.display())).await.unwrap();
+        fs::set_permissions(&virsh, std::fs::Permissions::from_mode(0o755))
+            .await
+            .unwrap();
         let tools = KvmTools {
-            qemu: "/usr/bin/sleep".into(),
+            virsh,
             ..KvmTools::default()
         };
-        // A harmless child pins ownership without creating a VM.
-        let lock = File::options()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(vm.directory.join("owner.lock"))
-            .unwrap();
-        lock.try_lock().unwrap();
-        assert_eq!(
-            vm.start(&tools).await.err().unwrap().kind(),
-            io::ErrorKind::WouldBlock
-        );
-        drop(lock);
-        let child = Command::new(&tools.qemu)
-            .arg("30")
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
-        let lease = File::options()
-            .read(true)
-            .write(true)
-            .open(root.path().join("owner.lock"))
-            .unwrap();
-        lease.try_lock().unwrap();
-        let running = RunningVm::own(child, vm.directory, lease);
-        assert!(running.id() > 0);
-        running.force_stop().await.unwrap();
-        let lease = File::options()
-            .read(true)
-            .write(true)
-            .open(root.path().join("owner.lock"))
-            .unwrap();
-        lease.try_lock().unwrap();
+        assert_eq!(vm.start(&tools).await.unwrap(), VmState::Running);
+        assert_eq!(vm.start(&tools).await.unwrap(), VmState::Running);
+        // Reopen after service loss without stopping or spawning a second guest.
+        let reopened = vm.clone();
+        assert_eq!(reopened.state(&tools).await.unwrap(), VmState::Running);
+        assert_eq!(reopened.shutdown(&tools).await.unwrap(), VmState::Stopped);
+        vm.unregister(&tools).await.unwrap();
+        assert!(!root.path().join("prepared").exists());
     }
 }

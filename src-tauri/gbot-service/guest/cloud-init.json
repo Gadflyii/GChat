@@ -16,61 +16,32 @@
   "disable_root": true,
   "packages": [
     "openssh-server",
-    "xserver-xorg",
-    "xserver-xorg-video-qxl",
+    "tigervnc-standalone-server",
     "xfce4",
     "xfce4-terminal",
-    "lightdm",
     "dbus-x11",
     "at-spi2-core",
-    "x11vnc",
-    "firefox",
+    "xauth",
+    "fonts-dejavu-core",
     "curl",
     "ca-certificates",
     "ufw",
-    "libxtst6",
-    "libxrandr2",
-    "libxcomposite1",
-    "libxi6",
-    "libatk-bridge2.0-0t64",
-    "libgl1"
+    "x11-xserver-utils",
+    "util-linux",
+    "tar"
   ],
   "write_files": [
     {
-      "path": "/etc/lightdm/lightdm.conf.d/50-gbot.conf",
+      "path": "/etc/systemd/user/gbot-desktop.service",
       "owner": "root:root",
       "permissions": "0644",
-      "content": "[Seat:*]\nautologin-user=gbot\nautologin-user-timeout=0\nuser-session=gbot\nautologin-session=gbot\nxserver-command=X -nolisten tcp\n"
-    },
-    {
-      "path": "/usr/share/xsessions/gbot.desktop",
-      "owner": "root:root",
-      "permissions": "0644",
-      "content": "[Desktop Entry]\nName=Gbot XFCE\nExec=/usr/local/bin/gbot-desktop-session\nType=Application\nDesktopNames=XFCE\n"
+      "content": "[Unit]\nDescription=Gbot private XFCE desktop\nConditionPathExists=/var/lib/gbot/installed\n[Service]\nWorkingDirectory=%h\nEnvironment=HOME=%h\nRuntimeDirectory=gbot\nRuntimeDirectoryMode=0700\nExecStart=/usr/bin/dbus-run-session -- /usr/local/bin/gbot-desktop-session\nRestart=on-failure\n[Install]\nWantedBy=default.target\n"
     },
     {
       "path": "/usr/local/bin/gbot-desktop-session",
       "owner": "root:root",
       "permissions": "0755",
-      "content": "#!/bin/sh\nset -eu\nexport GTK_MODULES=gail:atk-bridge\nexport QT_ACCESSIBILITY=1\nexport NO_AT_BRIDGE=0\nexport PATH=/opt/gbot/bin:$PATH\ndbus-update-activation-environment --systemd DISPLAY XAUTHORITY GTK_MODULES QT_ACCESSIBILITY NO_AT_BRIDGE PATH\ninstall -d -m 700 \"$XDG_RUNTIME_DIR/gbot\"\numask 077\nprintf 'DISPLAY=%s\\nXAUTHORITY=%s\\nDBUS_SESSION_BUS_ADDRESS=%s\\n' \"$DISPLAY\" \"$XAUTHORITY\" \"$DBUS_SESSION_BUS_ADDRESS\" > \"$XDG_RUNTIME_DIR/gbot/desktop.env\"\nexec startxfce4\n"
-    },
-    {
-      "path": "/usr/local/bin/gbot-view",
-      "owner": "root:root",
-      "permissions": "0755",
-      "content": "#!/bin/sh\nset -eu\nexec x11vnc -display \"$DISPLAY\" -auth \"$XAUTHORITY\" -localhost -rfbport 5900 -forever -shared -nopw -viewonly\n"
-    },
-    {
-      "path": "/etc/xdg/autostart/gbot-view.desktop",
-      "owner": "root:root",
-      "permissions": "0644",
-      "content": "[Desktop Entry]\nType=Application\nName=Gbot desktop view\nExec=/usr/local/bin/gbot-view\nOnlyShowIn=XFCE;\n"
-    },
-    {
-      "path": "/usr/local/bin/gbot-guest",
-      "owner": "root:root",
-      "permissions": "0755",
-      "content": "#!/bin/sh\nset -eu\nexport XDG_RUNTIME_DIR=/run/user/$(id -u)\nwhile IFS='=' read -r name value; do\n  case \"$name\" in\n    DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS) export \"$name=$value\" ;;\n    *) exit 1 ;;\n  esac\ndone < \"$XDG_RUNTIME_DIR/gbot/desktop.env\"\nexport GTK_MODULES=gail:atk-bridge QT_ACCESSIBILITY=1 NO_AT_BRIDGE=0\nexport PATH=/opt/gbot/bin:$PATH\nexec /opt/gbot/bin/gbot-guest \"$@\"\n"
+      "content": "#!/bin/bash\nset -eu\nexport DISPLAY=:1\nexport XAUTHORITY=\"$XDG_RUNTIME_DIR/gbot/Xauthority\"\nexport GTK_MODULES=atk-bridge QT_ACCESSIBILITY=1 NO_AT_BRIDGE=0\nexport PATH=/opt/gbot/bin:$PATH\numask 077\nxauth -f \"$XAUTHORITY\" add \"$DISPLAY\" MIT-MAGIC-COOKIE-1 \"$(mcookie)\"\nXtigervnc \"$DISPLAY\" -geometry 1280x800 -depth 24 -localhost yes -rfbport 5900 -SecurityTypes None -AcceptPointerEvents=0 -AcceptKeyEvents=0 -AcceptCutText=0 -SendCutText=0 -nolisten tcp -auth \"$XAUTHORITY\" &\nvnc=$!\ntrap 'kill \"$vnc\" \"${xfce:-}\" 2>/dev/null || true; wait \"$vnc\" \"${xfce:-}\" 2>/dev/null || true' EXIT HUP INT TERM\n# Confirm this X server before publishing the session to SSH workers.\nxset -display \"$DISPLAY\" q >/dev/null 2>&1 || { sleep 1; xset -display \"$DISPLAY\" q >/dev/null; }\nxset s off\nxset -dpms\ndbus-update-activation-environment DISPLAY XAUTHORITY GTK_MODULES QT_ACCESSIBILITY NO_AT_BRIDGE PATH\nprintf 'DISPLAY=%s\\nXAUTHORITY=%s\\nDBUS_SESSION_BUS_ADDRESS=%s\\n' \"$DISPLAY\" \"$XAUTHORITY\" \"$DBUS_SESSION_BUS_ADDRESS\" > \"$XDG_RUNTIME_DIR/gbot/desktop.env\"\nmkdir -p \"$HOME/.config/xfce4/xfconf/xfce-perchannel-xml\"\ncat > \"$HOME/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml\" <<'XML'\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<channel name=\"xfwm4\" version=\"1.0\"><property name=\"general\" type=\"empty\"><property name=\"use_compositing\" type=\"bool\" value=\"false\"/></property></channel>\nXML\nstartxfce4 &\nxfce=$!\nwait -n \"$vnc\" \"$xfce\"\n"
     },
     {
       "path": "/etc/ssh/sshd_config.d/00-gbot.conf",
@@ -79,10 +50,46 @@
       "content": "PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin no\nX11Forwarding no\nAllowUsers gbot\n"
     },
     {
-      "path": "/usr/local/sbin/gbot-install-binaries",
+      "path": "/usr/local/sbin/gbot-install-driver",
       "owner": "root:root",
       "permissions": "0755",
       "content": "# populated from reviewed artifact URLs and SHA-256 digests\n"
+    },
+    {
+      "path": "/etc/xdg/autostart/xfce4-screensaver.desktop",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Desktop Entry]\nType=Application\nHidden=true\n"
+    },
+    {
+      "path": "/etc/xdg/autostart/light-locker.desktop",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Desktop Entry]\nType=Application\nHidden=true\n"
+    },
+    {
+      "path": "/etc/xdg/autostart/xfce4-power-manager.desktop",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Desktop Entry]\nType=Application\nHidden=true\n"
+    },
+    {
+      "path": "/etc/xdg/autostart/update-notifier.desktop",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Desktop Entry]\nType=Application\nHidden=true\n"
+    },
+    {
+      "path": "/usr/local/bin/gbot-cua",
+      "owner": "root:root",
+      "permissions": "0755",
+      "content": "#!/bin/sh\nset -eu\nexec /usr/local/bin/gbot-in-session /opt/gbot/bin/cua-driver mcp\n"
+    },
+    {
+      "path": "/usr/local/bin/gbot-in-session",
+      "owner": "root:root",
+      "permissions": "0755",
+      "content": "#!/bin/sh\nset -eu\nexport XDG_RUNTIME_DIR=/run/user/$(id -u)\nwhile IFS='=' read -r name value; do\n  case \"$name\" in\n    DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS) export \"$name=$value\" ;;\n    *) exit 1 ;;\n  esac\ndone < \"$XDG_RUNTIME_DIR/gbot/desktop.env\"\nexport GTK_MODULES=atk-bridge QT_ACCESSIBILITY=1 NO_AT_BRIDGE=0\nexec \"$@\"\n"
     }
   ],
   "runcmd": [
@@ -116,7 +123,7 @@
       "enable"
     ],
     [
-      "/usr/local/sbin/gbot-install-binaries"
+      "/usr/local/sbin/gbot-install-driver"
     ],
     [
       "systemctl",
@@ -125,11 +132,23 @@
       "ssh"
     ],
     [
-      "systemctl",
-      "enable",
-      "--now",
-      "lightdm"
+      "loginctl",
+      "enable-linger",
+      "gbot"
+    ],
+    [
+      "sh",
+      "-c",
+      "uid=$(id -u gbot); runuser -u gbot -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus systemctl --user daemon-reload; runuser -u gbot -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus systemctl --user enable --now gbot-desktop.service"
+    ],
+    [
+      "sh",
+      "-c",
+      "printf \"GBOT_READY_KEY %s\\n\" \"$(cat /etc/ssh/ssh_host_ed25519_key.pub)\" > /dev/ttyS0"
     ]
   ],
-  "final_message": "Gbot first-boot setup finished. Verify cloud-init, SSH, worker and the same-session desktop before Ready."
+  "final_message": "Gbot first-boot setup finished. Verify cloud-init, SSH, worker and the same-session desktop before Ready.",
+  "apt": {
+    "conf": "APT::Install-Recommends \"false\";\nAPT::Install-Suggests \"false\";\n"
+  }
 }

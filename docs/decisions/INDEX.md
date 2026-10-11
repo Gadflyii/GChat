@@ -431,3 +431,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - [2026-09-20: Remove retired context reloads and tighten code hygiene](2026-09-20-remove-retired-context-reloads.md)
 
 - **2026-09-20** — [Separate desktop LAN sharing from loopback management](2026-09-20-desktop-lan-sharing.md)
+
+- **2026-10-11** — [Use libvirt session and Cua for dedicated Gbot guests](2026-10-11-use-libvirt-session-and-cua-for-gbot-guests.md)
