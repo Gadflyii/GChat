@@ -153,6 +153,24 @@ async fn destination_space_preserves_non_ascii_paths_and_reports_missing_directo
     // Windows canonicalize produces a verbatim path; do not strip its prefix.
     assert!(available_bytes(native.clone()).await.unwrap() > 0);
     assert!(available_bytes(native.join("missing")).await.is_err());
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::{ffi::OsStringExt, fs::symlink};
+        // Query native path bytes, including names unsuitable for UTF-8 or a
+        // subprocess's line-oriented output. Follow the selected path itself.
+        let raw = directory.path().join(std::ffi::OsString::from_vec(b"-models \xff\n".to_vec()));
+        std::fs::create_dir(&raw).unwrap();
+        assert!(available_bytes(raw.clone()).await.unwrap() > 0);
+        let link = directory.path().join("destination-link");
+        symlink(&raw, &link).unwrap();
+        assert!(available_bytes(link).await.unwrap() > 0);
+        let dangling = directory.path().join("missing-link");
+        symlink(native.join("missing"), &dangling).unwrap();
+        assert!(available_bytes(dangling).await.is_err());
+        let nul = PathBuf::from(std::ffi::OsString::from_vec(b"/invalid\0path".to_vec()));
+        assert!(available_bytes(nul).await.is_err());
+        assert!(available_bytes(PathBuf::new()).await.is_err());
+    }
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStringExt;
