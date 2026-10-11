@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { Terminal } from '@xterm/xterm'
@@ -60,7 +61,7 @@ const bundleTerminal = String.raw`
 
 describe('production terminal runtime', () => {
   it('replies to mode queries and drains subsequent output chunks', async () => {
-    const root = fileURLToPath(new URL('../../', import.meta.url))
+    const root = `${resolve(dirname(fileURLToPath(import.meta.url)), '../..')}/`
     const { stdout } = await execFileAsync(
       process.execPath,
       ['--input-type=module', '-e', bundleTerminal, root],
