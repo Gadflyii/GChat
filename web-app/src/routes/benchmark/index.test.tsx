@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ list: vi.fn(), run: vi.fn(), command: vi.fn(),
 vi.mock('@tanstack/react-router', () => ({ createFileRoute: () => (options: unknown) => ({ options }), useNavigate: () => vi.fn() }))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: React.ReactNode }) => <header>{children}</header> }))
 vi.mock('@/services/benchmark/tauri', () => ({ listBenchmarkSessions: mocks.list, runBenchmark: mocks.run, cancelBenchmark: vi.fn(), onBenchmarkProgress: vi.fn().mockResolvedValue(() => {}) }))
-vi.mock('@/services/engines', () => ({ engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}`, engineCommand: mocks.command }))
+vi.mock('@/services/engines', () => ({ engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}`, engineCommand: mocks.command, hardwareProfileBusy: () => false }))
 vi.mock('@/hooks/useModelProvider', () => ({ useModelProvider: { getState: () => ({ selectedModel: { id: 'model' } }) } }))
 vi.mock('@/stores/engine-hosts-store', () => {
   const state = () => ({ hosts: [{ host_id: 'local', name: 'This computer', local: true }, { host_id: 'remote', name: 'Server 2' }], snapshots: mocks.snapshots, errors: {}, refresh: mocks.refresh })
