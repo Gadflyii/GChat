@@ -171,7 +171,7 @@ impl HardwareProfiles {
                     profile_path: directory.join("hardware-profiles"),
                     checkpoint_available: false,
                     diagnostic_tail: String::new(),
-                    error: Some("Choose a GPU group to install its hardware profile".into()),
+                    error: None,
                     available: false,
                     gpu_uuids: vec![],
                     engine_path: None,
