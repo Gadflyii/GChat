@@ -224,16 +224,16 @@ async fn route(
             }
         }
         (&Method::POST, "/v1/operations") => match parse_body::<GuestRequest>(request).await {
-            Ok(operation) => match runtime.request(operation).await {
+            Some(operation) => match runtime.request(operation).await {
                 Ok(reply) => json_response(StatusCode::OK, &reply),
                 Err(error) => workspace_error(error),
             },
-            Err(response) => response,
+            None => invalid_request(),
         },
         (&Method::POST, "/v1/connect" | "/v1/disconnect" | "/v1/view/open" | "/v1/view/close") => {
             let path = request.uri().path().to_string();
             match parse_body::<SessionIdentity>(request).await {
-                Ok(identity) => match path.as_str() {
+                Some(identity) => match path.as_str() {
                     "/v1/connect" => match runtime.connect(identity).await {
                         Ok(hello) => json_response(StatusCode::OK, &hello),
                         Err(error) => workspace_error(error),
@@ -262,7 +262,7 @@ async fn route(
                         }
                     }
                 },
-                Err(response) => response,
+                None => invalid_request(),
             }
         }
         _ => error_response(
@@ -274,20 +274,19 @@ async fn route(
     Ok(response)
 }
 
-async fn parse_body<T: serde::de::DeserializeOwned>(
-    request: Request<Body>,
-) -> Result<T, Response<Body>> {
-    let parsed = match hyper::body::to_bytes(request.into_body()).await {
+async fn parse_body<T: serde::de::DeserializeOwned>(request: Request<Body>) -> Option<T> {
+    match hyper::body::to_bytes(request.into_body()).await {
         Ok(bytes) => serde_json::from_slice(&bytes).ok(),
         Err(_) => None,
-    };
-    parsed.ok_or_else(|| {
-        error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            "Gbot request is invalid",
-        )
-    })
+    }
+}
+
+fn invalid_request() -> Response<Body> {
+    error_response(
+        StatusCode::BAD_REQUEST,
+        "invalid_request",
+        "Gbot request is invalid",
+    )
 }
 
 fn workspace_error(error: WorkspaceError) -> Response<Body> {
@@ -408,6 +407,24 @@ mod tests {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
             assert!(!bytes.windows(token.len()).any(|window| window == token));
+        }
+        for path in ["/v1/connect", "/v1/operations"] {
+            let response = client
+                .request(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri(format!("http://{endpoint}{path}"))
+                        .header(AUTHORIZATION, bearer.as_str())
+                        .body(Body::from("{invalid"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let error: serde_json::Value =
+                serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                    .unwrap();
+            assert_eq!(error["error"]["code"], "invalid_request");
         }
         let config = WorkspaceConfig {
             id: WorkspaceId::new(),
