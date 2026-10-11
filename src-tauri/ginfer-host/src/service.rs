@@ -2180,10 +2180,15 @@ mod resource_tests {
         offline.gpu_uuids = vec!["GPU-offline".into()];
         host.data.lock().await.profiles.insert(offline_id, offline.clone());
         let reserved = host.processes.lock().await.reserved_gpus(None);
-        let expected: Vec<_> = catalog.iter().flat_map(|profile| models.iter().filter(|model| profile.matches_model(model)).map(|model| serde_json::json!({
-            "profile":profile, "model_id":model.id, "gpu_groups":profile.gpu_groups(&host.gpus, &reserved),
-            "compatible_gpu_groups":profile.gpu_groups(&host.gpus, &Default::default()),
-        }))).collect();
+        let mut expected = Vec::new();
+        for profile in &catalog {
+            for model in models.iter().filter(|model| profile.matches_model(model)) {
+                expected.push(serde_json::json!({
+                    "profile":profile, "model_id":model.id, "gpu_groups":profile.gpu_groups(&host.gpus, &reserved),
+                    "compatible_gpu_groups":profile.gpu_groups(&host.gpus, &Default::default()),
+                }));
+            }
+        }
         let measurement = crate::resource_measurement::Measurement::start();
         let snapshot = host.snapshot().await;
         measurement.finish("service_resource_snapshot_174_profiles_4_instances");
