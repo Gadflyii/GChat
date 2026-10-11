@@ -941,13 +941,22 @@ mod tests {
                 .unwrap(),
             ))
             .unwrap();
-        let response = host.clone().route(request).await?;
-        serde_json::from_slice(
+        let response = host.clone().route(request).await.unwrap();
+        let status = response.status();
+        let value: serde_json::Value = serde_json::from_slice(
             &hyper::body::to_bytes(response.into_body())
                 .await
                 .map_err(|e| e.to_string())?,
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+        if status.is_success() {
+            Ok(value)
+        } else {
+            Err(format!(
+                "Host returned {status}: {}",
+                value["error"].as_str().unwrap_or("missing error message")
+            ))
+        }
     }
     async fn begun(arguments: &Path) {
         tokio::time::timeout(Duration::from_secs(2), async {
