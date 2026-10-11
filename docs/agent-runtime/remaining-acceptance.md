@@ -4,10 +4,101 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## Current Linux Code TUI correction
+
+Repository `/ai/gchat`; subject `docs/agent-runtime/`; baseline main `7fe8363b1`,
+branch `fix/gchat-linux-code-tui-7fe`, source
+`/ai/gchat-worktrees/linux-code-tui-7fe`. The October 11 10:42 decision assigns
+GCHAT-CODE-LINUX-TUI-BLANK. Establish the cause from source plus one isolated
+Linux reproduction, then fix the owning path. Deadline 13:30Z.
+
+Acceptance: focused owning cases and one live Linux Code session that renders
+its TUI and accepts a typed prompt. Use the local 5090 for at most 20 minutes
+only if the final response needs a model. No native Windows work, dependency
+installation, Engine build, calibration, full suite or release publication.
+
+Saved baseline: stock OpenCode 1.18.21 starts its managed provider/MCP/session,
+but the parsed xterm screen contains only the shell launch. Successful native
+PTY input does not enter stock message history. The same session's public API
+prompt completes normally; model routing and managed configuration are accepted,
+not embedded TUI interaction. No cause is inferred from those associations.
+
+One private no-model reproduction proves the owning failure. OpenCode receives
+unsent terminal input and produces ANSI TUI drawing; the native channel delivers
+it. xterm instead throws `ReferenceError: Can't find variable: i` in `requestMode`
+on the initial DECRQM capability query, leaving 15 chunks / 13,660 bytes queued.
+The installed 6.0.0 source and published JS builds declare that variable. The
+actual shipped GChat bundle removes the declaration but retains the enum's
+assignment, establishing production bundling as the owner. Correcting
+PTY window pixels inside the same session does not resume rendering; it is not
+established as this defect's cause. No model was needed for this diagnosis.
+
+Tested source `f2de958f3` preserves logical assignment in the existing Vite esbuild
+configuration. An installed esbuild-only discriminator proves default lowering
+throws while the feature override executes correctly; preserving Rollup output
+alone still fails. Actual Linux WebKit directly executes the supported syntax.
+Independent source review accepts the correction and the focused fixture, which
+bundles the actual published terminal with production settings and checks exact
+mode replies plus continued output through public APIs.
+
+The focused production parser fixture passes 1/1 in 909 ms. Affected fixture
+lint, frontend typecheck/build and the corrected Linux desktop build pass on
+that exact source; the desktop finishes in 3m11s at 11:24:21Z under CPU booking
+481 (11:14–11:39Z). Its retained executable is
+`/ai/gchat/out/linux-code-tui-20261011/runtime-donor/usr/bin/gchat`.
+These checks establish exact query replies and continued parsing/write completion,
+not visible drawing or ordinary OpenCode input.
+
+The named live Linux Code TUI gate passes at 11:36Z on the corrected desktop.
+Screenshots show the rendered TUI, typed prompt, response and next-input cursor.
+One native X11 submission sends 53 characters and one Return; the same stock
+OpenCode session changes from zero messages to exactly one user and one assistant
+message. The exact typed prompt is persisted. The assistant answers `ok`, finishes
+with `stop`, becomes idle and calls no tools. It does not return the requested
+full marker; this is functional TUI/input evidence, not model-quality evidence.
+The bridge shows Connected with 16 skills and 39 tools, and the session appears
+in the Code sidebar. Independent saved-evidence review accepts that named scope.
+
+Ordinary Code Stop and the owned Host's normal Stop at 11:37:19Z complete.
+App and Host exit normally; Code and Engine children are absent, all five private
+listeners close, and guard PID 1901679 exits 0 (execution session 29915).
+Booking 485 is cancelled. All 11 standalone configuration entries remain unchanged. `resource-return.json` records
+the verified return. `cleanup-result.json` confirms removal of the private
+test root and 95,838,208 allocated bytes; no owned process or model remains.
+
+Next unresolved action: complete the reviewed main merge, then recover the
+OI-069/OI-071 S2 paired-Host acceptance prerequisites. Source remains
+`f2de958f3`; no Windows or release change occurred.
+Code TUI acceptance is PASS. OI-068 remains PARTIAL for Hermes/Windows and the
+broader active-worker compaction scope.
+
+Initial fixture failures are retained: bundling now uses an actual Node subprocess,
+paths use Node file utilities, and expected replies include xterm's real
+focus-out report. No parser interception or fabricated reply was introduced.
+The frontend's existing large-chunk warning remains visible: baseline 531.59 kB,
+current 531,559 bytes. OI-074's remaining packaging work is separate.
+Evidence: `/ai/gchat/out/linux-code-tui-20261011/` `console-errors.json`,
+`bundled-handler.json`, `parser-state.json`, `raw-after-input.json` and
+`buffer-after-input.json`; passing gates are retained in
+`frontend-terminal-mode-replies.log`, `frontend-fixture-focus-lint.exit`,
+`frontend-build.log` and `desktop-corrected-cli.log`, with their exit receipts.
+Live evidence is `corrected-code-before-input.png`, `corrected-code-final.png`,
+`type-own-code-result.json`, `dismiss-update-result.json`,
+`runtime-before-typed.json`, `runtime-final-typed.json`,
+`corrected-buffer-final.json` and `corrected-code-final.json`.
+
+| Owner / host | Path | Purpose / retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/linux-code-tui-7fe` | Current candidate; retain through reviewed merge |
+| GChat / local | `/ai/gchat/out/linux-code-tui-20261011/` | Retain cause, focused/live verification and resource-return evidence |
+| GChat / local | Same packet `test-root/` | Removed after normal teardown; 95,838,208 allocated bytes reclaimed |
+| GChat / local | Same packet `runtime-donor/usr/bin/gchat` | Corrected tested desktop from `f2de958f3`; source and live gates pass, merge pending |
+| GChat / local | `/ai/gchat/out/opencode-data-root-20261011/` | Accepted tested desktop and config-isolation evidence; preserve without rebuilding |
+
 ## Current Code configuration isolation
 
 Repository `/ai/gchat`; subject `docs/agent-runtime/`; baseline main `1e61155b4`,
-branch `fix/gchat-opencode-data-root-1e611`, owned source
+branch `fix/gchat-opencode-data-root-1e611`, retired source
 `/ai/gchat-worktrees/opencode-data-root-1e611`. The October 11 decision assigns
 GCHAT-CODE-MANAGED-CONFIG-DATA-ROOT: managed configuration and all managed OpenCode
 children must use the selected GChat data folder without writing the user's
@@ -42,13 +133,15 @@ entries retain exact bytes, hashes, modes and mtimes through full teardown.
 This is configuration/model/bridge evidence, not inference performance or
 physical model qualification.
 
-Embedded terminal interaction remains incomplete. Its parsed xterm buffer is
+That configuration check did not complete embedded terminal interaction. Its
+parsed xterm buffer was
 blank apart from the launch command, and the once-only native PTY prompt never
-enters OpenCode's message history. The API prompt above was submitted only after
+entered OpenCode's message history. The API prompt above was submitted only after
 that session was confirmed to contain zero messages. It does not establish a
 natural TUI response. GCHAT-CODE-LINUX-TUI-BLANK records this separate observed
-defect; its cause is unproven. OI-068 remains PARTIAL for that Code walkthrough,
-Hermes/Windows and broader active-worker scope.
+defect; the current item above establishes its bundling cause and passes the
+live typed-input gate. OI-068 remains PARTIAL for Hermes/Windows and broader
+active-worker compaction scope.
 
 Ordinary Code Stop reports Exited; ordinary sidebar Stop leaves the Host instance
 stopped with zero active requests. Model booking 478 (10:24–10:39) returned at
@@ -69,13 +162,16 @@ fields must be read before commands, Radix menus opened through supported keyboa
 interaction, and process ownership checked as paths/arguments rather than raw
 command substrings. Failed driver observations are excluded from product evidence.
 
-Current next action: coordinator review/main merge of this correction and assignment
-of the separate terminal defect; no owned live job or booking remains. The original
-next paired-Host acceptance items are OI-069/OI-071.
+Configuration ownership is merged/pushed on main `7fe8363b1`. The separate Linux
+terminal defect is the current item above; no configuration-check job remains.
+The clean merged source tree is retired. Its tested desktop and exact accepted
+resources remain in `/ai/gchat/out/opencode-data-root-20261011/runtime-donor/`;
+`baseline-tree-retired.json` in the current TUI packet records the retirement.
+The next paired-Host acceptance items are OI-069/OI-071.
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/opencode-data-root-1e611` | Reviewed candidate; retain through coordinator merge |
+| GChat / local | `/ai/gchat-worktrees/opencode-data-root-1e611` | Retired after merge on main `7fe8363b1`; accepted desktop/resources retained externally |
 | GChat / local | `/ai/gchat/out/opencode-data-root-20261011/` | `focused-result.json`, `code-config-functional-result.json`, `runtime-api-after.json`, exact standalone snapshots, blank terminal and cleanup evidence; tested desktop retained |
 | GChat / local | Same packet `test-root/` | Removed after normal teardown |
 | GChat / local | `/ai/gchat/out/agent-walkthrough-20261011/` | Accepted three-defect evidence and tested baseline; preserve |
