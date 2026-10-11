@@ -193,7 +193,7 @@
     "openDocs": "Open Docs",
     "startupConfiguration": "Startup Configuration",
     "runOnStartup": "Auto start",
-    "runOnStartupDesc": "Automatically start the Local API Server when the application launches.",
+    "runOnStartupDesc": "Off by default. Enable to start the Local API Server when GChat opens.",
     "serverConfiguration": "Server Configuration",
     "serverHost": "Server Host",
     "serverHostDesc": "Network address for the server.",
@@ -274,7 +274,7 @@
     "launchAtStartupDesc": "Automatically start GChat when you log in to your computer.",
     "launchAtStartupError": "Failed to update the launch at startup setting.",
     "preloadModelOnStartup": "Load default model on startup",
-    "preloadModelOnStartupDesc": "On by default so GChat is ready to use after launch. Turn it off to open GChat without loading the selected model."
+    "preloadModelOnStartupDesc": "Off by default. Enable to load the selected model when GChat opens."
   },
   "extensions": {
     "title": "Extensions"
