@@ -13,9 +13,9 @@ and OI-120–122 retain their composed Rust gate. Windows now has the accepted
 The installed embedded UI loads correctly. Ron accepts Code Stop/Restart after
 fresh-window392 shows Exited and then Running with output and connected tools,
 with both saved startup flags off. Normal recovery/state preservation passes;
-no model, API or debug listener remains and both guards are released. Reconnect
-still produces a blank terminal and a lost-screen-state warning; that is the
-next separate product item. [Remaining acceptance](remaining-acceptance.md)
+no model, API or debug listener remains and both guards are released. Reconnect is now corrected by `f111810ec`: the one installed reload preserves
+output and prompt with connected tools and no lost-screen warning. Normal recovery
+and resource return pass at23:59:56 UTC. The source awaits coordinator main merge. [Remaining acceptance](remaining-acceptance.md)
 owns exact receipts, next action and incomplete broader OI-068 checks.
 
 Frozen source `7d9a8f689` passes actual native production at 09:37:44 UTC and
