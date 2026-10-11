@@ -5,6 +5,7 @@ mod linux {
         contract::*,
         kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, CUA_REVISION},
         service::Service,
+        ssh::desktop_model_result,
         vault::{NativeVault, Secret, Vault},
         workspace::WorkspaceRuntime,
     };
@@ -14,6 +15,7 @@ mod linux {
     use std::{
         error::Error,
         path::{Path, PathBuf},
+        process::Stdio,
         sync::Arc,
         time::Duration,
     };
@@ -62,12 +64,6 @@ mod linux {
             _ => Err("unexpected desktop reply".into()),
         }
     }
-    fn text_only(mut result: Value) -> Value {
-        if let Some(content) = result["content"].as_array_mut() {
-            content.retain(|item| item["type"] != "image");
-        }
-        result
-    }
     async fn model_task(
         runtime: &WorkspaceRuntime,
         identity: SessionIdentity,
@@ -109,11 +105,47 @@ mod linux {
             return Err("the gate requires one served model".into());
         }
         let model = entries[0]["id"].as_str().ok_or("missing served model ID")?;
+        let context_tokens = entries[0]["max_model_len"]
+            .as_u64()
+            .ok_or("missing served context capacity")?;
+        let helper = std::env::var_os("GBOT_CONTEXT_PREPARER")
+            .ok_or("shared context preparer is required for this gate")?;
+        let mut preparer = Command::new("node")
+            .arg(helper)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+        let mut context_input = preparer.stdin.take().ok_or("context input missing")?;
+        let mut context_output =
+            BufReader::new(preparer.stdout.take().ok_or("context output missing")?).lines();
         let mut turn = 0;
         loop {
             turn += 1;
-            let request = Request::post(format!("{}/v1/chat/completions",url.trim_end_matches('/'))).header("content-type","application/json")
-                .body(Body::from(serde_json::to_vec(&json!({"model":model,"messages":messages,"tools":tools,"tool_choice":"auto"}))?))?;
+            let completion_url = format!("{}/v1/chat/completions", url.trim_end_matches('/'));
+            let context_request = json!({"url":completion_url,"threadId":identity.session_id,"contextTokens":context_tokens,"body":{"model":model,"messages":messages,"tools":tools,"tool_choice":"auto"}});
+            context_input
+                .write_all(format!("{context_request}\n").as_bytes())
+                .await?;
+            context_input.flush().await?;
+            let prepared: Value = serde_json::from_str(
+                &context_output
+                    .next_line()
+                    .await?
+                    .ok_or("shared context preparer exited")?,
+            )?;
+            tokio::fs::write(
+                evidence.join(format!("context-{turn}.json")),
+                serde_json::to_vec_pretty(&prepared)?,
+            )
+            .await?;
+            let body = prepared["body"]
+                .as_str()
+                .ok_or_else(|| format!("context preparation failed: {prepared}"))?;
+            let request =
+                Request::post(format!("{}/v1/chat/completions", url.trim_end_matches('/')))
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_owned()))?;
             let response = client.request(request).await?;
             let status = response.status();
             let bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -170,7 +202,7 @@ mod linux {
                     }
                 } else if names.contains(&name) {
                     match desktop(runtime, identity, name, arguments).await {
-                        Ok(value) => text_only(value),
+                        Ok(value) => value,
                         Err(error) => json!({"error":error.to_string()}),
                     }
                 } else {
@@ -184,10 +216,16 @@ mod linux {
                     serde_json::to_vec_pretty(&result)?,
                 )
                 .await?;
+                let projected = desktop_model_result(&result);
                 messages.push(
-                    json!({"role":"tool","tool_call_id":call["id"],"content":result.to_string()}),
+                    json!({"role":"tool","tool_call_id":call["id"],"content":projected.to_string()}),
                 );
             }
+            tokio::fs::write(
+                evidence.join("conversation.json"),
+                serde_json::to_vec_pretty(&messages)?,
+            )
+            .await?;
             println!("Model turn {turn}: {} tools", calls.len());
         }
         tokio::fs::write(
@@ -195,6 +233,7 @@ mod linux {
             serde_json::to_vec_pretty(&messages)?,
         )
         .await?;
+        preparer.kill().await?;
         match operation(
             runtime,
             identity,

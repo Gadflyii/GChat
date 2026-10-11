@@ -37,6 +37,8 @@ use crate::{
 };
 
 mod guest;
+mod projection;
+pub use projection::desktop_model_result;
 pub use guest::DesktopTool;
 
 #[derive(Clone, Copy, Debug)]

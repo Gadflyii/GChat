@@ -682,7 +682,7 @@ Only this task's local/S1 paths were cleaned; no fleet-wide cleanliness claim.
 Repository GChat, candidate `feat/gbot-cua-service-be226` from merged main
 `be2267586`, owned tree `/ai/gchat-worktrees/gbot-cua-service-be226`.
 Deliverable: production service connects to the approved guest through pinned
-Cua MCP over SSH; one dense-INT model task opens Mousepad, types a line, saves
+Cua MCP over SSH; one released SMOL model task opens Mousepad, types a line, saves
 `~/hello.txt`, and verifies the bytes independently through SSH. Text-only AT-SPI;
 no human session, Vision, Windows, cloud provisioning, or performance claims.
 
@@ -735,10 +735,26 @@ appears in text content, structured `tree_markdown`, and structured `elements`.
 The two snapshots were13833 and22992 bytes. This is a separate model-facing
 history/representation issue; the file was not saved and the task is not qualified.
 
-Next action: obtain the owning model-adapter decision for one canonical
-structured representation and the shared compaction path; do not increase the
-model context, truncate trees arbitrarily, alter the prompt, or retry unchanged.
-The transport/lifecycle change is source-ready; model acceptance stays blocked.
+**Approved next gate (2026-10-11 23:50Z):** the service owns model-facing Cua
+projection: one elements list with role, name, element token and state; complete
+raw MCP replies remain in the task log. Text and tree_markdown duplicates are
+removed, with actionable state and incomplete-tree/error metadata retained.
+The opt-in Rust driver uses the existing Chat `prepareGInferContextRequest` via
+a bundled Node bridge, including exact engine token counts and shared compaction.
+This is a development-gate bridge, not a production Node dependency or a second
+compaction policy. The unchanged desktop prompt remains the acceptance task.
+
+Default recommended Gbot brain: released Qwen or Muse SMOL, with at least128K
+context and full native context where VRAM permits. Qwen SMOL is the first gate
+at262144 context/C2; Muse SMOL is checked only after Qwen passes. Earlier dense
+INT/16384 and intermediate32768/131072 gate sizing are superseded. The Qwen
+artifact is copied once to S1 SSD and verified against the release SHA256SUMS;
+a rejected hardware profile is reported rather than bypassed.
+
+Both focused projection cases, strict all-target Clippy and the changed gate
+build pass. S1 SSD artifact copy is verified against the release manifest
+(9576802560 bytes). Next: one Qwen SMOL hello.txt run with the shared context
+preparer; preserve the full task prompt and independent exact SSH file readback.
 Evidence: S1 `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/`,
 including `model-1..7.json`, `tool-*.json` and `model-stop.json` (PID4048678 absent,
 normal exit0, 17.8s, end23:41:05Z). Dedicated guest95ce015c is stopped and its vault
@@ -751,21 +767,23 @@ of the actual saved bytes qualifies the task; no `hello.txt` PASS exists yet.
 Approved runtime on S1 GPU0, at most 20 minutes while a model runs:
 `/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/build120/apps/ginfer-serve`.
 Artifact:
-`/media/ron/SSD_RAID/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/qwen38_27b_int_df2.ginfer`.
+`/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer`
+(from NAS `release-waves/v1`, release-manifest SHA
+`ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`).
 Profile:
 `/media/ron/SSD_RAID/ai/tmp-c4-gbench-scoreboard-20261011/results/pro1-r2/profiles/dense-qwen-int.json`.
-Effective launch: artifact first, `--tp 1 --max-context 16384 --max-concurrency 2
+Effective launch: artifact first, `--tp 1 --max-context 262144 --max-concurrency 2
 --kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy --no-profile
 --hardware-profile <above>`, bound to localhost. Greedy avoids the open sampled
 speculation defect. This is a functional task, not a GBench/performance claim.
 The new runtime must identify the requested source before task dispatch; model
-settings remain unchanged.
+settings otherwise remain unchanged.
 
 Evidence and owned inventory:
 
 | Owner / host | Path | State and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Source-ready transport/lifecycle change; real task blocked on model-facing history. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle verified; canonical model projection in progress. |
 | GChat / local | `/ai/gchat/out/gbot-cua-service-20261011/` | Focused check logs, supervisor scripts and raw tool-call response retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/evidence/` | First integrated connection and API-ID failure evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate2/` | Model task/raw response/readback and normal-stop evidence retained. `model-2.json`, `choices[0].message.content`, is the exact native markup. |
