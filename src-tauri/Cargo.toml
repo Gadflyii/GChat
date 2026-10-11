@@ -1,7 +1,11 @@
 [workspace]
 members = ["ginfer-host", "ginfer-manager"]
+exclude = ["vendor/tray-icon"]
 default-members = ["."]
 resolver = "2"
+
+[patch.crates-io]
+tray-icon = { path = "vendor/tray-icon" }
 
 [package]
 name = "gchat"

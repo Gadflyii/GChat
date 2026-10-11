@@ -122,6 +122,36 @@ function submit(app) {
   return form
 }
 
+test('secure storage results show neutral success and an error alert only on failure', async (t) => {
+  let failure = null
+  const app = await manager(t, fixture(), (request) => {
+    assert.equal(request.action, 'secure_storage')
+    if (failure) throw failure
+    return {}
+  })
+  button(app.document, 'Pair a host…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  const check = button(pane, 'Check secure storage')
+  check.click()
+  await waitFor(() => pane.querySelector('[role="status"]')?.textContent === 'Secure storage is ready', 'successful check must report readiness')
+  const status = pane.querySelector('[role="status"]')
+  assert.equal(status.className, 'muted')
+  assert.equal(pane.querySelector('.section-error[role="status"]'), null)
+
+  failure = new Error('Secure storage is unavailable')
+  check.click()
+  await waitFor(() => status.textContent === String(failure), 'failed check must report the actual error')
+  assert.equal(status.className, 'section-error')
+  assert.equal(status.getAttribute('role'), 'alert')
+
+  failure = null
+  check.click()
+  await waitFor(() => status.textContent === 'Secure storage is ready', 'retry must replace the failed check with readiness')
+  assert.equal(status.className, 'muted')
+  assert.equal(status.getAttribute('role'), 'status')
+  assert.deepEqual(requests(app).map((request) => request.action), ['secure_storage', 'secure_storage', 'secure_storage'])
+})
+
 test('heartbeat-only snapshots retain Manager controls and keyboard focus', async (t) => {
   const app = await manager(t)
   const refresh = button(app.document, 'Refresh')
