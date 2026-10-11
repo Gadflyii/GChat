@@ -160,6 +160,8 @@ pub struct RemovedPackage {
 
 pub struct ModelDownloads {
     root: std::sync::RwLock<PathBuf>,
+    default_root: PathBuf,
+    original_root: PathBuf,
     state_path: PathBuf,
     jobs: Arc<Mutex<BTreeMap<Uuid, Download>>>,
     pending_journal: Arc<AtomicBool>,
@@ -187,8 +189,22 @@ impl ModelDownloads {
         state_path: PathBuf,
         local_layout: bool,
     ) -> Result<Arc<Self>, String> {
+        let selected = crate::model_storage::resolve_artifact_root(&root)?;
+        Self::open_layout_resolved(root, selected, state_path, local_layout)
+    }
+    fn open_layout_resolved(
+        original_root: PathBuf,
+        root: PathBuf,
+        state_path: PathBuf,
+        local_layout: bool,
+    ) -> Result<Arc<Self>, String> {
         std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
         let root = root.canonicalize().map_err(|e| e.to_string())?;
+        let original_root = match original_root.canonicalize() {
+            Ok(root) => root,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => original_root,
+            Err(error) => return Err(error.to_string()),
+        };
         let mut jobs: BTreeMap<Uuid, Download> = match std::fs::read(&state_path) {
             Ok(bytes) => {
                 serde_json::from_slice(&bytes).map_err(|e| format!("download state: {e}"))?
@@ -198,7 +214,7 @@ impl ModelDownloads {
         };
         for job in jobs.values_mut() {
             if job.storage_root.as_os_str().is_empty() {
-                job.storage_root = root.clone();
+                job.storage_root = original_root.clone();
             }
             if matches!(
                 job.status.as_str(),
@@ -211,6 +227,8 @@ impl ModelDownloads {
             job.bytes_per_second = 0;
         }
         let manager = Arc::new(Self {
+            default_root: root.clone(),
+            original_root,
             root: std::sync::RwLock::new(root),
             state_path,
             jobs: Arc::new(Mutex::new(jobs)),
@@ -222,6 +240,12 @@ impl ModelDownloads {
     }
     pub fn root(&self) -> PathBuf {
         self.root.read().unwrap().clone()
+    }
+    pub(crate) fn default_root(&self) -> &std::path::Path {
+        &self.default_root
+    }
+    pub(crate) fn original_root(&self) -> &std::path::Path {
+        &self.original_root
     }
     pub fn set_root(&self, root: PathBuf) {
         *self.root.write().unwrap() = root;
@@ -278,13 +302,35 @@ impl ModelDownloads {
         let mut jobs = self.jobs.clone().lock_owned().await;
         if let Some(job) = jobs
             .values()
-            .find(|j| j.release.sha256 == release.sha256)
-            .cloned()
+            .find(|job| job.release.sha256 == release.sha256 && job.status == "installed"
+                && job.path.as_ref().is_some_and(|path| path.exists()))
         {
-            if job.status != "installed" || job.path.as_ref().is_some_and(|p| p.exists()) {
-                return Ok(job);
+            return Ok(job.clone());
+        }
+        let storage_root = self.root();
+        let candidates: Vec<_> = jobs.values()
+            .filter(|job| job.release.sha256 == release.sha256)
+            .map(|job| (job.id, job.storage_root.clone(), job.status == "installed"))
+            .collect();
+        let (storage_root, matching) = tokio::task::spawn_blocking(move || {
+            crate::model_storage::require_native_model_storage(&storage_root)?;
+            let root = storage_root.canonicalize().map_err(|error| error.to_string())?;
+            let mut matching = None;
+            for (id, candidate, installed) in candidates {
+                if candidate.canonicalize().ok().as_ref() == Some(&root)
+                    && (matching.is_none() || !installed)
+                {
+                    matching = Some((id, installed));
+                    if !installed { break; }
+                }
             }
-            jobs.remove(&job.id);
+            Ok::<_, String>((root, matching))
+        }).await.map_err(|e| e.to_string())??;
+        if let Some((id, installed)) = matching {
+            if !installed {
+                return Ok(jobs.get(&id).expect("jobs guard retains the download").clone());
+            }
+            jobs.remove(&id);
         }
         let job = Download {
             id: Uuid::new_v4(),
@@ -294,7 +340,7 @@ impl ModelDownloads {
             bytes_per_second: 0,
             error: None,
             path: None,
-            storage_root: self.root(),
+            storage_root,
         };
         jobs.insert(job.id, job.clone());
         self.persist(jobs, Some((self.clone(), job.id)), true).await?;
@@ -336,6 +382,13 @@ impl ModelDownloads {
             }
             "pause" if job.status == "downloading" => job.status = "pausing".into(),
             "resume" if matches!(job.status.as_str(), "paused" | "failed") => {
+                let root = job.storage_root.clone();
+                tokio::task::spawn_blocking(move || {
+                    crate::model_storage::require_native_model_storage(&root)
+                }).await.map_err(|e| e.to_string())?.map_err(|error| format!(
+                    "{error} Existing partial bytes remain at {}. Changing storage does not move this download; start a new download in Linux model storage instead.",
+                    job.storage_root.display(),
+                ))?;
                 job.status = "queued".into();
                 job.error = None;
             }
@@ -439,6 +492,10 @@ impl ModelDownloads {
         };
         let release = job.release;
         let root = job.storage_root;
+        let checked_root = root.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::model_storage::require_native_model_storage(&checked_root)
+        }).await.map_err(|e| e.to_string())??;
         let partial = root.join(format!("{id}.part"));
         let destination = if self.local_layout {
             root.join(&release.sha256).join("model.ginfer")
@@ -792,6 +849,73 @@ mod tests {
         assert_eq!(reopened.list().await[0].path.as_ref(), Some(&installed));
         reopened.remove_installed(&installed).await.unwrap();
         assert!(!installed.exists());
+    }
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn redirected_default_publishes_native_package_and_keeps_previous_storage() {
+        let dir = tempfile::tempdir().unwrap();
+        let provider = dir.path().join("provider");
+        let original = provider.join("models");
+        let native = dir.path().join("native/models");
+        let journal = provider.join("model-downloads.json");
+        std::fs::create_dir_all(&original).unwrap();
+        let (release, bytes) = fixture();
+        let old_id = Uuid::new_v4();
+        let old_partial = original.join(format!("{old_id}.part"));
+        let retained = original.join("keep.ginfer");
+        std::fs::write(&old_partial, b"previous partial").unwrap();
+        std::fs::write(&retained, &bytes).unwrap();
+        let old_job = Download {
+            id: old_id, release: release.clone(), status: "paused".into(),
+            received: 16, bytes_per_second: 0, error: None, path: None,
+            storage_root: original.clone(),
+        };
+        let expected_old = serde_json::to_value(&old_job).unwrap();
+        let saved = serde_json::to_vec(&BTreeMap::from([(old_id, old_job)])).unwrap();
+        std::fs::write(&journal, &saved).unwrap();
+        // Inject only the shared policy's selected root; publication uses the real owner.
+        let manager = ModelDownloads::open_layout_resolved(
+            original.clone(), native.clone(), journal.clone(), true,
+        ).unwrap();
+        assert_eq!(std::fs::read(&journal).unwrap(), saved);
+        assert_eq!(manager.list().await[0].storage_root, original);
+        let permit = manager.serial.clone().acquire_owned().await.unwrap();
+        let queued = manager.enqueue(release.clone()).await.unwrap();
+        let id = queued.id;
+        assert_ne!(id, old_id);
+        assert_eq!(manager.enqueue(release.clone()).await.unwrap().id, id);
+        assert_eq!(manager.list().await.iter().find(|job| job.id == old_id).unwrap().status, "paused");
+        std::fs::write(native.join(format!("{id}.part")), &bytes).unwrap();
+        manager.transfer(id).await.unwrap();
+        let jobs = manager.list().await;
+        assert_eq!(serde_json::to_value(jobs.iter().find(|job| job.id == old_id).unwrap()).unwrap(), expected_old);
+        drop(permit);
+        let destination = native.join(&release.sha256).join("model.ginfer");
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(destination.with_file_name("model.yml")).unwrap(),
+        ).unwrap();
+        assert_eq!(manifest["model_path"], destination.to_string_lossy().as_ref());
+        assert_eq!(std::fs::read(&destination).unwrap(), bytes);
+        assert_eq!(std::fs::read(&old_partial).unwrap(), b"previous partial");
+        assert_eq!(std::fs::read(&retained).unwrap(), bytes);
+        assert!(!original.join(&release.sha256).exists());
+        let imported = native.join("imported/model.ginfer");
+        std::fs::create_dir(imported.parent().unwrap()).unwrap();
+        std::fs::write(&imported, &bytes).unwrap();
+        let custom = dir.path().join("selected-models");
+        std::fs::create_dir(&custom).unwrap();
+        manager.set_root(custom);
+        let mut host = crate::service::Host::open_with_model_storage(
+            provider.join("host"), "Placement".into(), std::env::current_exe().unwrap(),
+            vec![], vec![], vec![], Some(provider),
+        ).await.unwrap();
+        Arc::get_mut(&mut host).unwrap().downloads = manager;
+        host.scan().await.unwrap();
+        let inventory = host.inventory.read().await;
+        for path in [&destination, &imported, &retained] {
+            assert!(inventory.iter().any(|model| &model.path == path));
+        }
+        assert_eq!(std::fs::read(old_partial).unwrap(), b"previous partial");
     }
     #[tokio::test]
     async fn complete_partial_is_verified_published_and_removed_only_from_managed_storage() {

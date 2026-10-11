@@ -6,7 +6,71 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## CLI configuration selection — verified, merge-ready
+## Current item — WSL model placement
+
+Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
+Candidate `/ai/gchat-worktrees/wsl-model-placement-c4ddb0`, branch
+`fix/gchat-wsl-model-placement-c4ddb0`, from merged main `c4ddb0a6d`.
+
+Deliverable: installer/downloader place managed model artifacts on the Linux
+filesystem under WSL, with coherent model discovery and launch paths. The
+retained OI-144-9P same-engine/artifact/profile comparison is 42.259s Ready from
+ext4 versus 237.278s from E:9p. Approximately 94% of that gap is attributed to
+nonoverlapping materialization stages; no engine reader change is selected.
+The current task owns storage placement, not a new performance campaign.
+
+Acceptance assigned by bubbs: focused placement/installer/downloader fixtures
+and one actual Linux run; deadline 08:00 UTC. No model/GPU, native Windows
+build/run, full calibration, release, signing or publication. Preserve existing
+model data and user configuration; do not silently copy or delete large existing
+artifacts. Before source changes, read the master rows for actual downloader,
+installer and model-root files and fold overlapping review findings. Selected design: one Host-owned resolver detects WSL and the actual filesystem
+of the requested root. Implicit 9p roots redirect new managed writes to a native
+XDG/HOME root namespaced by the canonical original root. Explicit Windows-backed
+storage and resuming its old jobs refuse with an actionable message. Existing
+artifacts, journals and partials remain unchanged. New manifests stay beside their
+artifacts and use absolute paths outside the saved app data folder. A shared native
+catalog supplies desktop and CLI discovery across selected, original and installed
+job roots; Host scanning includes them. Ordinary download containment remains intact.
+
+Verification: product `e05195afe` passes 14 focused extension cases and 10 Rust
+cases (two Host, two catalog/import, five downloader and one CLI transfer), plus
+the extension bundle and strict Host Clippy. `b65e8eb03` removes the one needless
+borrow caught by strict app Clippy; that failed check and the pending CLI build
+then pass. Behavior-identical code keeps the previous passing fixture evidence;
+no passing case is rerun. The first runner stop was an incorrect cached bundler
+entrypoint, corrected from its installed package manifest before native work.
+
+The admitted transfer uses an actual private Windows-mounted 9p data folder and
+native Linux XDG root. A 24-byte loopback payload, its partial and its manifest
+land on native storage. The compiled CLI lists that model and the retained
+legacy model together, preserving the original partial, artifact and saved
+custom-folder settings. This tests placement/discovery; it makes no new engine
+startup-performance or model/hardware qualification claim. No GPU/model or
+native Windows work runs. Windows runtime acceptance belongs to its release gate.
+
+Evidence and owned inventory: `/ai/gchat/out/wsl-model-placement-20261011/`
+contains `result.json`, focused/bundle/Clippy logs, the accepted
+`gchat-cli-b65e8eb03`, extension bundle and resource-return/fixture-cleanup
+receipts. Only the tiny private fixture folders are removed after zero live
+references; 12,288 native allocated bytes are reclaimed. Existing user models,
+profiles, state and shared caches are untouched. CPU booking441 is canceled at
+actual completion06:27 UTC; the canonical build guard is reacquired/released and
+the owned container is absent. The source branch is committed and pushed;
+candidate source retires after reviewed main integration.
+
+Master overlap audit: OI-116 journal/hash/free-space and managed-root dedup,
+OI-118 Host lifecycle and OI-102 full-hash preparation remain intact. The current
+GCHAT-WSL-MODEL-PLACEMENT row holds this source/gate result; the independently
+closed OI-144-9P loader disposition is not reopened. Its retained evidence is
+`/ai/kernel-agent/run_workdir/local/direct-read-wake-670d1c68a/evidence/oi144-9p/README.md`.
+
+Next unresolved action: reviewed GChat main integration, then retire the clean
+merged candidate while retaining accepted binaries and evidence. No release,
+signing, publication, existing-model relocation or further qualification is owed
+to this assigned item.
+
+## Accepted CLI configuration selection
 
 Deliverable: generic CLI commands use the same desktop/installer configuration
 selector and saved data folder. Reading configuration creates no competing
@@ -37,8 +101,8 @@ The assigned gate passes on Linux, actual 05:48:54–05:50:05 UTC:
 Evidence: `/ai/gchat/out/cli-config-selection-20261011/` (`gate.log`,
 `result.json`, `custom-folder.stdout/stderr`). The tested binary
 `gchat-cli-8d4602951` is retained as the accepted CLI baseline; private fixture
-metadata is disposable. Candidate source remains until the normal reviewed
-merge. Shared Cargo/toolchain caches are retained. No native Windows build/run,
+metadata is disposable. Source is merged and pushed on main `c4ddb0a6d`; the clean/pushed CLI
+worktree is retired after its accepted ancestry and zero live consumers are verified. Shared Cargo/toolchain caches are retained. No native Windows build/run,
 GPU/model, release, signing or publication was part of this gate.
 
 The local disk hold deferred waiting schedulers before any compiler/test ran.

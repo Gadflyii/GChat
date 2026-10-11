@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Place WSL managed models on Linux filesystems](2026-10-11-place-wsl-managed-models-on-linux-filesystems.md)
+
 - **2026-10-11** — [Own hardware profile installation in Host](2026-10-11-own-hardware-profile-installation-in-host.md)
 
 - **2026-10-11** — [Correct CJK dependency provider metadata](20261011-correct-cjk-provider-dependencies.md)
