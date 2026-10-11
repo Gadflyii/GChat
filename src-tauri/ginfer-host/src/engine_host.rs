@@ -320,6 +320,7 @@ pub struct HostProcesses {
     instances: BTreeMap<Uuid, ManagedInstance>,
     client: reqwest::Client,
     startup_timeout: Duration,
+    activity: Arc<tokio::sync::Notify>,
     pub(crate) hardware_profile: Option<Arc<crate::hardware_profile::HardwareProfiles>>,
 }
 
@@ -385,6 +386,7 @@ impl HostProcesses {
             instances: BTreeMap::new(),
             client,
             startup_timeout,
+            activity: Arc::new(tokio::sync::Notify::new()),
             hardware_profile: None,
         })
     }
@@ -690,7 +692,18 @@ impl HostProcesses {
                 hardware_profile_path,
             },
         );
+        self.activity.notify_one();
         Ok(session_id)
+    }
+
+    pub fn activity_notification(&self) -> Arc<tokio::sync::Notify> {
+        self.activity.clone()
+    }
+
+    pub fn needs_monitoring(&self) -> bool {
+        self.instances
+            .values()
+            .any(|instance| instance.child.is_some() || instance.pending_exit.is_some())
     }
 
     pub fn instances(&self) -> impl Iterator<Item = &ManagedInstance> {
@@ -744,6 +757,7 @@ impl HostProcesses {
         let instance = self.instances.get_mut(&id).ok_or("unknown instance")?;
         if let Some(child) = &mut instance.child {
             instance.status = InstanceStatus::Stopping;
+            self.activity.notify_one();
             child
                 .kill()
                 .await
@@ -754,6 +768,7 @@ impl HostProcesses {
         instance.model_metadata = None;
         // A reaped session retains its final diagnostic until its drain commits.
         instance.status = InstanceStatus::Stopped;
+        self.activity.notify_one();
         Ok(())
     }
 
@@ -789,6 +804,7 @@ impl HostProcesses {
                     pending: pending.clone(),
                 });
                 instance.pending_exit = Some(pending);
+                self.activity.notify_one();
                 continue;
             }
             if instance.status != InstanceStatus::Starting {
@@ -799,6 +815,7 @@ impl HostProcesses {
                 instance.child = None;
                 instance.status = InstanceStatus::Failed;
                 instance.last_error = Some("engine startup timed out".into());
+                self.activity.notify_one();
                 continue;
             }
             observations.readiness.push(StartupProbe {
@@ -836,6 +853,7 @@ impl HostProcesses {
             instance.status = InstanceStatus::Failed;
         }
         instance.pending_exit = None;
+        self.activity.notify_one();
     }
 
     pub(crate) fn confirm_readiness(
@@ -857,6 +875,7 @@ impl HostProcesses {
         if child.try_wait().map_err(|e| e.to_string())?.is_none() {
             instance.model_metadata = Some(observation.metadata);
             instance.status = InstanceStatus::Ready;
+            self.activity.notify_one();
         }
         Ok(())
     }
