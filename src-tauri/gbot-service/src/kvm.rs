@@ -280,8 +280,9 @@ impl PreparedVm {
                 .collect::<String>();
             format!("<cputune>{vcpus}<emulatorpin cpuset='{set}'/></cputune>")
         };
+        // Queue the NIC after libvirt's JSON PCI controllers.
         let nic = xml(r#"{"driver":"virtio-net-pci","netdev":"gbot-ssh","id":"gbot-net"}"#);
-        Ok(format!("<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu>{pinning}<os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><video><model type='none'/></video><serial type='pty'><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console></devices><qemu:commandline><qemu:arg value='-netdev'/><qemu:arg value='user,id=gbot-ssh,hostfwd=tcp:127.0.0.1:{port}-:22'/><qemu:arg value='-device'/><qemu:arg value='{nic}'/></qemu:commandline></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
+        Ok(format!("<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu>{pinning}<os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><video><model type='vga'/></video><serial type='pty'><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console></devices><qemu:commandline><qemu:arg value='-netdev'/><qemu:arg value='user,id=gbot-ssh,hostfwd=tcp:127.0.0.1:{port}-:22'/><qemu:arg value='-device'/><qemu:arg value='{nic}'/></qemu:commandline></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
     }
 
     async fn lease(&self) -> io::Result<File> {
@@ -504,6 +505,7 @@ mod tests {
         assert!(domain.contains("<vcpupin vcpu='0' cpuset='112'/><vcpupin vcpu='1' cpuset='113'/><emulatorpin cpuset='112,113'/></cputune>"));
         assert!(domain.contains("user,id=gbot-ssh,hostfwd=tcp:127.0.0.1:2222-:22"));
         assert!(domain.contains("&quot;driver&quot;:&quot;virtio-net-pci&quot;"));
+        assert!(domain.contains("<video><model type='vga'/></video>"));
         assert!(!domain.contains("<backend type='passt'") && !domain.contains("<interface"));
         assert!(
             !domain.contains("bridge")

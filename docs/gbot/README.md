@@ -600,9 +600,7 @@ system libvirt services are inactive. SeaBIOS suffices; no bridge or host
 firewall setup is part of this adapter.
 
 The adapter uses **qemu:///session** with slirp user-mode networking and an
-explicit loopback-only SSH forward, recorded with the guest. Port0 in a new
-setup request selects an available ephemeral port before the durable record is
-written. A later bind conflict fails startup; it never silently changes the port. Libvirt owns the running guest independently
+explicit loopback-only SSH forward, recorded with the guest. Libvirt owns the running guest independently
 of Gbot service lifetime. Disks, seed, XML and setup records are under
 `/ai/gbot-vms`; libvirt keeps normal per-user domain registrations. Unregister
 the exact stopped owned UUID before deleting its files. Never remove other
@@ -617,7 +615,9 @@ OI-057 runs in both GNOME Wayland and Ubuntu on Xorg: launch/render, one Chat
 completion through an accepted Host, generated session save/reopen across
 restart, normal exit. `gbot-linux-dev` is a Debian 13 cloud image created by
 the product adapter, 2 vCPU / 4 GiB, XFCE on Xvnc :1. VNC listens on localhost
-and uses SSH. Neither guest shares a person's desktop or uses GPUs.
+and uses SSH. Neither guest shares a person's desktop or passes through a host GPU.
+The Debian BIOS guest retains an emulated VGA device for boot; its bot desktop
+still runs on Xvnc.
 
 There is no new native guest-worker binary. Cloud-init and systemd **user**
 units own Xvnc/XFCE, publish the selected DISPLAY/XAUTHORITY/session D-Bus
@@ -631,8 +631,12 @@ Deliverable: the first dedicated Debian guest made by the product KVM adapter.
 Acceptance: one real desktop frame and one harmless AT-SPI action with independent
 readback; text-only, followed by stopped guest and removed fixture credential.
 No Ron desktop input, GPU/model, Vision, integrated-agent Ready, Windows or release
-claim is part of this gate. Next: run the corrected first boot in S1's booked
-20:13–20:40Z slot, with guest vCPU and emulator affinity112–113.
+claim is part of this gate. First-guest5 stopped: the selected BIOS image reset449 times before the
+kernel when video was disabled. A bounded one-variable VGA screen proves
+Linux/cloud-init startup (one boot, Linux banner and init-local), with the same
+image, CPU, memory and network. The adapter now keeps emulated VGA; Xvnc
+remains the actual bot desktop. This screen is not final qualification.
+Next: one full corrected guest gate in a fresh finite slot on CPUs112–113.
 
 Source gates passed: three focused first-boot, XML/lifecycle and selected-port
 cases; strict all-target Clippy; opt-in guest fixture build. Evidence:
@@ -669,7 +673,7 @@ channels remains an explicit integration item.
 | GChat / local | `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21` | Pushed candidate source; retain until reviewed merge. |
 | GChat / local | `/ai/gchat/out/gbot-kvm-prep-20261011/` | Source gates, official artifact receipts and cold-failure evidence; fixture/Cua unpack retained only through physical gate. |
 | GChat / S1 | `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2` | Exact341508096-byte base, checked against official SHA512SUMS; reuse, no duplicate. |
-| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; no live VM yet. Failed UUID directories retain concise evidence only. |
+| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; first-guest5 stopped; boot/VGA comparison retained. Failed UUID directories retain concise evidence only. |
 | GChat / local | `/ai/gchat/out/oi057-linux-packages-20261011/` | DEB/AppImage/Manager artifacts and minimal archive checks from main0705; historical05a engine, no current-engine/Flash qualification. |
 
 OI-057 packages passed minimal archive inspection; the stock Ubuntu Desktop
@@ -682,3 +686,8 @@ QEMU `-device` is initialized before libvirt's JSON PCI controllers, occupying
 their root slot. The NIC now uses JSON `-device` form, which queues it after
 those controllers. A bounded QEMU parser/controller check accepts that shape;
 the affected XML/lifecycle fixture and real start remain the relevant gates.
+
+Boot comparison evidence: S1 `evidence/boot5/{serial.log,vga-serial.log,
+first-guest5-cpu-registers.txt,grub.cfg}`. The image explicitly enables serial
+earlyprintk, yet the no-video route produces no Linux banner; VGA reaches
+cloud-init in eight seconds. No image/kernel/host policy was changed.
