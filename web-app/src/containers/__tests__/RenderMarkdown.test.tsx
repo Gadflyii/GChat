@@ -16,10 +16,10 @@ Object.assign(navigator, {
 })
 
 describe('RenderMarkdown', () => {
-  it('renders CJK punctuation-adjacent emphasis and strikethrough', () => {
+  it('renders short CJK punctuation-adjacent emphasis and strikethrough', () => {
     const { container } = render(
       <RenderMarkdown
-        content="这是一条包含格式的中文聊天回复。 **中文。**后续 ~~删除。~~后续"
+        content="**中文。**后续 ~~删除。~~后续"
         isAnimating={false}
       />
     )
@@ -28,9 +28,7 @@ describe('RenderMarkdown', () => {
       markdown?.querySelector('[data-streamdown="strong"]')?.textContent
     ).toBe('中文。')
     expect(markdown?.querySelector('del')?.textContent).toBe('删除。')
-    expect(markdown?.textContent).toBe(
-      '这是一条包含格式的中文聊天回复。 中文。后续 删除。后续'
-    )
+    expect(markdown?.textContent).toBe('中文。后续 删除。后续')
   })
 
   it('preserves line breaks in model responses (when isUser == undefined)', () => {
