@@ -4,6 +4,93 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## Current OI-068 Linux SMOL functional walkthrough
+
+Repository `/ai/gchat`, subject `docs/agent-runtime/`; source baseline
+`a4bebb2e1`, Host candidate `257252131`, branch
+`test/gchat-oi068-real-model-a4bebb2e`. The October11 authorization permits an
+isolated Linux Host and accepted desktop, accepted670 SM120a runtime, existing
+complete v2 profile and existing FlashNext SMOL artifact in place. The08:33
+exception permits one current Host build for the discovered argument-order
+blocker. No Engine build, calibration, model copy, Windows change, performance
+claim or physical-release qualification is included.
+
+The bounded Linux cells are complete, with partial acceptance. Actual Ready
+reports131072 context. Fresh Chat reads generated MD/XLSX through ordinary
+folder permission and reports OI068-LOCAL-ONLY / Budget /42000/12000/30000;
+same-conversation continuation passes without tool calls. The reviewed standard
+definition saves through the actual native Create agent control with current
+model, default{} permissions and unchanged25 steps. Its separately invoked
+saved-agent run finishes in2 steps with two fresh native document reads and
+final reply; Chat clears Working. Manual `/compact` creates a checkpoint, and
+the final no-tool continuation reuses it: input10138→4667,6 retained and23
+summarized messages. This does not qualify Code compaction or continuity of an
+already active worker. The same actual Engine session is used throughout.
+
+Agent Builder normal completion fails: after the approved save succeeds, the
+worker requests an identical second save despite the explicit once instruction.
+The second approval is not granted; ordinary Stop cancels that turn. A preceding
+review rejects a wrong goal path and a changed-permissions proposal; the final
+saved definition has the correct paths and original settings. Persisted-definition
+and saved-agent success are distinct from Builder completion.
+
+All discovered product defects are on the sole master list:
+
+- GCHAT-HOST-HARDWARE-PROFILE-ARG-ORDER: fixed257. Host had prepended the
+  hardware-profile flag before the required artifact; accepted670 rejected the
+  profile path before weights. The fix preserves profile/settings and orders
+  the artifact or closed-set selector first. Actual spawn-argv fixture1/1,
+  production build/zero warnings and same-runtime Ready pass. Initial failure
+  and normal resource return are retained; this was not a VRAM failure.
+- GCHAT-CHAT-TOOL-ERROR-PERSISTENCE: failed tool parts drop state/errorText on
+  save and reopen as pending inputs. Four absent-output calls prevent exact
+  diagnosis of the initial read failure. No maxChars permission cause is claimed.
+- GCHAT-AGENT-BUILDER-DUPLICATE-SAVE: actual repeated save and unfinished Builder
+  turn; inference/runtime cause remains unproven.
+- GCHAT-CHAT-AGENT-DEFINITION-REFRESH: mounted Chat keeps its initial empty list
+  after Builder saves. Reload restores the saved selector; ordinary Host refresh
+  and model reselection retain the same Engine session before the actual run.
+
+The08:23 conditional decision allows Code only with safe isolation. Linux
+managed configuration ignores private XDG and writes under HOME, which stays
+unchanged here: Code is skipped and GCHAT-CODE-MANAGED-CONFIG-DATA-ROOT remains
+open. Hermes provisioning is excluded; its live cell is owed on the existing
+Windows installation at the release walkthrough. Broader Windows/Code/Hermes,
+Builder completion and active-worker checks keep OI-068 open.
+
+One invalid harness send is excluded from saved-agent acceptance: selector
+lookup failed, but its shell caller continued to Send. Ordinary Stop cancels
+that turn. Dependent phases now use `set -e` and verify both the saved ID and
+selected model before Send. Process ownership checks use every Host task's
+children and birth identity; checking only the main thread misses worker-spawned
+children. Radix menus use their supported keyboard trigger rather than a bare
+programmatic click. No passing gate is repeated for these helper corrections.
+
+Normal sidebar Stop closes the facade1337 and Engine44775; the Host reports
+stopped/0 active and owned Engine PID1713297 is absent. GPU memory returns to
+1927MiB. At09:01 the keeper exits, canonical GPU guard is reacquired/released and
+booking464 is cancelled before C3's09:05 install. Isolated app/Host exit normally;
+no private-root process references remain. The test root is deleted, while the
+tested candidate Host is retained as baseline. The merged OI-073 tree's generated
+remnant is also retired after confirming its source is pushed and merged;
+315,731,968 allocated bytes are removed in total. No Windows state or owner
+runtime/profile/model is changed.
+
+Current next action is coordinator review/main merge of257 plus this accepted
+functional evidence, then remedy the remaining product rows in assigned order.
+There is no live model, Host, app, booking or guard owned by this walkthrough.
+
+| Owner / host | Exact path | Purpose / retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/oi068-real-model-a4bebb2e` | Unmerged source/docs candidate; retain until coordinator merge |
+| GChat / local | `/ai/gchat/out/remaining-acceptance-20261009/oi068-linux-smol-20261011/` | Concise generated-fixture evidence, `chat-functional-result.json`, `saved-agent-functional-result.json`, `compact-and-continuation-result.json`, final Stop/resource/cleanup receipts |
+| GChat / local | Same packet `accepted-host/ginfer-host` | Tested257 Linux Host,4,323,960 bytes; retain without rebuilding |
+| Accepted baseline / local | `/ai/gchat/out/remaining-acceptance-20261009/oi073/app-delete-20261011/runtime-donor/` | Accepted35e desktop and packaged resources; preserved |
+| C3 / local | `/ai/kernel-agent/run_workdir/local/direct-read-wake-670d1c68a/accepted-670-full-cli-120a/` | Authorized670 CLI/library closure; owner prerequisite preserved |
+| C3 / local | `/ai/kernel-agent/run_workdir/local/profile-v2-87f0820b0/apps-670d1c68a/apps/ginfer-serve` | Accepted670 server; explicit source/ELF binding retained in `runtime-binding.json` |
+| C3 / local | `/ai/kernel-agent/run_workdir/local/profile-v2-87f0820b0/results/local5090-301974bb6-r1/hardware-v2.json` | Complete v2 profile; preserved without calibration |
+| Shared model / local | `/ai/kernel-agent/run_workdir/local/fn-graph-probe-startup-f9af4cff4/model/qwen38_flash_smol_mtp.ginfer` | Existing TP1 `qwen3.8-flash-next/smol-q2g64`; preserved in place |
+
 ## Current ordered acceptance — October 10
 
 Booking380 completed and both canonical guards returned at 22:44:41 UTC,

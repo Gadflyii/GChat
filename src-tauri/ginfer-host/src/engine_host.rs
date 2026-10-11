@@ -609,7 +609,6 @@ impl HostProcesses {
         let executable = self.executable_for(&launch.gpu_uuids)?;
         let mut command = Command::new(executable);
         let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
-        if let Some(path) = &hardware_profile_path { command.arg("--hardware-profile").arg(path); }
         #[cfg(windows)]
         command.creation_flags(0x08000000); // Background serving has no console window.
         if let Some(directory) = executable.parent() {
@@ -635,6 +634,7 @@ impl HostProcesses {
         } else {
             command.arg(&launch.artifact);
         }
+        if let Some(path) = &hardware_profile_path { command.arg("--hardware-profile").arg(path); }
         let mut child = command
             .args([
                 "--exit-on-stdin-close",
@@ -904,6 +904,70 @@ mod tests {
             model_id: "fixture".into(), gpu_uuids: vec!["GPU-fixture".into()],
             tp: 1, port: 40121, max_context: 4096, concurrency: 1,
             options: LaunchOptions::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn hardware_profile_spawn_keeps_artifact_selection_first() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("ginfer-serve");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/spawn-argv\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(directory.path().join("ginfer"), b"fixture CLI").unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture artifact").unwrap();
+        let gpus = vec!["GPU-fixture".to_owned()];
+        let host_directory = directory.path().join("host");
+        let profile = crate::hardware_profile::group_profile_path(&host_directory, &gpus);
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        std::fs::write(&profile, br#"{"schema_version":2}"#).unwrap();
+        let mut processes = HostProcesses::new(
+            executable.clone(),
+            BTreeSet::from([gpus[0].clone()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
+        processes
+            .configure_runtimes(
+                BTreeMap::from([("12.0".to_owned(), executable)]),
+                BTreeMap::from([(gpus[0].clone(), "12.0".to_owned())]),
+            )
+            .unwrap();
+        processes.hardware_profile = Some(
+            crate::hardware_profile::HardwareProfiles::open(
+                host_directory,
+                Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            )
+            .unwrap(),
+        );
+        for artifact_set in [false, true] {
+            let id = Uuid::new_v4();
+            let mut launch = fixture_launch(&artifact, id);
+            launch.artifact_set = artifact_set;
+            processes.launch(launch).unwrap();
+            let child = processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap();
+            let exit = tokio::time::timeout(Duration::from_secs(2), child.wait())
+                .await
+                .unwrap()
+                .unwrap();
+            processes.stop(id).await.unwrap();
+            assert!(exit.success());
+            let recorded = std::fs::read_to_string(directory.path().join("spawn-argv")).unwrap();
+            let args: Vec<_> = recorded.lines().collect();
+            let artifact = artifact.to_str().unwrap();
+            let profile = profile.to_str().unwrap();
+            let expected = if artifact_set {
+                vec!["--tp-artifact-set", artifact, "--tp-fallback", "reject", "--hardware-profile", profile]
+            } else {
+                vec![artifact, "--hardware-profile", profile]
+            };
+            assert_eq!(&args[..expected.len()], expected.as_slice());
+            assert_eq!(args.iter().filter(|arg| **arg == "--hardware-profile").count(), 1);
+            assert_eq!(args[expected.len()], "--exit-on-stdin-close");
         }
     }
 
