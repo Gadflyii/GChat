@@ -117,6 +117,17 @@ and Cargo caches. Native account acceptance remains a separate unmet prerequisit
 No publication, signing, production account mutation, new dependency or paid
 Arbitor implementation is authorized by this task.
 
+Verification preparation is source-only. The candidate has no `node_modules`;
+reuse the aligned graph at `/ai/gchat-worktrees/oi074-frontend-packages` through
+the existing Linux container mounts. Route generation uses its installed
+`@tanstack/router-generator` `Generator`/`getConfig`, with the same React,
+`autoCodeSplitting` and ignore-pattern options as `web-app/vite.config.ts`.
+Run the nineteen `core::connectors` fixtures, five `workspace_connectors` fixtures,
+`bundled_skills_follow_explicit_platform_metadata_policy`, the connections UI
+fixtures and the Settings link assertion. Compile/type/lint the affected paths.
+Each check answers the changed account, provider, dispatch or navigation contract;
+do not repeat the accepted terminal/defaults gates or run an unrelated full suite.
+
 See [connection setup and supported operations](operations.md) and the
 [account/runtime decision](../decisions/2026-10-10-own-native-workspace-connectors.md).
 
