@@ -7,12 +7,14 @@ import {
   type ChatRequestOptions,
   type ChatTransport,
   type LanguageModel,
+  type ModelMessage,
   type UIMessageChunk,
   type Tool,
   type LanguageModelUsage,
   type TextStreamPart,
 } from 'ai'
 import { repairToolCallArguments } from './repairToolCall'
+import { logChatWarning, type ChatWarningContext } from './chat-warning'
 import { chatMemoryContext, supportsGChatMemory } from './memory'
 import { prepareToolResultImagesForModel } from './toolResultImages'
 import {
@@ -384,6 +386,22 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     const providerId = useModelProvider.getState().selectedProvider
     const effectiveProviderName = providerId
     const provider = useModelProvider.getState().getProviderByName(providerId)
+    const warningContext: ChatWarningContext = {
+      threadId: this.threadId ?? options.chatId,
+      modelId,
+      providerId,
+      messageFormat: 'UIMessage[]',
+      conversion: 'pending',
+      uiMessageCount: options.messages.length,
+      modelMessageCount: null,
+      toolCount: 0,
+      configuredContextTokens: null,
+      loadedContextTokens: null,
+      contextTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      reservedOutputTokens: null,
+    }
     this.requestModelId = providerId === 'ginfer' || providerId === 'ginfer-lan' ? modelId : undefined
     if (this.serviceHub && modelId && provider) {
       try {
@@ -466,11 +484,14 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
               updatedProvider?.models, provider.models, this.contextState
             )
           : undefined
+        warningContext.configuredContextTokens = contextPolicy?.configuredContextTokens ?? null
+        warningContext.contextTokens = contextPolicy?.configuredContextTokens ?? null
         if (contextPolicy && effectiveProviderName === 'ginfer-lan') {
           const instance = (await listAgentModelInstances()).find((candidate) => candidate.id === modelId)
           if (!instance || typeof instance.maxContext !== 'number' || !Number.isInteger(instance.maxContext) || instance.maxContext <= 0) {
             throw new Error('The paired GInfer instance is unavailable or did not report its loaded context capacity.')
           }
+          warningContext.loadedContextTokens = instance.maxContext
           contextPolicy.configuredContextTokens = instance.maxContext
         } else if (contextPolicy) {
           const engine = EngineManager.instance().get('ginfer') as
@@ -478,9 +499,11 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
             | undefined
           const loadedContext = await engine?.getLoadedContext?.(modelId)
           if (loadedContext && Number.isInteger(loadedContext) && loadedContext > 0) {
+            warningContext.loadedContextTokens = loadedContext
             contextPolicy.configuredContextTokens = loadedContext
           }
         }
+        warningContext.contextTokens = contextPolicy?.configuredContextTokens ?? null
         this.model = await ModelFactory.createModel(
           modelId,
           effectiveProvider,
@@ -489,15 +512,21 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           contextPolicy
             ? {
                 ...contextPolicy,
-                onUsage: (usage) => useContextUsage.getState().record(
-                  this.threadId ?? options.chatId,
-                  { ...usage, modelId, outputTokens: 0 }
-                ),
+                onUsage: (usage) => {
+                  warningContext.inputTokens = usage.inputTokens
+                  warningContext.contextTokens = usage.contextTokens
+                  warningContext.reservedOutputTokens = usage.reservedOutputTokens
+                  useContextUsage.getState().record(
+                    this.threadId ?? options.chatId,
+                    { ...usage, modelId, outputTokens: 0 }
+                  )
+                },
               }
             : undefined
         )
         ttftMark('deltaEnd')
       } catch (error) {
+        logChatWarning('model-setup', warningContext, error)
         console.error('Failed to create model:', error)
         throw new Error(
           `Failed to create model: ${extractModelErrorMessage(error)}`
@@ -527,7 +556,20 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         supportsVision,
       })
     }
-    const baseMessages = convertToModelMessages(preparedMessages)
+    warningContext.uiMessageCount = preparedMessages.length
+    warningContext.toolCount = (useModelProvider.getState().selectedModel?.capabilities?.includes('tools') ?? this.modelSupportsTools)
+      ? Object.keys(this.tools).length : 0
+    let baseMessages: ModelMessage[]
+    try {
+      baseMessages = convertToModelMessages(preparedMessages)
+      warningContext.messageFormat = 'ModelMessage[]'
+      warningContext.conversion = 'converted'
+      warningContext.modelMessageCount = baseMessages.length
+    } catch (error) {
+      warningContext.conversion = 'rejected'
+      logChatWarning('ui-message-conversion', warningContext, error)
+      throw error
+    }
 
     const modelMessages = baseMessages
 
@@ -584,22 +626,29 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     const maxOutputTokens = getSamplingParamsForThread(this.threadId).params
       ?.max_output_tokens as number | undefined
 
-    const result = streamText({
-      model: this.model,
-      messages: modelMessages,
-      abortSignal: options.abortSignal,
-      tools: shouldEnableTools ? requestTools : undefined,
-      toolChoice: invocationTool ? { type: 'tool', toolName: invocationTool } : shouldEnableTools ? 'auto' : undefined,
-      system: systemMessage,
-      maxOutputTokens,
-      experimental_transform: stripSpecialTokensTransform,
-      experimental_repairToolCall: async ({ toolCall, error }) => {
-        if (NoSuchToolError.isInstance(error)) return null
-        const repaired = repairToolCallArguments(toolCall.input)
-        if (repaired === null) return null
-        return { ...toolCall, input: repaired }
-      },
-    })
+    warningContext.toolCount = shouldEnableTools ? Object.keys(requestTools).length : 0
+    let result: ReturnType<typeof streamText<typeof requestTools>>
+    try {
+      result = streamText({
+        model: this.model,
+        messages: modelMessages,
+        abortSignal: options.abortSignal,
+        tools: shouldEnableTools ? requestTools : undefined,
+        toolChoice: invocationTool ? { type: 'tool', toolName: invocationTool } : shouldEnableTools ? 'auto' : undefined,
+        system: systemMessage,
+        maxOutputTokens,
+        experimental_transform: stripSpecialTokensTransform,
+        experimental_repairToolCall: async ({ toolCall, error }) => {
+          if (NoSuchToolError.isInstance(error)) return null
+          const repaired = repairToolCallArguments(toolCall.input)
+          if (repaired === null) return null
+          return { ...toolCall, input: repaired }
+        },
+      })
+    } catch (error) {
+      logChatWarning('stream-setup', warningContext, error)
+      throw error
+    }
 
     let tokensPerSecond = 0
     let draftTokensTotal: number | null = null
@@ -633,6 +682,8 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
             finishReason: string
           }
           const usage = finishPart.totalUsage
+          if (usage?.inputTokens != null) warningContext.inputTokens = usage.inputTokens
+          warningContext.outputTokens = usage?.outputTokens ?? null
           const durationMs = streamStartTime ? Date.now() - streamStartTime : 0
           const durationSec = durationMs / 1000
 
@@ -698,6 +749,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         return undefined
       },
       onError: (error) => {
+        logChatWarning('stream-error', warningContext, error)
         const contextFailure = getSmartContextFailure(error)
         if (contextFailure) return JSON.stringify({ error: contextFailure })
         const errorMessage =
