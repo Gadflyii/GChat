@@ -3,6 +3,15 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+The [isolated Linux SMOL walkthrough](remaining-acceptance.md#current-oi-068-linux-smol-functional-walkthrough)
+accepts actual Host Ready, Chat MD/XLSX reading/continuation, reviewed saved
+agent execution, manual Chat compaction/continuation and normal final Stop.
+Builder completion fails on a duplicate save; missing definition refresh and
+failed-tool error persistence are logged. Code isolation and Hermes remain
+explicit gaps. The narrow Host argument-order fix257 passes its focused argv
+fixture/build and real startup. No Engine build, calibration, Windows change
+or performance claim. GPU resources and private test state are returned.
+
 OI-075's one generated Linux/WSLg WebKit observation is now measured: opening
 110 ms, full programmatic traversal 113 ms and stable foreground idle 30.047 s.
 Native process counters are partial because temporary image-loader children
@@ -16,12 +25,15 @@ OI-073's new public-removal control passes its focused source/native gates and
 one actual Linux candidate-app submit/read/delete. The confirmation removes only
 the receipt-owned public result, keeping local history and unrelated ownership.
 All12 official series/36 points remain unchanged. The disposable row and private
-fixture are removed; main merge is next. The [current deletion record](remaining-acceptance.md#current-oi-073-app-public-deletion-gate-accepted)
+fixture are removed; source is merged/pushed on maina4bebb2e1. The [current deletion record](remaining-acceptance.md#current-oi-073-app-public-deletion-gate-accepted)
 owns exact scope, evidence and the deferred Windows release gate.
 
 Installer routing follows the [validated current-user NSIS decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).
 
-Published source baseline is `bd4dba841`. Host correctness fixes OI-111–114
+## Earlier Windows installation evidence
+
+The receipts below describe earlier installed artifacts, not current main.
+Historical source baseline is `bd4dba841`. Host correctness fixes OI-111–114
 and OI-120–122 retain their composed Rust gate. Windows now has the accepted
 `3aff66d62` desktop, retained `574d73df7` Manager, 7d9 Host/CLI and2ef Engine.
 The installed embedded UI loads correctly. Ron accepts Code Stop/Restart after
