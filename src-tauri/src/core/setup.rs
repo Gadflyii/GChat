@@ -180,7 +180,7 @@ pub async fn prepare_installed_hardware_from_resources(
     if !app_data_directory.is_absolute() {
         return Err("installed app-data directory must be absolute".into());
     }
-    let data_folder = crate::core::app::commands::resolve_installer_data_folder(&app_data_directory);
+    let data_folder = crate::core::app::commands::resolve_app_data_folder(&app_data_directory);
     let resources = resource_directory.clone();
     let destination = data_folder.clone();
     tokio::task::spawn_blocking(move || {

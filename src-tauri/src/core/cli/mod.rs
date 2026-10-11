@@ -11,7 +11,7 @@ pub mod integrations;
 
 use std::path::{Path, PathBuf};
 
-use crate::core::app::commands::resolve_jan_data_folder;
+use crate::core::app::commands::resolve_data_folder;
 
 // Re-export impl functions and config types so the binary can call them directly.
 // `load_ginfer_model_impl` is explicitly documented as usable without an AppHandle.
@@ -54,7 +54,7 @@ pub type ModelEntry = (String, ModelYml);
 /// Embedding models are excluded: they cannot serve `/v1/chat/completions`, so
 /// offering them anywhere the CLI leads is a dead end.
 pub fn list_chat_models() -> Vec<ModelEntry> {
-    let data_folder = resolve_jan_data_folder();
+    let data_folder = resolve_data_folder();
     match crate::core::ginfer_models::adopt_root_ginfer_models_in(&data_folder) {
         Ok(report) => {
             for adopted in report.adopted {
@@ -130,7 +130,7 @@ pub fn list_chat_models_in(data_folder: &Path) -> Vec<ModelEntry> {
 ///   - absolute (`/…` or `C:\…`) — used verbatim
 ///   - relative — joined with the GChat data folder
 pub fn resolve_model_by_id(model_id: &str) -> Result<PathBuf, String> {
-    resolve_model_by_id_in(&resolve_jan_data_folder(), model_id)
+    resolve_model_by_id_in(&resolve_data_folder(), model_id)
 }
 
 /// Same as [`resolve_model_by_id`], against an explicit data folder.
@@ -167,7 +167,7 @@ pub fn resolve_model_by_id_in(data_folder: &Path, model_id: &str) -> Result<Path
 /// Linux: `<data_folder>/ginfer/linux/sm120a/bin/ginfer-serve`.
 /// Windows: `<data_folder>/ginfer/bin/ginfer-serve.exe`.
 pub fn discover_ginfer_binary() -> Option<PathBuf> {
-    discover_ginfer_binary_in(&resolve_jan_data_folder())
+    discover_ginfer_binary_in(&resolve_data_folder())
 }
 
 /// Same as [`discover_ginfer_binary`], against an explicit data folder.
@@ -314,7 +314,7 @@ pub async fn download_hf_model(
     use futures_util::StreamExt;
     use tokio::io::AsyncWriteExt;
 
-    let data_folder = resolve_jan_data_folder();
+    let data_folder = resolve_data_folder();
     let model_dir = data_folder.join(MODELS_ROOT).join("models").join(repo_id);
     tokio::fs::create_dir_all(&model_dir)
         .await
@@ -391,7 +391,7 @@ pub async fn download_hf_model(
 // ── App config ────────────────────────────────────────────────────────────
 
 pub fn cli_get_data_folder() -> PathBuf {
-    resolve_jan_data_folder()
+    resolve_data_folder()
 }
 
 #[cfg(test)]

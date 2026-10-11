@@ -44,6 +44,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_KEY_ID");
     println!("cargo:rerun-if-env-changed=GBENCH_SIGNING_SEED_HEX");
     println!("cargo:rerun-if-env-changed=CARGO_MANIFEST_DIR");
+    stage_bundle_identifier();
     stage_launch_profiles();
 
     #[cfg(all(windows, feature = "test-tauri"))]
@@ -51,6 +52,27 @@ fn main() {
 
     #[cfg(not(feature = "cli"))]
     build_tauri()
+}
+
+fn stage_bundle_identifier() {
+    let path = manifest_dir().join("tauri.conf.json");
+    println!("cargo:rerun-if-changed={}", path.display());
+    println!("cargo:rerun-if-env-changed=TAURI_CONFIG");
+    let config: serde_json::Value = serde_json::from_slice(
+        &fs::read(path).expect("cannot read GChat configuration"),
+    )
+    .expect("invalid GChat configuration");
+    let override_config: Option<serde_json::Value> = std::env::var("TAURI_CONFIG")
+        .ok()
+        .map(|value| serde_json::from_str(&value).expect("invalid Tauri configuration override"));
+    let identifier = override_config
+        .as_ref()
+        .and_then(|value| value.get("identifier"))
+        .unwrap_or(&config["identifier"])
+        .as_str()
+        .filter(|value| !value.is_empty())
+        .expect("GChat bundle identifier is missing");
+    println!("cargo:rustc-env=GCHAT_BUNDLE_IDENTIFIER={identifier}");
 }
 
 fn stage_launch_profiles() {

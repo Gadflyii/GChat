@@ -6,7 +6,51 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-076 warning diagnostics
+## CLI configuration selection — verified, merge-ready
+
+Deliverable: generic CLI commands use the same desktop/installer configuration
+selector and saved data folder. Reading configuration creates no competing
+`gchat` root. Existing desktop precedence, valid custom folders and default
+fallback stay intact on Linux and Windows. Models, model lookup, runtime
+discovery, downloads and server-state paths all consume that one resolver.
+
+Candidate `/ai/gchat-worktrees/cli-config-selection-b55`, branch
+`fix/gchat-cli-config-b55`, from merged main `b55f1f73f`. Product source
+`8d4602951` is committed/pushed and independently accepted. The build script
+emits the owning bundle identifier, including an explicit Tauri override;
+headless callers delegate to the existing desktop/installer selector. The
+superseded root creation and internal legacy resolver names are removed.
+Master CLI/resolver and OI115–119 rows were read before implementation: the
+latter concern Host/Manager owners and do not overlap these app/CLI modules.
+
+The assigned gate passes on Linux, actual 05:48:54–05:50:05 UTC:
+
+- Exact CLI/resolver fixture: 1/1 PASS, 598 cases unselected; 0.01s execution.
+  Current custom storage, actual model/runtime discovery and server-state paths,
+  existing XDG-config selection, malformed-config fallback, saved bytes and
+  absent competing roots are covered in an isolated subprocess.
+- CLI build: PASS; 14.96s after the 54.95s fixture build; no emitted warnings/errors.
+- One native `models list --json` against private custom-folder metadata: PASS.
+  The expected fixture model is returned, saved configuration bytes are unchanged
+  and neither competing legacy root is created. No model is loaded.
+
+Evidence: `/ai/gchat/out/cli-config-selection-20261011/` (`gate.log`,
+`result.json`, `custom-folder.stdout/stderr`). The tested binary
+`gchat-cli-8d4602951` is retained as the accepted CLI baseline; private fixture
+metadata is disposable. Candidate source remains until the normal reviewed
+merge. Shared Cargo/toolchain caches are retained. No native Windows build/run,
+GPU/model, release, signing or publication was part of this gate.
+
+The local disk hold deferred waiting schedulers before any compiler/test ran.
+One early handoff preflight was blocked by another already-active compile;
+canonical fd/inode proof identified its owner, which returned a finite actual
+END. These are resource deferrals, not code/test failures. The sole executing
+gate then passed; its container is absent, canonical build guard reacquired
+and released, and booking 435 canceled at actual completion. Waiting receipts
+are preserved, and future execution verifies the live guard rather than relying
+on an earlier release notice. No passing check was repeated.
+
+## Accepted OI-076 warning diagnostics
 
 Deliverable: make the existing context/format warning self-diagnosing without
 changing admission, classification, message conversion or UI behavior. The
@@ -42,8 +86,8 @@ UI error formatter. Logging moved to its original failure event, preserving
 the SDK's console output and formatter. Both failed logs remain in the same
 evidence folder; neither passing check was repeated. The injected SDK failures
 still produce expected console errors, including test sentinels; the new native
-records omit them. OI-076 is diagnostics in place on the candidate, waiting for
-the next occurrence after merge. OI-072 is the next ONE item; deadline 06:00 UTC.
+records omit them. OI-076 diagnostics are merged on main `36ac89441`, waiting for the next
+occurrence. The source tree was retired; Git and saved evidence are retained.
 
 ## Accepted short formatted Chat replies
 
