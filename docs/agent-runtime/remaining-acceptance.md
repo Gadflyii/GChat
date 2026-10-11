@@ -462,13 +462,20 @@ GInfer `docs/maintainer/process-log.md` row
 
 The [validated NSIS owner decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md) governs the integrated custom template; failed ownership checks retain upstream MSI migration.
 
+### Historical Windows and S2 acceptance preparation
+
+The October 10 records below preserve the tested producers and then-pending
+actions. Current acceptance and the new S2 plan are recorded above and in
+[the Manager authority](../ginfer-manager/README.md).
+
 Candidate `fix/gchat-remaining-acceptance-bd4` at
 `/ai/gchat-worktrees/remaining-acceptance-bd4` starts from published
-`bd4dba841`. Current Windows components are compiled `574d73df7` GChat desktop,
-new Manager `574d73df7`, 7d9 Host/CLI and retained Engine `2ef56a52`.
-Exact restoration and ordinary baseline UI pass. Booking364's desktop-only
-refresh now runs compiled `574d73df7`; embedded UI loads, but Code Stop remains
-visibly Stopping after native exit. Host fixes
+`bd4dba841`. Historical Windows components were corrected `574d73df7` GChat
+desktop, new Manager `574d73df7`, 7d9 Host/CLI and retained Engine `2ef56a52`.
+The baseline restoration, corrected desktop compilation, embedded-origin
+rendering and separate NSIS payload verification pass at their recorded scope.
+Code Stop presentation failed at that stage; subsequent correction and acceptance
+are recorded in the current account above. Host fixes
 OI-111–114 and OI-120–122 retain composed Rust checks at 01:50:05 UTC.
 The [integration authority](../code-hygiene/README.md)
 owns their source verification and accepted Linux packages (`54c931c68`
@@ -487,6 +494,23 @@ partial site deployment, the explicitly authorized one-attempt installed
 submit/read/delete check passes. Public and local test data are removed;
 broader retry checks remain unrun under the current restriction.
 The ordered remaining checks are OI-068, OI-069, OI-071 and OI-075.
+The October 10 booking364 desktop refresh passed embedded-origin rendering
+and normal nondebug restart with state and Manager/Host/Engine preserved. Code
+Stop succeeded at backend/process scope but its UI remained Stopping after 26s;
+`GCHAT-CODE-STOP-STUCK-UI` was open and the complete Code case was not accepted
+at that stage.
+The packet's `desktop-ui-terminal-364.json` records this split outcome and actual
+16:31:58 guard release. Booking365's corrected Linux Manager component/package
+pass and the still-unrun S2 native tray/grant check are recorded in the current
+[Manager subject](../ginfer-manager/README.md). NSIS367's producer and independent
+package check pass; bundling took 159.902512 seconds. The wrapper's final success
+allowlist omitted `NSIS_ONLY_PASS`, so its actual terminal exit 1 is retained
+separately from body exit 0, actual Job0 and package PASS. Guards were released
+at 17:04:53.939 UTC, all six observed build PIDs are absent, and booking367 was
+cancelled early. Apps and settings are unchanged. The new Code UI fix is absent
+from this installer; its composed verification was booked for 17:30–17:50 UTC.
+There has been no new model-backed walkthrough or capacity qualification.
+
 The registered second peer timed out on the bounded reachability check and the
 local fleet is unconfigured. Read-only strict-key/BatchMode SSH to
 `ron@192.168.1.112` succeeded at 11:15:27 UTC as `AIS-1-2950X-L02`, UID1000
@@ -494,8 +518,14 @@ local fleet is unconfigured. Read-only strict-key/BatchMode SSH to
 That earlier query found only the GDM greeter and SSH sessions. A fresh read-only
 query at 12:19:11 UTC now proves Ron's active X11 `:1` session, both tray
 providers and Secret Service (`oi071/s2-logged-in-readonly-20261010.json`).
-The selected accepted Manager/Host pair is missing; the existing Host has a
-different SHA. No deployment, app start or provider activation has run.
+The accepted Manager/Host pair is now staged in a separate S2 child-XDG fixture;
+the existing Host and its ordinary state remain intact. FIFO row 806 ran the
+baseline Manager at 14:34:43–14:42:43 UTC. Native Check secure storage displayed
+ready; Cancel dismissed the Pair dialog without pairing. The fixed timeout
+ended it with code 124 and the exact Manager PID was absent afterward. Tray
+Open/Exit remains unqualified because no safe icon target was available.
+This screen created no Host, model or pairing grant; it does not qualify the
+new tray lifecycle correction.
 The accepted four-file archive and S2 Ubuntu 24.04.3/glibc 2.39/GTK/WebKit/Soup
 prerequisites match (`oi071/s2-compatibility-package-proposal-20261010.json`).
 Physical pool checks need designated available
@@ -539,8 +569,10 @@ continuation, original-run reporting and stock persistence evidence below.
 Preserve user histories, definitions, settings, profiles, grants, existing agent
 budgets, caller identity and actual loaded capacity. A model-backed check needs
 a compatible actually Ready instance and both canonical GPU/build guards for its
-whole lifetime. No UAC, provider/dependency installation, Server 2 use, reduced
-profile controls or widened folder permissions. Final Stop keeps the explicitly
+whole lifetime. No UAC, provider/dependency installation, original Server 2 state
+changes, reduced profile controls or widened folder permissions. The authorized
+S2 native tray/vault fixture uses its FIFO and leaves other owners' jobs intact.
+Final Stop keeps the explicitly
 authorized AUTO profile; restore normal apps and prove Engine absence before
 guard release.
 
@@ -639,17 +671,26 @@ profiles and certificates. Manager 24796/birth `2026-10-10T11:46:14.4288363Z`
 and hash `1b9f0173…` are unchanged; 7d9 Host/CLI and 2ef Engine remain intact.
 Engine/API counts are zero and guards are released.
 
-CPU-only booking353, 15:05–15:15 UTC, used the accepted source proposal for the
-owning build body: relative `frontendDist`
-`../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
-assets as a Directory. That preparation alone was nonexecution evidence; the
-completed desktop's byte/provenance proof and booking364 UI are recorded below.
-The NSIS build remains incomplete. The proposal is in
+### Historical October 10 desktop and terminal correction
+
+The following preparation decisions and pending claims describe their original
+execution stage. The current acceptance account above supersedes them.
+
+CPU-only booking353, 15:05–15:15 UTC, compiled the corrected desktop: relative
+`frontendDist` `../../../windows-build/source/web-app/dist` resolves to the exact
+832 accepted assets as a Directory. Cargo passed from 15:07:07.607 to
+15:11:35.887 UTC (4m28s). The independent 15:13 UTC deadline killed the owned
+job with NSIS packaging incomplete, about 84 seconds after Cargo completion.
+Overall native result remains `BOUNDED_ABORT`/exit 1. Job membership was empty;
+fresh controller/body/helper absence passed at 15:13:44 UTC and the keeper
+released at 15:14:21 UTC. Evidence: `production-terminal-353.json`,
+`release-verified-353.json` and native
+`%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/native-574d73df7-353-frontend-directory/`
+under the existing OI-068 packet. The preparation is retained in
 `oi068-windows-20261010/production-frontend-directory-574d73df7-proposed/`.
-Booking364 verifies the compiled desktop's complete provenance and embedded UI.
-NSIS completion remains unqualified. Code Stop exposes the ordering defect below;
-model-backed acceptance has not run. Reuse valid Manager, Host/CLI, Engine and
-state-preservation evidence at its recorded scope.
+Ron separately approved desktop-only UI and NSIS continuation; booking364's
+embedded UI and NSIS367's later completion retain their independent scopes.
+Manager, Host/CLI, Engine and saved-state evidence remain unchanged.
 
 ### Embedded terminal status ordering
 
@@ -990,7 +1031,8 @@ The 7d9 and refreshed349 production/package fields pass. Booking350 retains
 original R2 classifier FAIL, separate adjudication, actual Manager R3 PASS and
 full installed byte/state PASS. The candidate GChat frontend failed to load;
 exact baseline desktop-only restoration and ordinary UI now pass. Relative
-Directory correction and candidate desktop/NSIS rebuild/UI acceptance remain pending.
+Directory correction desktop compilation passes in booking353; candidate UI
+acceptance and separate NSIS packaging remain pending.
 Retain the native `production-refresh-574d73df7-349` packet and
 `native-574d73df7-349-production-refresh/native-test-result.json` for those next
 steps. Consumed 37aa/333 artifacts are retained evidence, not current passing gates.
@@ -999,7 +1041,7 @@ The refreshed package reuses the accepted 7d9 compiled GChat/Host/CLI and exact
 Engine/frontend closure. Only the Manager embed and NSIS bundle regenerated; do not
 relabel reused compiled payloads as newly compiled from `574d73df7`. Retain
 package/component/state proof separately from the failed ordinary GChat UI and
-pending corrected desktop production.
+completed corrected desktop compilation and pending UI/separate NSIS acceptance.
 
 After the required CPU checks and production refresh, perform remaining
 acceptance sequentially inside the admitted reservation. Compilation/checks and actual model use cannot overlap. The
@@ -1100,14 +1142,18 @@ evidence does not supersede those packages. The WSLg desktop lacks the required
 providers, but the fresh 12:19:11 UTC read-only S2 query proves Ron's active X11
 `:1`, an X11 tray owner, StatusNotifierWatcher and Secret Service. Evidence is
 `out/remaining-acceptance-20261009/oi071/s2-logged-in-readonly-20261010.json`.
-The existing Host has a different SHA and the selected accepted Manager/Host
-pair is missing. The next step is to verify that exact pair's compatibility and
-launch prerequisites on the desktop Ron designated; no deployment or app start
-has run.
+The accepted Manager/Host pair is now staged in the isolated S2 fixture.
+FIFO806's actual baseline Manager screen passes native secure-storage readiness;
+its timeout124 and exact PID absence are recorded in
+`oi071/s2-row806-native-storage-tray-20261010.json`. No Host or grant was created,
+and tray Open/Exit remains unqualified. The corrected Linux Manager check,
+strict Clippy and build are approved for CPU-only 16:35–16:55 UTC; its actual
+lifecycle and pairing checks remain next.
 On that desktop, use the actual Manager/Host pair, pair through the native vault,
 restart Manager and restore the saved grant, then use Show/Hide and Exit tray
-actions while checking that the same Host remains alive. No provider install,
-Linux deployment or credential changes were attempted here.
+actions while checking that the same Host remains alive. No provider install or
+original deployment/credential change was attempted; only the readiness probe's
+temporary native-vault set/read/delete was exercised.
 
 ## Current OI-073 app public deletion: gate accepted
 
@@ -1431,7 +1477,8 @@ the October 1 cause remains unknown.
 | Windows acceptance `/ai/gchat-worktrees/terminal-stop-ui-574d`, branch `fix/gchat-terminal-stop-ui` | Native historical base `1ccde5715` plus actual two-leaf product overlay `3aff66d62`; checked source `210d642ba`. Stop source is accepted after actual392 replay and pending normal merge. Reconnect is a separate next item; retain source and concise374/380/391/392 evidence. |
 | Windows acceptance `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/`, native `C:\Users\Ron\AppData\Local\GChat\remaining-acceptance-20261010/` | Actual r3 Compile/Test PASS and desktop-r4 PASS/proof retained with fresh22MiB frontend and37MiB exact developer executable for the accepted installed Stop screen and upcoming reconnect correction. Original failed attempts, catalog diagnosis/restoration and reviewed r2/r3/r4 controls are concise retained evidence. `root-retirement-380.json` proves Jobs/PIDs/guards returned; no owned jobs remain. 391/392 refresh/recovery scripts completed; both saved startup flags remain false. Two same-byte392 backups can retire after recovery; original accepted build remains available. Keep accepted353/367/574d/7d9 artifacts and shared caches; no rebuild is needed. |
 | `/ai/gchat-worktrees/remaining-acceptance-bd4`, branch `fix/gchat-remaining-acceptance-bd4` | Integrated implementation through `574d73df7`; this record owns current runtime acceptance. Retain source and reused build caches. |
-| `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; corrected candidate desktop UI acceptance remains pending. No disk-cleanliness claim. |
+| Retired `/ai/gchat-worktrees/current-user-nsis-7d9` and `/ai/gchat-worktrees/manager-stopped-error-7d9` | Removed after integrated-patch, clean/upstream and live-use checks. Published branches and acceptance evidence remain; 551,276,544 allocated file bytes released. Current candidates, packages and shared caches retained. |
+| `/ai/gchat/out/remaining-acceptance-20261009/`, including `oi068-windows-20261010/production-9a4caa1c3-337/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/` | Retain prior 7d9 and refreshed349 production/package evidence, booking350 original R2 FAIL/adjudication, Manager R3/installed byte-state receipts, consumed booking341 evidence and Office fixture. Preserve exact rollback desktop, actual restoration/UI PASS and failed frontend production evidence; booking353 compiled desktop PASS, partial NSIS `BOUNDED_ABORT` and terminal/release receipts remain retained in `native-574d73df7-353-frontend-directory`. Candidate desktop UI 16:20–16:35 and separate NSIS 16:55–17:20 remain pending. No disk-cleanliness claim. |
 | Existing `/ai/gchat/out/unified-sessions-20261008/`, `agent-recovery-20261001/`, `ginfer-manager/`, `oi056-current-engine/`, `remediation-native-correction-20261009/`, `remediation-final-20261009/` | Reused retained evidence; no duplicated suite or model artifacts. |
 
 Two file-launch attempts ran no measurement: a guessed native path did not
