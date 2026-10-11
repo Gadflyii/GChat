@@ -68,18 +68,37 @@ fingerprints are unchanged. Raw evidence is in
 `out/linux-tray-registration-20261011/native-882-evidence/`;
 `watcher-format-diagnosis.json` and `shell-traversal-diagnosis.json` retain the causes.
 
-Next unresolved action: one source-corrected FIFO Hide/Open/Exit gate using the
-same accepted four-file archive, no rebuild/model/Pair. Use a fresh owned fixture
-under `/mnt/data/ai/gchat-linux-tray-registration-r2-20261011`, unchanged HOME and
-private XDG config/data/cache in Ron's active unlocked X11 session 8475. The existing
-FIFO 5130 remains the only launcher. Bound 230s plus 20s cleanup; require owned SNI,
-normal native Exit and retained Host before its graceful shutdown. Keep 882's
-partial evidence and retire its disposable fixture only after exact lifetime audit.
-FIFO 885 was queued at 14:54:06Z behind 884, with corrected controls and the exact
-accepted four-file package. Independent source review is READY. The preceding
-job's 30-minute bound ends by 15:20:39Z; this gate has 230s plus 20s cleanup.
-Expected result: 15:25Z; deadline: 17:00Z. No model, app build, product source
-patch or second desktop session is included.
+FIFO 885 runs 15:19:39–15:19:41Z. Fresh SNI `:1.373` belongs to exact Manager
+3884509; native Hide retains Host 3884472. The corrected structural walk still
+cannot find the label because `named_nodes` excludes Menu roles before reading
+their names. S2's installed GNOME 46 `PanelMenu.Button` gives the indicator its
+accessible name and `Atk.Role.MENU`. The installed resource, appindicator subclass
+and retained raw result identify this additional probe incompatibility. Both
+children exit, Host normally with code 0; original state is unchanged. This result
+does not establish an absent icon or failed Open/Exit product behavior.
+
+October 11 15:22Z decision ends accessibility-finder iteration. Next unresolved
+action: one bounded S2 FIFO gate through the exact owned tray's public D-Bus
+contract, using the unchanged accepted package. Invoke SNI Activate once and
+the uniquely labelled, enabled, visible dbusmenu Exit item with `Event('clicked')`;
+record actual window/process effects rather than method-return success alone.
+Manager's supported Open handler is the dbusmenu Open item. The 15:26Z decision
+approves the fixed sequence: record Activate's effect, click the uniquely bound
+Open item, then click Exit in the same single gate.
+No AX finder, model, build, Pair or private application callback is used. Start the
+new Manager under `/mnt/data/ai/gchat-linux-tray-dbus-contract-20261011`, unchanged
+HOME and private XDG state. Its empty account does not auto-hide at startup;
+prepare the hidden-window precondition with one normal `WM_DELETE_WINDOW` request
+to its exact owned X11 window, then verify the same live Manager is hidden.
+Repin exact bus/process identities before
+each method. If dbusmenu is not exposed, record Open/Exit as owed to Ron's desktop
+release walkthrough and close this row as tray-works, per the decision. Deadline:
+17:00Z. The existing FIFO 5130 remains the sole launcher.
+
+The unused accessibility iterator and its fixture are removed from the current
+candidate when this gate supersedes that path. Their earlier focused result and
+staged R2 controls remain historical evidence. The unchanged shared registration
+parser and its three passing cases remain in use by the public-contract gate.
 
 FIFO 882's disposable S2 fixture is retired at 14:59:12Z after all 11 evidence
 files match their retained local copies, its exact process group is empty and
