@@ -248,7 +248,7 @@ async fn builder_save_finishes_both_skill_routes_after_revision_and_keeps_ordina
         definition.built_in = false;
         definition.default_goal = "Read the approved fixture and report its marker.".into();
         let mut invalid_definition = definition.clone();
-        invalid_definition.default_goal.clear();
+        invalid_definition.name.clear();
         let save = json!({"action":"save_definition","args":definition});
         let server = ScriptedGinferServer::start(vec![
             ScriptedResponse::tool_call("studio_manage", json!({"action":"save_definition","args":invalid_definition})),
@@ -276,7 +276,7 @@ async fn builder_save_finishes_both_skill_routes_after_revision_and_keeps_ordina
         assert_eq!(outcome.reason, "reply");
         assert_eq!(outcome.step_count, if builder { 2 } else { 4 });
         assert_eq!(session.turn_count, 1);
-        assert!(events.iter().any(|event| matches!(event, AgentEvent::ToolCallExecuted { result } if result.call.tool == "studio.manage" && result.outcome.status == ToolStatus::Error && result.outcome.summary.contains("default goal"))));
+        assert!(events.iter().any(|event| matches!(event, AgentEvent::ToolCallExecuted { result } if result.call.tool == "studio.manage" && result.outcome.status == ToolStatus::Error && result.outcome.summary == "Agent name is required")));
         assert!(events.iter().any(|event| matches!(event, AgentEvent::TurnFinished { reason, step_count } if reason == "reply" && *step_count == outcome.step_count)));
         let persisted = definitions::list_definitions(workspace.path()).unwrap().into_iter().find(|saved| saved.id == definition.id).unwrap();
         assert_eq!(json!(persisted), json!(definition), "reviewed settings must remain unchanged");
