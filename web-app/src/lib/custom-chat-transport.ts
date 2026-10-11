@@ -638,6 +638,10 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         system: systemMessage,
         maxOutputTokens,
         experimental_transform: stripSpecialTokensTransform,
+        onError: ({ error }) => {
+          logChatWarning('stream-error', warningContext, error)
+          console.error(error)
+        },
         experimental_repairToolCall: async ({ toolCall, error }) => {
           if (NoSuchToolError.isInstance(error)) return null
           const repaired = repairToolCallArguments(toolCall.input)
@@ -749,7 +753,6 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         return undefined
       },
       onError: (error) => {
-        logChatWarning('stream-error', warningContext, error)
         const contextFailure = getSmartContextFailure(error)
         if (contextFailure) return JSON.stringify({ error: contextFailure })
         const errorMessage =
