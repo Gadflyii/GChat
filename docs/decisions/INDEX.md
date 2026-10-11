@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- [Own native Workspace accounts and share connector execution](2026-10-10-own-native-workspace-connectors.md)
+
 - [Order embedded terminal status by native sequence](2026-10-10-order-embedded-terminal-status.md)
 
 - [Prefer the validated current-user NSIS installation](2026-10-10-prefer-current-user-nsis-owner.md)

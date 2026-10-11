@@ -759,7 +759,7 @@ fn parse_atem_tool_calls(raw: &str) -> Result<Vec<ToolCallPayload>, GinferClient
         calls.push(normalize_payload(ToolCallPayload {
             tool,
             args: Value::Object(args),
-        }));
+        })?);
         remaining = &invocation_body[close_start + INVOKE_CLOSE.len()..];
     }
 
@@ -927,7 +927,7 @@ fn decode_atem_entities(raw: &str) -> Result<String, GinferClientError> {
     Ok(decoded)
 }
 
-fn normalize_payload(mut call: ToolCallPayload) -> ToolCallPayload {
+fn normalize_payload(mut call: ToolCallPayload) -> Result<ToolCallPayload, GinferClientError> {
     if let Some(name) = agent_tool_name(&call.tool) {
         call.tool = name.to_owned();
     }
@@ -951,7 +951,7 @@ fn normalize_payload(mut call: ToolCallPayload) -> ToolCallPayload {
             }
         }
     }
-    call
+    super::tools::normalize_connector_call(call).map_err(GinferClientError::ToolCallParse)
 }
 
 fn normalize_tool_call(value: &Value, index: usize) -> Result<ToolCallPayload, GinferClientError> {
@@ -970,7 +970,7 @@ fn normalize_tool_call(value: &Value, index: usize) -> Result<ToolCallPayload, G
         })?
         .to_owned();
     let args = read_args(object)?;
-    Ok(normalize_payload(ToolCallPayload { tool, args }))
+    normalize_payload(ToolCallPayload { tool, args })
 }
 
 fn read_args(object: &Map<String, Value>) -> Result<Value, GinferClientError> {
@@ -1498,7 +1498,10 @@ mod tests {
             .any(|tool| tool["function"]["name"] == "os_fs_hash"));
         request.loaded_native_tools.insert("os.fs.hash".into());
         let loaded_payload = completion_request_payload("model", &request);
-        assert!(loaded_payload["tools"].as_array().unwrap().iter()
+        assert!(loaded_payload["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["function"]["name"] == "os_fs_hash"));
         let response: CompletionEnvelope = serde_json::from_value(serde_json::json!({
             "choices":[{"message":{"tool_calls":[{"function":{
@@ -1513,6 +1516,39 @@ mod tests {
             .content
             .contains("mcp_0123456789abcdef0123456789abcdef"));
         assert!(normalized.content.contains("weather"));
+    }
+
+    #[test]
+    fn workspace_connectors_normalize_all_model_formats_before_batch_classification() {
+        let arguments = serde_json::json!({"query":"label:inbox"});
+        let call = serde_json::json!({"name":"google_gmail_search","arguments":arguments});
+        let plain = serde_json::json!([{"tool":"connector_call","args":call}]).to_string();
+        let atem = r#"<atem:function_calls><atem:invoke name="connector_call"><atem:parameter name="name">google.gmail.search</atem:parameter><atem:parameter name="arguments">{"query":"label:inbox"}</atem:parameter></atem:invoke></atem:function_calls>"#;
+        let response: CompletionEnvelope = serde_json::from_value(serde_json::json!({
+            "choices":[{"message":{"tool_calls":[{"function":{
+                "name":"connector_call","arguments":call.to_string()
+            }}]}}], "usage":{}, "x_ginfer":{"finish_reason":"stop_token"}
+        }))
+        .unwrap();
+        let structured = normalize_completion_with_tools(
+            response,
+            &[serde_json::json!({"function":{"name":"connector_call"}})],
+        )
+        .unwrap();
+        for raw in [plain.as_str(), atem, structured.content.as_str()] {
+            let parsed = parse_tool_calls(raw).unwrap();
+            assert_eq!(parsed.calls[0].tool, "google.gmail.search");
+            assert_eq!(parsed.calls[0].args, arguments);
+            assert_eq!(
+                super::super::resource_class::resource_class_for(&parsed.calls[0].tool),
+                super::super::resource_class::ResourceClass::PureRead
+            );
+        }
+        let unknown = serde_json::json!([{"tool":"connector_call","args":{"name":"google.gmail.unregistered","arguments":{}}}]);
+        assert!(parse_tool_calls(&unknown.to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown Workspace connector tool"));
     }
 
     #[tokio::test]

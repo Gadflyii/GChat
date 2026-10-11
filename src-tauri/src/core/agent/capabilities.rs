@@ -20,6 +20,7 @@ use super::ginfer_client::{
 };
 use super::path_policy::EditableRoots;
 use super::prompt::ITERATION_ONE_TOOLS;
+use super::resource_class::connector_tool;
 use super::skills::{self, loaded::LoadedSkills};
 use super::tools::{self, tool_view::LoadedTools, ToolContext};
 use super::types::{
@@ -97,7 +98,10 @@ impl CapabilityCatalog {
         }
         self.tools
             .iter()
-            .filter(|tool| tool.origin == "mcp" && !self.disabled(disabled, &tool.name))
+            .filter(|tool| {
+                (tool.origin == "mcp" || connector_tool(&tool.identity).is_some())
+                    && !self.disabled(disabled, &tool.name)
+            })
             .filter(|tool| {
                 format!("{}\n{}", tool.name, tool.description)
                     .to_lowercase()
@@ -117,6 +121,18 @@ impl CapabilityCatalog {
         })
     }
 
+    pub fn available_connected_tool(
+        &self,
+        name: &str,
+        disabled: &BTreeSet<String>,
+    ) -> Option<&CapabilityTool> {
+        self.tools.iter().find(|tool| {
+            tool.name == name
+                && (tool.origin == "mcp" || connector_tool(&tool.identity).is_some())
+                && !self.disabled(disabled, name)
+        })
+    }
+
     pub fn available_agent_tool_names(&self, disabled: &BTreeSet<String>) -> BTreeSet<String> {
         let mut names: BTreeSet<String> = self
             .tools
@@ -125,7 +141,8 @@ impl CapabilityCatalog {
             .filter_map(
                 |tool| match self.target(&tool.name).expect("catalog target") {
                     CapabilityTarget::Native(name)
-                        if ITERATION_ONE_TOOLS.iter().any(|entry| entry.name == name) =>
+                        if ITERATION_ONE_TOOLS.iter().any(|entry| entry.name == name)
+                            || connector_tool(name).is_some() =>
                     {
                         Some(name.clone())
                     }
@@ -138,12 +155,45 @@ impl CapabilityCatalog {
         names
     }
 
-    pub fn agent_mcp_functions(&self, _disabled: &BTreeSet<String>) -> Vec<Value> {
-        [
-            ("capability_search", "Search enabled connected MCP tools by name or purpose.", json!({"type":"object","properties":{"query":{"type":"string","minLength":1}},"required":["query"],"additionalProperties":false})),
-            ("capability_read", "Read the exact argument schema for an enabled connected MCP tool.", json!({"type":"object","properties":{"name":{"type":"string","minLength":1}},"required":["name"],"additionalProperties":false})),
+    pub fn agent_mcp_functions(&self, disabled: &BTreeSet<String>) -> Vec<Value> {
+        let mut functions: Vec<Value> = [
+            ("capability_search", "Search enabled connected tools by name or purpose.", json!({"type":"object","properties":{"query":{"type":"string","minLength":1}},"required":["query"],"additionalProperties":false})),
+            ("capability_read", "Read the exact argument schema for an enabled connected tool.", json!({"type":"object","properties":{"name":{"type":"string","minLength":1}},"required":["name"],"additionalProperties":false})),
             ("mcp_call", "Call an enabled connected MCP tool by exact name and schema-conforming arguments.", json!({"type":"object","properties":{"name":{"type":"string","minLength":1},"arguments":{"type":"object"}},"required":["name","arguments"],"additionalProperties":false})),
-        ].into_iter().map(|(name, description, parameters)| json!({"type":"function","function":{"name":name,"description":description,"parameters":parameters,"strict":false}})).collect()
+        ].into_iter().map(|(name, description, parameters)| json!({"type":"function","function":{"name":name,"description":description,"parameters":parameters,"strict":false}})).collect();
+        if self.tools.iter().any(|tool| {
+            connector_tool(&tool.identity).is_some() && !self.disabled(disabled, &tool.name)
+        }) {
+            functions.push(json!({"type":"function","function":{
+                "name":"connector_call",
+                "description":"Call an enabled Workspace connector by the exact name and arguments discovered with capability_search and capability_read. Uses the selected or explicitly named account and the caller's permissions.",
+                "parameters":{"type":"object","properties":{"name":{"type":"string","minLength":1},"arguments":{"type":"object"}},"required":["name","arguments"],"additionalProperties":false},
+                "strict":false
+            }}));
+        }
+        functions
+    }
+
+    fn insert_connectors(
+        &mut self,
+        descriptors: Vec<crate::core::connectors::ConnectedTool>,
+    ) -> Result<(), String> {
+        for descriptor in descriptors {
+            let provider = crate::core::connectors::provider_for(descriptor.name)?;
+            self.insert(
+                CapabilityTool {
+                    name: wire_tool_name(descriptor.name),
+                    identity: descriptor.name.into(),
+                    description: descriptor.description,
+                    input_schema: descriptor.input_schema,
+                    server: provider.as_str().into(),
+                    origin: "native",
+                },
+                CapabilityTarget::Native(descriptor.name.into()),
+            )?;
+        }
+        self.tools.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(())
     }
 }
 
@@ -268,7 +318,9 @@ pub fn catalog_from_mcp(response: McpToolsResponse) -> Result<CapabilityCatalog,
 
 pub async fn load_catalog<R: Runtime>(app: AppHandle<R>) -> Result<CapabilityCatalog, String> {
     let response = mcp::get_tools(app.clone(), app.state()).await?;
-    catalog_from_mcp(response)
+    let mut catalog = catalog_from_mcp(response)?;
+    catalog.insert_connectors(crate::core::connectors::catalog(&app)?)?;
+    Ok(catalog)
 }
 
 #[derive(Serialize)]
@@ -845,6 +897,70 @@ mod tests {
     use crate::core::mcp::models::ToolWithServer;
 
     #[test]
+    fn workspace_connectors_share_exact_catalog_and_compact_discovery() {
+        let mut catalog = catalog_from_mcp(McpToolsResponse {
+            servers: vec![],
+            tools: vec![],
+        })
+        .unwrap();
+        let names = [
+            "google.gmail.search",
+            "google.gmail.send",
+            "microsoft.outlook.read",
+        ];
+        let descriptors = crate::core::connectors::tools()
+            .iter()
+            .filter(|tool| names.contains(&tool.name))
+            .cloned()
+            .map(crate::core::connectors::ConnectedTool::from)
+            .collect();
+        catalog.insert_connectors(descriptors).unwrap();
+        let disabled = BTreeSet::from(["google::google_gmail_send".into()]);
+        let read = catalog
+            .available_connected_tool("google_gmail_search", &disabled)
+            .unwrap();
+        assert_eq!(read.identity, "google.gmail.search");
+        assert_eq!(read.server, "google");
+        assert_eq!(
+            read.input_schema["properties"]["account_id"]["type"],
+            "string"
+        );
+        assert!(
+            matches!(catalog.target(&read.name), Some(CapabilityTarget::Native(name)) if name == "google.gmail.search")
+        );
+        assert!(catalog
+            .available_connected_tool("google_gmail_send", &disabled)
+            .is_none());
+        assert!(catalog
+            .search("gmail", &disabled)
+            .iter()
+            .all(|tool| tool.identity != "google.gmail.send"));
+        let available = catalog.available_agent_tool_names(&disabled);
+        assert!(available.contains("google.gmail.search"));
+        assert!(available.contains("microsoft.outlook.read"));
+        assert!(!available.contains("google.gmail.send"));
+        let functions = catalog.agent_mcp_functions(&disabled);
+        assert_eq!(functions.len(), 4);
+        assert_eq!(functions[3]["function"]["name"], "connector_call");
+        assert!(functions.iter().all(|function| !names
+            .iter()
+            .any(|name| function["function"]["name"] == wire_tool_name(name))));
+        let all_disabled = BTreeSet::from([
+            "google::google_gmail_search".into(),
+            "google::google_gmail_send".into(),
+            "microsoft::microsoft_outlook_read".into(),
+        ]);
+        assert_eq!(catalog.agent_mcp_functions(&all_disabled).len(), 3);
+        let approval = RecordingApproval::allow();
+        let scoped = DisabledApproval {
+            disabled: &disabled,
+            catalog: &catalog,
+            inner: &approval,
+        };
+        assert_eq!(scoped.permission("google.gmail.send"), Permission::Deny);
+    }
+
+    #[test]
     fn exact_mcp_identity_is_unique_and_disabled_by_server() {
         let catalog = catalog_from_mcp(McpToolsResponse {
             servers: vec![],
@@ -896,11 +1012,20 @@ mod tests {
         let advertised = catalog.agent_mcp_functions(&disabled);
         assert_eq!(advertised.len(), 3);
         assert_eq!(
-            advertised.iter().map(|tool| tool["function"]["name"].as_str().unwrap()).collect::<Vec<_>>(),
+            advertised
+                .iter()
+                .map(|tool| tool["function"]["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
             ["capability_search", "capability_read", "mcp_call"]
         );
-        assert!(catalog.search("read", &disabled).iter().all(|tool| tool.name != one));
-        assert!(catalog.search("read", &disabled).iter().any(|tool| tool.name == two));
+        assert!(catalog
+            .search("read", &disabled)
+            .iter()
+            .all(|tool| tool.name != one));
+        assert!(catalog
+            .search("read", &disabled)
+            .iter()
+            .any(|tool| tool.name == two));
         assert!(catalog.available_mcp_tool(&one, &disabled).is_none());
         assert!(catalog.available_mcp_tool(&two, &disabled).is_some());
         let approval = RecordingApproval::allow();

@@ -36,6 +36,7 @@ fn capability(tool: &str) -> Option<Capability> {
         "os.shell.run" => Shell,
         "skill.run_script" => Scripts,
         "os.http.request" | "os.web.search" | "os.web.fetch" => Network,
+        name if super::resource_class::connector_tool(name).is_some() => Network,
         name if name.starts_with("mcp_") => Network,
         "os.clipboard.read" | "os.clipboard.write" => Clipboard,
         "vision.describe" => FileRead,
