@@ -6,29 +6,44 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-076 continued-chat warning diagnosis
+## Current item — OI-076 warning diagnostics
 
-Deliverable: establish the cause of the original October 1 context/format
-warning after continuing a step-limited agent conversation, using preserved
-evidence first. Accepted main is `d9b802e4c`. The exact warning, failed request
-and matching history are required for attribution; later successful replies
-and fixes for different failures do not close this diagnosis. Deadline06:00 UTC.
-No speculative fix, blind model rerun, new capacity limit or release action.
+Deliverable: make the existing context/format warning self-diagnosing without
+changing admission, classification, message conversion or UI behavior. The
+October 11 decision authorizes existing app.log records with the exact trigger,
+context/token counts and format decision, plus one focused fixture. No new
+logging mechanism, dependency, model run or retrospective cause claim.
 
-The two retained incident records contain later max_steps and Working-only
-events. Neither preserves the original diagnostic or failed request.
-[Agent runtime](../agent-runtime/README.md#earlier-recovery-evidence) and
-[diagnostic preservation](../agent-runtime/remaining-acceptance.md#original-diagnostic-preservation)
-own the evidence and precise missing input. The bounded source audit at
-`d9b802e4c` separates context admission, completion and SDK schema failures;
-the saved events demonstrate none of those warning triggers. OI-076 remains
-blocked. No source change or model run follows from this evidence.
+Baseline main `d9b802e4c`; source candidate
+`/ai/gchat-worktrees/oi076-evidence-d9b`, branch
+`fix/gchat-oi076-diagnostics-d9b`, retains docs-only audit `3c75ba505`.
+Existing evidence remains in `/ai/gchat/out/agent-recovery-20261001/`.
+[Diagnostic preservation](../agent-runtime/remaining-acceptance.md#original-diagnostic-preservation)
+owns the missing original event and bounded source audit. Product `49759ad5b`,
+IPC fixture correction `fb43a1734` and original-error hook `6a9fd25e0` now log
+completion, request-context and message-format decisions through the existing
+native app.log target. Input/output counts are current or null; request policy
+and loaded capacity are recorded when available. Completion records keep the
+actual comparison capacity and current usage; unavailable loaded/reserve counts
+remain null rather than using earlier request metadata. Arbitrary error bodies,
+prompt and tool contents are excluded from the added record.
 
-Owned candidate `/ai/gchat-worktrees/oi076-evidence-d9b`, branch
-`docs/gchat-oi076-evidence-d9b`, baseline `d9b802e4c`; documentation only, no
-build/artifact or live job. Existing incident evidence is retained in
-`/ai/gchat/out/agent-recovery-20261001/`. Next: obtain the original diagnostic or
-one preserved recurrence with the matching request and loaded capacity.
+The one named transport fixture passes 1/1, with 21 cases unselected, in 0.912s
+on the final source. It exercises unchanged structured/raw returned errors,
+real SDK ModelMessage rejection, fresh versus unavailable token counts, exact
+completion triggers and error-content omission. Evidence:
+`/ai/gchat/out/oi076-warning-diagnostics-20261011/fixture-owner-hook.log`.
+Source review accepts unchanged warning/stream behavior. No model, native build,
+installed replay or broad suite ran; this is diagnostic verification.
+
+The first fixture stopped at an unsupported ESM export spy; it now uses the
+existing Tauri IPC mock. The corrected attempt found that the SDK replays the
+UI error formatter. Logging moved to its original failure event, preserving
+the SDK's console output and formatter. Both failed logs remain in the same
+evidence folder; neither passing check was repeated. The injected SDK failures
+still produce expected console errors, including test sentinels; the new native
+records omit them. OI-076 is diagnostics in place on the candidate, waiting for
+the next occurrence after merge. OI-072 is the next ONE item; deadline 06:00 UTC.
 
 ## Accepted short formatted Chat replies
 
