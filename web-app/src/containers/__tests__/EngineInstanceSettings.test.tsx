@@ -9,6 +9,15 @@ const instance: EngineInstance = {
   model_metadata: { max_model_len: 8192 },
 }
 describe('engine-reported and requested configuration', () => {
+  it('shows reported structured outputs ON or OFF without inventing a missing launch setting', () => {
+    const view = render(<EngineInstanceSettings instance={instance} online />)
+    expect(screen.getByText('Structured outputs: not reported')).toBeInTheDocument()
+    view.rerender(<EngineInstanceSettings instance={{ ...instance, configuration: { ...instance.configuration, structured_outputs: true } }} online />)
+    expect(screen.getByText('Structured outputs: enabled')).toBeInTheDocument()
+    view.rerender(<EngineInstanceSettings instance={{ ...instance, configuration: { ...instance.configuration, structured_outputs: false } }} online />)
+    expect(screen.getByText('Structured outputs: disabled')).toBeInTheDocument()
+    view.unmount()
+  })
   it('does not substitute requested context for the engine-reported limit', () => {
     const view = render(<EngineInstanceSettings instance={instance} online />)
     expect(screen.getByText('Engine-reported context: 8,192 tokens')).toBeInTheDocument()

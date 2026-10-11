@@ -6,7 +6,9 @@ import type { EngineInstance, EngineLaunchProfile, NearbyHost } from '@/services
 const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), error: '', local: false, nearby: [] as NearbyHost[], instances: [] as EngineInstance[] }))
 vi.mock('@tanstack/react-router', () => ({ createFileRoute: () => (options: unknown) => ({ options }) }))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
-vi.mock('@/services/engines', () => ({ engineCommand: mocks.command }))
+vi.mock('@/services/engines', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/services/engines')>(), engineCommand: mocks.command,
+}))
 vi.mock('@/stores/engine-discovery-store', () => ({ useEngineDiscovery: () => ({ enabled: mocks.nearby.length > 0, ignored: {}, setEnabled: vi.fn(), ignore: vi.fn(), restore: vi.fn() }) }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector?: (state: { refresh: typeof mocks.refresh }) => unknown) => {
   if (selector) return selector({ refresh: mocks.refresh })
@@ -114,7 +116,7 @@ describe('Engines host intake and launch controls', () => {
   it('starts saved instances and confirms a running-instance restart', async () => {
     const profile: EngineLaunchProfile = {
       model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,
-      vision: false, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
+      vision: false, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
       kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
     }
     mocks.instances = [{ instance_id: 'instance', session_id: null, display_name: 'Saved model',
@@ -151,7 +153,7 @@ describe('Engines host intake and launch controls', () => {
   it('labels adjacent selectors and resolves generated instance names without changing command IDs', async () => {
     const profile: EngineLaunchProfile = {
       model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 131072, concurrency: 4,
-      vision: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
+      vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
       kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
     }
     mocks.instances = ['stopped', 'ready'].map((status, index) => ({
@@ -222,6 +224,56 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/error sending request/)).not.toBeInTheDocument()
     expect(mocks.command).not.toHaveBeenCalledWith('launch', expect.anything())
+  })
+  it('launches structured outputs by default and preserves explicit OFF and Host KV AUTO or zero', async () => {
+    renderExpandedPage()
+    fireEvent.click(screen.getByText('Custom server settings'))
+    fireEvent.click(screen.getByText('Advanced launch settings'))
+    fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
+    const structured = screen.getByRole('checkbox', { name: 'Structured outputs', exact: true })
+    const cache = screen.getByLabelText('Host KV cache (bytes, blank = automatic, 0 = disabled)')
+    const load = screen.getByRole('button', { name: 'Load model' })
+    expect(structured).toBeChecked()
+    expect(cache).toHaveValue(null)
+    fireEvent.click(load)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {
+      host_id: 'host', body: expect.objectContaining({ structured_outputs: true, host_kv_cache_bytes: null }),
+    }))
+    await waitFor(() => expect(load).toBeEnabled())
+    fireEvent.click(structured)
+    fireEvent.change(cache, { target: { value: '0' } })
+    fireEvent.click(load)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {
+      host_id: 'host', body: expect.objectContaining({ structured_outputs: false, host_kv_cache_bytes: 0 }),
+    }))
+    await waitFor(() => expect(load).toBeEnabled())
+    fireEvent.change(cache, { target: { value: '' } })
+    fireEvent.click(load)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {
+      host_id: 'host', body: expect.objectContaining({ structured_outputs: false, host_kv_cache_bytes: null }),
+    }))
+  })
+
+  it('loads saved structured-output OFF and disabled Host KV cache without resetting them', async () => {
+    const profile: EngineLaunchProfile = {
+      model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,
+      vision: false, structured_outputs: false, spec: 'none', draft_tokens: 0, draft_tp: 0,
+      kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
+    }
+    mocks.instances = [{ instance_id: 'instance', session_id: 'session', display_name: 'Saved model',
+      upstream_model_id: 'model', status: 'ready', configuration: profile, profile }]
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderExpandedPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+    fireEvent.click(screen.getByText('Advanced launch settings'))
+    expect(screen.getByRole('checkbox', { name: 'Structured outputs', exact: true })).not.toBeChecked()
+    expect(screen.getByLabelText('Host KV cache (bytes, blank = automatic, 0 = disabled)')).toHaveValue(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply settings and reload' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('reload', {
+      host_id: 'host', instance_id: 'instance', body: expect.objectContaining({ configuration: expect.objectContaining({
+        structured_outputs: false, host_kv_cache_bytes: 0,
+      }) }),
+    }))
   })
   it('blocks pairing when storage is unavailable even after skipping setup', async () => {
     mocks.command.mockResolvedValue({ ready: false, platform: 'linux', can_install: false })

@@ -59,6 +59,11 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
   const choices = compatible.filter(item => groupKey(item.group) === gpuKey)
   const selected = choices.find(item => item.key === choice)
     ?? (!currentSettings && !choice && !instanceId ? choices.find(item => item.entry.profile.options.vision) : undefined)
+  const [structuredChoice, setStructuredChoice] = useState<{ instanceId: string; value: boolean } | null>(null)
+  const structuredOutputs = structuredChoice?.instanceId === instanceId ? structuredChoice.value
+    : instance?.profile?.structured_outputs ?? instance?.configuration.structured_outputs
+      ?? true
+  const changedStructured = selected && structuredOutputs !== (selected.entry.profile.options.structured_outputs ?? false)
   const pending = currentSettings && (!!choice || (modelId !== (instance?.profile?.model_id ?? snapshot.models[0]?.id)))
   useEffect(() => { onPendingChange?.(pending) }, [pending, onPendingChange])
   return <div className="space-y-3 rounded-lg border p-4">
@@ -100,13 +105,18 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
       </select>
     </label>
     </div>
+    <label className="flex items-center gap-2 text-sm"><input type="checkbox"
+      aria-label={labelPrefix ? `${labelPrefix} structured outputs` : undefined}
+      checked={structuredOutputs} disabled={controlsDisabled || (currentSettings && !selected)}
+      onChange={e => setStructuredChoice({ instanceId, value: e.target.checked })} />Structured outputs</label>
     {pending && <p role="alert" className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">Applying these settings unloads the current model and restarts this server instance. Other clients using it will be affected. Benchmarking is paused until the new instance is ready.</p>}
+    {changedStructured && <p className="text-sm text-muted-foreground">Changing the recorded structured output setting makes this launch custom and unqualified.</p>}
     {selected && <p className="text-sm text-muted-foreground">{selected.entry.profile.qualification.tier === 'full-context-tested'
-      ? 'Tested with full-length requests at this concurrency.'
+      ? 'Recorded profile: tested with full-length requests at this concurrency.'
       : selected.entry.profile.qualification.tier === 'calculated-startup-smoke'
-        ? 'Capacity calculated for the full context; startup and concurrent short requests checked. Full-length requests have not been tested.'
-        : 'Pending validation: capacity is calculated only. Startup, memory margin and inference are unverified; this profile may fail to load until the required engine support is available.'}</p>}
-    {selected && <p className="text-sm text-muted-foreground">Evidence applies to Engine {selected.entry.profile.qualification.engine_revision.slice(0, 8)} and the recorded workload. A changed Engine needs separate validation.</p>}
+        ? 'Recorded profile: capacity calculated for the full context; startup and concurrent short requests checked. Full-length requests have not been tested.'
+        : 'Recorded profile: pending validation; capacity is calculated only. Startup, memory margin and inference are unverified; this profile may fail to load until the required engine support is available.'}</p>}
+    {selected && <p className="text-sm text-muted-foreground">Evidence applies to the recorded options and Engine {selected.entry.profile.qualification.engine_revision.slice(0, 8)}, for the recorded workload. A changed option or Engine needs separate validation.</p>}
     {!choices.length && <p className="text-sm text-muted-foreground">{
       !snapshot.models.length ? 'No installed models were found. Add a .ginfer model to this host’s model folder, then rescan.'
         : currentSettings ? 'No alternate profiles match this model and GPU group. You can benchmark the current running settings, or select another installed model with a compatible profile.'
@@ -117,9 +127,9 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
       if (!selected || controlsDisabled) return
       if (restarting && !window.confirm('Switch this instance to the selected model and profile? Serving restarts after its current requests drain.')) return
       void launch({ profile_id: selected.entry.profile.id, model_id: selected.entry.model_id,
-        gpu_uuids: selected.group, instance_id: instanceId || null, force: false,
+        gpu_uuids: selected.group, instance_id: instanceId || null, force: false, structured_outputs: structuredOutputs,
         ...(instanceId ? { expected_session_id: snapshot.instances.find(i => i.instance_id === instanceId)?.session_id } : {}) })
     }}>{currentSettings ? 'Apply & Restart Server' : restarting ? 'Apply profile and restart' : 'Start Server Instance'}</Button>}
-    {pending && <Button variant="outline" disabled={controlsDisabled} onClick={() => { setModelChoice(null); setGpuChoice(null); setChoice('') }}>Keep running settings</Button>}
+    {pending && <Button variant="outline" disabled={controlsDisabled} onClick={() => { setModelChoice(null); setGpuChoice(null); setChoice(''); setStructuredChoice(null) }}>Keep running settings</Button>}
   </div>
 }

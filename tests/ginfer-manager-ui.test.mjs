@@ -201,7 +201,13 @@ test('manager renders local and paired status, installed model, GPU, profile and
   const pane = app.document.querySelector('[role="dialog"]')
   assert.match(pane.textContent, /Muse TP1 32K.*RTX 5090.*full-context-tested/s)
   assert.match(pane.textContent, /full-context-tested · Engine 922e5a87/)
-  assert.match(pane.textContent, /A changed Engine needs separate validation/)
+  assert.match(pane.textContent, /A changed option or Engine needs separate validation/)
+  assert.equal(pane.querySelector('input[name="structured_outputs"]').checked, true)
+  const changedNote = [...pane.querySelectorAll('p')].find(node => /this launch custom and unqualified/.test(node.textContent))
+  assert.ok(changedNote)
+  assert.equal(changedNote.hidden, false, 'fresh ON differs from the recorded omitted/OFF catalog setting')
+  pane.querySelector('input[name="structured_outputs"]').click()
+  assert.equal(changedNote.hidden, true, 'matching the recorded OFF setting retains its evidence')
   assert.equal(requests(app).length, 0, 'rendering and selecting a profile never start a model')
   button(pane, 'Cancel').click()
   app.document.querySelectorAll('.host-button')[1].click()
@@ -227,7 +233,7 @@ test('Start, draining Stop and forced Reload use host session guards and exact s
   await completed(app, (calls) => calls.length === 3)
   assert.deepEqual(requests(app)[2], { action: 'host', host_id: localId, operation: 'profile_launch', args: {
     instance_id: readyId, expected_session_id: sessionId, force: true,
-    profile_id: 'muse-qualified', model_id: 'installed-muse', gpu_uuids: ['GPU-local'],
+    profile_id: 'muse-qualified', model_id: 'installed-muse', gpu_uuids: ['GPU-local'], structured_outputs: true,
   } })
   assert.match(app.document.querySelector('[role="status"]').textContent, /Instance reloaded/)
 })
@@ -359,16 +365,16 @@ test('custom reload can clear a failed profile\'s fixed KV pool without changing
   await completed(app, (calls) => calls.length === 1)
   assert.deepEqual(requests(app)[0], { action: 'host', host_id: localId, operation: 'instance', args: {
     instance_id: readyId, expected_session_id: sessionId, force: false, operation: 'reload',
-    configuration: { ...saved, qualified_profile_id: null, draft_policy: 'auto', kv_arena_bytes: null },
+    configuration: { ...saved, qualified_profile_id: null, draft_policy: 'auto', kv_arena_bytes: null, structured_outputs: true },
   } })
   assert.deepEqual(instance.profile, saved, 'editing a custom copy must not rewrite the saved qualification')
 })
 
-test('new custom launches choose automatic KV sizing unless an exact positive budget is entered', async (t) => {
+test('new custom launches default structured outputs ON and preserve Host KV AUTO, zero and exact sizes', async (t) => {
   const view = fixture()
   view.hosts[0].snapshot.launch_profiles = []
   const app = await manager(t, view)
-  for (const value of ['', '4294967296']) {
+  for (const [index, [value, cacheValue, enabled]] of [['', '', true], ['4294967296', '0', false], ['', '4096', false]].entries()) {
     button(app.document, 'Start a model…').click()
     const pane = app.document.querySelector('[role="dialog"]')
     pane.querySelector('input[name="gpu"]').checked = true
@@ -376,14 +382,56 @@ test('new custom launches choose automatic KV sizing unless an exact positive bu
     const budget = pane.querySelector('input[name="kv_arena_bytes"]')
     assert.equal(budget.value, '')
     budget.value = value
+    const structured = pane.querySelector('input[name="structured_outputs"]')
+    assert.equal(structured.checked, true)
+    structured.checked = enabled
+    const cache = pane.querySelector('input[name="host_kv_cache_bytes"]')
+    assert.equal(cache.value, '')
+    cache.value = cacheValue
     submit(app)
-    await completed(app, (calls) => calls.length === (value ? 2 : 1))
+    await completed(app, (calls) => calls.length === index + 1)
     const configuration = requests(app).at(-1).args
-    assert.equal(configuration.kv_arena_bytes, value ? 4294967296 : null)
+    assert.equal(configuration.kv_arena_bytes, value === '' ? null : Number(value))
+    assert.equal(configuration.host_kv_cache_bytes, cacheValue === '' ? null : Number(cacheValue))
+    assert.equal(configuration.structured_outputs, enabled)
     assert.equal(configuration.max_context, 131072)
     assert.equal(configuration.concurrency, 1)
     assert.equal(configuration.qualified_profile_id, null)
   }
+})
+
+test('reload preserves saved structured-output OFF and Host KV zero or cleared AUTO', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.instances[0].profile.structured_outputs = false
+  const app = await manager(t, view)
+  for (const [index, cacheValue] of ['0', ''].entries()) {
+    button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').click()
+    const pane = app.document.querySelector('[role="dialog"]')
+    assert.equal(pane.querySelector('input[name="structured_outputs"]').checked, false)
+    pane.querySelector('input[name="launch_mode"][value="custom"]').click()
+    assert.equal(pane.querySelector('input[name="structured_outputs"]').checked, false)
+    const cache = pane.querySelector('input[name="host_kv_cache_bytes"]')
+    assert.equal(cache.value, '0')
+    cache.value = cacheValue
+    submit(app)
+    await completed(app, (calls) => calls.length === index + 1)
+    assert.equal(requests(app).at(-1).args.configuration.structured_outputs, false)
+    assert.equal(requests(app).at(-1).args.configuration.host_kv_cache_bytes, cacheValue === '' ? null : 0)
+  }
+})
+
+test('qualified profile controls preserve structured-output OFF without another custom setting', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.instances[0].profile.structured_outputs = false
+  const app = await manager(t, view)
+  button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  assert.equal(pane.querySelector('input[name="structured_outputs"]').checked, false)
+  submit(app)
+  await completed(app, (calls) => calls.length === 1)
+  assert.equal(requests(app)[0].operation, 'profile_launch')
+  assert.equal(requests(app)[0].args.structured_outputs, false)
+  assert.equal(Object.hasOwn(requests(app)[0].args, 'host_kv_cache_bytes'), false)
 })
 
 test('custom KV budgets reject zero, fractional and unsafe byte counts before contacting the host', async (t) => {
@@ -398,6 +446,13 @@ test('custom KV budgets reject zero, fractional and unsafe byte counts before co
     pane.querySelector('input[name="kv_arena_bytes"]').value = value
     submit(app)
     await waitFor(() => /GPU KV budget must be a positive whole number/.test(pane.querySelector('[role="alert"]').textContent), 'invalid budgets must explain the accepted input')
+    assert.equal(requests(app).length, 0)
+  }
+  pane.querySelector('input[name="kv_arena_bytes"]').value = ''
+  for (const value of ['-1', '1.5', '9007199254740992']) {
+    pane.querySelector('input[name="host_kv_cache_bytes"]').value = value
+    submit(app)
+    await waitFor(() => /Host KV cache must be a nonnegative whole number/.test(pane.querySelector('[role="alert"]').textContent), 'invalid Host cache budgets must explain the accepted input')
     assert.equal(requests(app).length, 0)
   }
 })

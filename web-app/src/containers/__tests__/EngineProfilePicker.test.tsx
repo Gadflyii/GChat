@@ -30,7 +30,7 @@ it('reserves other instances GPUs and requires confirmation before switching the
   confirm.mockReturnValue(true)
   fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith({ profile_id: 'fixture-c4', model_id: 'model',
-    gpu_uuids: ['GPU-one'], instance_id: 'existing', force: false, expected_session_id: 'session' }))
+    gpu_uuids: ['GPU-one'], instance_id: 'existing', force: false, structured_outputs: true, expected_session_id: 'session' }))
   expect(screen.getByLabelText('Server Host')).toHaveValue('existing')
 })
 
@@ -42,6 +42,43 @@ it('keeps offline snapshots read-only and does not invent missing profiles', () 
   expect(screen.getByText(/No installed models were found/)).toBeInTheDocument()
   expect(screen.getByLabelText('Server Host')).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
+})
+
+it('preserves saved structured-output OFF when applying a qualified profile', async () => {
+  const data = snapshot()
+  data.instances[0].profile = {
+    model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,
+    vision: false, structured_outputs: false, spec: 'none', draft_tokens: 0, draft_tp: 0,
+    kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
+  }
+  const launch = vi.fn().mockResolvedValue(undefined)
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
+  const structured = screen.getByRole('checkbox', { name: 'Structured outputs' })
+  expect(structured).not.toBeChecked()
+  const option = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
+  await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: false })))
+  fireEvent.click(structured)
+  fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
+  await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: true })))
+})
+
+it('defaults a new profile launch to ON and distinguishes recorded structured-output OFF evidence', async () => {
+  for (const enabled of [undefined, false]) {
+    const data = snapshot()
+    data.instances = []
+    data.launch_profiles![0].profile.options.vision = true
+    data.launch_profiles![0].profile.options.structured_outputs = enabled
+    const launch = vi.fn().mockResolvedValue(undefined)
+    const view = render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+    expect(screen.getByRole('checkbox', { name: 'Structured outputs' })).toBeChecked()
+    expect(screen.getByText(/this launch custom and unqualified/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+    await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: true })))
+    view.unmount()
+  }
 })
 
 it('distinguishes calculated smoke evidence from full-context testing', () => {
@@ -61,8 +98,8 @@ it('identifies the Engine recorded by full-context evidence without claiming a n
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
   const option = screen.getByRole('option', { name: /Full-context tested · Engine 922e5a87/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  expect(screen.getByText(/Evidence applies to Engine 922e5a87 and the recorded workload/)).toBeInTheDocument()
-  expect(screen.getByText(/A changed Engine needs separate validation/)).toBeInTheDocument()
+  expect(screen.getByText(/Evidence applies to the recorded options and Engine 922e5a87/)).toBeInTheDocument()
+  expect(screen.getByText(/A changed option or Engine needs separate validation/)).toBeInTheDocument()
 })
 
 it('defaults new instances to an available Vision profile without starting it', () => {

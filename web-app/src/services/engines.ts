@@ -17,10 +17,10 @@ export type EngineInstance = {
   model_metadata?: Record<string, unknown>
 }
 export type EngineLaunchOptions = {
-  vision: boolean; spec: 'auto' | 'none' | 'dflash'; draft_tokens: number; draft_tp: number;
+  vision: boolean; structured_outputs: boolean; spec: 'auto' | 'none' | 'dflash'; draft_tokens: number; draft_tp: number;
   kv_dtype: 'auto' | 'bf16' | 'int8' | 'nvfp4'; kv_arena_bytes: number | null;
   kv_arena_headroom_bytes?: number;
-  host_kv_cache_bytes: number; prefill_chunk: number; no_cuda_graph: boolean;
+  host_kv_cache_bytes: number | null; prefill_chunk: number; no_cuda_graph: boolean;
 }
 export type EngineLaunchProfile = EngineLaunchOptions & {
   qualified_profile_id?: string | null;
@@ -56,7 +56,7 @@ export type EngineSnapshot = {
   lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
-      options: { vision: boolean };
+      options: Partial<EngineLaunchOptions> & { vision: boolean };
       qualification: { tier: 'full-context-tested' | 'calculated-startup-smoke' | 'calculated-pending-validation'; engine_revision: string } } }[];
   profile_error?: string | null;
   host_id: string; display_name: string; revision: number;

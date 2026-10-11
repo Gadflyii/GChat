@@ -118,6 +118,7 @@ fn capture_output(
 #[serde(default)]
 pub struct LaunchOptions {
     pub vision: bool,
+    pub structured_outputs: bool,
     pub spec: String,
     pub draft_policy: String,
     pub draft_tokens: u32,
@@ -125,7 +126,8 @@ pub struct LaunchOptions {
     pub kv_dtype: String,
     pub kv_arena_bytes: Option<u64>,
     pub kv_arena_headroom_bytes: u64,
-    pub host_kv_cache_bytes: u64,
+    /// None uses AUTO; Some(0) disables the Host prefix pool.
+    pub host_kv_cache_bytes: Option<u64>,
     pub prefill_chunk: u32,
     pub no_cuda_graph: bool,
 }
@@ -133,6 +135,7 @@ impl Default for LaunchOptions {
     fn default() -> Self {
         Self {
             vision: true,
+            structured_outputs: true,
             spec: "auto".into(),
             draft_policy: "auto".into(),
             draft_tokens: 0,
@@ -140,7 +143,7 @@ impl Default for LaunchOptions {
             kv_dtype: "auto".into(),
             kv_arena_bytes: None,
             kv_arena_headroom_bytes: crate::launch_profiles::HEADROOM_BYTES,
-            host_kv_cache_bytes: 0,
+            host_kv_cache_bytes: None,
             prefill_chunk: 0,
             no_cuda_graph: false,
         }
@@ -253,6 +256,9 @@ impl LaunchOptions {
         if self.vision {
             args.push("--vision".into());
         }
+        if self.structured_outputs {
+            args.push("--structured-outputs".into());
+        }
         if self.kv_dtype != "auto" {
             args.extend(["--kv-dtype".into(), self.kv_dtype.clone()]);
         }
@@ -260,7 +266,6 @@ impl LaunchOptions {
             ("--draft-tokens", self.draft_tokens as u64),
             ("--draft-tp", self.draft_tp as u64),
             ("--prefill-chunk", self.prefill_chunk as u64),
-            ("--host-kv-cache-bytes", self.host_kv_cache_bytes),
         ] {
             if value > 0 {
                 args.extend([name.into(), value.to_string()]);
@@ -268,6 +273,9 @@ impl LaunchOptions {
         }
         if let Some(bytes) = self.kv_arena_bytes {
             args.extend(["--kv-arena-bytes".into(), bytes.to_string()]);
+        }
+        if let Some(bytes) = self.host_kv_cache_bytes {
+            args.extend(["--host-kv-cache-bytes".into(), bytes.to_string()]);
         }
         if self.no_cuda_graph {
             args.push("--no-cuda-graph".into());
@@ -908,7 +916,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hardware_profile_spawn_keeps_artifact_selection_first() {
+    async fn deployment_controls_round_trip_and_spawn_after_artifact_selection() {
         let directory = tempfile::tempdir().unwrap();
         let executable = directory.path().join("ginfer-serve");
         std::fs::write(
@@ -944,30 +952,65 @@ mod tests {
             )
             .unwrap(),
         );
-        for artifact_set in [false, true] {
-            let id = Uuid::new_v4();
-            let mut launch = fixture_launch(&artifact, id);
-            launch.artifact_set = artifact_set;
-            processes.launch(launch).unwrap();
-            let child = processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap();
-            let exit = tokio::time::timeout(Duration::from_secs(2), child.wait())
-                .await
-                .unwrap()
-                .unwrap();
-            processes.stop(id).await.unwrap();
-            assert!(exit.success());
-            let recorded = std::fs::read_to_string(directory.path().join("spawn-argv")).unwrap();
-            let args: Vec<_> = recorded.lines().collect();
-            let artifact = artifact.to_str().unwrap();
-            let profile = profile.to_str().unwrap();
-            let expected = if artifact_set {
-                vec!["--tp-artifact-set", artifact, "--tp-fallback", "reject", "--hardware-profile", profile]
-            } else {
-                vec![artifact, "--hardware-profile", profile]
+        let cases = [
+            (serde_json::json!({}), true, None),
+            (serde_json::json!({"structured_outputs":true,"host_kv_cache_bytes":null}), true, None),
+            (serde_json::json!({"structured_outputs":false,"host_kv_cache_bytes":null}), false, None),
+            (serde_json::json!({"host_kv_cache_bytes":0}), true, Some(0_u64)),
+            (serde_json::json!({"structured_outputs":false,"host_kv_cache_bytes":0}), false, Some(0)),
+            (serde_json::json!({"structured_outputs":false,"host_kv_cache_bytes":4096}), false, Some(4096)),
+        ];
+        for (input, enabled, cache_bytes) in cases {
+            let request = crate::service::LaunchRequest {
+                instance_id: None, qualified_profile_id: None, model_id: Uuid::new_v4(),
+                gpu_uuids: gpus.clone(), max_context: 4096, concurrency: 1,
+                options: serde_json::from_value(input).unwrap(),
             };
-            assert_eq!(&args[..expected.len()], expected.as_slice());
-            assert_eq!(args.iter().filter(|arg| **arg == "--hardware-profile").count(), 1);
-            assert_eq!(args[expected.len()], "--exit-on-stdin-close");
+            let saved = serde_json::to_vec(&request).unwrap();
+            let persisted: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+            assert_eq!(persisted["structured_outputs"], enabled);
+            assert_eq!(persisted["host_kv_cache_bytes"], serde_json::json!(cache_bytes));
+            let restored: crate::service::LaunchRequest = serde_json::from_slice(&saved).unwrap();
+            assert_eq!(restored.options.structured_outputs, enabled);
+            assert_eq!(restored.options.host_kv_cache_bytes, cache_bytes);
+            for artifact_set in [false, true] {
+                let id = Uuid::new_v4();
+                let mut launch = fixture_launch(&artifact, id);
+                launch.artifact_set = artifact_set;
+                launch.options = restored.options.clone();
+                processes.launch(launch).unwrap();
+                let configuration = serde_json::to_value(&processes.instances[&id].launch).unwrap();
+                assert_eq!(configuration["structured_outputs"], enabled);
+                assert_eq!(configuration["host_kv_cache_bytes"], serde_json::json!(cache_bytes));
+                let child = processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap();
+                let exit = tokio::time::timeout(Duration::from_secs(2), child.wait())
+                    .await
+                    .unwrap()
+                    .unwrap();
+                processes.stop(id).await.unwrap();
+                assert!(exit.success());
+                let recorded = std::fs::read_to_string(directory.path().join("spawn-argv")).unwrap();
+                let args: Vec<_> = recorded.lines().collect();
+                let artifact = artifact.to_str().unwrap();
+                let profile = profile.to_str().unwrap();
+                let expected = if artifact_set {
+                    vec!["--tp-artifact-set", artifact, "--tp-fallback", "reject", "--hardware-profile", profile]
+                } else {
+                    vec![artifact, "--hardware-profile", profile]
+                };
+                assert_eq!(&args[..expected.len()], expected.as_slice());
+                assert_eq!(args.iter().filter(|arg| **arg == "--hardware-profile").count(), 1);
+                assert_eq!(args[expected.len()], "--exit-on-stdin-close");
+                assert_eq!(args.iter().filter(|arg| **arg == "--structured-outputs").count(), usize::from(enabled));
+                let cache_flag = args.iter().position(|arg| *arg == "--host-kv-cache-bytes");
+                if let Some(bytes) = cache_bytes {
+                    let index = cache_flag.expect("Explicit cache size must reach the child");
+                    assert_eq!(args[index + 1], bytes.to_string());
+                    assert_eq!(args.iter().filter(|arg| **arg == "--host-kv-cache-bytes").count(), 1);
+                } else {
+                    assert!(cache_flag.is_none(), "AUTO must omit the cache flag");
+                }
+            }
         }
     }
 
