@@ -6,7 +6,48 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-105 remaining CJK dependencies
+## Current item — short formatted Chat replies
+
+Deliverable: remove the renderer's under32-character plain-text bypass so short
+formatted replies use the same supported Markdown/plugin path as long replies.
+Baseline is accepted main `8a0e89a3a`; OI105 and native Linux free space are merged.
+Acceptance named by coordinator: one focused real-renderer regression and one
+visible browser rendering check, CPU only, deadline06:00 UTC. No native package,
+model/GPU, release, signing or publication.
+
+Implemented in `f6f9dccc6`: remove the24-line bypass and its unused math
+predicate. Short replies use the same normalized Markdown/plugin path as long
+replies; plain short text also follows its paragraph/whitespace semantics. The
+exact CJK reproducer passes1/1 (23cases unselected). One native Edge browser
+render of the actual source component passes exact DOM checks and visual image
+inspection, GPU disabled. The screenshot shows bold and struck-out text with
+no literal formatting markers. Evidence: /ai/gchat/out/short-markdown-20261011/
+{fixture.log,render.png,browser.stdout.log,launch.json}.
+
+PowerShell's Process.ExitCode was null, so the wrapper reported failure even
+though completed DOM/screenshot were PASS. No zero exit code is claimed; the
+future capture checks actual output and only a known nonzero exit code. Edge
+internals emitted task-manager/page-metrics stderr diagnostics; this is not a
+GChat console-clean claim. A quoted CIM query failed before reading; corrected
+owned-profile filtering verifies browser absence. The server is stopped and
+disposable browser profile removed; logs/image remain. Vite's stale
+baseline-browser-mapping warning is recorded separately without upgrading an
+unrelated dependency. No unchanged passing gate was repeated.
+
+Next: normal main merge, then OI076. Preserve the
+accepted dependencies and all plugin capabilities. Owned candidate
+`/ai/gchat-worktrees/short-markdown-8a0`, branch `fix/gchat-short-markdown-8a0`,
+no live job. Reuse source-identical core output and the accepted physical graph
+from `/ai/gchat-worktrees/oi105-cjk-metadata-2ad` as a read-only baseline.
+
+The superseded resource candidate, original test control and OI116 source trees
+were removed through matching-owner no-force Git after clean/pushed/no-consumer
+checks and accepted OI105 merge:833,568,768 allocated source bytes removed.
+Branch refs and evidence stay retained; shared caches are untouched. See
+`/ai/gchat/out/review-resources-20261011/disk-resource-lifecycle-review.md`.
+
+
+## Accepted OI-105 dependency graph
 
 Deliverable: complete the release dependency graph from accepted GChat main
 `2ad018261`, retaining the accepted React/SDK/parser/Vitest alignment and CJK
@@ -41,7 +82,7 @@ file, without suppressing warnings. Earlier failed/setup logs remain evidence.
 Normal Windows source staging copies this root config and Linux runs its root
 immutable install. The retained OI070 custom runner skips installs and mounts an
 older physical graph: it must use a graph qualified against this config before
-its next build. No native packaging is claimed. Next: normal main merge.
+its next build. No native packaging is claimed. Merged on main `8a0e89a3a`.
 
 Owned candidate: `/ai/gchat-worktrees/oi105-cjk-metadata-2ad`, branch
 `fix/gchat-oi105-cjk-metadata-2ad`, baseline `2ad018261`, no live job. Retain the
@@ -106,7 +147,7 @@ Original-source fixtures at
 test additions and extraction-only helpers called by production. Measurements
 use original `da3cf4cd9` and candidate `fed89a83f`, the same Rust 1.98/debug
 profile and accepted offline Ubuntu 24 toolchain, CPU16–31. Retain both sources
-through acceptance, shared Cargo/frontend caches, and evidence at
+through acceptance (now retired), keeping shared Cargo/frontend caches and evidence at
 `/ai/gchat/out/review-resources-20261011/gate400/`. No model copies or separate
 build directories were allocated.
 
@@ -192,7 +233,8 @@ no additional live action or build; C1's result is pending. Its separate authori
 
 ### Owned disk and job inventory
 
-Keep the two resource sources, ResponseStore source and small accepted binaries,
+Retire superseded resource source/control trees after accepted main merges; keep
+ResponseStore source and small accepted binaries,
 shared build/dependency caches, every cited evidence packet, models, profiles,
 user state and release artifacts. October 11 remote hygiene verified S1, S2,
 Ada4090 and laptop reachable, with no own retirement candidate. Four clean,
