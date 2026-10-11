@@ -5,11 +5,163 @@ Open defects and TODOs belong in the [master list](../open-work.md); this record
 retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
 Installed Windows Manager producer is `574d73df7`, with actual installation,
-byte/state and stopped/no-alert presentation evidence below. The refreshed Linux
-Manager/Host is compiled from `54c931c68` and assembled at `02d369e8a`;
-independent package and native X11 acceptance pass. The older `2a6e21ff2`
-Linux proof remains historical evidence. Package paths and proof are recorded below.
-Documentation-only handoffs do not rebuild accepted binaries.
+byte/state and stopped/no-alert presentation evidence below. The accepted Linux
+package binds Manager `6b199362d` and Host `257252131`; handoff `09e7b2fb6`
+contains their reviewed source and current acceptance account. Earlier package
+and Linux evidence remains scoped to its tested producer. The tray diagnosis is closed: native
+Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
+walkthrough. No application registration failure was established. Documentation and harness fixes reuse
+the accepted binaries.
+
+## Closed Linux tray registration diagnosis
+
+`GCHAT-MANAGER-LINUX-TRAY-NO-SNI` is closed by the October 11 15:44Z decision:
+**Linux tray works; Open/Exit owed to Ron's desktop release walkthrough.**
+No further tray gates or application builds are authorized for this item.
+Source baseline is accepted Manager `6b199362d` and Host `257252131`, composed
+into handoff `09e7b2fb6`. The candidate is
+`/ai/gchat-worktrees/linux-tray-registration-09e`, branch
+`fix/gchat-linux-tray-registration-09e`; main is unchanged pending review.
+Subject authority is this folder. Evidence remains in
+`out/linux-tray-registration-20261011/`.
+
+Original retries 874/877 falsely report missing ownership: GNOME serializes
+registrations as `service@/object/path`; the old helper passes `service@` to
+GetNameOwner and discards the failure before PID matching. Those absence claims
+are invalidated. `scripts/ginfer_sni_identity.py` supplies the corrected shared
+parser; its three focused cases pass. There is no demonstrated app registration
+failure and no product patch or rebuild.
+
+FIFO 882 at 14:42:55–57Z proves fresh exact-Manager SNI registration and native
+Alt+F4 Hide while the Host remains alive. Its accessibility finder excludes the
+actual Shell Window root; FIFO 885 at 15:19:39–41Z corrects that traversal but
+still excludes the tray's Menu role. GNOME 46 assigns PanelMenu.Button its
+accessible name and Menu role. These are probe failures, not failed product
+Open/Exit actions. The superseded accessibility iterator and fixture are removed
+from the current candidate. Earlier passing traversal evidence stays historical.
+
+The one approved public-contract gate is **FIFO 888**, not 887. It runs
+15:38:41.895–15:38:43.288Z with unchanged accepted binaries. Fresh SNI `:1.384`
+belongs to exact Manager 3897905; Host 3897869 remains alive until cleanup.
+The harness stops at `s2-tray-contract.py:276`, whose unconditional preflight
+asserts Activate has signature `(ii) -> ()`. It records no actual signature.
+WMClose, Activate, Open and Exit are all **unreached**; no method behavior is
+qualified by this run. The installed Ayatana library exposes a different SNI
+method inventory, including no Activate method; the failed live introspection
+response was not retained and is not claimed as a measured signature.
+The concrete execution correction is to stop assuming optional provider methods
+and retain provider observations before an assertion. This item does not launch
+another probe to obtain them.
+
+All three gates preserve the four original configuration/binary fingerprints,
+stop their exact owned processes and shut down the Host normally with code 0.
+FIFO 888's retained `native-888-evidence/root-lifetime-audit.json` confirms both
+child PIDs and launcher/controller PIDs are absent, their process group is empty
+and private port 17443 is free. Its 11 raw evidence files match retained copies.
+Raw 882/885 evidence, watcher-format and Shell-traversal diagnosis remain linked
+beside the controls. No model, calibration, Pair, Windows change or user-data
+write occurs in this item.
+
+Owned inventory: retain the candidate until reviewed integration, the accepted
+four-file baseline archive and concise cited evidence. The disposable S2 882/885
+fixtures are retired after lifetime audits, freeing 35,692,544 available bytes
+combined. The FIFO 888 fixture is retired at 15:47Z after evidence retention and its
+scoped lifetime audit, freeing 17,817,600 available bytes. Its retirement receipt
+retains the audit scope. Total S2 fixture retirement frees 53,510,144 bytes. Shared tray files, models,
+profiles and other owners' paths remain intact. Next work is the structured
+ON/OFF pair with C1's current-tip runtime; Open/Exit is a release walkthrough
+obligation, not a pending development gate.
+
+## Current S2 pairing and tray acceptance — OI-069 / OI-071
+
+Repository `/ai/gchat`; subject `docs/ginfer-manager/`; baseline main `058702dd8`.
+Candidate `/ai/gchat-worktrees/s2-acceptance-058`, branch
+`fix/gchat-s2-acceptance-058`, composes the reviewed tray source with current main
+at pushed `6b199362d`. Component check, strict Clippy and Manager build pass;
+the exact four-file package and its accepted Host `257252131` are verified.
+No Windows, release, signing, calibration or model copies are included.
+
+Native GChat pairing on S2 passes using the actual Secret Service. FIFO worker
+878 starts the private Host and GChat in Ron's active X11 session 8475. Pair
+at 12:50:42Z issues client `789bcdb4-4fa1-4618-8dc4-a9803adb430f` for the private
+local coordinator. Ordinary Close exits 0; the tracked restart at 12:51:53Z
+preserves the private XDG scope and saved grant. The restarted process retrieves
+an authenticated snapshot at 12:56:23Z using the same Host, client, certificate
+and origin. Its client last-seen time advances beyond the restart time; no
+second Pair is performed. This qualifies native GChat saved-grant restoration,
+not Manager tray interaction or local WSLg remote pairing.
+
+Ordinary Forget at 13:02:20Z returns no credential cleanup warning. UUID-scoped
+Secret Service metadata changes from one item to zero at 13:03:05Z, and the
+coordinator's ordinary revoke endpoint removes only that disposable grant.
+No secret contents are inspected. The worker's final normal Close and graceful
+Host shutdown finish at 13:03:37Z. Final process/port verification passes; retained
+small evidence is recorded in `out/s2-acceptance-20261011/native-worker-evidence/`.
+The separate source-proven Manager omission of credential cleanup warnings is
+open; this successful cleanup does not exercise its error branch.
+
+Linux Manager tray registration and native Hide are accepted by the October 11
+15:44Z decision. Original 874/877 missing-registration claims were probe false
+negatives. The closed diagnosis above retains corrected 882/885 evidence and
+FIFO 888's preflight failure. Open/Exit remains owed to Ron's desktop release
+walkthrough; no further development tray gate is scheduled.
+
+The real two-worker gate is blocked before Ready. Exact clean GInfer `66452662d`
+builds its app-only SM86 server in FIFO 872 at 12:22:41Z; its native ELF closure
+resolves without a donor overlay. It uses the in-place v3 SMOL artifact and
+complete 3090 v2 profile. Its unchanged C1/131072/INT8/fixed3 MTP/AUTO-arena
+launch fails at 13:00:26Z with `Flash actual Host owners cannot preserve
+whole-host RAM headroom`. No S2 inference or shared-worker qualification follows.
+
+The local accepted `670` runtime also fails expert-refill startup at 12:59:40Z:
+CUDA free 936,992,768 bytes is below the configured 1 GiB headroom. Its model
+exits and both canonical locks return at 13:00:22Z. This older runtime predates
+the current startup fixes; it is historical evidence, not a new current-engine
+claim. The 13:01Z decision authorizes exactly one unchanged local launch with
+C3's accepted `candidate-ready-quote-4c63-120a/apps/ginfer-serve` and its matching
+sibling library closure (source-equivalent to `8317c64f2`). That launch reaches
+Ready with exactly the same request settings and stops normally at 13:12:28Z;
+both guards are reacquired/released and booking 496 is cancelled. No inference
+claim follows from this startup check. The old local failure is not current.
+Next unresolved action: C3 diagnoses the saved current S2 RAM-headroom failure;
+full shared catalog/assignments, simultaneous two-host dispatch, saturation,
+cancellation and disconnect/recovery require two actual Ready instances.
+
+The local WSLg client uses its genuine service-owner local grant; S2 uses its
+native-vault grant. Both see the same coordinator before models are Ready.
+That observation does not qualify assigned pools or real worker dispatch.
+No instance IDs, capacity witnesses, model settings or limits are fabricated.
+
+Evidence: `/ai/gchat/out/s2-acceptance-20261011/` contains source/package gates,
+`serve-664-build-verified-readonly.json`, `s2-pair-restored.json`,
+`s2-native-forget.json`, `paired-grant-revoked.json`, `local-model-status.json`,
+`s2-model-status-final.json`, and the two native evidence subfolders.
+
+| Owner / host | Exact path | Purpose / retention |
+| --- | --- | --- |
+| GChat coordinator / local | `/ai/gchat-worktrees/s2-acceptance-058` | Current candidate; retain until reviewed integration |
+| GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011` | Concise gate evidence and current UI candidate; retain accepted evidence |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi071-pair-tray-20261011` | Retired after native process/port audit and local evidence retention |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-serve-66452662d` | Retired; clean source is an ancestor of official dev/next, failed runtime evidence retained |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-worker-20261011` | Retired after grant cleanup and retained cited evidence; no user data |
+| GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011/local-worker` | Retired after ordinary app/Host exit; public configuration receipts retained in local-evidence/ |
+| C3 / local and S2 | Exact artifact/profile/runtime paths in evidence | Read-only borrowed prerequisites; never delete |
+
+Cleanup completes after both native apps/Hosts exit and owned listeners close.
+The S2 source/build/fixtures free 4,971,196,416 available bytes; private local
+fixtures and staging copies are removed separately. Cited small evidence,
+accepted desktop baselines and the corrected UI candidate remain. Models,
+profiles and other owners' paths are untouched. The copied source's stale S2
+remote is not used as ancestry authority: its clean commit is verified against
+the official GInfer dev/next reference before deletion. Receipts are
+`s2-retirement-result.json`, `local-retirement-result.json` and
+`native-worker-evidence/source-retirement-authority.json`.
+
+Source review also identifies a separate Host settings mismatch: the zero
+`host_kv_cache_bytes` request is omitted from argv, so current Flash selects an
+AUTO prefix pool instead of explicit disabled zero. It is recorded as
+GCHAT-HOST-ZERO-PREFIX-CACHE. This is not established as the S2 startup cause;
+no setting, argv fix, guard or additional run is applied in this gate.
 
 ## Accepted hardware profile installation
 
@@ -148,6 +300,162 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
+### Linux tray lifecycle — OI-071
+
+The accepted Linux `54c931c68` Manager gates initial
+background hiding and close-to-tray handling behind Windows-only compilation.
+Linux therefore closes the Manager on `WM_DELETE_WINDOW` even after creating
+its tray. Reviewed source `deaf467a1` shares those existing tray-conditioned paths
+between Windows and Linux: a nonempty Host snapshot on the first refresh hides
+the window by default, `--window` retains initial visibility, and close hides
+and prevents window destruction when the tray was created. On Linux, construction
+first requires an available StatusNotifierWatcher. Missing/unreachable watcher,
+missing probe tool, `--no-tray` and tray-construction failure retain a visible
+window and ordinary close behavior.
+Tray Open restores the window; Exit ends only Manager and retains Host.
+
+Candidate `/ai/gchat-worktrees/oi071-linux-tray`, branch
+`fix/gchat-oi071-linux-tray`, starts at `85f0bac2047c70cfa219ea8ef334367faf966138`.
+The runtime removes the two superseded Windows-only gates and their unused-value
+suppressions, and adds one Linux startup watcher probe before tray construction.
+Tauri/Tao/Wry and keyring do not expose usable GIO/D-Bus APIs through their public
+reexports; the probe uses optional installed `gdbus` with fixed arguments to call
+the session bus daemon's `org.freedesktop.DBus.NameHasOwner` for
+`org.kde.StatusNotifierWatcher`. It does not activate a provider. Only a successful
+`(true,)` reply enables tray construction. The existing Tokio runtime bounds the
+whole command/output wait to one second, including bus connection, and kills a
+timed-out child with a further bounded 250 ms reap attempt and kill-on-drop
+backstop. That deadline does not prove reaping; any residual child remains owned
+by Tokio's existing Unix reaper.
+There is no repeated availability polling or new declared runtime dependency.
+Tray construction alone is insufficient: cached `tray-icon` GTK construction
+sets the indicator active and writes the icon without requiring a watcher.
+X11 tray selection alone also does not prove AppIndicator availability.
+Windows installed producer `574d73df7`, accepted Linux packages, Host lifecycle,
+existing snapshot polling, settings and model/profile controls remain retained.
+
+Independent source review, compilation, strict Clippy and package verification
+pass. The probe owns its child through success, failure and cancellation;
+synchronous setup uses Tauri's existing multithread runtime. Native verification
+remains pending: with a real watcher/tray, verify default
+background startup, `--window`, close/hide, tray reopen and Exit while retaining
+the same Host; verify visible startup and ordinary close on an actual missing
+watcher desktop, and the explicit `--no-tray` fallback. Verify absent-tool and
+unreachable-bus fallback within the probe deadline. No candidate native
+operation has run; provider/dependency changes and model loads remain excluded
+from this tray check.
+
+October 10 admission: S2 Ron's X11 session remains active with the recovered
+session bus and XAUTHORITY path; current desktop tools and 50.6 GiB free disk
+are verified in `out/remaining-acceptance-20261009/oi071/s2-remote-admission-readonly-20261010.json`.
+A separate campaign owns its running Engine and FIFO slot. No GChat process is
+running there before this screen. FIFO row 806 ran the accepted `54c931c68`
+Manager in a fresh child-local XDG fixture from 14:34:43 to 14:42:43 UTC.
+The actual Pair dialog's Check secure storage reported ready; Cancel dismissed
+the dialog without pairing. The fixed 480-second timeout ended the process
+with code 124, and its exact PID was absent afterward. Native tray Open/Exit
+remains unqualified because automation could not safely identify its icon.
+The installed AT-SPI typelib and already-running accessibility registry now
+provide a possible exact-name/bounds route for native tray clicks. Actual item
+exposure remains unproven; use no guessed coordinates or private callbacks.
+Evidence: `out/remaining-acceptance-20261009/oi071/s2-row806-native-storage-tray-20261010.json`.
+This baseline screen created no Host, model, pairing grant or fleet catalog,
+used no original state, and does not qualify the new Hide behavior. The archive
+remains staged at `/home/ron/.local/share/GInfer/oi071-manager-54c931c68`.
+Keep the same fixture available for the corrected
+artifact's full pairing/restart/lifetime check. The corrected Linux Manager now passes focused check, strict Clippy and the
+Manager/Host build in booking365. The four-member archive matches both produced
+binaries, guide and font license; both ELF64 x86-64 binaries require at most
+glibc 2.39. Product source is `deaf467a1`, compiled from clean `14592d330`.
+The first check failed because Tauri writes `ginfer-manager/gen/schemas` while
+both source aliases were read-only. A narrow writable generated-directory mount
+at each alias corrected this build setup; product files were unchanged.
+Check took 3.41 seconds, Clippy 2.01 seconds and build 52.76 seconds.
+The exact owned container was removed at 16:37:49 UTC and the canonical build
+guard was reacquired and released. No Engine, frontend, dependency or model build
+ran. The archive is retained at
+`out/remaining-acceptance-20261009/oi071/build-365-deaf467a1-proposed/output-r2/manager/`
+with `manager-package-verification.json` beside that directory. First-failure
+logs remain in `output/`. This component pass does not qualify native tray,
+pairing or saved-grant restoration; the next action is the bounded S2 FIFO
+screen using this candidate and the existing isolated fixture.
+
+The prepared native gate now verifies the candidate's live registered tray
+owner, fresh accessible target and point hit before each action. Open requires
+actual window focus and menu closure; Exit requires the original PID absent.
+An unavailable owned-menu image is recorded without weakening those checks.
+This remains source preparation, with no new S2 launch or FIFO row.
+Read-only inspection of S2's Ubuntu appindicator extension shows its accessible
+name comes from icon description or Title, with no Id fallback. The original
+locked GTK tray backend ignores the Manager's tooltip, supplies description `icon`,
+and maps its `title` option to panel text. Adding that option would not provide
+the intended accessible name. Actual candidate exposure remains unmeasured;
+use only fresh candidate-linked properties and targets for the native gate.
+Evidence: `out/remaining-acceptance-20261009/oi071/s2-tray-accessible-name-source-20261010.json`.
+
+The Pair dialog's secure-storage readiness message incorrectly used error
+styling. The reviewed correction uses neutral status text for readiness, a red
+alert only after failure, and clears the previous failure on retry. A focused
+DOM fixture covers success, failure and recovery; execution remains deferred
+until the admitted CPU window. Its only required check is
+`node --test --test-name-pattern='secure storage results' tests/ginfer-manager-ui.test.mjs`.
+No secure-storage or pairing contract changes. This source correction does not
+qualify the physical tray or saved-grant lifecycle.
+
+Ron explicitly approved the reviewed `tray-icon` source override under GChat
+`AGENTS.md` §6.6. `src-tauri/vendor/tray-icon` now contains the locked 0.21.3
+source from upstream `a0081a3b833ab3382d2c8d2142df76ccaabaadf6`, with both
+licenses retained. Its GTK backend owns the configured tooltip and applies it
+as the native icon description at construction, tooltip changes and subsequent
+icon replacement. Existing main-thread and mutable AppIndicator ownership remain
+intact; no raw-pointer access or panel text is introduced. Non-Linux code,
+dependency versions and edges are unchanged. The workspace override also binds
+GChat's transitive tray dependency to this source.
+
+The static lock change removes only tray-icon's registry source/checksum. Offline
+resolution, Linux Manager check/strict Clippy and package generation remain
+pending until the admitted CPU window at 22:20 UTC. Retained build365 does not
+contain this patch. Actual fresh candidate SNI properties, unique native target,
+Open focus/menu closure and Exit PID absence remain required under S2 FIFO;
+Hide/pairing/saved-grant acceptance remains unqualified. Ron selected Manager's
+existing canonical `src-tauri/icons/icon.png` as the shared application icon.
+Manager already selects `../icons/icon.png` in its Tauri bundle configuration;
+locked code generation embeds that PNG as the default window icon, which the
+tray builder uses. Its UI brand and Windows icon producer use the same PNG.
+The Manager route is retained without a second decode or new asset; GChat's
+explicit shared-icon routing is handled separately. Icon assets are unchanged.
+The reviewed integration manifest and
+patch remain in `out/remaining-acceptance-20261009/oi071/` as
+`tray-icon-backend-integration-proposed.txt` and
+`tray-icon-0.21.3-gtk-accessible-name-proposed.patch`.
+
+Booking364's installed Windows desktop renders the embedded app correctly at
+`http://tauri.localhost`. The visible Code Stop reaches backend Exited and all
+four Code children exit, but the UI remains Stopping after 26 seconds; the new
+`GCHAT-CODE-STOP-STUCK-UI` row owns that separate defect. Normal nondebug GChat
+restart and saved-state/component preservation pass at 16:31:17 UTC; its guards
+are released at 16:31:58 UTC. No model or installer ran in booking364.
+Separate NSIS367 packaging and independent package verification now pass.
+The actual bundle-call/validation interval was 159.902512 seconds, with the
+owned packager using 99.7% of one logical CPU during its two-second sample.
+Booking353 measured 4m28s compilation and left at most 84 seconds for packaging;
+it did not measure a 13-minute NSIS run. No packaging performance defect is
+demonstrated by these results.
+
+The wrapper's final success allowlist omitted `NSIS_ONLY_PASS`: body exit 0,
+normal Job0 and fresh package PASS coexist with its actual controller exit 1.
+That exit is preserved rather than relabelled. The native body/controller and
+four observed children are absent; apps and settings remain unchanged, with
+zero Engine/API processes. Both guards were released at 17:04:53.939 UTC and
+booking367 was cancelled. Evidence is
+`out/remaining-acceptance-20261009/oi068-windows-20261010/nsis-367-current-result.json`.
+The one-line next-use correction is independently reviewed and retained as
+`nsis-controller-next-use-allowlist.patch` in that packet; the expired booking's
+original script and raw exit remain unchanged. No successful bundle was rerun.
+The installer retains Manager349/Host/CLI/Engine/profile closure and verifies
+the fresh embedded desktop; it excludes the new Code UI ordering fix.
+Native S2 tray/grant acceptance and that fix's installed replay remain pending.
+
 ### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
 
 The October 10 public Host snapshot reports the saved instance stopped with zero
@@ -190,11 +498,22 @@ parsed as a `C:` URL and left assets unembedded. Exact `0f06ba433` desktop-only
 restoration passes at 11:56:54.9219517 UTC, with ordinary GChat UI, seven original
 saved threads and unchanged selected protected state. Manager 24796/hash
 `1b9f0173…` and 7d9 Host/CLI/2ef Engine remain intact; Engine/API counts are zero
-and guards are released. CPU-only booking353, 15:05–15:15 UTC, has an accepted
-nonexecuted build-body proposal: relative `frontendDist`
+and guards are released. CPU-only booking353, 15:05–15:15 UTC, compiled the
+corrected desktop: relative `frontendDist`
 `../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
-assets as a Directory. Actual desktop/NSIS build, install and ordinary candidate
-UI verification remain pending.
+assets as a Directory. Cargo passed from 15:07:07.607 to 15:11:35.887 UTC
+(4m28s). NSIS packaging remained incomplete when the independent 15:13 UTC
+deadline killed the owned job, only about 84 seconds after Cargo finished. The
+overall result remains `BOUNDED_ABORT`, not a package pass. The job is empty;
+fresh controller/body/helper absence is proven at 15:13:44 UTC, and the own
+keeper released at 15:14:21 UTC. No installation or new candidate UI result is
+claimed. Retain `production-terminal-353.json`, `release-verified-353.json` and
+native `native-574d73df7-353-frontend-directory` under the existing
+`oi068-windows-20261010` evidence roots. The user approves this compiled
+`574d73df7` desktop for desktop-only UI verification at 16:20–16:35 UTC,
+retaining installed Manager, Host, Engine and saved state. Separate NSIS
+packaging at 16:55–17:20 UTC remains pending and does not gate that UI check.
+Native tray qualification and model-backed acceptance remain pending.
 The [remaining acceptance authority](../agent-runtime/remaining-acceptance.md)
 owns package/installation admission and preservation checks.
 
@@ -741,8 +1060,9 @@ version-matched offline documents. That historical Engine reports unknown
 embedded commit/dirty fields; exact baseline bytes/manifests establish its
 provenance. There is no Flash, new Engine capacity, model or GPU qualification
 claim, and Server 2 is untouched. See [installer refresh](../installer-refresh/README.md).
-Linux package/native lifecycle acceptance is complete. Next continue
-Host/Manager review from Bubbs’s 22:43 handoff.
+Linux package/window lifecycle acceptance remains accepted baseline evidence.
+The real-tray lifecycle correction and verification above are the next OI-071
+action; the historical window-only check does not qualify that behavior.
 
 Both packages contain Manager, matching Host, guide and font license. They
 contain no inference engine or models. Registered service/Desktop ownership
@@ -788,7 +1108,11 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
-| Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, three observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
+| S2 native provider fixture / GChat coordinator | `/home/ron/.local/share/GInfer/oi071-manager-54c931c68` | Accepted54 baseline; FIFO806 completed with native secure-storage readiness PASS, timeout124 and exact Manager absent. Tray Open/Exit remains unqualified. Retain fixture/evidence for corrected-artifact pairing/lifetime acceptance; original Host/state/models preserved, no Host/model/grant created. |
+| Linux tray lifecycle / GChat coordinator | `/ai/gchat-worktrees/oi071-linux-tray` | Source candidate from `85f0bac2047c70cfa219ea8ef334367faf966138`, branch `fix/gchat-oi071-linux-tray`; product `deaf467a1`, compiled from `14592d330`. Component/package gates pass; retain unmerged source for native tray/grant acceptance. No live job or model. |
+| Linux tray build365 / GChat coordinator | `/ai/gchat/out/remaining-acceptance-20261009/oi071/build-365-deaf467a1-proposed/` | `output-r2/manager/` retains the accepted 5,085,204-byte four-file candidate archive. Both binaries require at most glibc2.39. `output/` retains the read-only generated-directory setup failure. Exact container is removed; shared Cargo cache remains. |
+| Retired stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Removed October 10 after clean/upstream/live-use checks; source is integrated at `574d73df7`, and branch `fix/gchat-manager-stopped-error-7d9` remains published at `ce6b9ff40`. Installed and focused-check evidence retained. |
+| Retired current-user NSIS / GChat coordinator | `/ai/gchat-worktrees/current-user-nsis-7d9` | Removed October 10 after clean/upstream/live-use checks; product patch is integrated at `1a9044e65`, and branch `fix/gchat-current-user-nsis-7d9` remains published at `d6da84677`. Both retired trees released 551,276,544 allocated file bytes; accepted packages, active candidates and shared caches remain intact. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |
@@ -796,6 +1120,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | KV native candidate | `C:\Users\Ron\AppData\Local\GChat\windows-build\manager-kv-startup-20261008` | Retired after accepted Windows package/install; shared cache junction detached first |
 | Offline source candidate | `/ai/gchat-worktrees/manager-offline-status` | Reviewed source retained in Git; checkout disposition in task `worktree-cleanup.json` |
 | Windows accepted package/proof | `/ai/gchat/out/ginfer-manager/windows/` | Current archive/guide/hashes and earlier public native proof |
+| Windows desktop/NSIS / GChat coordinator | `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/` and native `%LOCALAPPDATA%/GChat/remaining-acceptance-20261010/production-nsis-only-574d73df7-proposed/` | Retain compiled353 desktop, installed364 embedded UI/split Code Stop evidence, fresh367 568,903,887-byte installer and package proof, actual wrapper exit1 and correction, terminal/release receipts. Original353 packaging abort stays historical. All build processes are absent and guards released; original state, component baseline and shared cache retained. |
 | Linux accepted package/proof | `/ai/gchat/out/ginfer-manager/linux/` | Refreshed Manager compiled `54c931c68`, guide/checksums; earlier native proof retained as historical evidence |
 | Linux refresh packet | `/ai/gchat/out/oi070-linux-refresh/` | Accepted `02d369e8a` assembly, compiled `54c931c68`, independent package/native proof; old packet path retained as stable symlink |
 | Offline task evidence | `/ai/gchat/out/manager-offline-status-20261008/` | Required gate, Clippy, native build, installed UI/identity, cleanup receipts |
