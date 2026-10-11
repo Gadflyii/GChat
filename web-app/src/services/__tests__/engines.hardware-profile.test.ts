@@ -5,7 +5,9 @@ import { hardwareProfile, type EngineHardwareProfile } from '@/services/engines'
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 
 describe('Host-owned hardware profile actions', () => {
-  beforeEach(() => vi.mocked(invoke).mockReset())
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset()
+  })
 
   it.each(['ensure', 'refresh', 'resume', 'cancel'] as const)(
     'routes %s to the selected Host without caller paths or commands', async action => {
