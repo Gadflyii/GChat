@@ -26,7 +26,8 @@ Source diagnosis establishes three owners: Builder had no successful-save
 completion boundary; native saves did not notify mounted definition consumers;
 Chat serialization omitted terminal tool state/error text. Candidate corrections
 are implemented and under independent source review. Focused checks plus one
-current Linux desktop build are booked CPU-only09:40–10:15; no current candidate
+current Linux desktop build are booked CPU-only09:22–09:57 after C3 cancels its
+booking and both canonical guards are reacquired with no compute process; no current candidate
 build or model job exists. Retain the accepted prior257 Host and concise evidence at
 `out/remaining-acceptance-20261009/oi068-linux-smol-20261011/`; retire the merged
 prior source tree after confirming no live user or dirty state.
