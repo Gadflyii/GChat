@@ -51,21 +51,27 @@ connection/reconnect and disconnect with accurate account/service availability.
 
 | Owner | Paths / deliverable | Status |
 | --- | --- | --- |
-| Root | Subject record, integration, review, master TODOs | Source integration complete; checks pending |
-| review_host_transport | `core/connectors/mod.rs`, `accounts.rs`, native command registration | Implemented; nine auth fixtures unrun |
-| review_host_catalog | `core/connectors/google.rs`, bundled Workspace guidance | Implemented; five provider fixtures unrun |
-| review_host_startup | `core/connectors/microsoft.rs` | Implemented; five provider fixtures unrun |
-| review_host_process | Existing shared agent capability, tool, permission and command dispatch | Implemented; five runtime fixtures unrun |
-| review_master_findings | Settings connections route, service client and focused UI fixtures | Implemented; twelve connection UI fixtures unrun |
-| fix_oi111 | Independent account, provider, dispatch and UI source review | Accepted revised source; no execution claim |
+| Root | Subject record, integration, review, master TODOs | Integrated; focused compile/type/lint checks pass |
+| review_host_transport | `core/connectors/mod.rs`, `accounts.rs`, native command registration | Implemented; nine auth fixtures pass |
+| review_host_catalog | `core/connectors/google.rs`, bundled Workspace guidance | Implemented; five provider fixtures pass |
+| review_host_startup | `core/connectors/microsoft.rs` | Implemented; five provider fixtures pass |
+| review_host_process | Existing shared agent capability, tool, permission and command dispatch | Implemented; five runtime fixtures pass |
+| review_master_findings | Settings connections route, service client and focused UI fixtures | Implemented; twelve connection UI fixtures pass |
+| fix_oi111 | Independent account, provider, dispatch and UI source review | Accepted initial implementation and focused corrections |
 
 All source lives in `/ai/gchat-worktrees/workspace-connectors-f111`, branch
 `feat/gchat-workspace-connectors`, baseline `f111810ec`, owned by GChat/root.
-Reviewed implementation `a7ab93e63` is committed and pushed to the source remote.
-Main stays unchanged pending reviewed integration. No connector build, model run,
-GPU booking, live account, registration or provider mutation has begun. Agents
-write disjoint files; root reviews actual diffs and commits before compilation.
-No disposable build directory or copied model/artifact exists for this subject.
+Reviewed implementation `a7ab93e63` and focused corrections are committed on the
+source branch. Accepted main `ab4c047fe` is an ancestor; merge-ready delivery does
+not install or release the feature. Native check/tests and frontend checks reused
+`/ai/gchat/src-tauri/target` and the aligned dependency graph at
+`/ai/gchat-worktrees/oi074-frontend-packages`; these shared caches are retained.
+Owned evidence and small test caches are under
+`/ai/gchat/out/workspace-connectors-20261011/gate-397/` (under 1 MiB).
+No copied model, disposable build directory, live account or provider mutation
+exists. Booking 397 was CPU-only, returned at 00:55:55 UTC October 11 and cancelled;
+all owned check containers exited and the canonical build guard was reacquired
+and released. No GPU lock or model job was started.
 Native bundled Google Workspace and Microsoft 365 guidance replaces the bundled
 external `gog-workspace` skill; user-installed skills are not pruned.
 
@@ -94,54 +100,52 @@ account and operation without exposing message bodies or binary payloads.
 Independent source review caught and corrected cancellation during vault commit,
 disconnect metadata rollback, unchecked partial consent, exposed Graph storage
 URLs, lost pending sign-in state after navigation and eager schema injection.
-The review accepts the revised source; compilation, formatting and fixtures have
-now started. Formatting and generated route registration pass. First native
-compilation found a moved Gmail path and two missing methods in a connector test
-double. UI ran twelve cases: eleven pass; failed disconnect's alert was hidden
-behind the modal. The corrected source preserves the mail path, rejects unrelated
-fixture calls and shows the error inside the active dialog with retry enabled.
-The initial logs remain in `gate-397/`; focused correction checks are next.
-No connector feature is installed or live-qualified.
+The revised implementation and focused corrections are independently accepted.
+Native compilation exposed a moved Gmail path and incomplete fixture methods;
+UI testing exposed disconnect feedback hidden behind its modal. Corrections keep
+the path owned, reject unrelated fixture calls and show the error in the active
+dialog with retry enabled. Strict checks then corrected two MSRV predicates,
+account/auth argument ownership, unnecessary schema clones and the route literal.
+Effect cleanup captures stable ref objects while invalidating their latest values.
+No lint suppression, dependency upgrade or MSRV change was introduced.
+
+## Verification
+
+All named focused gates pass. Evidence uses Ubuntu 24, Rust 1.98 and the existing
+React/TypeScript/Vitest dependency graph, with networking disabled and no live
+credentials. Native resources are inert test stubs, not installer resources.
+
+| Gate | Result | Evidence relative to `gate-397/` |
+| --- | --- | --- |
+| Account lifecycle | 9 pass | `round-3/native-account-provider.log`, source `65b72d3be` |
+| Google and Microsoft request adapters | 5 + 5 pass | Same nineteen-case native log |
+| Shared runtime/account approval | 5 pass | `round-2/native-runtime.log`, source `3aeac1903` |
+| Connections UI lifecycle | 12 pass | `round-4/ui-connections.log`, source `ea74f950e` |
+| Skill seeding and Settings link | 1 + 1 pass | `round-2/native-skills.log`, `round-2/ui-settings-link.log` |
+| Cargo check, all test-supported targets | Pass | `round-3/native-check.log` |
+| Strict Clippy, warnings denied | Pass | `round-3/native-clippy.log` |
+| Frontend type check and affected ESLint, zero warnings | Pass | `round-4/typecheck.log`, `round-4/frontend-lint.log` |
+
+Passing runtime, skill and navigation cases are reused because their code and
+resources did not change after `3aeac1903`. Auth/provider cases were repeated after
+the account contract changed; UI cases were repeated after the cleanup change.
+Fourteen unselected Settings cases are excluded, not additional passes. Original
+failed logs remain alongside corrections. No unrelated full suite was run.
 
 ## Acceptance and next action
 
-Complete the account lifecycle, provider tools and shared UI/dispatch. Verify the
-changed auth transitions, exact provider request construction, account resolution
-before approval, paging/redirect ownership and connection UI with focused checks;
-run affected compile/type checks, not an unrelated full suite. Document supported
-operations, scopes and account limitations. Native Windows/Linux OAuth and live
+Source implementation, supported-operation documentation and the named focused
+checks are complete. Native Windows/Linux OAuth and live
 read/write acceptance require real registered client IDs and a user-approved test
 account; these prerequisites are not available yet. Source fixtures cannot be
 reported as live sign-in or provider qualification.
 
-Next: finish the failing type/Clippy gates after correcting the route literal,
-MSRV-compatible predicates and typed provider/account/service argument groups.
-All requested focused cases passed on `3aeac1903`: auth 9, provider 10, runtime 5,
-UI 12; skill seeding and Settings navigation also passed, as did native check.
-Rerun account/provider cases and native check/Clippy because their Rust source
-changed. Reuse passing runtime/UI/skill/navigation cases: dispatch, UI behavior
-and resources are unchanged; the route literal annotation only affects typing.
-The focused retry answers whether the corrected owning account contract still
-constructs the same requests and satisfies type/lint requirements.
-C3 returned the workstation at 00:31:43 UTC and cancelled 396.
-GChat CPU-only booking 397 is 00:41–01:06 UTC on October 11, CPUs 0–31; no GPU/model.
-Evidence is owned under `/ai/gchat/out/workspace-connectors-20261011/gate-397/`;
-reuse the existing Ubuntu image, aligned dependency graph and Cargo cache.
-The candidate imports accepted main `ab4c047fe`; passing terminal/default gates
-are reused. Native account acceptance remains a separate unmet prerequisite.
-No publication, signing, production account mutation, new dependency or paid
-Arbitor implementation is authorized by this task.
-
-Verification preparation is source-only. The candidate has no `node_modules`;
-reuse the aligned graph at `/ai/gchat-worktrees/oi074-frontend-packages` through
-the existing Linux container mounts. Route generation uses its installed
-`@tanstack/router-generator` `Generator`/`getConfig`, with the same React,
-`autoCodeSplitting` and ignore-pattern options as `web-app/vite.config.ts`.
-Run the nineteen `core::connectors` fixtures, five `workspace_connectors` fixtures,
-`bundled_skills_follow_explicit_platform_metadata_policy`, the connections UI
-fixtures and the Settings link assertion. Compile/type/lint the affected paths.
-Each check answers the changed account, provider, dispatch or navigation contract;
-do not repeat the accepted terminal/defaults gates or run an unrelated full suite.
+Next: reviewed GChat main merge from `feat/gchat-workspace-connectors`, then
+register approved desktop clients and test accounts for native/live acceptance
+when available. No feature is installed or live-qualified. No publication,
+signing, production account mutation, new dependency or paid Arbitor
+implementation is authorized by this task. The named gates are complete; do not
+repeat terminal/defaults or other passing checks for documentation-only changes.
 
 See [connection setup and supported operations](operations.md) and the
 [account/runtime decision](../decisions/2026-10-10-own-native-workspace-connectors.md).

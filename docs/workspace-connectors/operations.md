@@ -1,8 +1,9 @@
 # Workspace connection setup and operations
 
-This describes the implemented source. Focused checks and live Windows/Linux
-sign-in acceptance are pending; the installed application does not yet contain
-these connectors. See [current delivery status](README.md).
+This describes the implemented source. Focused checks pass; live Windows/Linux
+sign-in acceptance requires registered clients and approved test accounts. The
+installed application does not yet contain these connectors. See
+[current delivery status](README.md).
 
 ## Connect an account
 
@@ -101,6 +102,6 @@ account/organization portal; GChat does not revoke unrelated application session
 Registered Google and Microsoft client IDs and user-approved test accounts are
 needed to verify sign-in, refresh, cancellation, reconnect, consent, disconnect
 and a disposable read/write operation on both desktop platforms. Enter credentials
-through Settings and provider consent pages, not chat. Prepared, unrun fixtures
-cover request construction and state transitions; they do not establish live provider
-or credential-store qualification.
+through Settings and provider consent pages, not chat. Passing focused fixtures
+cover request construction, state transitions, shared dispatch and connection UI;
+they do not establish live provider or credential-store qualification.
