@@ -3,6 +3,13 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+OI-075's one generated Linux/WSLg WebKit observation is now measured: opening
+110 ms, full programmatic traversal 113 ms and stable foreground idle 30.047 s.
+Native process counters are partial because temporary image-loader children
+exit during the interval; there is no complete-group total or cross-OS gain.
+The [current OI-075 record](remaining-acceptance.md#current-oi-075-linux-rendering-observation)
+owns metadata-only generation, exact results, limitations and deleted fixture.
+
 ## Current acceptance
 
 Installer routing follows the [validated current-user NSIS decision](../decisions/2026-10-10-prefer-current-user-nsis-owner.md).

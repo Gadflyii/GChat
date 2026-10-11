@@ -6,6 +6,7 @@ use std::{
 
 struct CountingAllocator;
 static ACTIVE: AtomicBool = AtomicBool::new(false);
+static NATIVE_SYSTEM_ONLY: AtomicBool = AtomicBool::new(false);
 static ACCOUNTING_LOCK: AtomicBool = AtomicBool::new(false);
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static BYTES: AtomicU64 = AtomicU64::new(0);
@@ -25,6 +26,22 @@ impl Drop for AccountingGuard {
     fn drop(&mut self) {
         ACCOUNTING_LOCK.store(false, Ordering::Release);
     }
+}
+
+/// Only the explicitly filtered native-process fixture uses this irreversible
+/// mode. Other allocation fixtures run in separate processes and stay tracked.
+#[allow(dead_code)] // Shared integration copies do not select native-process mode.
+pub fn native_process_system_allocation() {
+    let guard = AccountingGuard::lock();
+    if ACTIVE.load(Ordering::Relaxed) {
+        drop(guard);
+        panic!("native process mode cannot interrupt an active allocation measurement");
+    }
+    if NATIVE_SYSTEM_ONLY.load(Ordering::Relaxed) {
+        drop(guard);
+        panic!("native process mode is irreversible and can only be selected once");
+    }
+    NATIVE_SYSTEM_ONLY.store(true, Ordering::Release);
 }
 
 fn record_allocation(previous: usize, bytes: usize) {
@@ -47,22 +64,22 @@ fn record_deallocation(bytes: usize) {
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let pointer = System.alloc(layout);
-        if !pointer.is_null() { record_allocation(0, layout.size()); }
+        if !pointer.is_null() && !NATIVE_SYSTEM_ONLY.load(Ordering::Acquire) { record_allocation(0, layout.size()); }
         pointer
     }
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         let pointer = System.alloc_zeroed(layout);
-        if !pointer.is_null() { record_allocation(0, layout.size()); }
+        if !pointer.is_null() && !NATIVE_SYSTEM_ONLY.load(Ordering::Acquire) { record_allocation(0, layout.size()); }
         pointer
     }
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
         let pointer = System.realloc(pointer, layout, size);
-        if !pointer.is_null() { record_allocation(layout.size(), size); }
+        if !pointer.is_null() && !NATIVE_SYSTEM_ONLY.load(Ordering::Acquire) { record_allocation(layout.size(), size); }
         pointer
     }
     unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
         System.dealloc(pointer, layout);
-        record_deallocation(layout.size());
+        if !NATIVE_SYSTEM_ONLY.load(Ordering::Acquire) { record_deallocation(layout.size()); }
     }
 }
 
@@ -83,6 +100,10 @@ pub struct Counts {
 impl Measurement {
     pub fn start() -> Self {
         let guard = AccountingGuard::lock();
+        if NATIVE_SYSTEM_ONLY.load(Ordering::Relaxed) {
+            drop(guard);
+            panic!("native process mode cannot measure allocator layouts");
+        }
         if ACTIVE.load(Ordering::Relaxed) {
             drop(guard);
             panic!("measurements must not overlap");

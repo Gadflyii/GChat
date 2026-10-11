@@ -297,6 +297,18 @@ impl ModelDownloads {
     pub async fn list(&self) -> Vec<Download> {
         self.jobs.clone().lock_owned().await.values().cloned().collect()
     }
+    #[cfg(test)]
+    pub(crate) async fn seed_concurrent_resource_jobs(&self, entries: Vec<Download>) {
+        // Setup only: the measured authenticated Pause owns the sole durable
+        // 100-entry journal write through the unchanged action/save path.
+        let mut jobs = self.jobs.clone().lock_owned().await;
+        assert!(jobs.is_empty());
+        assert_eq!(entries.len(), 100);
+        for entry in entries {
+            assert!(matches!(entry.status.as_str(), "queued" | "paused"));
+            assert!(jobs.insert(entry.id, entry).is_none());
+        }
+    }
     pub async fn enqueue(self: &Arc<Self>, release: Release) -> Result<Download, String> {
         release.validate()?;
         let mut jobs = self.jobs.clone().lock_owned().await;

@@ -478,14 +478,7 @@ async fn run(
     let mut maintenance = tokio::task::JoinSet::new();
     let monitor_host = host.clone();
     maintenance.spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_secs(1));
-        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tick.tick().await;
-            if let Err(e) = refresh_nonempty_processes(&monitor_host).await {
-                eprintln!("Engine monitoring: {e}");
-            }
-        }
+        monitor_processes(&monitor_host).await;
     });
     let scan_host = host.clone();
     maintenance.spawn(async move {
@@ -533,8 +526,37 @@ async fn run(
     outcome
 }
 
-async fn refresh_nonempty_processes(host: &Host) -> Result<bool, String> {
-    if host.processes.lock().await.instances().next().is_none() {
+async fn monitor_processes(host: &Host) {
+    let activity = host.processes.lock().await.activity_notification();
+    let mut tick = None;
+    loop {
+        let notified = activity.notified();
+        tokio::pin!(notified);
+        // Register before inspecting ownership so a launch cannot lose its wake.
+        notified.as_mut().enable();
+        if !host.processes.lock().await.needs_monitoring() {
+            tick = None;
+            notified.await;
+            continue;
+        }
+        let tick = tick.get_or_insert_with(|| {
+            let mut tick = tokio::time::interval(Duration::from_secs(1));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            tick
+        });
+        tokio::select! {
+            _ = notified => {},
+            _ = tick.tick() => {
+                if let Err(e) = refresh_active_processes(host).await {
+                    eprintln!("Engine monitoring: {e}");
+                }
+            }
+        }
+    }
+}
+
+async fn refresh_active_processes(host: &Host) -> Result<bool, String> {
+    if !host.processes.lock().await.needs_monitoring() {
         return Ok(false);
     }
     let result = host.refresh_processes().await;
@@ -700,10 +722,179 @@ mod tests {
         .unwrap();
         let initial = host.revision.load(std::sync::atomic::Ordering::SeqCst);
         let start = std::time::Instant::now();
-        let refreshed = super::refresh_nonempty_processes(&host).await.unwrap();
+        let refreshed = super::refresh_active_processes(&host).await.unwrap();
         let elapsed = start.elapsed();
         let revision_changes = host.revision.load(std::sync::atomic::Ordering::SeqCst) - initial;
         assert!(host.snapshot().await["instances"].as_array().unwrap().is_empty());
         eprintln!("RESOURCE_EMPTY_MONITOR elapsed={elapsed:?} refreshed={refreshed} revision_changes={revision_changes}");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn process_monitor_wakes_for_launch_and_parks_after_stop_and_exit() {
+        use ginfer_host::engine_host::{EngineLaunch, HostProcesses, LaunchOptions};
+        use std::{collections::BTreeSet, os::unix::fs::PermissionsExt, time::Duration};
+
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("engine");
+        std::fs::write(&executable, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture").unwrap();
+        let host = ginfer_host::service::Host::open(
+            directory.path().join("host"), "Monitor fixture".into(), executable.clone(),
+            vec![], vec![], vec![],
+        ).await.unwrap();
+        *host.processes.lock().await = HostProcesses::new(
+            executable.clone(), BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10),
+        ).unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = hyper::Server::from_tcp(listener).unwrap().serve(
+            hyper::service::make_service_fn(|_| async {
+                Ok::<_, hyper::Error>(hyper::service::service_fn(|_| async {
+                    Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::from(
+                        r#"{"data":[{"id":"fixture","owned_by":"monitor-test"}]}"#,
+                    )))
+                }))
+            }),
+        );
+        let mut jobs = tokio::task::JoinSet::new();
+        jobs.spawn(async move { server.await.unwrap(); });
+        let polls = Arc::new(AtomicUsize::new(0));
+        let observed = polls.clone();
+        let monitor_host = host.clone();
+        let (registered, ready) = tokio::sync::oneshot::channel();
+        jobs.spawn(async move {
+            let future = super::monitor_processes(&monitor_host);
+            tokio::pin!(future);
+            let mut registered = Some(registered);
+            std::future::poll_fn(|context| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                let result = future.as_mut().poll(context);
+                if let Some(registered) = registered.take() {
+                    registered.send(()).unwrap();
+                }
+                result
+            }).await;
+        });
+        ready.await.unwrap();
+        let idle_polls = polls.load(Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        assert_eq!(polls.load(Ordering::SeqCst), idle_polls);
+        let id = uuid::Uuid::new_v4();
+        let launch = || EngineLaunch {
+            instance_id: id, artifact: artifact.clone(), artifact_dependencies: vec![artifact.clone()],
+            artifact_set: false, model_id: "fixture".into(), gpu_uuids: vec!["GPU-fixture".into()],
+            tp: 1, port, max_context: 4096, concurrency: 1, options: LaunchOptions::default(),
+        };
+        let revision = host.revision.load(Ordering::SeqCst);
+        let started = std::time::Instant::now();
+        let first = host.processes.lock().await.launch(launch()).unwrap();
+        tokio::time::timeout(Duration::from_millis(750), async {
+            loop {
+                if let Ok((_, _, model, session)) = host.processes.lock().await.endpoint(id) {
+                    assert_eq!(model, "fixture");
+                    assert_eq!(session, first);
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.unwrap();
+        let readiness_elapsed = started.elapsed();
+        assert!(host.revision.load(Ordering::SeqCst) > revision);
+        host.processes.lock().await.stop(id).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        let stopped_polls = polls.load(Ordering::SeqCst);
+        let stopped_revision = host.revision.load(Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        assert_eq!(polls.load(Ordering::SeqCst), stopped_polls);
+        assert_eq!(host.revision.load(Ordering::SeqCst), stopped_revision);
+        assert_eq!(host.snapshot().await["instances"][0]["status"], "stopped");
+
+        std::fs::write(&executable, "#!/bin/sh\nprintf 'final diagnostic\\n'\nexit 7\n").unwrap();
+        let restarted = std::time::Instant::now();
+        let second = host.processes.lock().await.launch(launch()).unwrap();
+        assert_ne!(first, second);
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let snapshot = host.snapshot().await;
+                if snapshot["instances"][0]["status"] == "failed" {
+                    assert_eq!(snapshot["instances"][0]["session_id"], second.to_string());
+                    assert_eq!(snapshot["instances"][0]["last_error"],
+                        "engine exited unexpectedly: exit status: 7\nfinal diagnostic");
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.unwrap();
+        let exit_elapsed = restarted.elapsed();
+        assert!(host.processes.lock().await.reserved_gpus(None).is_empty());
+        assert!(host.revision.load(Ordering::SeqCst) > stopped_revision);
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        let exited_polls = polls.load(Ordering::SeqCst);
+        let exited_revision = host.revision.load(Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        assert_eq!(polls.load(Ordering::SeqCst), exited_polls);
+        assert_eq!(host.revision.load(Ordering::SeqCst), exited_revision);
+        eprintln!("RESOURCE_ACTIVE_MONITOR readiness_elapsed={readiness_elapsed:?} exit_diagnostic_elapsed={exit_elapsed:?} monitor_revision_changes={}",
+            exited_revision - revision);
+        jobs.abort_all();
+        while jobs.join_next().await.is_some() {}
+    }
+
+    #[tokio::test]
+    #[ignore = "one actual one-second idle timer comparison"]
+    async fn process_monitor_idle_timer_measurement() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = ginfer_host::service::Host::open(
+            directory.path().into(), "Idle monitor".into(), std::env::current_exe().unwrap(),
+            vec![], vec![], vec![],
+        ).await.unwrap();
+        let baseline_polls = Arc::new(AtomicUsize::new(0));
+        let candidate_polls = Arc::new(AtomicUsize::new(0));
+        let baseline_host = host.clone();
+        let baseline_observed = baseline_polls.clone();
+        let candidate_host = host.clone();
+        let candidate_observed = candidate_polls.clone();
+        let mut jobs = tokio::task::JoinSet::new();
+        jobs.spawn(async move {
+            let future = async {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+                tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    tick.tick().await;
+                    if baseline_host.processes.lock().await.instances().next().is_some() {
+                        let result = baseline_host.refresh_processes().await;
+                        baseline_host.revision.fetch_add(1, Ordering::SeqCst);
+                        result.unwrap();
+                    }
+                }
+            };
+            tokio::pin!(future);
+            std::future::poll_fn(|context| {
+                baseline_observed.fetch_add(1, Ordering::SeqCst);
+                future.as_mut().poll(context)
+            }).await;
+        });
+        jobs.spawn(async move {
+            let future = super::monitor_processes(&candidate_host);
+            tokio::pin!(future);
+            std::future::poll_fn(|context| {
+                candidate_observed.fetch_add(1, Ordering::SeqCst);
+                future.as_mut().poll(context)
+            }).await;
+        });
+        let started = std::time::Instant::now();
+        tokio::time::sleep(std::time::Duration::from_millis(2200)).await;
+        jobs.abort_all();
+        while jobs.join_next().await.is_some() {}
+        let baseline = baseline_polls.load(Ordering::SeqCst);
+        let candidate = candidate_polls.load(Ordering::SeqCst);
+        assert!(baseline >= 3);
+        assert_eq!(candidate, 1);
+        eprintln!("RESOURCE_IDLE_MONITOR elapsed={:?} baseline_future_polls={baseline} candidate_future_polls={candidate} revision={}",
+            started.elapsed(), host.revision.load(Ordering::SeqCst));
     }
 }

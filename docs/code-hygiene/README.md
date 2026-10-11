@@ -6,7 +6,119 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — WSL model placement
+## Current item — OI-116 and OI-118 merge-ready
+
+Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
+Candidate `/ai/gchat-worktrees/review-remaining-712d5718`, branch
+`fix/gchat-review-remaining-712d5718`, from merged main `712d57180`.
+
+Deliverable: finish the remaining catalog/download and Host lifecycle review
+work together. Preserve the accepted ordered journal, complete package hashes,
+fresh all-rank inventory, per-path errors, current credentials and final process
+diagnostics. Retain Tokio's default worker count; measure the representative
+concurrent control/scan/journal workload before considering a count change.
+
+Acceptance assigned October 11: focused owning cases, strict Clippy and the
+OI-118 named representative measurement, due 09:00 UTC. Reuse accepted resource
+and native Linux statvfs evidence; do not repeat passing unchanged checks. CPU
+only; no GPU/model, native Windows build/run, calibration, release, signing or
+publication. Windows SCM and UNC/extended-path physical acceptance belongs to
+the scheduled Windows gate and cannot be claimed from Linux evidence.
+
+Selected design: HostProcesses owns activity notification. Register a wait before
+checking live-child/pending-exit eligibility under its mutex. Drop the monitor's
+timer while inactive, including retained stopped/failed records; successful spawn
+wakes it before profile persistence. Active monitoring keeps the existing one-second
+cadence and final output/readiness semantics. The separate 30-second inventory
+refresh remains unchanged. Suppressing unchanged stopped-record revisions removes
+idle snapshot traffic, without suppressing action or final-observation publication.
+
+OI-116 adds an explicitly scan-local canonical payload observation. Descriptor
+and direct-entry visibility currently repeat that same header read. One fresh
+pass reuses it while independently validating every descriptor declaration;
+no metadata cache survives a scan or launch preparation. Actual successful reader
+opens/header bytes and exact fresh all-rank output establish the effect. Existing
+full-SHA preparation and ordered durability are not replaced.
+
+The ONE representative Linux default-worker measurement overlaps authenticated
+snapshot/download/control/Scan/Stop with a durable 100-job Pause write. Its
+filtered process uses System allocation with one atomic mode dispatch and no
+allocation-accounting spinlock; this avoids distorting management concurrency.
+Other allocator fixtures retain their existing tracking in separate processes.
+Setup uses synthetic nongpu children; hardware admission and calibration are
+outside the measured interval. The production Host hardware owner remains
+attached for measured Scan. Socket/TLS transport and daemon maintenance are
+excluded. The native counters describe this Linux test process, not Windows SCM
+or an installed daemon. Default workers remain unchanged; one observation does
+not establish an optimal count.
+
+Product `a7b653a89`, with fixture corrections `f5d88db2f` and `9ff45a2f3`, is
+independently reviewed and passes the assigned gate on Ubuntu 24/Rust 1.98:
+
+| Evidence | Result and scope |
+| --- | --- |
+| Fresh inventory and complete SHA control | PASS; descriptor declarations, rank provenance, missing members and same-size payload corruption remain checked |
+| TP1/2/4 shared-header observation | Successful reader opens 7→4, returned header bytes 4,937→2,847, read calls 14→8; identical metadata. CPU ticks were zero at this resolution; no CPU gain claim |
+| Actual Host Scan | PASS; per-path errors, stable UUIDs, calibration removal/restoration, descriptor repair and a fresh second pass |
+| Launch/readiness/Stop/restart/final diagnostic | PASS; reaped exit7 retains its exact final diagnostic and parks after drain |
+| Inactive monitor, 2.201s | Previous timer future polls 4→1 initial poll; no periodic monitor timer while inactive. This is wake/poll evidence, not a native CPU/RSS comparison |
+| One concurrent default-worker workload | 198 authenticated routes in 0.979s (202.18 mixed requests/s); observed Scan/read and Pause/read overlap; exact one-write 100-job, 65,001-byte journal and reopened state |
+| Strict Host all-target Clippy | PASS, warnings denied |
+
+The scan comparison uses process-wide requested Rust layouts: allocations
+172→122 and requested bytes 70,370→42,292, but peak bytes above the initial live
+set rise 11,354→12,606. Shared metadata ownership trades a small retained cache
+for fewer reads; this does not establish a total memory reduction. Reader
+counters measure successful file opens and returned bytes below buffering,
+not storage-cache misses or full-payload hashes.
+
+The concurrent fixture uses the production default of 32 Tokio workers,
+174 catalog profiles and four public-process-owner CPU children. Of its 198
+routes, 64 each read snapshots, download jobs and clients; four Scan, one Pause
+and one Stop complete. Snapshot median/sample-p95 are 48.47/67.14ms; download
+read 1.869/1.942ms; client read 0.0505/0.0561ms; Scan 68.40/70.33ms. The singleton
+Pause takes 5.156ms and Stop 69.824ms; no percentile is inferred from either.
+Durations include response-body consumption and exclude request construction
+and response JSON decoding. Mixed throughput includes harness/counter work and
+is not isolated route capacity or a before/after worker-count comparison.
+
+Native `/proc` samples show 35→36 process threads and private resident bytes
+23,920,640→34,959,360 during the workload; user ticks increase by133 and system
+ticks by0. The separate two-second loaded-fixture quiescent interval has zero
+CPU-tick change, four voluntary context switches across the same35 TIDs and
+stable23,646,208 private resident bytes. Active matched35 TIDs add89 voluntary
+and3 involuntary switches; one new TID is reported separately. These are
+endpoint samples, excluding child memory and peak/private-commit claims.
+
+Evidence and inventory: `/ai/gchat/out/review-remaining-20261011/` contains
+`result.json`, owning logs, `concurrent-summary.json`, accepted
+`ginfer_host-tests-9ff45a2f3` and resource-return proof. The four passing cases
+on `f5d88db2f` are reused after the native-fixture-only setup correction; only
+the previously unrun measurement and strict Clippy execute on `9ff45a2f3`.
+Shared Cargo caches and prior accepted resource/statvfs evidence remain.
+The candidate source above is retained until reviewed main integration.
+The gate ends06:54:20 UTC; its container is absent, the canonical build guard
+is reacquired/released and CPU446 canceled06:56:53. No model, job, booking or
+guard remains. Private fixture state and CPU children end with the passing case.
+
+Two runner preflights stopped before compilation on absent Git metadata and
+container/worktree ownership. Read-only owning mounts and a command-local
+trusted alias correct both without global Git changes. The first compile
+stopped on an ambiguous slice index and an unused retained TempDir binding;
+explicit `usize` and `_dir` fix those. The initial native fixture then stopped
+before measurement because its CPU child lacked a native profiling CLI.
+Its setup now creates the synthetic public process owner separately from
+hardware admission and reattaches the actual hardware owner before measured
+Scan. Production admission is unchanged. Failure logs remain alongside accepted
+results; no failed setup is counted as measurement or qualification.
+
+Next action: push the reviewed source/documentation and master-row result for
+main integration, then retire the clean merged candidate. Physical Windows
+SCM/worker/UNC-path acceptance and prior OI-121 slow-NAS launch/hash latency
+remain release-gate obligations. No additional model qualification or count
+change follows from this Linux gate.
+
+## Accepted WSL model placement
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
 Candidate `/ai/gchat-worktrees/wsl-model-placement-c4ddb0`, branch
@@ -57,7 +169,9 @@ references; 12,288 native allocated bytes are reclaimed. Existing user models,
 profiles, state and shared caches are untouched. CPU booking441 is canceled at
 actual completion06:27 UTC; the canonical build guard is reacquired/released and
 the owned container is absent. The source branch is committed and pushed;
-candidate source retires after reviewed main integration.
+source is merged on main `712d57180`. The clean, pushed candidate is retired
+after ancestry and zero-live-reference checks; 278,093,824 allocated source
+bytes are reclaimed and shared caches preserved (`worktree-retirement.json`).
 
 Master overlap audit: OI-116 journal/hash/free-space and managed-root dedup,
 OI-118 Host lifecycle and OI-102 full-hash preparation remain intact. The current
@@ -65,8 +179,8 @@ GCHAT-WSL-MODEL-PLACEMENT row holds this source/gate result; the independently
 closed OI-144-9P loader disposition is not reopened. Its retained evidence is
 `/ai/kernel-agent/run_workdir/local/direct-read-wake-670d1c68a/evidence/oi144-9p/README.md`.
 
-Next unresolved action: reviewed GChat main integration, then retire the clean
-merged candidate while retaining accepted binaries and evidence. No release,
+Completed: reviewed main integration and candidate retirement. Accepted binaries
+and evidence are retained. No release,
 signing, publication, existing-model relocation or further qualification is owed
 to this assigned item.
 
@@ -253,12 +367,12 @@ Implemented in `da85b9adf`. The focused raw-path/symlink/missing/NUL/empty-path
 fixture passes (1/1), and Host all-target strict Clippy passes with zero warnings
 on the offline Ubuntu 24/Rust 1.98 toolchain. Evidence:
 `/ai/gchat/out/review-resources-20261011/oi116-native-space/{path-fixture,clippy}.log`.
-No new crate version or package download was required. Next: normal main merge. Owned tree
-`/ai/gchat-worktrees/oi116-native-space-2ad`, branch
-`fix/gchat-oi116-native-space-2ad`, baseline `2ad018261`, no live job. Reuse
-`/ai/gchat/out/review-resources-20261011/` target cache and concise evidence.
-OI-118 retains default Tokio workers; the next Manager change will measure the
-representative concurrent workload before choosing a count.
+No new crate version or package download was required. Source is incorporated
+in accepted main `8a0e89a3a`. The clean/pushed source tree
+`/ai/gchat-worktrees/oi116-native-space-2ad` is retired; its branch,
+`fix/gchat-oi116-native-space-2ad`, target cache and concise evidence remain.
+The current OI-118 section above records the completed representative workload
+and unchanged default workers.
 
 
 ## Current outcome and acceptance
@@ -364,8 +478,8 @@ smoke remains scheduled. No passing unchanged check was repeated.
 OI-116 now replaces Linux `df` with the approved locked rustix 1.1.4 native
 query, as verified above. Windows uses its native API; the physical
 UNC/extended-path check remains unrun. The coordinator kept default Tokio
-workers for OI-118; a representative concurrent control/scan/journal measurement
-rides the next Manager change before choosing a count. Native SCM,
+workers for OI-118; the current section above completes the representative
+concurrent control/scan/journal measurement without changing that count. Native SCM,
 Manager idle/private bytes, media peak memory and slow-NAS qualification are not
 established by this CPU gate. These limits remain explicit on the master rows.
 

@@ -834,7 +834,93 @@ Reuse the existing source signature/ownership/contract checks. Updater release
 signing/publication (OI-110) is a separate decision. No new inference or official
 reference import is needed for this measured result copy.
 
-## Native idle observation and remaining rendering measurement
+## Current OI-075 Linux rendering observation
+
+Repository `/ai/gchat`, subject `docs/agent-runtime/`, owner GChat coordinator.
+Candidate `/ai/gchat-worktrees/oi075-linux-93e2`, branch
+`docs/gchat-oi075-linux-93e2`, from reviewed source/documentation `93e2ba9b9`.
+The preceding OI-116/118 change is merge-ready; no failing check remains.
+
+Ron/bubbs's October 11 07:05 decision authorizes a generated Linux history matching
+the selected twelve-message history's shape: message count, per-message byte
+sizes, attachment/code-block kinds and total bytes. Original content is excluded;
+no Windows history copy, shared user-data-folder launch or synthetic inference.
+Use one isolated folder, run one native WebKitGTK open/programmatic traversal/
+30-second foreground idle observation under WSLg, then delete that folder.
+The output qualifies the generated Linux/WSLg WebKit workload only, not S2,
+the original conversation, cross-OS equivalence, many-message scaling or a gain.
+
+Reuse accepted desktop/frontend `54c931c68`, packaged by `02d369e8a`, from
+`/ai/gchat/out/linux/GChat_2.0.42_amd64.deb`; prior X11 extraction/fixture paths
+are retired. No rebuild, install, dependency change, model load, calibration or
+Windows run is selected. The existing six OI-075 browser phase expressions own
+the measurement. Adapt only native inspector transport and process endpoint
+counters; unknown WebKit long-task support is unavailable, never zero.
+The actual native WebKitGTK 2.52.6 page is `tauri://localhost`, title GChat,
+with the Tauri bridge, sole generated sidebar link and a 1200×800/DPR1 viewport.
+Its loopback HTTP inspector supplies one WebPage over a persistent WebSocket;
+page-target multiplexing and `Runtime.awaitPromise` execute the existing phases.
+No inspector window is opened. Fixture-only saved startup flags are off before
+measurement; no original settings or data are used.
+
+Acceptance: metadata-only generated shape check, actual native page/build/window
+identity, completed opening and full traversal, stable foreground/viewport/
+expansion through the30s idle interval, pinned process-group CPU/memory endpoint
+counts and observer/process/data cleanup. No new performance floor or cap.
+CPU counters use actual monotonic elapsed and PID/start identities; Linux
+private resident/PSS retain their meanings rather than Windows private commit.
+
+The one requested observation runs October 11 at 07:20:26–07:20:57 UTC.
+Generated shape verification passes: 12 messages, 107,089 JSONL bytes,
+101,857 compact content bytes, largest 79,574, reasoning parts, 12 tool calls,
+one unknown-language code fence and no attachments. Per-message row/content
+sizes match the read-only metadata; every identifier/body/tool payload is
+generated. This does not establish equivalent semantic/rendering content.
+
+First sidebar open reaches all 12 wrappers plus another frame in 110 ms; cache
+state is unknown, and this is not GPU-present timing. Settled full programmatic
+traversal takes 113 ms, six scroll steps, seven retained frame gaps with median
+and maximum 16 ms. It does not measure wheel/input latency. Passive browser idle
+lasts 30.047 s around the native 30.0001 s sample with no continuous frame sampling;
+route, 12 wrappers, viewport, foreground/focus and collapsed expansion remain
+unchanged. WebKit long-task support is unavailable, not zero.
+
+Native counters are **partial**. The sampler exits 1 `FAIL_UNSTABLE_COHORT`:
+two `bwrap` wrappers and their `glycin-image-rs` image loader are present at the
+first endpoint and absent at the second. Their final CPU/memory cannot be
+recovered. The three stable processes (GChat, WebKitNetwork and WebKitWeb) use
+a summed 2.06616% of one logical core; their private resident bytes are
+320,131,072 before and 307,961,856 after. Those are partial-component counters,
+not full descendant-group totals, private commit, a peak or a memory-gain claim.
+No rendering cause, cross-OS improvement or physical S2 qualification follows.
+
+The runner stops before phase 05 because the sampler rejects the cohort.
+Phase 06 cleanup preserves the actual passive idle observation as `interrupted`;
+its retained state checks pass. Raw sampler/runner failure remains unchanged;
+the derived result is `ONE_REQUESTED_OBSERVATION_COMPLETE_WITH_PARTIAL_PROCESS_COUNTERS`,
+not an overall performance-gate PASS. No opening, traversal or idle rerun occurs.
+Any future complete-group measurement must finish transient image loading
+before its endpoint bracket; it is not part of this one-observation mandate.
+
+Inventory: accepted package and previous Windows results retained. Metadata,
+generator/measurement inputs, exact raw observations and derived result belong to
+`/ai/gchat/out/remaining-acceptance-20261009/oi075/linux-shaped-20261011/`;
+`shape-verification.json`, `result.json`, `native-idle.json` and phase01–04/06
+receipts support the scope above. Exact owned application/WebKit/image-loader
+identities are absent at 07:21:54.883 UTC; the canonical build guard is returned
+and CPU booking 450 cancelled. No GPU/model/Windows run occurs.
+After live-reference checks, the entire isolated `fixture/` data/runtime/package
+folder is deleted at 07:22:51.536, removing 3,532,132,352 allocated bytes; 508 KiB
+of metadata/scripts/evidence remains. `process-return.json` and
+`resource-return.json` record cleanup. Shared caches, original conversation/
+settings, accepted packages, models and other owners are untouched.
+The requested generated Linux/WSLg observation is complete with the stated
+counter limitation. Broader original-content, many-message and complete-group
+qualification stays incomplete; no new rendering fix is justified by this screen.
+Next authorized item after this docs/master handoff: OI-073 app public-delete
+control, with its prepared source and unrun focused gates recovered first.
+
+## Accepted Windows native idle observation
 
 OI-075's actual October 10 12:02 Windows baseline uses restored desktop
 `0f06ba433`, Manager `574d73df7` and existing thread
