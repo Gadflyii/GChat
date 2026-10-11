@@ -101,6 +101,8 @@ struct Guest {
     desktop_claim: Mutex<Option<OperationId>>,
     stale: std::sync::atomic::AtomicBool,
     wrong_version: std::sync::atomic::AtomicBool,
+    cua_active: std::sync::atomic::AtomicBool,
+    reject_start: std::sync::atomic::AtomicBool,
 }
 
 fn failure(message: impl Into<String>) -> GuestError {
@@ -457,6 +459,7 @@ impl server::Handler for Peer {
                         }
                         "notifications/initialized" => continue,
                         "tools/list" => serde_json::json!({"tools":[
+                            {"name":"start_session","description":"Activate or revive owned session","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}},
                             {"name":"get_window_state","description":"Read accessible window","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}},
                             {"name":"invoke_menu","description":"Invoke accessible menu","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}}
                         ]}),
@@ -465,17 +468,36 @@ impl server::Handler for Peer {
                                 request["params"]["arguments"]["session"],
                                 self.guest.hello.identity.session_id.as_uuid().to_string()
                             );
-                            let operation =
-                                self.guest.desktop_claim.lock().unwrap().take().unwrap();
-                            assert_eq!(bufferless_dispatch(&self.guest, operation), 1);
-                            let lose =
-                                self.guest.lose_reply.lock().unwrap().take() == Some(operation);
-                            if lose {
-                                session.eof(channel)?;
-                                session.close(channel)?;
-                                return Ok(());
+                            if request["params"]["name"] == "start_session" {
+                                let rejected = self
+                                    .guest
+                                    .reject_start
+                                    .load(std::sync::atomic::Ordering::Acquire);
+                                if !rejected {
+                                    self.guest
+                                        .cua_active
+                                        .store(true, std::sync::atomic::Ordering::Release);
+                                }
+                                serde_json::json!({"isError":rejected,"structuredContent":{"active":!rejected},"content":[{"type":"text","text":if rejected {"session unavailable"} else {"session active"}}]})
+                            } else {
+                                assert!(
+                                    self.guest
+                                        .cua_active
+                                        .load(std::sync::atomic::Ordering::Acquire),
+                                    "desktop action dispatched to an expired Cua session"
+                                );
+                                let operation =
+                                    self.guest.desktop_claim.lock().unwrap().take().unwrap();
+                                assert_eq!(bufferless_dispatch(&self.guest, operation), 1);
+                                let lose =
+                                    self.guest.lose_reply.lock().unwrap().take() == Some(operation);
+                                if lose {
+                                    session.eof(channel)?;
+                                    session.close(channel)?;
+                                    return Ok(());
+                                }
+                                serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}]})
                             }
-                            serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}]})
                         }
                         _ => panic!("unexpected MCP method"),
                     };
@@ -752,6 +774,8 @@ impl Fixture {
             desktop_claim: Mutex::new(None),
             stale: std::sync::atomic::AtomicBool::new(false),
             wrong_version: std::sync::atomic::AtomicBool::new(false),
+            cua_active: std::sync::atomic::AtomicBool::new(false),
+            reject_start: std::sync::atomic::AtomicBool::new(false),
         });
         let handles = Arc::new(Mutex::new(Vec::new()));
         let config = Arc::new(server::Config {
@@ -1169,7 +1193,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             .iter()
             .all(|op| op.state == OperationState::Completed));
         runtime.ping(expected).await.unwrap();
-        assert_eq!(runtime.desktop_tools(expected).await.unwrap().len(), 2);
+        assert_eq!(runtime.desktop_tools(expected).await.unwrap().len(), 3);
         let desktop = fixture.request(GuestOperationKind::Desktop { tool:"invoke_menu".into(),arguments:serde_json::json!({"session":"model-supplied-untrusted"}) });
         assert!(matches!(success(runtime.request(desktop).await.unwrap()),GuestResult::Desktop { result } if result["isError"] == false));
 
@@ -1249,7 +1273,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
         let response = client.request(post("/v1/desktop/tools", serde_json::to_vec(&expected).unwrap())).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let tools: serde_json::Value = serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
-        assert_eq!(tools.as_array().unwrap().len(), 2);
+        assert_eq!(tools.as_array().unwrap().len(), 3);
         let command = fixture.script("http.sh", "printf http\n").await;
         let response = client
             .request(post(
@@ -1282,6 +1306,58 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
     })
     .await
     .expect("bounded loopback transport test timed out");
+}
+
+#[tokio::test]
+async fn cua_idle_revival_and_refused_start_never_dispatches_actions() {
+    timeout(WAIT, async {
+        let fixture = Fixture::new().await;
+        let identity = fixture.guest.hello.identity;
+        let service = Arc::new(
+            Service::open(&fixture.directory.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = fixture.runtime(service).await;
+        runtime.connect(identity).await.unwrap();
+
+        for _ in 0..2 {
+            // Reproduce Cua's idle tombstone without waiting five minutes.
+            fixture
+                .guest
+                .cua_active
+                .store(false, std::sync::atomic::Ordering::Release);
+            let request = fixture.request(GuestOperationKind::Desktop {
+                tool: "invoke_menu".into(),
+                arguments: serde_json::json!({"session":"model-owned"}),
+            });
+            let id = request.operation_id;
+            assert!(matches!(success(runtime.request(request).await.unwrap()),
+                GuestResult::Desktop { result } if result["isError"] == false));
+            assert_eq!(fixture.guest.dispatches.lock().unwrap().get(&id), Some(&1));
+        }
+
+        fixture
+            .guest
+            .cua_active
+            .store(false, std::sync::atomic::Ordering::Release);
+        fixture
+            .guest
+            .reject_start
+            .store(true, std::sync::atomic::Ordering::Release);
+        let request = fixture.request(GuestOperationKind::Desktop {
+            tool: "invoke_menu".into(),
+            arguments: serde_json::json!({}),
+        });
+        let id = request.operation_id;
+        assert!(matches!(success(runtime.request(request).await.unwrap()),
+            GuestResult::Desktop { result } if result["isError"] == true));
+        assert!(!fixture.guest.dispatches.lock().unwrap().contains_key(&id));
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .expect("bounded Cua idle revival test timed out");
 }
 
 #[tokio::test]

@@ -10,8 +10,9 @@ implements the local-first service skeleton, vault-held SSH sessions, guest-tool
 contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparation below replaces earlier S1/S2
 acceptance-host proposals; the Debian image and Host tools are staged, with
 first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
-on `feat/gbot-cua-service-be226`; the dedicated-guest model task is parked
-on the Engine parser fix `QWEN-TOOLCALL-LITERALS`.
+on `feat/gbot-cua-service-be226`; the parser-fixed model task exposed an idle
+Cua session-lifecycle gap, now fixed. The model task is blocked on raw MCP
+window-state history filling the approved context before the file is saved.
 The focused contracts and actual loopback SSH fixture pass.
 No user desktop input or native Windows execution is authorized. Ron separately
 approved the isolated S1 Debian guest and its harmless accessibility gate below.
@@ -709,16 +710,46 @@ XML `on_screen_only` parameter. GInfer's strict JSON parameter parser returned
 that call as content, preventing typing/saving; independent SSH readback found
 no file. This does not qualify the end-to-end model task.
 
-**Current decision:** park the model task until Grok's owning Engine fix
-`QWEN-TOOLCALL-LITERALS` merges. Bubbs cancelled the proposed flag-only retry:
-`--structured-outputs` constrains response formats, not ordinary function tools,
-and strict tools are rejected by the current serving contract. There is no
-prompt, Boolean-coercion or native-markup parsing workaround in Gbot. The
-supervisor keeps its log open until its output thread drains after normal stop.
+**Current decision (2026-10-11 23:41Z):** exact GInfer `19cc62bc5` built
+both `ginfer` and `ginfer-serve` on S1, Release SM120a, GNU12.4/CUDA13.3.73.
+The 570-target build passed. The post-build `ginfer --version` probe was invalid
+for that CLI and exited1; this was a harness probe failure, not a compilation
+failure. `ginfer-serve --version` confirms `19cc62bc5`. No rebuild is needed.
+
+The first parser-fixed task opened Mousepad but every desktop call returned
+`session_ended`: its first real frame had been idle seven minutes while the
+Engine was built, beyond pinned Cua's five-minute TTL. Gbot held its MCP channel
+but omitted Cua lifecycle activation. Repeated refusals filled the context;
+context overflow was a consequence of that lifecycle defect in this first run.
+The service now calls idempotent `start_session` under its own UUID before each
+desktop action, preserving capture policy and never replaying an action. A known
+start refusal is saved without dispatching the action. Three focused hermetic
+SSH cases, strict all-target Clippy and the fixture build pass.
+
+The changed-service real task proved the lifecycle fix: it listed windows,
+inspected Mousepad, typed `Hello from Gbot` through targeted AT-SPI, opened the
+File menu and inspected it. No `session_ended` or tool-argument parsing failure
+occurred. Before the seventh model turn, the prompt reached17990 tokens against
+the unchanged16384 context. The gate appends entire raw MCP replies: each tree
+appears in text content, structured `tree_markdown`, and structured `elements`.
+The two snapshots were13833 and22992 bytes. This is a separate model-facing
+history/representation issue; the file was not saved and the task is not qualified.
+
+Next action: obtain the owning model-adapter decision for one canonical
+structured representation and the shared compaction path; do not increase the
+model context, truncate trees arbitrarily, alter the prompt, or retry unchanged.
+The transport/lifecycle change is source-ready; model acceptance stays blocked.
+Evidence: S1 `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/`,
+including `model-1..7.json`, `tool-*.json` and `model-stop.json` (PID4048678 absent,
+normal exit0, 17.8s, end23:41:05Z). Dedicated guest95ce015c is stopped and its vault
+credential deleted. Both own S1 and local bookings/guards are returned.
+The preceding idle-failure evidence remains at `gate-parser-19cc62bc5/`.
+Pinned lifecycle authority is retained under local
+`out/gbot-cua-service-20261011/cua-pin-lifecycle/`. Only independent SSH readback
+of the actual saved bytes qualifies the task; no `hello.txt` PASS exists yet.
 
 Approved runtime on S1 GPU0, at most 20 minutes while a model runs:
-`/media/ron/SSD_RAID/ai/tmp-bubbs-laptop-smol-20261011/build120/apps/ginfer-serve`,
-assigned as dev/next `3235aaacc` (the executable reports unknown version/commit).
+`/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/build120/apps/ginfer-serve`.
 Artifact:
 `/media/ron/SSD_RAID/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/qwen38_27b_int_df2.ginfer`.
 Profile:
@@ -727,22 +758,27 @@ Effective launch: artifact first, `--tp 1 --max-context 16384 --max-concurrency 
 --kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy --no-profile
 --hardware-profile <above>`, bound to localhost. Greedy avoids the open sampled
 speculation defect. This is a functional task, not a GBench/performance claim.
-The resumed task needs the approved parser-fixed runtime; do not rerun the old
-binary or change model settings to bypass this failure.
+The new runtime must identify the requested source before task dispatch; model
+settings remain unchanged.
 
 Evidence and owned inventory:
 
 | Owner / host | Path | State and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Unmerged implementation retained and pushed; model acceptance blocked on the Engine parser. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Source-ready transport/lifecycle change; real task blocked on model-facing history. |
 | GChat / local | `/ai/gchat/out/gbot-cua-service-20261011/` | Focused check logs, supervisor scripts and raw tool-call response retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/evidence/` | First integrated connection and API-ID failure evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate2/` | Model task/raw response/readback and normal-stop evidence retained. `model-2.json`, `choices[0].message.content`, is the exact native markup. |
+| GChat / S1 | `/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/` | Exact-source build passed, native-build-receipt.json retained; accepted runtime for the remaining functional gate. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-parser-19cc62bc5/` | Failed parser-fixed gate; desktop idle-expired, no saved file. Model/guest stopped and credential deleted; evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/6fae39a5-220a-4cbc-802d-0135ff040354` | Failed test guest stopped; native undefine required before removing its disposable disk. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/` | Desktop/frame/type/menu pass; model context overflow before save. Model/guest stopped, vault credential deleted; evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate-lifecycle` | Changed-service fixture; focused SSH/Clippy passed. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Accepted integration fixture, API-ID discovery enabled and rejected prompt guidance absent. Reusable until source changes. |
 | GChat / S1 | `/ai/gbot-vms/18b93479-d663-4b12-9715-7894d2e03e89`, `/ai/gbot-vms/cfbeb614-85d0-4b06-a447-c7a91763b692` | Failed task guests stopped, vault references deleted; disposable disks may be removed after native undefine. |
 
-Model PID 3958066 exited normally with code 0 and was absent at
-2026-10-11T21:38:41Z; the guest is stopped and its credential deleted. No model,
+Latest model PID4048678 exited normally with code0 and was absent at
+2026-10-11T23:41:05Z; the guest is stopped and its credential deleted. No model,
 guest or GPU lock remains held. Initial fixture root/keyring failures occurred
 before VM creation; separate evidence roots and fresh private keyrings prevent
 them without touching Ron's configuration.
