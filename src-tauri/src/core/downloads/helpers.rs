@@ -32,7 +32,7 @@ pub(super) fn resolve_download_save_path_in(
     let requested = data.join(&item.save_path);
     let logical = normalize_path(&requested);
     // Resolve filesystem aliases before enforcing ordinary download containment.
-    if !canonicalize_existing_prefix(&logical).starts_with(&canonicalize_existing_prefix(data)) {
+    if !canonicalize_existing_prefix(&logical).starts_with(canonicalize_existing_prefix(data)) {
         return Err(format!(
             "Path {} is outside of GChat data folder {}",
             logical.display(),

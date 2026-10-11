@@ -45,7 +45,13 @@ jobs yet. Root-scoped paused-job dedup permits a fresh native transfer without
 changing the old job. Existing directory aliases remain readable with canonical
 ancestor cycle detection. Import admission protects installed Host payloads and
 refuses linked write targets; deletion retains Host ownership and refuses
-ambiguous copies. Independent source review precedes execution. Owned inventory: this candidate source, accepted CLI binary/evidence in
+ambiguous copies. Independent source review accepts the composed change. The 14 extension and
+10 Rust focused cases pass, including the actual tiny 9p-to-native transfer.
+Strict app Clippy identified one needless borrow in the new path check; it is
+removed without changing path behavior. Continue only the failed Clippy and
+unrun CLI build/list. The runner also corrected its cached bundler entrypoint
+from the installed package manifest before any native job started; passing
+checks are reused. Owned inventory: this candidate source, accepted CLI binary/evidence in
 `/ai/gchat/out/cli-config-selection-20261011/`, shared caches retained. CLI
 private metadata is removed; its source branch and Git history remain retained.
 
