@@ -31,8 +31,9 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
       && group[0] === instance.configuration.gpu_uuids[0] && !occupied.has(group[0])
       && snapshot?.gpus.some(gpu => gpu.uuid === group[0]) && snapshot.models.some(model => model.id === entry.model_id))
     .map(group => ({ entry, group, key: JSON.stringify([entry.model_id, entry.profile.id, group]) })))
-  const maxPerf = maxPerfChoice?.targetId === selected?.target_id && maxPerfChoice?.sessionId === selected?.session_id
-    ? maxPerfChoices.find(item => item.key === maxPerfChoice.key) : undefined
+  const maxPerfKey = maxPerfChoice && maxPerfChoice.targetId === selected?.target_id && maxPerfChoice.sessionId === selected?.session_id
+    ? maxPerfChoice.key : undefined
+  const maxPerf = maxPerfChoices.find(item => item.key === maxPerfKey)
   const maxPerfPending = !!maxPerf
   useEffect(() => { onPendingChange(capacityPending || maxPerfPending) }, [capacityPending, maxPerfPending, onPendingChange])
   const apply = async (body: Record<string, unknown>) => {
