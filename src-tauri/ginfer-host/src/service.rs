@@ -279,7 +279,20 @@ impl Host {
         }
         let path = directory.join("host.json");
         let mut data = match std::fs::read(&path) {
-            Ok(bytes) => serde_json::from_slice::<Persistent>(&bytes).map_err(|e| e.to_string())?,
+            Ok(bytes) => {
+                let mut saved: serde_json::Value = serde_json::from_slice(&bytes)
+                    .map_err(|e| e.to_string())?;
+                if let Some(profiles) = saved.get_mut("profiles").and_then(|value| value.as_object_mut()) {
+                    for profile in profiles.values_mut() {
+                        if profile.get("structured_outputs").is_none()
+                            && profile.get("qualified_profile_id").is_some_and(|id| !id.is_null())
+                        {
+                            profile["qualified_profile_id"] = serde_json::Value::Null;
+                        }
+                    }
+                }
+                serde_json::from_value::<Persistent>(saved).map_err(|e| e.to_string())?
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Persistent {
                 fleet: Default::default(),
                 fleet_revision: 0,
@@ -1677,6 +1690,8 @@ impl Host {
                     force: bool,
                     #[serde(default)]
                     expected_session_id: Option<Uuid>,
+                    #[serde(default)]
+                    structured_outputs: Option<bool>,
                 }
                 let body = body_json(req).await?;
                 let selection: Selection =
@@ -1710,7 +1725,7 @@ impl Host {
                     .find(|p| p.id == selection.profile_id)
                     .cloned()
                     .ok_or("unknown qualified profile")?;
-                let request = LaunchRequest {
+                let mut request = LaunchRequest {
                     instance_id: selection.instance_id,
                     qualified_profile_id: Some(profile.id),
                     model_id: selection.model_id,
@@ -1719,7 +1734,13 @@ impl Host {
                     concurrency: profile.concurrency,
                     options: profile.options,
                 };
-                let launch = self.prepare_launch(&request).await?;
+                let mut launch = self.prepare_launch(&request).await?;
+                let enabled = selection.structured_outputs.unwrap_or(true);
+                if enabled != request.options.structured_outputs {
+                    request.options.structured_outputs = enabled;
+                    launch.options.structured_outputs = enabled;
+                    request.qualified_profile_id = None;
+                }
                 self.processes
                     .lock()
                     .await
@@ -3015,9 +3036,17 @@ mod lifecycle_tests {
     #[tokio::test]
     async fn invalid_reload_preserves_session_and_restart_preserves_profile() {
         let dir = tempfile::tempdir().unwrap();
-        let engine = dir.path().join("engine");
+        let engine = dir.path().join("ginfer-serve");
         std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(dir.path().join("ginfer"), b"fixture profiling CLI").unwrap();
+        for gpu in ["GPU-test", "GPU-second"] {
+            let path = crate::hardware_profile::group_profile_path(
+                &dir.path().join("state"), &[gpu.to_owned()],
+            );
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, br#"{"schema_version":2}"#).unwrap();
+        }
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
         let metadata = serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
@@ -3354,12 +3383,47 @@ mod lifecycle_tests {
             .is_success());
         let snapshot = host.snapshot().await;
         assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
+        let mut recorded = serde_json::to_value(&qualified).unwrap();
+        recorded["options"].as_object_mut().unwrap().remove("structured_outputs");
+        let recorded: crate::launch_profiles::LaunchProfile = serde_json::from_value(recorded).unwrap();
+        assert!(!recorded.options.structured_outputs);
+        *host.launch_profiles.write().await = vec![recorded.clone()];
+        assert!(host.clone().route(switch()).await.unwrap().status().is_success());
+        let default_on = host.snapshot().await;
+        assert_eq!(default_on["instances"][0]["configuration"]["structured_outputs"], true);
+        assert!(default_on["instances"][0]["profile"]["qualified_profile_id"].is_null());
+        *host.launch_profiles.write().await = vec![qualified.clone()];
+        let mut override_selection = selection.clone();
+        override_selection["structured_outputs"] = false.into();
+        let override_request = || Request::post("/host/v1/profile-launch")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(override_selection.to_string()))
+            .unwrap();
+        assert!(host.clone().route(override_request()).await.unwrap().status().is_success());
+        let overridden = host.snapshot().await;
+        assert!(overridden["instances"][0]["profile"]["qualified_profile_id"].is_null());
+        assert_eq!(overridden["instances"][0]["configuration"]["structured_outputs"], false);
+        assert!(overridden["instances"][0]["configuration"]["host_kv_cache_bytes"].is_null());
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join("state/host.json")).unwrap())
+                .unwrap();
+        assert_eq!(saved["profiles"][id.to_string()]["structured_outputs"], false);
+        assert!(saved["profiles"][id.to_string()]["host_kv_cache_bytes"].is_null());
+        let restart = Request::post(format!("/host/v1/instances/{id}/restart"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap();
+        assert!(host.clone().route(restart).await.unwrap().status().is_success());
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["configuration"]["structured_outputs"], false);
+        assert!(snapshot["instances"][0]["configuration"]["host_kv_cache_bytes"].is_null());
+        assert!(snapshot["instances"][0]["profile"]["qualified_profile_id"].is_null());
         session = snapshot["instances"][0]["session_id"].clone();
         qualified.artifact_sha256 = "0".repeat(64);
         *host.launch_profiles.write().await = vec![qualified];
         assert!(!host
             .clone()
-            .route(switch())
+            .route(override_request())
             .await
             .unwrap()
             .status()
@@ -3507,6 +3571,7 @@ mod lifecycle_tests {
         let duplicate_id = Uuid::from_u128(u128::MAX);
         {
             let mut data = host.data.lock().await;
+            data.profiles.get_mut(&id).unwrap().qualified_profile_id = Some(recorded.id.clone());
             let mut duplicate = data.profiles[&id].clone();
             duplicate.instance_id = Some(duplicate_id);
             data.profiles.insert(duplicate_id, duplicate);
@@ -3515,10 +3580,10 @@ mod lifecycle_tests {
         let restored = Host::open(
             dir.path().join("state"),
             "Test".into(),
-            engine,
-            vec![models],
+            engine.clone(),
+            vec![models.clone()],
             vec![],
-            gpus,
+            gpus.clone(),
         )
         .await
         .unwrap();
@@ -3533,6 +3598,37 @@ mod lifecycle_tests {
         )
         .unwrap();
         assert!(retired.contains_key(&duplicate_id));
+        *restored.launch_profiles.write().await = vec![recorded];
+        assert_eq!(snapshot["instances"][0]["profile"]["structured_outputs"], false);
+        assert_eq!(snapshot["instances"][0]["profile"]["qualified_profile_id"], "fixture-c4");
+        let start = Request::post(format!("/host/v1/instances/{id}/start"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap();
+        assert!(restored.clone().route(start).await.unwrap().status().is_success());
+        assert_eq!(restored.snapshot().await["instances"][0]["configuration"]["structured_outputs"], false);
+        restored.processes.lock().await.shutdown().await.unwrap();
+        let path = dir.path().join("state/host.json");
+        let mut legacy: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        legacy["profiles"][id.to_string()].as_object_mut().unwrap().remove("structured_outputs");
+        std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        drop(restored);
+        let restored = Host::open(
+            dir.path().join("state"), "Test".into(), engine, vec![models], vec![], gpus,
+        ).await.unwrap();
+        let upgraded = restored.snapshot().await;
+        assert_eq!(upgraded["instances"][0]["profile"]["structured_outputs"], true);
+        assert!(upgraded["instances"][0]["profile"]["qualified_profile_id"].is_null());
+        let persisted: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(persisted["profiles"][id.to_string()]["structured_outputs"], true);
+        assert!(persisted["profiles"][id.to_string()]["qualified_profile_id"].is_null());
+        let restart = Request::post(format!("/host/v1/instances/{id}/restart"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap();
+        assert!(restored.clone().route(restart).await.unwrap().status().is_success());
+        assert_eq!(restored.snapshot().await["instances"][0]["configuration"]["structured_outputs"], true);
+        restored.processes.lock().await.shutdown().await.unwrap();
         let mut replacement = profile.clone();
         replacement.concurrency = 2;
         assert_eq!(restored.launch(replacement.clone()).await.unwrap(), id);

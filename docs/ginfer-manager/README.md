@@ -19,9 +19,9 @@ the accepted binaries.
 **Linux tray works; Open/Exit owed to Ron's desktop release walkthrough.**
 No further tray gates or application builds are authorized for this item.
 Source baseline is accepted Manager `6b199362d` and Host `257252131`, composed
-into handoff `09e7b2fb6`. The candidate is
-`/ai/gchat-worktrees/linux-tray-registration-09e`, branch
-`fix/gchat-linux-tray-registration-09e`; main is unchanged pending review.
+into handoff `09e7b2fb6`. The corrected harness is merged to main at `abc02aae3`. The clean, pushed
+`/ai/gchat-worktrees/linux-tray-registration-09e` candidate is retired; its
+`fix/gchat-linux-tray-registration-09e` branch and evidence remain in Git.
 Subject authority is this folder. Evidence remains in
 `out/linux-tray-registration-20261011/`.
 
@@ -62,10 +62,10 @@ Raw 882/885 evidence, watcher-format and Shell-traversal diagnosis remain linked
 beside the controls. No model, calibration, Pair, Windows change or user-data
 write occurs in this item.
 
-Owned inventory: retain the candidate until reviewed integration, the accepted
+Owned inventory: the source candidate is merged and retired. Retain the accepted
 four-file baseline archive and concise cited evidence. The disposable S2 882/885
 fixtures are retired after lifetime audits, freeing 35,692,544 available bytes
-combined. The FIFO 888 fixture is retired at 15:47Z after evidence retention and its
+combined. The FIFO 888 fixture is retired at 15:46Z after evidence retention and its
 scoped lifetime audit, freeing 17,817,600 available bytes. Its retirement receipt
 retains the audit scope. Total S2 fixture retirement frees 53,510,144 bytes. Shared tray files, models,
 profiles and other owners' paths remain intact. Next work is the structured
@@ -162,6 +162,99 @@ Source review also identifies a separate Host settings mismatch: the zero
 AUTO prefix pool instead of explicit disabled zero. It is recorded as
 GCHAT-HOST-ZERO-PREFIX-CACHE. This is not established as the S2 startup cause;
 no setting, argv fix, guard or additional run is applied in this gate.
+
+## Structured outputs in Host deployments
+
+Current item: `GCHAT-STRUCTURED-OUTPUT-ENABLEMENT`, approved October 11.
+Deliverable: agent-capable Host deployments enable the existing Engine
+structured-output flag by default, with an explicit saved deployment setting to
+disable it. GChat and Manager expose the same control. Ron has now selected
+Engine/CLI default ON with an explicit off flag; C1 owns that Engine change. An omitted Host setting means ON, and explicit
+OFF survives profile save, reload and restart. A preset override must retain
+model/GPU/payload validation and stop claiming qualification when its options
+differ from the recorded catalog. Historical profile evidence does not qualify
+this changed startup setting.
+
+The touched-file audit also identifies `GCHAT-HOST-ZERO-PREFIX-CACHE`: an omitted
+Host cache limit selects AUTO, explicit zero disables it, and a positive value
+selects exact bytes. Preserve those three values through API, saved deployment,
+UI and argv instead of filtering zero out. This mismatch is not an established
+cause of the separate S2 RAM-headroom failure.
+
+Acceptance: focused Host argv/default/persistence cases, then one real
+schema-valid request with structured outputs ON and the same otherwise-valid
+request receiving the typed disabled rejection with OFF. Existing small owning
+UI cases cover the explicit controls; no full suite or model matrix. Use one
+isolated Linux Host and the accepted local SMOL artifact/profile/runtime in
+place; keep admission guards, context, concurrency, KV dtype and speculation
+unchanged. No Engine build, hardware calibration, native Windows change,
+installer/release/signing/publication or Gbot implementation.
+
+Owned candidate: `/ai/gchat-worktrees/structured-outputs-058`, branch
+`fix/gchat-structured-outputs-058`, baseline main `058702dd8`. Evidence and accepted
+Host build belong in `/ai/gchat/out/structured-output-20261011/`; retain concise
+results and the accepted build, retire the private state after normal stop.
+Source `e65778645` is frozen. Three exact Host cases PASS (argv/serde,
+validated preset/save/restart/reopen, recorded catalog defaults), plus five
+GChat and seven Manager cases. Strict Host/plugin Clippy, plugin check,
+affected frontend lint/typecheck and the Linux Host build PASS. Retained Host:
+`/ai/gchat/out/structured-output-20261011/accepted-host/ginfer-host`;
+[focused results](../../../out/structured-output-20261011/host-gate-result.json)
+and [UI results](../../../out/structured-output-20261011/frontend-manager-acceptance.json).
+
+The real pair is unblocked by C1's Engine fixes merged as `a59c489ad` on October 11.
+The earlier Flash mask-width failure expected 7760 padded words but supplied 7753
+semantic words; the old `4c63` runtime is excluded from this gate. Its Ready/Stop
+evidence did not qualify constrained sampling.
+
+Real acceptance **PASS** at 16:02:34–16:03:37Z on the local RTX 5090:
+
+- ON omits the Host setting; actual argv includes `--structured-outputs`.
+  The single strict-schema request returns HTTP 200 with `{"ok":true}` and
+  `finish_reason: stop`.
+- OFF explicitly saves false; this tested Engine receives no enable flag.
+  The same request returns HTTP 400, code `structured_outputs_not_supported`,
+  type `invalid_request_error`. Saved OFF remains false.
+
+The accepted Host uses C1's clean Release/SM120a server `2cc592d46`, containing
+`a59c489ad`, with its receiving loader closure. Runtime location:
+`/ai/kernel-agent/run_workdir/local/c1-structured-io-check-20261011/gchat-sm120a-2cc592d46/apps/ginfer-serve`.
+Actual process executable and mapped providers agree with C1's nine-file loader
+receipt. Both cases preserve the same in-place SMOL artifact/v2 profile and
+TP1/C1/131072/INT8/fixed3 MTP/AUTO arena/1 GiB device headroom, graphs ON and
+explicit disabled Host prefix cache. Only structured-output enablement differs.
+This is a functional check, not model quality, speed, release or full-context
+qualification.
+
+The first controller attempt stops before a schema request: Start correctly
+returns HTTP 202 Accepted, while the harness expects 200. The owning API also
+requires a JSON object for Stop. The control is corrected against
+`service.rs:1941–1948` and `body_json`; failed-attempt evidence is retained in
+`attempt1-accepted-status/`. No product or model setting is changed. The real
+pair then runs once; passing source/component cases are reused.
+
+Ordinary Stop leaves both exact Engine PIDs absent between cases. Host exits 0,
+its private listener closes, both canonical guards return and booking 507 is
+cancelled. Private Host state and generated credentials are retired after the
+root audit; accepted Host, cited public results, borrowed runtime/model/profile
+sources remain. Evidence: `out/structured-output-20261011/{live-pair-result.json,
+on-response.json,off-response.json,saved-settings-observation.json,
+runtime-binding.json,private-fixture-retirement.json}`.
+
+The 15:52Z decision approves the unchanged product Host AUTO launch; the
+schedule's explicit Host-RAM flag guidance governs engine bench runs. This
+runtime's documented default is flat 4 GiB, not the older 25% formula. The
+existing controller retains the local emergency backstop, finite deadline and
+exact process/lock lifetime. There is no wrapper or new Host setting.
+
+Next action: reviewed main integration of this accepted change. Ron's subsequent
+Engine-default-ON decision requires Host false to emit C1's explicit off flag;
+the tested `2cc592d46` still defaults OFF. Coordinate that flag mapping with C1
+before the new Engine default becomes the product runtime. These results do not
+claim that a saved OFF works by omission against a default-ON Engine. The Linux
+tray diagnosis is already merged/closed; Open/Exit is owed to Ron's desktop
+release walkthrough. Gbot's design is approved separately, with source-only
+SSH/vault/session work allowed while development VMs await setup.
 
 ## Accepted hardware profile installation
 

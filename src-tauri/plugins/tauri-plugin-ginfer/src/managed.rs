@@ -169,61 +169,70 @@ async fn load_on_host(
     if let Some((id, launch)) = residents.into_iter().next() {
         return attach(sessions, control, launch, id, model_id, model_path, timeout).await;
     }
-    let launch = if let Some((profile, gpu_uuids)) =
+    if let Some((profile, gpu_uuids)) =
         selected_profile(&snapshot, model.id, &config, &requested)
     {
-        LaunchRequest {
-            instance_id: None,
-            qualified_profile_id: Some(profile.id),
+        let result = control.request("/host/v1/profile-launch", Some(serde_json::json!({
+            "profile_id": profile.id, "model_id": model.id, "gpu_uuids": gpu_uuids,
+            "structured_outputs": requested.structured_outputs,
+        }))).await?;
+        let instance_id: Uuid = serde_json::from_value(result["instance_id"].clone())
+            .map_err(|e| e.to_string())?;
+        let changed = profile.options.structured_outputs != requested.structured_outputs;
+        let mut options = profile.options;
+        options.structured_outputs = requested.structured_outputs;
+        let launch = LaunchRequest {
+            instance_id: Some(instance_id),
+            qualified_profile_id: if changed { None } else { Some(profile.id) },
             model_id: model.id,
             gpu_uuids,
             max_context: profile.max_context,
             concurrency: profile.concurrency,
-            options: profile.options,
-        }
-    } else {
-        if config.max_context == 0 || config.max_concurrency == 0 {
-            return Err("No qualified automatic profile is available. Select a qualified profile in Engines, or specify both context and concurrency as custom settings.".into());
-        }
-        let occupied: BTreeSet<&str> = snapshot["instances"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|i| {
-                matches!(
-                    i["status"].as_str(),
-                    Some("ready" | "starting" | "stopping")
-                )
-            })
-            .flat_map(|i| {
-                i["configuration"]["gpu_uuids"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-            })
-            .filter_map(Value::as_str)
-            .collect();
-        let available: Vec<_> = snapshot["gpus"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|g| g["uuid"].as_str().is_some_and(|id| !occupied.contains(id)))
-            .collect();
-        let gpu_uuids = available.iter().find_map(|first| {
-            let group: Vec<String> = available.iter().filter(|g| g["name"] == first["name"]
-                && g["compute_capability"] == first["compute_capability"])
-                .take(model.metadata.tp_size as usize).filter_map(|g| g["uuid"].as_str().map(str::to_string)).collect();
-            (group.len() == model.metadata.tp_size as usize).then_some(group)
-        }).ok_or("No unreserved homogeneous GPU group is available; manage existing instances in Engines")?;
-        LaunchRequest {
-            instance_id: None,
-            qualified_profile_id: None,
-            model_id: model.id,
-            gpu_uuids,
-            max_context: config.max_context,
-            concurrency: config.max_concurrency,
-            options: requested,
-        }
+            options,
+        };
+        return attach(sessions, control, launch, instance_id, model_id, model_path, timeout).await;
+    }
+    if config.max_context == 0 || config.max_concurrency == 0 {
+        return Err("No qualified automatic profile is available. Select a qualified profile in Engines, or specify both context and concurrency as custom settings.".into());
+    }
+    let occupied: BTreeSet<&str> = snapshot["instances"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|i| {
+            matches!(
+                i["status"].as_str(),
+                Some("ready" | "starting" | "stopping")
+            )
+        })
+        .flat_map(|i| {
+            i["configuration"]["gpu_uuids"]
+                .as_array()
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(Value::as_str)
+        .collect();
+    let available: Vec<_> = snapshot["gpus"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|g| g["uuid"].as_str().is_some_and(|id| !occupied.contains(id)))
+        .collect();
+    let gpu_uuids = available.iter().find_map(|first| {
+        let group: Vec<String> = available.iter().filter(|g| g["name"] == first["name"]
+            && g["compute_capability"] == first["compute_capability"])
+            .take(model.metadata.tp_size as usize).filter_map(|g| g["uuid"].as_str().map(str::to_string)).collect();
+        (group.len() == model.metadata.tp_size as usize).then_some(group)
+    }).ok_or("No unreserved homogeneous GPU group is available; manage existing instances in Engines")?;
+    let launch = LaunchRequest {
+        instance_id: None,
+        qualified_profile_id: None,
+        model_id: model.id,
+        gpu_uuids,
+        max_context: config.max_context,
+        concurrency: config.max_concurrency,
+        options: requested,
     };
     let result = control
         .request(

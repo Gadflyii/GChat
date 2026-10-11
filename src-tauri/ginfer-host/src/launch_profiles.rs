@@ -27,8 +27,19 @@ pub struct LaunchProfile {
     pub min_memory_mib_per_gpu: u64,
     pub max_context: u32,
     pub concurrency: u32,
+    #[serde(deserialize_with = "recorded_options")]
     pub options: LaunchOptions,
     pub qualification: Qualification,
+}
+
+fn recorded_options<'de, D>(deserializer: D) -> Result<LaunchOptions, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let mut options = serde_json::Map::<String, serde_json::Value>::deserialize(deserializer)?;
+    // Catalog omission records the Engine's OFF default.
+    options.entry("structured_outputs".to_owned()).or_insert(false.into());
+    serde_json::from_value(serde_json::Value::Object(options)).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -481,6 +492,7 @@ mod tests {
     }
     #[test]
     fn dynamic_catalog_preserves_policy_and_capacity_evidence() {
+        assert!(serde_json::from_str::<LaunchOptions>("{}").unwrap().structured_outputs);
         let mut p = profile();
         p.options.kv_arena_bytes = None;
         p.qualification.tier = QualificationTier::CalculatedStartupSmoke;
@@ -504,9 +516,17 @@ mod tests {
             schema: "ginfer-launch-profiles-v1".into(), profiles: vec![p],
         }).unwrap();
         for omitted in [false, true] {
-            if omitted { json["profiles"][0]["options"].as_object_mut().unwrap().remove("kv_arena_bytes"); }
+            if omitted {
+                let options = json["profiles"][0]["options"].as_object_mut().unwrap();
+                options.remove("kv_arena_bytes");
+                options.remove("structured_outputs");
+            }
             std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
-            assert_eq!(ProfileCatalog::read(&path).unwrap()[0].options.kv_arena_bytes, None);
+            let profile = &ProfileCatalog::read(&path).unwrap()[0];
+            assert_eq!(profile.options.kv_arena_bytes, None);
+            assert_eq!(profile.options.structured_outputs, !omitted);
+            let recorded: LaunchProfile = serde_json::from_value(serde_json::to_value(profile).unwrap()).unwrap();
+            assert_eq!(recorded.options.structured_outputs, !omitted);
         }
     }
     #[test]

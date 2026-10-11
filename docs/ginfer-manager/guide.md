@@ -101,6 +101,18 @@ group, or **Custom settings** to select an installed package, its GPU group,
 context window, concurrency, Vision, KV format and speculation. The host
 validates settings before launch. No model starts just by opening Manager.
 
+**Structured outputs** is enabled by default for new Host deployments, allowing
+JSON-schema responses and strict tools. Uncheck it to turn those capabilities
+off; the saved choice is used by Start and Reload. Presets retain their recorded
+evidence. Changing their structured-output setting uses custom runtime options
+and does not extend that evidence to the changed deployment. The standalone
+GInfer Engine remains opt-in.
+
+Custom settings also exposes **Host KV cache (bytes, blank = automatic, 0 =
+disabled)**. A blank value leaves sizing to the Engine; zero explicitly disables
+the Host cache, and a positive value sets exact bytes. Reload preserves all three
+choices. This control is separate from the GPU KV budget.
+
 Custom settings exposes **GPU KV budget (bytes, blank = automatic)**. Leave it
 blank for the Engine to size the pool from available memory after startup, or
 enter an exact positive byte count. Reload shows the saved budget; clearing it

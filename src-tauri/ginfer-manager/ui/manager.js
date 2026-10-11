@@ -281,6 +281,10 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const previous = instance?.profile || {}
     const model = previous.model_id || models[0]?.id
     let mode = profiles.length ? 'profile' : 'custom'
+    let updateStructuredEvidence = () => {}
+    const structuredInput = h('input', { type: 'checkbox', name: 'structured_outputs',
+      checked: previous.structured_outputs ?? true, onchange: () => updateStructuredEvidence() })
+    const structuredField = h('label', { class: 'check' }, structuredInput, 'Structured outputs')
     const content = h('div')
     const radios = h('div', { class: 'radio-tabs' }, ['profile', 'custom'].map((kind) => h('label', {},
       h('input', { type: 'radio', name: 'launch_mode', value: kind, checked: mode === kind,
@@ -292,11 +296,20 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     }).join(' + ')
     function fill() {
       if (mode === 'profile') {
-        content.replaceChildren(select('Profile and GPU group', 'profile_choice', profiles.map(({ entry, group }, index) => [String(index),
-          `${entry.profile.name} · ${gpuNames(group)} · ${entry.profile.qualification.tier} · Engine ${entry.profile.qualification.engine_revision.slice(0, 8)}`]), '0'),
-        h('p', { class: 'muted' }, 'Profile evidence applies to its recorded Engine and workload. A changed Engine needs separate validation.'))
+        const profileField = select('Profile and GPU group', 'profile_choice', profiles.map(({ entry, group }, index) => [String(index),
+          `${entry.profile.name} · ${gpuNames(group)} · ${entry.profile.qualification.tier} · Engine ${entry.profile.qualification.engine_revision.slice(0, 8)}`]), '0')
+        const changedNote = note('Changing the recorded structured output setting makes this launch custom and unqualified.')
+        updateStructuredEvidence = () => {
+          const recorded = profiles[Number(profileField.querySelector('select').value)]?.entry.profile.options.structured_outputs ?? false
+          changedNote.hidden = structuredInput.checked === recorded
+        }
+        profileField.addEventListener('change', updateStructuredEvidence)
+        updateStructuredEvidence()
+        content.replaceChildren(profileField, changedNote,
+        h('p', { class: 'muted' }, 'Profile evidence applies to its recorded options, Engine and workload. A changed option or Engine needs separate validation.'))
         return
       }
+      updateStructuredEvidence = () => {}
       const modelField = select('Installed model', 'model_id', models.map((entry) => [entry.id, `${modelLabel(entry)} · TP${entry.metadata?.tp_size}`]), model)
       const specField = select('Speculative decoding', 'spec', [['auto', 'Automatic'], ['none', 'None'], ['dflash', 'DFlash2'], ['mtp', 'MTP']], previous.spec || 'auto')
       const draftPolicy = select('Draft width policy', 'draft_policy', [['auto', 'Automatic'], ['fixed', 'Fixed'], ['adaptive', 'Adaptive']], previous.draft_policy || 'auto')
@@ -311,6 +324,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         h('div', { class: 'grid' }, widthField,
           select('KV cache', 'kv_dtype', [['auto', 'Automatic'], ['bf16', 'BF16'], ['int8', 'INT8'], ['nvfp4', 'NVFP4']], previous.kv_dtype || 'auto')),
         field('GPU KV budget (bytes, blank = automatic)', 'kv_arena_bytes', previous.kv_arena_bytes ?? '', 'number', { min: 1, max: Number.MAX_SAFE_INTEGER }),
+        field('Host KV cache (bytes, blank = automatic, 0 = disabled)', 'host_kv_cache_bytes', previous.host_kv_cache_bytes ?? '', 'number', { min: 0, max: Number.MAX_SAFE_INTEGER }),
+        note('Host KV cache is automatic when blank; zero disables it and a positive value sets its exact size.'),
         note('Automatic sizing uses available GPU memory after startup. Context and concurrent request settings stay as entered.'),
         note('Automatic speculation uses width 0. DFlash2 and MTP require a positive width. The host validates the exact model, GPU group and settings before starting or replacing an instance.'))
       const updateWidth = () => {
@@ -334,7 +349,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     fill()
     dialog(instance ? 'Reload instance' : 'Start a model',
       instance ? 'The host validates the replacement first. Current requests drain unless you explicitly choose to interrupt them.' : 'Choose an installed model and exact GPU group. No model starts until you submit this form.',
-      [radios, content, ...(instance?.active_requests > 0 ? [h('label', { class: 'check' },
+      [radios, structuredField, content, ...(instance?.active_requests > 0 ? [h('label', { class: 'check' },
         h('input', { type: 'checkbox', name: 'force' }), `Interrupt ${instance.active_requests} active request(s)`)] : [])],
       instance ? 'Reload' : 'Start', (form) => {
         const latest = observation().hosts.get(host.host_id)
@@ -344,17 +359,21 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
           const choice = profiles[Number(fieldValue(form, 'profile_choice'))]
           if (!choice) throw new Error('Choose a saved profile')
           return run(hostRequest(host, 'profile_launch', { ...guard, profile_id: choice.entry.profile.id,
-            model_id: choice.entry.model_id, gpu_uuids: choice.group }), instance ? 'Instance reloaded' : 'Model starting')
+            model_id: choice.entry.model_id, gpu_uuids: choice.group, structured_outputs: checked(form, 'structured_outputs') }), instance ? 'Instance reloaded' : 'Model starting')
         }
         const configuration = { ...previous, instance_id: instance?.instance_id || null, qualified_profile_id: null,
           model_id: fieldValue(form, 'model_id'), gpu_uuids: checkedValues(form, 'gpu'),
           max_context: Number(fieldValue(form, 'max_context')), concurrency: Number(fieldValue(form, 'concurrency')),
-          vision: checked(form, 'vision'), spec: fieldValue(form, 'spec'), draft_policy: fieldValue(form, 'draft_policy'),
+          vision: checked(form, 'vision'), structured_outputs: checked(form, 'structured_outputs'), spec: fieldValue(form, 'spec'), draft_policy: fieldValue(form, 'draft_policy'),
           draft_tokens: Number(fieldValue(form, 'draft_tokens')), kv_dtype: fieldValue(form, 'kv_dtype'),
-          kv_arena_bytes: fieldValue(form, 'kv_arena_bytes') === '' ? null : Number(fieldValue(form, 'kv_arena_bytes')) }
+          kv_arena_bytes: fieldValue(form, 'kv_arena_bytes') === '' ? null : Number(fieldValue(form, 'kv_arena_bytes')),
+          host_kv_cache_bytes: fieldValue(form, 'host_kv_cache_bytes') === '' ? null : Number(fieldValue(form, 'host_kv_cache_bytes')) }
         if (!configuration.gpu_uuids.length) throw new Error('Choose the exact GPU group')
         if (configuration.kv_arena_bytes !== null && (!Number.isSafeInteger(configuration.kv_arena_bytes) || configuration.kv_arena_bytes < 1)) {
           throw new Error('GPU KV budget must be a positive whole number of bytes, or blank for automatic sizing')
+        }
+        if (configuration.host_kv_cache_bytes !== null && (!Number.isSafeInteger(configuration.host_kv_cache_bytes) || configuration.host_kv_cache_bytes < 0)) {
+          throw new Error('Host KV cache must be a nonnegative whole number of bytes, or blank for automatic sizing')
         }
         const width = configuration.draft_tokens
         if (!Number.isInteger(width) || width < 0) throw new Error('Draft width must be a whole number')

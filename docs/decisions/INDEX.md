@@ -1,8 +1,10 @@
 # Engineering Decisions (ADR)
 
-- **2026-10-11** — [Design local-first Gbot and guided computer setup](2026-10-11-design-local-first-gbot-and-computer-setup.md) — product inputs decided; implementation pending
+- **2026-10-11** — [Enable structured outputs in Host deployments](2026-10-11-enable-structured-outputs-in-host-deployments.md)
 
-- [Draft Gbot shared runtime and Cua workspaces](2026-10-10-draft-gbot-shared-runtime-and-cua-workspaces.md) — proposed
+- **2026-10-11** — [Design local-first Gbot and guided computer setup](2026-10-11-design-local-first-gbot-and-computer-setup.md) — product design approved; implementation scoped separately
+
+- [Draft Gbot shared runtime and Cua workspaces](2026-10-10-draft-gbot-shared-runtime-and-cua-workspaces.md) — initial proposal
 - **2026-10-11** — [Preserve logical assignment in desktop bundles](2026-10-11-preserve-desktop-logical-assignment.md)
 
 - **2026-10-11** — [Keep managed OpenCode configuration in the GChat data folder](2026-10-11-isolate-managed-opencode-configuration.md)
