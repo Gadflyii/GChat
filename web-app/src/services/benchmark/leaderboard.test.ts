@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
-import { buildSubmission, submitStandardBenchmark } from './leaderboard'
+import { buildSubmission, submitStandardBenchmark, ownedLeaderboardResults, deleteLeaderboardResult } from './leaderboard'
 import type { BenchmarkResult } from './tauri'
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 afterEach(() => { vi.mocked(invoke).mockReset(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
@@ -82,5 +82,50 @@ describe('G.bench public submission', () => {
   it('rejects a receipt for a different Run ID', async () => {
     vi.mocked(invoke).mockResolvedValueOnce({ run_id: 'wrong-run', delete_token: 'a'.repeat(64) })
     await expect(submitStandardBenchmark(fixture(), 'Player')).rejects.toThrow('Invalid leaderboard receipt')
+  })
+})
+
+describe('G.bench receipt-owned deletion', () => {
+  const id = 'published-run-001'
+  const receipt = { run_id: id, delete_token: 'b'.repeat(64), owner_token: 'c'.repeat(64) }
+  const other = { run_id: 'other-published-run', delete_token: 'd'.repeat(64) }
+  const pending = { owner_token: 'e'.repeat(64) }
+  const save = () => localStorage.setItem(localStorageKey.gbenchReceipts, JSON.stringify({ [id]: receipt, [other.run_id]: other, 'pending-run-001': pending }))
+
+  it('restores ownership independently of local benchmark history and clears only a confirmed deletion', async () => {
+    save()
+    expect(ownedLeaderboardResults()).toEqual([receipt, other])
+    vi.mocked(invoke).mockResolvedValueOnce(undefined)
+    await deleteLeaderboardResult(id)
+    expect(invoke).toHaveBeenCalledWith('delete_benchmark', { runId: id, deleteToken: receipt.delete_token })
+    expect(ownedLeaderboardResults()).toEqual([other])
+    expect(JSON.parse(localStorage.getItem(localStorageKey.gbenchReceipts)!)['pending-run-001']).toEqual(pending)
+  })
+
+  it('keeps the exact receipt and unrelated results after a failed or lost response', async () => {
+    save()
+    const before = localStorage.getItem(localStorageKey.gbenchReceipts)
+    vi.mocked(invoke).mockRejectedValueOnce(new Error('Invalid deletion receipt.'))
+    await expect(deleteLeaderboardResult(id)).rejects.toThrow('Invalid deletion receipt.')
+    expect(localStorage.getItem(localStorageKey.gbenchReceipts)).toBe(before)
+    vi.mocked(invoke).mockResolvedValueOnce(undefined)
+    await deleteLeaderboardResult(id)
+    expect(vi.mocked(invoke).mock.calls[1][1]).toEqual(vi.mocked(invoke).mock.calls[0][1])
+  })
+
+  it('refuses absent or mismatched receipt ownership without sending DELETE', async () => {
+    localStorage.setItem(localStorageKey.gbenchReceipts, JSON.stringify({ [id]: { ...receipt, run_id: other.run_id } }))
+    await expect(deleteLeaderboardResult(id)).rejects.toThrow('No saved deletion receipt')
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('reports public success separately when local receipt persistence fails', async () => {
+    save()
+    vi.mocked(invoke).mockResolvedValueOnce(undefined)
+    const storage = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => { throw new Error('Storage unavailable') })
+    try {
+      await expect(deleteLeaderboardResult(id)).rejects.toThrow('public result was removed, but its local receipt could not be cleared')
+      expect(ownedLeaderboardResults()).toEqual([receipt, other])
+    } finally { storage.mockRestore() }
   })
 })

@@ -798,6 +798,7 @@ function LaunchPage() {
             command = agent.detectBin
           }
           await invoke('open_agent_terminal', {
+            agentId: agent.id,
             command,
             proxy: buildProxyPayload(),
           })

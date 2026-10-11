@@ -75,7 +75,7 @@ to confirm access.
 ## When NOT to use
 
 - To-dos / checklists without a fixed time — use the `apple-reminders` skill.
-- Google Calendar specifically — use the `gog-workspace` skill (`calendar events`).
+- Google Calendar specifically — use the native `google-workspace` skill.
 - Agent-driven background scheduling — use `tasks.schedule` / `tasks.cron`.
 
 ## Reading events (icalBuddy)

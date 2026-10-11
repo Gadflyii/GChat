@@ -67,6 +67,8 @@ pub struct DownloadItem {
     pub sha256: Option<String>,
     pub size: Option<u64>,
     pub model_id: Option<String>,
+    #[serde(default)]
+    pub model_storage_root: Option<String>,
 }
 
 #[derive(serde::Serialize, Clone, Debug)]

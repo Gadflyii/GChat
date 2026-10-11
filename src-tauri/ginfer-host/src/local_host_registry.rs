@@ -5,7 +5,7 @@ use std::{fs::OpenOptions, path::{Path, PathBuf}};
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Owner {
-    Desktop(LocalHost),
+    Desktop(Box<LocalHost>),
     Service { directory: PathBuf, origin: String },
 }
 
@@ -151,14 +151,14 @@ mod tests {
             models: vec![], artifact_sets: vec![], name: "computer".into(),
             nvidia_smi: "nvidia-smi".into(), listen: "127.0.0.1:7443".parse().unwrap(),
         };
-        select(&path, Some(Owner::Desktop(local.clone()))).unwrap();
+        select(&path, Some(Owner::Desktop(Box::new(local.clone())))).unwrap();
         local.engine_runtimes.insert("8.6".into(), executable.clone());
-        let refreshed = select(&path, Some(Owner::Desktop(local.clone()))).unwrap();
+        let refreshed = select(&path, Some(Owner::Desktop(Box::new(local.clone())))).unwrap();
         assert_eq!(serde_json::to_value(refreshed).unwrap()["engine_runtimes"]["8.6"], executable.to_string_lossy().as_ref());
         let other = root.path().join("other");
         local.desktop_provider = Some(other.clone());
         local.directory = other.join("host");
-        select(&path, Some(Owner::Desktop(local))).unwrap();
+        select(&path, Some(Owner::Desktop(Box::new(local)))).unwrap();
         let retained = select(&path, None).unwrap();
         assert_eq!(serde_json::to_value(retained).unwrap()["directory"], provider.join("host").to_string_lossy().as_ref());
     }

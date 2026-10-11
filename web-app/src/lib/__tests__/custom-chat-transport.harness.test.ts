@@ -1,7 +1,9 @@
 import { EngineManager, MessageStatus, type ThreadMessage } from '@gchat/core'
 import { useContextUsage } from '@/hooks/useContextUsage'
 import type { UIMessage } from '@ai-sdk/react'
-import type { LanguageModel } from 'ai'
+import { InvalidPromptError, TypeValidationError, type LanguageModel } from 'ai'
+import type { InvokeArgs } from '@tauri-apps/api/core'
+import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
@@ -18,7 +20,12 @@ import { executeChatCapability, chatCapabilityRun } from '../execute-chat-capabi
 import { executeClaimedChatToolBatch, shouldSendToolFollowUp } from '../execute-chat-tool-calls'
 import { isSessionBusy, useChatSessions } from '@/stores/chat-session-store'
 import { convertThreadMessageToUIMessage, extractContentPartsFromUIMessage } from '../messages'
-import type { GInferContextState } from '../smart-context'
+import {
+  SmartContextError,
+  smartContextErrorResponse,
+  type GInferContextState,
+} from '../smart-context'
+import { logChatWarning, reportCompletionContextWarning, type ChatWarningContext } from '../chat-warning'
 import type { CapabilitiesService } from '@/services/capabilities/types'
 import * as agentDefinitions from '@/services/agent/definitions'
 import { conversationDocumentAccess, processAttachmentsForSend } from '../attachmentProcessing'
@@ -554,6 +561,230 @@ describe('CustomChatTransport production harness', () => {
       }))
     } finally {
       engine.mockRestore()
+    }
+  })
+
+  it('logs exact context and format warning evidence without changing errors or reusing previous request counts', async () => {
+    const threadId = 'warning-chat'
+    const promptSecret = 'private-prompt-sentinel'
+    const toolSecret = 'private-tool-result-sentinel'
+    const invoke = vi.fn<(command: string, args?: InvokeArgs) => unknown>().mockReturnValue(undefined)
+    mockIPC(invoke)
+    const engine = vi.spyOn(EngineManager, 'instance').mockReturnValue({
+      get: () => ({ getLoadedContext: async () => 131072 }),
+    } as unknown as EngineManager)
+    useModelProvider.setState((state) => ({
+      selectedModel: {
+        ...state.selectedModel!,
+        settings: { ctx_len: { controller_props: { value: 32768 } } },
+      } as never,
+      providers: state.providers.map((provider) => ({
+        ...provider,
+        models: [{
+          id: 'fixture-model',
+          settings: { ctx_len: { controller_props: { value: 32768 } } },
+        }],
+      })) as never,
+    }))
+    const structuredMessage = 'The current request cannot fit after safe compaction.'
+    const structuredError = new SmartContextError('context_turn_too_large', structuredMessage, {
+      inputTokens: 131009,
+      inputBudget: 122624,
+      summaryInputTokens: 4096,
+      configuredContextTokens: 131072,
+    })
+    const wrappedError = Object.assign(new Error('API request failed with status 400'), {
+      responseBody: await smartContextErrorResponse(structuredError).text(),
+    })
+    const rawError = new Error('the request exceeds the available context size.')
+    let scenario: 'structured' | 'raw' | 'schema' = 'structured'
+    const dispatchedModels: LanguageModel[] = []
+    const createModel = vi.spyOn(ModelFactory, 'createModel').mockImplementation(async (...args) => {
+      const policy = args[4]!
+      expect(policy.configuredContextTokens).toBe(131072)
+      const model = fakeStreamingModel([])
+      vi.mocked(model.doStream).mockImplementation(async () => {
+        if (scenario === 'structured') {
+          policy.onUsage?.({ inputTokens: 131009, contextTokens: 131072, reservedOutputTokens: 8192 })
+          throw wrappedError
+        }
+        throw rawError
+      })
+      dispatchedModels.push(model)
+      return model
+    })
+    const transport = new CustomChatTransport(undefined, threadId)
+    const send = (messages: UIMessage[]) => transport.sendMessages({
+      chatId: threadId,
+      messages,
+      abortSignal: undefined,
+      trigger: 'submit-message',
+      messageId: undefined,
+    }) as Promise<ReadableStream<Record<string, unknown>>>
+    const warningCalls = () => invoke.mock.calls.filter(([command]) => command === 'plugin:log|log')
+    const warnings = () => warningCalls().map(([, args]) =>
+      JSON.parse((args as { message: string }).message) as Record<string, unknown>
+    )
+    const privateUser: UIMessage = { ...userMessage, parts: [{ type: 'text', text: promptSecret }] }
+    const requestContext = {
+      event: 'chat_warning',
+      trigger: 'stream-error',
+      threadId,
+      modelId: 'fixture-model',
+      providerId: 'ginfer',
+      messageFormat: 'ModelMessage[]',
+      conversion: 'converted',
+      uiMessageCount: 1,
+      modelMessageCount: 1,
+      toolCount: 0,
+      configuredContextTokens: 32768,
+      loadedContextTokens: 131072,
+      contextTokens: 131072,
+      outputTokens: null,
+      formatDecision: 'converted',
+      displayDecision: 'context-window-full',
+    }
+    try {
+      const structuredChunks = await readChunks(await send([privateUser]))
+      expect(structuredChunks.filter((chunk) => chunk.type === 'error')).toEqual([{
+        type: 'error',
+        errorText: JSON.stringify({ error: { code: 'context_turn_too_large', message: structuredMessage } }),
+      }])
+      expect(warnings()).toHaveLength(1)
+      expect(warnings()[0]).toMatchObject({
+        ...requestContext,
+        inputTokens: 131009,
+        reservedOutputTokens: 8192,
+        classificationTrigger: 'context_turn_too_large',
+        errorName: 'Error',
+        errorMessage: null,
+        errorContext: {
+          inputTokens: 131009, inputBudget: 122624,
+          summaryInputTokens: 4096, configuredContextTokens: 131072,
+        },
+      })
+      expect(dispatchedModels[0].doStream).toHaveBeenCalledTimes(1)
+      expect(useContextUsage.getState().requests[threadId].inputTokens).toBe(131009)
+
+      scenario = 'raw'
+      const rawChunks = await readChunks(await send([privateUser]))
+      expect(rawChunks.filter((chunk) => chunk.type === 'error')).toEqual([{
+        type: 'error', errorText: rawError.message,
+      }])
+      expect(warnings()).toHaveLength(2)
+      expect(warnings()[1]).toMatchObject({
+        ...requestContext,
+        inputTokens: null,
+        reservedOutputTokens: null,
+        classificationTrigger: 'available-context-size',
+        errorName: 'Error',
+        errorMessage: null,
+        errorContext: {},
+      })
+      expect(dispatchedModels[1].doStream).toHaveBeenCalledTimes(1)
+
+      scenario = 'schema'
+      const invalidToolResult: UIMessage = {
+        id: 'invalid-tool-result', role: 'assistant', parts: [{
+          type: 'tool-agent_run', toolCallId: 'invalid-call', state: 'output-available',
+          input: { task: toolSecret },
+          output: { nested: { absent: undefined, private: toolSecret } },
+        }],
+      }
+      const schemaChunks = await readChunks(await send([privateUser, invalidToolResult]))
+      const schemaMessage = 'Invalid prompt: The messages must be a ModelMessage[]. If you have passed a UIMessage[], you can use convertToModelMessages to convert them.'
+      expect(schemaChunks.filter((chunk) => chunk.type === 'error')).toEqual([{
+        type: 'error', errorText: schemaMessage,
+      }])
+      expect(warnings()).toHaveLength(3)
+      expect(warnings()[2]).toMatchObject({
+        ...requestContext,
+        uiMessageCount: 2,
+        modelMessageCount: 3,
+        inputTokens: null,
+        reservedOutputTokens: null,
+        formatDecision: 'model-message-schema-rejected',
+        displayDecision: 'error-generating-response',
+        classificationTrigger: 'model-message-schema-rejected',
+        errorName: 'AI_InvalidPromptError',
+        errorMessage: schemaMessage,
+        errorContext: {},
+      })
+      expect(dispatchedModels[2].doStream).not.toHaveBeenCalled()
+
+      const completionContext: ChatWarningContext = {
+        threadId, modelId: 'fixture-model', providerId: 'ginfer',
+        messageFormat: 'ModelMessage[]', conversion: 'converted',
+        uiMessageCount: 1, modelMessageCount: 1, toolCount: 0,
+        configuredContextTokens: null, loadedContextTokens: null,
+        contextTokens: null, inputTokens: 29491, outputTokens: 1,
+        reservedOutputTokens: null,
+      }
+      expect(reportCompletionContextWarning(completionContext, {
+        finishReason: 'length', ginferFinishReason: 'context_capacity', comparisonContextTokens: 32768,
+      })).toBe(true)
+      expect(reportCompletionContextWarning(completionContext, {
+        finishReason: 'length', comparisonContextTokens: 32768,
+      })).toBe(true)
+      for (const completion of [
+        { finishReason: 'stop' },
+        { finishReason: 'max_steps' },
+        { finishReason: 'length', ginferFinishReason: 'max_tokens' },
+        { finishReason: 'length', ginferFinishReason: 'context_capacity', isAbort: true },
+      ]) {
+        expect(reportCompletionContextWarning(completionContext, {
+          ...completion, comparisonContextTokens: 32768,
+        })).toBe(false)
+      }
+      expect(reportCompletionContextWarning({ ...completionContext, outputTokens: 0 }, {
+        finishReason: 'length', comparisonContextTokens: 32768,
+      })).toBe(false)
+      expect(warnings()).toHaveLength(5)
+      for (const [index, trigger] of ['finish.context_capacity', 'finish.usage_at_least_90_percent'].entries()) {
+        expect(warnings()[index + 3]).toMatchObject({
+          event: 'chat_warning', ...completionContext, trigger,
+          classificationTrigger: trigger,
+          formatDecision: 'converted', displayDecision: 'context-window-full',
+          finishReason: 'length', comparisonContextTokens: 32768,
+        })
+      }
+      const validationError = new TypeValidationError({
+        value: { prompt: promptSecret, tool: toolSecret },
+        cause: new Error('Invalid value'),
+      })
+      expect(validationError.message).toContain(promptSecret)
+      expect(validationError.message).toContain(toolSecret)
+      logChatWarning('stream-error', completionContext, validationError)
+      expect(warnings()[5]).toMatchObject({
+        event: 'chat_warning', ...completionContext, trigger: 'stream-error',
+        formatDecision: 'value-schema-rejected',
+        classificationTrigger: 'unclassified-error',
+        displayDecision: 'error-generating-response',
+        errorName: 'AI_TypeValidationError', errorMessage: null, errorContext: {},
+      })
+      const emptyMessagesError = new InvalidPromptError({
+        prompt: { messages: [], private: promptSecret },
+        message: 'messages must not be empty',
+      })
+      logChatWarning('stream-error', completionContext, emptyMessagesError)
+      expect(warnings()[6]).toMatchObject({
+        event: 'chat_warning', ...completionContext, trigger: 'stream-error',
+        formatDecision: 'empty-model-messages',
+        classificationTrigger: 'empty-model-messages',
+        displayDecision: 'error-generating-response',
+        errorName: 'AI_InvalidPromptError',
+        errorMessage: 'Invalid prompt: messages must not be empty', errorContext: {},
+      })
+      expect(warnings()).toHaveLength(7)
+      for (const [, args] of warningCalls()) {
+        expect(args).toMatchObject({ level: 4, location: 'chat-warning', file: null, line: null, keyValues: {} })
+        expect((args as { message: string }).message).not.toContain(promptSecret)
+        expect((args as { message: string }).message).not.toContain(toolSecret)
+      }
+    } finally {
+      createModel.mockRestore()
+      engine.mockRestore()
+      clearMocks()
     }
   })
 

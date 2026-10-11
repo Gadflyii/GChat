@@ -4,11 +4,130 @@ Repository: GChat. Owner: GChat coordinator. Subject: `docs/ginfer-manager/`.
 Open defects and TODOs belong in the [master list](../open-work.md); this record
 retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.
-Installed Windows Manager producer is `43c8d71cf`. The refreshed Linux
+Installed Windows Manager producer is `574d73df7`, with actual installation,
+byte/state and stopped/no-alert presentation evidence below. The refreshed Linux
 Manager/Host is compiled from `54c931c68` and assembled at `02d369e8a`;
 independent package and native X11 acceptance pass. The older `2a6e21ff2`
 Linux proof remains historical evidence. Package paths and proof are recorded below.
 Documentation-only handoffs do not rebuild accepted binaries.
+
+## Accepted hardware profile installation
+
+Deliverable: one Host-owned resumable profile-v2 job, invoked by the GChat
+installer and hardware-inventory refresh, visible in GChat and Manager. Model
+launches are held while it measures; ordinary Engine startup only reads the
+saved profile. Use the existing producer's matching-profile fast path and
+durable `<output>.install-state.json` resume without replacing it with a partial
+accepted profile. Explicit authenticated inventory Scan runs Ensure for saved
+groups. At Engine launch, the existing reader fingerprint rejection marks the exact group stale;
+the UI offers an explicit re-profile action. No automatic change detection,
+periodic profiling or duplicated fingerprint implementation is claimed.
+Keep exact invocation inputs, including `--reprofile` when an interrupted forced
+refresh must resume. The producer owns fingerprint/completeness decisions.
+
+Approved October 11 gates: focused Host, installer and UI fixtures; one installed
+local5090 invocation reusing its existing complete v2 profile; one short bounded
+measurement interrupt/resume check. No full calibration, model/full-context
+qualification, publication/signing, new dependency or Engine measurement recipe
+change. CPU/GPU booking covers only actual measurement. C3 has already validated
+complete 22–73 minute installs; paths and source authority are in
+`/ai/coordination/flash-next/profile-v2-paths.md`.
+
+Candidate `/ai/gchat-worktrees/hardware-profile-install-e91`, branch
+`feat/gchat-hardware-profile-install-e91`, baseline main `e91c7c136`; source
+`d2994568f` is committed and pushed. Reuse the accepted OI105 node/core graph
+read-only. Focused evidence is retained in
+`/ai/gchat/out/hardware-profile-install-20261011/`.
+October 11 ownership correction: mixed-SM hosts use profiles bound to an exact
+selected device group and its compatible CLI image, not a merged all-host
+profile. The architect binds exactly one configured deployment: its visible GPU UUID
+set (TP1 or its homogeneous TP group), with a canonical profile under the Host
+profile root keyed by the sorted UUID set. This is a Host deployment binding:
+the v2 reader fingerprints sorted physical inventory and checks selected-rank
+membership; it does not enforce exact deployment-set equality. C3 supplied the
+accepted full v2 CLI closure. The Host preserves the exact visible GPU set, runtime,
+output and
+forced-refresh setting through interruption; selected launch order remains a
+deployment input, not a separate profile identity. Ordinary snapshot polling stays
+read-only. New jobs retain failed checkpoints in their original workspace;
+only a producer-completed profile can replace the accepted group profile.
+
+Source review corrected crash lifetime, configured-path propagation, forced
+refresh recovery, publication-only retries and post-spawn queue ownership.
+Stale detection matches the actual native diagnostic's inline suffix and the
+launched profile path. The first-install bootstrap shares the desktop path
+resolver, retaining custom data folders and registered providers. Fresh installs
+prepare Host/runtime and display **Choose GPU group**, without
+a default even on a one-GPU machine. The user explicitly selects an ordered,
+same-SM group, sees the expected duration, saves that deployment and starts its
+one job. Existing deployments install the saved exact group; no combinations
+are enumerated automatically. A model is not admitted without that group's
+complete profile. Recent complete installs took 22–73 minutes; this integration
+does not shorten the recipe. The installer waits only for verified file setup
+and Host handoff, not the long calibration.
+
+Explicit Scan and installer preparation process only saved deployment groups,
+serially under one reservation. Cancel retains the current recipe and pending
+groups; Resume continues them. Reader rejection is matched to the launched
+group's actual profile path. Profiling status is separate from model-capacity
+qualification.
+
+Focused frontend checks pass: five hardware-profile UI cases, one picker guard,
+six typed IPC cases, four Manager cases and one Linux installer fixture. A
+Manager expression syntax error and a Vitest hook returning its IPC mock were
+fixed before the affected reruns; passing unrelated cases were reused. Focused
+frontend/Manager lint and frontend type checking pass. Shared status helpers now
+live outside React component exports, removing the Fast Refresh warning.
+
+Focused native proofs pass: six Host lifecycle/publication/queue/stale checks,
+one registry check, one GPU configuration preservation check and two owning
+installer checks. Host/Manager strict Clippy, GChat CLI checking and Linux-hosted
+Windows GNU checking pass. The native test helper and one MSRV-compatible
+Clippy correction were fixed before the affected checks.
+
+The first installed Linux handoff failed before profiling: the Host exited with
+`Address already in use (os error 98)`. Actual bind probes show 7443 and 7444
+occupied although Linux `ss` lists no listener; the existing mirrored Windows
+owner is left untouched. The isolated installed gate uses verified-free 17443
+in its private configuration and locator. This gate does not qualify default-port
+coexistence. C3's accepted full CLI and server use production670 with their exact
+six-library closure; inherited donor RPATHs require explicit installed-library
+preloads for this development gate, not a release relocation claim.
+
+Installed Linux acceptance passes at October 11 04:43:38–04:43:50 UTC:
+matching complete-v2 Ensure reused the original profile byte-for-byte. A bounded
+forced refresh wrote a 798,631-byte native checkpoint. Actual Host `SIGKILL`
+stopped its profiler; the replacement installed Host kept the interrupted recipe.
+Resume used the same workspace, GPU grant and forced-refresh setting and emitted
+`Hardware install resume`. This checkpoint retained platform/GPU measurements
+and **zero completed CPU node/format groups**; no completed CPU-format retention
+or full calibration is claimed. Cancel reaped the resumed native child and kept
+the checkpoint. Both accepted and original profiles remained unchanged, and all
+owned Host/profiler processes and canonical guards were released. Evidence:
+`installed-gate-d2994568f/reuse-resume-result.json` and its public status records
+under the subject evidence directory.
+
+Merged and pushed on GChat main `b55f1f73f`. Ron's standing rule
+excludes native Windows development builds/runs. The already installed Windows GNU target passes from Linux; normal
+completion, cancellation, actual Host-loss lifetime, MSVC and native installer
+checks remain owed to his scheduled pre-release Windows gate.
+
+Owned inventory: the clean merged hardware-profile source tree was retired
+after publication, ancestry and live-use checks; branch/source and tested Host
+binary remain retained. The accepted OI105 node/core graph stays read-only. Merged clean OI076 and OI072 candidate trees were
+retired October 11 after ancestry/publication and live-job checks, reclaiming
+555,421,696 allocated bytes; branches and external evidence remain. No owned
+profiling job is running. The shared Rust cache remains at
+`/ai/gchat/src-tauri/target`; bounded owning checks use the accepted Rust image
+and canonical build guard. The original complete local v2 profile and Ron's
+canonical profile, locator and model state remained read-only. The installed gate
+used a separate owned prefix and the same CPU0–31/Mem0/GPU UUID grant. Its tested
+d299 Host binary, native checkpoint and concise status/log evidence are retained;
+duplicate bundle/runtime/installed Engine copies and the private launcher were
+retired after all owned processes exited, reclaiming 1,723,944,960 allocated
+bytes (1.606 GiB). C3's original CLI/server/library closure and shared caches
+remain intact. The retired prefix is evidence, not an active deployment. See
+`installed-gate-d2994568f/cleanup.json`.
 
 ## Outcome and acceptance
 
@@ -29,7 +148,57 @@ excluded. The earlier neutral per-host Offline/Online fix remains delivered.
 
 ## Current decision and next action
 
-Installed Windows client `0f06ba433` passes with retained Manager producer
+### Retained instance diagnostics — GCHAT-MANAGER-STOPPED-ERROR-ALERT
+
+The October 10 public Host snapshot reports the saved instance stopped with zero
+active requests while retaining its October 9 startup error. Manager rendered
+that entire saved diagnostic as a current red error. Source now keeps stopped
+and other historical diagnostics in neutral, collapsed **Previous startup
+error** details. An online failed instance keeps a short visible failure alert
+and collapsed **Startup or runtime error details**. The complete diagnostic
+remains available in a bounded, scrollable text area; no Host error, cached
+snapshot, model profile or stored data is cleared or changed.
+
+Diagnostic details use the existing section-state map, keyed by Host, instance
+and current versus previous phase. Unrelated live snapshot updates preserve an
+open diagnostic while it is being read. A phase change starts collapsed, including
+a round trip back to a previous startup error.
+
+The reviewed code is integrated and pushed through root source `574d73df7`.
+Actual focused Manager Node checks pass **24/24** at October 10 10:36:08 UTC,
+covering stopped versus failed presentation, offline cached diagnostics, full
+retained text, reading state across unrelated snapshot updates and collapsed
+phase transitions. CPU-only booking346 closed at 10:44:12 with no jobs or
+guards remaining. New Manager `574d73df7` is now installed; neither its component
+checks nor successful presentation repair the separate Engine profile/startup issue.
+
+Evidence: `/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/host-current-error-341.json`
+records `stopped`, zero active requests and the retained 9,009-byte diagnostic.
+Actual gate evidence is
+`/ai/gchat/out/remaining-acceptance-20261009/oi068-windows-20261010/manager-ui-574d73df7-346.log`.
+Booking349's actual `PRODUCTION_PASS` at 11:26:00.6625612 UTC completes the
+Manager embed build from `574d73df7` and NSIS-only bundle refresh. Accepted
+compiled 7d9 GChat/Host/CLI, Engine and frontend payloads retain their original
+producer provenance. The production body exits 0 and its job is empty after
+the identified VCTIP helper teardown. Package verification passes, Manager R3
+installation passes at 11:43:08 UTC, and full installed byte/state verification
+passes at 11:45:47 UTC. Actual Manager CDP at 11:46 shows
+`http://tauri.localhost/`, stopped, zero active requests and no alerts. These
+observations do not qualify every diagnostic interaction. The candidate GChat
+frontend opened a directory listing because an absolute Windows `frontendDist`
+parsed as a `C:` URL and left assets unembedded. Exact `0f06ba433` desktop-only
+restoration passes at 11:56:54.9219517 UTC, with ordinary GChat UI, seven original
+saved threads and unchanged selected protected state. Manager 24796/hash
+`1b9f0173…` and 7d9 Host/CLI/2ef Engine remain intact; Engine/API counts are zero
+and guards are released. CPU-only booking353, 15:05–15:15 UTC, has an accepted
+nonexecuted build-body proposal: relative `frontendDist`
+`../../../windows-build/source/web-app/dist` resolves to the exact 832 accepted
+assets as a Directory. Actual desktop/NSIS build, install and ordinary candidate
+UI verification remain pending.
+The [remaining acceptance authority](../agent-runtime/remaining-acceptance.md)
+owns package/installation admission and preservation checks.
+
+Earlier installed Windows client `0f06ba433` passes with retained Manager producer
 `43c8d71cf` and clean Engine `2ef56a52a`. Composed `make verify`, native build,
 package verification and installed payload/user-state preservation pass.
 Seven original threads, all models/profiles, credentials and Host identity are
@@ -41,7 +210,8 @@ Reload/Stop restores the original profile exactly and normal apps are restored
 without debug ports. Evidence:
 `/ai/gchat/out/oi106-final-update-20261009/installed-verification.json` and
 `installed-lifecycle-acceptance.json`. Reviewed code is merged and pushed on
-Windows main `e2521e33`; installed product remains `0f06ba433`. Linux
+Windows main `e2521e33`; that accepted desktop is now restored alongside the newer
+Manager and Host/CLI. Linux
 assembly, both-format independent package verification and actual native X11
 lifecycle acceptance pass at `02d369e8a`, as recorded below. Completed OI-106 and profile
 source trees are retired; source branches and evidence remain. This C4/32K
@@ -50,8 +220,56 @@ functional acceptance leaves the original fixed-arena
 
 ### Current Engine profile repair — OI-072
 
-The installed Engine is now native `2ef56a52a`. The original fixed-pool profile
-remains saved exactly and stopped. OI-072 must deliver Muse TP1, C4/131,072,
+October 11 decision: the source-only catalog/evidence audit is complete. Physical
+qualification is pending the release gate Ron schedules; the changing development
+Engine is not qualified tonight. The pending configuration is Muse TP1,
+C4/131,072, native NVFP4 long KV and native NVFP4 DFlash, prefill 1,024, graphs
+and public prefix reuse enabled, Vision off and the unchanged 300 MiB guard.
+The release gate selects and records the actual Engine, exact package and GPU
+group before the retained cold four-request/full-context check. AUTO functional
+authorization stays in force; neither Ready nor a short lifecycle pass promotes
+capacity evidence. OI-072-RUNTIME remains the separate historical memory-owner
+question. No Engine, catalog value, profile tier or launch behavior changed in
+this audit.
+
+Host validation checks the declared tier's counts/calculation/headroom facts;
+it does not read archived measurements or compare `engine_revision` with the
+selected executable. Availability matches identity, TP/draft degree and size.
+Launch then verifies the exact payload SHA256, context/concurrency/options and
+platform/SKU/SM/selected GPU group. Engine startup owns live memory and topology.
+These checks preserve historical settings; they do not make historical evidence
+current qualification. GChat, Manager and the text launcher already show the
+recorded Engine/workload and changed-Engine disclaimer. Any future current-match
+verdict must come from Host observations, not guessed client version comparison.
+Owning paths: `ginfer-host/src/{launch_profiles.rs,service.rs,engine_host.rs}`,
+`EngineProfilePicker.tsx` and `ginfer-manager/ui/manager.js`.
+
+Saved Windows `catalogs.json` contains 103 entries: 23 full-context-tested, four
+startup/smoke and 76 calculated/pending. The native Muse C1–C8 resource reports
+are September passes, not in-progress tests or qualification of a later Engine.
+Its C4 record uses package SHA256
+`6d6cc348c75a75c60ca011d267eb389dcbb8530f6c51a680dad911d25365b61f`,
+22,447,498,752 bytes, RTX5090 and Engine `922e5a879`: four 131,009-token prompts,
+256 returned/252 decode tokens, 13 B4 graph rounds, zero reuse and 373,293,056
+minimum free bytes. That direct placement workload used full reset with no
+public checkpoint reservation. It does not qualify the current prefix-enabled
+public route. October 9 AUTO startup/lifecycle passed on `2ef56a52a`; its cold
+wave aborted below the same guard. October 10's four completed responses used
+53 prefix tokens on one lane and do not close cold-independent qualification.
+Retained evidence remains linked below and in
+[profile evidence](../model-profile-evidence.md).
+
+Audit candidate: `/ai/gchat-worktrees/oi072-evidence-d9b`, branch
+`docs/gchat-oi072-evidence-d9b`, baseline `d9b802e4c`; docs only, no build/model
+or live job. Historical GInfer catalog source
+`/ai/ginfer-worktrees/gchat-oi072-catalog` at `61c62903e` remains clean and
+retained. Next ONE item is resumable profile-v2 installation from the GChat
+installer and hardware-change refresh; no new OI-072 physical run is authorized
+before Ron's release gate.
+
+The retained October 9 repair used native `2ef56a52a`. The original fixed-pool
+profile was saved exactly and restored stopped after those checks. Its required
+configuration was Muse TP1, C4/131,072,
 NVFP4 long KV and native NVFP4 DFlash, 1,024-token prefill, graphs enabled and
 Vision disabled through the public prefix-enabled serving route. Context,
 concurrency, the 300 MiB guard and sampling behavior are not reduced. Engine
@@ -570,6 +788,7 @@ Cargo trees; pinned Process handles retain the real PowerShell 5.1 exit status.
 | Owner / host | Exact path | Purpose and retention |
 | --- | --- | --- |
 | GChat / RON-9950X3D2 | `/ai/gchat` | Stable main delivery checkout |
+| Stopped-error UI / GChat coordinator | `/ai/gchat-worktrees/manager-stopped-error-7d9` | Isolated source candidate from `7d9a8f689`; UI/CSS, three observable DOM regressions and this subject record. Retain for review/integration and admitted checks; no private fixture, native source, models, build outputs or owned dependencies allocated. |
 | Diagnosis clarification | `/ai/gchat-worktrees/manager-kv-diagnosis` | Documentation-only correction on `6ea7dc9d4`; source in Git and checkout retirement in task `diagnosis-cleanup.json` |
 | C4 startup diagnosis | `/ai/gchat-worktrees/manager-kv-math` | Documentation branch from `fbe10c93d`; attribution follow-up retained beside existing KV evidence, checkout retirement in `math-worktree-cleanup.json` |
 | KV budget candidate | `/ai/gchat-worktrees/manager-kv-budget` | Accepted `ce6a6c0e6` retained in Git; checkout disposition in task `worktree-cleanup.json` |

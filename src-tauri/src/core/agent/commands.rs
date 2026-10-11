@@ -312,6 +312,23 @@ pub(crate) struct AgentDesktopServices<R: Runtime> {
 
 #[async_trait]
 impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
+    async fn connector_prepare(
+        &self,
+        name: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        crate::core::connectors::prepare(&self.app_handle, name, args)
+    }
+
+    async fn connector(
+        &self,
+        name: &str,
+        args: serde_json::Value,
+        cancellation: &CancellationToken,
+    ) -> Result<serde_json::Value, String> {
+        crate::core::connectors::execute(&self.app_handle, name, args, cancellation).await
+    }
+
     async fn capability_search(&self, query: &str) -> Result<serde_json::Value, String> {
         let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
         Ok(serde_json::json!(catalog
@@ -323,8 +340,8 @@ impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
     async fn capability_read(&self, name: &str) -> Result<serde_json::Value, String> {
         let catalog = super::capabilities::load_catalog(self.app_handle.clone()).await?;
         let tool = catalog
-            .available_mcp_tool(name, &self.disabled_tools)
-            .ok_or_else(|| format!("MCP capability `{name}` is unavailable or disabled"))?;
+            .available_connected_tool(name, &self.disabled_tools)
+            .ok_or_else(|| format!("Connected capability `{name}` is unavailable or disabled"))?;
         serde_json::to_value(tool).map_err(|error| error.to_string())
     }
     async fn mcp(

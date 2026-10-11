@@ -93,8 +93,10 @@ fn linux_runtime_set(root: &Path) -> std::io::Result<std::collections::BTreeMap<
                 return Err(invalid(format!("runtime file hash mismatch: {relative}")));
             }
         }
-        if !seen.contains("bin/ginfer-serve") {
-            return Err(invalid(format!("{directory} has no ginfer-serve")));
+        for required in ["bin/ginfer", "bin/ginfer-serve"] {
+            if !seen.contains(required) {
+                return Err(invalid(format!("{directory} has no {required}")));
+            }
         }
         let server = image.join("bin/ginfer-serve");
         #[cfg(unix)]
@@ -138,10 +140,20 @@ fn install_linux_runtimes_from(source: &Path, data_folder: &Path) -> std::io::Re
 
 #[cfg(target_os = "linux")]
 pub fn install_bundled_ginfer_linux<R: Runtime>(app: tauri::AppHandle<R>) -> Result<bool, Box<dyn std::error::Error>> {
-    let source = app.path().resource_dir()?.join("resources/ginfer/linux");
+    let resource_directory = app.path().resource_dir()?;
     let data_folder = get_jan_data_folder_path(app.clone());
-    let changed = install_linux_runtimes_from(&source, &data_folder)?;
-    let host_source = app.path().resource_dir()?.join("resources/bin/ginfer-host");
+    let changed = install_linux_resources_from(&resource_directory, &data_folder)?;
+    if changed {
+        prepare_hardware_after_runtime_install(app);
+    }
+    Ok(changed)
+}
+
+#[cfg(target_os = "linux")]
+fn install_linux_resources_from(resource_directory: &Path, data_folder: &Path) -> std::io::Result<bool> {
+    let source = resource_directory.join("resources/ginfer/linux");
+    let changed = install_linux_runtimes_from(&source, data_folder)?;
+    let host_source = resource_directory.join("resources/bin/ginfer-host");
     let host_directory = data_folder.join("ginfer/bin");
     fs::create_dir_all(&host_directory)?;
     let host = host_directory.join("ginfer-host");
@@ -153,6 +165,46 @@ pub fn install_bundled_ginfer_linux<R: Runtime>(app: tauri::AppHandle<R>) -> Res
         fs::rename(temporary, host)?;
     }
     Ok(changed)
+}
+
+/// Headless per-user installer entry; shares desktop configuration and install ownership.
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub async fn prepare_installed_hardware_from_resources(
+    resource_directory: PathBuf,
+    app_data_directory: PathBuf,
+    gpu_uuids: Vec<String>,
+) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
+    if !resource_directory.is_absolute() {
+        return Err("installed resource directory must be absolute".into());
+    }
+    if !app_data_directory.is_absolute() {
+        return Err("installed app-data directory must be absolute".into());
+    }
+    let data_folder = crate::core::app::commands::resolve_app_data_folder(&app_data_directory);
+    let resources = resource_directory.clone();
+    let destination = data_folder.clone();
+    tokio::task::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        install_bundled_ginfer_from(&resources.join(GINFER_RUNTIME_RESOURCE_DIR), &destination)?;
+        #[cfg(target_os = "linux")]
+        install_linux_resources_from(&resources, &destination)?;
+        Ok::<(), std::io::Error>(())
+    }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+    crate::core::engine_hosts::prepare_installed_hardware_from_paths(
+        data_folder, resource_directory, (!gpu_uuids.is_empty()).then_some(gpu_uuids),
+    ).await
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+fn prepare_hardware_after_runtime_install<R: Runtime>(app: tauri::AppHandle<R>) {
+    // Installation hands work to the shared Host. Unchanged ordinary startup
+    // never requests measurement, and the desktop does not own the profiler.
+    tauri::async_runtime::spawn(async move {
+        match crate::core::engine_hosts::prepare_installed_hardware(app).await {
+            Ok(status) => log::info!("Installed runtime hardware preparation: {}", status.status),
+            Err(error) => log::warn!("Installed runtime hardware preparation failed: {error}"),
+        }
+    });
 }
 
 fn bundled_extensions_fingerprint(pre_install_path: &Path) -> Result<String, String> {
@@ -206,6 +258,46 @@ fn copy_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(any(target_os = "windows", test))]
+fn verify_windows_runtime(root: &Path) -> std::io::Result<()> {
+    use std::io::{Error, ErrorKind};
+    let invalid = |message: String| Error::new(ErrorKind::InvalidData, message);
+    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(root.join(GINFER_RUNTIME_MANIFEST))?)
+        .map_err(|e| invalid(format!("invalid Windows runtime manifest: {e}")))?;
+    if manifest["schema"] != "ginfer-windows-runtime-v1" || manifest["platform"] != "windows-x64" {
+        return Err(invalid("invalid Windows GInfer runtime manifest".into()));
+    }
+    let entries = manifest["files"].as_array().ok_or_else(|| invalid("runtime file inventory is missing".into()))?;
+    let mut seen = std::collections::HashSet::new();
+    for entry in entries {
+        let relative = entry["path"].as_str().ok_or_else(|| invalid("runtime file path is missing".into()))?;
+        let path = Path::new(relative);
+        if !path.components().all(|part| matches!(part, std::path::Component::Normal(_))) || !seen.insert(relative) {
+            return Err(invalid(format!("invalid or duplicate runtime file path: {relative}")));
+        }
+        let size = entry["bytes"].as_u64().ok_or_else(|| invalid(format!("missing size for {relative}")))?;
+        let hash = entry["sha256"].as_str().ok_or_else(|| invalid(format!("missing hash for {relative}")))?;
+        let mut file = File::open(root.join(path))?;
+        if file.metadata()?.len() != size {
+            return Err(invalid(format!("runtime file size mismatch: {relative}")));
+        }
+        let mut digest = Sha256::new();
+        let mut buffer = [0u8; 65536];
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 { break; }
+            digest.update(&buffer[..count]);
+        }
+        if format!("{:x}", digest.finalize()) != hash {
+            return Err(invalid(format!("runtime file hash mismatch: {relative}")));
+        }
+    }
+    for required in ["bin/ginfer.exe", "bin/ginfer-serve.exe"] {
+        if !seen.contains(required) { return Err(invalid(format!("runtime is missing {required}"))); }
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "windows", test))]
 fn install_bundled_ginfer_from(source: &Path, data_folder: &Path) -> std::io::Result<bool> {
     let source_manifest_path = source.join(GINFER_RUNTIME_MANIFEST);
     let source_manifest = fs::read(&source_manifest_path)?;
@@ -224,10 +316,13 @@ fn install_bundled_ginfer_from(source: &Path, data_folder: &Path) -> std::io::Re
     let destination_manifest_path = destination.join(GINFER_RUNTIME_MANIFEST);
     let destination_server = destination.join("bin").join("ginfer-serve.exe");
     if destination_server.is_file()
+        && destination.join("bin/ginfer.exe").is_file()
         && fs::read(&destination_manifest_path).ok().as_deref() == Some(source_manifest.as_slice())
     {
         return Ok(false);
     }
+
+    verify_windows_runtime(source)?;
 
     fs::create_dir_all(&destination)?;
     let staging = destination.join(".runtime-installing");
@@ -235,6 +330,7 @@ fn install_bundled_ginfer_from(source: &Path, data_folder: &Path) -> std::io::Re
     remove_directory_if_present(&staging)?;
     remove_directory_if_present(&previous_bin)?;
     copy_directory(source, &staging)?;
+    verify_windows_runtime(&staging)?;
 
     let staged_bin = staging.join("bin");
     if !staged_bin.join("ginfer-serve.exe").is_file() {
@@ -286,8 +382,12 @@ pub fn install_bundled_ginfer<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let source = app.path().resource_dir()?.join(GINFER_RUNTIME_RESOURCE_DIR);
-    let data_folder = get_jan_data_folder_path(app);
-    Ok(install_bundled_ginfer_from(&source, &data_folder)?)
+    let data_folder = get_jan_data_folder_path(app.clone());
+    let changed = install_bundled_ginfer_from(&source, &data_folder)?;
+    if changed {
+        prepare_hardware_after_runtime_install(app);
+    }
+    Ok(changed)
 }
 
 pub fn install_extensions<R: Runtime>(app: tauri::AppHandle<R>, force: bool) -> Result<(), String> {
@@ -764,9 +864,10 @@ pub fn setup_tray(app: &App) -> tauri::Result<TrayIcon> {
         tray_builder = tray_builder.icon(menu_bar_icon).icon_as_template(true);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
-        tray_builder = tray_builder.icon(app.default_window_icon().unwrap().clone());
+        let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../../icons/icon.png"))?;
+        tray_builder = tray_builder.icon(tray_icon);
     }
 
     tray_builder
@@ -980,11 +1081,19 @@ mod tests {
         fs::create_dir_all(root.join("bin")).unwrap();
         fs::create_dir_all(root.join("licenses")).unwrap();
         fs::write(root.join("bin/ginfer-serve.exe"), server).unwrap();
+        fs::write(root.join("bin/ginfer.exe"), "profiler-cli").unwrap();
         fs::write(root.join("bin/runtime.dll"), "dll").unwrap();
         fs::write(root.join("licenses/runtime.txt"), "license").unwrap();
         fs::write(root.join("LICENSE"), "project license").unwrap();
         fs::write(root.join("README.md"), "runtime readme").unwrap();
-        fs::write(root.join(GINFER_RUNTIME_MANIFEST), manifest).unwrap();
+        let paths = ["bin/ginfer.exe", "bin/ginfer-serve.exe", "bin/runtime.dll", "licenses/runtime.txt", "LICENSE", "README.md"];
+        let files: Vec<_> = paths.into_iter().map(|path| {
+            let bytes = fs::read(root.join(path)).unwrap();
+            serde_json::json!({"path":path,"bytes":bytes.len(),"sha256":format!("{:x}", Sha256::digest(&bytes))})
+        }).collect();
+        fs::write(root.join(GINFER_RUNTIME_MANIFEST), serde_json::to_vec(&serde_json::json!({
+            "schema":"ginfer-windows-runtime-v1", "platform":"windows-x64", "source_commit":manifest, "files":files
+        })).unwrap()).unwrap();
     }
 
     #[test]
@@ -1006,9 +1115,16 @@ mod tests {
         );
         assert_eq!(fs::read_to_string(&model).unwrap(), "model");
         assert!(!install_bundled_ginfer_from(&source, &data).unwrap());
+        fs::remove_file(data.join("ginfer/bin/ginfer.exe")).unwrap();
+        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
+        assert_eq!(fs::read_to_string(data.join("ginfer/bin/ginfer.exe")).unwrap(), "profiler-cli");
 
-        fs::write(source.join("bin/ginfer-serve.exe"), "server-v2").unwrap();
-        fs::write(source.join(GINFER_RUNTIME_MANIFEST), "runtime-v2").unwrap();
+        write_runtime(&source, "runtime-v2", "server-v2");
+        fs::write(source.join("bin/ginfer.exe"), "corrupted").unwrap();
+        assert!(install_bundled_ginfer_from(&source, &data).is_err());
+        assert_eq!(fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(), "server-v1");
+        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
+        write_runtime(&source, "runtime-v2", "server-v2");
         assert!(install_bundled_ginfer_from(&source, &data).unwrap());
         assert_eq!(
             fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
@@ -1056,15 +1172,19 @@ mod tests {
             for (_, directory, architecture) in LINUX_RUNTIME_ARCHITECTURES {
                 let image = source.join(directory);
                 fs::create_dir_all(image.join("bin")).unwrap();
-                let server = image.join("bin/ginfer-serve");
                 let bytes = format!("{directory}-{version}");
-                fs::write(&server, &bytes).unwrap();
                 use std::os::unix::fs::PermissionsExt;
-                fs::set_permissions(&server, fs::Permissions::from_mode(0o755)).unwrap();
+                for name in ["ginfer", "ginfer-serve"] {
+                    let path = image.join("bin").join(name);
+                    fs::write(&path, &bytes).unwrap();
+                    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+                }
                 fs::write(image.join("runtime-manifest.json"), serde_json::to_vec(&serde_json::json!({
                     "schema":"ginfer-linux-runtime-v1", "source_commit":version,
                     "source_dirty":false, "cuda_architecture":architecture,
                     "files":[{"path":"bin/ginfer-serve","bytes":bytes.len(),
+                        "sha256":format!("{:x}", Sha256::digest(bytes.as_bytes()))},
+                        {"path":"bin/ginfer","bytes":bytes.len(),
                         "sha256":format!("{:x}", Sha256::digest(bytes.as_bytes()))}]
                 })).unwrap()).unwrap();
             }

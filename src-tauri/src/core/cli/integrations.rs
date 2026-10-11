@@ -11,6 +11,7 @@
 //! A drift test below asserts the two id sets stay in sync.
 
 use crate::core::system::commands as agents;
+use std::{ffi::OsString, path::Path};
 
 /// How the agent is started once its config has been written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -270,6 +271,7 @@ pub fn api_url_for(agent: &Agent, base_url: &str, prefix: &str) -> String {
 /// Launch page invokes.
 pub async fn configure(
     agent: &Agent,
+    data_folder: &Path,
     api_url: &str,
     model: &str,
     api_key: &str,
@@ -284,7 +286,7 @@ pub async fn configure(
         "claude-code" => agents::configure_claude_code(url, model_opt, key),
         "pi" => agents::configure_pi(url, model_owned, key),
         "codex" => agents::configure_codex(url, model_owned, key),
-        "opencode" => agents::configure_opencode(url, model_owned, key).await,
+        "opencode" => agents::configure_opencode_in(data_folder, url, model_owned, key).await,
         "openclaude" => agents::configure_openclaude(url, model_owned, key),
         "cline" => agents::configure_cline(url, model_owned, key),
         "dsh" => agents::configure_dsh(url, model_owned, key),
@@ -308,22 +310,31 @@ pub async fn configure(
 /// Four agents are configured purely through environment variables that
 /// `configure_*` persists to the user's shell rc. That file is not live in a
 /// process we are about to spawn, so the same variables are set directly on the
-/// child. Everything else is configured through a file the agent reads itself
-/// and needs no environment at all.
+/// child. OpenCode receives its selected GChat-managed config root. Other
+/// agents read their configured files without an additional environment.
 pub fn child_env(
     agent: &Agent,
+    data_folder: &Path,
     api_url: &str,
     model: &str,
     api_key: &str,
-) -> Vec<(String, String)> {
+) -> Vec<(OsString, OsString)> {
     let key = Some(api_key);
-    match agent.id {
+    if agent.id == "opencode" {
+        let directory = crate::core::system::opencode_config::config_directory(data_folder);
+        return crate::core::system::opencode_config::child_env(&directory);
+    }
+    let environment = match agent.id {
         "copilot" => agents::copilot_env_vars(api_url, model, key),
         "goose" => agents::goose_env_vars(api_url, model, key),
         "openhands" => agents::openhands_env_vars(api_url, model, key),
         "poolside" => agents::poolside_env_vars(api_url, model, key),
         _ => Vec::new(),
-    }
+    };
+    environment
+        .into_iter()
+        .map(|(name, value)| (name.into(), value.into()))
+        .collect()
 }
 
 /// Provider credentials in the ambient environment that would override the
@@ -344,6 +355,32 @@ pub const CONFLICTING_PROVIDER_ENV: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_opencode_root_does_not_change_other_agent_environments() {
+        let data = Path::new("selected data");
+        let actual = child_env(
+            find("goose").unwrap(),
+            data,
+            "http://localhost:1337/v1",
+            "model",
+            "key",
+        );
+        let expected: Vec<(OsString, OsString)> =
+            agents::goose_env_vars("http://localhost:1337/v1", "model", Some("key"))
+                .into_iter()
+                .map(|(name, value)| (name.into(), value.into()))
+                .collect();
+        assert_eq!(actual, expected);
+        assert!(child_env(
+            find("codex").unwrap(),
+            data,
+            "http://localhost:1337/v1",
+            "model",
+            "key"
+        )
+        .is_empty());
+    }
 
     #[test]
     fn lookup_accepts_id_binary_and_alias() {

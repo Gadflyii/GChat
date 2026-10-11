@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import type {
   AgentDefinition,
   AgentModelInstance,
@@ -8,6 +9,10 @@ import type {
 
 export function listAgentDefinitions(): Promise<AgentDefinition[]> {
   return invoke<AgentDefinition[]>('agent_list_definitions')
+}
+
+export function onAgentDefinitionsChanged(changed: () => void) {
+  return listen('agent-definitions-changed', changed)
 }
 
 export function listAgentModelInstances(): Promise<AgentModelInstance[]> {

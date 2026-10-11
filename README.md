@@ -302,7 +302,9 @@ Model weights are downloaded separately inside GChat.
 
 - The local API is loopback-only by default.
 - Conversations, settings, agent sessions, and workspaces are stored under the GChat data root.
-- Model packages live under `<data>/ginfer/models/`.
+- Model packages normally live under `<data>/ginfer/models/`. Under WSL, new managed
+  downloads use Linux storage when that folder is on a Windows-backed filesystem;
+  existing packages remain discoverable in their original location.
 - Agent paths are canonicalized and confined to the active workspace unless a scoped approval
   allows the exact outside operation.
 - Shell commands pass through allow, approval-required, or hard-block policy before execution.

@@ -19,6 +19,32 @@ struct TestRun {
     session: AgentSessionState,
 }
 
+struct StudioDesktop(std::path::PathBuf);
+
+#[async_trait::async_trait]
+impl super::tools::DesktopServices for StudioDesktop {
+    async fn studio(&self, action: &str, args: serde_json::Value) -> Result<serde_json::Value, String> {
+        use super::definitions;
+        use serde_json::json;
+
+        match action {
+            "catalog" => Ok(json!({"templates": definitions::built_in_templates()})),
+            "validate_definition" => {
+                let definition = serde_json::from_value(args).map_err(|e| e.to_string())?;
+                definitions::validate_definition(&definition)?;
+                Ok(json!({"valid": true}))
+            }
+            "save_definition" => {
+                let definition = serde_json::from_value(args).map_err(|e| e.to_string())?;
+                Ok(json!(definitions::save_definition(&self.0, definition)?))
+            }
+            _ => Err("Unsupported Studio action".into()),
+        }
+    }
+    async fn write_clipboard(&self, _: String) -> Result<(), String> { Err("Unavailable".into()) }
+    async fn notify(&self, _: String, _: String) -> Result<(), String> { Err("Unavailable".into()) }
+}
+
 #[tokio::test]
 #[ignore = "requires a live endpoint and explicit saved definition; executes local read-only inventory"]
 async fn live_saved_disk_inventory_execution() {
@@ -154,30 +180,7 @@ async fn run_live_builder_case(kind: &str, messages: &[&str]) {
 #[tokio::test]
 async fn builder_inventory_definition_is_saved_only_after_confirmation() {
     use super::definitions;
-    use super::tools::DesktopServices;
-    use serde_json::{json, Value};
-
-    struct StudioDesktop(std::path::PathBuf);
-    #[async_trait::async_trait]
-    impl DesktopServices for StudioDesktop {
-        async fn studio(&self, action: &str, args: Value) -> Result<Value, String> {
-            match action {
-                "catalog" => Ok(json!({"templates": definitions::built_in_templates()})),
-                "validate_definition" => {
-                    let definition = serde_json::from_value(args).map_err(|e| e.to_string())?;
-                    definitions::validate_definition(&definition)?;
-                    Ok(json!({"valid": true}))
-                }
-                "save_definition" => {
-                    let definition = serde_json::from_value(args).map_err(|e| e.to_string())?;
-                    Ok(json!(definitions::save_definition(&self.0, definition)?))
-                }
-                _ => Err("Unsupported Studio action".into()),
-            }
-        }
-        async fn write_clipboard(&self, _: String) -> Result<(), String> { Err("Unavailable".into()) }
-        async fn notify(&self, _: String, _: String) -> Result<(), String> { Err("Unavailable".into()) }
-    }
+    use serde_json::json;
 
     for approved in [false, true] {
         let workspace = TestWorkspace::new();
@@ -195,7 +198,7 @@ async fn builder_inventory_definition_is_saved_only_after_confirmation() {
             ScriptedResponse::completion(r#"[{"tool":"studio.inspect","args":{"action":"catalog","args":{}}}]"#),
             ScriptedResponse::tool_call("studio_inspect", json!({"action":"validate_definition","args":wrapped})),
             ScriptedResponse::completion(&save),
-            ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"Review complete."}}]"#),
+            ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"What should change in the definition?"}}]"#),
         ]).await;
         let approval = if approved { RecordingApproval::allow() } else { RecordingApproval::deny() };
         let mut session = AgentSessionState::new("builder-save");
@@ -219,11 +222,67 @@ async fn builder_inventory_definition_is_saved_only_after_confirmation() {
         let saved = definitions::list_definitions(workspace.path()).unwrap();
         assert_eq!(saved.iter().any(|item| item.id == definition.id), approved);
         assert_eq!(approval.requests().len(), 1);
-        assert_eq!(server.requests().len(), 5, "clarification and known wire forms need no repair calls");
+        assert_eq!(server.requests().len(), if approved { 4 } else { 5 }, "successful reviewed save finishes without another model call; denial still reaches clarification");
+        if !approved {
+            assert!(events.iter().any(|event| matches!(event, AgentEvent::AssistantReply { text } if text == "What should change in the definition?")));
+        }
         assert!(server.requests()[1].to_string().contains("Should the inventory include a combined total?"));
         assert!(server.requests()[2]["messages"].as_array().unwrap().iter().any(|message|
             message["content"].as_str().is_some_and(|content| content.contains("\"templates\""))));
         assert!(!workspace.path().join("inventory.txt").exists());
+    }
+}
+
+#[tokio::test]
+async fn builder_save_finishes_both_skill_routes_after_revision_and_keeps_ordinary_agent_saves() {
+    use super::{definitions, runner::{run_turn_with_options, RunTurnOptions}, session::AgentSessionTurn};
+    use serde_json::json;
+
+    // Agent chat selects the skill directly; Studio passes definition skills as additional skills.
+    for source in ["selected", "additional", "ordinary"] {
+        let workspace = TestWorkspace::new();
+        workspace.write(".agent-skills/agent-builder/SKILL.md", include_str!("../../../resources/agent-skills/agent-builder/SKILL.md"));
+        let mut definition = definitions::general_agent();
+        definition.id = "reviewed-reader".into();
+        definition.name = "Reviewed reader".into();
+        definition.built_in = false;
+        definition.default_goal = "Read the approved fixture and report its marker.".into();
+        let mut invalid_definition = definition.clone();
+        invalid_definition.name.clear();
+        let save = json!({"action":"save_definition","args":definition});
+        let server = ScriptedGinferServer::start(vec![
+            ScriptedResponse::tool_call("studio_manage", json!({"action":"save_definition","args":invalid_definition})),
+            ScriptedResponse::tool_call("studio_manage", save.clone()),
+            // Reproduce the real model's next completion if the runtime continues after saving.
+            ScriptedResponse::tool_call("studio_manage", save),
+            ScriptedResponse::tool_call("reply", json!({"text":"Ordinary agent completed both requested saves."})),
+        ]).await;
+        let approval = RecordingApproval::allow();
+        let mut session = AgentSessionState::new(source);
+        let registry = super::skills::SkillRegistry::load(workspace.path().join(".agent-skills"), &Default::default(), &super::prompt::ITERATION_ONE_TOOLS.iter().map(|tool| tool.name.to_owned()).collect()).unwrap();
+        let additional_skills = if source == "additional" { vec!["agent-builder".to_owned()] } else { vec![] };
+        let mut events = Vec::new();
+        let outcome = run_turn_with_options(RunTurnInput {
+            run_id: source, session_id: source,
+            user_message: if source == "ordinary" { "Save this definition twice, then reply." } else { "Save the reviewed definition once, without running its task." },
+            selected_skill: (source == "selected").then_some("agent-builder"), stable_prefix: "Use the provided tools", reasoning_effort: None,
+            working_dir: workspace.path(), editable_roots: &EditableRoots::for_test(workspace.path()), external_read_only_roots: &[], trusted_read_roots: &[], max_steps: 25,
+            client: &server.client(), approval: &approval, folder_access: &RecordingFolderAccess::deny(), desktop: &StudioDesktop(workspace.path().to_owned()), cancellation: &CancellationToken::new(), session: &mut session,
+            skill_registry: &registry, bundled_script_runtime: None,
+        }, RunTurnOptions { additional_skills: &additional_skills, ..Default::default() }, |event| collect_event(&mut events, event)).await.unwrap();
+        let builder = source != "ordinary";
+        assert_eq!(server.requests().len(), if builder { 2 } else { 4 });
+        assert_eq!(approval.requests().len(), if builder { 1 } else { 2 });
+        assert_eq!(outcome.reason, "reply");
+        assert_eq!(outcome.step_count, if builder { 2 } else { 4 });
+        assert_eq!(session.turn_count, 1);
+        assert!(events.iter().any(|event| matches!(event, AgentEvent::ToolCallExecuted { result } if result.call.tool == "studio.manage" && result.outcome.status == ToolStatus::Error && result.outcome.summary == "Agent name is required")));
+        assert!(events.iter().any(|event| matches!(event, AgentEvent::TurnFinished { reason, step_count } if reason == "reply" && *step_count == outcome.step_count)));
+        let persisted = definitions::list_definitions(workspace.path()).unwrap().into_iter().find(|saved| saved.id == definition.id).unwrap();
+        assert_eq!(json!(persisted), json!(definition), "reviewed settings must remain unchanged");
+        assert!(session.turns.iter().any(|turn| matches!(turn, AgentSessionTurn::ToolResult { tool, status, .. } if tool == "studio.manage" && *status == ToolStatus::Ok)));
+        assert!(matches!(session.turns.last(), Some(AgentSessionTurn::AssistantReply { text }) if Some(text) == outcome.reply.as_ref()));
+        assert_eq!(events.iter().filter(|event| matches!(event, AgentEvent::AssistantReply { .. })).count(), 1);
     }
 }
 

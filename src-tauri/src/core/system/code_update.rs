@@ -4,7 +4,7 @@ use std::{
     process::{Command, Stdio},
     sync::atomic::{AtomicBool, Ordering},
 };
-use tauri::ipc::Channel;
+use tauri::{ipc::Channel, AppHandle, Runtime};
 
 static UPDATING: AtomicBool = AtomicBool::new(false);
 struct UpdateGuard;
@@ -48,7 +48,8 @@ fn command(executable: &Path, args: &[&str], directory: &Path) -> Command {
     super::commands::apply_runtime_path(&mut cmd);
     cmd.current_dir(directory)
         .stdin(Stdio::null())
-        .env("NO_COLOR", "1");
+        .env("NO_COLOR", "1")
+        .envs(super::opencode_config::child_env(directory));
     cmd
 }
 
@@ -90,10 +91,13 @@ fn run_update(
 }
 
 #[tauri::command]
-pub async fn update_code(
+pub async fn update_code<R: Runtime>(
+    app: AppHandle<R>,
     custom_path: Option<String>,
     on_progress: Channel<String>,
 ) -> Result<CodeUpdateResult, String> {
+    let data = crate::core::app::commands::get_jan_data_folder_path(app);
+    let directory = super::opencode_config::config_directory(&data);
     if UPDATING
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
@@ -120,8 +124,6 @@ pub async fn update_code(
         .to_owned();
     tokio::task::spawn_blocking(move || {
         let _guard = guard;
-        let home = dirs::home_dir().ok_or("The user home directory is unavailable.")?;
-        let directory = super::opencode_config::config_directory(&home.to_string_lossy());
         let executable = if let Some(path) = custom_path.filter(|p| !p.trim().is_empty()) {
             let path = PathBuf::from(path);
             if !path.is_absolute() || !path.is_file() {
@@ -154,14 +156,33 @@ mod tests {
             [("1.2.3", 0, true), ("1.2.2", 0, false), ("1.2.3", 7, false)]
         {
             let dir = tempfile::tempdir().unwrap();
+            let directory =
+                super::super::opencode_config::config_directory(&dir.path().join("selected data"));
             let exe = dir.path().join("code");
-            std::fs::write(&exe, format!("#!/bin/sh\nif [ \"$1\" = '--version' ]; then echo '{version}'; exit 0; fi\n[ \"$*\" = 'upgrade 1.2.3' ] || exit 8\nread answer && exit 9\necho 'private update log'\nexit {exit}\n")).unwrap();
+            std::fs::write(&exe, format!("#!/bin/sh\nprintf '%s\\n' \"$XDG_CONFIG_HOME\" \"$OPENCODE_CONFIG_DIR\" \"$OPENCODE_CONFIG\" \"$PWD\" > \"$OPENCODE_CONFIG_DIR/child-$1.env\"\nif [ \"$1\" = '--version' ]; then echo '{version}'; exit 0; fi\n[ \"$*\" = 'upgrade 1.2.3' ] || exit 8\nread answer && exit 9\necho 'private update log'\nexit {exit}\n")).unwrap();
             std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
             assert_eq!(
-                run_update(&exe, dir.path(), "1.2.3", |_| {}).is_ok(),
+                run_update(&exe, &directory, "1.2.3", |_| {}).is_ok(),
                 success
             );
-            assert!(std::fs::read_to_string(dir.path().join("gchat-update.log"))
+            let expected = format!(
+                "{}\n{}\n{}\n{}\n",
+                directory.parent().unwrap().display(),
+                directory.display(),
+                directory.join("opencode.jsonc").display(),
+                directory.display(),
+            );
+            assert_eq!(
+                std::fs::read_to_string(directory.join("child-upgrade.env")).unwrap(),
+                expected,
+            );
+            if exit == 0 {
+                assert_eq!(
+                    std::fs::read_to_string(directory.join("child---version.env")).unwrap(),
+                    expected,
+                );
+            }
+            assert!(std::fs::read_to_string(directory.join("gchat-update.log"))
                 .unwrap()
                 .contains("private update log"));
         }

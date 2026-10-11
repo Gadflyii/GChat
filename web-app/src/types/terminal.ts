@@ -16,6 +16,7 @@ export type TerminalPhase = 'idle' | 'running' | 'stopping' | 'exited'
 export type TerminalStatus = {
   phase: TerminalPhase
   generation: number
+  sequence: number
   cwd?: string
   launch?: TerminalLaunch
   exitCode?: number
@@ -28,8 +29,7 @@ export type TerminalEvent =
       type: 'started'
       generation: number
       sequence: number
-      cwd: string
-      launch: TerminalLaunch
+      status: TerminalStatus
     }
   | {
       type: 'output'
@@ -41,8 +41,7 @@ export type TerminalEvent =
       type: 'exited'
       generation: number
       sequence: number
-      exit_code: number
-      signal?: string
+      status: TerminalStatus
     }
   | {
       type: 'replay_unavailable'
@@ -54,6 +53,7 @@ export type TerminalEvent =
       generation: number
       sequence: number
       message: string
+      status: TerminalStatus
     }
 
 export type OpenCodeReadinessReason =

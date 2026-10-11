@@ -58,16 +58,20 @@ impl ResponseScope {
     }
 }
 pub fn decode(id: &str) -> Result<(ResponseScope, String), String> {
-    let fields: Vec<_> = id
+    let mut fields = id
         .strip_prefix(PREFIX)
         .ok_or("response handle is not a GInfer host handle")?
-        .split('_')
-        .collect();
-    if fields.len() != 4 {
+        .split('_');
+    let (Some(host), Some(instance), Some(session), Some(encoded)) =
+        (fields.next(), fields.next(), fields.next(), fields.next())
+    else {
+        return Err("invalid GInfer response handle".into());
+    };
+    if fields.next().is_some() {
         return Err("invalid GInfer response handle".into());
     }
     let uuid = |s: &str| Uuid::parse_str(s).map_err(|e| e.to_string());
-    let upstream = String::from_utf8(hex::decode(fields[3]).map_err(|e| e.to_string())?)
+    let upstream = String::from_utf8(hex::decode(encoded).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())?;
     if upstream.is_empty()
         || !upstream
@@ -79,10 +83,10 @@ pub fn decode(id: &str) -> Result<(ResponseScope, String), String> {
     Ok((
         ResponseScope {
             instance: InstanceRef {
-                host_id: uuid(fields[0])?,
-                instance_id: uuid(fields[1])?,
+                host_id: uuid(host)?,
+                instance_id: uuid(instance)?,
             },
-            session: uuid(fields[2])?,
+            session: uuid(session)?,
         },
         upstream,
     ))
@@ -119,6 +123,30 @@ pub fn request_target(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "one response-handle resource measurement"]
+    fn request_resource_measurement_response_handle() {
+        let scope = ResponseScope {
+            instance: InstanceRef { host_id: Uuid::new_v4(), instance_id: Uuid::new_v4() },
+            session: Uuid::new_v4(),
+        };
+        let id = scope.encode("resp_same_123");
+        let measurement = crate::resource_measurement::Measurement::start();
+        let decoded = decode(&id).unwrap();
+        measurement.finish("response_handle");
+        assert_eq!(decoded, (scope.clone(), "resp_same_123".into()));
+        for malformed in [format!("{id}_extra"), id.rsplit_once('_').unwrap().0.to_owned()] {
+            assert_eq!(decode(&malformed).unwrap_err(), "invalid GInfer response handle");
+        }
+        for upstream in ["", "a/b", "é"] {
+            assert!(decode(&scope.encode(upstream)).is_err());
+        }
+        let prefix = id.rsplit_once('_').unwrap().0;
+        for encoded in ["z1", "ff"] {
+            assert!(decode(&format!("{prefix}_{encoded}")).is_err());
+        }
+    }
+
     #[test]
     fn response_handles_disambiguate_hosts_and_reject_cross_session_continuation() {
         let scope = ResponseScope {

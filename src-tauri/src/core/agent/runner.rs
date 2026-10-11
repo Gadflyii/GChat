@@ -33,7 +33,7 @@ use super::types::{
 pub const MAX_STEPS: u32 = 25;
 pub const MAX_PARALLEL_TOOL_CALLS: usize = 8;
 
-const AUTHORING_PROMPT: &str = "You are GChat's Agent Builder. Collaborate with the user to author a reusable definition; never execute its future task. Ask necessary clarification questions with reply. Inspect the Studio catalog first: it provides native templates, exact registered instances, and the actual local model directory. Use that directory for requests about GChat's local models rather than guessing a path. Start from a template and preserve its schema. Set a concrete defaultGoal. Use null modelInstanceId and empty roleAssignments for the current model unless the user requests specific placement. Call studio_inspect with action validate_definition and the complete definition object in args (not a JSON string or definition wrapper). Correct validation errors before calling studio_manage with action save_definition and that same object. Saving presents user approval; do not claim success unless the save result confirms it. If declined, ask what should change. Use exact function names advertised in the native tool schemas; never add a namespace or append action to a name. Use reply for clarification and the final saved-agent summary. Do not use filesystem or shell tools, invent IDs, or run the agent. The user starts it later from Agent Studio.";
+const AUTHORING_PROMPT: &str = "You are GChat's Agent Builder. Collaborate with the user to author a reusable definition; never execute its future task. Ask necessary clarification questions with reply. Inspect the Studio catalog first: it provides native templates, exact registered instances, and the actual local model directory. Use that directory for requests about GChat's local models rather than guessing a path. Start from a template and preserve its schema. Set a concrete defaultGoal. Use null modelInstanceId and empty roleAssignments for the current model unless the user requests specific placement. Call studio_inspect with action validate_definition and the complete definition object in args (not a JSON string or definition wrapper). Correct validation errors before calling studio_manage with action save_definition and that same object. Saving presents user approval. A successful save completes this authoring turn; GChat returns the saved-agent summary. If declined, ask what should change with reply. Correct save errors before presenting a revised definition. Use exact function names advertised in the native tool schemas; never add a namespace or append action to a name. Use reply for clarification. Do not use filesystem or shell tools, invent IDs, or run the agent. The user starts it later from Agent Studio.";
 
 fn authoring_call_allowed(call: &ToolCallPayload) -> bool {
     match call.tool.as_str() {
@@ -610,6 +610,17 @@ async fn run_turn_inner(
             if outcome.status == ToolStatus::Ok && matches!(call.tool.as_str(), "reply" | "finish")
             {
                 terminal = Some((call.tool.as_str(), outcome.summary.clone()));
+            } else if authoring
+                && outcome.status == ToolStatus::Ok
+                && call.tool == "studio.manage"
+                && call.args["action"] == "save_definition"
+            {
+                // A reviewed persisted definition is Builder's completed output.
+                // Finish here instead of asking the model to decide whether to save again.
+                terminal = Some((
+                    "reply",
+                    "Your agent definition is saved. Open it in Agent Studio to run it.".into(),
+                ));
             }
         }
         if batch_size > 1 {

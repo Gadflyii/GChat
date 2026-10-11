@@ -77,6 +77,20 @@ enum Commands {
         #[command(subcommand)]
         cmd: ServerCommands,
     },
+    /// Install bundled runtime resources and ask the shared Host to prepare hardware.
+    /// This entry never starts chat, a model, or the Local API Server.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    PrepareHardware {
+        /// Installed GChat resource directory, supplied by the per-user installer.
+        #[arg(long)]
+        resource_directory: PathBuf,
+        /// Effective per-user app-data directory supplied by the owning package.
+        #[arg(long)]
+        app_data_directory: PathBuf,
+        /// Exact ordered deployment GPU UUIDs; repeat for TP2/TP4.
+        #[arg(long = "gpu")]
+        gpu_uuids: Vec<String>,
+    },
 }
 
 // ── Serve args ─────────────────────────────────────────────────────────────
@@ -270,6 +284,13 @@ async fn main() {
         Commands::Launch { args } => handle_launch(args).await,
         Commands::Models { cmd } => handle_models(cmd),
         Commands::Server { cmd } => handle_server(cmd).await,
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        Commands::PrepareHardware { resource_directory, app_data_directory, gpu_uuids } => {
+            match app_lib::core::setup::prepare_installed_hardware_from_resources(resource_directory, app_data_directory, gpu_uuids).await {
+                Ok(status) => println!("{}", serde_json::to_string(&status).unwrap_or_else(|e| fail(e.to_string()))),
+                Err(error) => fail(error),
+            }
+        }
     }
 }
 
@@ -1088,8 +1109,11 @@ async fn handle_launch(args: LaunchArgs) {
 
     let base_url = format!("http://127.0.0.1:{actual_port}");
     let api_url = integrations::api_url_for(agent, &base_url, "/v1");
+    let data_folder = cli_get_data_folder();
 
-    if let Err(e) = integrations::configure(agent, &api_url, &model_id, &args.api_key).await {
+    if let Err(e) =
+        integrations::configure(agent, &data_folder, &api_url, &model_id, &args.api_key).await
+    {
         init_ginfer_state().ginfer_process.lock().await.remove(&pid);
         fail(format!("could not configure {}: {e}", agent.name));
     }
@@ -1113,7 +1137,14 @@ async fn handle_launch(args: LaunchArgs) {
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
-        apply_agent_env(&mut cmd, agent, &api_url, &model_id, &args.api_key);
+        apply_agent_env(
+            &mut cmd,
+            agent,
+            &data_folder,
+            &api_url,
+            &model_id,
+            &args.api_key,
+        );
         if let Err(e) = cmd.spawn() {
             init_ginfer_state().ginfer_process.lock().await.remove(&pid);
             fail(format!("could not launch {}: {e}", agent.name));
@@ -1132,7 +1163,14 @@ async fn handle_launch(args: LaunchArgs) {
 
     let mut cmd = std::process::Command::new(agent.detect_bin);
     cmd.args(&argv);
-    apply_agent_env(&mut cmd, agent, &api_url, &model_id, &args.api_key);
+    apply_agent_env(
+        &mut cmd,
+        agent,
+        &data_folder,
+        &api_url,
+        &model_id,
+        &args.api_key,
+    );
     let status = cmd.status();
 
     init_ginfer_state().ginfer_process.lock().await.remove(&pid);
@@ -1154,6 +1192,7 @@ async fn handle_launch(args: LaunchArgs) {
 fn apply_agent_env(
     cmd: &mut std::process::Command,
     agent: &Agent,
+    data_folder: &std::path::Path,
     api_url: &str,
     model_id: &str,
     api_key: &str,
@@ -1161,7 +1200,7 @@ fn apply_agent_env(
     for var in integrations::CONFLICTING_PROVIDER_ENV {
         cmd.env_remove(var);
     }
-    for (key, value) in integrations::child_env(agent, api_url, model_id, api_key) {
+    for (key, value) in integrations::child_env(agent, data_folder, api_url, model_id, api_key) {
         cmd.env(key, value);
     }
 }

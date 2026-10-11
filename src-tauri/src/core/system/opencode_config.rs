@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use serde_json::Value;
 
@@ -9,8 +12,29 @@ const LOAD_ORDER: [&str; 3] = ["config.json", "opencode.json", "opencode.jsonc"]
 // then JSON, then the legacy filename, and create JSONC for a new install.
 const WRITE_ORDER: [&str; 3] = ["opencode.jsonc", "opencode.json", "config.json"];
 
-pub(crate) fn config_directory(home: &str) -> PathBuf {
-    PathBuf::from(home).join(".config").join("opencode")
+pub(crate) fn config_directory(data: &Path) -> PathBuf {
+    data.join("code").join("opencode")
+}
+
+pub(crate) fn child_env(directory: &Path) -> Vec<(OsString, OsString)> {
+    vec![
+        (
+            "XDG_CONFIG_HOME".into(),
+            directory
+                .parent()
+                .expect("managed OpenCode directory has a parent")
+                .as_os_str()
+                .to_owned(),
+        ),
+        (
+            "OPENCODE_CONFIG_DIR".into(),
+            directory.as_os_str().to_owned(),
+        ),
+        (
+            "OPENCODE_CONFIG".into(),
+            writable_config_path(directory).into_os_string(),
+        ),
+    ]
 }
 
 pub(crate) fn writable_config_path(directory: &Path) -> PathBuf {

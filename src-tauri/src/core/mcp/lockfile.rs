@@ -92,7 +92,7 @@ pub fn is_process_alive(pid: u32) -> bool {
         use std::os::windows::process::CommandExt;
 
         let mut cmd = Command::new("tasklist");
-        cmd.args(&["/FI", &format!("PID eq {}", pid), "/NH"]);
+        cmd.args(["/FI", &format!("PID eq {}", pid), "/NH"]);
 
         #[cfg(windows)]
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW

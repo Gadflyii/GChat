@@ -5,13 +5,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::core::app::commands::get_jan_data_folder_path;
 
 use super::runner::MAX_STEPS;
 
 pub const AGENT_DEFINITION_SCHEMA_VERSION: u32 = 3;
+const DEFINITIONS_CHANGED_EVENT: &str = "agent-definitions-changed";
 const AGENT_DEFINITIONS_FILE: &str = "agent-definitions.json";
 const MAX_DEFINITIONS: usize = 128;
 const MAX_COMPOSITE_NODES: usize = 8;
@@ -906,10 +907,12 @@ pub async fn agent_save_definition<R: Runtime>(
     app_handle: AppHandle<R>,
     definition: AgentDefinition,
 ) -> Result<AgentDefinition, String> {
-    let data = get_jan_data_folder_path(app_handle);
-    tokio::task::spawn_blocking(move || save_definition(&data, definition))
+    let data = get_jan_data_folder_path(app_handle.clone());
+    let saved = tokio::task::spawn_blocking(move || save_definition(&data, definition))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    notify_definitions_changed(&app_handle);
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -917,10 +920,20 @@ pub async fn agent_delete_definition<R: Runtime>(
     app_handle: AppHandle<R>,
     id: String,
 ) -> Result<(), String> {
-    let data = get_jan_data_folder_path(app_handle);
+    let data = get_jan_data_folder_path(app_handle.clone());
     tokio::task::spawn_blocking(move || delete_definition(&data, &id))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    notify_definitions_changed(&app_handle);
+    Ok(())
+}
+
+fn notify_definitions_changed<R: Runtime>(app: &AppHandle<R>) {
+    // Persistence already succeeded: reporting a failed save here could cause
+    // the caller to repeat the completed write.
+    if let Err(error) = app.emit(DEFINITIONS_CHANGED_EVENT, ()) {
+        log::error!("Failed to notify Agent definition consumers: {error}");
+    }
 }
 
 #[tauri::command]
@@ -931,6 +944,51 @@ pub async fn agent_list_templates() -> Result<Vec<AgentTemplate>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn studio_and_desktop_definition_writes_notify_after_persistence() {
+        use std::sync::Arc;
+        use tauri::{Listener, Manager};
+
+        let root = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(crate::test_support::TestDataRoot(root.path().to_path_buf()));
+        assert!(list_definitions(root.path()).unwrap().is_empty());
+        let snapshots = Arc::new(Mutex::new(Vec::new()));
+        let observed = snapshots.clone();
+        let data = root.path().to_path_buf();
+        app.listen_any(DEFINITIONS_CHANGED_EVENT, move |_| {
+            observed.lock().unwrap().push(list_definitions(&data).unwrap());
+        });
+
+        let unrelated = custom_standard("unrelated");
+        agent_save_definition(app.handle().clone(), unrelated.clone()).await.unwrap();
+        let mut reviewed = custom_standard("reviewed");
+        reviewed.name = "Reviewed reader".into();
+        super::super::studio::operation(
+            app.handle().clone(), "save_definition", serde_json::to_value(&reviewed).unwrap(),
+        ).await.unwrap();
+        reviewed.default_goal = "Read the updated local document.".into();
+        super::super::studio::operation(
+            app.handle().clone(), "save_definition", serde_json::to_value(&reviewed).unwrap(),
+        ).await.unwrap();
+        reviewed.name = "Updated reader".into();
+        agent_save_definition(app.handle().clone(), reviewed.clone()).await.unwrap();
+        agent_delete_definition(app.handle().clone(), reviewed.id.clone()).await.unwrap();
+
+        {
+            let events = snapshots.lock().unwrap();
+            assert_eq!(events.len(), 5);
+            assert_eq!(events[0], vec![unrelated.clone()]);
+            assert_eq!(events[1].iter().find(|item| item.id == reviewed.id).unwrap().name, "Reviewed reader");
+            assert_eq!(events[2].iter().find(|item| item.id == reviewed.id).unwrap().default_goal, reviewed.default_goal);
+            assert_eq!(events[3].iter().find(|item| item.id == reviewed.id).unwrap(), &reviewed);
+            assert_eq!(events[4], vec![unrelated]);
+        }
+        reviewed.id = "general".into();
+        assert!(agent_save_definition(app.handle().clone(), reviewed).await.is_err());
+        assert_eq!(snapshots.lock().unwrap().len(), 5);
+    }
 
     fn custom_standard(id: &str) -> AgentDefinition {
         AgentDefinition {

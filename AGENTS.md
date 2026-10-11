@@ -67,7 +67,9 @@ Hugging Face organization.
   `extensions/ginfer-extension/` (extends `AIEngine`).
 - Models are `.ginfer` containers from the `SectileLabs` HF
   organization (int-autoround + NVFP4). The HF download pipeline is narrowed to
-  `.ginfer`; the local model cache is `<data>/ginfer/models/`.
+  `.ginfer`; the normal model cache is `<data>/ginfer/models/`. Under WSL, the
+  shared native storage resolver redirects new Windows-backed managed downloads
+  to Linux storage; discovery retains original and installed-job roots.
 - Model identity comes from the `.ginfer` artifact itself (closed registered
   set); unsupported identities fail at server start. Downloadable catalog
   entries must track published artifacts 1:1.
@@ -100,7 +102,7 @@ now load-bearing — do not introduce new legacy identifiers.
 | Tauri CLI binary         | `gchat-cli`             |
 | Tauri bundle id          | `app.gchat`             |
 | Data folder (all OS)     | `GChat`                 |
-| Ginfer model cache       | `<data>/ginfer/models/` |
+| Ginfer model cache       | `<data>/ginfer/models/`; WSL placement uses the shared native resolver |
 | Pre-install tarballs     | `gchat-*-*.tgz`         |
 
 **All** modules, packages, env vars, log prefixes, CLI subcommands, telemetry

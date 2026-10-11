@@ -176,6 +176,12 @@ export type ThreadContent = {
   tool_name?: string
   input?: unknown
   output?: unknown
+  state?:
+    | 'input-streaming'
+    | 'input-available'
+    | 'output-available'
+    | 'output-error'
+  errorText?: string
 }
 
 export interface Attachment {

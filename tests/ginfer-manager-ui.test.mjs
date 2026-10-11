@@ -253,6 +253,92 @@ test('offline hosts preserve inventory and disable host mutations while a stale 
   assert.equal(requests(app).length, 0)
 })
 
+test('stopped instances retain their full previous startup diagnostic without a current failure alert', async (t) => {
+  const view = fixture()
+  const instance = view.hosts[0].snapshot.instances[1]
+  const diagnostic = 'engine exited unexpectedly: exit code 1\nKV arena rejected\n' + 'Usage: ginfer-serve --model <artifact>\n'.repeat(200)
+  instance.last_error = diagnostic
+  const savedProfile = structuredClone(instance.profile)
+  const app = await manager(t, view)
+  const card = app.document.querySelector(`[data-instance="${stoppedId}"]`)
+  assert.equal(card.querySelector('[role="alert"]'), null)
+  const details = card.querySelector('details')
+  assert.equal(details.querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(details.open, false)
+  details.querySelector('summary').click()
+  assert.equal(details.open, true)
+  assert.equal(details.querySelector('pre').textContent, diagnostic)
+  assert.equal(instance.last_error, diagnostic)
+  assert.deepEqual(instance.profile, savedProfile)
+  const offline = structuredClone(view)
+  offline.hosts[0].online = false
+  offline.hosts[0].offline = true
+  offline.hosts[0].snapshot.instances[1].status = 'failed'
+  await app.publish(offline)
+  const cached = app.document.querySelector(`[data-instance="${stoppedId}"]`)
+  assert.equal(cached.querySelector('[role="alert"]'), null)
+  assert.equal(cached.querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(cached.querySelector('details').open, true)
+  assert.equal(cached.querySelector('pre').textContent, diagnostic)
+  assert.deepEqual(requests(app), [])
+})
+
+test('current failures show a short alert and retain collapsed diagnostics after stopping', async (t) => {
+  const view = fixture()
+  const instance = view.hosts[0].snapshot.instances[0]
+  const diagnostic = 'engine startup timed out\nfull retained stdout\nUsage: ginfer-serve --model <artifact>'
+  instance.status = 'failed'
+  instance.active_requests = 0
+  instance.last_error = diagnostic
+  const app = await manager(t, view)
+  let card = app.document.querySelector(`[data-instance="${readyId}"]`)
+  assert.equal(card.querySelector('[role="alert"]').textContent, 'Engine failed. Open error details for the diagnostic.')
+  let details = card.querySelector('details')
+  assert.equal(details.querySelector('summary').textContent, 'Startup or runtime error details')
+  assert.equal(details.open, false)
+  details.querySelector('summary').click()
+  assert.equal(details.open, true)
+  assert.equal(details.querySelector('pre').textContent, diagnostic)
+  const stopped = structuredClone(view)
+  stopped.hosts[0].snapshot.instances[0].status = 'stopped'
+  await app.publish(stopped)
+  card = app.document.querySelector(`[data-instance="${readyId}"]`)
+  assert.equal(card.querySelector('[role="alert"]'), null)
+  details = card.querySelector('details')
+  assert.equal(details.querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(details.open, false)
+  assert.equal(details.querySelector('pre').textContent, diagnostic)
+  assert.equal(stopped.hosts[0].snapshot.instances[0].last_error, diagnostic)
+  assert.deepEqual(requests(app), [])
+})
+
+test('instance diagnostics retain their reading state across unrelated snapshots and collapse on phase changes', async (t) => {
+  const view = fixture()
+  const diagnostic = 'retained startup error\nfull diagnostic\nUsage: ginfer-serve --model <artifact>'
+  view.hosts[0].snapshot.instances[1].last_error = diagnostic
+  const app = await manager(t, view)
+  const details = () => app.document.querySelector(`[data-instance="${stoppedId}"] details`)
+  details().querySelector('summary').click()
+  assert.equal(details().open, true)
+  const unrelated = structuredClone(view)
+  unrelated.hosts[0].snapshot.instances[0].active_requests += 1
+  await app.publish(unrelated)
+  assert.equal(details().open, true)
+  assert.equal(details().querySelector('pre').textContent, diagnostic)
+  const failed = structuredClone(unrelated)
+  failed.hosts[0].snapshot.instances[1].status = 'failed'
+  await app.publish(failed)
+  assert.equal(details().querySelector('summary').textContent, 'Startup or runtime error details')
+  assert.equal(details().open, false)
+  details().querySelector('summary').click()
+  assert.equal(details().open, true)
+  await app.publish(unrelated)
+  assert.equal(details().querySelector('summary').textContent, 'Previous startup error')
+  assert.equal(details().open, false)
+  assert.equal(details().querySelector('pre').textContent, diagnostic)
+  assert.deepEqual(requests(app), [])
+})
+
 test('custom reload can clear a failed profile\'s fixed KV pool without changing its workload or headroom', async (t) => {
   const view = fixture()
   const instance = view.hosts[0].snapshot.instances[0]
@@ -631,4 +717,132 @@ test('host membership reports Current only when its confirmed authority revision
   await app.publish(next)
   assert.match(membershipStatus(), /^Last known revision 12/)
   assert.equal(requests(app).length, 0, 'viewing membership never changes the host authority')
+})
+
+test('hardware profiling updates through shared snapshots, blocks launch and keeps Stop available', async (t) => {
+  const view = fixture()
+  const hardware = { status: 'running', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-local'], engine_path: '/bin/ginfer', job_id: 'profile-job', pid: 42, reprofile: false,
+    started_unix_ms: 1000, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: false, diagnostic_tail: 'Measuring CPU groups', error: null, available: true }
+  view.hosts[0].snapshot.hardware_profile = hardware
+  const app = await manager(t, view)
+  assert.equal(button(app.document, 'Start a model…').disabled, true)
+  assert.equal(button(app.document.querySelector(`[data-instance="${stoppedId}"]`), 'Start').disabled, true)
+  assert.equal(button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').disabled, true)
+  assert.equal(button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Stop').disabled, false)
+  assert.equal(app.document.querySelector('progress').hasAttribute('value'), false)
+  assert.match(app.document.body.textContent, /Measuring CPU groups/)
+  button(app.document, 'Cancel profiling').click()
+  await waitFor(() => app.calls.some(({ input }) => input?.request?.operation === 'hardware_profile'), 'cancel reaches the shared Host command')
+  assert.deepEqual(app.calls.find(({ input }) => input?.request?.operation === 'hardware_profile').input.request,
+    { action: 'host', host_id: localId, operation: 'hardware_profile', args: { action: 'cancel' } })
+  await flush()
+  const next = structuredClone(app.view)
+  next.hosts[0].snapshot.hardware_profile = { ...hardware, status: 'interrupted', checkpoint_available: true,
+    diagnostic_tail: 'CPU group saved', error: 'Producer interrupted', finished_unix_ms: 62000 }
+  await app.publish(next)
+  assert.match(app.document.body.textContent, /checkpoint presence alone does not prove compatibility/)
+  assert.match(app.document.body.textContent, /CPU group saved/)
+  assert.match(app.document.body.textContent, /61 seconds elapsed/)
+  button(app.document, 'Resume profiling').click()
+  await waitFor(() => app.calls.some(({ input }) => input?.request?.args?.action === 'resume'), 'resume is explicit')
+  await flush()
+  const offline = structuredClone(next)
+  offline.hosts[0].online = false
+  await app.publish(offline)
+  assert.equal(button(app.document, 'Resume profiling').disabled, true)
+  assert.equal(button(app.document, 'Refresh hardware profile').disabled, true)
+  const calls = app.calls.length
+  app.runtime.stop()
+  assert.equal(app.calls.length, calls, 'closing the UI does not cancel the Host job')
+})
+
+test('a launch dialog opened before profiling starts cannot submit a model launch', async (t) => {
+  const app = await manager(t)
+  button(app.document, 'Start a model…').click()
+  const next = structuredClone(app.view)
+  next.hosts[0].snapshot.hardware_profile = { status: 'running', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-local'], engine_path: '/bin/ginfer', available: true, checkpoint_available: false,
+    started_unix_ms: null, finished_unix_ms: null, diagnostic_tail: '', error: null }
+  await app.publish(next)
+  submit(app)
+  await flush()
+  assert.equal(app.calls.filter(({ command }) => command === 'manager_request').length, 0)
+  assert.match(app.document.body.textContent, /hardware profiling has stopped/)
+})
+
+
+test('first hardware installation requires explicit ordered homogeneous selection, including a singleton', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.hardware_profile = { status: 'idle', pending_gpu_groups: [], stale_groups: [], gpu_uuids: [], engine_path: null,
+    available: false, checkpoint_available: false, started_unix_ms: null, finished_unix_ms: null,
+    diagnostic_tail: '', error: null }
+  const app = await manager(t, view)
+  const selected = uuid => app.document.querySelector(`input[aria-label*="(${uuid})"]`)
+  assert.equal(selected('GPU-local').checked, false)
+  assert.equal(button(app.document, 'Prepare hardware profile').disabled, true)
+  assert.match(app.document.body.textContent, /Choose GPU group/)
+  selected('GPU-local').click()
+  button(app.document, 'Prepare hardware profile').click()
+  await waitFor(() => app.calls.some(({ input }) => input?.request?.args?.action === 'ensure'), 'singleton starts only after selection')
+  assert.deepEqual(app.calls.find(({ input }) => input?.request?.args?.action === 'ensure').input.request.args,
+    { action: 'ensure', gpu_uuids: ['GPU-local'] })
+  await flush()
+  const next = structuredClone(app.view)
+  const gpu = next.hosts[0].snapshot.gpus[0]
+  next.hosts[0].snapshot.gpus.push({ ...gpu, uuid: 'GPU-two' },
+    { ...gpu, uuid: 'GPU-ada', name: 'RTX 4090', compute_capability: '8.9' },
+    { ...gpu, uuid: 'GPU-pro', name: 'RTX PRO 6000' })
+  await app.publish(next)
+  button(app.document, 'Clear GPU selection').click()
+  selected('GPU-two').click()
+  assert.equal(selected('GPU-ada').disabled, true)
+  assert.equal(selected('GPU-pro').disabled, true)
+  selected('GPU-local').click()
+  button(app.document, 'Prepare hardware profile').click()
+  await waitFor(() => app.calls.filter(({ input }) => input?.request?.args?.action === 'ensure').length === 2, 'explicit two-GPU group starts')
+  assert.deepEqual(app.calls.filter(({ input }) => input?.request?.args?.action === 'ensure').at(-1).input.request.args,
+    { action: 'ensure', gpu_uuids: ['GPU-two', 'GPU-local'] })
+  await flush()
+  button(app.document, 'Clear GPU selection').click()
+  assert.equal(selected('GPU-ada').disabled, false)
+  assert.equal(button(app.document, 'Prepare hardware profile').disabled, true)
+})
+
+test('pending and exact stale profile groups update in shared snapshots and require explicit start', async (t) => {
+  const view = fixture()
+  const gpu = view.hosts[0].snapshot.gpus[0]
+  view.hosts[0].snapshot.gpus.push({ ...gpu, uuid: 'GPU-two' })
+  const profile = { status: 'failed', job_id: 'job', gpu_uuids: ['GPU-local'], engine_path: '/bin/ginfer',
+    pending_gpu_groups: [], stale_groups: [], available: true, checkpoint_available: false,
+    started_unix_ms: null, finished_unix_ms: null, diagnostic_tail: '', error: 'Unrelated startup failure' }
+  view.hosts[0].snapshot.hardware_profile = profile
+  const app = await manager(t, view)
+  assert.doesNotMatch(app.document.body.textContent, /Hardware changed — re-profile/)
+  const next = structuredClone(app.view)
+  next.hosts[0].snapshot.hardware_profile = { ...profile, status: 'interrupted', checkpoint_available: false,
+    pending_gpu_groups: [['GPU-two']], stale_groups: [
+      { gpu_uuids: ['GPU-local'], profile_path: '/group-one/hardware.json', expected_duration_ms: 120000 },
+      { gpu_uuids: ['GPU-two'], profile_path: '/group-two/hardware.json', expected_duration_ms: null },
+    ] }
+  await app.publish(next)
+  assert.match(app.document.body.textContent, /Pending saved deployment groups/)
+  assert.equal(button(app.document, 'Resume profiling').disabled, false)
+  assert.match(app.document.body.textContent, /Resume retries the saved job inputs/)
+  assert.match(app.document.body.textContent, /Hardware changed — re-profile · ~2 minutes/)
+  assert.match(app.document.body.textContent, /Hardware changed — re-profile · recent full installs took 22–73 minutes/)
+  const stale = app.document.querySelector('section[aria-label*="Stale GPU group"][aria-label*="GPU-two"]')
+  assert.match(stale.textContent, /group-two\/hardware.json/)
+  button(stale, 'Select group to re-profile').click()
+  assert.equal(app.calls.filter(({ command }) => command === 'manager_request').length, 0)
+  button(app.document, 'Refresh hardware profile').click()
+  await waitFor(() => app.calls.some(({ input }) => input?.request?.args?.action === 'refresh'), 'explicit refresh reaches the selected stale group')
+  assert.deepEqual(app.calls.find(({ input }) => input?.request?.args?.action === 'refresh').input.request.args,
+    { action: 'refresh', gpu_uuids: ['GPU-two'] })
+  await flush()
+  const active = structuredClone(next)
+  active.hosts[0].snapshot.hardware_profile.status = 'running'
+  await app.publish(active)
+  button(app.document, 'Cancel profiling and queue').click()
+  await waitFor(() => app.calls.some(({ input }) => input?.request?.args?.action === 'cancel'), 'queue cancellation uses the original job')
+  assert.deepEqual(app.calls.find(({ input }) => input?.request?.args?.action === 'cancel').input.request.args, { action: 'cancel' })
 })

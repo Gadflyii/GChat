@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { localStorageKey } from '@/constants/localStorage'
 
 type LocalApiServerState = {
-  // Run local API server once app opens
+  // Opt in to running the local API server when the app opens
   enableOnStartup: boolean
   setEnableOnStartup: (value: boolean) => void
   // Default local model to auto-load when the server starts
@@ -41,10 +41,30 @@ type LocalApiServerState = {
   setProxyTimeout: (value: number) => void
 }
 
+export function migrateLocalApiServerSettings(
+  persistedState: unknown,
+  version: number
+): Partial<LocalApiServerState> {
+  const state = { ...(persistedState as Partial<LocalApiServerState>) }
+  if (version < 1) {
+    // v0 → v1: add lastServerModels field
+    state.lastServerModels = []
+  }
+  if (version < 2) {
+    // v1 → v2: add defaultModelLocalApiServer field
+    state.defaultModelLocalApiServer = null
+  }
+  if (version < 3) {
+    // Missing startup preferences stay off; preserve explicit saved choices.
+    state.enableOnStartup ??= false
+  }
+  return state
+}
+
 export const useLocalApiServer = create<LocalApiServerState>()(
   persist(
     (set) => ({
-      enableOnStartup: true,
+      enableOnStartup: false,
       setEnableOnStartup: (value) => set({ enableOnStartup: value }),
       defaultModelLocalApiServer: null,
       setDefaultModelLocalApiServer: (model) =>
@@ -81,24 +101,7 @@ export const useLocalApiServer = create<LocalApiServerState>()(
       name: localStorageKey.settingLocalApiServer,
       storage: createJSONStorage(() => localStorage),
       version: 3,
-      migrate: (persistedState: unknown, version: number) => {
-        const state = persistedState as Partial<LocalApiServerState>
-        if (version < 1) {
-          // v0 → v1: add lastServerModels field
-          state.lastServerModels = []
-        }
-        if (version < 2) {
-          // v1 → v2: add defaultModelLocalApiServer field
-          state.defaultModelLocalApiServer = null
-        }
-        if (version < 3) {
-          // v2 → v3: enableOnStartup was a dormant field defaulting to false;
-          // it now drives the Local API Server auto-start toggle and defaults
-          // to on, so opt existing users in to match the new default.
-          state.enableOnStartup = true
-        }
-        return state
-      },
+      migrate: migrateLocalApiServerSettings,
     }
   )
 )

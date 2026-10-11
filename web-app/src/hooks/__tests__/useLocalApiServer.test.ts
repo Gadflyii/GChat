@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useLocalApiServer } from '../useLocalApiServer'
+import {
+  migrateLocalApiServerSettings,
+  useLocalApiServer,
+} from '../useLocalApiServer'
 
 // Mock constants
 vi.mock('@/constants/localStorage', () => ({
@@ -23,22 +26,13 @@ describe('useLocalApiServer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Reset store state to defaults
-    const store = useLocalApiServer.getState()
-    store.setEnableOnStartup(true)
-    store.setServerHost('127.0.0.1')
-    store.setServerPort(1337)
-    store.setApiPrefix('/v1')
-    store.setCorsEnabled(true)
-    store.setVerboseLogs(true)
-    store.setTrustedHosts([])
-    store.setApiKey('')
-    store.setProxyTimeout(600)
+    useLocalApiServer.setState(useLocalApiServer.getInitialState())
   })
 
   it('should initialize with default values', () => {
     const { result } = renderHook(() => useLocalApiServer())
 
-    expect(result.current.enableOnStartup).toBe(true)
+    expect(result.current.enableOnStartup).toBe(false)
     expect(result.current.serverHost).toBe('127.0.0.1')
     expect(result.current.serverPort).toBe(1337)
     expect(result.current.apiPrefix).toBe('/v1')
@@ -48,6 +42,25 @@ describe('useLocalApiServer', () => {
     expect(result.current.apiKey).toBe('')
     expect(result.current.proxyTimeout).toBe(600)
   })
+
+  it.each([0, 1, 2])(
+    'migrates a missing API startup preference to off in schema %i',
+    (version) => {
+      expect(migrateLocalApiServerSettings({}, version).enableOnStartup).toBe(false)
+    }
+  )
+
+  it.each([0, 1, 2, 3])(
+    'preserves explicit API startup choices in schema %i',
+    (version) => {
+      for (const enableOnStartup of [true, false]) {
+        expect(
+          migrateLocalApiServerSettings({ enableOnStartup }, version)
+            .enableOnStartup
+        ).toBe(enableOnStartup)
+      }
+    }
+  )
 
   describe('enableOnStartup', () => {
     it('should set run on startup', () => {

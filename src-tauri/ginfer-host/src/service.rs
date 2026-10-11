@@ -16,7 +16,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, Notify, RwLock};
 use uuid::Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -134,12 +134,12 @@ pub struct Host {
     inventory_dirty: AtomicBool,
     pub gpus: Vec<Gpu>,
     pub boot_id: Uuid,
-    pub revision: AtomicU64,
+    pub revision: Arc<AtomicU64>,
     pub directory: PathBuf,
     pub model_dirs: Vec<PathBuf>,
     pub artifact_sets: Vec<PathBuf>,
     lifecycle: Mutex<()>,
-    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
+    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
 }
 /// An authenticated HTTP caller, not a persistent desktop connection.
@@ -164,23 +164,24 @@ fn now_unix_ms() -> u64 {
 struct RequestLease {
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
     principal: Principal,
-    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
+    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     id: Uuid,
 }
 struct DrainGuard {
-    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
+    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     id: Uuid,
 }
 impl Drop for DrainGuard {
     fn drop(&mut self) {
-        self.traffic.lock().unwrap().entry(self.id).or_default().0 = false;
+        self.traffic.lock().unwrap().entry(self.id).or_default().draining = false;
     }
 }
 impl Drop for RequestLease {
     fn drop(&mut self) {
-        if let Some((_, count)) = self.traffic.lock().unwrap().get_mut(&self.id) {
-            *count = count.saturating_sub(1);
-        }
+        let idle = if let Some(traffic) = self.traffic.lock().unwrap().get_mut(&self.id) {
+            traffic.count = traffic.count.saturating_sub(1);
+            (traffic.count == 0).then(|| traffic.idle.clone())
+        } else { None };
         let mut activity = self.activity.lock().unwrap();
         if let Some(caller) = activity.get_mut(&self.principal) {
             if let Some(count) = caller.instances.get_mut(&self.id) {
@@ -191,7 +192,18 @@ impl Drop for RequestLease {
             }
             caller.last_seen_unix_ms = Some(now_unix_ms());
         }
+        drop(activity);
+        if let Some(idle) = idle {
+            idle.notify_waiters();
+        }
     }
+}
+
+#[derive(Default)]
+struct InstanceTraffic {
+    draining: bool,
+    count: usize,
+    idle: Arc<Notify>,
 }
 
 // Secrets never pass through desktop-visible snapshots or command logs.
@@ -315,11 +327,26 @@ impl Host {
             &path,
             &serde_json::to_vec(&data).map_err(|e| e.to_string())?,
         )?;
-        let processes = HostProcesses::new(
+        let mut processes = HostProcesses::new(
             engine,
             gpus.iter().map(|g| g.uuid.clone()).collect(),
             Duration::from_secs(600),
         )?;
+        processes.configure_runtimes(
+            Default::default(),
+            gpus.iter()
+                .filter_map(|gpu| {
+                    gpu.compute_capability
+                        .as_ref()
+                        .map(|sm| (gpu.uuid.clone(), sm.clone()))
+                })
+                .collect(),
+        )?;
+        let revision = Arc::new(AtomicU64::new(1));
+        processes.hardware_profile = Some(crate::hardware_profile::HardwareProfiles::open(
+            directory.clone(),
+            revision.clone(),
+        )?);
         let downloads = match desktop_provider {
             Some(provider) => crate::model_downloads::ModelDownloads::open_local(
                 provider.join("models"),
@@ -352,7 +379,7 @@ impl Host {
             inventory_dirty: AtomicBool::new(false),
             gpus,
             boot_id: Uuid::new_v4(),
-            revision: AtomicU64::new(1),
+            revision,
             directory,
             model_dirs,
             artifact_sets,
@@ -362,6 +389,13 @@ impl Host {
         });
         host.scan().await?;
         Ok(host)
+    }
+    pub async fn shutdown_hardware_profile(&self) -> Result<(), String> {
+        let job = self.processes.lock().await.hardware_profile.clone();
+        if let Some(job) = job {
+            job.shutdown().await?;
+        }
+        Ok(())
     }
     pub async fn save(&self) -> Result<(), String> {
         let data = self.data.lock().await;
@@ -472,6 +506,8 @@ impl Host {
         let mut roots = self.model_dirs.clone();
         roots.extend(self.data.lock().await.local_artifacts.iter().cloned());
         roots.push(self.downloads.root().to_path_buf());
+        roots.push(self.downloads.default_root().to_path_buf());
+        let original_root = self.downloads.original_root().to_path_buf();
         roots.extend(
             self.downloads
                 .list()
@@ -481,10 +517,22 @@ impl Host {
         );
         let sets = self.artifact_sets.clone();
         let (entries, errors) = tokio::task::spawn_blocking(move || {
+            let mut inspection = crate::engine_inventory::InventoryInspection::default();
             let mut pending: Vec<_> = roots.into_iter().map(|p| (p, false)).chain(sets.into_iter().map(|p|(p,true))).collect();
+            if original_root.exists() {
+                pending.push((original_root, false));
+            }
             let mut found = Vec::new();
             let mut errors = Vec::new();
+            type DirectoryListing = Result<Vec<Result<std::ffi::OsString, String>>, String>;
+            let mut directories: BTreeMap<PathBuf, DirectoryListing> = BTreeMap::new();
+            let mut paths = BTreeSet::new();
+            let mut rejected = BTreeMap::new();
+            let mut published = BTreeSet::new();
             while let Some((path, artifact_set)) = pending.pop() {
+                if !paths.insert((path.as_os_str().to_owned(), artifact_set)) {
+                    continue;
+                }
                 let metadata = match std::fs::symlink_metadata(&path) {
                     Ok(m) => m,
                     Err(e) => {
@@ -497,11 +545,23 @@ impl Host {
                     continue;
                 }
                 if metadata.is_dir() && !artifact_set {
-                    match std::fs::read_dir(&path) {
+                    let resolved = match path.canonicalize() {
+                        Ok(path) => path,
+                        Err(e) => {
+                            errors.push(serde_json::json!({"path":path,"error":e.to_string()}));
+                            continue;
+                        }
+                    };
+                    let listing = directories.entry(resolved).or_insert_with(|| {
+                        std::fs::read_dir(&path)
+                            .map(|entries| entries.map(|entry| entry.map(|entry| entry.file_name()).map_err(|e| e.to_string())).collect())
+                            .map_err(|e| e.to_string())
+                    });
+                    match &*listing {
                         Ok(entries) => {
                             for entry in entries {
                                 match entry {
-                                    Ok(entry) => pending.push((entry.path(), false)),
+                                    Ok(name) => pending.push((path.join(name), false)),
                                     Err(e) => errors.push(
                                         serde_json::json!({"path":path,"error":e.to_string()}),
                                     ),
@@ -513,26 +573,39 @@ impl Host {
                         }
                     }
                 } else if artifact_set || path.extension().and_then(|s| s.to_str()) == Some("ginfer") {
-                    let result = if artifact_set {
-                        artifact_set_members(&path)
-                    } else {
-                        inspect_artifact(&path).and_then(|metadata| {
-                            path.canonicalize()
-                                .map(|payload| vec![(payload, metadata)])
-                                .map_err(|e| e.to_string())
-                        })
+                    let resolved = match path.canonicalize() {
+                        Ok(path) => path,
+                        Err(e) => {
+                            errors.push(serde_json::json!({"path":path,"error":e.to_string()}));
+                            continue;
+                        }
                     };
-                    match result.and_then(|members| {
-                        path.canonicalize()
-                            .map(|p| (p, members))
-                            .map_err(|e| e.to_string())
-                    }) {
-                        Ok((path, members)) => {
+                    let key = (resolved.clone(), artifact_set);
+                    if published.contains(&key) {
+                        continue;
+                    }
+                    if let Some(error) = rejected.get(&key) {
+                        errors.push(serde_json::json!({"path":path,"error":error}));
+                        continue;
+                    }
+                    // Each pass owns one validation per resolved entry. Rejected
+                    // entries still report against each configured path.
+                    let result = if artifact_set {
+                        inspection.artifact_set_members(&resolved)
+                    } else {
+                        inspection.inspect_artifact(&resolved).map(|metadata| vec![(resolved.clone(), metadata)])
+                    };
+                    match result {
+                        Ok(members) => {
+                            published.insert(key);
                             for (payload, metadata) in members {
-                                found.push((path.clone(), payload, metadata, artifact_set));
+                                found.push((resolved.clone(), payload, metadata, artifact_set));
                             }
                         }
-                        Err(e) => errors.push(serde_json::json!({"path":path,"error":e})),
+                        Err(e) => {
+                            errors.push(serde_json::json!({"path":path,"error":e}));
+                            rejected.insert(key, e);
+                        }
                     }
                 }
             }
@@ -584,10 +657,14 @@ impl Host {
     }
     pub async fn refresh_processes(&self) -> Result<(), String> {
         let probes = self.processes.lock().await.pending_readiness().await?;
-        let observations = futures_util::future::join_all(
-            probes.into_iter().map(|probe| probe.observe()),
-        ).await;
+        let (observations, exits) = tokio::join!(
+            futures_util::future::join_all(probes.readiness.into_iter().map(|probe| probe.observe())),
+            futures_util::future::join_all(probes.exits.into_iter().map(|drain| drain.observe())),
+        );
         let mut processes = self.processes.lock().await;
+        for observation in exits {
+            processes.confirm_exit(observation);
+        }
         for observation in observations.into_iter().flatten() {
             processes.confirm_readiness(observation)?;
         }
@@ -601,29 +678,87 @@ impl Host {
             "port":sharing.standalone.unwrap_or(sharing.port),"error":sharing.error});
         drop(sharing);
         let processes = self.processes.lock().await;
+        let (hardware_profile, revision) = match &processes.hardware_profile {
+            Some(job) => {
+                let (status, revision) = job.observation(processes.profiling_cli(&job.group()));
+                (Some(status), revision)
+            }
+            None => (None, self.revision.load(Ordering::SeqCst)),
+        };
         let reserved = processes.reserved_gpus(None);
+        let observations: Vec<_> = processes
+            .instances()
+            .map(|i| {
+                (
+                    i.instance_id,
+                    i.session_id,
+                    i.status.clone(),
+                    i.last_error.clone(),
+                    i.launch.clone(),
+                    i.model_metadata.clone(),
+                )
+            })
+            .collect();
+        drop(processes);
+        let profiles = data.profiles.clone();
+        let host_id = data.host_id;
+        let name = data.name.clone();
+        let fleet = data.fleet.clone();
+        let usage = self.client_projection(&data);
+        let membership = match Self::membership_view(&data) {
+            Ok(view) => serde_json::json!(view),
+            Err(error) => serde_json::json!({"error":error}),
+        };
+        let models = self.inventory.read().await.clone();
+        drop(data);
+        let launch_profiles = self.launch_profiles.read().await.clone();
+        let mut model_index: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for model in &models {
+            let metadata = &model.metadata;
+            model_index
+                .entry((
+                    metadata.identity.model_id.as_str(),
+                    metadata.identity.weights_id.as_str(),
+                    metadata.tp_size,
+                    metadata.draft_tp,
+                    metadata.size_bytes,
+                ))
+                .or_default()
+                .push(model);
+        }
         let mut available_profiles = vec![];
-        for profile in self.launch_profiles.read().await.iter() {
-            for model in self
-                .inventory
-                .read()
-                .await
-                .iter()
-                .filter(|m| profile.matches_model(m))
-            {
-                available_profiles.push(serde_json::json!({"profile":profile,"model_id":model.id,
-                    "gpu_groups":profile.gpu_groups(&self.gpus, &reserved),
-                    "compatible_gpu_groups":profile.gpu_groups(&self.gpus, &Default::default())}));
+        for profile in &launch_profiles {
+            let key = (
+                profile.identity.model_id.as_str(),
+                profile.identity.weights_id.as_str(),
+                profile.tp,
+                profile.draft_tp,
+                profile.artifact_bytes,
+            );
+            if let Some(matching) = model_index.get(&key) {
+                let groups = profile.gpu_groups(&self.gpus, &reserved);
+                let compatible = profile.gpu_groups(&self.gpus, &Default::default());
+                for model in matching {
+                    available_profiles
+                        .push(serde_json::json!({"profile":profile,"model_id":model.id,
+                    "gpu_groups":groups,"compatible_gpu_groups":compatible}));
+                }
             }
         }
-        let mut instances: Vec<_> = processes.instances().map(|i| serde_json::json!({
-            "instance_id": i.instance_id, "session_id": i.session_id, "display_name": i.launch.model_id,
-            "upstream_model_id": i.launch.model_id, "status": i.status, "last_error": i.last_error,
-            "configuration": i.launch, "model_metadata": i.model_metadata,
-            "profile": data.profiles.get(&i.instance_id),
-        })).collect();
-        for (id, profile) in &data.profiles {
-            if !processes.instances().any(|i| i.instance_id == *id) {
+        let instance_ids: BTreeSet<_> = observations.iter().map(|(id, ..)| *id).collect();
+        let mut instances: Vec<_> = observations
+            .iter()
+            .map(|(id, session, status, error, launch, metadata)| {
+                serde_json::json!({
+                    "instance_id": id, "session_id": session, "display_name": launch.model_id,
+                    "upstream_model_id": launch.model_id, "status": status, "last_error": error,
+                    "configuration": launch, "model_metadata": metadata,
+                    "profile": profiles.get(id),
+                })
+            })
+            .collect();
+        for (id, profile) in &profiles {
+            if !instance_ids.contains(id) {
                 instances.push(serde_json::json!({
                     "instance_id":id,"session_id":null,"display_name":profile.model_id.to_string(),
                     "upstream_model_id":"","status":"stopped","last_error":null,
@@ -631,11 +766,6 @@ impl Host {
                 }));
             }
         }
-        let usage = self.client_projection(&data);
-        let membership = match Self::membership_view(&data) {
-            Ok(view) => serde_json::json!(view),
-            Err(error) => serde_json::json!({"error":error}),
-        };
         {
             let traffic = self.traffic.lock().unwrap();
             for instance in &mut instances {
@@ -645,20 +775,21 @@ impl Host {
                 {
                     instance["active_requests"] = traffic
                         .get(&id)
-                        .map(|(_, count)| *count)
+                        .map(|traffic| traffic.count)
                         .unwrap_or(0)
                         .into();
                 }
             }
         }
-        serde_json::json!({"protocol_version":1,"host_id":data.host_id,"boot_id":self.boot_id,
+        serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
             "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
                 "active":network["active"],"port":network["port"],"error":network["error"]},
-            "display_name":data.name,"revision":self.revision.load(Ordering::SeqCst),
-            "fleet":data.fleet,
+            "display_name":name,"revision":revision,
+            "fleet":fleet,
             "fleet_membership":membership,
             "clients":usage["clients"],"local_administrator":usage["local_administrator"],
-            "instances":instances,"gpus":self.gpus,"models":*self.inventory.read().await,
+            "hardware_profile":hardware_profile,
+            "instances":instances,"gpus":self.gpus,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "launch_profiles":available_profiles,"profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
@@ -745,10 +876,16 @@ impl Host {
                 artifact_set_members(&path)
             } else {
                 let metadata = inspect_artifact(&path)?;
-                Ok(vec![(path.canonicalize().map_err(|e| e.to_string())?, metadata)])
+                Ok(vec![(
+                    path.canonicalize().map_err(|e| e.to_string())?,
+                    metadata,
+                )])
             }
-        }).await.map_err(|e| e.to_string())??;
-        let (payload, metadata) = members.iter()
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        let (payload, metadata) = members
+            .iter()
             .find(|(_, metadata)| !model.artifact_set || metadata.tp_size == model.metadata.tp_size)
             .cloned()
             .ok_or("artifact set no longer declares selected degree")?;
@@ -855,24 +992,31 @@ impl Host {
         Ok(id)
     }
     async fn stop_instance(&self, id: Uuid, force: bool) -> Result<(), String> {
-        self.traffic.lock().unwrap().entry(id).or_default().0 = true;
+        let idle = {
+            let mut traffic = self.traffic.lock().unwrap();
+            let traffic = traffic.entry(id).or_default();
+            traffic.draining = true;
+            traffic.idle.clone()
+        };
         let _draining = DrainGuard {
             traffic: self.traffic.clone(),
             id,
         };
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        while !force
-            && self
-                .traffic
-                .lock()
-                .unwrap()
-                .get(&id)
-                .is_some_and(|(_, count)| *count > 0)
-        {
-            if tokio::time::Instant::now() >= deadline {
-                return Err("instance still has active requests; retry after completion or choose force-stop".into());
+        if !force {
+            loop {
+                let notified = idle.notified();
+                tokio::pin!(notified);
+                // Register before inspecting the count so the last release cannot
+                // be lost between the check and the await.
+                notified.as_mut().enable();
+                if !self.traffic.lock().unwrap().get(&id).is_some_and(|traffic| traffic.count > 0) {
+                    break;
+                }
+                if tokio::time::timeout_at(deadline, notified).await.is_err() {
+                    return Err("instance still has active requests; retry after completion or choose force-stop".into());
+                }
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
         }
         let result = self.processes.lock().await.stop(id).await;
         self.revision.fetch_add(1, Ordering::SeqCst);
@@ -918,11 +1062,11 @@ impl Host {
             .ok_or("missing authenticated inference principal")?;
         let lease = {
             let mut traffic = self.traffic.lock().unwrap();
-            let (draining, count) = traffic.entry(id).or_default();
-            if *draining {
+            let traffic = traffic.entry(id).or_default();
+            if traffic.draining {
                 return Err("instance is draining".into());
             }
-            *count += 1;
+            traffic.count += 1;
             let mut activity = self.activity.lock().unwrap();
             let caller = activity.entry(principal).or_default();
             *caller.instances.entry(id).or_default() += 1;
@@ -962,6 +1106,7 @@ impl Host {
             if !bytes.is_empty() {
                 let mut body: serde_json::Value =
                     serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+                drop(bytes);
                 if !body.is_object() {
                     return Err("inference body must be a JSON object".into());
                 }
@@ -1408,6 +1553,42 @@ impl Host {
             }
         }
         match (req.method().as_str(), path.as_str()) {
+            ("POST", "/host/v1/hardware-profile") => {
+                let request: crate::hardware_profile::HardwareProfileRequest =
+                    serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+                let saved = self
+                    .data
+                    .lock()
+                    .await
+                    .profiles
+                    .values()
+                    .map(|profile| profile.gpu_uuids.clone())
+                    .collect();
+                let processes = self.processes.lock().await;
+                if request.action == crate::hardware_profile::HardwareProfileAction::Ensure
+                    && request.gpu_uuids.is_none()
+                {
+                    processes.ensure_hardware_if_idle(saved)?;
+                }
+                let result = if request.action
+                    == crate::hardware_profile::HardwareProfileAction::Ensure
+                    && request.gpu_uuids.is_none()
+                {
+                    processes
+                        .hardware_profile
+                        .as_ref()
+                        .ok_or("Hardware profiling is not configured")?
+                        .status(None)
+                } else {
+                    processes.hardware_profile_action(request)?
+                };
+                drop(processes);
+                self.revision.fetch_add(1, Ordering::SeqCst);
+                Ok(json(
+                    StatusCode::OK,
+                    serde_json::to_value(result).map_err(|e| e.to_string())?,
+                ))
+            }
             ("POST", "/host/v1/local-engine") => {
                 if !self.local_administrator(req).await {
                     return Ok(json(
@@ -1572,10 +1753,14 @@ impl Host {
                     .cloned()
                     .ok_or("unknown model")?;
                 let mut affected_paths = BTreeSet::from([model.path.clone()]);
-                affected_paths.extend(inventory.iter()
-                    .filter(|entry| entry.artifact_set && entry.payload == model.path)
-                    .map(|entry| entry.path.clone()));
-                let affected_ids: BTreeSet<_> = inventory.iter()
+                affected_paths.extend(
+                    inventory
+                        .iter()
+                        .filter(|entry| entry.artifact_set && entry.payload == model.path)
+                        .map(|entry| entry.path.clone()),
+                );
+                let affected_ids: BTreeSet<_> = inventory
+                    .iter()
                     .filter(|entry| affected_paths.contains(&entry.path))
                     .map(|entry| entry.id)
                     .collect();
@@ -1594,7 +1779,9 @@ impl Host {
                         }
                     } else {
                         if uses_payload {
-                            return Err("stop every instance using this package before removing it".into());
+                            return Err(
+                                "stop every instance using this package before removing it".into(),
+                            );
                         }
                         active_ids.insert(instance.instance_id);
                     }
@@ -1604,9 +1791,12 @@ impl Host {
                 {
                     let mut data = self.data.lock().await;
                     let previous_len = data.profiles.len();
-                    data.profiles.retain(|id, p| active_ids.contains(id)
-                        || (!affected_ids.contains(&p.model_id)
-                            && (present_ids.contains(&p.model_id) || !stopped_dependency_ids.contains(id))));
+                    data.profiles.retain(|id, p| {
+                        active_ids.contains(id)
+                            || (!affected_ids.contains(&p.model_id)
+                                && (present_ids.contains(&p.model_id)
+                                    || !stopped_dependency_ids.contains(id)))
+                    });
                     if data.profiles.len() != previous_len {
                         self.inventory_dirty.store(true, Ordering::SeqCst);
                     }
@@ -1647,6 +1837,10 @@ impl Host {
                 if !root.is_absolute() {
                     return Err("model storage must be an absolute path".into());
                 }
+                let checked_root = root.clone();
+                tokio::task::spawn_blocking(move || {
+                    crate::model_storage::require_native_model_storage(&checked_root)
+                }).await.map_err(|e| e.to_string())??;
                 tokio::fs::create_dir_all(&root)
                     .await
                     .map_err(|e| e.to_string())?;
@@ -1708,6 +1902,18 @@ impl Host {
             ("GET", "/host/v1/snapshot") => Ok(json(StatusCode::OK, self.snapshot().await)),
             ("POST", "/host/v1/scan") => {
                 self.scan().await?;
+                let groups = self
+                    .data
+                    .lock()
+                    .await
+                    .profiles
+                    .values()
+                    .map(|profile| profile.gpu_uuids.clone())
+                    .collect();
+                self.processes
+                    .lock()
+                    .await
+                    .ensure_hardware_if_idle(groups)?;
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
             ("POST", "/host/v1/instances") => {
@@ -1824,17 +2030,41 @@ mod target_launch_tests {
         let (dir, host, _) = installed_flash("groupwise-int", false).await;
         let state = dir.path().join("state");
         let path = state.join("host.json");
-        std::fs::copy(dir.path().join("models/flash.ginfer"), dir.path().join("models/second.ginfer")).unwrap();
+        std::fs::copy(
+            dir.path().join("models/flash.ginfer"),
+            dir.path().join("models/second.ginfer"),
+        )
+        .unwrap();
         std::fs::remove_file(&path).unwrap();
         std::fs::create_dir(&path).unwrap();
         assert!(host.scan().await.is_err());
-        let failed_ids: BTreeMap<_, _> = host.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        let failed_ids: BTreeMap<_, _> = host
+            .inventory
+            .read()
+            .await
+            .iter()
+            .map(|model| (model.path.clone(), model.id))
+            .collect();
         assert_eq!(failed_ids.len(), 2);
         std::fs::remove_dir(&path).unwrap();
         host.scan().await.unwrap();
-        let restarted = Host::open(state, "Ignored".into(), std::env::current_exe().unwrap(),
-            vec![dir.path().join("models")], vec![], vec![]).await.unwrap();
-        let restored_ids: BTreeMap<_, _> = restarted.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        let restarted = Host::open(
+            state,
+            "Ignored".into(),
+            std::env::current_exe().unwrap(),
+            vec![dir.path().join("models")],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
+        let restored_ids: BTreeMap<_, _> = restarted
+            .inventory
+            .read()
+            .await
+            .iter()
+            .map(|model| (model.path.clone(), model.id))
+            .collect();
         assert_eq!(restored_ids, failed_ids);
     }
 
@@ -1906,6 +2136,806 @@ mod target_launch_tests {
                 .unwrap_err()
                 .contains("registered weights"));
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod resource_tests {
+    use super::*;
+    use std::{future::Future, os::unix::fs::PermissionsExt};
+
+    async fn fixture() -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = dir.path().join("engine");
+        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let models = dir.path().join("models");
+        std::fs::create_dir(&models).unwrap();
+        let metadata = serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
+        let mut bytes = b"NINFER\0\x03".to_vec();
+        bytes.extend((metadata.len() as u64).to_le_bytes());
+        bytes.extend(metadata.as_bytes());
+        bytes.resize(4096, 0);
+        std::fs::write(models.join("model.ginfer"), &bytes).unwrap();
+        let gpus = (0..4)
+            .map(|index| Gpu {
+                uuid: format!("GPU-fixture-{index}"),
+                name: "Fixture GPU".into(),
+                display_name: None,
+                memory_mib: 32768,
+                compute_capability: Some("12.0".into()),
+            })
+            .collect();
+        let host = Host::open(
+            dir.path().join("state"),
+            "Resource fixture".into(),
+            engine,
+            vec![models],
+            vec![],
+            gpus,
+        )
+        .await
+        .unwrap();
+        let request = LaunchRequest {
+            instance_id: None,
+            qualified_profile_id: None,
+            model_id: host.inventory.read().await[0].id,
+            gpu_uuids: vec!["GPU-fixture-0".into()],
+            max_context: 8192,
+            concurrency: 1,
+            options: LaunchOptions::default(),
+        };
+        (dir, host, request)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "one coordinator-booked default-worker Linux concurrency measurement"]
+    fn service_resource_concurrent_control_scan_and_journal() {
+        crate::resource_measurement::native_process_system_allocation();
+        #[derive(Clone, Copy, serde::Serialize)]
+        struct RouteTiming { start_ns: u128, end_ns: u128 }
+        #[derive(Default)]
+        struct InFlight {
+            active: std::sync::atomic::AtomicUsize,
+            peak: std::sync::atomic::AtomicUsize,
+            scan: std::sync::atomic::AtomicUsize,
+            pause: std::sync::atomic::AtomicUsize,
+            reads_started_during_scan: std::sync::atomic::AtomicUsize,
+            reads_started_during_pause: std::sync::atomic::AtomicUsize,
+        }
+        struct ActiveRoute<'a> { counters: &'a InFlight, scan: bool, pause: bool }
+        impl Drop for ActiveRoute<'_> {
+            fn drop(&mut self) {
+                if self.scan { self.counters.scan.fetch_sub(1, Ordering::SeqCst); }
+                if self.pause { self.counters.pause.fetch_sub(1, Ordering::SeqCst); }
+                self.counters.active.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+        fn proc_observation() -> serde_json::Value {
+            fn capture(path: &str, parse: impl FnOnce(&str) -> Result<serde_json::Value, String>) -> serde_json::Value {
+                match std::fs::read_to_string(path).map_err(|error| error.to_string()).and_then(|text| parse(&text)) {
+                    Ok(value) => serde_json::json!({"value":value}),
+                    Err(error) => serde_json::json!({"unavailable":error}),
+                }
+            }
+            let cpu = capture("/proc/self/stat", |text| {
+                let end = text.rfind(')').ok_or("invalid process stat")?;
+                let fields: Vec<_> = text[end + 1..].split_whitespace().collect();
+                let number = |index: usize| fields.get(index).ok_or("missing CPU field")?.parse::<u64>().map_err(|error| error.to_string());
+                Ok(serde_json::json!({"user_ticks":number(11)?,"system_ticks":number(12)?}))
+            });
+            let threads = capture("/proc/self/status", |text| {
+                let count = text.lines().find_map(|line| line.strip_prefix("Threads:"))
+                    .ok_or("missing Threads")?.trim().parse::<u64>().map_err(|error| error.to_string())?;
+                Ok(serde_json::json!(count))
+            });
+            let private = capture("/proc/self/smaps_rollup", |text| {
+                let field = |name: &str| -> Result<u64, String> {
+                    text.lines().find_map(|line| line.strip_prefix(name)).ok_or_else(|| format!("missing {name}"))?
+                        .split_whitespace().next().ok_or("missing private-byte value")?
+                        .parse::<u64>().map_err(|error| error.to_string())
+                };
+                let kib = field("Private_Clean:")?.checked_add(field("Private_Dirty:")?)
+                    .and_then(|bytes| bytes.checked_add(field("Private_Hugetlb:").ok()?)).ok_or("private-byte overflow or missing hugetlb")?;
+                Ok(serde_json::json!(kib.checked_mul(1024).ok_or("private-byte overflow")?))
+            });
+            let task_switches = (|| -> Result<serde_json::Value, String> {
+                let mut tasks = BTreeMap::new();
+                for entry in std::fs::read_dir("/proc/self/task").map_err(|error| error.to_string())? {
+                    let entry = entry.map_err(|error| error.to_string())?;
+                    let text = std::fs::read_to_string(entry.path().join("status")).map_err(|error| error.to_string())?;
+                    let field = |name: &str| -> Result<u64, String> {
+                        text.lines().find_map(|line| line.strip_prefix(name)).ok_or_else(|| format!("missing {name}"))?
+                            .trim().parse::<u64>().map_err(|error| error.to_string())
+                    };
+                    tasks.insert(entry.file_name().to_string_lossy().into_owned(), serde_json::json!({
+                        "voluntary":field("voluntary_ctxt_switches:")?, "involuntary":field("nonvoluntary_ctxt_switches:")?,
+                    }));
+                }
+                Ok(serde_json::json!(tasks))
+            })();
+            serde_json::json!({"cpu":cpu,"threads":threads,"private_resident_bytes":private,
+                "context_switches":match task_switches { Ok(value) => serde_json::json!({"value":value}), Err(error) => serde_json::json!({"unavailable":error}) }})
+        }
+        async fn request(host: &Arc<Host>, token: &str, counters: &InFlight, epoch: std::time::Instant, method: &str, path: &str, body: serde_json::Value) -> (RouteTiming, serde_json::Value) {
+            let request = Request::builder().method(method).uri(path)
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(body.to_string())).unwrap();
+            let start_ns = epoch.elapsed().as_nanos();
+            let active = counters.active.fetch_add(1, Ordering::SeqCst) + 1;
+            counters.peak.fetch_max(active, Ordering::SeqCst);
+            let scan = path == "/host/v1/scan";
+            let pause = path == "/host/v1/download-actions";
+            if scan { counters.scan.fetch_add(1, Ordering::SeqCst); }
+            if pause { counters.pause.fetch_add(1, Ordering::SeqCst); }
+            if method == "GET" {
+                if counters.scan.load(Ordering::SeqCst) != 0 { counters.reads_started_during_scan.fetch_add(1, Ordering::SeqCst); }
+                if counters.pause.load(Ordering::SeqCst) != 0 { counters.reads_started_during_pause.fetch_add(1, Ordering::SeqCst); }
+            }
+            let ownership = ActiveRoute { counters, scan, pause };
+            let response = host.clone().route(request).await.unwrap();
+            let status = response.status();
+            let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            let end_ns = epoch.elapsed().as_nanos();
+            drop(ownership);
+            let value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(status, StatusCode::OK, "{method} {path}: {value}");
+            (RouteTiming { start_ns, end_ns }, value)
+        }
+        // Match production's default multi-thread worker selection. The ignored
+        // fixture has one harness thread; no worker-count or blocking-pool tuning.
+        assert!(std::env::var_os("TOKIO_WORKER_THREADS").is_none());
+        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+        let workers = runtime.metrics().num_workers();
+        runtime.block_on(async {
+            let (dir, host, launch) = fixture().await;
+            let model = host.inventory.read().await[0].clone();
+            let profiles: Vec<crate::launch_profiles::LaunchProfile> = (0..174).map(|index| {
+                serde_json::from_value(serde_json::json!({
+                    "id":format!("concurrent-{index}"),"name":"Synthetic concurrency fixture, not qualification",
+                    "platform":"linux","identity":model.metadata.identity,"artifact_sha256":"a".repeat(64),
+                    "artifact_bytes":4096,"tp":1,"draft_tp":0,"gpu_name":"Fixture GPU","compute_capability":"12.0",
+                    "vram_tier_gib":32,"min_memory_mib_per_gpu":32768,"max_context":8192,"concurrency":1,"options":{},
+                    "qualification":{"tier":"full-context-tested","evidence":"synthetic fixture only","engine_revision":"fixture",
+                        "free_bytes_per_gpu":1_u64 << 30,"full_context_requests":1}
+                })).unwrap()
+            }).collect();
+            let catalog_path = host.directory.join("launch-profiles.json");
+            let catalog_bytes = serde_json::to_vec(&serde_json::json!({"schema":"ginfer-launch-profiles-v1","profiles":profiles})).unwrap();
+            std::fs::write(&catalog_path, &catalog_bytes).unwrap();
+            host.scan().await.unwrap();
+            assert_eq!(host.launch_profiles.read().await.len(), 174);
+            // Sleep children exercise management without model/hardware admission.
+            // Preserve the Host hardware owner for measured Scan.
+            let hardware = host.processes.lock().await.hardware_profile.clone();
+            let mut synthetic = HostProcesses::new(
+                dir.path().join("engine"),
+                host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
+                Duration::from_secs(600),
+            ).unwrap();
+            synthetic.configure_runtimes(Default::default(), host.gpus.iter().filter_map(|gpu| {
+                gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))
+            }).collect()).unwrap();
+            let mut instances = Vec::new();
+            for index in 0..4 {
+                let mut launch = launch.clone();
+                launch.gpu_uuids = vec![format!("GPU-fixture-{index}")];
+                let prepared = host.prepare_launch(&launch).await.unwrap();
+                let id = prepared.instance_id;
+                synthetic.launch(prepared).unwrap();
+                launch.instance_id = Some(id);
+                host.data.lock().await.profiles.insert(id, launch);
+                synthetic.mark_profile_persisted(id);
+                instances.push(id);
+            }
+            synthetic.hardware_profile = hardware;
+            *host.processes.lock().await = synthetic;
+            host.save().await.unwrap();
+            let job_ids: Vec<_> = (0..100).map(|_| Uuid::new_v4()).collect();
+            let release = crate::model_downloads::Release {
+                name:"Synthetic queued transfer, never started".into(), identity:model.metadata.identity.clone(),
+                url:"https://huggingface.co/SectileLabs/fixture/resolve/0000000000000000000000000000000000000000/model.ginfer".into(),
+                sha256:"a".repeat(64), bytes:4096, tp:1, qualified_sm:vec!["12.0".into()], min_vram_mib_per_gpu:32768,
+                capabilities:vec!["tools".into()], launch_profiles:vec![],
+            };
+            release.validate().unwrap();
+            host.downloads.seed_concurrent_resource_jobs(job_ids.iter().enumerate().map(|(index, id)| crate::model_downloads::Download {
+                id:*id,release:release.clone(),status:if index == 0 { "queued" } else { "paused" }.into(),received:0,bytes_per_second:0,error:None,path:None,
+                storage_root:host.downloads.root(),
+            }).collect()).await;
+            let mut expected_jobs = host.downloads.list().await;
+            expected_jobs.iter_mut().find(|job| job.id == job_ids[0]).unwrap().status = "paused".into();
+            let expected_jobs = serde_json::to_value(expected_jobs).unwrap();
+            let journal = host.directory.join("model-downloads.json");
+            assert!(!journal.exists());
+            let token = host.data.lock().await.pairing_admin_token.clone();
+            let unauthorized = host.clone().route(Request::get("/host/v1/snapshot").body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+            let idle_before = proc_observation();
+            let idle_started = std::time::Instant::now();
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let idle_ns = idle_started.elapsed().as_nanos();
+            let idle_after = proc_observation();
+            let epoch = std::time::Instant::now();
+            let counters = Arc::new(InFlight::default());
+            let barrier = Arc::new(tokio::sync::Barrier::new(8));
+            let mut jobs = tokio::task::JoinSet::new();
+            for reader in 0..4 {
+                let host = host.clone(); let token = token.clone(); let barrier = barrier.clone(); let counters = counters.clone();
+                jobs.spawn(async move {
+                    barrier.wait().await;
+                    let mut observations = Vec::new();
+                    for _ in 0..16 {
+                        for (label, path) in [("snapshot","/host/v1/snapshot"),("downloads","/host/v1/downloads"),("control_clients","/host/v1/clients")] {
+                            let (elapsed, value) = request(&host, &token, &counters, epoch, "GET", path, serde_json::json!({})).await;
+                            if label == "snapshot" {
+                                assert_eq!(value["launch_profiles"].as_array().unwrap().len(), 174);
+                                assert_eq!(value["instances"].as_array().unwrap().len(), 4);
+                            } else if label == "downloads" { assert_eq!(value.as_array().unwrap().len(), 100); }
+                            observations.push((format!("{label}-reader-{reader}"), elapsed));
+                        }
+                    }
+                    observations
+                });
+            }
+            {
+                let host = host.clone(); let token = token.clone(); let barrier = barrier.clone(); let counters = counters.clone();
+                jobs.spawn(async move {
+                    barrier.wait().await;
+                    let mut observations = Vec::new();
+                    for _ in 0..4 {
+                        let (elapsed, value) = request(&host, &token, &counters, epoch, "POST", "/host/v1/scan", serde_json::json!({})).await;
+                        assert_eq!(value["launch_profiles"].as_array().unwrap().len(), 174);
+                        observations.push(("scan".into(), elapsed));
+                    }
+                    observations
+                });
+            }
+            {
+                let host = host.clone(); let token = token.clone(); let barrier = barrier.clone(); let id = job_ids[0]; let counters = counters.clone();
+                jobs.spawn(async move {
+                    barrier.wait().await;
+                    let (elapsed, _) = request(&host, &token, &counters, epoch, "POST", "/host/v1/download-actions", serde_json::json!({"id":id,"action":"pause"})).await;
+                    vec![("pause_one_ordered_100_job_journal".into(), elapsed)]
+                });
+            }
+            {
+                let host = host.clone(); let token = token.clone(); let barrier = barrier.clone(); let id = instances[0]; let counters = counters.clone();
+                jobs.spawn(async move {
+                    barrier.wait().await;
+                    // Three other synthetic children stay live throughout every
+                    // Scan: idle hardware preparation must never be admitted.
+                    let (elapsed, _) = request(&host, &token, &counters, epoch, "POST", &format!("/host/v1/instances/{id}/stop"), serde_json::json!({})).await;
+                    vec![("stop_one_synthetic_child".into(), elapsed)]
+                });
+            }
+            let active_before = proc_observation();
+            let started = std::time::Instant::now();
+            barrier.wait().await;
+            let mut latencies: BTreeMap<String, Vec<RouteTiming>> = BTreeMap::new();
+            let outcome = tokio::time::timeout(Duration::from_secs(20), async {
+                while let Some(result) = jobs.join_next().await {
+                    for (label, ns) in result.map_err(|error| error.to_string())? {
+                        latencies.entry(label).or_default().push(ns);
+                    }
+                }
+                Ok::<_, String>(())
+            }).await;
+            let elapsed_ns = started.elapsed().as_nanos();
+            let active_after = proc_observation();
+            if !matches!(outcome, Ok(Ok(()))) {
+                jobs.abort_all();
+                while jobs.join_next().await.is_some() {}
+            }
+            let final_snapshot = tokio::time::timeout(Duration::from_secs(3), host.snapshot()).await;
+            // Reap every owned synthetic child before asserting measurement or
+            // journal results, including a task panic or timeout outcome.
+            let cleanup = tokio::time::timeout(Duration::from_secs(5), async {
+                host.processes.lock().await.shutdown().await
+            }).await;
+            cleanup.unwrap().unwrap();
+            outcome.unwrap().unwrap();
+            let final_snapshot = final_snapshot.unwrap();
+            let saved: BTreeMap<Uuid, crate::model_downloads::Download> = serde_json::from_slice(&std::fs::read(&journal).unwrap()).unwrap();
+            assert_eq!(saved.len(), 100);
+            assert_eq!(saved[&job_ids[0]].status, "paused");
+            for id in job_ids.iter().skip(1) { assert_eq!(saved[id].status, "paused"); }
+            assert_eq!(serde_json::to_value(saved.values().collect::<Vec<_>>()).unwrap(), expected_jobs);
+            assert_eq!(serde_json::to_value(host.downloads.list().await).unwrap(), serde_json::to_value(saved.values().collect::<Vec<_>>()).unwrap());
+            let reopened = crate::model_downloads::ModelDownloads::open(host.downloads.root(), journal.clone()).unwrap();
+            assert_eq!(serde_json::to_value(reopened.list().await).unwrap(), serde_json::to_value(saved.values().collect::<Vec<_>>()).unwrap());
+            assert_eq!(std::fs::read(&catalog_path).unwrap(), catalog_bytes);
+            assert_eq!(final_snapshot["instances"].as_array().unwrap().iter().filter(|instance| instance["status"] == "stopped").count(), 1);
+            assert!(final_snapshot["inventory_errors"].as_array().unwrap().is_empty());
+            let profile_status = host.processes.lock().await.hardware_profile.as_ref().unwrap().status(None);
+            assert_eq!(profile_status.status, "idle");
+            assert!(profile_status.pid.is_none());
+            let overlaps = |left: &RouteTiming, right: &RouteTiming| left.start_ns < right.end_ns && right.start_ns < left.end_ns;
+            let pause = latencies["pause_one_ordered_100_job_journal"][0];
+            let read_timings: Vec<_> = latencies.iter().filter(|(label, _)| label.starts_with("snapshot-") || label.starts_with("downloads-") || label.starts_with("control_clients-"))
+                .flat_map(|(_, timings)| timings.iter()).collect();
+            let pause_overlap = read_timings.iter().any(|reading| overlaps(&pause, reading));
+            let scan_overlap = latencies["scan"].iter().any(|scan| read_timings.iter().any(|reading| overlaps(scan, reading)));
+            assert!(pause_overlap, "no observed read/control overlap with the real durable Pause; not a concurrent journal measurement");
+            assert!(scan_overlap, "no observed read/control overlap with a production Scan");
+            let summaries: BTreeMap<_, _> = latencies.into_iter().map(|(label, mut values)| {
+                values.sort_by_key(|value| value.end_ns - value.start_ns);
+                let count = values.len();
+                let elapsed = |index: usize| values[index].end_ns - values[index].start_ns;
+                let p95 = elapsed((count * 95).div_ceil(100).saturating_sub(1));
+                (label, if count == 1 { serde_json::json!({"completed":1,"duration_ns":elapsed(0),"intervals":values}) } else {
+                    serde_json::json!({"completed":count,"min_ns":elapsed(0),"median_ns":elapsed(count / 2),"sample_p95_ns":p95,"max_ns":elapsed(count - 1),
+                        "mixed_workload_share_per_second":count as f64 * 1_000_000_000.0 / elapsed_ns as f64,"intervals":values})
+                })
+            }).collect();
+            println!("CONCURRENT_HOST_RESOURCE_RESULT {}", serde_json::json!({
+                "scope":"native Linux test process; actual authenticated Host route, excludes socket/TLS, daemon maintenance and model/hardware admission; four public-process-owner synthetic nongpu children",
+                "workers":"production default","worker_count":workers,"catalog_profiles":174,"instances":4,"journal_entries":100,
+                "allocator_scope":"System with irreversible accounting bypass; one atomic dispatch branch per allocation, no counting spinlock",
+                "journal_writes_in_scope":1,"journal_bytes":std::fs::metadata(journal).unwrap().len(),"elapsed_ns":elapsed_ns,
+                "observed_pause_read_overlap":pause_overlap,"observed_scan_read_overlap":scan_overlap,"journal_reopen_exact":true,
+                "in_flight":{"peak":counters.peak.load(Ordering::SeqCst),"reads_started_during_scan":counters.reads_started_during_scan.load(Ordering::SeqCst),
+                    "reads_started_during_pause":counters.reads_started_during_pause.load(Ordering::SeqCst)},
+                "mixed_workload_completed":198,"mixed_workload_per_second":198.0 * 1_000_000_000.0 / elapsed_ns as f64,
+                "idle_scope":"two-second loaded Host fixture, no daemon periodic monitor","idle_elapsed_ns":idle_ns,
+                "idle_before":idle_before,"idle_after":idle_after,"active_before":active_before,"active_after":active_after,
+                "latencies":summaries,"counter_scope":"native process /proc; CPU ticks are raw; context switches retain per-thread IDs; unavailable counters are explicit",
+                "full_sha_scope":"prior accepted full-package SHA fixture reused; no new hash measurement",
+            }));
+        });
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_inference_body_one_mib_preserves_json_and_model() {
+        let (_dir, host, request) = fixture().await;
+        let id = host.launch(request).await.unwrap();
+        let port = host.processes.lock().await.instances().find(|instance| instance.instance_id == id).unwrap().launch.port;
+        let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let capture = received.clone();
+        let upstream = hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(hyper::service::make_service_fn(move |_| {
+            let capture = capture.clone();
+            async move { Ok::<_, std::convert::Infallible>(hyper::service::service_fn(move |req: Request<Body>| {
+                let capture = capture.clone();
+                async move {
+                    let body = match req.uri().path() {
+                        "/health" => "{}".to_owned(),
+                        "/v1/models" => serde_json::json!({"data":[{"id":"muse-glimmer-30b/nvfp4"}]}).to_string(),
+                        _ => {
+                            let content_type = req.headers().get("content-type").map(|value| value.to_str().unwrap().to_owned());
+                            let bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+                            let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                            capture.lock().unwrap().push((content_type, value));
+                            "{}".to_owned()
+                        }
+                    };
+                    Ok::<_, std::convert::Infallible>(Response::new(Body::from(body)))
+                }
+            })) }
+        }));
+        let server = tokio::spawn(upstream);
+        host.refresh_processes().await.unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let call = |suffix: &str, bytes: Vec<u8>| {
+            Request::post(format!("/host/v1/instances/{id}/inference/{suffix}"))
+                .header("authorization", format!("Bearer {token}"))
+                .header("content-type", "text/plain")
+                .body(Body::from(bytes))
+                .unwrap()
+        };
+        let mut original = serde_json::json!({"model":"caller-alias", "messages":[{"role":"user", "content":"Unicode 🐦\nquoted \"text\""}], "padding":""});
+        let prefix_bytes = serde_json::to_vec(&original).unwrap().len();
+        original["padding"] = "x".repeat(1024 * 1024 - prefix_bytes).into();
+        let bytes = serde_json::to_vec(&original).unwrap();
+        let input_bytes = bytes.len();
+        let request = call("v1/chat/completions", bytes);
+        let measurement = crate::resource_measurement::Measurement::start();
+        let response = host.clone().route(request).await.unwrap();
+        let status = response.status();
+        let response_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        measurement.finish("service_resource_inference_body_one_mib");
+        let benchmark = host
+            .clone()
+            .route(call(
+                "v1/ginfer/benchmark",
+                br#"{"model":"benchmark-owned"}"#.to_vec(),
+            ))
+            .await
+            .unwrap();
+        let invalid_object = host
+            .clone()
+            .route(call("v1/chat/completions", b"[]".to_vec()))
+            .await
+            .unwrap();
+        let invalid_json = host
+            .clone()
+            .route(call("v1/chat/completions", b"{broken".to_vec()))
+            .await
+            .unwrap();
+        let captured = received.lock().unwrap().clone();
+        host.processes.lock().await.shutdown().await.unwrap();
+        server.abort();
+        let _ = server.await;
+        original["model"] = "muse-glimmer-30b/nvfp4".into();
+        assert_eq!(input_bytes, 1024 * 1024);
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(response_bytes.as_ref(), b"{}");
+        assert_eq!(benchmark.status(), StatusCode::OK);
+        assert_eq!(invalid_object.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(invalid_json.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[0], (Some("application/json".to_owned()), original));
+        assert_eq!(captured[1], (Some("application/json".to_owned()), serde_json::json!({"model":"benchmark-owned"})));
+    }
+
+    #[tokio::test]
+    async fn service_body_cap_uses_actual_bytes_with_exact_and_unreliable_hints() {
+        let mut exact = Request::new(Body::from("12345678"));
+        assert_eq!(bounded_body(&mut exact, 8).await.unwrap(), b"12345678");
+        let mut over = Request::new(Body::from("123456789"));
+        assert_eq!(bounded_body(&mut over, 8).await.unwrap_err(), "request exceeds host body limit");
+        let chunks = futures_util::stream::iter([Ok::<_, std::convert::Infallible>("1234"), Ok("5678")]);
+        let mut unknown = Request::builder().header("content-length", u64::MAX.to_string()).body(Body::wrap_stream(chunks)).unwrap();
+        assert_eq!(bounded_body(&mut unknown, 8).await.unwrap(), b"12345678");
+        let chunks = futures_util::stream::iter([Ok::<_, std::convert::Infallible>("1234"), Ok("56789")]);
+        let mut misleading = Request::builder().header("content-length", "1").body(Body::wrap_stream(chunks)).unwrap();
+        assert_eq!(bounded_body(&mut misleading, 8).await.unwrap_err(), "request exceeds host body limit");
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_scan_deduplicates_managed_paths_and_refreshes_errors() {
+        use sha2::Digest;
+        use crate::engine_inventory::{resource_io, InventoryInspection};
+        fn write_member(path: &Path, tp: u32, complete: bool) -> u64 {
+            let mut objects = Vec::new();
+            for rank in 0..tp {
+                for suffix in ["profile_v2", "full_inverse_global_scales", "sliding_inverse_global_scales"] {
+                    if !complete && rank + 1 == tp && suffix == "sliding_inverse_global_scales" {
+                        continue;
+                    }
+                    objects.push(serde_json::json!({"kind":"tensor","rank":rank,"name":format!("text/kv_cache/nvfp4_g16/{suffix}")}));
+                }
+            }
+            let directory = serde_json::to_vec(&serde_json::json!({
+                "identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},
+                "tp_size":tp,"draft_tp":0,"objects":objects,
+            })).unwrap();
+            let mut bytes = b"NINFER\0\x03".to_vec();
+            bytes.extend((directory.len() as u64).to_le_bytes());
+            bytes.extend(&directory);
+            bytes.resize(4096, 0);
+            std::fs::write(path, bytes).unwrap();
+            16 + directory.len() as u64
+        }
+        fn io_delta(before: resource_io::Counts, after: resource_io::Counts) -> serde_json::Value {
+            serde_json::json!({"opens":after.opens-before.opens,"read_bytes":after.read_bytes-before.read_bytes,"read_calls":after.read_calls-before.read_calls})
+        }
+        fn cpu_ticks() -> Option<u64> {
+            let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
+            let fields: Vec<_> = stat[stat.rfind(')')? + 1..].split_whitespace().collect();
+            let user = fields.get(11)?.parse::<u64>().ok()?;
+            user.checked_add(fields.get(12)?.parse::<u64>().ok()?)
+        }
+        fn cpu_delta(before: Option<u64>, after: Option<u64>) -> Option<u64> {
+            after?.checked_sub(before?)
+        }
+        let (dir, host, _) = fixture().await;
+        let mut shared_header_bytes = 0;
+        let mut declarations = Vec::new();
+        let mut members = Vec::new();
+        for tp in [1, 2, 4] {
+            let name = format!("shared-tp{tp}.ginfer");
+            let path = dir.path().join("models").join(&name);
+            shared_header_bytes += write_member(&path, tp, true);
+            declarations.push(serde_json::json!({"tp":tp,"draft_tp":0,"path":name,"bytes":4096,"sha256":"a".repeat(64)}));
+            members.push(path);
+        }
+        let descriptor = serde_json::json!({
+            "schema":"ginfer-artifact-set-v1",
+            "identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4","family_id":"b".repeat(64)},
+            "canonical_reconstructed_target_sha256":"c".repeat(64),
+            "canonical_reconstructed_draft_sha256":null,"artifacts":declarations,
+        });
+        let sets: Vec<_> = ["shared-a.json", "shared-b.json"].into_iter().map(|name| {
+            let path = dir.path().join("models").join(name);
+            std::fs::write(&path, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+            path
+        }).collect();
+        let bad_set = dir.path().join("models/shared-bad.json");
+        let mut invalid_descriptor = descriptor.clone();
+        invalid_descriptor["artifacts"][2]["bytes"] = 4097.into();
+        std::fs::write(&bad_set, serde_json::to_vec(&invalid_descriptor).unwrap()).unwrap();
+        let original = std::fs::read(dir.path().join("models/model.ginfer")).unwrap();
+        let original_header_bytes = 16 + u64::from_le_bytes(original[8..16].try_into().unwrap());
+        let package = host.downloads.root().join("package");
+        std::fs::create_dir(&package).unwrap();
+        let payload = package.join("model.ginfer");
+        std::fs::copy(dir.path().join("models/model.ginfer"), &payload).unwrap();
+        let id = Uuid::new_v4();
+        let download = crate::model_downloads::Download {
+            id, release: crate::model_downloads::Release {
+                name: "Owned local fixture".into(), identity: host.inventory.read().await[0].metadata.identity.clone(),
+                url: "https://huggingface.co/SectileLabs/fixture/resolve/0000000000000000000000000000000000000000/model.ginfer".into(),
+                sha256: hex::encode(Sha256::digest(std::fs::read(&payload).unwrap())), bytes: 4096,
+                tp: 1, qualified_sm: vec!["12.0".into()], min_vram_mib_per_gpu: 32768,
+                capabilities: vec![], launch_profiles: vec![],
+            }, status: "installed".into(), received: 4096, bytes_per_second: 0,
+            error: None, path: Some(payload.clone()), storage_root: host.downloads.root(),
+        };
+        std::fs::write(
+            dir.path().join("state/model-downloads.json"),
+            serde_json::to_vec(&BTreeMap::from([(id, download)])).unwrap(),
+        )
+        .unwrap();
+        let executable = dir.path().join("engine");
+        drop(host);
+        let broken = dir.path().join("models/broken.ginfer");
+        std::fs::write(&broken, b"invalid fixture").unwrap();
+        let missing = dir.path().join("missing.ginfer");
+        let models_alias = dir.path().join("models/.");
+        let host = Host::open(
+            dir.path().join("state"),
+            "Ignored".into(),
+            executable,
+            vec![
+                dir.path().join("models"),
+                models_alias.clone(),
+                package,
+                payload.clone(),
+                missing.clone(),
+            ],
+            sets.iter().cloned().chain(std::iter::once(bad_set.clone())).collect(),
+            vec![],
+        )
+        .await
+        .unwrap();
+        host.data.lock().await.local_artifacts.push(payload.clone());
+        let ids: BTreeMap<_, _> = host
+            .inventory
+            .read()
+            .await
+            .iter()
+            .map(|model| ((model.path.clone(), model.metadata.tp_size, model.artifact_set), model.id))
+            .collect();
+        let before = resource_io::snapshot();
+        let cpu_before = cpu_ticks();
+        let measurement = crate::resource_measurement::Measurement::start();
+        let mut uncached = Vec::new();
+        uncached.extend(artifact_set_members(&sets[0]).unwrap());
+        for member in &members {
+            uncached.push((member.canonicalize().unwrap(), inspect_artifact(member).unwrap()));
+        }
+        measurement.finish("shared_headers_uncached_wrappers");
+        let uncached_cpu = cpu_delta(cpu_before, cpu_ticks());
+        let uncached_io = io_delta(before, resource_io::snapshot());
+        let before = resource_io::snapshot();
+        let cpu_before = cpu_ticks();
+        let measurement = crate::resource_measurement::Measurement::start();
+        let mut inspection = InventoryInspection::default();
+        let mut cached = Vec::new();
+        cached.extend(inspection.artifact_set_members(&sets[0]).unwrap());
+        for member in &members {
+            cached.push((member.canonicalize().unwrap(), inspection.inspect_artifact(member).unwrap()));
+        }
+        measurement.finish("shared_headers_one_inspection");
+        let cached_cpu = cpu_delta(cpu_before, cpu_ticks());
+        let cached_io = io_delta(before, resource_io::snapshot());
+        assert_eq!(uncached, cached);
+        assert!(cached.iter().all(|(_, metadata)| metadata.nvfp4_kv_available));
+        assert_eq!(uncached_io["opens"], 7);
+        assert_eq!(cached_io["opens"], 4);
+        assert_eq!(uncached_io["read_bytes"].as_u64().unwrap() - cached_io["read_bytes"].as_u64().unwrap(), shared_header_bytes);
+        assert_eq!(inspection.artifact_set_members(&sets[1]).unwrap(), cached[..3]);
+        assert!(inspection.artifact_set_members(&bad_set).unwrap_err().contains("disagrees with its declaration"));
+        drop(inspection);
+        drop(cached);
+        drop(uncached);
+        let expected_scan_bytes = shared_header_bytes + 2 * original_header_bytes + b"invalid fixture".len() as u64
+            + sets.iter().chain(std::iter::once(&bad_set)).map(|path| std::fs::metadata(path).unwrap().len()).sum::<u64>();
+        println!("RESOURCE_SCAN_PHASE_BEGIN managed_packages=1 visible_models=11 shared_members=3 sets=2 duplicate_sources=root/job/local/configured/set");
+        let before = resource_io::snapshot();
+        let cpu_before = cpu_ticks();
+        let measurement = crate::resource_measurement::Measurement::start();
+        host.scan().await.unwrap();
+        measurement.finish("service_resource_scan_one_pass");
+        let scan_cpu = cpu_delta(cpu_before, cpu_ticks());
+        let scan_io = io_delta(before, resource_io::snapshot());
+        assert_eq!(scan_io["opens"], 9);
+        assert_eq!(scan_io["read_bytes"], expected_scan_bytes);
+        println!("SHARED_HEADER_RESULT {}", serde_json::json!({"uncached":uncached_io,"inspection":cached_io,"host_scan":scan_io,"process_cpu_ticks":{"uncached":uncached_cpu,"inspection":cached_cpu,"host_scan":scan_cpu},"scope":"one fresh metadata pass; synthetic TP1/2/4, coarse process CPU ticks, no full hash or Engine"}));
+        let first = host.snapshot().await;
+        std::fs::OpenOptions::new().write(true).open(&payload).unwrap().set_len(8192).unwrap();
+        std::fs::remove_file(&broken).unwrap();
+        write_member(&members[2], 4, false);
+        host.scan().await.unwrap();
+        let second = host.snapshot().await;
+        let refreshed: BTreeMap<_, _> = host.inventory.read().await.iter().map(|model| ((model.path.clone(), model.metadata.tp_size, model.artifact_set), model.id)).collect();
+        assert_eq!(ids, refreshed);
+        assert_eq!(first["models"].as_array().unwrap().iter().map(|model| &model["id"]).collect::<Vec<_>>(), second["models"].as_array().unwrap().iter().map(|model| &model["id"]).collect::<Vec<_>>());
+        assert_eq!(first["models"].as_array().unwrap().len(), 11);
+        let errors = first["inventory_errors"].as_array().unwrap();
+        assert_eq!(errors.len(), 4);
+        assert!(errors.iter().any(|error| error["path"] == broken.to_string_lossy().as_ref()));
+        assert!(errors.iter().any(|error| error["path"] == models_alias.join("broken.ginfer").to_string_lossy().as_ref()));
+        assert!(errors.iter().any(|error| error["path"] == bad_set.to_string_lossy().as_ref()));
+        assert_eq!(second["inventory_errors"].as_array().unwrap().len(), 2);
+        assert!(second["inventory_errors"].as_array().unwrap().iter().any(|error| error["path"] == missing.to_string_lossy().as_ref()));
+        assert_eq!(second["models"].as_array().unwrap().iter().find(|model| model["path"] == payload.to_string_lossy().as_ref()).unwrap()["metadata"]["size_bytes"], 8192);
+        let inventory = host.inventory.read().await;
+        assert_eq!(inventory.iter().filter(|model| model.metadata.tp_size == 4).count(), 3);
+        assert!(inventory.iter().filter(|model| model.metadata.tp_size == 4).all(|model| !model.metadata.nvfp4_kv_available));
+        drop(inventory);
+        write_member(&members[2], 4, true);
+        std::fs::write(&bad_set, serde_json::to_vec(&descriptor).unwrap()).unwrap();
+        host.scan().await.unwrap();
+        let recovered = host.snapshot().await;
+        assert_eq!(recovered["inventory_errors"].as_array().unwrap().len(), 1);
+        assert_eq!(recovered["inventory_errors"][0]["path"], missing.to_string_lossy().as_ref());
+        assert_eq!(recovered["models"].as_array().unwrap().len(), 14);
+        assert!(host.inventory.read().await.iter().filter(|model| model.metadata.tp_size == 4).all(|model| model.metadata.nvfp4_kv_available));
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_snapshot_matches_catalog_and_reserved_instances() {
+        let (dir, host, request) = fixture().await;
+        std::fs::copy(
+            dir.path().join("models/model.ginfer"),
+            dir.path().join("models/second.ginfer"),
+        )
+        .unwrap();
+        host.scan().await.unwrap();
+        let models = host.inventory.read().await.clone();
+        let mut catalog = Vec::new();
+        for index in 0..174 {
+            let mut profile: crate::launch_profiles::LaunchProfile = serde_json::from_value(serde_json::json!({
+                "id":format!("fixture-{index}"), "name":"Synthetic resource fixture", "platform":std::env::consts::OS,
+                "identity":models[0].metadata.identity, "artifact_sha256":"a".repeat(64), "artifact_bytes":4096,
+                "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU", "compute_capability":"12.0", "vram_tier_gib":32,
+                "min_memory_mib_per_gpu":32768, "max_context":8192, "concurrency":1, "options":{},
+                "qualification":{"tier":"full-context-tested", "evidence":"synthetic fixture only", "engine_revision":"fixture", "free_bytes_per_gpu":1_u64 << 30, "full_context_requests":1}
+            })).unwrap();
+            match index { 0 => profile.tp = 2, 1 => profile.artifact_bytes = 8192, 2 => profile.identity.weights_id = "groupwise-int".into(), _ => {} }
+            catalog.push(profile);
+        }
+        *host.launch_profiles.write().await = catalog.clone();
+        let mut ids = Vec::new();
+        for index in 0..4 {
+            let mut request = request.clone();
+            request.gpu_uuids = vec![format!("GPU-fixture-{index}")];
+            ids.push(host.launch(request).await.unwrap());
+        }
+        let offline_id = Uuid::new_v4();
+        let mut offline = request.clone();
+        offline.instance_id = Some(offline_id);
+        offline.gpu_uuids = vec!["GPU-offline".into()];
+        host.data.lock().await.profiles.insert(offline_id, offline.clone());
+        let reserved = host.processes.lock().await.reserved_gpus(None);
+        let mut expected = Vec::new();
+        for profile in &catalog {
+            for model in models.iter().filter(|model| profile.matches_model(model)) {
+                expected.push(serde_json::json!({
+                    "profile":profile, "model_id":model.id, "gpu_groups":profile.gpu_groups(&host.gpus, &reserved),
+                    "compatible_gpu_groups":profile.gpu_groups(&host.gpus, &Default::default()),
+                }));
+            }
+        }
+        let measurement = crate::resource_measurement::Measurement::start();
+        let snapshot = host.snapshot().await;
+        measurement.finish("service_resource_snapshot_174_profiles_4_instances");
+        host.processes.lock().await.shutdown().await.unwrap();
+        assert_eq!(snapshot["launch_profiles"], serde_json::json!(expected));
+        let instances = snapshot["instances"].as_array().unwrap();
+        assert_eq!(instances.len(), 5);
+        let stopped = instances.iter().find(|instance| instance["instance_id"] == offline_id.to_string()).unwrap();
+        assert_eq!(stopped["status"], "stopped");
+        assert!(stopped["session_id"].is_null());
+        assert_eq!(stopped["profile"], serde_json::to_value(offline).unwrap());
+        for id in ids {
+            let instance = instances.iter().find(|instance| instance["instance_id"] == id.to_string()).unwrap();
+            assert_eq!(instance["status"], "starting");
+            assert!(instance["session_id"].is_string());
+            assert_eq!(instance["profile"]["model_id"], request.model_id.to_string());
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_stop_waits_for_final_stream_and_force_keeps_leases() {
+        let (_dir, host, request) = fixture().await;
+        let id = host.launch(request.clone()).await.unwrap();
+        let port = host.processes.lock().await.instances().find(|i| i.instance_id == id).unwrap().launch.port;
+        let senders = Arc::new(std::sync::Mutex::new(Vec::<hyper::body::Sender>::new()));
+        let serve = |port| {
+        let capture = senders.clone();
+        let upstream = hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(hyper::service::make_service_fn(move |_| {
+            let capture = capture.clone();
+            async move { Ok::<_, std::convert::Infallible>(hyper::service::service_fn(move |req: Request<Body>| {
+                let capture = capture.clone();
+                async move {
+                    let body = match req.uri().path() {
+                        "/health" => Body::from("{}"),
+                        "/v1/models" => Body::from(serde_json::json!({"data":[{"id":"muse-glimmer-30b/nvfp4"}]}).to_string()),
+                        _ => { let (sender, body) = Body::channel(); capture.lock().unwrap().push(sender); body }
+                    };
+                    Ok::<_, std::convert::Infallible>(Response::new(body))
+                }
+            })) }
+        }));
+            tokio::spawn(upstream)
+        };
+        let server = serve(port);
+        host.refresh_processes().await.unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let inference = || {
+            Request::post(format!(
+                "/host/v1/instances/{id}/inference/v1/chat/completions"
+            ))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap()
+        };
+        let first = host.clone().route(inference()).await.unwrap();
+        let second = host.clone().route(inference()).await.unwrap();
+        let stop = Request::post(format!("/host/v1/instances/{id}/stop"))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}"))
+            .unwrap();
+        let mut stopping = Box::pin(host.clone().route(stop));
+        let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let capture = polls.clone();
+        let measurement = crate::resource_measurement::Measurement::start();
+        let mut stopping = tokio::spawn(futures_util::future::poll_fn(move |cx| {
+            capture.fetch_add(1, Ordering::SeqCst);
+            stopping.as_mut().poll(cx)
+        }));
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        let draining = host.clone().route(inference()).await.unwrap();
+        drop(first);
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        let waiting_for_second = !stopping.is_finished();
+        drop(second);
+        let released = tokio::time::Instant::now();
+        let outcome = tokio::time::timeout(Duration::from_secs(3), &mut stopping).await;
+        if outcome.is_err() {
+            stopping.abort();
+            let _ = stopping.await;
+        }
+        let release_ns = released.elapsed().as_nanos();
+        measurement.finish("service_resource_stop_two_withheld_streams");
+        println!("RESOURCE_DRAIN polls={} withheld_ms=240 final_release_ns={release_ns}", polls.load(Ordering::SeqCst));
+        let after = host.snapshot().await;
+        server.abort();
+        let _ = server.await;
+        let start = Request::post(format!("/host/v1/instances/{id}/start"))
+            .header("authorization", format!("Bearer {token}")).body(Body::from("{}")).unwrap();
+        let started = host.clone().route(start).await.unwrap();
+        let port = host.processes.lock().await.instances().find(|i| i.instance_id == id).unwrap().launch.port;
+        let server = serve(port);
+        host.refresh_processes().await.unwrap();
+        let first = host.clone().route(inference()).await.unwrap();
+        let second = host.clone().route(inference()).await.unwrap();
+        let force = Request::post(format!("/host/v1/instances/{id}/stop"))
+            .header("authorization", format!("Bearer {token}")).body(Body::from("{\"force\":true}")).unwrap();
+        let forced = tokio::time::timeout(Duration::from_secs(3), host.clone().route(force)).await;
+        let after_force = host.snapshot().await;
+        drop(first);
+        drop(second);
+        host.processes.lock().await.shutdown().await.unwrap();
+        server.abort();
+        let _ = server.await;
+        assert_eq!(draining.status(), StatusCode::BAD_REQUEST);
+        assert!(waiting_for_second);
+        assert_eq!(outcome.unwrap().unwrap().unwrap().status(), StatusCode::OK);
+        assert_eq!(after["instances"][0]["status"], "stopped");
+        assert_eq!(after["instances"][0]["active_requests"], 0);
+        assert_eq!(started.status(), StatusCode::OK);
+        assert_eq!(forced.unwrap().unwrap().status(), StatusCode::OK);
+        assert_eq!(after_force["instances"][0]["status"], "stopped");
+        assert_eq!(after_force["instances"][0]["active_requests"], 2);
+        assert_ne!(after_force["instances"][0]["session_id"], after["instances"][0]["session_id"]);
     }
 }
 
@@ -2166,27 +3196,59 @@ mod lifecycle_tests {
             }
             assert_eq!(observed, expected.into_iter().collect());
         }
-        tokio::time::timeout(Duration::from_millis(500), wait_for_stage(&mut arrivals, "health", [id, second_id]))
-            .await.unwrap();
-        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot()).await.unwrap();
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            wait_for_stage(&mut arrivals, "health", [id, second_id]),
+        )
+        .await
+        .unwrap();
+        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot())
+            .await
+            .unwrap();
         assert_eq!(snapshot["instances"][0]["status"], "starting");
         assert_eq!(snapshot["instances"][1]["status"], "starting");
         assert!(!refresh.is_finished());
         let stop = Request::post(format!("/host/v1/instances/{id}/stop"))
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::from(serde_json::json!({"expected_session_id":session}).to_string())).unwrap();
-        assert!(tokio::time::timeout(Duration::from_millis(500), host.clone().route(stop))
-            .await.unwrap().unwrap().status().is_success());
-        for gate in health_gates { gate.add_permits(1); }
-        tokio::time::timeout(Duration::from_millis(500), wait_for_stage(&mut arrivals, "models", [id, second_id]))
-            .await.unwrap();
+            .body(Body::from(
+                serde_json::json!({"expected_session_id":session}).to_string(),
+            ))
+            .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), host.clone().route(stop))
+                .await
+                .unwrap()
+                .unwrap()
+                .status()
+                .is_success()
+        );
+        for gate in health_gates {
+            gate.add_permits(1);
+        }
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            wait_for_stage(&mut arrivals, "models", [id, second_id]),
+        )
+        .await
+        .unwrap();
         let reload = Request::post(format!("/host/v1/instances/{second_id}/reload"))
             .header("authorization", format!("Bearer {token}"))
-            .body(Body::from(serde_json::json!({"expected_session_id":second_session}).to_string())).unwrap();
-        assert!(tokio::time::timeout(Duration::from_millis(500), host.clone().route(reload))
-            .await.unwrap().unwrap().status().is_success());
+            .body(Body::from(
+                serde_json::json!({"expected_session_id":second_session}).to_string(),
+            ))
+            .unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), host.clone().route(reload))
+                .await
+                .unwrap()
+                .unwrap()
+                .status()
+                .is_success()
+        );
         assert!(!refresh.is_finished());
-        for gate in model_gates { gate.add_permits(1); }
+        for gate in model_gates {
+            gate.add_permits(1);
+        }
         refresh.await.unwrap().unwrap();
         let after_probes = host.snapshot().await;
         assert_eq!(after_probes["instances"][0]["status"], "stopped");
@@ -2491,7 +3553,10 @@ mod lifecycle_tests {
 }
 async fn bounded_body(req: &mut Request<Body>, limit: usize) -> Result<Vec<u8>, String> {
     use hyper::body::HttpBody;
-    let mut bytes = Vec::new();
+    let capacity = req.body().size_hint().exact()
+        .filter(|size| *size <= limit as u64)
+        .map_or(0, |size| size as usize);
+    let mut bytes = Vec::with_capacity(capacity);
     while let Some(chunk) = req.body_mut().data().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
         if bytes.len() + chunk.len() > limit {

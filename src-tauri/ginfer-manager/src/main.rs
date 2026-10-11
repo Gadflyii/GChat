@@ -3,13 +3,14 @@
 mod vault;
 
 use ginfer_host::{
-    client::{Client, CredentialStore, PairRequest},
+    client::{Client, ClientError, CredentialStore, PairRequest},
     fleet::{AuthorityLocator, FleetUpdate},
     fleet_client::FleetClient,
 };
 use reqwest::Method;
-use serde::Deserialize;
-use serde_json::{json, Value};
+use serde::{ser::SerializeMap, Deserialize, Serialize, Serializer};
+use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -25,10 +26,140 @@ use uuid::Uuid;
 struct ManagerState {
     client: Arc<Client>,
     fleet: FleetClient,
-    view: Mutex<Value>,
+    view: Mutex<ManagerView>,
     initialized: Mutex<bool>,
     refresh: Mutex<()>,
     tray_ready: AtomicBool,
+}
+
+#[derive(Clone)]
+struct ManagerView {
+    snapshot: Arc<Value>,
+    refresh_error: Option<String>,
+}
+
+impl ManagerView {
+    fn new(snapshot: Value) -> Self {
+        Self {
+            snapshot: Arc::new(snapshot),
+            refresh_error: None,
+        }
+    }
+}
+
+impl std::ops::Deref for ManagerView {
+    type Target = Value;
+
+    fn deref(&self) -> &Self::Target {
+        &self.snapshot
+    }
+}
+
+impl Serialize for ManagerView {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let Some(error) = &self.refresh_error else {
+            return self.snapshot.serialize(serializer);
+        };
+        let object = self.snapshot.as_object().ok_or_else(|| {
+            <S::Error as serde::ser::Error>::custom("Manager view must be an object")
+        })?;
+        let mut map = serializer.serialize_map(Some(
+            object.len() + usize::from(!object.contains_key("refresh_error")),
+        ))?;
+        // Use the same key ordering as a Value object without copying its values.
+        let mut keys = Map::new();
+        for key in object.keys() {
+            keys.insert(key.clone(), Value::Null);
+        }
+        keys.insert("refresh_error".into(), Value::Null);
+        for key in keys.keys() {
+            if key == "refresh_error" {
+                map.serialize_entry(key, error)?;
+            } else {
+                map.serialize_entry(key, &object[key])?;
+            }
+        }
+        map.end()
+    }
+}
+
+#[derive(Serialize)]
+struct ManagerResponse {
+    result: Value,
+    view: ManagerView,
+}
+
+fn project_hosts(
+    registrations: Vec<Value>,
+    snapshots: Vec<Result<Value, ClientError>>,
+    previous: &Value,
+) -> Vec<Value> {
+    let mut previous_snapshots = None;
+    let mut hosts = Vec::with_capacity(registrations.len());
+    for (mut host, snapshot) in registrations.into_iter().zip(snapshots) {
+        match snapshot {
+            Ok(snapshot) => {
+                host["online"] = true.into();
+                host["offline"] = false.into();
+                host["snapshot"] = snapshot;
+                host["error"] = Value::Null;
+            }
+            Err(error) => {
+                host["online"] = false.into();
+                host["offline"] = error.is_offline().into();
+                host["error"] = error.to_string().into();
+                let previous_snapshots = previous_snapshots.get_or_insert_with(|| {
+                    let previous_hosts = previous["hosts"].as_array();
+                    let mut index = HashMap::with_capacity(previous_hosts.map_or(0, Vec::len));
+                    for old in previous_hosts.into_iter().flatten() {
+                        if let Some(id) = old["host_id"].as_str() {
+                            // Preserve the first matching previous registration.
+                            index.entry(id).or_insert(&old["snapshot"]);
+                        }
+                    }
+                    index
+                });
+                host["snapshot"] = host["host_id"]
+                    .as_str()
+                    .and_then(|id| previous_snapshots.get(id))
+                    .map(|snapshot| Value::clone(snapshot))
+                    .unwrap_or(Value::Null);
+            }
+        }
+        hosts.push(host);
+    }
+    hosts
+}
+
+fn local_share_request(view: &Value) -> Result<ManagerRequest, String> {
+    let local = view["hosts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|host| host["local"] == true && host["online"] == true)
+        .ok_or("This computer is offline")?;
+    let host_id = serde_json::from_value(local["host_id"].clone())
+        .map_err(|error| error.to_string())?;
+    Ok(ManagerRequest::Host {
+        host_id,
+        operation: HostOperation::Share,
+        args: json!({"enabled":local["snapshot"]["lan_sharing"]["enabled"] != true}),
+    })
+}
+
+fn refreshed_view(
+    hosts: Vec<Value>,
+    mut listed: Value,
+    fleet: Value,
+    client_name: Option<String>,
+) -> ManagerView {
+    let mut view = Map::new();
+    view.insert("hosts".into(), Value::Array(hosts));
+    view.insert("discovered".into(), listed["discovered"].take());
+    view.insert("client_name".into(), client_name.map(Value::String).unwrap_or(Value::Null));
+    view.insert("local_error".into(), listed["local_error"].take());
+    view.insert("fleet".into(), fleet);
+    ManagerView::new(Value::Object(view))
 }
 
 #[derive(Deserialize)]
@@ -66,6 +197,7 @@ enum ManagerRequest {
 enum HostOperation {
     Snapshot,
     Scan,
+    HardwareProfile,
     Clients,
     Catalog,
     Storage,
@@ -92,49 +224,31 @@ impl ManagerState {
         Ok(())
     }
 
-    async fn refresh(&self) -> Result<Value, String> {
+    async fn refresh(&self) -> Result<ManagerView, String> {
         self.initialize().await?;
         let _refresh = self.refresh.lock().await;
-        let listed = self.client.list().await?;
+        let mut listed = self.client.list().await?;
         let previous = self.view.lock().await.clone();
-        let registrations: Vec<_> = listed["registered"].as_array().into_iter().flatten().collect();
+        let registrations = listed["registered"]
+            .as_array_mut()
+            .map(std::mem::take)
+            .unwrap_or_default();
         let ids = registrations.iter().map(|host| {
             serde_json::from_value(host["host_id"].clone()).map_err(|error| error.to_string())
         }).collect::<Result<Vec<Uuid>, _>>()?;
         let snapshots = self.client.snapshots(&ids).await;
-        let mut hosts = Vec::new();
-        for (registration, snapshot) in registrations.into_iter().zip(snapshots) {
-            let mut host = registration.clone();
-            match snapshot {
-                Ok(snapshot) => {
-                    host["online"] = true.into();
-                    host["offline"] = false.into();
-                    host["snapshot"] = snapshot;
-                    host["error"] = Value::Null;
-                }
-                Err(error) => {
-                    host["online"] = false.into();
-                    host["offline"] = error.is_offline().into();
-                    host["error"] = error.to_string().into();
-                    host["snapshot"] = previous["hosts"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .find(|old| old["host_id"] == host["host_id"])
-                        .map(|old| old["snapshot"].clone())
-                        .unwrap_or(Value::Null);
-                }
-            }
-            hosts.push(host);
-        }
+        let hosts = project_hosts(registrations, snapshots, &previous.snapshot);
         let fleet = match self.fleet.read().await {
             Ok(report) => serde_json::to_value(report).map_err(|error| error.to_string())?,
-            Err(error) => json!({"connected":false,"snapshot":previous["fleet"]["snapshot"],
-                "authority":previous["fleet"]["authority"],"error":error}),
+            Err(error) => json!({"connected":false,"snapshot":previous.snapshot["fleet"]["snapshot"],
+                "authority":previous.snapshot["fleet"]["authority"],"error":error}),
         };
-        let view = json!({"hosts":hosts,"discovered":listed["discovered"],
-            "client_name":ginfer_host::local_host::computer_name().ok(),
-            "local_error":listed["local_error"],"fleet":fleet});
+        let view = refreshed_view(
+            hosts,
+            listed,
+            fleet,
+            ginfer_host::local_host::computer_name().ok(),
+        );
         *self.view.lock().await = view.clone();
         Ok(view)
     }
@@ -184,6 +298,13 @@ impl ManagerState {
                 let (method, path) = match operation {
                     HostOperation::Snapshot => {
                         return self.client.snapshot(host_id).await.map_err(String::from)
+                    }
+                    HostOperation::HardwareProfile => {
+                        let request: ginfer_host::hardware_profile::HardwareProfileRequest =
+                            serde_json::from_value(args).map_err(|error| error.to_string())?;
+                        let status = self.client.hardware_profile(host_id, request)
+                            .await.map_err(String::from)?;
+                        return serde_json::to_value(status).map_err(|error| error.to_string());
                     }
                     HostOperation::Scan => (Method::POST, "/host/v1/scan".into()),
                     HostOperation::Clients => (Method::GET, "/host/v1/clients".into()),
@@ -240,6 +361,16 @@ impl ManagerState {
     }
 }
 
+#[cfg(test)]
+#[path = "../../ginfer-host/tests/common/resource_measurement.rs"]
+mod resource_measurement;
+
+#[cfg(test)]
+mod native_tests;
+
+#[cfg(test)]
+mod native_measurement;
+
 fn show_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -248,10 +379,10 @@ fn show_window(app: &tauri::AppHandle) {
     }
 }
 
-async fn publish(app: &tauri::AppHandle) -> Result<Value, String> {
+async fn publish(app: &tauri::AppHandle) -> Result<ManagerView, String> {
     let view = app.state::<ManagerState>().refresh().await?;
     if let Some(item) = app.try_state::<CheckMenuItem<tauri::Wry>>() {
-        let local = view["hosts"]
+        let local = view.snapshot["hosts"]
             .as_array()
             .into_iter()
             .flatten()
@@ -268,23 +399,23 @@ async fn publish(app: &tauri::AppHandle) -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn manager_snapshot(app: tauri::AppHandle) -> Result<Value, String> {
+async fn manager_snapshot(app: tauri::AppHandle) -> Result<ManagerView, String> {
     publish(&app).await
 }
 
 #[tauri::command]
-async fn manager_request(app: tauri::AppHandle, request: ManagerRequest) -> Result<Value, String> {
+async fn manager_request(app: tauri::AppHandle, request: ManagerRequest) -> Result<ManagerResponse, String> {
     let result = app.state::<ManagerState>().execute(request).await?;
     // Keep tray state and visible controls on the same host-owned account.
     let view = match publish(&app).await {
         Ok(view) => view,
         Err(error) => {
             let mut view = app.state::<ManagerState>().view.lock().await.clone();
-            view["refresh_error"] = error.into();
+            view.refresh_error = Some(error);
             view
         }
     };
-    Ok(json!({"result":result,"view":view}))
+    Ok(ManagerResponse { result, view })
 }
 
 fn main() {
@@ -294,7 +425,7 @@ fn main() {
     let state = ManagerState {
         fleet: FleetClient::new(client.clone()),
         client,
-        view: Mutex::new(json!({"hosts":[],"discovered":[],"fleet":null})),
+        view: Mutex::new(ManagerView::new(json!({"hosts":[],"discovered":[],"fleet":null}))),
         initialized: Mutex::new(false),
         refresh: Mutex::new(()),
         tray_ready: AtomicBool::new(false),
@@ -323,13 +454,11 @@ fn main() {
                                 let result = async {
                                     if share {
                                         let state = app.state::<ManagerState>();
-                                        let view = state.view.lock().await.clone();
-                                        let local = view["hosts"].as_array().into_iter().flatten()
-                                            .find(|host| host["local"] == true && host["online"] == true)
-                                            .ok_or("This computer is offline")?;
-                                        let id = serde_json::from_value(local["host_id"].clone()).map_err(|error| error.to_string())?;
-                                        state.execute(ManagerRequest::Host { host_id:id, operation:HostOperation::Share,
-                                            args:json!({"enabled":local["snapshot"]["lan_sharing"]["enabled"] != true}) }).await?;
+                                        let request = {
+                                            let view = state.view.lock().await;
+                                            local_share_request(&view.snapshot)?
+                                        };
+                                        state.execute(request).await?;
                                     }
                                     publish(&app).await
                                 }.await;
@@ -355,7 +484,7 @@ fn main() {
                         Ok(view) => {
                             #[cfg(windows)]
                             if initial && !start_window && handle.state::<ManagerState>().tray_ready.load(Ordering::SeqCst)
-                                && view["hosts"].as_array().is_some_and(|hosts| !hosts.is_empty()) {
+                                && view.snapshot["hosts"].as_array().is_some_and(|hosts| !hosts.is_empty()) {
                                 if let Some(window) = handle.get_webview_window("main") { let _ = window.hide(); }
                             }
                             let _ = (&view, start_window, initial);
