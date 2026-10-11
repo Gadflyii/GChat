@@ -3,7 +3,7 @@
 mod vault;
 
 use ginfer_host::{
-    client::{Client, CredentialStore, PairRequest},
+    client::{Client, ClientError, CredentialStore, PairRequest},
     fleet::{AuthorityLocator, FleetUpdate},
     fleet_client::FleetClient,
 };
@@ -82,6 +82,50 @@ enum HostOperation {
     Revoke,
 }
 
+fn project_hosts(
+    registrations: Vec<Value>,
+    snapshots: Vec<Result<Value, ClientError>>,
+    previous: &Value,
+) -> Vec<Value> {
+    let registrations: Vec<_> = Some(&registrations).into_iter().flatten().collect();
+    let mut hosts = Vec::new();
+    for (registration, snapshot) in registrations.into_iter().zip(snapshots) {
+        let mut host = registration.clone();
+        match snapshot {
+            Ok(snapshot) => {
+                host["online"] = true.into();
+                host["offline"] = false.into();
+                host["snapshot"] = snapshot;
+                host["error"] = Value::Null;
+            }
+            Err(error) => {
+                host["online"] = false.into();
+                host["offline"] = error.is_offline().into();
+                host["error"] = error.to_string().into();
+                host["snapshot"] = previous["hosts"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|old| old["host_id"] == host["host_id"])
+                    .map(|old| old["snapshot"].clone())
+                    .unwrap_or(Value::Null);
+            }
+        }
+        hosts.push(host);
+    }
+    hosts
+}
+
+fn refreshed_view(
+    hosts: Vec<Value>,
+    listed: Value,
+    fleet: Value,
+    client_name: Option<String>,
+) -> Value {
+    json!({"hosts":hosts,"discovered":listed["discovered"],
+        "client_name":client_name,"local_error":listed["local_error"],"fleet":fleet})
+}
+
 impl ManagerState {
     async fn initialize(&self) -> Result<(), String> {
         let mut initialized = self.initialized.lock().await;
@@ -95,46 +139,20 @@ impl ManagerState {
     async fn refresh(&self) -> Result<Value, String> {
         self.initialize().await?;
         let _refresh = self.refresh.lock().await;
-        let listed = self.client.list().await?;
+        let mut listed = self.client.list().await?;
         let previous = self.view.lock().await.clone();
-        let registrations: Vec<_> = listed["registered"].as_array().into_iter().flatten().collect();
+        let registrations = listed["registered"].as_array_mut().map(std::mem::take).unwrap_or_default();
         let ids = registrations.iter().map(|host| {
             serde_json::from_value(host["host_id"].clone()).map_err(|error| error.to_string())
         }).collect::<Result<Vec<Uuid>, _>>()?;
         let snapshots = self.client.snapshots(&ids).await;
-        let mut hosts = Vec::new();
-        for (registration, snapshot) in registrations.into_iter().zip(snapshots) {
-            let mut host = registration.clone();
-            match snapshot {
-                Ok(snapshot) => {
-                    host["online"] = true.into();
-                    host["offline"] = false.into();
-                    host["snapshot"] = snapshot;
-                    host["error"] = Value::Null;
-                }
-                Err(error) => {
-                    host["online"] = false.into();
-                    host["offline"] = error.is_offline().into();
-                    host["error"] = error.to_string().into();
-                    host["snapshot"] = previous["hosts"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .find(|old| old["host_id"] == host["host_id"])
-                        .map(|old| old["snapshot"].clone())
-                        .unwrap_or(Value::Null);
-                }
-            }
-            hosts.push(host);
-        }
+        let hosts = project_hosts(registrations, snapshots, &previous);
         let fleet = match self.fleet.read().await {
             Ok(report) => serde_json::to_value(report).map_err(|error| error.to_string())?,
             Err(error) => json!({"connected":false,"snapshot":previous["fleet"]["snapshot"],
                 "authority":previous["fleet"]["authority"],"error":error}),
         };
-        let view = json!({"hosts":hosts,"discovered":listed["discovered"],
-            "client_name":ginfer_host::local_host::computer_name().ok(),
-            "local_error":listed["local_error"],"fleet":fleet});
+        let view = refreshed_view(hosts, listed, fleet, ginfer_host::local_host::computer_name().ok());
         *self.view.lock().await = view.clone();
         Ok(view)
     }
@@ -381,3 +399,10 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("GInfer Server Manager desktop runtime");
 }
+
+#[cfg(test)]
+#[path = "../../ginfer-host/tests/common/resource_measurement.rs"]
+mod resource_measurement;
+
+#[cfg(test)]
+mod native_measurement;

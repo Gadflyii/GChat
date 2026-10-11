@@ -614,7 +614,7 @@ pub async fn available_bytes(path: PathBuf) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn fixture() -> (Release, Vec<u8>) {
+    pub(super) fn fixture() -> (Release, Vec<u8>) {
         let identity = ArtifactIdentity {
             model_id: "muse-glimmer-30b".into(),
             weights_id: "nvfp4".into(),
@@ -665,7 +665,7 @@ mod tests {
         assert!(release.validate().is_err());
     }
 
-    async fn insert(manager: &ModelDownloads, release: Release) -> Uuid {
+    pub(super) async fn insert(manager: &ModelDownloads, release: Release) -> Uuid {
         let id = Uuid::new_v4();
         let mut jobs = manager.jobs.lock().await;
         jobs.insert(
@@ -1668,3 +1668,7 @@ mod tests {
             });
     }
 }
+
+#[cfg(test)]
+#[path = "model_downloads_resource_tests.rs"]
+mod resource_tests;

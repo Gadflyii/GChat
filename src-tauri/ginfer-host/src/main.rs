@@ -201,10 +201,7 @@ async fn run(
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tick.tick().await;
-            if let Err(e) = monitor_host.refresh_processes().await {
-                eprintln!("Engine monitoring: {e}");
-            }
-            monitor_host.revision.fetch_add(1, Ordering::SeqCst);
+            let _ = refresh_nonempty_processes(&monitor_host).await;
         }
     });
     let scan_host = host.clone();
@@ -251,6 +248,14 @@ async fn run(
     host.processes.lock().await.shutdown().await?;
     outcome
 }
+async fn refresh_nonempty_processes(host: &Host) -> Result<bool, String> {
+    if let Err(e) = host.refresh_processes().await {
+        eprintln!("Engine monitoring: {e}");
+    }
+    host.revision.fetch_add(1, Ordering::SeqCst);
+    Ok(true)
+}
+
 async fn shutdown_signal() {
     #[cfg(unix)]
     {
@@ -279,5 +284,18 @@ mod tests {
         assert_eq!(super::gpu_display_alias("0x20C210DE"), Some("NVIDIA CMP 170HX"));
         assert_eq!(super::gpu_display_alias("0x220410DE"), None);
         assert_eq!(super::gpu_display_alias("N/A"), None);
+    }
+    #[tokio::test]
+    async fn empty_host_monitor_resource_pass() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = ginfer_host::service::Host::open(directory.path().into(), "Empty monitor".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let initial = host.revision.load(std::sync::atomic::Ordering::SeqCst);
+        let start = std::time::Instant::now();
+        let refreshed = super::refresh_nonempty_processes(&host).await.unwrap();
+        let elapsed = start.elapsed();
+        let revision_changes = host.revision.load(std::sync::atomic::Ordering::SeqCst) - initial;
+        assert!(host.snapshot().await["instances"].as_array().unwrap().is_empty());
+        eprintln!("RESOURCE_EMPTY_MONITOR elapsed={elapsed:?} refreshed={refreshed} revision_changes={revision_changes}");
     }
 }

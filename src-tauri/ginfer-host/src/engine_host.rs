@@ -596,6 +596,93 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
+    fn fixture_launch(artifact: &std::path::Path, instance_id: Uuid) -> EngineLaunch {
+        EngineLaunch {
+            instance_id, artifact: artifact.to_owned(),
+            artifact_dependencies: vec![artifact.to_owned()], artifact_set: false,
+            model_id: "fixture".into(), gpu_uuids: vec!["GPU-fixture".into()],
+            tp: 1, port: 40121, max_context: 4096, concurrency: 1,
+            options: LaunchOptions::default(),
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "one noisy-child resource measurement"]
+    async fn request_resource_measurement_noisy_child_tail() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("engine");
+        std::fs::write(&executable, "#!/bin/sh\ncat \"$1\"\nexit 7\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        let mut payload: Vec<u8> = (0..65_536).map(|index| b'a' + (index % 26) as u8).collect();
+        payload[65_400] = 0xff;
+        payload.push(b'\n');
+        std::fs::write(&artifact, &payload).unwrap();
+        let expected = String::from_utf8_lossy(&payload[payload.len() - 16_384..]);
+        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
+            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
+        *host.processes.lock().await = HostProcesses::new(executable,
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let id = Uuid::new_v4();
+        let measurement = crate::resource_measurement::Measurement::start();
+        {
+            let mut processes = host.processes.lock().await;
+            processes.launch(fixture_launch(&artifact, id)).unwrap();
+            processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap().wait().await.unwrap();
+        }
+        host.refresh_processes().await.unwrap();
+        measurement.finish("noisy_child_tail");
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["status"], "failed");
+        assert_eq!(snapshot["instances"][0]["last_error"],
+            format!("engine exited unexpectedly: exit status: 7\n{}", expected.trim()));
+        assert!(host.processes.lock().await.reserved_gpus(None).is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "one gated-reader action resource measurement"]
+    async fn request_resource_measurement_exit_drain_action() {
+        use std::{future::Future, task::Poll};
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("engine");
+        std::fs::write(&executable, "#!/bin/sh\n(sleep 0.5; printf 'late diagnostic\\n') &\nexit 7\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture").unwrap();
+        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
+            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
+        *host.processes.lock().await = HostProcesses::new(executable,
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let id = Uuid::new_v4();
+        {
+            let mut processes = host.processes.lock().await;
+            processes.launch(fixture_launch(&artifact, id)).unwrap();
+            processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap().wait().await.unwrap();
+        }
+        let (entered, ready) = tokio::sync::oneshot::channel();
+        let observer = host.clone();
+        let refresh = tokio::spawn(async move {
+            let mut refresh = Box::pin(observer.refresh_processes());
+            std::future::poll_fn(|context| match refresh.as_mut().poll(context) {
+                Poll::Pending => Poll::Ready(()),
+                Poll::Ready(result) => panic!("fixture reader must still be held: {result:?}"),
+            }).await;
+            entered.send(()).unwrap();
+            refresh.await
+        });
+        ready.await.unwrap();
+        let measurement = crate::resource_measurement::Measurement::start();
+        let snapshot = host.snapshot().await;
+        measurement.finish("exit_drain_snapshot_action");
+        assert_eq!(snapshot["instances"][0]["instance_id"], id.to_string());
+        refresh.await.unwrap().unwrap();
+        let final_snapshot = host.snapshot().await;
+        assert_eq!(final_snapshot["instances"][0]["status"], "failed");
+        assert_eq!(final_snapshot["instances"][0]["last_error"],
+            "engine exited unexpectedly: exit status: 7\nlate diagnostic");
+    }
+
+
     #[tokio::test]
     async fn launches_each_gpu_with_its_declared_runtime_without_fallback() {
         let dir = tempfile::tempdir().unwrap();

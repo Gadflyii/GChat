@@ -180,6 +180,27 @@ pub async fn alias_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "one fragmented-request resource measurement"]
+    fn request_resource_measurement_fragmented_alias_event() {
+        let generated = "x".repeat(8192);
+        let value = serde_json::json!({"model":"upstream","choices":[{"delta":{"content":generated}}]});
+        let input = format!("event: message\r\ndata: {value}\r\n\r\ndata: {{\"usage\":{{\"completion_tokens\":1}}}}\n\ndata: [DONE]\n\n");
+        let mut expected_value = value.clone();
+        expected_value["model"] = "ginfer/host/instance".into();
+        let expected = format!("event: message\ndata: {expected_value}\n\ndata: {{\"usage\":{{\"completion_tokens\":1}}}}\n\ndata: [DONE]\n\n");
+        let measurement = crate::resource_measurement::Measurement::start();
+        let mut events = AliasEvents::new("ginfer/host/instance");
+        let mut output = Vec::new();
+        for byte in input.as_bytes() {
+            output.extend(events.push(std::slice::from_ref(byte)).unwrap());
+        }
+        events.finish().unwrap();
+        measurement.finish("fragmented_alias_event");
+        assert_eq!(output, expected.as_bytes());
+    }
+
     #[test]
     fn response_event_handles_keep_item_and_tool_identifiers_unchanged() {
         let scope = crate::response_route::ResponseScope {

@@ -119,6 +119,31 @@ pub fn request_target(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "one response-handle resource measurement"]
+    fn request_resource_measurement_response_handle() {
+        let scope = ResponseScope {
+            instance: InstanceRef { host_id: Uuid::new_v4(), instance_id: Uuid::new_v4() },
+            session: Uuid::new_v4(),
+        };
+        let id = scope.encode("resp_same_123");
+        let measurement = crate::resource_measurement::Measurement::start();
+        let decoded = decode(&id).unwrap();
+        measurement.finish("response_handle");
+        assert_eq!(decoded, (scope.clone(), "resp_same_123".into()));
+        for malformed in [format!("{id}_extra"), id.rsplit_once('_').unwrap().0.to_owned()] {
+            assert_eq!(decode(&malformed).unwrap_err(), "invalid GInfer response handle");
+        }
+        for upstream in ["", "a/b", "é"] {
+            assert!(decode(&scope.encode(upstream)).is_err());
+        }
+        let prefix = id.rsplit_once('_').unwrap().0;
+        for encoded in ["z1", "ff"] {
+            assert!(decode(&format!("{prefix}_{encoded}")).is_err());
+        }
+    }
+
     #[test]
     fn response_handles_disambiguate_hosts_and_reject_cross_session_continuation() {
         let scope = ResponseScope {

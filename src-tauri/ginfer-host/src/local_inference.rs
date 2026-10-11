@@ -167,6 +167,44 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "one authenticated-request resource measurement"]
+    async fn request_resource_measurement_session_authentication() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = Host::open(directory.path().join("host"), "fixture".into(),
+            directory.path().join("unused-engine"), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
+        let instance = Uuid::new_v4();
+        let first = LocalInference::bind(&host, instance, Uuid::new_v4()).unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let url = format!("http://127.0.0.1:{}/v1/models", first.port);
+        for credential in [None, Some("wrong"), Some("")] {
+            let mut request = client.get(&url);
+            if let Some(credential) = credential { request = request.bearer_auth(credential); }
+            let response = request.send().await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            assert_eq!(response.json::<serde_json::Value>().await.unwrap()["error"], "invalid inference credential");
+        }
+        let request = client.get(&url).bearer_auth(&first.api_key).header("origin", "http://tauri.localhost");
+        let measurement = crate::resource_measurement::Measurement::start();
+        let response = request.send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.headers()["access-control-allow-origin"], "http://tauri.localhost");
+        let body = response.json::<serde_json::Value>().await.unwrap();
+        measurement.finish("session_authentication_request");
+        assert_eq!(body["error"], "instance is not ready");
+        let second = LocalInference::bind(&host, instance, Uuid::new_v4()).unwrap();
+        assert_ne!(first.api_key, second.api_key);
+        let response = client.get(format!("http://127.0.0.1:{}/v1/models", second.port))
+            .bearer_auth(&first.api_key).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let response = client.get(format!("http://127.0.0.1:{}/health", first.port)).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.json::<serde_json::Value>().await.unwrap()["status"], "unavailable");
+        drop(first);
+        drop(second);
+    }
+
+
+    #[tokio::test]
     async fn desktop_preflight_succeeds_without_credentials_but_other_origins_do_not() {
         for origin in ["http://tauri.localhost", "https://tauri.localhost", "tauri://localhost"] {
             let request = Request::builder().method("OPTIONS").uri("/v1/models")

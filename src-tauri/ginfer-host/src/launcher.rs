@@ -7,6 +7,16 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
+thread_local! {
+    static CONTROL_WORK: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(test)]
+pub(crate) fn control_work_counts() -> (usize, usize) {
+    CONTROL_WORK.with(std::cell::Cell::get)
+}
+
 pub struct LocalControl {
     client: reqwest::Client,
     origin: reqwest::Url,
@@ -111,6 +121,8 @@ impl LocalControl {
     }
 
     pub fn open(directory: &Path, origin: &str) -> Result<Self, String> {
+        #[cfg(test)]
+        CONTROL_WORK.with(|counts| { let (opens, clients) = counts.get(); counts.set((opens + 1, clients)); });
         let state: Persistent = serde_json::from_reader(std::io::BufReader::new(
             std::fs::File::open(directory.join("host.json")).map_err(|e| {
                 format!(
@@ -129,8 +141,11 @@ impl LocalControl {
         {
             return Err("host address must be an HTTPS origin".into());
         }
+        let client = pinned_client(&state.certificate.fingerprint())?;
+        #[cfg(test)]
+        CONTROL_WORK.with(|counts| { let (opens, clients) = counts.get(); counts.set((opens, clients + 1)); });
         Ok(Self {
-            client: pinned_client(&state.certificate.fingerprint())?,
+            client,
             origin,
             token: state.pairing_admin_token,
             host_id: state.host_id,
@@ -201,6 +216,11 @@ struct Choice {
     body: Value,
     vision: bool,
     concurrency: u64,
+}
+
+fn has_choices(snapshot: &Value) -> bool {
+    let available = choices(snapshot, None);
+    !available.is_empty()
 }
 
 fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
@@ -470,10 +490,10 @@ async fn menu_control(control: LocalControl) -> Result<(), String> {
         if let Some(error) = snapshot["profile_error"].as_str() {
             println!("Profile catalog: {error}");
         }
-        let available = choices(&snapshot, None);
+        let available = has_choices(&snapshot);
         if snapshot["models"].as_array().is_none_or(Vec::is_empty) {
             println!("\nNo local models registered. Download a model or add an existing local package.");
-        } else if available.is_empty() {
+        } else if !available {
             println!("\nNo launch profiles match the installed models and available GPU groups.");
         }
         println!("\nInstances:");
@@ -572,6 +592,17 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn menu_availability_resource_pass() {
+        let snapshot = json!({"instances": [], "launch_profiles": (0..174).map(|index| {
+            json!({"model_id":"model","profile":{"id":index,"name":"Fixture","concurrency":4},
+                "compatible_gpu_groups":[["gpu0"],["gpu1"]]})
+        }).collect::<Vec<_>>()});
+        let started = std::time::Instant::now();
+        assert!(has_choices(&snapshot));
+        eprintln!("RESOURCE_LAUNCHER profiles=174 groups=348 elapsed={:?}", started.elapsed());
+    }
+
     #[test]
     fn gpu_labels_identify_distinct_devices_and_occupancy() {
         let snapshot = json!({"gpus":[

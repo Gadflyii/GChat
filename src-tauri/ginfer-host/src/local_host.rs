@@ -203,6 +203,77 @@ impl LocalHost {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
+    #[tokio::test]
+    async fn delayed_bootstrap_resource_pass() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = crate::service::Host::open(directory.path().into(), "Delayed bootstrap".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let connections = Arc::new(AtomicUsize::new(0));
+        let server_requests = requests.clone();
+        let server_connections = connections.clone();
+        let serving_host = host.clone();
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    Some(_) = connections.join_next(), if !connections.is_empty() => {},
+                    socket = listener.accept() => {
+                        let (socket, _) = socket.unwrap();
+                        server_connections.fetch_add(1, Ordering::SeqCst);
+                        let acceptor = acceptor.clone();
+                        let requests = server_requests.clone();
+                        let host = serving_host.clone();
+                        connections.spawn(async move {
+                            if let Ok(tls) = acceptor.accept(socket).await {
+                                let service = hyper::service::service_fn(move |request| {
+                                    let host = host.clone();
+                                    let waiting = requests.fetch_add(1, Ordering::SeqCst) < 4;
+                                    async move {
+                                        if waiting {
+                                            Ok::<_, std::convert::Infallible>(hyper::Response::builder().status(503)
+                                                .body(hyper::Body::from(r#"{"error":"starting"}"#)).unwrap())
+                                        } else { host.route(request).await }
+                                    }
+                                });
+                                let _ = hyper::server::conn::Http::new().serve_connection(tls, service).await;
+                            }
+                        });
+                    }
+                }
+            }
+        });
+        let local = LocalHost {
+            binary: std::env::current_exe().unwrap(), engine: std::env::current_exe().unwrap(),
+            engine_runtimes: Default::default(), directory: directory.path().into(), desktop_provider: None,
+            models: vec![], artifact_sets: vec![], name: "Fixture".into(), nvidia_smi: "unused".into(), listen: address,
+        };
+        let owner = ServiceOwner::acquire(directory.path()).unwrap();
+        let before = crate::launcher::control_work_counts();
+        let start = std::time::Instant::now();
+        let control = tokio::time::timeout(Duration::from_secs(2), local.ensure_running()).await.unwrap().unwrap();
+        let candidate = start.elapsed();
+        let after = crate::launcher::control_work_counts();
+        assert_eq!(requests.load(Ordering::SeqCst), 5);
+        assert_eq!(after.0 - before.0, 5);
+        assert_eq!(control.host_id(), host.data.lock().await.host_id);
+        assert!(ServiceOwner::acquire(directory.path()).is_err());
+        eprintln!("RESOURCE_BOOTSTRAP attempts=5 elapsed={candidate:?} state_opens={} client_constructions={} tls_connections={}",
+            after.0 - before.0, after.1 - before.1, connections.load(Ordering::SeqCst));
+        drop(owner);
+        server.abort();
+        let _ = server.await;
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub fn desktop_runtimes(provider: &std::path::Path) -> Result<std::collections::BTreeMap<String, PathBuf>, String> {
     let root = provider.join("linux");
