@@ -477,6 +477,11 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(unit.contains("Type=notify") && unit.contains("NotifyAccess=all"));
+        assert!(unit.contains("ExecStart=/usr/local/bin/gbot-desktop-session"));
+        assert!(
+            session.find("unset NOTIFY_SOCKET").unwrap()
+                < session.find("exec dbus-run-session").unwrap()
+        );
         let startup = data["runcmd"].as_array().unwrap().last().unwrap()[2]
             .as_str()
             .unwrap();

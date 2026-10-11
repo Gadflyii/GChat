@@ -636,13 +636,13 @@ kernel when video was disabled. A bounded one-variable VGA screen proves
 Linux/cloud-init startup (one boot, Linux banner and init-local), with the same
 image, CPU, memory and network. The adapter now keeps emulated VGA; Xvnc
 remains the actual bot desktop. This screen is not final qualification.
-Current corrected full gate: guest `5d3369a5-4e19-40eb-adba-6950569753c7`,
-QEMU3846032, source6a55fc91c. Debian cloud-init is installing guest packages;
-all QEMU threads stay on CPUs112–113 and SSH listens on127.0.0.1:45345.
-The finite slot ends20:55Z; the gate itself has a900-second bound. Next:
-completed setup, real Cua frame and AT-SPI action/readback, then stop and
-remove the fixture credential. S1 evidence/first-guest6-live-proof.json records
-actual execution; domiflist is empty as designed.
+Current corrected full gate: guest `3b06faf5-cae8-4b18-b548-1b54da9086ca`,
+QEMU3868599, sourcee6476aabf. Debian cloud-init is installing the final guest
+packages; all QEMU threads stay on CPUs112–113 and SSH listens on
+127.0.0.1:37439. The finite slot ends21:05Z; the gate has a900-second bound.
+Next: session readiness, real Cua frame and AT-SPI action/readback, then stop
+and remove the fixture credential. S1 evidence/first-guest7-live-proof.json
+records actual execution; domiflist is empty as designed.
 
 Source gates passed: three focused first-boot, XML/lifecycle and selected-port
 cases; strict all-target Clippy; opt-in guest fixture build. Evidence:
@@ -679,7 +679,7 @@ channels remains an explicit integration item.
 | GChat / local | `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21` | Pushed candidate source; retain until reviewed merge. |
 | GChat / local | `/ai/gchat/out/gbot-kvm-prep-20261011/` | Source gates, official artifact receipts and cold-failure evidence; fixture/Cua unpack retained only through physical gate. |
 | GChat / S1 | `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2` | Exact341508096-byte base, checked against official SHA512SUMS; reuse, no duplicate. |
-| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; first-guest6 running as above; earlier boot/VGA comparison retained. Failed UUID directories retain concise evidence only. |
+| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; first-guest7 running as above; earlier boot/VGA comparison retained. Failed UUID directories retain concise evidence only. |
 | GChat / local | `/ai/gchat/out/oi057-linux-packages-20261011/` | DEB/AppImage/Manager artifacts and minimal archive checks from main0705; historical05a engine, no current-engine/Flash qualification. |
 
 OI-057 packages passed minimal archive inspection; the stock Ubuntu Desktop
@@ -707,3 +707,11 @@ on the notify-type desktop unit. Its Ready notification follows X-server/env
 publication and XFCE launch; the boot marker is emitted only after active-unit
 confirmation in one fail-fast shell stage. Cua stderr is retained in the
 dedicated guest for diagnosis; the full corrected gate remains pending.
+
+First-guest7 confirms the user bus fix but exposes premature unit readiness:
+Cua stderr names missing desktop.env while the unit is active and its script
+is still at the X-server wait. Startup helpers inherited NOTIFY_SOCKET under
+NotifyAccess=all. The launcher now removes that standard variable before
+starting session helpers, retaining it under a private name solely for the
+final readiness call after env publication. The failed guest is stopped and
+its fixture key is removed. Evidence: S1 evidence/ready7/guest-diagnostics.txt.
