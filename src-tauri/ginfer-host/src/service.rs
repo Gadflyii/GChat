@@ -2222,7 +2222,7 @@ mod resource_tests {
             let cpu = capture("/proc/self/stat", |text| {
                 let end = text.rfind(')').ok_or("invalid process stat")?;
                 let fields: Vec<_> = text[end + 1..].split_whitespace().collect();
-                let number = |index| fields.get(index).ok_or("missing CPU field")?.parse::<u64>().map_err(|error| error.to_string());
+                let number = |index: usize| fields.get(index).ok_or("missing CPU field")?.parse::<u64>().map_err(|error| error.to_string());
                 Ok(serde_json::json!({"user_ticks":number(11)?,"system_ticks":number(12)?}))
             });
             let threads = capture("/proc/self/status", |text| {
@@ -2289,7 +2289,7 @@ mod resource_tests {
         let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
         let workers = runtime.metrics().num_workers();
         runtime.block_on(async {
-            let (dir, host, launch) = fixture().await;
+            let (_dir, host, launch) = fixture().await;
             let model = host.inventory.read().await[0].clone();
             let profiles: Vec<crate::launch_profiles::LaunchProfile> = (0..174).map(|index| {
                 serde_json::from_value(serde_json::json!({
