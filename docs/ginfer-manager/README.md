@@ -13,6 +13,18 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Current credential cleanup warning fix
+
+`GCHAT-MANAGER-FORGET-CREDENTIAL-WARNING` uses baseline main `254c0f8fd`,
+candidate `/ai/gchat-worktrees/manager-forget-credential-warning-254`, branch
+`fix/manager-forget-credential-warning-254`. Manager must preserve successful
+saved-host removal while displaying returned OS credential cleanup warnings,
+including alongside refresh errors and across unrelated snapshots. The owning
+UI and two existing DOM-fixture cases are implemented; focused execution is
+pending. No Host/vault behavior, native application or user credential changes
+are included. Evidence belongs in `out/manager-forget-credential-warning-20261011/`;
+the source tree is retained for review, with existing Node dependencies reused.
+
 ## Closed Linux tray registration diagnosis
 
 `GCHAT-MANAGER-LINUX-TRAY-NO-SNI` is closed by the October 11 15:44Z decision:
