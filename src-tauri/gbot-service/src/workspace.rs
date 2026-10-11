@@ -14,8 +14,8 @@ use crate::{
         ServicePc, SessionIdentity, WorkspaceConfig, WorkspaceConnection, WorkspaceId,
     },
     service::{OperationCompletion, Service, ServiceError},
-    ssh::{SshError, SshPolicy, SshSession},
-    vault::Vault,
+    ssh::{import_ssh_key, ImportedSshKey, SshError, SshPolicy, SshSession},
+    vault::{Secret, Vault},
 };
 
 #[derive(Debug)]
@@ -91,6 +91,15 @@ impl WorkspaceRuntime {
             .entry(workspace)
             .or_default()
             .clone()
+    }
+
+    pub async fn import_ssh_key(
+        &self,
+        key: Secret,
+        passphrase: Option<Secret>,
+    ) -> Result<ImportedSshKey, WorkspaceError> {
+        self.accepting()?;
+        Ok(import_ssh_key(self.vault.as_ref(), key, passphrase).await?)
     }
 
     pub async fn register_workspace(&self, config: WorkspaceConfig) -> Result<(), WorkspaceError> {

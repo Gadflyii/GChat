@@ -1,4 +1,5 @@
 //! Actual SSH transport against a disposable, in-process guest; no desktop or sshd.
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -9,14 +10,14 @@ use std::time::Duration;
 use gbot_service::api::Api;
 use gbot_service::contract::*;
 use gbot_service::service::{OperationState, ReviewReason, Service, ServiceError};
-use gbot_service::ssh::{SshError, SshPolicy, SshSession};
+use gbot_service::ssh::{import_ssh_key, SshError, SshPolicy, SshSession};
 use gbot_service::vault::{Secret, Vault, VaultFuture};
 use gbot_service::workspace::{WorkspaceError, WorkspaceRuntime};
 use hyper::{
     header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE},
     Body, Client, Request, StatusCode,
 };
-use russh::keys::{ssh_key::LineEnding, Algorithm, PrivateKey, PublicKey};
+use russh::keys::{ssh_key::LineEnding, Algorithm, HashAlg, PrivateKey, PublicKey};
 use russh::server::ChannelOpenHandle;
 use russh::{server, Channel, ChannelId, Disconnect};
 use tempfile::TempDir;
@@ -94,6 +95,7 @@ struct Guest {
     cancel: Mutex<BTreeMap<OperationId, Cancel>>,
     started: Notify,
     lose_reply: Mutex<Option<OperationId>>,
+    authenticated_algorithms: Mutex<Vec<Algorithm>>,
     tasks: Tasks,
 }
 
@@ -315,7 +317,17 @@ impl server::Handler for Peer {
         user: &str,
         public_key: &PublicKey,
     ) -> Result<server::Auth, Self::Error> {
-        self.auth_publickey_offered(user, public_key).await
+        let accepted = self.auth_publickey_offered(user, public_key).await?;
+        if accepted == server::Auth::Accept {
+            // This callback follows russh's cryptographic signature verification.
+            // It exposes the key algorithm, not the signature's wire hash.
+            self.guest
+                .authenticated_algorithms
+                .lock()
+                .unwrap()
+                .push(public_key.algorithm());
+        }
+        Ok(accepted)
     }
 
     async fn channel_open_session(
@@ -426,13 +438,16 @@ struct Fixture {
 
 impl Fixture {
     async fn new() -> Self {
+        Self::with_user_key(key()).await
+    }
+
+    async fn with_user_key(user_key: PrivateKey) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let echo = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let echo_address = echo.local_addr().unwrap();
         let host_key = key();
-        let user_key = key();
         let identity = SessionIdentity {
             workspace_id: WorkspaceId::new(),
             session_id: SessionId::new(),
@@ -487,6 +502,7 @@ impl Fixture {
             cancel: Mutex::default(),
             started: Notify::new(),
             lose_reply: Mutex::new(None),
+            authenticated_algorithms: Mutex::default(),
             tasks: tasks.clone(),
         });
         let handles = Arc::new(Mutex::new(Vec::new()));
@@ -494,6 +510,19 @@ impl Fixture {
             keys: vec![host_key],
             auth_rejection_time: Duration::from_millis(1),
             inactivity_timeout: Some(Duration::from_secs(10)),
+            // Host identity remains Ed25519; RSA user-auth advertisement permits only SHA2.
+            preferred: russh::Preferred {
+                key: Cow::Owned(vec![
+                    Algorithm::Ed25519,
+                    Algorithm::Rsa {
+                        hash: Some(HashAlg::Sha512),
+                    },
+                    Algorithm::Rsa {
+                        hash: Some(HashAlg::Sha256),
+                    },
+                ]),
+                ..Default::default()
+            },
             ..Default::default()
         });
         let accept = {
@@ -652,6 +681,120 @@ fn success(reply: GuestReply) -> GuestResult {
         GuestOutcome::Success { result } => result,
         GuestOutcome::Error { error } => panic!("guest error: {error:?}"),
     }
+}
+
+#[tokio::test]
+async fn encrypted_and_rsa_imports_authenticate_and_reconnect_without_passphrase() {
+    // One 4096-bit RSA generation is shared by encrypted/plain cases. Keep it off
+    // the async executor; the larger bound includes prime generation and bcrypt.
+    timeout(Duration::from_secs(180), async {
+        let rsa = tokio::task::spawn_blocking(|| {
+            PrivateKey::random(
+                &mut russh::keys::key::safe_rng(),
+                Algorithm::Rsa { hash: None },
+            )
+            .unwrap()
+        })
+        .await
+        .unwrap();
+        for (user_key, encrypted) in [(key(), true), (rsa.clone(), true), (rsa, false)] {
+            let fixture = Fixture::with_user_key(user_key.clone()).await;
+            let passphrase = Uuid::new_v4().simple().to_string().into_bytes();
+            let wrong_passphrase = Uuid::new_v4().simple().to_string().into_bytes();
+            let imported_key = if encrypted {
+                user_key
+                    .encrypt(&mut russh::keys::key::safe_rng(), &passphrase)
+                    .unwrap()
+            } else {
+                user_key.clone()
+            };
+            let encoded = imported_key.to_openssh(LineEnding::LF).unwrap();
+            let before = fixture.vault.0.lock().unwrap().clone();
+            if encrypted {
+                assert!(matches!(
+                    import_ssh_key(
+                        fixture.vault.as_ref(),
+                        Secret::new(encoded.as_bytes().to_vec()),
+                        None
+                    )
+                    .await,
+                    Err(SshError::PassphraseRequired)
+                ));
+                assert!(
+                    *fixture.vault.0.lock().unwrap() == before,
+                    "missing passphrase changed secure storage"
+                );
+                assert!(matches!(
+                    import_ssh_key(
+                        fixture.vault.as_ref(),
+                        Secret::new(encoded.as_bytes().to_vec()),
+                        Some(Secret::new(wrong_passphrase))
+                    )
+                    .await,
+                    Err(SshError::InvalidPassphrase)
+                ));
+                assert!(
+                    *fixture.vault.0.lock().unwrap() == before,
+                    "wrong passphrase changed secure storage"
+                );
+            }
+            let imported = import_ssh_key(
+                fixture.vault.as_ref(),
+                Secret::new(encoded.as_bytes().to_vec()),
+                encrypted.then(|| Secret::new(passphrase.clone())),
+            )
+            .await
+            .unwrap();
+            drop(passphrase);
+            assert!(imported.public_key == pin(&user_key));
+            assert!(imported.credential_ref != fixture.connection.credential_ref);
+            imported.credential_ref.validate().unwrap();
+            assert_eq!(fixture.vault.0.lock().unwrap().len(), before.len() + 1);
+            let stored = fixture
+                .vault
+                .get(imported.credential_ref.as_uuid())
+                .await
+                .unwrap()
+                .unwrap();
+            let parsed = PrivateKey::from_openssh(stored.expose_secret()).unwrap();
+            assert!(
+                !parsed.is_encrypted(),
+                "import did not store a reconnectable key"
+            );
+            assert!(parsed.public_key() == user_key.public_key());
+            let mut connection = fixture.connection.clone();
+            connection.credential_ref = imported.credential_ref;
+            for _ in 0..2 {
+                // A fresh transport has only the imported vault reference, never a passphrase.
+                let session = SshSession::connect(
+                    &connection,
+                    fixture.guest.hello.identity,
+                    fixture.vault.as_ref(),
+                    policy(),
+                )
+                .await
+                .unwrap();
+                assert_eq!(session.hello().identity, fixture.guest.hello.identity);
+                session.ping().await.unwrap();
+                session.close().await.unwrap();
+            }
+            let algorithms = fixture
+                .guest
+                .authenticated_algorithms
+                .lock()
+                .unwrap()
+                .clone();
+            assert_eq!(algorithms.len(), 2);
+            assert!(algorithms
+                .iter()
+                .all(|algorithm| *algorithm == user_key.algorithm()));
+            // For RSA this proves verified RSA authentication against SHA2-only
+            // advertisement. The private wire hash is not exposed by Handler.
+            fixture.shutdown().await;
+        }
+    })
+    .await
+    .expect("bounded generated SSH key import/authentication case timed out");
 }
 
 #[tokio::test]

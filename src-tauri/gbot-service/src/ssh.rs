@@ -17,10 +17,12 @@ use std::{
 
 use russh::{
     client,
-    keys::{PrivateKey, PrivateKeyWithHashAlg, PublicKey, PublicKeyOrCertificate},
+    keys::{
+        Algorithm, HashAlg, PrivateKey, PrivateKeyWithHashAlg, PublicKey, PublicKeyOrCertificate,
+    },
     Channel, Disconnect,
 };
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
@@ -31,9 +33,9 @@ use tokio::{
 use crate::{
     contract::{
         ContractError, GuestCapability, GuestHello, GuestReply, GuestRequest, OperationId,
-        SessionIdentity, SshConnection,
+        SessionIdentity, SshConnection, SshHostPublicKey, VaultCredentialRef,
     },
-    vault::{Vault, VaultError},
+    vault::{Secret, Vault, VaultError},
 };
 
 const WORKER_COMMAND: &str = "gbot-guest --stdio";
@@ -62,8 +64,10 @@ pub enum SshError {
     Vault(VaultError),
     MissingCredential,
     InvalidCredential,
-    EncryptedCredentialUnsupported,
+    PassphraseRequired,
+    InvalidPassphrase,
     UnsupportedCredentialAlgorithm,
+    ImportFailed,
     InvalidPolicy,
     PeerRejected,
     AuthenticationRejected,
@@ -85,8 +89,10 @@ impl fmt::Display for SshError {
             Self::Vault(error) => error.fmt(f),
             Self::MissingCredential => f.write_str("SSH credential is missing from secure storage"),
             Self::InvalidCredential => f.write_str("SSH credential must be an OpenSSH private key"),
-            Self::EncryptedCredentialUnsupported => f.write_str("Passphrase-protected key import is not supported yet"),
-            Self::UnsupportedCredentialAlgorithm => f.write_str("This SSH transport supports Ed25519 and ECDSA credentials; RSA is not enabled"),
+            Self::PassphraseRequired => f.write_str("This SSH key requires its passphrase for import"),
+            Self::InvalidPassphrase => f.write_str("SSH key could not be unlocked with this passphrase"),
+            Self::UnsupportedCredentialAlgorithm => f.write_str("SSH credentials must use Ed25519, ECDSA or RSA"),
+            Self::ImportFailed => f.write_str("SSH credential import could not complete"),
             Self::InvalidPolicy => f.write_str("SSH timeouts and keepalive count must be positive"),
             Self::PeerRejected => f.write_str("Guest SSH key does not match the selected peer"),
             Self::AuthenticationRejected => f.write_str("Guest rejected the selected SSH credential"),
@@ -106,6 +112,73 @@ impl From<ContractError> for SshError {
     fn from(value: ContractError) -> Self {
         Self::Contract(value)
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ImportedSshKey {
+    pub credential_ref: VaultCredentialRef,
+    pub public_key: SshHostPublicKey,
+}
+
+fn validate_credential_algorithm(private: &PrivateKey) -> Result<(), SshError> {
+    if matches!(
+        private.algorithm(),
+        Algorithm::Ed25519 | Algorithm::Ecdsa { .. } | Algorithm::Rsa { .. }
+    ) {
+        Ok(())
+    } else {
+        Err(SshError::UnsupportedCredentialAlgorithm)
+    }
+}
+
+/// Unlock an OpenSSH key once; only its normalized key enters secure storage.
+pub async fn import_ssh_key(
+    vault: &dyn Vault,
+    key: Secret,
+    passphrase: Option<Secret>,
+) -> Result<ImportedSshKey, SshError> {
+    let (public_key, normalized) = tokio::task::spawn_blocking(move || {
+        // Parse the OpenSSH envelope before distinguishing missing/wrong passwords.
+        let mut private = PrivateKey::from_openssh(key.expose_secret())
+            .map_err(|_| SshError::InvalidCredential)?;
+        validate_credential_algorithm(&private)?;
+        if private.is_encrypted() {
+            let passphrase = passphrase.as_ref().ok_or(SshError::PassphraseRequired)?;
+            let password = std::str::from_utf8(passphrase.expose_secret())
+                .map_err(|_| SshError::InvalidPassphrase)?;
+            let encoded = std::str::from_utf8(key.expose_secret())
+                .map_err(|_| SshError::InvalidCredential)?;
+            private = russh::keys::decode_secret_key(encoded, Some(password))
+                .map_err(|_| SshError::InvalidPassphrase)?;
+        }
+        // A key's free-form comment is not public connection metadata.
+        private.set_comment("");
+        let public = private
+            .public_key()
+            .to_openssh()
+            .map_err(|_| SshError::InvalidCredential)?;
+        let (algorithm, public_key) = public.split_once(' ').ok_or(SshError::InvalidCredential)?;
+        let public_key = SshHostPublicKey {
+            algorithm: algorithm.into(),
+            public_key: public_key.into(),
+        };
+        public_key.validate()?;
+        let normalized = private
+            .to_openssh(russh::keys::ssh_key::LineEnding::LF)
+            .map_err(|_| SshError::InvalidCredential)?;
+        Ok::<_, SshError>((public_key, Secret::new(normalized.as_bytes().to_vec())))
+    })
+    .await
+    .map_err(|_| SshError::ImportFailed)??;
+    let credential_ref = VaultCredentialRef::new();
+    vault
+        .put(credential_ref.as_uuid(), normalized)
+        .await
+        .map_err(SshError::Vault)?;
+    Ok(ImportedSshKey {
+        credential_ref,
+        public_key,
+    })
 }
 
 struct Peer {
@@ -305,14 +378,9 @@ impl SshSession {
         let private = PrivateKey::from_openssh(secret.expose_secret())
             .map_err(|_| SshError::InvalidCredential)?;
         if private.is_encrypted() {
-            return Err(SshError::EncryptedCredentialUnsupported);
+            return Err(SshError::PassphraseRequired);
         }
-        if !matches!(
-            private.algorithm(),
-            russh::keys::Algorithm::Ed25519 | russh::keys::Algorithm::Ecdsa { .. }
-        ) {
-            return Err(SshError::UnsupportedCredentialAlgorithm);
-        }
+        validate_credential_algorithm(&private)?;
         drop(secret);
         let connection = connection.clone();
         let (cancel, cancelled) = oneshot::channel();
@@ -563,8 +631,22 @@ async fn establish(
         }
     })?;
     let inspection = async {
+        let hash = if matches!(private.algorithm(), Algorithm::Rsa { .. }) {
+            match client
+                .best_supported_rsa_hash()
+                .await
+                .map_err(|_| SshError::Transport)?
+            {
+                Some(Some(hash)) => Some(hash),
+                Some(None) => return Err(SshError::AuthenticationRejected),
+                // An absent extension permits an explicit SHA-2 attempt, never SHA-1.
+                None => Some(HashAlg::Sha256),
+            }
+        } else {
+            None
+        };
         let auth = client
-            .authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(private), None))
+            .authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(private), hash))
             .await
             .map_err(|_| SshError::Transport)?;
         if !auth.success() {

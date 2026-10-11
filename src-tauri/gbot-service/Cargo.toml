@@ -14,7 +14,7 @@ tokio = { version = "1", features = ["full"] }
 hyper = { version = "0.14", features = ["full"] }
 keyring = { version = "3.6", features = ["windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
 clap = { version = "4", features = ["derive"] }
-russh = { version = "=0.63.1", default-features = false, features = ["ring"] }
+russh = { version = "=0.63.1", default-features = false, features = ["ring", "rsa"] }
 
 [dev-dependencies]
 tempfile = "3"
