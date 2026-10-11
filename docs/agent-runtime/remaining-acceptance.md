@@ -4,7 +4,34 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
-## Current OI-068 Linux SMOL functional walkthrough
+## Current walkthrough defect correction
+
+Repository `/ai/gchat`; subject `docs/agent-runtime/`; baseline main869a368b1,
+branch `fix/gchat-agent-walkthrough-869`, owned source
+`/ai/gchat-worktrees/agent-walkthrough-869`. The09:07 decision authorizes one
+coherent correction for the three discovered core-agent defects: Builder must
+finish after its successful required save; mounted Chat must refresh newly saved
+and updated definitions; failed Chat tool state/error must survive persistence.
+Read each owning-file master row before changing it; original walkthrough
+receipts below are baseline evidence, not passing candidate evidence.
+
+Acceptance: one focused regression per owning behavior, then one installed
+Linux real-model re-check of only those three steps. Reuse the accepted670
+runtime/profile/in-place artifact without Engine build, calibration, model copy
+or Windows changes. Book the local5090 for at most20 minutes only while the
+model runs, after C3's current09:01–09:36 install actually releases its guard;
+09:40 remains the conservative earliest planned GPU start. No full suites,
+passing-gate repeats, release/sign/publication or added limits. Deadline11:30Z.
+Source diagnosis establishes three owners: Builder had no successful-save
+completion boundary; native saves did not notify mounted definition consumers;
+Chat serialization omitted terminal tool state/error text. Candidate corrections
+are implemented and under independent source review. Focused checks plus one
+current Linux desktop build are booked CPU-only09:40–10:15; no current candidate
+build or model job exists. Retain the accepted prior257 Host and concise evidence at
+`out/remaining-acceptance-20261009/oi068-linux-smol-20261011/`; retire the merged
+prior source tree after confirming no live user or dirty state.
+
+## Accepted OI-068 Linux SMOL functional walkthrough
 
 Repository `/ai/gchat`, subject `docs/agent-runtime/`; source baseline
 `a4bebb2e1`, Host candidate `257252131`, branch

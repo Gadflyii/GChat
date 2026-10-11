@@ -3,7 +3,14 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-The [isolated Linux SMOL walkthrough](remaining-acceptance.md#current-oi-068-linux-smol-functional-walkthrough)
+Current work is the [three walkthrough defect corrections](remaining-acceptance.md#current-walkthrough-defect-correction):
+Builder completion, live definition refresh and failed-tool history. Baseline
+main869a368b1 includes the accepted Host launch-order correction. Focused gates
+and one bounded Linux real-model re-check are authorized; no release or Windows
+change. The prior [isolated walkthrough](remaining-acceptance.md#accepted-oi-068-linux-smol-functional-walkthrough)
+is preserved as baseline evidence below.
+
+The [isolated Linux SMOL walkthrough](remaining-acceptance.md#accepted-oi-068-linux-smol-functional-walkthrough)
 accepts actual Host Ready, Chat MD/XLSX reading/continuation, reviewed saved
 agent execution, manual Chat compaction/continuation and normal final Stop.
 Builder completion fails on a duplicate save; missing definition refresh and
