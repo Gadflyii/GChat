@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Correct CJK dependency provider metadata](20261011-correct-cjk-provider-dependencies.md)
+
 - [Own native Workspace accounts and share connector execution](2026-10-10-own-native-workspace-connectors.md)
 
 - [Order embedded terminal status by native sequence](2026-10-10-order-embedded-terminal-status.md)

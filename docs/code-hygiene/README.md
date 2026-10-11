@@ -6,7 +6,52 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-116 Linux available disk space
+## Current item — OI-105 remaining CJK dependencies
+
+Deliverable: complete the release dependency graph from accepted GChat main
+`2ad018261`, retaining the accepted React/SDK/parser/Vitest alignment and CJK
+rendering. Correct missing dependencies at the external package that consumes
+them; peer validation must remain active. Acceptance is a clean actual root peer
+graph, an offline immutable install of the changed graph, and one representative
+CJK rendering check. Reuse earlier extension/UI/alignment evidence for unchanged
+packages; no release build, native installation, GPU, signing or publication.
+
+The package and cached Yarn4.5.3 audit confirms exact-selector dependency
+extensions add the missing providers without changing peer declarations. The
+children require unified^11 and micromark^4, already locked to11.0.5/4.0.2. This
+corrects provider metadata; it is not evidence of a runtime import failure.
+Source `8138349f9` supplies the three missing providers through the existing
+`.yarnrc.yml`; fixture correction `598a8c59f` exercises the real full Chat
+renderer. The actual root graph passes all368 peer groups (previously3 unmet).
+Offline immutable installation succeeds in18s with no peer warning; both
+lockfiles, all versions/checksums and package manifests remain unchanged. The
+real CJK punctuation-adjacent emphasis/strikethrough case passes1/1 (23cases
+unselected), and explicit test-file ESLint passes with zero warnings. Existing
+React/SDK/parser/Vitest and unchanged extension-graph acceptance is retained.
+
+The first rendering attempt lacked generated core output. Core source is
+identical to the accepted oi074 source, so its accepted generated package was
+reused rather than rebuilt. The first short input bypassed parsing below32
+characters and the default strong renderer uses a styled span; the fixture now
+uses a representative longer reply and its real output. The short-message
+formatting defect is separately listed as GCHAT-SHORT-MARKDOWN-BYPASS. Normal
+ESLint ignores tests; the corrected explicit --no-ignore invocation checks the
+file, without suppressing warnings. Earlier failed/setup logs remain evidence.
+
+Normal Windows source staging copies this root config and Linux runs its root
+immutable install. The retained OI070 custom runner skips installs and mounts an
+older physical graph: it must use a graph qualified against this config before
+its next build. No native packaging is claimed. Next: normal main merge.
+
+Owned candidate: `/ai/gchat-worktrees/oi105-cjk-metadata-2ad`, branch
+`fix/gchat-oi105-cjk-metadata-2ad`, baseline `2ad018261`, no live job. Retain the
+accepted physical graph and previous receipts in
+`/ai/gchat-worktrees/oi074-frontend-packages` for reuse; do not relink shared state.
+New concise evidence belongs in `/ai/gchat/out/oi105-cjk-metadata-20261011/`.
+
+
+
+## Accepted OI-116 Linux available disk space
 
 GChat main `2ad018261` contains the accepted resource review. The coordinator
 approved Linux-only rustix 1.1.4 statvfs on October 11: preserve raw path/error
@@ -377,11 +422,12 @@ gate, package verification and actual installed Windows acceptance are complete.
 
 Approved alignment retains React/DOM 19.2.8, TypeScript 5.9.2, ESLint 9.25.1
 and compatible TypeScript ESLint 8.44.1; extension Vitest UI/runner are 3.2.4.
-All project-owned peers pass. Three upstream CJK metadata peers remain and are
-reported without widening peer ranges or suppressing warnings. Production output
+Project-owned alignment remains accepted. The three CJK parent metadata gaps
+are now corrected by exact-version dependency extensions; all368 root peer
+groups pass, without widening peer ranges or suppressing warnings. Production output
 retains lazy terminal/emoji/highlighter/Mermaid/locale loading, all 250 grammar
 assets and the WASM. Final native compilation has no compiler/linker warning;
-Yarn still reports the known upstream peer metadata gaps.
+The corrected offline root install has no remaining peer warning.
 
 Original Muse C4/131072/NVFP4 fixed-arena startup rejects before Ready. The
 separate automatic candidate reaches Ready and prepares four distinct exact
