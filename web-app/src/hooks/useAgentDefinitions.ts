@@ -13,6 +13,9 @@ export function useAgentDefinitions(enabled = true) {
   const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<string | null>(null)
   const loadSequence = useRef(0)
+  const invalidateLoads = useCallback(() => {
+    ++loadSequence.current
+  }, [])
 
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current
@@ -55,10 +58,10 @@ export function useAgentDefinitions(enabled = true) {
     })
     return () => {
       disposed = true
-      ++loadSequence.current
+      invalidateLoads()
       unlisten?.()
     }
-  }, [enabled, load])
+  }, [enabled, invalidateLoads, load])
 
   const save = useCallback(async (definition: AgentDefinition) => {
     const saved = await saveAgentDefinition(definition)
