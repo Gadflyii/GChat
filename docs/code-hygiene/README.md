@@ -6,30 +6,49 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — CLI configuration selection
+## CLI configuration selection — verified, merge-ready
 
 Deliverable: generic CLI commands use the same desktop/installer configuration
-selector and saved data folder. Reading configuration must not create a sibling
-`gchat` directory that changes the desktop's selected configuration. Preserve
-existing desktop precedence, valid custom folders and default fallback on Linux
-and Windows. Models, model lookup, runtime discovery and server-state paths all
-consume that one resolver.
+selector and saved data folder. Reading configuration creates no competing
+`gchat` root. Existing desktop precedence, valid custom folders and default
+fallback stay intact on Linux and Windows. Models, model lookup, runtime
+discovery, downloads and server-state paths all consume that one resolver.
 
 Candidate `/ai/gchat-worktrees/cli-config-selection-b55`, branch
-`fix/gchat-cli-config-b55`, from merged main `b55f1f73f`. Acceptance assigned by
-bubbs: focused CLI/resolver tests and one actual Linux custom-folder CLI run,
-CPU only, deadline06:30 UTC. No native Windows build/run, models/GPU, release,
-signing or publication. Master CLI/resolver rows and OI115–119 were read; the
-latter concern Host/Manager modules and do not overlap the affected app/CLI
-configuration modules or build script.
+`fix/gchat-cli-config-b55`, from merged main `b55f1f73f`. Product source
+`8d4602951` is committed/pushed and independently accepted. The build script
+emits the owning bundle identifier, including an explicit Tauri override;
+headless callers delegate to the existing desktop/installer selector. The
+superseded root creation and internal legacy resolver names are removed.
+Master CLI/resolver and OI115–119 rows were read before implementation: the
+latter concern Host/Manager owners and do not overlap these app/CLI modules.
 
-The current app-data root derives from the owning bundle identifier emitted by
-the existing build script, including an explicit Tauri identifier override.
-Generic CLI and installer use the same existing configuration selector. The
-superseded CLI root creation and internal legacy resolver name are removed.
-No configuration, folder, model or runtime is moved or deleted. Next: focused
-resolver/CLI proof and one actual custom-folder discovery. Evidence belongs in
-`/ai/gchat/out/cli-config-selection-20261011/`. No job or hardware grant is held.
+The assigned gate passes on Linux, actual 05:48:54–05:50:05 UTC:
+
+- Exact CLI/resolver fixture: 1/1 PASS, 598 cases unselected; 0.01s execution.
+  Current custom storage, actual model/runtime discovery and server-state paths,
+  existing XDG-config selection, malformed-config fallback, saved bytes and
+  absent competing roots are covered in an isolated subprocess.
+- CLI build: PASS; 14.96s after the 54.95s fixture build; no emitted warnings/errors.
+- One native `models list --json` against private custom-folder metadata: PASS.
+  The expected fixture model is returned, saved configuration bytes are unchanged
+  and neither competing legacy root is created. No model is loaded.
+
+Evidence: `/ai/gchat/out/cli-config-selection-20261011/` (`gate.log`,
+`result.json`, `custom-folder.stdout/stderr`). The tested binary
+`gchat-cli-8d4602951` is retained as the accepted CLI baseline; private fixture
+metadata is disposable. Candidate source remains until the normal reviewed
+merge. Shared Cargo/toolchain caches are retained. No native Windows build/run,
+GPU/model, release, signing or publication was part of this gate.
+
+The local disk hold deferred waiting schedulers before any compiler/test ran.
+One early handoff preflight was blocked by another already-active compile;
+canonical fd/inode proof identified its owner, which returned a finite actual
+END. These are resource deferrals, not code/test failures. The sole executing
+gate then passed; its container is absent, canonical build guard reacquired
+and released, and booking 435 canceled at actual completion. Waiting receipts
+are preserved, and future execution verifies the live guard rather than relying
+on an earlier release notice. No passing check was repeated.
 
 ## Accepted OI-076 warning diagnostics
 
