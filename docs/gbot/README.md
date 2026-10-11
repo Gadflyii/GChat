@@ -358,6 +358,62 @@ durable recovery, vault-only GChat secrets, and cost/resource cleanup. Platform
 builds, actual cloud spend and Windows installation remain governed by Ron's
 separate authorization and release schedule.
 
+### Step 1: GChat workspace connection
+
+October 11 preparation is **source-only planning**, while the structured-output
+gate waits for its runtime. The design remains held from main for Ron's review.
+No implementation, VM creation, worker installation, dependency adoption or
+cloud operation is authorized by these notes.
+
+The first implementation slice connects GChat to an existing, dedicated bot
+computer and proves that commands, files, captured frames and input belong to
+that computer's selected desktop session. Begin with one small Linux VM using
+the pinned Cua Driver, then qualify the Windows VM and Ron's M365 Cloud PC.
+Hypervisor/provider provisioning and durable task execution remain subsequent
+slices; an attached computer does not establish either capability.
+
+| Boundary | Proposed owner and behavior |
+| --- | --- |
+| GChat setup | Preserve the two location questions. Record the service PC separately from the bot PC, display connection stages and resume the unfinished choice from the existing GChat data folder. Local always identifies a separate VM, never the host desktop. |
+| Connection record | Store the workspace ID, service location, transport endpoint, verified peer identity, selected desktop session and actual capabilities. Keep only vault references for credentials. Do not reuse an inference grant as desktop-control permission. |
+| Workspace worker | Own guest command processes, guest paths and the selected graphical session. Use the pinned Driver for its qualified capture/input operations; report unavailable capabilities explicitly. A live SSH shell is not desktop readiness. |
+| Shared runtime | Bind its file/command/computer tools to the selected workspace. Guest paths stay guest paths; a failed remote operation cannot fall back to a client-machine tool. Agent definitions and skills retain their existing shared ownership. |
+| Desktop panel | Bind the displayed frame and input to the same session and geometry. Local/LAN/cloud use localhost VNC over SSH. Opening the panel is read-only; Take over waits for bot-input revocation before enabling human input. |
+
+Connect in observable stages: verify the selected PC's identity and reachability
+from the service PC; authenticate with vault-backed credentials; inspect the
+worker and desktop session; obtain a real frame; verify an explicitly approved
+harmless interaction; then expose Ready for those demonstrated capabilities.
+For an existing LAN PC, missing worker/session components require an explicit
+setup action rather than an implicit install. The initial development connection
+uses a prepared guest and does not alter the user's own desktop or OpenCode
+configuration.
+
+An offline PC, changed SSH identity, locked vault, missing worker, unavailable
+display or blocked capture/input keeps the setup at the failing stage with one
+useful next action. On reconnect, verify the workspace and session again before
+input. A command whose result is unknown is reconciled by its worker operation
+identity rather than repeated. Loss during human takeover leaves the bot paused.
+Closing the panel closes its stream, not the VM or service.
+
+The M365 connection uses the separately qualified route above. Do not force SSH
+or VNC onto a Cloud PC or represent its brokered RDP connection as our worker
+transport. The first slice must retain this adapter boundary while its actual
+tenant/session probe selects the route.
+
+When implementation is authorized, its smallest gate is one focused case for
+workspace/session binding and reconnect, plus one real prepared-guest connection
+showing a frame, a harmless command/file operation, an approved input and
+Take over / Hand back. Windows/M365 physical checks follow Ron's authorized
+desktop windows. These gates establish connection behavior, not cloud setup,
+unattended task persistence, model quality or release coverage.
+
+Next unresolved implementation choices are the minimal worker connection and
+operation-recovery protocol, the viewer component/license, and M365's actual
+permitted route. Resolve them against the pinned component contracts before
+adopting dependencies; no second agent executor or paid Arbitor layer is needed
+for this slice.
+
 ## Remaining engineering choices
 
 - M365's actual permitted route, client integration and embedded viewing surface.
@@ -388,5 +444,6 @@ no stale active scope and `git diff --check`. No service, VM, paid layer,
 dependency install, build or model run is part of the deliverable. Retain concise
 checks in `/ai/gchat/out/gbot-design-20261011/document-links.json` and
 `design-review.json`; no disposable build or VM needs retirement.
-Next action: bubbs merges the committed/pushed docs-only branch for Ron's review;
-implementation awaits Ron's authorization.
+Next action: Ron reviews the committed/pushed docs-only branch before main
+integration. The workspace-connection notes above are the next implementation
+slice's plan; implementation awaits Ron's authorization.
