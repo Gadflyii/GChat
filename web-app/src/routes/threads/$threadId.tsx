@@ -23,6 +23,7 @@ import {
 import { useOptimisticUserMessage } from '@/hooks/useOptimisticUserMessage'
 import { buildOptimisticUserMessage } from '@/lib/optimisticUserMessage'
 import { useChat } from '@/hooks/use-chat'
+import { reportCompletionContextWarning } from '@/lib/chat-warning'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { renderInstructions } from '@/lib/instructionTemplate'
 import {
@@ -255,22 +256,32 @@ function ThreadDetail() {
       // A startup-fixed GInfer context belongs to the selected host profile.
       // A length finish at capacity ends this request; the user can select a
       // larger profile or reduce the prompt before retrying.
-      if (!isAbort && finishReason === 'length') {
-        const selectedModelState = useModelProvider.getState().selectedModel
-        const usage = msgMeta?.usage as
-          { inputTokens?: number; outputTokens?: number } | undefined
-        const totalTokens =
-          (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0)
-        const ctxLen =
-          (selectedModelState?.settings?.ctx_len?.controller_props
-            ?.value as number) ?? 32768
-        const isContextLimit = ginferFinishReason
-          ? ginferFinishReason === 'context_capacity'
-          : totalTokens >= ctxLen * 0.9
-
-        if (isContextLimit) {
-          setContextLimitError(new Error(OUT_OF_CONTEXT_SIZE))
-        }
+      const selectedContextTokens = useModelProvider.getState().selectedModel
+        ?.settings?.ctx_len?.controller_props?.value as number | undefined
+      const usage = msgMeta?.usage as
+        { inputTokens?: number; outputTokens?: number } | undefined
+      if (reportCompletionContextWarning({
+        threadId,
+        modelId: typeof msgMeta?.modelId === 'string' ? msgMeta.modelId : undefined,
+        providerId: typeof msgMeta?.providerId === 'string' ? msgMeta.providerId : undefined,
+        messageFormat: 'ModelMessage[]',
+        conversion: 'converted',
+        uiMessageCount: null,
+        modelMessageCount: null,
+        toolCount: null,
+        configuredContextTokens: selectedContextTokens ?? null,
+        loadedContextTokens: null,
+        contextTokens: null,
+        inputTokens: usage?.inputTokens ?? null,
+        outputTokens: usage?.outputTokens ?? null,
+        reservedOutputTokens: null,
+      }, {
+        isAbort,
+        finishReason,
+        ginferFinishReason,
+        comparisonContextTokens: selectedContextTokens ?? 32768,
+      })) {
+        setContextLimitError(new Error(OUT_OF_CONTEXT_SIZE))
       }
 
       // Preserve partial answers when a request reaches a limit.

@@ -890,6 +890,46 @@ Preserve messages, tool results and settings; do not delete history or restart
 the server to erase the evidence. No speculative engine fix follows from the
 available receipt.
 
+October 11's bounded audit of main `d9b802e4c` finds no attributable warning
+trigger in those records. The thread completion handler requires a length
+finish with `context_capacity` (or usage-based fallback), while request
+preparation and error classification handle structured/raw context failures.
+The recorded agent `max_steps` is a separate outcome and cannot by itself
+enter the completion warning branch. The later `stop_token` continuation does
+not enter it either. SDK ModelMessage schema rejection is distinct from context
+admission; the accepted delegated-result fix omits absent JSON fields.
+
+Owning paths are `web-app/src/routes/threads/$threadId.tsx:257`,
+`web-app/src/lib/smart-context.ts:895`, `web-app/src/utils/error.ts:19,74`,
+`web-app/src/lib/agent-run-message.ts:31` and
+`web-app/src/lib/execute-chat-capability.ts:114`. This separates possible error
+sources; it does not establish which emitted the lost October 1 warning.
+That audit made no implementation, test, model run or capacity change and did
+not establish the original cause.
+
+The subsequent October 11 decision adds diagnostics, not a speculative fix.
+Candidate `6a9fd25e0` emits `chat_warning` records through the existing native
+`data/logs/app.log` target for model setup, message conversion, stream failures
+and completion warnings. Records identify the triggering branch, model/provider,
+conversion/schema decision, message/tool counts and available current-request
+capacity, input, output and reserve counts. Completion records include the
+actual capacity used for the existing comparison; loaded capacity and reserve
+are null when unavailable there. Earlier request metadata is never used to fill
+missing diagnostic counts. Structured context errors retain their numeric
+budget details. The added record excludes prompt/tool contents, error causes and
+arbitrary error messages; known static SDK format messages remain distinguishable.
+
+One focused real transport/SDK fixture passes 1/1 on `6a9fd25e0`, including
+unchanged returned errors and completion predicates, unavailable fresh counts
+after a counted request, and sensitive-value omission. Its final log is
+`/ai/gchat/out/oi076-warning-diagnostics-20261011/fixture-owner-hook.log`.
+The first IPC spy and the SDK formatter's duplicate invocation were corrected
+before that pass; the existing console reporting and warning behavior remain
+unchanged. No model run or installed occurrence was exercised. OI-076 now reads
+diagnostics in place on the candidate, waiting for the next occurrence after
+merge. Preserve its app.log record and the matching conversation on recurrence;
+the October 1 cause remains unknown.
+
 ## Owned inventory and execution
 
 | Owner / exact path | Purpose and retention |

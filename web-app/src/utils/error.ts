@@ -61,18 +61,9 @@ export const OUT_OF_MEMORY_TITLE = 'Ran out of memory'
 export const OUT_OF_MEMORY_MESSAGE =
   'The model ran out of memory while processing this request. Try a smaller or lighter model, reduce the context size, or remove attached images. On Apple Silicon, memory is shared with the system, so closing other memory-heavy apps can free up headroom.'
 
-/**
- * Detects errors raised when a request exceeds the model's context window.
- *
- * Mirrors the Rust `is_context_limit_error` matcher in
- * `src-tauri/src/core/server/proxy.rs` so the UI classifies the same engine
- * error bodies the proxy does. llama-server and mlx-server are both
- * OpenAI-compatible but phrase overflow differently: mlx-vlm rejects an
- * over-budget request with `... but MAX_KV_SIZE is N` (ATO-170), llama.cpp
- * references "context" + a size/length/limit keyword. Keep patterns lower-case.
- */
-export function isContextLimitError(error: unknown): boolean {
-  if (!error) return false
+/** Return the matched context-limit rule without logging the error body. */
+export function contextLimitErrorTrigger(error: unknown): string | null {
+  if (!error) return null
   const raw =
     typeof error === 'string'
       ? error
@@ -81,32 +72,30 @@ export function isContextLimitError(error: unknown): boolean {
         : typeof error === 'object' && error !== null && 'message' in error
           ? String((error as { message?: unknown }).message ?? '')
           : ''
-  if (!raw) return false
+  if (!raw) return null
   const b = raw.toLowerCase()
-  if (b.includes(OUT_OF_CONTEXT_SIZE)) return true
+  if (b.includes(OUT_OF_CONTEXT_SIZE)) return 'available-context-size'
   if (
     b.includes('max_kv_size') ||
     b.includes('max-kv-size') ||
     b.includes('max kv size')
   ) {
-    return true
+    return 'max-kv-size'
   }
   if (
     b.includes('kv cache') &&
     (b.includes('exceed') || b.includes('overflow') || b.includes('too'))
   ) {
-    return true
+    return 'kv-cache-capacity'
   }
-  if (!b.includes('context')) return false
-  return (
-    b.includes('size') ||
-    b.includes('length') ||
-    b.includes('limit') ||
-    b.includes('exceed') ||
-    b.includes('overflow') ||
-    b.includes('too long') ||
-    b.includes('too large')
-  )
+  if (!b.includes('context')) return null
+  const keyword = ['size', 'length', 'limit', 'exceed', 'overflow', 'too long', 'too large']
+    .find((word) => b.includes(word))
+  return keyword ? `context-${keyword.replace(' ', '-')}` : null
+}
+
+export function isContextLimitError(error: unknown): boolean {
+  return contextLimitErrorTrigger(error) !== null
 }
 
 /**
