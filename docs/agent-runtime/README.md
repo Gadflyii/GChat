@@ -3,7 +3,12 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-Current work is [the Linux Code TUI correction](remaining-acceptance.md#current-linux-code-tui-correction):
+Current source-only terminal work is [whole-window Unix PTY geometry](remaining-acceptance.md#current-unix-pty-window-geometry-correction).
+The frontend now sends full container pixels and reports pixel-only changes at
+unchanged rows/columns. Its focused fixture is unrun; coordinator review and the
+named CPU gate are next. This is separate from the accepted Linux Code TUI fix.
+
+The accepted [Linux Code TUI correction](remaining-acceptance.md#current-linux-code-tui-correction):
 the reproduced esbuild lowering defect is corrected in tested source `f2de958f3`.
 The production-bundled parser fixture passes 1/1; affected lint, frontend
 typecheck/build and the corrected Linux desktop build pass. The named live Linux
