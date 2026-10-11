@@ -44,26 +44,37 @@ before filtering, and protect GNOME serialization with a focused fixture. Keep
 exact process birth/executable and native target guards. Product code is unchanged
 unless the corrected live gate demonstrates a product failure.
 
-Next unresolved question: does the accepted Manager6b export its own fresh SNI
-and complete native Hide/Open/Exit on S2? The new private fixture is
-`/mnt/data/ai/gchat-linux-tray-registration-20261011`; the accepted four-file
-archive is `out/s2-acceptance-20261011/manager-build-6b199362d-120030/manager/ginfer-manager-linux-x64.tar.gz`.
-Queue one bounded no-model check behind the existing FIFO job, using the current
-X11/session bus with unchanged HOME and private XDG config/data/cache. No build,
-model, application patch or new desktop session is justified yet.
+Actual FIFO882 runs14:42:55–14:42:57Z with unchanged accepted Manager6b and
+Host257. Fresh SNI `:1.362@/org/ayatana/NotificationItem/tray_icon_tray_app_manager`
+resolves to exact Manager3859889; its Active state, menu and accessible description
+are bound before input. Native Alt+F4 hides the same Manager and retains Host3859853.
+Open/Exit are not reached: the helper's structural accessibility walk admits Frame
+but not the actual Shell Window at depth1, so it cannot reach the tray label.
 
-Effective gate: `timeout --signal=TERM --kill-after=20s 230 taskset -c 0-31
-/usr/bin/python3 /mnt/data/ai/gchat-linux-tray-registration-20261011/package/s2-tray-gate.py`.
-The driver rejects a changed FIFO birth, inactive session or changed package,
-keeps HOME unchanged and records the fresh SNI before native input. Internal
-work bound is180s; ordinary Exit must remove Manager while retaining Host, then
-owned Host stops normally. Four original config/binary fingerprints must remain
-unchanged. Source fixture3/3 and corrected-helper syntax checks pass. No model
-or application job has run yet. FIFO882 was queued14:27:44Z behind881 with that
-exact command; acceptance remains pending. Two independent source reviews find
-the corrected identity and native ownership/input guards coherent. Gate code and
-admission are retained in the subject evidence folder, not product app changes.
+A read-only Shell metadata check demonstrates `Application -> Window -> Panel`.
+The old160-node/10-depth walk also cannot cover the actual visible164-node/12-depth
+tree. Correct the owning probe to refresh structural caches, include that exact
+Shell Window, prune hidden branches and retain a finite traversal bound fitting
+the observed tree. This does not relax process/SNI/name/native-point ownership.
+No application registration defect or missing accessible name is established.
 
+Repeated probe failures came from assumptions about the provider's identity and
+accessibility shape rather than observed provider metadata. The concrete
+prevention is shared tested decoding/traversal plus retained pre-filter metadata;
+product patches must follow demonstrated app behavior rather than a failed finder.
+The decoder fixture3/3 is reused; the new Window traversal fixture1/1 passes. Both
+exact children are absent, Host exits0, and all four original config/binary
+fingerprints are unchanged. Raw evidence is in
+`out/linux-tray-registration-20261011/native-882-evidence/`;
+`watcher-format-diagnosis.json` and `shell-traversal-diagnosis.json` retain the causes.
+
+Next unresolved action: one source-corrected FIFO Hide/Open/Exit gate using the
+same accepted four-file archive, no rebuild/model/Pair. Use a fresh owned fixture
+under `/mnt/data/ai/gchat-linux-tray-registration-r2-20261011`, unchanged HOME and
+private XDG config/data/cache in Ron's active unlocked X11 session8475. The existing
+FIFO5130 remains the only launcher. Bound230s plus20s cleanup; require owned SNI,
+normal native Exit and retained Host before its graceful shutdown. Keep882's
+partial evidence and retire its disposable fixture only after exact lifetime audit.
 
 ## Current S2 pairing and tray acceptance — OI-069 / OI-071
 
