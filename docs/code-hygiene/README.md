@@ -6,7 +6,31 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — short formatted Chat replies
+## Current item — OI-076 continued-chat warning diagnosis
+
+Deliverable: establish the cause of the original October 1 context/format
+warning after continuing a step-limited agent conversation, using preserved
+evidence first. Accepted main is `d9b802e4c`. The exact warning, failed request
+and matching history are required for attribution; later successful replies
+and fixes for different failures do not close this diagnosis. Deadline06:00 UTC.
+No speculative fix, blind model rerun, new capacity limit or release action.
+
+The two retained incident records contain later max_steps and Working-only
+events. Neither preserves the original diagnostic or failed request.
+[Agent runtime](../agent-runtime/README.md#earlier-recovery-evidence) and
+[diagnostic preservation](../agent-runtime/remaining-acceptance.md#original-diagnostic-preservation)
+own the evidence and precise missing input. The bounded source audit at
+`d9b802e4c` separates context admission, completion and SDK schema failures;
+the saved events demonstrate none of those warning triggers. OI-076 remains
+blocked. No source change or model run follows from this evidence.
+
+Owned candidate `/ai/gchat-worktrees/oi076-evidence-d9b`, branch
+`docs/gchat-oi076-evidence-d9b`, baseline `d9b802e4c`; documentation only, no
+build/artifact or live job. Existing incident evidence is retained in
+`/ai/gchat/out/agent-recovery-20261001/`. Next: obtain the original diagnostic or
+one preserved recurrence with the matching request and loaded capacity.
+
+## Accepted short formatted Chat replies
 
 Deliverable: remove the renderer's under32-character plain-text bypass so short
 formatted replies use the same supported Markdown/plugin path as long replies.
@@ -34,7 +58,7 @@ disposable browser profile removed; logs/image remain. Vite's stale
 baseline-browser-mapping warning is recorded separately without upgrading an
 unrelated dependency. No unchanged passing gate was repeated.
 
-Next: normal main merge, then OI076. Preserve the
+Merged on main `d9b802e4c`. Preserve the
 accepted dependencies and all plugin capabilities. Owned candidate
 `/ai/gchat-worktrees/short-markdown-8a0`, branch `fix/gchat-short-markdown-8a0`,
 no live job. Reuse source-identical core output and the accepted physical graph

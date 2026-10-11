@@ -890,6 +890,23 @@ Preserve messages, tool results and settings; do not delete history or restart
 the server to erase the evidence. No speculative engine fix follows from the
 available receipt.
 
+October 11's bounded audit of main `d9b802e4c` finds no attributable warning
+trigger in those records. The thread completion handler requires a length
+finish with `context_capacity` (or usage-based fallback), while request
+preparation and error classification handle structured/raw context failures.
+The recorded agent `max_steps` is a separate outcome and cannot by itself
+enter the completion warning branch. The later `stop_token` continuation does
+not enter it either. SDK ModelMessage schema rejection is distinct from context
+admission; the accepted delegated-result fix omits absent JSON fields.
+
+Owning paths are `web-app/src/routes/threads/$threadId.tsx:257`,
+`web-app/src/lib/smart-context.ts:895`, `web-app/src/utils/error.ts:19,74`,
+`web-app/src/lib/agent-run-message.ts:31` and
+`web-app/src/lib/execute-chat-capability.ts:114`. This separates possible error
+sources; it does not establish which emitted the lost October 1 warning.
+OI-076 stays blocked on the diagnostic/request/history identified above. No
+implementation, test, model run or capacity change was made for this audit.
+
 ## Owned inventory and execution
 
 | Owner / exact path | Purpose and retention |
