@@ -104,7 +104,7 @@ After that reservation cleared, ordinary CPU16–31 admission completed the fina
 fixture and lint by 02:33:31 UTC; its container exited0 and is absent. The unused
 02:45–02:50 fallback booking404 is cancelled. No GChat job, guard holder or waiter
 remains. Next: normal GChat main merge, with OI-116/118 limits retained and the
-C1 served donor pending. No passing unchanged check was repeated.
+C1-owned served smoke scheduled. No passing unchanged check was repeated.
 
 OI-116 retains Linux `df` pending explicit rustix 1.1.4 direct-dependency approval.
 The prepared patch is outside the source; Windows uses its native API, whose
@@ -117,8 +117,9 @@ C1-CORE-021 is signed/merged as GInfer dev/next `7af8f6114`. Strict original and
 candidate owning tests pass; one near-capacity put allocations 21,228 → 16,
 requested bytes 6,430,400 → 3,288 and total wall 4.832 ms → 3.330 microseconds.
 The post-merge owning fixture passes on the source-identical accepted binary.
-One served continuation chain awaits the next merged-source donor; no additional
-GInfer build or older-engine result is authorized. Its separate authority is
+The served continuation chain is assigned to C1's post-merge smoke on merged
+dev/next `9b7d10cdd` (contains `7af8f6114`), Ada4090 after 03:10 UTC. GChat takes
+no additional live action or build; C1's result is pending. Its separate authority is
 `/ai/ginfer-worktrees/response-store-review-20261011/docs/response-store/README.md`.
 
 ### Owned disk and job inventory
