@@ -463,11 +463,18 @@ mod tests {
             "dbus-x11",
             "dbus-user-session",
             "at-spi2-core",
+            "mousepad",
         ] {
             assert!(packages.contains(&serde_json::json!(package)));
         }
         assert!(!packages.contains(&serde_json::json!("x11vnc")));
         let files = data["write_files"].as_array().unwrap();
+        let operation = files
+            .iter()
+            .find(|v| v["path"] == "/usr/local/bin/gbot-operation")
+            .unwrap();
+        assert_eq!(operation["permissions"], "0755");
+        assert!(!operation["content"].as_str().unwrap().is_empty());
         let session = files
             .iter()
             .find(|v| v["path"] == "/usr/local/bin/gbot-desktop-session")

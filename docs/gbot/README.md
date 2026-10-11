@@ -9,8 +9,9 @@ Status: Ron approved the design; it is merged into GChat main. October 11 step 1
 implements the local-first service skeleton, vault-held SSH sessions, guest-tools
 contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparation below replaces earlier S1/S2
 acceptance-host proposals; the Debian image and Host tools are staged, with
-first dedicated-guest gate passed. Integrated Gbot service admission is still pending.
-The focused contracts and actual loopback SSH fixture pass;
+first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
+on `feat/gbot-cua-service-be226`; its dedicated-guest model gate is next.
+The focused contracts and actual loopback SSH fixture pass.
 No user desktop input or native Windows execution is authorized. Ron separately
 approved the isolated S1 Debian guest and its harmless accessibility gate below.
 
@@ -664,9 +665,8 @@ environment. This gate does not establish restoration across that integration.
 Official Cua 0.34.1 binary revision is 0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc;
 archive SHA256 is `a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.
 Only MIT driver/cursor components are installed; optional helpers are excluded.
-Next unresolved action: replace the service's `gbot-guest --stdio` JSON-worker
-assumption with Cua MCP and direct SSH command/file routes while preserving
-session identity, capabilities, cancellation and unknown-operation recovery.
+This guest preparation is merged as `be2267586`. Current service integration
+and its remaining acceptance are recorded below.
 
 Retirement receipt: `retirement.json` and `s1-evidence/fixture-retirement.json`.
 Both merged SSH-import and package source trees are retired; package artifacts,
@@ -692,8 +692,24 @@ prevents duplicate dispatch. A desktop action without a completion receipt
 remains unknown and cannot be replayed automatically. Session binding records
 the desktop unit's InvocationID; restarting it requires a new session identity.
 
-Acceptance proposed to the coordinator: focused pinned MCP/tool and direct SSH
-command/file/cancel/lost-reply cases, strict Clippy, then one integrated dedicated
-guest/model task and independent SSH file readback. Next unresolved action:
-implement and run those gates; accepted dense-INT runtime/GPU assignment pending.
-Evidence root `/ai/gchat/out/gbot-cua-service-20261011/`; no live guest/model yet.
+Approved acceptance: focused pinned MCP/tool and direct SSH command/file/cancel/
+lost-reply cases, strict Clippy, then one integrated dedicated guest/model task
+and independent SSH file readback. All three SSH fixtures pass, including lost
+desktop replies, duplicate refusal and a fresh MCP channel after uncertainty.
+Strict all-target Clippy and the production-service fixture build pass; the
+changed first-boot fixture is the remaining CPU check.
+
+The live gate uses S1 GPU0, at most 20 minutes while the model runs. Approved
+runtime: `/media/ron/SSD_RAID/ai/tmp-bubbs-laptop-smol-20261011/build120/apps/ginfer-serve`,
+assigned as dev/next `3235aaacc` (its executable reports unknown version/commit).
+Artifact: `/media/ron/SSD_RAID/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/qwen38_27b_int_df2.ginfer`.
+Hardware profile: `/media/ron/SSD_RAID/ai/tmp-c4-gbench-scoreboard-20261011/results/pro1-r2/profiles/dense-qwen-int.json`.
+Effective launch: artifact first, `--tp 1 --max-context 16384 --max-concurrency 2
+--kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy --no-profile
+--hardware-profile <above>`, bound to localhost. Greedy avoids the open sampled
+speculation defect. This is a functional task, not a GBench/performance claim.
+
+Next unresolved action: the first-boot fixture, then start a fresh dedicated
+Debian guest through the production service and run the approved model task.
+Evidence root `/ai/gchat/out/gbot-cua-service-20261011/`; candidate guest root
+`/ai/gbot-vms/cua-service-20261011/` on S1, vCPUs112–113. No live guest/model yet.
