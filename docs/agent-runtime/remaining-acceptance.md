@@ -22,15 +22,58 @@ or Windows changes. Book the local5090 for at most20 minutes only while the
 model runs, after C3's current09:01–09:36 install actually releases its guard;
 09:40 remains the conservative earliest planned GPU start. No full suites,
 passing-gate repeats, release/sign/publication or added limits. Deadline11:30Z.
-Source diagnosis establishes three owners: Builder had no successful-save
-completion boundary; native saves did not notify mounted definition consumers;
-Chat serialization omitted terminal tool state/error text. Candidate corrections
-are implemented and under independent source review. Focused checks plus one
-current Linux desktop build are booked CPU-only09:22–09:57 after C3 cancels its
-booking and both canonical guards are reacquired with no compute process; no current candidate
-build or model job exists. Retain the accepted prior257 Host and concise evidence at
-`out/remaining-acceptance-20261009/oi068-linux-smol-20261011/`; retire the merged
-prior source tree after confirming no live user or dirty state.
+The coherent candidate fixes all three source owners: native Builder ends after
+its successful reviewed save; native definition saves/deletes notify mounted
+consumers after persistence; canonical Chat history retains terminal tool state
+and error text. Denied/failed authoring remains revisable, ordinary-agent saves
+continue, and successful/falsy results and existing saved-tool history are retained.
+
+All19 focused cases pass: mounted definitions5, history11, native Builder2 and
+native persistence1. Current core/frontend build and affected lint pass; corrected
+Linux desktop production from b51909e63 passes in3m11s without compiler warnings.
+The frontend retains its existing large-chunk notice. Independent source review
+and independent saved live-evidence review find no material blocker.
+
+The single real-model gate passes on the corrected Linux desktop, accepted257
+Host, accepted670 runtime/profile and in-place FlashNext SMOL. Each actual Create
+agent approval saves exactly once, then native Builder finishes with reply and
+no further inference. Outer Chat still generates its normal summary and clears
+Working. Create and rename appear in the same Chat selector without reload or
+navigation; the stored update changes only name. No separate persistent React
+mount token is claimed. One ordinary approved missing-file read stores
+output-error and the exact OS error; sidebar reopen shows Could not read document
+with the identical ERROR text, rather than a pending tool. No retry or alternate
+file/shell/web execution occurs.
+
+Booking47109:43–10:03 is returned at the actual09:49 model end, after normal
+sidebar Stop proves stopped/0active and facade1337/upstream46013 closed. Owned
+model children, app, Host and guard are absent. The guard exits0; later admission
+belongs to another owner. Private test state23797760 allocated bytes is removed,
+and the clean/pushed/merged prior OI-068 tree is retired. Candidate source and
+tested desktop/evidence remain for coordinator merge; shared models, source
+profile/runtime, previous evidence and Windows installation remain intact.
+
+The existing Code isolation gap is also observed during ordinary model selection:
+managed configuration writes HOME/.config/opencode/opencode.jsonc despite private
+XDG/app data. No Code run occurs. Its immediate before-image is unavailable, so
+no exact restoration or wholly isolated user-configuration claim is made. The
+master GCHAT-CODE-MANAGED-CONFIG-DATA-ROOT row retains this owning correction.
+Broader OI-068 remains PARTIAL for Code/Hermes/Windows and active-worker scope.
+
+Current next action: coordinator review/main merge of this single three-defect
+change, without release/sign/publication. No owned live job or booking remains.
+
+| Owner / host | Exact path | Purpose / retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/agent-walkthrough-869` | Current reviewed candidate; retain until coordinator merge |
+| GChat / local | `/ai/gchat/out/agent-walkthrough-20261011/` |19 focused PASS, tested desktop and real-model-result.json / exact saved-error and cleanup evidence |
+| GChat / local | Same packet `runtime-donor/usr/bin/gchat` | Tested b51909e63 Linux developer desktop; preserve without rebuilding |
+| GChat / local | Same packet `test-root/` | Deleted after normal resource return; concise generated evidence retained |
+| GChat / local | Prior OI-068 packet `accepted-host/ginfer-host` | Accepted257 Host reused without rebuild; preserve |
+
+Accepted670 runtime, complete v2 profile and in-place FlashNext SMOL artifact are
+retained prerequisites in the baseline inventory below. No Engine build,
+calibration, model copy, Windows change or performance/qualification claim.
 
 ## Accepted OI-068 Linux SMOL functional walkthrough
 
@@ -83,8 +126,9 @@ The08:23 conditional decision allows Code only with safe isolation. Linux
 managed configuration ignores private XDG and writes under HOME, which stays
 unchanged here: Code is skipped and GCHAT-CODE-MANAGED-CONFIG-DATA-ROOT remains
 open. Hermes provisioning is excluded; its live cell is owed on the existing
-Windows installation at the release walkthrough. Broader Windows/Code/Hermes,
-Builder completion and active-worker checks keep OI-068 open.
+Windows installation at the release walkthrough. These are baseline failures; the three-defect candidate above now accepts Builder
+completion/live refresh/error history. Broader Windows/Code/Hermes and active-worker
+checks keep OI-068 open.
 
 One invalid harness send is excluded from saved-agent acceptance: selector
 lookup failed, but its shell caller continued to Send. Ordinary Stop cancels
@@ -104,13 +148,13 @@ remnant is also retired after confirming its source is pushed and merged;
 315,731,968 allocated bytes are removed in total. No Windows state or owner
 runtime/profile/model is changed.
 
-Current next action is coordinator review/main merge of257 plus this accepted
-functional evidence, then remedy the remaining product rows in assigned order.
+Source257 and this baseline are merged/pushed on main869a368b1. The current
+three-defect candidate gate and handoff are recorded above.
 There is no live model, Host, app, booking or guard owned by this walkthrough.
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/oi068-real-model-a4bebb2e` | Unmerged source/docs candidate; retain until coordinator merge |
+| GChat / local | `/ai/gchat-worktrees/oi068-real-model-a4bebb2e` | Retired after clean, pushed and merged main869 verification; evidence/accepted Host retained outside tree |
 | GChat / local | `/ai/gchat/out/remaining-acceptance-20261009/oi068-linux-smol-20261011/` | Concise generated-fixture evidence, `chat-functional-result.json`, `saved-agent-functional-result.json`, `compact-and-continuation-result.json`, final Stop/resource/cleanup receipts |
 | GChat / local | Same packet `accepted-host/ginfer-host` | Tested257 Linux Host,4,323,960 bytes; retain without rebuilding |
 | Accepted baseline / local | `/ai/gchat/out/remaining-acceptance-20261009/oi073/app-delete-20261011/runtime-donor/` | Accepted35e desktop and packaged resources; preserved |

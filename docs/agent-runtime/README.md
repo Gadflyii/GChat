@@ -3,21 +3,21 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-Current work is the [three walkthrough defect corrections](remaining-acceptance.md#current-walkthrough-defect-correction):
-Builder completion, live definition refresh and failed-tool history. Baseline
-main869a368b1 includes the accepted Host launch-order correction. Focused gates
-and one bounded Linux real-model re-check are authorized; no release or Windows
-change. The prior [isolated walkthrough](remaining-acceptance.md#accepted-oi-068-linux-smol-functional-walkthrough)
-is preserved as baseline evidence below.
+The [three walkthrough defect corrections](remaining-acceptance.md#current-walkthrough-defect-correction)
+are merge-ready: Builder finishes after its successful reviewed save, mounted
+Chat refreshes created/updated definitions, and failed-tool history preserves its
+terminal state and exact error. All19 focused cases, corrected Linux desktop
+build and one targeted real-model three-step check pass. Independent review
+accepts source and saved live evidence. Normal Stop and private-root cleanup are
+complete; no owned model/app/Host/guard/booking remains. No Windows or release change.
 
-The [isolated Linux SMOL walkthrough](remaining-acceptance.md#accepted-oi-068-linux-smol-functional-walkthrough)
-accepts actual Host Ready, Chat MD/XLSX reading/continuation, reviewed saved
-agent execution, manual Chat compaction/continuation and normal final Stop.
-Builder completion fails on a duplicate save; missing definition refresh and
-failed-tool error persistence are logged. Code isolation and Hermes remain
-explicit gaps. The narrow Host argument-order fix257 passes its focused argv
-fixture/build and real startup. No Engine build, calibration, Windows change
-or performance claim. GPU resources and private test state are returned.
+The [accepted OI-068 baseline](remaining-acceptance.md#accepted-oi-068-linux-smol-functional-walkthrough)
+on main869a368b1 preserves actual Host Ready, Chat MD/XLSX reading/continuation,
+reviewed saved-agent execution, manual Chat compaction/continuation and final Stop.
+The candidate above corrects its three agent/history defects. OI-068 remains
+PARTIAL for Code isolation, Hermes/Windows and broader active-worker scope. Ordinary
+model selection also reproduces the existing global OpenCode configuration escape;
+its exact before-image is unavailable and no restoration claim is made.
 
 OI-075's one generated Linux/WSLg WebKit observation is now measured: opening
 110 ms, full programmatic traversal 113 ms and stable foreground idle 30.047 s.
