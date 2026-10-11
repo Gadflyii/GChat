@@ -83,7 +83,7 @@ all protected state equal and Manager/Host retained, Engine/API/debug0; the
 build-only keeper exits0 and releases at23:59:56. Booking393 is cancelled.
 `desktop-ui-393-retry/root-normal-recovery-verification.json` and
 `desktop-ui-393/release-verified.json` hold the actual recovery/resource proof.
-The new accepted desktop is retained as baseline; source and build are pushed.
+The new accepted desktop is retained locally as baseline; source is pushed.
 Startup-default source1ec remains a separate unbuilt change; the installed local
 flags are false, not proof the new default code is installed. Next: coordinator
 lands the accepted source through normal main merge, with no release/signing.
