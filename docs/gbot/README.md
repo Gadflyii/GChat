@@ -9,7 +9,7 @@ Status: Ron approved the design; it is merged into GChat main. October 11 step 1
 implements the local-first service skeleton, vault-held SSH sessions, guest-tools
 contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparation below replaces earlier S1/S2
 acceptance-host proposals; the Debian image and Host tools are staged, with
-first physical guest qualification pending.
+first dedicated-guest gate passed. Integrated Gbot service admission is still pending.
 The focused contracts and actual loopback SSH fixture pass;
 No user desktop input or native Windows execution is authorized. Ron separately
 approved the isolated S1 Debian guest and its harmless accessibility gate below.
@@ -542,14 +542,14 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
 supersedes the initial draft's unassigned-cloud scope without changing runtime
-code. Approved design `9c8c3b8ca` is merged; current implementation baseline is
-GChat main `254c0f8fd`; tested source remains `1a5771def`.
+code. Approved design `9c8c3b8ca` is merged; current main baseline is `0705f31a6`; initial step-1 tested source is
+`1a5771def`, and the dedicated-guest candidate below is `fa63cb8df`.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
 | GChat coordinator / local workstation | Branch `feat/gbot-workspace-connection-42d`, merged in main `254c0f8fd` | Clean, pushed source tree retired after ancestry verification; no live guest or service. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-workspace-20261011/` | Focused gate and merged-tree retirement evidence; shared build cache retained. |
-| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-ssh-key-import-c21`, branch `fix/gbot-ssh-key-import-c21` | Tested import follow-up, retained until reviewed main integration; no live service or guest. |
+| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-ssh-key-import-c21`, branch `fix/gbot-ssh-key-import-c21` | Merged in main 0705; source tree may be retired after clean/ancestry verification. No live service or guest. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-ssh-key-import-20261011/` | Two focused gate results, logs and dependency decision; no keys or model/VM copies. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-design-20261011/` | Concise input/research and document-check evidence; no binary, model or VM copy. |
 
@@ -567,8 +567,8 @@ source is `1a5771def`, from main `42d8c401e`; evidence is
 The loopback fixture verifies pinned vault-key authentication, generated guest
 command/file operations, cancellation, keepalive, forwarding and shutdown. A
 lost reply followed by service restart reconciles one completed file effect
-without dispatching it again. Native-vault provider availability remains
-unqualified. The import follow-up above qualifies encrypted/RSA behavior against
+without dispatching it again. Native-vault provider availability was unqualified in that initial loopback;
+the dedicated-guest gate below now covers an isolated Linux Secret Service collection. The import follow-up above qualifies encrypted/RSA behavior against
 the hermetic SSH server; it does not establish a physical vault provider.
 The CPU booking ended at 16:48:48 UTC; owned containers and generated guest files
 are gone and the canonical build guard was returned. The shared build cache is
@@ -584,134 +584,92 @@ operation ID cannot authorize replay of a possibly completed external effect.
 
 ### Current KVM and Linux desktop preparation
 
+**Dedicated-guest gate passed on S1.** The product adapter created a Debian 13
+VM; vault-key SSH, Cua MCP desktop capture and a harmless AT-SPI menu action
+with independent dialog readback passed. The guest is stopped, no owned QEMU
+process remains, and the fixture credential is removed. This is guest setup/Cua
+qualification, not an integrated Gbot Ready claim.
+
 Repository: GChat; subject: `docs/gbot/`. Authority:
-`/ai/coordination/gbot-vm-plan-20261011.md`, including approved stack and design
-additions. Candidate `feat/gbot-kvm-cloud-init-c21`, baseline main `0705f31a6`,
-at `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21`. OI-057 package source remains
-exact main `0705f31a6` in the separate owned tree
-`/ai/gchat-worktrees/oi057-linux-packages-0705`; outputs/evidence are
-`/ai/gchat/out/oi057-linux-packages-20261011`.
+`/ai/coordination/gbot-vm-plan-20261011.md` through the 20:10Z network decision.
+Candidate `feat/gbot-kvm-cloud-init-c21`, baseline main 0705, tested production
+`fa63cb8df`. Evidence: `/ai/gchat/out/gbot-kvm-prep-20261011/result.json` and
+`s1-evidence/`. No signing/publication, native Windows, human desktop input,
+model inference or Vision qualification. OI-057 stock Ubuntu Desktop acceptance
+and Gbot service integration remain separate open work.
 
-S1 (`ron@192.168.1.109`, verified AIS-2-8592-L01) has all seven explicitly
-approved host packages: `qemu-system-x86`, `qemu-utils`, `cloud-image-utils`,
-`libvirt-daemon`, `libvirt-daemon-driver-qemu`, `libvirt-clients`, `passt`.
-KVM read/write access is intact; `libvirt-daemon-system` is absent and the
-system libvirt services are inactive. SeaBIOS suffices; no bridge or host
-firewall setup is part of this adapter.
+The adapter owns guests through qemu:///session. One QEMU-commandline slirp
+netdev and JSON virtio NIC provide a recorded ephemeral SSH port on 127.0.0.1.
+There is no XML NIC: `virsh domiflist` is empty by design. Port0 in a new request
+is resolved before the durable setup record is written; reopen preserves it.
+A bind conflict fails startup without silently choosing another port. The
+Debian BIOS image needs an emulated VGA device, while the bot desktop runs on
+TigerVNC Xvnc :1. No host GPU is passed through.
 
-The adapter uses **qemu:///session** with slirp user-mode networking and an
-explicit loopback-only SSH forward, recorded with the guest. Libvirt owns the running guest independently
-of Gbot service lifetime. Disks, seed, XML and setup records are under
-`/ai/gbot-vms`; libvirt keeps normal per-user domain registrations. Unregister
-the exact stopped owned UUID before deleting its files. Never remove other
-users' domains or claim directory removal alone clears registration. Stop both
-guests during CPU-throughput benchmarks on all or overlapping cores. Disjoint
-GPU runs can coexist only with explicit guest vCPU/emulator pins. The first
-guest is pinned to112–113 (coordinator clarification1954Z).
+Cloud-init installs the pinned Cua driver and XFCE, then starts the systemd user
+manager and waits for the notify-type desktop unit. Launcher helpers never
+inherit NOTIFY_SOCKET; only the final script notification follows X-server
+validation, desktop.env publication and XFCE launch. The boot marker requires
+an active unit. The service uses that DISPLAY/XAUTHORITY/private D-Bus environment
+for Cua MCP through SSH; commands/files retain their SSH channel ownership.
+There is no new native guest-worker binary. VNC is localhost-only and pointer,
+key and clipboard input starts disabled. Integrated viewer/Take over and durable
+service recovery have not been qualified by this gate.
 
-Two guests serve different purposes. `gchat-linux-accept` is stock Ubuntu 24.04
-Desktop/GNOME, 4 vCPU / 8 GiB / 40 GiB, with a post-install clean snapshot.
-OI-057 runs in both GNOME Wayland and Ubuntu on Xorg: launch/render, one Chat
-completion through an accepted Host, generated session save/reopen across
-restart, normal exit. `gbot-linux-dev` is a Debian 13 cloud image created by
-the product adapter, 2 vCPU / 4 GiB, XFCE on Xvnc :1. VNC listens on localhost
-and uses SSH. Neither guest shares a person's desktop or passes through a host GPU.
-The Debian BIOS guest retains an emulated VGA device for boot; its bot desktop
-still runs on Xvnc.
+Acceptance evidence:
 
-There is no new native guest-worker binary. Cloud-init and systemd **user**
-units own Xvnc/XFCE, publish the selected DISPLAY/XAUTHORITY/session D-Bus
-environment, and enable AT-SPI. The service runs pinned Cua Driver MCP over
-SSH with that environment; commands and files use SSH channels. Per-session
-identity and capability checks must stay intact while removing the initial
-JSON-worker assumption. User viewer input/clipboard starts disabled. Actual
-capture, input and takeover require their physical gates.
+| Check | Observed result |
+| --- | --- |
+| Fresh guest | Debian 13 genericcloud20261001-2618,2 vCPU/4 GiB; owned UUID `6b870517-eb42-431d-b56b-2d5835f4e8dc`. |
+| Native fixture vault / SSH | Generated Ed25519 key stored/reloaded through isolated Secret Service; host identity bound to owned console; authentication passed; no private-key file or user credential copy. |
+| Desktop frame | Real 1280×800 Cua image, visually inspected; dedicated Gbot-Readiness terminal visible. |
+| Accessibility action | Terminal PID 3975, Help→About dispatched through accessibility; fresh window list proves a new About xfce4-terminal dialog for the same PID. Action reply alone was not treated as verification. |
+| Stop / credential cleanup | Native stop reports Stopped; fresh process scan finds no owned QEMU; NativeVault delete succeeds. Fixture provider processes are absent. |
+| Source gates | Three affected setup/XML/lifecycle/selected-port cases passed; later owning XML and first-boot cases passed after their source changes; final strict all-target Clippy and fixture build passed. No full suite or repeated unchanged passing gates. |
 
-Deliverable: the first dedicated Debian guest made by the product KVM adapter.
-Acceptance: one real desktop frame and one harmless AT-SPI action with independent
-readback; text-only, followed by stopped guest and removed fixture credential.
-No Ron desktop input, GPU/model, Vision, integrated-agent Ready, Windows or release
-claim is part of this gate. First-guest5 stopped: the selected BIOS image reset449 times before the
-kernel when video was disabled. A bounded one-variable VGA screen proves
-Linux/cloud-init startup (one boot, Linux banner and init-local), with the same
-image, CPU, memory and network. The adapter now keeps emulated VGA; Xvnc
-remains the actual bot desktop. This screen is not final qualification.
-Current corrected full gate: guest `3b06faf5-cae8-4b18-b548-1b54da9086ca`,
-QEMU3868599, sourcee6476aabf. Debian cloud-init is installing the final guest
-packages; all QEMU threads stay on CPUs112–113 and SSH listens on
-127.0.0.1:37439. The finite slot ends21:05Z; the gate has a900-second bound.
-Next: session readiness, real Cua frame and AT-SPI action/readback, then stop
-and remove the fixture credential. S1 evidence/first-guest7-live-proof.json
-records actual execution; domiflist is empty as designed.
+The unchanged CPU-pin route was observed on earlier real guests: every QEMU
+thread stayed on112–113. The accepted setup/domain retain those pins; its final
+process check was after normal stop. This is no performance claim. Stop dev
+guests for CPU-throughput work on overlapping/all cores; a disjoint GPU run
+can coexist only with explicit vCPU/emulator affinity. CPU bookings are released.
 
-Source gates passed: three focused first-boot, XML/lifecycle and selected-port
-cases; strict all-target Clippy; opt-in guest fixture build. Evidence:
-`slirp-{fixtures,clippy,build}.log` under
-`/ai/gchat/out/gbot-kvm-prep-20261011/`. The approved network is one QEMU-commandline
-slirp netdev and one virtio NIC, without an XML NIC. `virsh domiflist` is empty
-by design; setup.json/domain XML record the owned localhost SSH port. A new
-request's port0 is resolved before its durable setup is written; reopen preserves
-that value. A later bind conflict fails startup without silently changing it.
-Libvirt's JSON netdev cannot be modified by QEMU's legacy `-set` option, so the
-2007/2012Z decisions approve this single-NIC passthrough shape.
+Cold-start findings and preventive changes:
 
-Three earlier cold preparations never booted. Real libvirt exposed two source
-defects, now corrected: console backend must be `pty` with target `serial`, and
-`domuuid` accepts the owned name rather than the UUID. The third define/identity
-passed but Ubuntu passt AppArmor denied its runtime socket/PID files; kernel
-denials and correct directory ownership establish the cause. No policy changed;
-passt is installed but unused. Cold UUIDs fcb3271e, d83415c6 and7dcaae6d are
-retired, with concise setup/XML/results retained and unused disk/seed removed.
-The original fixture session's registration was reconciled and undefined before
-retirement. Full source errors are now retained in the owning lifecycle error.
+| Cause | Concrete correction / evidence |
+| --- | --- |
+| Invalid console backend and domuuid argument | Pty backend with serial target; lookup generated name and compare UUID. Real define/identity/start plus owning fixture pass. |
+| Stock Ubuntu passt AppArmor denies user-session paths | Approved slirp backend; no policy edit, bridge, firewall or system daemon change. `cold3/` evidence. |
+| Legacy NIC initializes before libvirt JSON PCI controllers | JSON NIC preserves controller order; `cold4/` and json-nic fixture. |
+| No-video BIOS guest resets before Linux | VGA-only screen reaches Linux/cloud-init; actual corrected boot passes. `boot5/{serial.log,vga-serial.log,grub.cfg}`. |
+| User-manager/bus race and premature helper readiness | dbus-user-session, synchronous manager start, owner-only notification and active-unit marker; `user6/`, `ready7/`, final MCP and service diagnostics. |
 
-The first-guest fixture uses the owning adapter and a private native Secret
-Service collection. It generates an Ed25519 key in memory, stores/reloads it
-through NativeVault, binds the SSH host key to the owned guest console, and
-removes the credential after success or failure. No key file or user credential
-is copied. The guest stops before the booking ends. This qualifies guest setup,
-Cua and the fixture vault at their stated scope. Replacing the merged service's
-`gbot-guest --stdio` JSON-worker assumption with Cua MCP and direct command/file
-channels remains an explicit integration item.
+S1 is verified AIS-2-8592-L01, ron@192.168.1.109. Only the seven approved Host
+packages were installed: qemu-system-x86, qemu-utils, cloud-image-utils,
+libvirt-daemon, libvirt-daemon-driver-qemu, libvirt-clients and passt (unused).
+KVM access is intact; libvirt-daemon-system is absent and system libvirt services
+are inactive. Unregister the exact stopped owned UUID before deleting disks.
+The fixture session's private libvirt configuration remains with its stopped
+baseline; ordinary Gbot service integration must use its own consistent session
+environment. This gate does not establish restoration across that integration.
 
-| Owner / host | Exact path | State and retention |
+| Owner / host | Exact path | State / retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21` | Pushed candidate source; retain until reviewed merge. |
-| GChat / local | `/ai/gchat/out/gbot-kvm-prep-20261011/` | Source gates, official artifact receipts and cold-failure evidence; fixture/Cua unpack retained only through physical gate. |
-| GChat / S1 | `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2` | Exact341508096-byte base, checked against official SHA512SUMS; reuse, no duplicate. |
-| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; first-guest7 running as above; earlier boot/VGA comparison retained. Failed UUID directories retain concise evidence only. |
-| GChat / local | `/ai/gchat/out/oi057-linux-packages-20261011/` | DEB/AppImage/Manager artifacts and minimal archive checks from main0705; historical05a engine, no current-engine/Flash qualification. |
+| GChat / local | `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21` | Pushed candidate; retain until reviewed merge. |
+| GChat / local | `/ai/gchat/out/gbot-kvm-prep-20261011/` | Concise source/results/MCP/frame evidence and tested fixture binary; disposable Cua download/unpack retired after verification. |
+| GChat / S1 | `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2` | Exact 341508096-byte base verified against official SHA512SUMS; one copy. |
+| GChat / S1 | `/ai/gbot-vms/6b870517-eb42-431d-b56b-2d5835f4e8dc/` | Accepted stopped guest, disk/seed/setup/XML retained; no usable fixture credential remains. |
+| GChat / S1 | `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/controller/xdg-config/`, `/ai/gbot-vms/kvm-ready-fixture` | Saved findings and session registration; tested baseline. Failed overlays/seed removed after owned unregister; private fixture keyrings retired after provider exit. |
+| GChat / local | `/ai/gchat/out/oi057-linux-packages-20261011/` | DEB/AppImage/Manager artifacts from main 0705; minimal archive checks pass. Historical05a runtime, no current-engine/Flash qualification. |
 
-OI-057 packages passed minimal archive inspection; the stock Ubuntu Desktop
-installed Wayland/Xorg gate remains owed. No signing, publication, calibration
-or native Windows changes. The official Cua0.34.1 archive's recorded SHA256 is
-`a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.
+Official Cua 0.34.1 binary revision is 0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc;
+archive SHA256 is `a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.
+Only MIT driver/cursor components are installed; optional helpers are excluded.
+Next unresolved action: replace the service's `gbot-guest --stdio` JSON-worker
+assumption with Cua MCP and direct SSH command/file routes while preserving
+session identity, capabilities, cancellation and unknown-operation recovery.
 
-The first slirp start (cold UUIDffd07806) failed before boot because a legacy
-QEMU `-device` is initialized before libvirt's JSON PCI controllers, occupying
-their root slot. The NIC now uses JSON `-device` form, which queues it after
-those controllers. A bounded QEMU parser/controller check accepts that shape;
-the affected XML/lifecycle fixture and real start remain the relevant gates.
-
-Boot comparison evidence: S1 `evidence/boot5/{serial.log,vga-serial.log,
-first-guest5-cpu-registers.txt,grub.cfg}`. The image explicitly enables serial
-earlyprintk, yet the no-video route produces no Linux banner; VGA reaches
-cloud-init in eight seconds. No image/kernel/host policy was changed.
-
-First-guest6 completed Debian provisioning and vault-key SSH authentication,
-but cloud-init's user-unit start raced the user-manager/bus startup. The saved
-serial log reports the absent user bus, and Cua MCP then closes before its
-first reply. Credential removal and guest stop both pass. The shared setup
-now installs dbus-user-session, starts the user manager synchronously and waits
-on the notify-type desktop unit. Its Ready notification follows X-server/env
-publication and XFCE launch; the boot marker is emitted only after active-unit
-confirmation in one fail-fast shell stage. Cua stderr is retained in the
-dedicated guest for diagnosis; the full corrected gate remains pending.
-
-First-guest7 confirms the user bus fix but exposes premature unit readiness:
-Cua stderr names missing desktop.env while the unit is active and its script
-is still at the X-server wait. Startup helpers inherited NOTIFY_SOCKET under
-NotifyAccess=all. The launcher now removes that standard variable before
-starting session helpers, retaining it under a private name solely for the
-final readiness call after env publication. The failed guest is stopped and
-its fixture key is removed. Evidence: S1 evidence/ready7/guest-diagnostics.txt.
+Retirement receipt: `retirement.json` and `s1-evidence/fixture-retirement.json`.
+Both merged SSH-import and package source trees are retired; package artifacts,
+concise results and the accepted stopped guest/tested fixture remain. Nine
+private fixture-keyring folders are removed after confirming provider exit.
+Only this task's local/S1 paths were cleaned; no fleet-wide cleanliness claim.
