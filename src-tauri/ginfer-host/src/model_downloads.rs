@@ -613,7 +613,17 @@ pub async fn available_bytes(path: PathBuf) -> Result<u64, String> {
         tokio::task::spawn_blocking(move || available_bytes_windows(&path))
             .await.map_err(|e| format!("cannot check destination disk space: {e}"))?
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        // The path remains native bytes; filesystem queries may block on a mount.
+        tokio::task::spawn_blocking(move || {
+            let space = rustix::fs::statvfs(&path)
+                .map_err(|e| format!("cannot check destination disk space: {e}"))?;
+            space.f_bavail.checked_mul(space.f_frsize)
+                .ok_or_else(|| "cannot check destination disk space: available byte count overflow".into())
+        }).await.map_err(|e| format!("cannot check destination disk space: {e}"))?
+    }
+    #[cfg(all(not(windows), not(target_os = "linux")))]
     {
         let output = tokio::process::Command::new("df")
             .args(["-B1", "--output=avail"])
