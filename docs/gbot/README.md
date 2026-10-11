@@ -711,5 +711,10 @@ speculation defect. This is a functional task, not a GBench/performance claim.
 
 Next unresolved action: the first-boot fixture, then start a fresh dedicated
 Debian guest through the production service and run the approved model task.
-Evidence root `/ai/gchat/out/gbot-cua-service-20261011/`; candidate guest root
-`/ai/gbot-vms/cua-service-20261011/` on S1, vCPUs112–113. No live guest/model yet.
+Evidence root `/ai/gchat/out/gbot-cua-service-20261011/`; private live evidence
+`/ai/gbot-vms/cua-service-20261011/evidence/` on S1, vCPUs112–113. Guest disks remain
+in a new UUID directory under `/ai/gbot-vms/`, where the existing base image lives.
+The first invocation was rejected before VM creation because its narrower root
+excluded that base. The fixture now takes its evidence directory separately;
+the shared immutable base is reused without copying or weakening root validation.
+No live guest/model yet.

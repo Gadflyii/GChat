@@ -326,7 +326,7 @@ mod linux {
         let mut args = std::env::args_os().skip(1);
         let root = PathBuf::from(args.next().ok_or("VM root required")?);
         let image = PathBuf::from(args.next().ok_or("exact image required")?);
-        let evidence = root.join("evidence");
+        let evidence = PathBuf::from(args.next().ok_or("private evidence folder required")?);
         tokio::fs::create_dir_all(&evidence).await?;
         let reference = Uuid::new_v4();
         let private = PrivateKey::random(
