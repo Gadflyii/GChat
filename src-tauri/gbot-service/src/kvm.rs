@@ -102,6 +102,14 @@ impl KvmSpec {
             .as_array_mut()
             .ok_or_else(|| io::Error::other("guest package list is invalid"))?
             .push(self.browser_package.clone().into());
+        value["packages"]
+            .as_array_mut()
+            .ok_or_else(|| io::Error::other("guest package list is invalid"))?
+            .push("mousepad".into());
+        value["write_files"].as_array_mut().ok_or_else(|| io::Error::other("guest setup is invalid"))?.push(serde_json::json!({
+            "path": "/usr/local/bin/gbot-operation", "owner": "root:root", "permissions": "0755",
+            "content": include_str!("../guest/operation.sh")
+        }));
         value["hostname"] = format!("gbot-{}", self.id.simple()).into();
         value["users"][0]["ssh_authorized_keys"] = serde_json::json!([self.ssh_public_key]);
         let installer = value["write_files"]
@@ -455,11 +463,18 @@ mod tests {
             "dbus-x11",
             "dbus-user-session",
             "at-spi2-core",
+            "mousepad",
         ] {
             assert!(packages.contains(&serde_json::json!(package)));
         }
         assert!(!packages.contains(&serde_json::json!("x11vnc")));
         let files = data["write_files"].as_array().unwrap();
+        let operation = files
+            .iter()
+            .find(|v| v["path"] == "/usr/local/bin/gbot-operation")
+            .unwrap();
+        assert_eq!(operation["permissions"], "0755");
+        assert!(!operation["content"].as_str().unwrap().is_empty());
         let session = files
             .iter()
             .find(|v| v["path"] == "/usr/local/bin/gbot-desktop-session")

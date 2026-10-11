@@ -9,8 +9,10 @@ Status: Ron approved the design; it is merged into GChat main. October 11 step 1
 implements the local-first service skeleton, vault-held SSH sessions, guest-tools
 contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparation below replaces earlier S1/S2
 acceptance-host proposals; the Debian image and Host tools are staged, with
-first dedicated-guest gate passed. Integrated Gbot service admission is still pending.
-The focused contracts and actual loopback SSH fixture pass;
+first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
+on `feat/gbot-cua-service-be226`; the dedicated-guest model task is parked
+on the Engine parser fix `QWEN-TOOLCALL-LITERALS`.
+The focused contracts and actual loopback SSH fixture pass.
 No user desktop input or native Windows execution is authorized. Ron separately
 approved the isolated S1 Debian guest and its harmless accessibility gate below.
 
@@ -664,12 +666,83 @@ environment. This gate does not establish restoration across that integration.
 Official Cua 0.34.1 binary revision is 0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc;
 archive SHA256 is `a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.
 Only MIT driver/cursor components are installed; optional helpers are excluded.
-Next unresolved action: replace the service's `gbot-guest --stdio` JSON-worker
-assumption with Cua MCP and direct SSH command/file routes while preserving
-session identity, capabilities, cancellation and unknown-operation recovery.
+This guest preparation is merged as `be2267586`. Current service integration
+and its remaining acceptance are recorded below.
 
 Retirement receipt: `retirement.json` and `s1-evidence/fixture-retirement.json`.
 Both merged SSH-import and package source trees are retired; package artifacts,
 concise results and the accepted stopped guest/tested fixture remain. Nine
 private fixture-keyring folders are removed after confirming provider exit.
 Only this task's local/S1 paths were cleaned; no fleet-wide cleanliness claim.
+
+
+### Current service integration
+
+Repository GChat, candidate `feat/gbot-cua-service-be226` from merged main
+`be2267586`, owned tree `/ai/gchat-worktrees/gbot-cua-service-be226`.
+Deliverable: production service connects to the approved guest through pinned
+Cua MCP over SSH; one dense-INT model task opens Mousepad, types a line, saves
+`~/hello.txt`, and verifies the bytes independently through SSH. Text-only AT-SPI;
+no human session, Vision, Windows, cloud provisioning, or performance claims.
+
+The service replaces the nonexistent JSON-worker executable. Desktop operations
+use MCP; commands/files use independent SSH channels with per-operation receipts
+under the guest account. Transient systemd user units own command process groups
+across SSH loss; cancellation stops only that operation's unit. An atomic claim
+prevents duplicate dispatch. A desktop action without a completion receipt
+remains unknown and cannot be replayed automatically. Session binding records
+the desktop unit's InvocationID; restarting it requires a new session identity.
+
+Approved acceptance: focused pinned MCP/tool and direct SSH command/file/cancel/
+lost-reply cases, strict Clippy, then one integrated dedicated guest/model task
+and independent SSH file readback. All three SSH fixtures pass, including lost
+desktop replies, duplicate refusal and a fresh MCP channel after uncertainty.
+The changed first-boot fixture, strict all-target Clippy and production-service
+fixture build pass. Logs are under `/ai/gchat/out/gbot-cua-service-20261011/`.
+
+The dedicated guest passed production NativeVault authentication, Cua catalog,
+forwarded RFB and real desktop-frame checks. The first model attempt found an
+incorrect fixture API ID; the fixture now resolves the single served model from
+`/v1/models` rather than guessing from its package filename. The second attempt
+opened Mousepad through the production SSH route, then emitted `True` in Qwen's
+XML `on_screen_only` parameter. GInfer's strict JSON parameter parser returned
+that call as content, preventing typing/saving; independent SSH readback found
+no file. This does not qualify the end-to-end model task.
+
+**Current decision:** park the model task until Grok's owning Engine fix
+`QWEN-TOOLCALL-LITERALS` merges. Bubbs cancelled the proposed flag-only retry:
+`--structured-outputs` constrains response formats, not ordinary function tools,
+and strict tools are rejected by the current serving contract. There is no
+prompt, Boolean-coercion or native-markup parsing workaround in Gbot. The
+supervisor keeps its log open until its output thread drains after normal stop.
+
+Approved runtime on S1 GPU0, at most 20 minutes while a model runs:
+`/media/ron/SSD_RAID/ai/tmp-bubbs-laptop-smol-20261011/build120/apps/ginfer-serve`,
+assigned as dev/next `3235aaacc` (the executable reports unknown version/commit).
+Artifact:
+`/media/ron/SSD_RAID/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/qwen38_27b_int_df2.ginfer`.
+Profile:
+`/media/ron/SSD_RAID/ai/tmp-c4-gbench-scoreboard-20261011/results/pro1-r2/profiles/dense-qwen-int.json`.
+Effective launch: artifact first, `--tp 1 --max-context 16384 --max-concurrency 2
+--kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy --no-profile
+--hardware-profile <above>`, bound to localhost. Greedy avoids the open sampled
+speculation defect. This is a functional task, not a GBench/performance claim.
+The resumed task needs the approved parser-fixed runtime; do not rerun the old
+binary or change model settings to bypass this failure.
+
+Evidence and owned inventory:
+
+| Owner / host | Path | State and retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Unmerged implementation retained and pushed; model acceptance blocked on the Engine parser. |
+| GChat / local | `/ai/gchat/out/gbot-cua-service-20261011/` | Focused check logs, supervisor scripts and raw tool-call response retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/evidence/` | First integrated connection and API-ID failure evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate2/` | Model task/raw response/readback and normal-stop evidence retained. `model-2.json`, `choices[0].message.content`, is the exact native markup. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Accepted integration fixture, API-ID discovery enabled and rejected prompt guidance absent. Reusable until source changes. |
+| GChat / S1 | `/ai/gbot-vms/18b93479-d663-4b12-9715-7894d2e03e89`, `/ai/gbot-vms/cfbeb614-85d0-4b06-a447-c7a91763b692` | Failed task guests stopped, vault references deleted; disposable disks may be removed after native undefine. |
+
+Model PID 3958066 exited normally with code 0 and was absent at
+2026-10-11T21:38:41Z; the guest is stopped and its credential deleted. No model,
+guest or GPU lock remains held. Initial fixture root/keyring failures occurred
+before VM creation; separate evidence roots and fresh private keyrings prevent
+them without touching Ron's configuration.

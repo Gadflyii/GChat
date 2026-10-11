@@ -182,6 +182,14 @@ impl WorkspaceRuntime {
         Ok(session)
     }
 
+    pub async fn desktop_tools(
+        &self,
+        identity: SessionIdentity,
+    ) -> Result<Vec<crate::ssh::DesktopTool>, WorkspaceError> {
+        let session = self.session(identity).await?;
+        Ok(session.desktop_tools().to_vec())
+    }
+
     pub async fn request(&self, request: GuestRequest) -> Result<GuestReply, WorkspaceError> {
         let session = self.session(request.identity).await?;
         self.service.begin_operation(&request).await?;
@@ -208,6 +216,9 @@ impl WorkspaceRuntime {
             GuestOutcome::Success {
                 result: GuestResult::ExecFinished { exit_code, .. },
             } if *exit_code != 0 => OperationCompletion::Failed,
+            GuestOutcome::Success {
+                result: GuestResult::Desktop { result },
+            } if result["isError"] == true => OperationCompletion::Failed,
             GuestOutcome::Success { .. } => OperationCompletion::Completed,
             GuestOutcome::Error { error }
                 if matches!(

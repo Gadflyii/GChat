@@ -338,6 +338,10 @@ pub enum GuestOperationKind {
         data: Vec<u8>,
         truncate: bool,
     },
+    Desktop {
+        tool: String,
+        arguments: serde_json::Value,
+    },
     Status {
         operation_id: OperationId,
     },
@@ -352,6 +356,11 @@ impl GuestOperationKind {
             Self::Exec { .. } => GuestCapability::Exec,
             Self::Read { .. } => GuestCapability::Read,
             Self::Write { .. } => GuestCapability::Write,
+            Self::Desktop { tool, .. } => match tool.as_str() {
+                "get_window_state" | "get_desktop_state" | "list_windows" | "list_displays"
+                | "verify_state" => GuestCapability::DesktopCapture,
+                _ => GuestCapability::DesktopInput,
+            },
             Self::Status { .. } => GuestCapability::Status,
             Self::Cancel { .. } => GuestCapability::Cancel,
         }
@@ -396,6 +405,12 @@ impl GuestOperationKind {
             }
             Self::Status { operation_id } | Self::Cancel { operation_id } => {
                 operation_id.validate()?
+            }
+            Self::Desktop { tool, arguments } => {
+                validate_text(tool)?;
+                if !arguments.is_object() {
+                    return Err(ContractError::InvalidOperation);
+                }
             }
         }
         Ok(())
@@ -456,6 +471,12 @@ impl GuestReply {
                 },
             ) if *bytes_written <= data.len() as u64 => Ok(()),
             (
+                GuestOperationKind::Desktop { .. },
+                GuestOutcome::Success {
+                    result: GuestResult::Desktop { .. },
+                },
+            ) => Ok(()),
+            (
                 GuestOperationKind::Status { .. },
                 GuestOutcome::Success {
                     result: GuestResult::Status { .. },
@@ -493,6 +514,9 @@ pub enum GuestResult {
     },
     Written {
         bytes_written: u64,
+    },
+    Desktop {
+        result: serde_json::Value,
     },
     Status {
         state: GuestOperationState,

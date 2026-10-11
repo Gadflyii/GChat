@@ -97,6 +97,10 @@ struct Guest {
     lose_reply: Mutex<Option<OperationId>>,
     authenticated_algorithms: Mutex<Vec<Algorithm>>,
     tasks: Tasks,
+    echo_address: SocketAddr,
+    desktop_claim: Mutex<Option<OperationId>>,
+    stale: std::sync::atomic::AtomicBool,
+    wrong_version: std::sync::atomic::AtomicBool,
 }
 
 fn failure(message: impl Into<String>) -> GuestError {
@@ -215,6 +219,7 @@ impl Guest {
                     stderr: err,
                 })
             }
+            GuestOperationKind::Desktop { .. } => unreachable!("desktop uses MCP"),
             GuestOperationKind::Status { operation_id } => Ok(GuestResult::Status {
                 state: self
                     .states
@@ -255,51 +260,131 @@ impl Guest {
         handle: server::Handle,
     ) {
         let result = self.perform(&request).await;
-        let state = match &result {
-            Ok(GuestResult::ExecFinished { exit_code, .. }) => GuestOperationState::Completed {
-                exit_code: Some(*exit_code),
-            },
-            Ok(_) => GuestOperationState::Completed { exit_code: None },
-            Err(error) if error.code == GuestErrorCode::Cancelled => GuestOperationState::Cancelled,
-            Err(error) => GuestOperationState::Failed {
-                error: error.clone(),
-            },
+        let (state, stdout, stderr) = match result {
+            Ok(GuestResult::ExecFinished {
+                exit_code,
+                stdout,
+                stderr,
+            }) => (
+                GuestOperationState::Completed {
+                    exit_code: Some(exit_code),
+                },
+                stdout,
+                stderr,
+            ),
+            Ok(GuestResult::Read { data }) => (
+                GuestOperationState::Completed { exit_code: Some(0) },
+                data,
+                vec![],
+            ),
+            Ok(GuestResult::Written { .. }) => (
+                GuestOperationState::Completed { exit_code: Some(0) },
+                vec![],
+                vec![],
+            ),
+            Ok(GuestResult::Status { state } | GuestResult::Cancel { state }) => {
+                (state, vec![], vec![])
+            }
+            Err(error) if error.code == GuestErrorCode::Cancelled => {
+                (GuestOperationState::Cancelled, vec![], vec![])
+            }
+            Err(error) => (
+                GuestOperationState::Completed { exit_code: Some(1) },
+                vec![],
+                error.message.into_bytes(),
+            ),
+            _ => unreachable!(),
         };
-        self.states
-            .lock()
-            .unwrap()
-            .insert(request.operation_id, state);
-        if *self.lose_reply.lock().unwrap() == Some(request.operation_id) {
-            // The guest effect completed, but its reply never reaches the service.
-            let _ = handle.close(channel).await;
-            return;
+        if !matches!(
+            request.operation,
+            GuestOperationKind::Status { .. } | GuestOperationKind::Cancel { .. }
+        ) {
+            self.states
+                .lock()
+                .unwrap()
+                .insert(request.operation_id, state.clone());
+            let lose = {
+                let mut loss = self.lose_reply.lock().unwrap();
+                if *loss == Some(request.operation_id) {
+                    loss.take();
+                    true
+                } else {
+                    false
+                }
+            };
+            if lose {
+                let _ = handle.close(channel).await;
+                return;
+            }
         }
-        let reply = GuestReply {
-            identity: request.identity,
-            operation_id: request.operation_id,
-            outcome: match result {
-                Ok(result) => GuestOutcome::Success { result },
-                Err(error) => GuestOutcome::Error { error },
-            },
-        };
-        let mut bytes = serde_json::to_vec(&reply).unwrap();
-        bytes.push(b'\n');
-        let _ = handle.data(channel, bytes).await;
-        let _ = handle.eof(channel).await;
-        let _ = handle.exit_status_request(channel, 0).await;
-        let _ = handle.close(channel).await;
+        send_receipt(&handle, channel, state, stdout, stderr).await;
     }
 }
 
+async fn send_receipt(
+    handle: &server::Handle,
+    channel: ChannelId,
+    state: GuestOperationState,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+) {
+    let mut bytes = match state {
+        GuestOperationState::Completed { exit_code } => {
+            format!("completed\n{}\n{}\n", exit_code.unwrap_or(0), stdout.len()).into_bytes()
+        }
+        GuestOperationState::Running => b"running\n".to_vec(),
+        GuestOperationState::Cancelled => b"cancelled\n".to_vec(),
+        _ => b"unknown\n".to_vec(),
+    };
+    bytes.extend(stdout);
+    bytes.extend(stderr);
+    let _ = handle.data(channel, bytes).await;
+    let _ = handle.eof(channel).await;
+    let _ = handle.exit_status_request(channel, 0).await;
+    let _ = handle.close(channel).await;
+}
+
+enum Input {
+    Mcp(Vec<u8>),
+    Helper { args: Vec<String>, data: Vec<u8> },
+}
 struct Peer {
     user_key: PublicKey,
     guest: Arc<Guest>,
-    buffers: BTreeMap<ChannelId, Vec<u8>>,
+    buffers: BTreeMap<ChannelId, Input>,
+}
+
+// Decode the client's quoted argv without running a shell in the fixture.
+fn argv(command: &str) -> Vec<String> {
+    let mut words = vec![];
+    let mut word = String::new();
+    let mut quoted = false;
+    let mut escape = false;
+    for ch in command.chars() {
+        if escape {
+            word.push(ch);
+            escape = false;
+        } else if ch == '\\' && !quoted {
+            escape = true;
+        } else if ch == '\'' {
+            quoted = !quoted;
+        } else if ch.is_whitespace() && !quoted {
+            if !word.is_empty() {
+                words.push(std::mem::take(&mut word));
+            }
+        } else {
+            word.push(ch);
+        }
+    }
+    assert!(!quoted && !escape);
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
 }
 
 impl server::Handler for Peer {
     type Error = russh::Error;
-
     async fn auth_publickey_offered(
         &mut self,
         user: &str,
@@ -311,7 +396,6 @@ impl server::Handler for Peer {
             server::Auth::reject()
         })
     }
-
     async fn auth_publickey(
         &mut self,
         user: &str,
@@ -319,8 +403,6 @@ impl server::Handler for Peer {
     ) -> Result<server::Auth, Self::Error> {
         let accepted = self.auth_publickey_offered(user, public_key).await?;
         if accepted == server::Auth::Accept {
-            // This callback follows russh's cryptographic signature verification.
-            // It exposes the key algorithm, not the signature's wire hash.
             self.guest
                 .authenticated_algorithms
                 .lock()
@@ -329,66 +411,224 @@ impl server::Handler for Peer {
         }
         Ok(accepted)
     }
-
     async fn channel_open_session(
         &mut self,
-        channel: Channel<server::Msg>,
+        _: Channel<server::Msg>,
         reply: ChannelOpenHandle,
         _: &mut server::Session,
     ) -> Result<(), Self::Error> {
-        self.buffers.insert(channel.id(), Vec::new());
         reply.accept().await;
         Ok(())
     }
-
     async fn exec_request(
         &mut self,
         channel: ChannelId,
         data: &[u8],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
-        if data != b"gbot-guest --stdio" {
-            return session.channel_failure(channel);
-        }
-        session.channel_success(channel)?;
-        let mut hello = serde_json::to_vec(&self.guest.hello).unwrap();
-        hello.push(b'\n');
-        session.data(channel, hello)
+        let args = argv(std::str::from_utf8(data).unwrap());
+        let input = match args.first().map(String::as_str) {
+            Some("/usr/local/bin/gbot-cua") => Input::Mcp(vec![]),
+            Some("/usr/local/bin/gbot-operation") => Input::Helper { args, data: vec![] },
+            _ => return session.channel_failure(channel),
+        };
+        self.buffers.insert(channel, input);
+        session.channel_success(channel)
     }
-
     async fn data(
         &mut self,
         channel: ChannelId,
         data: &[u8],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
-        let Some(buffer) = self.buffers.get_mut(&channel) else {
+        let Some(input) = self.buffers.get_mut(&channel) else {
             return Ok(());
         };
-        buffer.extend_from_slice(data);
-        let Some(end) = buffer.iter().position(|byte| *byte == b'\n') else {
+        match input {
+            Input::Helper { data: bytes, .. } => bytes.extend_from_slice(data),
+            Input::Mcp(bytes) => {
+                bytes.extend_from_slice(data);
+                while let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
+                    let request: serde_json::Value =
+                        serde_json::from_slice(&bytes.drain(..=end).collect::<Vec<_>>()).unwrap();
+                    let result = match request["method"].as_str().unwrap() {
+                        "initialize" => {
+                            serde_json::json!({"protocolVersion":"2025-06-18","serverInfo":{"name":"cua-driver","version":if self.guest.wrong_version.load(std::sync::atomic::Ordering::Acquire) { "wrong" } else { "0.34.1" }},"capabilities":{"tools":{}}})
+                        }
+                        "notifications/initialized" => continue,
+                        "tools/list" => serde_json::json!({"tools":[
+                            {"name":"get_window_state","description":"Read accessible window","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}},
+                            {"name":"invoke_menu","description":"Invoke accessible menu","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}}
+                        ]}),
+                        "tools/call" => {
+                            assert_eq!(
+                                request["params"]["arguments"]["session"],
+                                self.guest.hello.identity.session_id.as_uuid().to_string()
+                            );
+                            let operation =
+                                self.guest.desktop_claim.lock().unwrap().take().unwrap();
+                            assert_eq!(bufferless_dispatch(&self.guest, operation), 1);
+                            let lose =
+                                self.guest.lose_reply.lock().unwrap().take() == Some(operation);
+                            if lose {
+                                session.eof(channel)?;
+                                session.close(channel)?;
+                                return Ok(());
+                            }
+                            serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}]})
+                        }
+                        _ => panic!("unexpected MCP method"),
+                    };
+                    let mut reply = serde_json::to_vec(
+                        &serde_json::json!({"jsonrpc":"2.0","id":request["id"],"result":result}),
+                    )
+                    .unwrap();
+                    reply.push(b'\n');
+                    session.data(channel, reply)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    async fn channel_eof(
+        &mut self,
+        channel: ChannelId,
+        session: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        let Some(Input::Helper { args, data }) = self.buffers.remove(&channel) else {
             return Ok(());
         };
-        let request: GuestRequest = serde_json::from_slice(&buffer[..end]).unwrap();
-        request.validate(&self.guest.hello).unwrap();
-        self.buffers.remove(&channel);
-        assert_eq!(
-            bufferless_dispatch(&self.guest, request.operation_id),
-            1,
-            "operation was redispatched"
-        );
-        self.guest
-            .states
-            .lock()
-            .unwrap()
-            .insert(request.operation_id, GuestOperationState::Running);
-        let guest = self.guest.clone();
         let handle = session.handle();
-        let task = tokio::spawn(async move { guest.reply(request, channel, handle).await });
+        let guest = self.guest.clone();
+        if args[1] == "hello" {
+            if guest.stale.load(std::sync::atomic::Ordering::Acquire) {
+                handle
+                    .exit_status_request(channel, 65)
+                    .await
+                    .map_err(|_| russh::Error::Disconnect)?;
+            } else {
+                assert_eq!(
+                    args[2],
+                    guest.hello.identity.workspace_id.as_uuid().to_string()
+                );
+                assert_eq!(
+                    args[3],
+                    guest.hello.identity.session_id.as_uuid().to_string()
+                );
+                handle
+                    .data(
+                        channel,
+                        format!("GBOT-SSH-1\n{}\n{}\n", args[2], args[3]).into_bytes(),
+                    )
+                    .await
+                    .map_err(|_| russh::Error::Disconnect)?;
+                handle
+                    .exit_status_request(channel, 0)
+                    .await
+                    .map_err(|_| russh::Error::Disconnect)?;
+            }
+            handle
+                .eof(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .close(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            return Ok(());
+        }
+        let id = OperationId(Uuid::parse_str(&args[4]).unwrap());
+        if args[1] == "desktop" {
+            assert!(guest
+                .states
+                .lock()
+                .unwrap()
+                .insert(id, GuestOperationState::Unknown)
+                .is_none());
+            *guest.desktop_claim.lock().unwrap() = Some(id);
+            handle
+                .data(channel, b"claimed\n".to_vec())
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .exit_status_request(channel, 0)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .eof(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .close(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            return Ok(());
+        }
+        if args[1] == "finish" {
+            let state = GuestOperationState::Completed {
+                exit_code: Some(args[5].parse().unwrap()),
+            };
+            guest.states.lock().unwrap().insert(id, state.clone());
+            send_receipt(&handle, channel, state, data, vec![]).await;
+            return Ok(());
+        }
+        let operation = match args[1].as_str() {
+            "exec" => {
+                let mut tail = args[6..].iter();
+                let mut env = BTreeMap::new();
+                let mut program = tail.next().unwrap();
+                while let Some((key, value)) = program.split_once('=') {
+                    env.insert(key.into(), value.into());
+                    program = tail.next().unwrap();
+                }
+                GuestOperationKind::Exec {
+                    cwd: GuestPath(args[5].clone()),
+                    program: program.clone(),
+                    args: tail.cloned().collect(),
+                    env,
+                }
+            }
+            "read" => GuestOperationKind::Read {
+                path: GuestPath(args[5].clone()),
+                offset: args[6].parse().unwrap(),
+                length: args[7].parse().unwrap(),
+            },
+            "write" => GuestOperationKind::Write {
+                path: GuestPath(args[5].clone()),
+                offset: args[6].parse().unwrap(),
+                truncate: args[7].parse().unwrap(),
+                data,
+            },
+            "status" => GuestOperationKind::Status { operation_id: id },
+            "cancel" => GuestOperationKind::Cancel { operation_id: id },
+            _ => panic!("unknown helper operation"),
+        };
+        let request = GuestRequest {
+            identity: guest.hello.identity,
+            operation_id: id,
+            operation,
+        };
+        if !matches!(
+            request.operation,
+            GuestOperationKind::Status { .. } | GuestOperationKind::Cancel { .. }
+        ) {
+            assert_eq!(
+                bufferless_dispatch(&guest, id),
+                1,
+                "operation was redispatched"
+            );
+            guest
+                .states
+                .lock()
+                .unwrap()
+                .insert(id, GuestOperationState::Running);
+        }
+        let task = tokio::spawn(async move {
+            guest.reply(request, channel, handle).await;
+        });
         self.guest.tasks.lock().unwrap().push(task);
         Ok(())
     }
-
     async fn channel_open_direct_tcpip(
         &mut self,
         channel: Channel<server::Msg>,
@@ -399,20 +639,22 @@ impl server::Handler for Peer {
         reply: ChannelOpenHandle,
         _: &mut server::Session,
     ) -> Result<(), Self::Error> {
-        let endpoint = self.guest.hello.view.as_ref().unwrap();
-        if host != "127.0.0.1" || port != u32::from(endpoint.port) {
+        if host != "127.0.0.1" || port != 5900 {
             reply
                 .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
                 .await;
             return Ok(());
         }
-        let mut tcp = TcpStream::connect((endpoint.host, endpoint.port)).await?;
+        let mut tcp = TcpStream::connect(self.guest.echo_address).await?;
         reply.accept().await;
         let mut stream = channel.into_stream();
-        let task = tokio::spawn(async move {
-            let _ = tokio::io::copy_bidirectional(&mut stream, &mut tcp).await;
-        });
-        self.guest.tasks.lock().unwrap().push(task);
+        self.guest
+            .tasks
+            .lock()
+            .unwrap()
+            .push(tokio::spawn(async move {
+                let _ = tokio::io::copy_bidirectional(&mut stream, &mut tcp).await;
+            }));
         Ok(())
     }
 }
@@ -488,12 +730,14 @@ impl Fixture {
                     GuestCapability::Status,
                     GuestCapability::Cancel,
                     GuestCapability::ViewTransport,
+                    GuestCapability::DesktopCapture,
+                    GuestCapability::DesktopInput,
                 ]
                 .into_iter()
                 .collect(),
                 view: Some(GuestViewEndpoint {
                     host: echo_address.ip(),
-                    port: echo_address.port(),
+                    port: 5900,
                     session_id: identity.session_id,
                 }),
             },
@@ -504,6 +748,10 @@ impl Fixture {
             lose_reply: Mutex::new(None),
             authenticated_algorithms: Mutex::default(),
             tasks: tasks.clone(),
+            echo_address,
+            desktop_claim: Mutex::new(None),
+            stale: std::sync::atomic::AtomicBool::new(false),
+            wrong_version: std::sync::atomic::AtomicBool::new(false),
         });
         let handles = Arc::new(Mutex::new(Vec::new()));
         let config = Arc::new(server::Config {
@@ -836,23 +1084,12 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             .await,
             Err(SshError::MissingCredential)
         ));
-        let changed_session = SessionIdentity {
-            session_id: SessionId::new(),
-            ..expected
-        };
-        assert!(matches!(
-            SshSession::connect(
-                &fixture.connection,
-                changed_session,
-                fixture.vault.as_ref(),
-                policy()
-            )
-            .await,
-            Err(SshError::Contract(ContractError::SessionMismatch))
-        ));
+        fixture.guest.wrong_version.store(true, std::sync::atomic::Ordering::Release);
+        assert!(matches!(SshSession::connect(&fixture.connection, expected, fixture.vault.as_ref(), policy()).await, Err(SshError::Protocol)));
+        fixture.guest.wrong_version.store(false, std::sync::atomic::Ordering::Release);
         let session = fixture.connect().await;
         let mut wrong_identity = fixture.request(GuestOperationKind::Read {
-            path: fixture.path("guest.txt"),
+            path: fixture.path("guest file's.txt"),
             offset: 0,
             length: 1,
         });
@@ -877,7 +1114,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             success(
                 runtime
                     .request(fixture.request(GuestOperationKind::Write {
-                        path: fixture.path("guest.txt"),
+                        path: fixture.path("guest file's.txt"),
                         offset: 0,
                         data: b"from guest".to_vec(),
                         truncate: true,
@@ -891,7 +1128,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             success(
                 runtime
                     .request(fixture.request(GuestOperationKind::Read {
-                        path: fixture.path("guest.txt"),
+                        path: fixture.path("guest file's.txt"),
                         offset: 5,
                         length: 5,
                     }))
@@ -903,7 +1140,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             }
         );
         assert_eq!(
-            tokio::fs::read(fixture.directory.path().join("guest.txt"))
+            tokio::fs::read(fixture.directory.path().join("guest file's.txt"))
                 .await
                 .unwrap(),
             b"from guest"
@@ -932,6 +1169,9 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             .iter()
             .all(|op| op.state == OperationState::Completed));
         runtime.ping(expected).await.unwrap();
+        assert_eq!(runtime.desktop_tools(expected).await.unwrap().len(), 2);
+        let desktop = fixture.request(GuestOperationKind::Desktop { tool:"invoke_menu".into(),arguments:serde_json::json!({"session":"model-supplied-untrusted"}) });
+        assert!(matches!(success(runtime.request(desktop).await.unwrap()),GuestResult::Desktop { result } if result["isError"] == false));
 
         let view = runtime.open_view(expected).await.unwrap();
         assert!(view.ip().is_loopback());
@@ -1006,6 +1246,10 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
                 .unwrap();
         assert_eq!(hello, fixture.guest.hello);
+        let response = client.request(post("/v1/desktop/tools", serde_json::to_vec(&expected).unwrap())).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let tools: serde_json::Value = serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
+        assert_eq!(tools.as_array().unwrap().len(), 2);
         let command = fixture.script("http.sh", "printf http\n").await;
         let response = client
             .request(post(
@@ -1032,6 +1276,8 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
         timeout(WAIT, serving).await.unwrap().unwrap().unwrap();
         assert!(service.live_sessions().await.is_empty());
         assert!(TcpStream::connect(endpoint).await.is_err());
+        fixture.guest.stale.store(true,std::sync::atomic::Ordering::Release);
+        assert!(matches!(SshSession::connect(&fixture.connection,expected,fixture.vault.as_ref(),policy()).await, Err(SshError::Contract(ContractError::SessionMismatch))));
         fixture.shutdown().await;
     })
     .await
@@ -1090,6 +1336,15 @@ async fn cancellation_and_lost_reply_reconcile_without_redispatch() {
             OperationState::Completed);
         assert_eq!(tokio::fs::read(fixture.directory.path().join("effect.txt")).await.unwrap(), b"once");
         assert_eq!(fixture.guest.dispatches.lock().unwrap()[&effect.operation_id], 1);
+        let desktop = fixture.request(GuestOperationKind::Desktop { tool: "invoke_menu".into(), arguments: serde_json::json!({}) });
+        *fixture.guest.lose_reply.lock().unwrap() = Some(desktop.operation_id);
+        assert!(matches!(runtime.request(desktop.clone()).await, Err(WorkspaceError::Transport(SshError::UncertainOutcome { operation_id })) if operation_id == desktop.operation_id));
+        let status = fixture.request(GuestOperationKind::Status { operation_id: desktop.operation_id });
+        assert_eq!(success(runtime.request(status).await.unwrap()), GuestResult::Status { state: GuestOperationState::Unknown });
+        assert!(matches!(runtime.request(desktop.clone()).await, Err(WorkspaceError::State(ServiceError::DuplicateOperation))));
+        assert_eq!(fixture.guest.dispatches.lock().unwrap()[&desktop.operation_id], 1);
+        let next = fixture.request(GuestOperationKind::Desktop { tool: "get_window_state".into(), arguments: serde_json::json!({}) });
+        assert!(matches!(success(runtime.request(next).await.unwrap()), GuestResult::Desktop { .. }));
         runtime.close().await.unwrap();
         fixture.shutdown().await;
     }).await.expect("bounded operation/recovery test timed out");

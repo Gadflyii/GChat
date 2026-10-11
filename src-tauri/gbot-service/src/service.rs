@@ -104,12 +104,7 @@ impl DurableState {
                 .map_err(|_| ServiceError::InvalidState)?;
             if !operations.insert(operation.id)
                 || !workspaces.contains(&operation.identity.workspace_id)
-                || matches!(
-                    operation.capability,
-                    GuestCapability::DesktopCapture
-                        | GuestCapability::DesktopInput
-                        | GuestCapability::ViewTransport
-                )
+                || matches!(operation.capability, GuestCapability::ViewTransport)
             {
                 return Err(ServiceError::InvalidState);
             }

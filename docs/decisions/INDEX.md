@@ -433,3 +433,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-09-20** — [Separate desktop LAN sharing from loopback management](2026-09-20-desktop-lan-sharing.md)
 
 - **2026-10-11** — [Use libvirt session and Cua for dedicated Gbot guests](2026-10-11-use-libvirt-session-and-cua-for-gbot-guests.md)
+- **2026-10-11** — [Use pinned Cua MCP and SSH operation receipts for Gbot](2026-10-11-use-cua-mcp-and-ssh-operation-receipts.md)

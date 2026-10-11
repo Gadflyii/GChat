@@ -248,6 +248,15 @@ async fn route(
                 ),
             }
         }
+        (&Method::POST, "/v1/desktop/tools") => {
+            match parse_body::<SessionIdentity>(request).await {
+                Some(identity) => match runtime.desktop_tools(identity).await {
+                    Ok(tools) => json_response(StatusCode::OK, &tools),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/operations") => match parse_body::<GuestRequest>(request).await {
             Some(operation) => match runtime.request(operation).await {
                 Ok(reply) => json_response(StatusCode::OK, &reply),
