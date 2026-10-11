@@ -84,6 +84,7 @@ pub fn run() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
         core::benchmark_submission::submit_benchmark,
+        core::benchmark_submission::delete_benchmark,
         core::connectors::connector_accounts,
         core::connectors::connector_configure,
         core::connectors::connector_begin_auth,

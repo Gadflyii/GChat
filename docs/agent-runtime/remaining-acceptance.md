@@ -776,7 +776,80 @@ restart Manager and restore the saved grant, then use Show/Hide and Exit tray
 actions while checking that the same Host remains alive. No provider install,
 Linux deployment or credential changes were attempted here.
 
-## Installed community publication
+## Current OI-073 app public deletion: gate accepted
+
+Repository `/ai/gchat`; subject `docs/agent-runtime/`; candidate
+`/ai/gchat-worktrees/gbench-delete-bd4`, branch `fix/gchat-gbench-delete-bd4`.
+Product `c6fcfe34f` is composed with main `3bccdb243` as `3a4ca23af`; route-only
+fixture correction `35e8e8882` supplies main's `hardwareProfileBusy` mock.
+Connector/model commands and the new deletion command are preserved together;
+the owning IPC fixture includes ten formerly omitted main commands.
+Next: coordinator main merge, then retire this clean owned tree after verifying
+that merge. No release, signing, installer publication or Windows refresh.
+
+Bubbs/Ron's October 11 07:27:35 UTC decision authorized focused cases and one
+new labelled disposable submit/delete against the app's existing community API
+`https://sectilelabs.ai/gbench/api/v1`. No alternate deployed test endpoint was
+recorded. The app used its existing community signing and only the disposable's
+saved deletion receipt. No official credentials, site/DB/cPanel access, inference,
+calibration or native Windows build/run was used.
+
+Published results restore from ownership receipts even after local-history
+removal. The new Remove button confirms the exact ID, calls native
+`delete_benchmark` and keeps local history and other receipts. Only confirmed
+public success clears that receipt; failed/lost responses retain ownership.
+A local persistence failure reports public success with local cleanup pending.
+The existing site accepts a valid receipt after deletion for explicit cleanup
+retry; no live retry or fault injection was included in this gate.
+
+Eleven focused frontend cases and both native local-HTTP/validation cases pass,
+with changed-source lint, strict native Clippy and the fresh frontend's typecheck.
+Frontend production passes in13.95s; native desktop production passes in2m59s.
+The 48,986,656-byte candidate35e desktop embeds the fresh assets and reuses only
+the accepted54c931c68/02d369e8a package's resource closure. This does not qualify
+current Host/Engine, model/GPU behavior or native Windows.
+
+One actual Linux/WSLg WebKit2.52.6 candidate window is visible and focused with
+its native bridge. Private XDG/config/data, an executable private CLI and an
+exact provider locator at17443 preserve HOME and original user state; both
+model/API startup flags and LAN discovery are off for the gate. The generated
+local result copies the designated measured Standard evidence without an
+inference rerun. Its complete actual UI submission preview equals that original
+public projection with only the new ID and nickname changed.
+
+The ordinary Submit button publishes `oi073-app-delete-20261011-01`, nickname
+`Disposable App Delete Test`, once at07:59:58 UTC. GET200 returns the exact
+reviewed payload with `official:false`. The new Remove button opens the exact-ID
+confirmation; its single confirmation finishes at08:01:05 UTC. Native success
+clears that receipt, keeps identical local history and preserves the unrelated
+pending receipt. GET404 confirms removal; complete canonical records for all
+12 official series and36 points remain identical. Zero public retries ran.
+The final native observation confirms the dialog and target control are absent.
+
+Evidence under `out/remaining-acceptance-20261009/oi073/app-delete-20261011/`:
+`result.json`, `frontend-gate-result.json`, native logs,
+`desktop-producer-result.json`, `ui-preview-comparison.json`,
+`ui-submit-result.json`, `public-test-readback.json`, `ui-delete-result.json`,
+`ui-final-state-result.json` and `public-after-comparison.json`.
+The initial route mock failure and producer admission stops remain separately
+recorded: cached fingerprint ownership, read-only TypeScript temporary output,
+missing cached `/work` alias and missing source-local license. The corrected
+producer uses the accepted root/cache aliases and verifies every declared
+resource before compilation; no passing frontend/native cell is repeated.
+The inspector preparation needed the existing HTTP transport variable and the
+actual benchmark route; the input selector now checks its effective type.
+A100ms observation still saw the closing dialog's exit animation; the final
+observation proves normal closure without another deletion or source change.
+
+Owned inventory: this committed source, accepted candidate desktop/resource
+closure and concise evidence are retained pending merge; the original DEB and
+shared build/dependency caches are unchanged. All owned app/Host/child processes
+are absent and the canonical build guard is reacquired/released by08:03 UTC;
+CPU452/453 are cancelled at actual return. The isolated fixture is deleted after
+absence, reclaiming13,254,656 allocated bytes and retaining no ownership token.
+`ui-process-return.json` and `ui-fixture-retirement.json` record cleanup.
+
+## Accepted October 10 community publication
 
 OI-073 now uses the existing installed public client and the board's public
 GET/DELETE endpoints. Ron's October 10 12:09 decision allows the app-stored
