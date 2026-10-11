@@ -25,8 +25,7 @@ type GeneralSettingState = {
   reasoningBudget: ReasoningBudgetLevel
   /**
    * Restore the selected default model — and therefore spawn its engine —
-   * while the app is starting. On by default so a machine with a GInfer model
-   * is ready to chat without a separate load step.
+   * while the app is starting. Off by default; loading at startup is opt-in.
    */
   preloadModelOnStartup: boolean
   maxImageSizePx: number
@@ -59,7 +58,9 @@ export function migrateGeneralSettings(
     ...(version < 1
       ? { disableReasoning: false, reasoningBudget: 'high' as const }
       : {}),
-    ...(version < 2 ? { preloadModelOnStartup: true } : {}),
+    ...(version < 2
+      ? { preloadModelOnStartup: state.preloadModelOnStartup ?? false }
+      : {}),
   } as GeneralSettingState
 }
 
@@ -71,7 +72,7 @@ export const useGeneralSetting = create<GeneralSettingState>()(
       tokenCounterCompact: true,
       disableReasoning: false,
       reasoningBudget: 'high',
-      preloadModelOnStartup: true,
+      preloadModelOnStartup: false,
       maxImageSizePx: DEFAULT_MAX_IMAGE_SIZE_PX,
       huggingfaceToken: undefined,
       scanLocalModels: true,

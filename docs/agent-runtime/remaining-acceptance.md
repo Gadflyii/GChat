@@ -57,6 +57,66 @@ regressions and one installed visible replay after its source correction.
 Broader OI-068 model/tool/worker acceptance remains incomplete. No new build,
 model request or full suite ran in391/392.
 
+## Live terminal reconnect: installed gate accepted
+
+Repository GChat, subject `docs/agent-runtime/`, branch
+`fix/gchat-terminal-reconnect`, product `f111810ec`, baseline `ac3c7a5db`
+(product3aff). The fix retains every published event before delivery in the
+existing 1MiB full-generation replay log. Healthy replacements replay complete
+history; attachment does not reset it. Delivery failure preserves history and
+actual overflow remains unavailable until a new generation. No cap, dependency,
+redraw workaround or model request changed.
+
+The four focused Rust reattach regressions and existing frontend 21/21 checks
+pass in `reconnect-focused-result.json`. One Windows desktop build passes at
+23:38:12 UTC, reusing the accepted 832 embedded assets. The actual installed
+fresh-window reload passes once at 23:54:58: same generation1 and viewport,
+56 rows/15,547 text characters retained, Running, connected tools, visible prompt
+and no lost-screen warning. Both saved startup flags remain false. Evidence:
+`out/remaining-acceptance-20261009/oi068-windows-20261010/`:
+`compiled-desktop-reconnect-393-proof.json` and
+`desktop-ui-393-retry/{ui-result.json,23-full-screenshot.png}`.
+Accepted Stop/Restart392 is reused; no repeated model, full suite or reload gate.
+
+Normal candidate GChat30972 starts at23:59:18 with debug disabled. Root verifies
+all protected state equal and Manager/Host retained, Engine/API/debug0; the
+build-only keeper exits0 and releases at23:59:56. Booking393 is cancelled.
+`desktop-ui-393-retry/root-normal-recovery-verification.json` and
+`desktop-ui-393/release-verified.json` hold the actual recovery/resource proof.
+The new accepted desktop is retained locally as baseline; source is pushed.
+Startup-default source1ec is integrated from main but remains unbuilt; the
+installed local flags are false, not proof the new default code is installed. Next: coordinator
+lands the accepted source through normal main merge, with no release/signing.
+
+Original refresh/recovery helper FAIL receipts remain. They caused no foreign
+process action: raw PID ancestry followed older OneDrive children of a reused
+WebView PID; a recovery caller used unsupported capture names; descendant pinning
+raced natural exit; final detailed receipt proved equivalent `\\?\C:` and `C:`
+conhost paths compared unequal. Recovery uses the verified root process's graceful
+CloseMainWindow/exit and ordinary restart, without replacement or force. Future
+helper ownership must use live birth identities, tolerate proven exits, normalize
+native verbatim drive-path spelling and validate caller/capture contracts together.
+These procedural corrections belong in GInfer `docs/maintainer/process-log.md`;
+the one installed product replay remains accepted, never rerun for helper failures.
+
+## Startup defaults: accepted source integrated from main
+
+Both source startup defaults are false in accepted `1ec7ad935`, merged into
+GChat main `a3803c023`.
+Legacy missing keys resolve false; explicit saved true/false choices survive.
+The owning hook regressions pass15 selected cases in1.30s;44 unrelated cases
+were excluded by the name filter, not treated as passes. Production hooks pass
+ESLint; its configured test-file exclusions remain explicit. The Yarn launcher
+could not write the shared install-state cache, so the existing installed
+ESLint binary supplied the source check without package changes. No desktop
+rebuild ran; the installed flags and unbuilt default change are different scopes.
+The [startup decision](../decisions/2026-10-10-default-model-and-api-startup-off.md)
+replaces the old automatic opt-in policy. Accepted Stop `ac3c7a5db` and startup
+defaults are integrated on main; this reconnect branch imports them to resolve
+its documentation conflict. The terminal fix and passing gates remain unchanged.
+No build or test is repeated for this merge; installed acceptance above remains
+bound to the retained f111 executable and explicit saved startup settings.
+
 Pre-Cargo failures are preserved separately: historical-PID stderr handling,
 missing admitted guard arguments in the suspended child, and a test-generated
 empty staged catalog. Explicit existence status and child argument propagation
