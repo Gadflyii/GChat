@@ -8,103 +8,69 @@ Installed Windows Manager producer is `574d73df7`, with actual installation,
 byte/state and stopped/no-alert presentation evidence below. The accepted Linux
 package binds Manager `6b199362d` and Host `257252131`; handoff `09e7b2fb6`
 contains their reviewed source and current acceptance account. Earlier package
-and Linux evidence remains scoped to its tested producer. The current tray
-identity diagnosis and one authorized native gate are below; no application
-registration failure has been established. Documentation and harness fixes reuse
+and Linux evidence remains scoped to its tested producer. The tray diagnosis is closed: native
+Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
+walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
-## Current Linux tray registration fix
+## Closed Linux tray registration diagnosis
 
-Deliverable: diagnose `GCHAT-MANAGER-LINUX-TRAY-NO-SNI` from the actual retry 877
-and fix the demonstrated owner. Source baseline is the tested Manager
-`6b199362d`, composed into handoff `09e7b2fb6`; candidate
+`GCHAT-MANAGER-LINUX-TRAY-NO-SNI` is closed by the October 11 15:44Z decision:
+**Linux tray works; Open/Exit owed to Ron's desktop release walkthrough.**
+No further tray gates or application builds are authorized for this item.
+Source baseline is accepted Manager `6b199362d` and Host `257252131`, composed
+into handoff `09e7b2fb6`. The candidate is
 `/ai/gchat-worktrees/linux-tray-registration-09e`, branch
-`fix/gchat-linux-tray-registration-09e`. Main is unchanged. Subject authority is
-this folder. Evidence belongs in `out/linux-tray-registration-20261011/`.
+`fix/gchat-linux-tray-registration-09e`; main is unchanged pending review.
+Subject authority is this folder. Evidence remains in
+`out/linux-tray-registration-20261011/`.
 
-Acceptance: one focused case protecting the demonstrated cause, plus one live
-S2 X11 run with a fresh process-owned StatusNotifier registration and working
-Hide/Open/Exit. All S2 app jobs use the existing FIFO runner 5130, at most 30 min;
-no model, calibration, Windows build, dependency install or release. Existing 877
-evidence is reused rather than repeating an unchanged trial. A local isolated
-repro may distinguish the cause but does not qualify native tray actions.
+Original retries 874/877 falsely report missing ownership: GNOME serializes
+registrations as `service@/object/path`; the old helper passes `service@` to
+GetNameOwner and discards the failure before PID matching. Those absence claims
+are invalidated. `scripts/ginfer_sni_identity.py` supplies the corrected shared
+parser; its three focused cases pass. There is no demonstrated app registration
+failure and no product patch or rebuild.
 
-Recovery: 877's exact Manager remained alive, with an empty stderr log, on Ron's
-active X11 session 8475. Tauri retains the tray clone in its resource table.
-The installed GNOME watcher serializes registrations as `service@/object/path`.
-The old context/helper instead split at the first slash, passed `service@` to
-GetNameOwner, and swallowed NameHasNoOwner as a stale entry before PID matching.
-A read-only check confirms the old lookup fails while the correct service has a
-live owner. Thus 877's `zero_owned_SNI` and 874's ownerless diagnosis do not prove
-an absent Manager registration. Those earlier absence claims are invalidated.
+FIFO 882 at 14:42:55–57Z proves fresh exact-Manager SNI registration and native
+Alt+F4 Hide while the Host remains alive. Its accessibility finder excludes the
+actual Shell Window root; FIFO 885 at 15:19:39–41Z corrects that traversal but
+still excludes the tray's Menu role. GNOME 46 assigns PanelMenu.Button its
+accessible name and Menu role. These are probe failures, not failed product
+Open/Exit actions. The superseded accessibility iterator and fixture are removed
+from the current candidate. Earlier passing traversal evidence stays historical.
 
-Preventive change: share one watcher-entry parser between the corrected context
-and native input helpers, retain raw registration/service/owner/PID observations
-before filtering, and protect GNOME serialization with a focused fixture. Keep
-exact process birth/executable and native target guards. Product code is unchanged
-unless the corrected live gate demonstrates a product failure.
+The one approved public-contract gate is **FIFO 888**, not 887. It runs
+15:38:41.895–15:38:43.288Z with unchanged accepted binaries. Fresh SNI `:1.384`
+belongs to exact Manager 3897905; Host 3897869 remains alive until cleanup.
+The harness stops at `s2-tray-contract.py:276`, whose unconditional preflight
+asserts Activate has signature `(ii) -> ()`. It records no actual signature.
+WMClose, Activate, Open and Exit are all **unreached**; no method behavior is
+qualified by this run. The installed Ayatana library exposes a different SNI
+method inventory, including no Activate method; the failed live introspection
+response was not retained and is not claimed as a measured signature.
+The concrete execution correction is to stop assuming optional provider methods
+and retain provider observations before an assertion. This item does not launch
+another probe to obtain them.
 
-Actual FIFO 882 runs 14:42:55–14:42:57Z with unchanged accepted Manager 6b and
-Host 257. Fresh SNI `:1.362@/org/ayatana/NotificationItem/tray_icon_tray_app_manager`
-resolves to exact Manager 3859889; its Active state, menu and accessible description
-are bound before input. Native Alt+F4 hides the same Manager and retains Host 3859853.
-Open/Exit are not reached: the helper's structural accessibility walk admits Frame
-but not the actual Shell Window at depth 1, so it cannot reach the tray label.
+All three gates preserve the four original configuration/binary fingerprints,
+stop their exact owned processes and shut down the Host normally with code 0.
+FIFO 888's retained `native-888-evidence/root-lifetime-audit.json` confirms both
+child PIDs and launcher/controller PIDs are absent, their process group is empty
+and private port 17443 is free. Its 11 raw evidence files match retained copies.
+Raw 882/885 evidence, watcher-format and Shell-traversal diagnosis remain linked
+beside the controls. No model, calibration, Pair, Windows change or user-data
+write occurs in this item.
 
-A read-only Shell metadata check demonstrates `Application -> Window -> Panel`.
-The old 160-node/10-depth walk also cannot cover the actual visible 164-node/12-depth
-tree. Correct the owning probe to refresh structural caches, include that exact
-Shell Window, prune hidden branches and retain a finite traversal bound fitting
-the observed tree. This does not relax process/SNI/name/native-point ownership.
-No application registration defect or missing accessible name is established.
-
-Repeated probe failures came from assumptions about the provider's identity and
-accessibility shape rather than observed provider metadata. The concrete
-prevention is shared tested decoding/traversal plus retained pre-filter metadata;
-product patches must follow demonstrated app behavior rather than a failed finder.
-The decoder fixture 3/3 is reused; the new Window traversal fixture 1/1 passes. Both
-exact children are absent, Host exits 0, and all four original config/binary
-fingerprints are unchanged. Raw evidence is in
-`out/linux-tray-registration-20261011/native-882-evidence/`;
-`watcher-format-diagnosis.json` and `shell-traversal-diagnosis.json` retain the causes.
-
-FIFO 885 runs 15:19:39–15:19:41Z. Fresh SNI `:1.373` belongs to exact Manager
-3884509; native Hide retains Host 3884472. The corrected structural walk still
-cannot find the label because `named_nodes` excludes Menu roles before reading
-their names. S2's installed GNOME 46 `PanelMenu.Button` gives the indicator its
-accessible name and `Atk.Role.MENU`. The installed resource, appindicator subclass
-and retained raw result identify this additional probe incompatibility. Both
-children exit, Host normally with code 0; original state is unchanged. This result
-does not establish an absent icon or failed Open/Exit product behavior.
-
-October 11 15:22Z decision ends accessibility-finder iteration. Next unresolved
-action: one bounded S2 FIFO gate through the exact owned tray's public D-Bus
-contract, using the unchanged accepted package. Invoke SNI Activate once and
-the uniquely labelled, enabled, visible dbusmenu Exit item with `Event('clicked')`;
-record actual window/process effects rather than method-return success alone.
-Manager's supported Open handler is the dbusmenu Open item. The 15:26Z decision
-approves the fixed sequence: record Activate's effect, click the uniquely bound
-Open item, then click Exit in the same single gate.
-No AX finder, model, build, Pair or private application callback is used. Start the
-new Manager under `/mnt/data/ai/gchat-linux-tray-dbus-contract-20261011`, unchanged
-HOME and private XDG state. Its empty account does not auto-hide at startup;
-prepare the hidden-window precondition with one normal `WM_DELETE_WINDOW` request
-to its exact owned X11 window, then verify the same live Manager is hidden.
-Repin exact bus/process identities before
-each method. If dbusmenu is not exposed, record Open/Exit as owed to Ron's desktop
-release walkthrough and close this row as tray-works, per the decision. Deadline:
-17:00Z. The existing FIFO 5130 remains the sole launcher.
-
-The unused accessibility iterator and its fixture are removed from the current
-candidate when this gate supersedes that path. Their earlier focused result and
-staged R2 controls remain historical evidence. The unchanged shared registration
-parser and its three passing cases remain in use by the public-contract gate.
-
-FIFO 882's disposable S2 fixture is retired at 14:59:12Z after all 11 evidence
-files match their retained local copies, its exact process group is empty and
-private port 17443 is free. The removal frees 17,850,368 available bytes. Retain
-`native-882-evidence/fixture-retirement.json`, the accepted baseline archive and
-the candidate source; retain the R2 fixture until its own result and lifetime audit.
+Owned inventory: retain the candidate until reviewed integration, the accepted
+four-file baseline archive and concise cited evidence. The disposable S2 882/885
+fixtures are retired after lifetime audits, freeing 35,692,544 available bytes
+combined. The FIFO 888 fixture is retired at 15:47Z after evidence retention and its
+scoped lifetime audit, freeing 17,817,600 available bytes. Its retirement receipt
+retains the audit scope. Total S2 fixture retirement frees 53,510,144 bytes. Shared tray files, models,
+profiles and other owners' paths remain intact. Next work is the structured
+ON/OFF pair with C1's current-tip runtime; Open/Exit is a release walkthrough
+obligation, not a pending development gate.
 
 ## Current S2 pairing and tray acceptance — OI-069 / OI-071
 
@@ -134,13 +100,11 @@ small evidence is recorded in `out/s2-acceptance-20261011/native-worker-evidence
 The separate source-proven Manager omission of credential cleanup warnings is
 open; this successful cleanup does not exercise its error branch.
 
-Tray qualification remains open. Native873 fails before input on a harness
-process-visibility assumption. Native874 and877 use the faulty watcher-entry
-parser described above; their missing safe target cannot establish stale entries
-or missing registration. Ron's active desktop is confirmed. No Pair or tray input
-occurs; all four owned processes are absent and private port17443 is free.
-October11 14:11Z authorizes diagnosis, the owning fix and one corrected live
-Hide/Open/Exit gate. Constructor success alone is not registration evidence.
+Linux Manager tray registration and native Hide are accepted by the October 11
+15:44Z decision. Original 874/877 missing-registration claims were probe false
+negatives. The closed diagnosis above retains corrected 882/885 evidence and
+FIFO 888's preflight failure. Open/Exit remains owed to Ron's desktop release
+walkthrough; no further development tray gate is scheduled.
 
 The real two-worker gate is blocked before Ready. Exact clean GInfer `66452662d`
 builds its app-only SM86 server in FIFO 872 at 12:22:41Z; its native ELF closure
