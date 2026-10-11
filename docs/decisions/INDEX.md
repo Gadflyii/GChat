@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Complete agent authoring and preserve tool outcomes](2026-10-11-complete-agent-authoring-and-preserve-tool-outcomes.md)
+
 - **2026-10-11** — [Park inactive Host monitoring and share scan reads](2026-10-11-park-inactive-host-monitoring-and-share-scan-reads.md)
 
 - **2026-10-11** — [Place WSL managed models on Linux filesystems](2026-10-11-place-wsl-managed-models-on-linux-filesystems.md)

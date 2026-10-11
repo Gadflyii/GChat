@@ -46,6 +46,10 @@ pub async fn operation<R: Runtime>(
     action: &str,
     args: Value,
 ) -> Result<Value, String> {
+    if action == "save_definition" {
+        let definition = serde_json::from_value(args).map_err(|error| error.to_string())?;
+        return Ok(json!(definitions::agent_save_definition(app, definition).await?));
+    }
     let data = get_jan_data_folder_path(app.clone());
     if action == "compact_worker" {
         let id = args
@@ -133,7 +137,6 @@ pub async fn operation<R: Runtime>(
             definitions::validate_definition(&definition)?;
             Ok(json!({"valid":true,"roles":definitions::placement_roles(&definition)}))
         }
-        "save_definition" => Ok(json!(definitions::save_definition(&data, serde_json::from_value(args).map_err(|e| e.to_string())?)?)),
         "runs" => Ok(json!(runs::list_runs(&data)?)),
         "monitor" => Ok(json!({"active": LIVE.get_or_init(|| Mutex::new(BTreeMap::new())).lock().map_err(|e|e.to_string())?.clone(), "completed":runs::list_runs(&data)?})),
         _ => Err(format!("Unsupported Agent Studio operation `{action}`")),

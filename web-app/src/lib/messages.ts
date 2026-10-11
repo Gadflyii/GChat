@@ -22,83 +22,6 @@ export function convertUIMessageToThreadMessage(
   uiMessage: UIMessage,
   threadId: string
 ): ThreadMessage {
-  const content: ThreadContent[] = []
-
-  // Extract text and image parts from UIMessage
-  // Use 'any' for parts since the AI SDK types vary between versions
-  for (const part of uiMessage.parts as any[]) {
-    if (part.type === 'text') {
-      content.push({
-        type: ContentType.Text,
-        text: {
-          value: part.text,
-          annotations: [],
-        },
-      })
-    } else if (part.type === 'reasoning') {
-      // Wrap reasoning in <think> tags for compatibility with existing rendering
-      // The reasoning content is in 'reasoning' or 'text' depending on SDK version
-      const reasoningText = part.reasoning ?? part.text ?? ''
-      const existingText = content.find((c) => c.type === ContentType.Text)
-      if (existingText && existingText.text) {
-        existingText.text.value = `<think>${reasoningText}</think>${existingText.text.value}`
-      } else {
-        content.unshift({
-          type: ContentType.Text,
-          text: {
-            value: `<think>${reasoningText}</think>`,
-            annotations: [],
-          },
-        })
-      }
-    } else if (part.type === 'file' && part.mediaType) {
-      // Handle file parts (images)
-      const mediaType = part.mediaType as string
-      if (mediaType?.startsWith('image/')) {
-        content.push({
-          type: ContentType.Image,
-          image_url: {
-            url: part.url,
-            detail: 'auto',
-          },
-        })
-      }
-    }
-  }
-
-  // If no content was extracted, add empty text
-  if (content.length === 0) {
-    content.push({
-      type: ContentType.Text,
-      text: {
-        value: '',
-        annotations: [],
-      },
-    })
-  }
-
-  // Extract tool calls from parts
-  const toolCalls = (uiMessage.parts as any[])
-    .filter((part) => part.type.startsWith('tool'))
-    .map((part) => {
-      const toolName = part.type.replace('tool-', '')
-      return {
-        tool: {
-          id: part.toolCallId || part.toolInvocationId,
-          type: 'function' as const,
-          function: {
-            name: toolName,
-            arguments:
-              typeof part.input === 'string'
-                ? part.input
-                : JSON.stringify(part.input ?? part.args),
-          },
-        },
-        state: part.state === 'output-available' ? 'completed' : 'pending',
-        response: part.output ?? part.result,
-      }
-    })
-
   // Handle createdAt - may be on the message or not depending on SDK version
   const msgAny = uiMessage as any
   const createdAt =
@@ -113,11 +36,10 @@ export function convertUIMessageToThreadMessage(
     object: 'thread.message',
     thread_id: threadId,
     role: uiMessage.role as ThreadMessage['role'],
-    content,
+    content: extractContentPartsFromUIMessage(uiMessage),
     status: MessageStatus.Ready,
     created_at: createdAt,
     completed_at: createdAt,
-    metadata: toolCalls.length > 0 ? { tool_calls: toolCalls } : undefined,
   }
 }
 
@@ -257,14 +179,23 @@ export function convertThreadMessageToUIMessage(
         ...(typeof filename === 'string' ? { filename } : {}),
       })
     } else if (content.type === 'tool_call') {
-      // Handle tool call content items - direct conversion from flat structure
-      // Use AI SDK v5 UIToolInvocation format: toolCallId, state: 'output-available'/'input-available'
-      if (content.output != null) {
+      const state =
+        content.state ??
+        (content.output != null ? 'output-available' : 'input-available')
+      if (state === 'output-error') {
         parts.push({
           type: `tool-${content.tool_name}`,
           toolCallId: content.tool_call_id,
           input: content.input,
-          state: 'output-available',
+          state,
+          errorText: content.errorText,
+        })
+      } else if (state === 'output-available') {
+        parts.push({
+          type: `tool-${content.tool_name}`,
+          toolCallId: content.tool_call_id,
+          input: content.input,
+          state,
           output: content.output,
         })
       } else {
@@ -272,7 +203,7 @@ export function convertThreadMessageToUIMessage(
           type: `tool-${content.tool_name}`,
           toolCallId: content.tool_call_id,
           input: content.input,
-          state: 'input-available',
+          state,
         })
       }
     }
@@ -309,23 +240,18 @@ export function convertThreadMessageToUIMessage(
     }
   }
 
-  // BACKWARD COMPATIBILITY: Handle tool calls from metadata (old format)
-  // New messages will have tool calls as separate messages with tool_call_id
+  // Reopen stored tool results carried in message metadata.
   const toolCalls = (threadMessage.metadata as any)?.tool_calls
   if (Array.isArray(toolCalls)) {
     for (const tc of toolCalls) {
-      // Parse the result from the response.content array
       let result
       if (tc.response?.content) {
-        // Extract content from the response
         if (
           tc.response.content.length === 1 &&
           tc.response.content[0].type === 'text'
         ) {
-          // Single text content - return as string
           result = tc.response.content[0].text
         } else {
-          // Multiple content parts or non-text - return full content array
           result = tc.response.content
         }
       }
@@ -337,7 +263,6 @@ export function convertThreadMessageToUIMessage(
           : tc.tool?.function?.arguments || tc.args
       const toolCallId = tc.tool?.id || tc.id
 
-      // Use AI SDK v5 UIToolInvocation format
       if (
         result != null ||
         tc.state === 'ready' ||
@@ -445,16 +370,17 @@ export function extractContentPartsFromUIMessage(
     } else if (part.type.startsWith('tool-')) {
       // Handle tool call parts - flatten structure to match parts format
       const toolName = (part.type as string).replace('tool-', '')
-      const toolCallId = part.toolCallId || part.toolInvocationId
-      const input = part.input || part.args
-      const output = part.output || part.result
-
       const toolCallContent = {
         type: 'tool_call' as ContentType.ToolCall,
-        tool_call_id: toolCallId,
+        tool_call_id: part.toolCallId,
         tool_name: toolName,
-        input: input,
-        output: output,
+        input: part.input,
+        state: part.state,
+        ...(part.state === 'output-error'
+          ? { errorText: part.errorText }
+          : part.state === 'output-available'
+            ? { output: part.output }
+            : {}),
       }
       content.push(toolCallContent)
     }

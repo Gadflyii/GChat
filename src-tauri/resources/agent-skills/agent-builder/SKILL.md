@@ -1,7 +1,7 @@
 ---
 name: agent-builder
 description: Build or revise a reusable GChat agent definition from a user's description, choosing a native template and asking necessary clarifying questions. Does not execute the proposed agent's task.
-version: 1.2.0
+version: 1.3.0
 requires_tools:
   - studio.inspect
   - studio.manage
@@ -72,6 +72,10 @@ errors, then call approval-gated `studio.manage` / `save_definition` to present
 the definition preview. The user chooses Create agent or Revise. A rejected
 preview means ask what they want changed, not retry the identical save. Keep the
 same ID while revising this draft so retries do not create duplicate definitions.
+A successful reviewed save completes this authoring turn. GChat confirms the
+saved definition and directs the user to Agent Studio; no further tool call is
+needed. A denied or failed save does not complete authoring: ask about a denied
+preview with `reply`, or correct the reported save error before presenting it again.
 Never write agent-definitions.json or bypass validation.
 
 ## Placement and multimodal tasks
