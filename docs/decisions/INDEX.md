@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Keep managed OpenCode configuration in the GChat data folder](2026-10-11-isolate-managed-opencode-configuration.md)
+
 - **2026-10-11** — [Complete agent authoring and preserve tool outcomes](2026-10-11-complete-agent-authoring-and-preserve-tool-outcomes.md)
 
 - **2026-10-11** — [Park inactive Host monitoring and share scan reads](2026-10-11-park-inactive-host-monitoring-and-share-scan-reads.md)

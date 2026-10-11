@@ -3,8 +3,17 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
-The [three walkthrough defect corrections](remaining-acceptance.md#current-walkthrough-defect-correction)
-are merge-ready: Builder finishes after its successful reviewed save, mounted
+[Managed Code configuration isolation](remaining-acceptance.md#current-code-configuration-isolation)
+is implemented and reviewed in `6a8d81383`, awaiting coordinator merge. Eight
+focused cases, strict Clippy, frontend checks and the Linux desktop pass. The
+actual managed OpenCode process loads the selected configuration, connects its
+GChat bridge and completes one real-model API turn with HOME unchanged. All 11
+existing standalone configuration entries remain unchanged. The embedded Linux
+TUI is blank and did not accept the PTY prompt; its separate product row remains
+open. Normal Stop and private-root cleanup are complete, with no owned live job.
+
+The [three walkthrough defect corrections](remaining-acceptance.md#accepted-walkthrough-defect-correction)
+are merged/pushed on main1e61155b4: Builder finishes after its successful reviewed save, mounted
 Chat refreshes created/updated definitions, and failed-tool history preserves its
 terminal state and exact error. All19 focused cases, corrected Linux desktop
 build and one targeted real-model three-step check pass. Independent review
@@ -14,10 +23,11 @@ complete; no owned model/app/Host/guard/booking remains. No Windows or release c
 The [accepted OI-068 baseline](remaining-acceptance.md#accepted-oi-068-linux-smol-functional-walkthrough)
 on main869a368b1 preserves actual Host Ready, Chat MD/XLSX reading/continuation,
 reviewed saved-agent execution, manual Chat compaction/continuation and final Stop.
-The candidate above corrects its three agent/history defects. OI-068 remains
-PARTIAL for Code isolation, Hermes/Windows and broader active-worker scope. Ordinary
-model selection also reproduces the existing global OpenCode configuration escape;
-its exact before-image is unavailable and no restoration claim is made.
+Main `1e61155b4` corrects its three agent/history defects. OI-068 remains
+PARTIAL for the blank Code TUI, Hermes/Windows and broader active-worker scope. The
+prior walkthrough reproduced the global OpenCode write. The correction above prevents
+it in the new check; the earlier before-image remains unknown and no restoration
+is claimed.
 
 OI-075's one generated Linux/WSLg WebKit observation is now measured: opening
 110 ms, full programmatic traversal 113 ms and stable foreground idle 30.047 s.

@@ -13,7 +13,7 @@ title: "Brand the embedded OpenCode TUI with the Sectile theme"
   launched process.
 - **Decision:** GChat bundles and owns a complete `gchat` OpenCode theme with matching dark and
   light Sectile palettes. Before launching the embedded OpenCode session, GChat installs or repairs
-  that definition in OpenCode's global theme directory and writes a separate GChat-owned TUI
+  that definition in `<data>/code/opencode/themes` and writes a separate GChat-owned TUI
   selector. Only the Code-tab process receives `OPENCODE_TUI_CONFIG` pointing at that selector.
   GChat does not create or modify the user's normal `tui.json`, and a project-specific OpenCode TUI
   configuration retains OpenCode's normal override behavior. A generic Code-tab shell also remains
@@ -24,6 +24,7 @@ title: "Brand the embedded OpenCode TUI with the Sectile theme"
   session starts, so changes to OpenCode's supported theme contract require updating the bundled
   theme and its completeness test together.
 - **Owner:** Sectile Research Laboratories
+- **Configuration ownership:** The [October 11 decision](2026-10-11-isolate-managed-opencode-configuration.md) replaces the original standalone global directory with GChat's selected data folder.
 - **Links:** `2026-08-28-adopt-the-sectile-prism-visual-identity.md`,
   `2026-08-23-embed-a-raw-in-frame-terminal-code-tab-that-auto-runs-opencode-at-app-start.md`,
   `src-tauri/src/core/terminal.rs`, `src-tauri/resources/opencode/gchat.json`,
