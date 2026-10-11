@@ -183,7 +183,9 @@ impl HardwareProfiles {
         };
         if matches!(record.view.status.as_str(), "running" | "cancelling") {
             record.view.status = "interrupted".into();
-            record.view.finished_unix_ms = Some(now());
+            if !record.native_completed {
+                record.view.finished_unix_ms = Some(now());
+            }
             record.view.error = Some("Host stopped before profiling completed; resume retains native checkpoint validation".into());
             crate::service::write_private(
                 &directory.join("hardware-profile-job.json"),
