@@ -36,9 +36,12 @@ public v1 payload field set remains unchanged.
 
 Repository: GChat. Candidate:
 `/ai/gchat-worktrees/gbench-max-perf-profile-42d`, branch
-`feat/gbench-max-perf-profile-42d`, baseline main `42d8c401e`.
+`feat/gbench-max-perf-profile-42d`, baseline main `42d8c401e`, composed with main `254c0f8fd`.
 Source owners are Host launch policy, native benchmark/signing validation and
-the benchmark UI. No model, profile or user-state copy is allocated.
+the benchmark UI. No model, profile or user-state copy is allocated. The shared
+Rust cache remains at `/ai/gchat/src-tauri/target`; the cached dependency graph
+is retained at `/ai/gchat-worktrees/oi105-cjk-metadata-2ad` for existing consumers.
+The candidate source remains until main integration and ancestry verification.
 
 Approved gate: focused per-class selection, session-mismatch refusal and
 unchanged v1 report fields. No real submission; publishing stays disabled.
@@ -47,8 +50,26 @@ It must not be relabelled as v1 or used to claim current-runtime submission.
 The site's `spec=mtp` rejection belongs to Ron's site row; this work does not
 change PHP, MySQL or the public board.
 
-Next action: compose those three owners, run the focused CPU cases and report
-their actual result. Current implementation is untested.
+On October 11 the focused CPU gate passed eight Rust cases and twenty frontend
+cases: four-class selection, launch argv/restart/persistence, stale-session and
+actual-report refusal, native validation before signing/network, public v1
+projection, profile selection and route dispatch. Strict Rust library Clippy and
+frontend typecheck passed. Production frontend lint passed; the repository's
+existing ignore policy excludes test files. No full suite or real submission ran.
+
+Tested product source is `b5cf154b3`. Rust/unchanged submission checks are retained
+from their earlier composed source; only the changed selector cases were repeated.
+The gate corrected a new fixture's nonexistent Stop method, a fixture's missing
+graph fact and the nullable UI selection. Container mount recursion and an
+invalid Clippy CLI/binary target selection stopped their own stages; all claimed
+passing results name actual execution. Evidence and limitations are in
+`/ai/gchat/out/gbench-max-perf-profile-20261011/result.json`.
+
+CPU booking 511 ended early at the gate's actual completion; owned containers
+are absent and the canonical build guard was reacquired and released. The shared
+cache remains; no model, Engine, user profile or public-board state was touched.
+Next action: reviewed main integration. Native-v2 compatibility, site MTP
+acceptance and release qualification remain their separate open rows.
 
 Exact settings authority:
 `/ai/coordination/flash-next/gbench-standard-settings.md`.
