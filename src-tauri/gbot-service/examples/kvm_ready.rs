@@ -252,7 +252,7 @@ mod linux {
             .ok_or("fixture credential missing")?;
         let private = PrivateKey::from_openssh(saved.expose_secret())?;
         drop(saved);
-        let spec = KvmSpec { id:Uuid::new_v4(), cpus:2, host_cpus:vec![112,113], memory_mib:4096, disk_gib:40, ssh_port:22282,
+        let spec = KvmSpec { id:Uuid::new_v4(), cpus:2, host_cpus:vec![112,113], memory_mib:4096, disk_gib:40, ssh_port:0,
         ssh_public_key:private.public_key().to_openssh()?, browser_package:"firefox-esr".into(),
         driver:GuestBinary { url:"https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.34.1/cua-driver-rs-0.34.1-linux-x86_64-binary.tar.gz".into(),sha256:"a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee".into() }, driver_revision:CUA_REVISION.into() };
         let vm = match PreparedVm::prepare(&root, &image, spec, &KvmTools::default()).await {

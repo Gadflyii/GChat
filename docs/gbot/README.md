@@ -599,8 +599,10 @@ KVM read/write access is intact; `libvirt-daemon-system` is absent and the
 system libvirt services are inactive. SeaBIOS suffices; no bridge or host
 firewall setup is part of this adapter.
 
-The adapter uses **qemu:///session** with a passt user-mode interface and an
-explicit loopback-only SSH forward. Libvirt owns the running guest independently
+The adapter uses **qemu:///session** with slirp user-mode networking and an
+explicit loopback-only SSH forward, recorded with the guest. Port0 in a new
+setup request selects an available ephemeral port before the durable record is
+written. A later bind conflict fails startup; it never silently changes the port. Libvirt owns the running guest independently
 of Gbot service lifetime. Disks, seed, XML and setup records are under
 `/ai/gbot-vms`; libvirt keeps normal per-user domain registrations. Unregister
 the exact stopped owned UUID before deleting its files. Never remove other
@@ -625,56 +627,52 @@ identity and capability checks must stay intact while removing the initial
 JSON-worker assumption. User viewer input/clipboard starts disabled. Actual
 capture, input and takeover require their physical gates.
 
-Named source gates: first-boot/session/SSH-only assertions, the KVM domain
-XML/lifecycle fixture, strict owning Clippy. Libvirt source `91c0a7249` passes
-2/2 focused cases and strict all-target Clippy; the opt-in guest gate builds
-(`libvirt2-{fixtures,clippy,build}.log` in the evidence folder). This supersedes
-the raw-QEMU prototype. DEB/AppImage and Manager archive are built from exact
-main0705 with minimal archive inspection passed; see the package receipt.
-They use cached Ubuntu24.04 tooling and the retained historical05a engine set:
-current GChat UI/package acceptance only, no current-engine/Flash qualification.
-No signing or publication.
+Deliverable: the first dedicated Debian guest made by the product KVM adapter.
+Acceptance: one real desktop frame and one harmless AT-SPI action with independent
+readback; text-only, followed by stopped guest and removed fixture credential.
+No Ron desktop input, GPU/model, Vision, integrated-agent Ready, Windows or release
+claim is part of this gate. Next: run the corrected first boot in S1's booked
+20:13–20:40Z slot, with guest vCPU and emulator affinity112–113.
 
-Next action: create the one owned Debian guest on S1 in a finite CPU-quiet
-window. Coordinator approved the first gate alongside the disjoint GPU timing run,
-with guest vCPU/emulator affinity112–113. The unused slot1046 was cancelled;
-a replacement finite slot covers the actual launch. No VM has launched yet. Gate: a real desktop frame plus one harmless AT-SPI action,
-text-only; no screenshots fed to an unqualified model. Use official Linux
-x86_64 Driver release0.34.1 at the pinned source revision with a recorded
-SHA-256. Fall back from Xvnc only after a recorded failing action. Evidence and
-owned runtime inventory: `/ai/gchat/out/gbot-kvm-prep-20261011/`.
+Source gates passed: three focused first-boot, XML/lifecycle and selected-port
+cases; strict all-target Clippy; opt-in guest fixture build. Evidence:
+`slirp-{fixtures,clippy,build}.log` under
+`/ai/gchat/out/gbot-kvm-prep-20261011/`. The approved network is one QEMU-commandline
+slirp netdev and one virtio NIC, without an XML NIC. `virsh domiflist` is empty
+by design; setup.json/domain XML record the owned localhost SSH port. A new
+request's port0 is resolved before its durable setup is written; reopen preserves
+that value. A later bind conflict fails startup without silently changing it.
+Libvirt's JSON netdev cannot be modified by QEMU's legacy `-set` option, so the
+2007/2012Z decisions approve this single-NIC passthrough shape.
 
-The isolated first-guest fixture uses the owning KVM adapter and an isolated
-native Secret Service collection. It generates an Ed25519 key in memory, stores
-and reloads it through `NativeVault`, binds the SSH host key to the owned guest
-console, and removes its credential when the gate ends. No key file or user
-credential is copied. The guest is stopped before the CPU booking ends.
-This qualifies guest setup/Cua at its stated scope; replacing the service's
-merged `gbot-guest --stdio` assumption with Cua MCP and direct command/file
-channels remains an explicit integration item, not a delivered Ready state.
+Three earlier cold preparations never booted. Real libvirt exposed two source
+defects, now corrected: console backend must be `pty` with target `serial`, and
+`domuuid` accepts the owned name rather than the UUID. The third define/identity
+passed but Ubuntu passt AppArmor denied its runtime socket/PID files; kernel
+denials and correct directory ownership establish the cause. No policy changed;
+passt is installed but unused. Cold UUIDs fcb3271e, d83415c6 and7dcaae6d are
+retired, with concise setup/XML/results retained and unused disk/seed removed.
+The original fixture session's registration was reconciled and undefined before
+retirement. Full source errors are now retained in the owning lifecycle error.
 
-Current owned S1 paths: `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2`
-(341508096 bytes, checked against official SHA512SUMS), the private
-`controller/` native-vault fixture folder, `kvm-ready-fixture`, the reviewed
-`s1-guest-gate.sh`, and `evidence/`. No VM/domain exists yet. Local temporary
-Cua unpack and gate binary are retained for the pending physical gate;
-retire them after qualification. No shared model, GPU profile or release
-artifact was copied or deleted.
+The first-guest fixture uses the owning adapter and a private native Secret
+Service collection. It generates an Ed25519 key in memory, stores/reloads it
+through NativeVault, binds the SSH host key to the owned guest console, and
+removes the credential after success or failure. No key file or user credential
+is copied. The guest stops before the booking ends. This qualifies guest setup,
+Cua and the fixture vault at their stated scope. Replacing the merged service's
+`gbot-guest --stdio` JSON-worker assumption with Cua MCP and direct command/file
+channels remains an explicit integration item.
 
-First physical preparation at1955Z refused the domain before VM start:
-libvirt does not accept `console type=serial` as a character-device backend.
-The adapter now uses `type=pty` with `target type=serial`. The fixture also
-removes its vault entry after failed preparation, and the private keyring
-control folder must be0700. Failed setup UUID
-`fcb3271e-830e-40cb-b4c2-8ce170863f9f` remains stopped/unregistered for concise
-failure evidence; no capture/input was attempted. Reuse the passing pin gates;
-the corrected real libvirt define/start is the live question.
+| Owner / host | Exact path | State and retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21` | Pushed candidate source; retain until reviewed merge. |
+| GChat / local | `/ai/gchat/out/gbot-kvm-prep-20261011/` | Source gates, official artifact receipts and cold-failure evidence; fixture/Cua unpack retained only through physical gate. |
+| GChat / S1 | `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2` | Exact341508096-byte base, checked against official SHA512SUMS; reuse, no duplicate. |
+| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; no live VM yet. Failed UUID directories retain concise evidence only. |
+| GChat / local | `/ai/gchat/out/oi057-linux-packages-20261011/` | DEB/AppImage/Manager artifacts and minimal archive checks from main0705; historical05a engine, no current-engine/Flash qualification. |
 
-The corrected domain defined successfully at1958Z but the identity check
-failed before start: real `virsh domuuid` accepts a domain name/ID, not a UUID,
-while `domstate` does accept UUIDs. The adapter now looks up its generated owned
-name and compares the returned UUID, retaining UUID-based actions. The fixture
-models that real CLI distinction. Failed UUID
-`d83415c6-ba2c-4a44-aaca-9915b167859d` was confirmed shut off; its fixture
-credential cleanup succeeded. Undefine it before the corrected cold first-boot
-attempt; retain concise XML/setup/error evidence and remove unused overlay/seed.
+OI-057 packages passed minimal archive inspection; the stock Ubuntu Desktop
+installed Wayland/Xorg gate remains owed. No signing, publication, calibration
+or native Windows changes. The official Cua0.34.1 archive's recorded SHA256 is
+`a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee`.

@@ -167,9 +167,14 @@ impl PreparedVm {
     pub async fn prepare(
         root: &Path,
         cloud_image: &Path,
-        spec: KvmSpec,
+        mut spec: KvmSpec,
         tools: &KvmTools,
     ) -> io::Result<Self> {
+        if spec.ssh_port == 0 {
+            spec.ssh_port = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?
+                .local_addr()?
+                .port();
+        }
         spec.validate()?;
         let root = fs::canonicalize(root).await?;
         let image = fs::canonicalize(cloud_image).await?;
@@ -275,7 +280,7 @@ impl PreparedVm {
                 .collect::<String>();
             format!("<cputune>{vcpus}<emulatorpin cpuset='{set}'/></cputune>")
         };
-        Ok(format!("<domain type='kvm'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu>{pinning}<os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><interface type='user'><model type='virtio'/><backend type='passt'/><portForward proto='tcp' address='127.0.0.1'><range start='{port}' to='22'/></portForward></interface><video><model type='none'/></video><serial type='pty'><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console></devices></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
+        Ok(format!("<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu>{pinning}<os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><video><model type='none'/></video><serial type='pty'><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console></devices><qemu:commandline><qemu:arg value='-netdev'/><qemu:arg value='user,id=gbot-ssh,hostfwd=tcp:127.0.0.1:{port}-:22'/><qemu:arg value='-device'/><qemu:arg value='virtio-net-pci,netdev=gbot-ssh'/></qemu:commandline></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
     }
 
     async fn lease(&self) -> io::Result<File> {
@@ -319,9 +324,10 @@ impl PreparedVm {
             .output()
             .await?;
         if !output.status.success() {
-            return Err(io::Error::other(
-                "libvirt VM action failed; inspect the owned guest before retrying",
-            ));
+            return Err(io::Error::other(format!(
+                "libvirt {action} failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
         }
         String::from_utf8(output.stdout)
             .map_err(|_| io::Error::other("libvirt returned invalid output"))
@@ -491,9 +497,13 @@ mod tests {
         };
         fs::write(vm.directory.join("prepared"), "1").await.unwrap();
         let domain = vm.domain_xml().unwrap();
-        assert!(domain.contains("<domain type='kvm'>"));
+        assert!(domain.contains(
+            "<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>"
+        ));
         assert!(domain.contains("<vcpupin vcpu='0' cpuset='112'/><vcpupin vcpu='1' cpuset='113'/><emulatorpin cpuset='112,113'/></cputune>"));
-        assert!(domain.contains("<backend type='passt'/><portForward proto='tcp' address='127.0.0.1'><range start='2222' to='22'/></portForward>"));
+        assert!(domain.contains("user,id=gbot-ssh,hostfwd=tcp:127.0.0.1:2222-:22"));
+        assert!(domain.contains("virtio-net-pci,netdev=gbot-ssh"));
+        assert!(!domain.contains("<backend type='passt'") && !domain.contains("<interface"));
         assert!(
             !domain.contains("bridge")
                 && !domain.contains("hostdev")
@@ -518,5 +528,33 @@ mod tests {
         assert_eq!(reopened.shutdown(&tools).await.unwrap(), VmState::Stopped);
         vm.unregister(&tools).await.unwrap();
         assert!(!root.path().join("prepared").exists());
+    }
+    #[tokio::test]
+    async fn prepare_records_selected_loopback_port_and_reuses_it() {
+        let root = tempfile::tempdir().unwrap();
+        let image = root.path().join("base.qcow2");
+        fs::write(&image, "fixture").await.unwrap();
+        let tool = root.path().join("tool");
+        fs::write(&tool, "#!/bin/sh\nexit 0\n").await.unwrap();
+        fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755))
+            .await
+            .unwrap();
+        let tools = KvmTools {
+            virsh: tool.clone(),
+            image: tool.clone(),
+            cloud_localds: tool,
+        };
+        let mut settings = spec();
+        settings.ssh_port = 0;
+        let vm = PreparedVm::prepare(root.path(), &image, settings, &tools)
+            .await
+            .unwrap();
+        assert_ne!(vm.spec.ssh_port, 0);
+        let recorded = PreparedVm::open(&vm.directory).await.unwrap();
+        assert_eq!(recorded.spec.ssh_port, vm.spec.ssh_port);
+        assert!(recorded
+            .domain_xml()
+            .unwrap()
+            .contains(&format!("hostfwd=tcp:127.0.0.1:{}-:22", vm.spec.ssh_port)));
     }
 }
