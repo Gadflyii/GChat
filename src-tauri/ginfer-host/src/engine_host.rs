@@ -467,20 +467,7 @@ impl HostProcesses {
             job.start(request.action,None,gpus)?;
             return Ok(job.status(None));
         }
-        if !matches!(gpus.len(), 1 | 2 | 4)
-            || gpus.iter().collect::<BTreeSet<_>>().len() != gpus.len()
-            || gpus.iter().any(|gpu| !self.known_gpus.contains(gpu))
-        {
-            return Err("Choose an exact ordered group of one, two, or four known GPUs".into());
-        }
-        if let Some(first) = gpus.first().and_then(|gpu| self.gpu_architectures.get(gpu)) {
-            if gpus
-                .iter()
-                .any(|gpu| self.gpu_architectures.get(gpu) != Some(first))
-            {
-                return Err("A profiling GPU group must use one compute architecture".into());
-            }
-        }
+        crate::hardware_profile::validate_gpu_group(&gpus, &self.gpu_architectures)?;
         if request.action != HardwareProfileAction::Cancel
             && !job.busy()
             && self
@@ -516,12 +503,7 @@ impl HostProcesses {
         }
         let mut configurations = Vec::new();
         for gpus in groups.into_values() {
-            if !matches!(gpus.len(), 1 | 2 | 4)
-                || gpus.iter().collect::<BTreeSet<_>>().len() != gpus.len()
-                || gpus.iter().any(|gpu| !self.known_gpus.contains(gpu))
-            {
-                return Err("Saved deployment GPU group is unavailable".into());
-            }
+            crate::hardware_profile::validate_gpu_group(&gpus, &self.gpu_architectures)?;
             let config = job.configuration(self.profiling_cli(&gpus), &gpus)?;
             config.store(job.directory())?;
             configurations.push(config);

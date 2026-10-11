@@ -136,6 +136,28 @@ impl Configuration {
         crate::service::write_private(&path, &serde_json::to_vec(self).map_err(|e| e.to_string())?)
     }
 }
+pub fn validate_gpu_group(
+    gpus: &[String],
+    architectures: &std::collections::BTreeMap<String, String>,
+) -> Result<(), String> {
+    if !matches!(gpus.len(), 1 | 2 | 4)
+        || gpus.iter().collect::<std::collections::BTreeSet<_>>().len() != gpus.len()
+    {
+        return Err("Choose an explicit group of one, two, or four unique GPUs".into());
+    }
+    let architecture = architectures
+        .get(&gpus[0])
+        .ok_or("Selected GPU has no known compute architecture")?;
+    for gpu in gpus {
+        let selected = architectures
+            .get(gpu)
+            .ok_or("Selected GPU has no known compute architecture")?;
+        if selected != architecture {
+            return Err("A profiling GPU group must use one compute architecture".into());
+        }
+    }
+    Ok(())
+}
 pub fn group_key(gpus: &[String]) -> String {
     use sha2::{Digest, Sha256};
     let mut membership = gpus.to_vec();

@@ -93,6 +93,14 @@ struct PrepareHardware {
     #[arg(long)]
     reprofile: bool,
 }
+fn store_hardware_configuration(
+    configuration: &ginfer_host::hardware_profile::Configuration,
+    directory: &std::path::Path,
+    architectures: &std::collections::BTreeMap<String, String>,
+) -> Result<(), String> {
+    ginfer_host::hardware_profile::validate_gpu_group(&configuration.gpu_uuids, architectures)?;
+    configuration.store(directory)
+}
 async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
     use ginfer_host::hardware_profile::{Configuration, HardwareProfileAction};
     let (directory, provider, origin, configured_engine) =
@@ -268,7 +276,13 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
     ) {
         return Err("Configure the registered service owner's profiling runtime locally before preparing its hardware profile".into());
     }
-    configuration.store(&directory)?;
+    let inventory: Vec<ginfer_host::service::Gpu> =
+        serde_json::from_value(before["gpus"].clone()).map_err(|error| error.to_string())?;
+    let architectures = inventory
+        .into_iter()
+        .filter_map(|gpu| gpu.compute_capability.map(|architecture| (gpu.uuid, architecture)))
+        .collect();
+    store_hardware_configuration(&configuration, &directory, &architectures)?;
     let action = if args.reprofile {
         HardwareProfileAction::Refresh
     } else {
@@ -559,6 +573,57 @@ fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn hardware_profile_preparation_rejects_invalid_groups_without_changing_persistence() {
+        use ginfer_host::hardware_profile::{group_key, group_profile_path, Configuration};
+        use std::collections::BTreeMap;
+        let directory = tempfile::tempdir().unwrap();
+        let cli = directory.path().join("ginfer");
+        std::fs::write(&cli, b"fixture CLI").unwrap();
+        let group = vec!["GPU-B".to_string(), "GPU-A".to_string()];
+        let configuration = Configuration {
+            gpu_uuids: group.clone(),
+            engine: cli,
+            profile_path: group_profile_path(directory.path(), &group),
+        };
+        let valid = BTreeMap::from([
+            ("GPU-A".into(), "8.6".into()),
+            ("GPU-B".into(), "8.6".into()),
+        ]);
+        let path = directory
+            .path()
+            .join("hardware-profile-config")
+            .join(format!("{}.json", group_key(&group)));
+        let unknown = BTreeMap::from([("GPU-A".into(), "8.6".into())]);
+        let mixed = BTreeMap::from([
+            ("GPU-A".into(), "8.6".into()),
+            ("GPU-B".into(), "12.0".into()),
+        ]);
+        for invalid in [&unknown, &mixed] {
+            assert!(
+                super::store_hardware_configuration(&configuration, directory.path(), invalid)
+                    .is_err()
+            );
+            assert!(!path.exists());
+        }
+        super::store_hardware_configuration(&configuration, directory.path(), &valid).unwrap();
+        let accepted = std::fs::read(&path).unwrap();
+        for invalid in [&unknown, &mixed] {
+            assert!(
+                super::store_hardware_configuration(&configuration, directory.path(), invalid)
+                    .is_err()
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), accepted);
+        }
+        let saved: Configuration = serde_json::from_slice(&accepted).unwrap();
+        assert_eq!(saved.gpu_uuids, group);
+        let reversed: Vec<_> = group.into_iter().rev().collect();
+        assert_eq!(
+            saved.profile_path,
+            group_profile_path(directory.path(), &reversed)
+        );
+    }
+
     use std::future::Future;
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
