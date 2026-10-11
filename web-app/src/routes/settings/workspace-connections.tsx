@@ -515,10 +515,10 @@ export function WorkspaceConnections() {
           </div>
           <p className="text-sm text-muted-foreground">
             Use the same accounts in Chat, Agent and Code. Sign-in uses your
-            system browser; account tokens stay in your operating system’s
+            system browser; refresh tokens stay in your operating system’s
             credential vault.
           </p>
-          {error && (
+          {error && !disconnecting && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
@@ -604,6 +604,7 @@ export function WorkspaceConnections() {
                   )
                 }
                 onDisconnect={(account) => {
+                  setError(null)
                   setDisconnecting(account)
                   setRevoke(false)
                 }}
@@ -628,6 +629,11 @@ export function WorkspaceConnections() {
           <p className="break-all">
             {disconnecting?.email || disconnecting?.display_name}
           </p>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           {disconnecting?.provider === 'google' ? (
             <label className="flex gap-2 items-center text-sm">
               <input

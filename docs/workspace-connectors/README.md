@@ -95,7 +95,13 @@ Independent source review caught and corrected cancellation during vault commit,
 disconnect metadata rollback, unchecked partial consent, exposed Graph storage
 URLs, lost pending sign-in state after navigation and eager schema injection.
 The review accepts the revised source; compilation, formatting and fixtures have
-not run. No connector feature is installed or live-qualified.
+now started. Formatting and generated route registration pass. First native
+compilation found a moved Gmail path and two missing methods in a connector test
+double. UI ran twelve cases: eleven pass; failed disconnect's alert was hidden
+behind the modal. The corrected source preserves the mail path, rejects unrelated
+fixture calls and shows the error inside the active dialog with retry enabled.
+The initial logs remain in `gate-397/`; focused correction checks are next.
+No connector feature is installed or live-qualified.
 
 ## Acceptance and next action
 

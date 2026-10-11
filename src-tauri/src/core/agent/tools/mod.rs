@@ -1144,6 +1144,14 @@ mod tests {
 
     #[async_trait]
     impl DesktopServices for ConnectorDesktop {
+        async fn write_clipboard(&self, _text: String) -> Result<(), String> {
+            Err("Clipboard calls are outside this connector fixture".into())
+        }
+
+        async fn notify(&self, _title: String, _body: String) -> Result<(), String> {
+            Err("Notification calls are outside this connector fixture".into())
+        }
+
         async fn connector_prepare(&self, _name: &str, mut args: Value) -> Result<Value, String> {
             self.prepared.fetch_add(1, Ordering::SeqCst);
             if args["account_id"].as_str().unwrap_or("").is_empty() {

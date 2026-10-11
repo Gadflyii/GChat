@@ -986,7 +986,7 @@ pub async fn execute(
                 segment(s(args, "attachment_id"))
             ),
             "trash" | "untrash" => format!("{message}/{op}"),
-            "delete" => message,
+            "delete" => message.clone(),
             _ => return Err("Unsupported Gmail operation".into()),
         };
         url = endpoint(base, &path)?;

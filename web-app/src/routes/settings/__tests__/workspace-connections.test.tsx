@@ -225,9 +225,12 @@ describe('Workspace connections', () => {
     await user.click(screen.getByRole('button', { name: 'Disconnect' }))
     expect(screen.getByText(/This removes local access/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Disconnect account' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Vault unavailable'
-    )
+    expect(
+      await within(screen.getByRole('dialog')).findByRole('alert')
+    ).toHaveTextContent('Vault unavailable')
+    expect(
+      screen.getByRole('button', { name: 'Disconnect account' })
+    ).toBeEnabled()
     expect(screen.getByText('Ron Microsoft')).toBeInTheDocument()
     expect(screen.getByText('Connected · Default account')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Disconnect account' }))
