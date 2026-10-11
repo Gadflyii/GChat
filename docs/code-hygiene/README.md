@@ -33,27 +33,42 @@ artifacts and use absolute paths outside the saved app data folder. A shared nat
 catalog supplies desktop and CLI discovery across selected, original and installed
 job roots; Host scanning includes them. Ordinary download containment remains intact.
 
-Next unresolved action: finish and review the connected Host, native catalog,
-CLI and desktop download/import paths, including configured storage, preserved
-old partials, duplicate IDs and protected package removal; then run only the
-assigned focused fixtures and one Linux placement/discovery invocation.
+Verification: product `e05195afe` passes 14 focused extension cases and 10 Rust
+cases (two Host, two catalog/import, five downloader and one CLI transfer), plus
+the extension bundle and strict Host Clippy. `b65e8eb03` removes the one needless
+borrow caught by strict app Clippy; that failed check and the pending CLI build
+then pass. Behavior-identical code keeps the previous passing fixture evidence;
+no passing case is rerun. The first runner stop was an incorrect cached bundler
+entrypoint, corrected from its installed package manifest before native work.
 
-Evidence: C3's retained
-`/ai/kernel-agent/run_workdir/local/direct-read-wake-670d1c68a/evidence/oi144-9p/README.md`
-and the master OI-144-9P row. Source implementation is frozen for the focused gate; no tests/builds or live
-jobs yet. Root-scoped paused-job dedup permits a fresh native transfer without
-changing the old job. Existing directory aliases remain readable with canonical
-ancestor cycle detection. Import admission protects installed Host payloads and
-refuses linked write targets; deletion retains Host ownership and refuses
-ambiguous copies. Independent source review accepts the composed change. The 14 extension and
-10 Rust focused cases pass, including the actual tiny 9p-to-native transfer.
-Strict app Clippy identified one needless borrow in the new path check; it is
-removed without changing path behavior. Continue only the failed Clippy and
-unrun CLI build/list. The runner also corrected its cached bundler entrypoint
-from the installed package manifest before any native job started; passing
-checks are reused. Owned inventory: this candidate source, accepted CLI binary/evidence in
-`/ai/gchat/out/cli-config-selection-20261011/`, shared caches retained. CLI
-private metadata is removed; its source branch and Git history remain retained.
+The admitted transfer uses an actual private Windows-mounted 9p data folder and
+native Linux XDG root. A 24-byte loopback payload, its partial and its manifest
+land on native storage. The compiled CLI lists that model and the retained
+legacy model together, preserving the original partial, artifact and saved
+custom-folder settings. This tests placement/discovery; it makes no new engine
+startup-performance or model/hardware qualification claim. No GPU/model or
+native Windows work runs. Windows runtime acceptance belongs to its release gate.
+
+Evidence and owned inventory: `/ai/gchat/out/wsl-model-placement-20261011/`
+contains `result.json`, focused/bundle/Clippy logs, the accepted
+`gchat-cli-b65e8eb03`, extension bundle and resource-return/fixture-cleanup
+receipts. Only the tiny private fixture folders are removed after zero live
+references; 12,288 native allocated bytes are reclaimed. Existing user models,
+profiles, state and shared caches are untouched. CPU booking441 is canceled at
+actual completion06:27 UTC; the canonical build guard is reacquired/released and
+the owned container is absent. The source branch is committed and pushed;
+candidate source retires after reviewed main integration.
+
+Master overlap audit: OI-116 journal/hash/free-space and managed-root dedup,
+OI-118 Host lifecycle and OI-102 full-hash preparation remain intact. The current
+GCHAT-WSL-MODEL-PLACEMENT row holds this source/gate result; the independently
+closed OI-144-9P loader disposition is not reopened. Its retained evidence is
+`/ai/kernel-agent/run_workdir/local/direct-read-wake-670d1c68a/evidence/oi144-9p/README.md`.
+
+Next unresolved action: reviewed GChat main integration, then retire the clean
+merged candidate while retaining accepted binaries and evidence. No release,
+signing, publication, existing-model relocation or further qualification is owed
+to this assigned item.
 
 ## Accepted CLI configuration selection
 
