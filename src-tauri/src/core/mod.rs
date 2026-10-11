@@ -1,20 +1,21 @@
 pub mod agent;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub mod code_bridge;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub mod code_sessions;
 pub mod app;
 pub mod artifact;
 pub mod benchmark_submission;
 #[cfg(feature = "cli")]
 pub mod cli;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod code_bridge;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod code_sessions;
+pub mod connectors;
 pub mod downloads;
-pub use ginfer_host::{engine_registry, engine_host, engine_inventory};
+pub use ginfer_host::{engine_host, engine_inventory, engine_registry};
 pub mod engine_hosts;
 pub mod extensions;
 pub mod filesystem;
-pub mod http;
 pub mod ginfer_models;
+pub mod http;
 pub mod mcp;
 #[cfg(target_os = "windows")]
 pub mod notifications;

@@ -166,3 +166,18 @@ it('offers declared TP groups and explains cards without a matching profile', ()
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
   expect(launch).not.toHaveBeenCalled()
 })
+
+it('holds profile launches when the Host reports hardware profiling in progress', () => {
+  const data = snapshot()
+  data.instances = []
+  data.launch_profiles![0].gpu_groups = [['GPU-one']]
+  data.hardware_profile = { status: 'running', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: 42, reprofile: false,
+    started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: false, diagnostic_tail: '', error: null, available: true }
+  const launch = vi.fn().mockResolvedValue(undefined)
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
+  expect(screen.getByLabelText('Hardware profile')).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  expect(launch).not.toHaveBeenCalled()
+})

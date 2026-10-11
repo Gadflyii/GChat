@@ -26,7 +26,33 @@ export type EngineLaunchProfile = EngineLaunchOptions & {
   qualified_profile_id?: string | null;
   instance_id?: string; model_id: string; gpu_uuids: string[]; max_context: number; concurrency: number;
 }
+export type EngineHardwareProfileAction = 'ensure' | 'refresh' | 'resume' | 'cancel'
+export type EngineHardwareProfile = {
+  status: 'idle' | 'running' | 'cancelling' | 'interrupted' | 'cancelled' | 'completed' | 'failed'
+  job_id: string | null
+  pid: number | null
+  reprofile: boolean
+  started_unix_ms: number | null
+  finished_unix_ms: number | null
+  profile_path: string
+  gpu_uuids: string[]
+  engine_path: string | null
+  pending_gpu_groups: string[][]
+  stale_groups: {
+    gpu_uuids: string[]
+    profile_path: string
+    expected_duration_ms: number | null
+  }[]
+  checkpoint_available: boolean
+  diagnostic_tail: string
+  error: string | null
+  available: boolean
+}
+export const hardwareProfileBusy = (profile?: EngineHardwareProfile) =>
+  profile?.status === 'running' || profile?.status === 'cancelling'
+
 export type EngineSnapshot = {
+  hardware_profile?: EngineHardwareProfile
   lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
@@ -41,5 +67,10 @@ export type EngineSnapshot = {
 }
 export const engineCommand = <T>(action: string, args: Record<string, unknown> = {}) =>
   invoke<T>('engine_hosts_command', { action, args })
+
+export const hardwareProfile = (hostId: string, action: EngineHardwareProfileAction, gpuUuids?: string[]) =>
+  engineCommand<EngineHardwareProfile>('hardware_profile', {
+    host_id: hostId, body: { action, ...(gpuUuids === undefined ? {} : { gpu_uuids: gpuUuids }) },
+  })
 
 export const engineAlias = (hostId: string, instanceId: string) => `ginfer/${hostId}/${instanceId}`

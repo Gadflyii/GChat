@@ -31,7 +31,7 @@ use super::approval_allowlist::fingerprint_prepared_action;
 use super::definitions::AgentReasoningEffort;
 use super::ginfer_client::GinferClient;
 use super::path_policy::{prepare_call_paths, EditableRoots};
-use super::resource_class::{resource_class_for, ResourceClass};
+use super::resource_class::{connector_tool, resource_class_for, ResourceClass};
 use super::shell_guard::{evaluate_shell_command, join_command_stream, ShellGuardVerdict};
 use super::skills::{loaded::LoadedSkills, SkillRegistry};
 use super::types::{
@@ -43,8 +43,12 @@ pub const MAX_TOOL_OUTPUT_CHARS: usize = 16_000;
 
 #[async_trait]
 pub trait ApprovalHook: Send + Sync {
-    fn permission(&self, _tool: &str) -> super::permissions::Permission { Default::default() }
-    fn permission_summary(&self) -> Option<String> { None }
+    fn permission(&self, _tool: &str) -> super::permissions::Permission {
+        Default::default()
+    }
+    fn permission_summary(&self) -> Option<String> {
+        None
+    }
     async fn is_allowed(&self, fingerprint: &str) -> bool;
     async fn request(&self, request: ApprovalRequest) -> Result<ApprovalDecision, String>;
 }
@@ -56,6 +60,17 @@ pub trait FolderAccessHook: Send + Sync {
 
 #[async_trait]
 pub trait DesktopServices: Send + Sync {
+    async fn connector_prepare(&self, _name: &str, _args: Value) -> Result<Value, String> {
+        Err("Workspace connectors are unavailable in this environment".into())
+    }
+    async fn connector(
+        &self,
+        _name: &str,
+        _args: Value,
+        _cancellation: &CancellationToken,
+    ) -> Result<Value, String> {
+        Err("Workspace connectors are unavailable in this environment".into())
+    }
     async fn capability_search(&self, _query: &str) -> Result<Value, String> {
         Err("Capability discovery is unavailable in this environment".into())
     }
@@ -82,12 +97,25 @@ pub trait DesktopServices: Send + Sync {
     }
     async fn write_clipboard(&self, text: String) -> Result<(), String>;
     async fn notify(&self, title: String, body: String) -> Result<(), String>;
-    async fn mcp(&self, _wire_name: &str, _args: Value, _cancellation: &CancellationToken) -> Result<Value, String> {
+    async fn mcp(
+        &self,
+        _wire_name: &str,
+        _args: Value,
+        _cancellation: &CancellationToken,
+    ) -> Result<Value, String> {
         Err("MCP capabilities are unavailable in this environment".into())
     }
-    async fn mcp_functions(&self) -> Result<Vec<Value>, String> { Ok(Vec::new()) }
-    fn disabled_tools(&self) -> std::collections::BTreeSet<String> { Default::default() }
-    async fn mcp_identity(&self, _wire_name: &str, _args: &Value) -> Result<(String, String), String> {
+    async fn mcp_functions(&self) -> Result<Vec<Value>, String> {
+        Ok(Vec::new())
+    }
+    fn disabled_tools(&self) -> std::collections::BTreeSet<String> {
+        Default::default()
+    }
+    async fn mcp_identity(
+        &self,
+        _wire_name: &str,
+        _args: &Value,
+    ) -> Result<(String, String), String> {
         Err("MCP capability is unavailable".into())
     }
 }
@@ -109,6 +137,29 @@ pub struct ToolContext<'a> {
     pub desktop: &'a dyn DesktopServices,
 }
 
+pub(super) fn normalize_connector_call(
+    mut call: ToolCallPayload,
+) -> Result<ToolCallPayload, String> {
+    // The compact discovery control uses the target's policy, account and fingerprint.
+    if call.tool == "connector_call" {
+        let name = required_string(&call.args, "name")?;
+        let Some(tool) = connector_tool(&name) else {
+            return Err("Unknown Workspace connector tool".into());
+        };
+        let Some(args) = call.args.get("arguments").filter(|args| args.is_object()) else {
+            return Err("Workspace connector arguments must be an object".into());
+        };
+        return Ok(ToolCallPayload {
+            tool: tool.name.into(),
+            args: args.clone(),
+        });
+    }
+    if let Some(tool) = connector_tool(&call.tool) {
+        call.tool = tool.name.into();
+    }
+    Ok(call)
+}
+
 pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolOutcome {
     if context.cancellation.is_cancelled() {
         return ToolOutcome {
@@ -117,12 +168,16 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
             details: None,
         };
     }
+    let call = match normalize_connector_call(call.clone()) {
+        Ok(call) => call,
+        Err(error) => return ToolOutcome::error(error),
+    };
     if call.tool == "os.proc.kill" {
         if let Err(error) = proc::validate_kill_args(&call.args) {
             return ToolOutcome::error(error);
         }
     }
-    let call = match authorize_call(call, context).await {
+    let call = match authorize_call(&call, context).await {
         Ok(call) => call,
         Err(outcome) => return outcome,
     };
@@ -216,28 +271,59 @@ pub async fn execute(call: &ToolCallPayload, context: &ToolContext<'_>) -> ToolO
         "skill.run_script" => skill_run_script::execute(&call.args, context).await,
         "skill.view" => skill_view::execute(&call.args, context).await,
         "tool.view" => tool_view::execute(&call.args, context.loaded_tools).await,
-        "capability_search" => async {
-            let query = required_string(&call.args, "query").map_err(ToolOutcome::error)?;
-            context.desktop.capability_search(&query).await.map(|value| {
+        "capability_search" => {
+            async {
+                let query = required_string(&call.args, "query").map_err(ToolOutcome::error)?;
+                context
+                    .desktop
+                    .capability_search(&query)
+                    .await
+                    .map(|value| {
+                        let mut outcome = ToolOutcome::ok(value.to_string());
+                        outcome.details = Some(value);
+                        outcome
+                    })
+                    .map_err(ToolOutcome::error)
+            }
+            .await
+        }
+        "capability_read" => {
+            async {
+                let name = required_string(&call.args, "name").map_err(ToolOutcome::error)?;
+                context
+                    .desktop
+                    .capability_read(&name)
+                    .await
+                    .map(|value| {
+                        let mut outcome = ToolOutcome::ok(value.to_string());
+                        outcome.details = Some(value);
+                        outcome
+                    })
+                    .map_err(ToolOutcome::error)
+            }
+            .await
+        }
+        tool if tool.starts_with("mcp_") => context
+            .desktop
+            .mcp(tool, call.args.clone(), context.cancellation)
+            .await
+            .map(|value| {
                 let mut outcome = ToolOutcome::ok(value.to_string());
                 outcome.details = Some(value);
                 outcome
-            }).map_err(ToolOutcome::error)
-        }.await,
-        "capability_read" => async {
-            let name = required_string(&call.args, "name").map_err(ToolOutcome::error)?;
-            context.desktop.capability_read(&name).await.map(|value| {
-                let mut outcome = ToolOutcome::ok(value.to_string());
+            })
+            .map_err(ToolOutcome::error),
+        tool if connector_tool(tool).is_some() => context
+            .desktop
+            .connector(tool, call.args.clone(), context.cancellation)
+            .await
+            .map(|value| {
+                let mut outcome =
+                    ToolOutcome::ok(truncate(value.to_string(), MAX_TOOL_OUTPUT_CHARS));
                 outcome.details = Some(value);
                 outcome
-            }).map_err(ToolOutcome::error)
-        }.await,
-        tool if tool.starts_with("mcp_") => context.desktop.mcp(tool, call.args.clone(), context.cancellation)
-            .await.map(|value| {
-                let mut outcome = ToolOutcome::ok(value.to_string());
-                outcome.details = Some(value);
-                outcome
-            }).map_err(ToolOutcome::error),
+            })
+            .map_err(ToolOutcome::error),
         "reply" => required_string(&call.args, "text")
             .map(ToolOutcome::ok)
             .map_err(ToolOutcome::error),
@@ -256,7 +342,10 @@ async fn authorize_call(
     use super::permissions::Permission;
     let permission = context.approval.permission(&call.tool);
     if permission == Permission::Deny {
-        return Err(ToolOutcome::denied("Blocked by this agent definition's permissions", "definition-permission"));
+        return Err(ToolOutcome::denied(
+            "Blocked by this agent definition's permissions",
+            "definition-permission",
+        ));
     }
     let mut prepared = prepare_call_paths(
         call,
@@ -266,6 +355,14 @@ async fn authorize_call(
     )
     .await
     .map_err(ToolOutcome::error)?;
+    if connector_tool(&prepared.call.tool).is_some() {
+        // Approval and execution must refer to the same explicitly selected account.
+        prepared.call.args = context
+            .desktop
+            .connector_prepare(&prepared.call.tool, prepared.call.args.clone())
+            .await
+            .map_err(ToolOutcome::error)?;
+    }
     while let Some(folder_request) = prepared.folder_access.clone() {
         let allowed = context
             .folder_access
@@ -294,8 +391,11 @@ async fn authorize_call(
     }
     let mut reasons = Vec::new();
     if prepared.call.tool == "studio.manage" && prepared.call.args["action"] == "save_definition" {
-        context.desktop.studio("validate_definition", prepared.call.args["args"].clone())
-            .await.map_err(ToolOutcome::error)?;
+        context
+            .desktop
+            .studio("validate_definition", prepared.call.args["args"].clone())
+            .await
+            .map_err(ToolOutcome::error)?;
     }
     let mut skill_invocation = None;
     if prepared.call.tool == "os.shell.run" {
@@ -347,7 +447,9 @@ async fn authorize_call(
         return Ok(prepared.call);
     }
     let fingerprint = fingerprint_prepared_action(&prepared.call.tool, &prepared.call.args);
-    let can_remember = permission != Permission::Ask && is_approval_gated && !prepared.escaped_root
+    let can_remember = permission != Permission::Ask
+        && is_approval_gated
+        && !prepared.escaped_root
         && prepared.call.tool != "studio.manage";
     if can_remember && context.approval.is_allowed(&fingerprint).await {
         return Ok(prepared.call);
@@ -356,10 +458,16 @@ async fn authorize_call(
     let mut resources = prepared.resources;
     resources.extend(non_path_resources(&prepared.call));
     if prepared.call.tool.starts_with("mcp_") {
-        let (server, tool) = context.desktop.mcp_identity(&prepared.call.tool, &prepared.call.args).await
+        let (server, tool) = context
+            .desktop
+            .mcp_identity(&prepared.call.tool, &prepared.call.args)
+            .await
             .map_err(ToolOutcome::error)?;
-        resources.push(ApprovalResource { kind: "mcp".into(),
-            value: format!("{server}::{tool}"), operation: "call".into() });
+        resources.push(ApprovalResource {
+            kind: "mcp".into(),
+            value: format!("{server}::{tool}"),
+            operation: "call".into(),
+        });
     }
     if let Some(invocation) = skill_invocation {
         resources.push(ApprovalResource {
@@ -397,7 +505,219 @@ async fn authorize_call(
     }
 }
 
+fn connector_preview(args: &Value, tool: &crate::core::connectors::ConnectorTool) -> Value {
+    fn fields(value: &Value, keys: &[&str]) -> Value {
+        Value::Object(
+            keys.iter()
+                .filter_map(|key| value.get(*key).map(|value| ((*key).into(), value.clone())))
+                .collect(),
+        )
+    }
+
+    let provider =
+        crate::core::connectors::provider_for(tool.name).expect("registered connector provider");
+    let mut preview = fields(
+        args,
+        &[
+            "account_id",
+            "name",
+            "title",
+            "subject",
+            "address",
+            "resource_name",
+            "parent",
+            "previous",
+            "parent_ids",
+            "add_parent_ids",
+            "remove_parent_ids",
+            "add_label_ids",
+            "remove_label_ids",
+            "type",
+            "role",
+            "scope",
+            "email_address",
+            "domain",
+            "emails",
+            "send_invitation",
+            "send_notification_email",
+            "transfer_ownership",
+            "allow_file_discovery",
+            "send_updates",
+            "create_meet",
+            "save_to_sent_items",
+            "permanent",
+            "start",
+            "end",
+            "destination_id",
+            "to_recipients",
+            "update_fields",
+            "value_input_option",
+            "insert_data_option",
+        ],
+    )
+    .as_object()
+    .expect("preview object")
+    .clone();
+    preview.insert("provider".into(), provider.as_str().into());
+    preview.insert("service".into(), tool.service.into());
+    preview.insert("operation".into(), tool.name.into());
+    for (key, value) in args.as_object().into_iter().flatten() {
+        if key.ends_with("_id") || key.ends_with("_ids") || (key == "range" && value.is_string()) {
+            preview.insert(key.clone(), value.clone());
+        }
+    }
+    if let Some(message) = args.get("message") {
+        let mut mail = fields(
+            message,
+            &[
+                "to",
+                "cc",
+                "bcc",
+                "toRecipients",
+                "ccRecipients",
+                "bccRecipients",
+                "subject",
+                "importance",
+            ],
+        )
+        .as_object()
+        .expect("mail preview")
+        .clone();
+        if let Some(attachments) = message["attachments"].as_array() {
+            mail.insert(
+                "attachments".into(),
+                Value::Array(
+                    attachments
+                        .iter()
+                        .map(|attachment| fields(attachment, &["filename", "mime_type"]))
+                        .collect(),
+                ),
+            );
+        }
+        preview.insert("message".into(), Value::Object(mail));
+    }
+    if let Some(event) = args.get("event") {
+        preview.insert(
+            "event".into(),
+            fields(
+                event,
+                &[
+                    "summary",
+                    "subject",
+                    "start",
+                    "end",
+                    "location",
+                    "attendees",
+                    "isAllDay",
+                    "isOnlineMeeting",
+                    "onlineMeetingProvider",
+                    "recurrence",
+                    "visibility",
+                ],
+            ),
+        );
+    }
+    if let Some(task) = args.get("task") {
+        preview.insert(
+            "task".into(),
+            fields(
+                task,
+                &[
+                    "title",
+                    "due",
+                    "dueDateTime",
+                    "reminderDateTime",
+                    "status",
+                    "importance",
+                ],
+            ),
+        );
+    }
+    for key in ["person", "contact"] {
+        if let Some(person) = args.get(key) {
+            preview.insert(
+                key.into(),
+                fields(
+                    person,
+                    &[
+                        "names",
+                        "givenName",
+                        "surname",
+                        "displayName",
+                        "emailAddresses",
+                    ],
+                ),
+            );
+        }
+    }
+    if let Some(requests) = args["requests"].as_array() {
+        preview.insert(
+            "edits".into(),
+            Value::Array(
+                requests
+                    .iter()
+                    .map(|request| {
+                        Value::Object(
+                            request
+                                .as_object()
+                                .into_iter()
+                                .flatten()
+                                .map(|(operation, target)| {
+                                    (
+                                        operation.clone(),
+                                        fields(
+                                            target,
+                                            &[
+                                                "objectId",
+                                                "pageObjectId",
+                                                "range",
+                                                "location",
+                                                "endOfSegmentLocation",
+                                            ],
+                                        ),
+                                    )
+                                })
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(changes) = args["changes"].as_array() {
+        preview.insert(
+            "changes".into(),
+            Value::Array(
+                changes
+                    .iter()
+                    .map(|change| fields(change, &["target", "action", "position"]))
+                    .collect(),
+            ),
+        );
+    }
+    if args.get("data_base64").is_some() || args.get("content_base64").is_some() {
+        preview.insert("replaces_or_uploads_bytes".into(), Value::Bool(true));
+    }
+    if let Some(range) = args.get("range").filter(|range| range.is_object()) {
+        preview.insert(
+            "range_fields".into(),
+            Value::Array(
+                range
+                    .as_object()
+                    .expect("range object")
+                    .keys()
+                    .map(|key| key.clone().into())
+                    .collect(),
+            ),
+        );
+    }
+    Value::Object(preview)
+}
+
 fn safe_preview(call: &ToolCallPayload) -> Value {
+    if let Some(tool) = connector_tool(&call.tool) {
+        return connector_preview(&call.args, tool);
+    }
     if call.tool == "mcp_call" {
         return serde_json::json!({"name":call.args.get("name")});
     }
@@ -577,6 +897,20 @@ fn safe_url_preview(raw: &str) -> String {
 }
 
 fn non_path_resources(call: &ToolCallPayload) -> Vec<ApprovalResource> {
+    if let Some(tool) = connector_tool(&call.tool) {
+        let provider = crate::core::connectors::provider_for(tool.name)
+            .expect("registered connector provider");
+        return vec![ApprovalResource {
+            kind: "connector".into(),
+            value: format!(
+                "{}::{}::{}",
+                provider.as_str(),
+                call.args["account_id"].as_str().unwrap_or(""),
+                tool.service
+            ),
+            operation: tool.name.into(),
+        }];
+    }
     match call.tool.as_str() {
         "os.http.request" => call
             .args
@@ -800,6 +1134,242 @@ mod tests {
             self.notifications.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
+    }
+
+    struct ConnectorDesktop {
+        selected: std::sync::Arc<StdMutex<String>>,
+        prepared: AtomicUsize,
+        executed: StdMutex<Vec<ToolCallPayload>>,
+    }
+
+    #[async_trait]
+    impl DesktopServices for ConnectorDesktop {
+        async fn write_clipboard(&self, _text: String) -> Result<(), String> {
+            Err("Clipboard calls are outside this connector fixture".into())
+        }
+
+        async fn notify(&self, _title: String, _body: String) -> Result<(), String> {
+            Err("Notification calls are outside this connector fixture".into())
+        }
+
+        async fn connector_prepare(&self, _name: &str, mut args: Value) -> Result<Value, String> {
+            self.prepared.fetch_add(1, Ordering::SeqCst);
+            if args["account_id"].as_str().unwrap_or("").is_empty() {
+                args["account_id"] = self.selected.lock().unwrap().clone().into();
+            }
+            Ok(args)
+        }
+        async fn connector(
+            &self,
+            name: &str,
+            args: Value,
+            cancellation: &CancellationToken,
+        ) -> Result<Value, String> {
+            assert!(!cancellation.is_cancelled());
+            self.executed.lock().unwrap().push(ToolCallPayload {
+                tool: name.into(),
+                args: args.clone(),
+            });
+            Ok(serde_json::json!({"account_id":args["account_id"]}))
+        }
+    }
+
+    struct ConnectorApproval {
+        selected: std::sync::Arc<StdMutex<String>>,
+        approved: bool,
+        requests: StdMutex<Vec<ApprovalRequest>>,
+    }
+
+    #[async_trait]
+    impl ApprovalHook for ConnectorApproval {
+        async fn is_allowed(&self, _fingerprint: &str) -> bool {
+            false
+        }
+        async fn request(&self, request: ApprovalRequest) -> Result<ApprovalDecision, String> {
+            self.requests.lock().unwrap().push(request);
+            // A settings change during approval cannot redirect an already prepared action.
+            *self.selected.lock().unwrap() = "selected-b".into();
+            Ok(if self.approved {
+                ApprovalDecision::AllowOnce
+            } else {
+                ApprovalDecision::Deny
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn workspace_connectors_share_permissions_and_freeze_account_before_approval() {
+        use crate::core::agent::permissions::{Capability, DefinitionApproval, Permission};
+        let root = test_dir();
+        let loaded_tools = tool_view::LoadedTools::default();
+        let loaded_skills = LoadedSkills::default();
+        let skill_registry = test_skill_registry(&root);
+        let editable_roots = EditableRoots::for_test(&root);
+        let folder_access = TestFolderAccess {
+            allowed: false,
+            calls: AtomicUsize::new(0),
+        };
+        let cancellation = CancellationToken::new();
+        let mail = serde_json::json!({"message":{"to":["recipient@example.test"],"subject":"Approval target","text":"PRIVATE-BODY","attachments":[{"filename":"report.txt","mime_type":"text/plain","data_base64":"ATTACHMENTPAYLOAD"}]}});
+        let outlook = serde_json::json!({"message":{"subject":"Approval target","body":{"contentType":"Text","content":"PRIVATE-BODY"},"toRecipients":[{"emailAddress":{"address":"recipient@example.test"}}]}});
+        for (name, args, permission, approved, requests, expected) in [
+            (
+                "google.gmail.search",
+                serde_json::json!({"query":"label:inbox"}),
+                Permission::Default,
+                true,
+                0,
+                ToolStatus::Ok,
+            ),
+            (
+                "google.gmail.send",
+                mail.clone(),
+                Permission::Default,
+                false,
+                1,
+                ToolStatus::Denied,
+            ),
+            (
+                "google.gmail.send",
+                mail,
+                Permission::Default,
+                true,
+                1,
+                ToolStatus::Ok,
+            ),
+            (
+                "microsoft.outlook.send",
+                outlook.clone(),
+                Permission::Default,
+                true,
+                1,
+                ToolStatus::Ok,
+            ),
+            (
+                "microsoft.outlook.send",
+                outlook,
+                Permission::Allow,
+                false,
+                0,
+                ToolStatus::Ok,
+            ),
+            (
+                "google.gmail.search",
+                serde_json::json!({}),
+                Permission::Ask,
+                true,
+                1,
+                ToolStatus::Ok,
+            ),
+            (
+                "microsoft.outlook.read",
+                serde_json::json!({"message_id":"message-a"}),
+                Permission::Deny,
+                true,
+                0,
+                ToolStatus::Denied,
+            ),
+        ] {
+            let selected = std::sync::Arc::new(StdMutex::new("selected-a".into()));
+            let desktop = ConnectorDesktop {
+                selected: selected.clone(),
+                prepared: AtomicUsize::new(0),
+                executed: StdMutex::new(Vec::new()),
+            };
+            let approval = ConnectorApproval {
+                selected,
+                approved,
+                requests: StdMutex::new(Vec::new()),
+            };
+            let permissions = [(Capability::Network, permission)].into_iter().collect();
+            let definition = DefinitionApproval {
+                permissions: &permissions,
+                inner: &approval,
+            };
+            let context = ToolContext {
+                working_dir: &root,
+                editable_roots: &editable_roots,
+                trusted_read_roots: &[],
+                client: None,
+                reasoning_effort: None,
+                inference: None,
+                approval: &definition,
+                folder_access: &folder_access,
+                cancellation: &cancellation,
+                loaded_tools: &loaded_tools,
+                loaded_skills: &loaded_skills,
+                skill_registry: &skill_registry,
+                bundled_script_runtime: None,
+                desktop: &desktop,
+            };
+            let outcome = execute(&ToolCallPayload {
+                tool: "connector_call".into(),
+                args: serde_json::json!({"name":super::super::ginfer_client::wire_tool_name(name),"arguments":args}),
+            }, &context).await;
+            assert_eq!(outcome.status, expected, "{name} {permission:?}");
+            let recorded = approval.requests.lock().unwrap();
+            assert_eq!(recorded.len(), requests);
+            if let Some(request) = recorded.first() {
+                let mut prepared = args.clone();
+                prepared["account_id"] = "selected-a".into();
+                assert_eq!(request.tool, name);
+                assert_eq!(
+                    request.fingerprint,
+                    fingerprint_prepared_action(name, &prepared)
+                );
+                assert_eq!(request.preview["account_id"], "selected-a");
+                assert_eq!(request.affected_resources[0].operation, name);
+                assert!(request.affected_resources[0]
+                    .value
+                    .contains("::selected-a::"));
+                let preview = request.preview.to_string();
+                assert!(!preview.contains("PRIVATE-BODY"));
+                assert!(!preview.contains("ATTACHMENTPAYLOAD"));
+                if name.ends_with(".send") {
+                    assert!(preview.contains("recipient@example.test"));
+                    assert!(preview.contains("Approval target"));
+                }
+            }
+            let executed = desktop.executed.lock().unwrap();
+            assert_eq!(executed.len(), usize::from(expected == ToolStatus::Ok));
+            if let Some(call) = executed.first() {
+                assert_eq!(call.tool, name);
+                assert_eq!(call.args["account_id"], "selected-a");
+            }
+            if permission == Permission::Deny {
+                assert_eq!(desktop.prepared.load(Ordering::SeqCst), 0);
+            }
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn workspace_connectors_mutation_approval_identifies_event_sharing_and_destructive_targets() {
+        let event = safe_preview(&ToolCallPayload {
+            tool: "google.calendar.create".into(),
+            args: serde_json::json!({"account_id":"account-a","calendar_id":"team-calendar","send_updates":"all","event":{"summary":"Planning","start":{"dateTime":"2026-10-12T10:00:00Z"},"end":{"dateTime":"2026-10-12T11:00:00Z"},"attendees":[{"email":"person@example.test"}],"description":"PRIVATE-BODY"}}),
+        });
+        assert_eq!(event["calendar_id"], "team-calendar");
+        assert_eq!(event["event"]["start"]["dateTime"], "2026-10-12T10:00:00Z");
+        assert_eq!(
+            event["event"]["attendees"][0]["email"],
+            "person@example.test"
+        );
+        assert!(event["event"].get("description").is_none());
+        let share = safe_preview(&ToolCallPayload {
+            tool: "google.drive.share".into(),
+            args: serde_json::json!({"account_id":"account-a","file_id":"file-a","type":"user","role":"writer","email_address":"person@example.test","transfer_ownership":false}),
+        });
+        assert_eq!(share["file_id"], "file-a");
+        assert_eq!(share["email_address"], "person@example.test");
+        assert_eq!(share["role"], "writer");
+        let delete = safe_preview(&ToolCallPayload {
+            tool: "microsoft.onedrive.delete".into(),
+            args: serde_json::json!({"account_id":"account-a","drive_id":"drive-a","item_id":"item-a"}),
+        });
+        assert_eq!(delete["operation"], "microsoft.onedrive.delete");
+        assert_eq!(delete["drive_id"], "drive-a");
+        assert_eq!(delete["item_id"], "item-a");
     }
 
     #[tokio::test]

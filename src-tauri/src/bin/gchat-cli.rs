@@ -77,6 +77,20 @@ enum Commands {
         #[command(subcommand)]
         cmd: ServerCommands,
     },
+    /// Install bundled runtime resources and ask the shared Host to prepare hardware.
+    /// This entry never starts chat, a model, or the Local API Server.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    PrepareHardware {
+        /// Installed GChat resource directory, supplied by the per-user installer.
+        #[arg(long)]
+        resource_directory: PathBuf,
+        /// Effective per-user app-data directory supplied by the owning package.
+        #[arg(long)]
+        app_data_directory: PathBuf,
+        /// Exact ordered deployment GPU UUIDs; repeat for TP2/TP4.
+        #[arg(long = "gpu")]
+        gpu_uuids: Vec<String>,
+    },
 }
 
 // ── Serve args ─────────────────────────────────────────────────────────────
@@ -270,6 +284,13 @@ async fn main() {
         Commands::Launch { args } => handle_launch(args).await,
         Commands::Models { cmd } => handle_models(cmd),
         Commands::Server { cmd } => handle_server(cmd).await,
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        Commands::PrepareHardware { resource_directory, app_data_directory, gpu_uuids } => {
+            match app_lib::core::setup::prepare_installed_hardware_from_resources(resource_directory, app_data_directory, gpu_uuids).await {
+                Ok(status) => println!("{}", serde_json::to_string(&status).unwrap_or_else(|e| fail(e.to_string()))),
+                Err(error) => fail(error),
+            }
+        }
     }
 }
 

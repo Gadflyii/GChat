@@ -103,6 +103,15 @@ impl Discovery {
     pub fn hosts(&self) -> Vec<DiscoveredHost> {
         self.found.lock().unwrap().values().cloned().collect()
     }
+    pub(crate) fn host(&self, id: uuid::Uuid) -> Option<DiscoveredHost> {
+        let id = id.to_string();
+        self.found.lock().unwrap().values().find(|host| host.host_id == id).cloned()
+    }
+    pub(crate) fn urls(&self, id: uuid::Uuid) -> Vec<String> {
+        let id = id.to_string();
+        self.found.lock().unwrap().values().filter(|host| host.host_id == id)
+            .flat_map(|host| host.urls.iter().cloned()).collect()
+    }
 }
 impl Drop for Discovery {
     fn drop(&mut self) {

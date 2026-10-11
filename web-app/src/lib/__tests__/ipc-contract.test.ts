@@ -15,6 +15,16 @@ const PLUGINS_ROOT = join(TAURI_ROOT, 'plugins')
 
 const EXPECTED_DESKTOP_ONLY = new Set([
   'engine_hosts_command',
+  'connector_accounts',
+  'connector_configure',
+  'connector_begin_auth',
+  'connector_auth_status',
+  'connector_cancel_auth',
+  'connector_select_account',
+  'connector_disconnect',
+  'ginfer_model_locations',
+  'ginfer_model_import_location',
+  'delete_ginfer_model',
   'adopt_root_ginfer_models',
   'check_for_app_updates',
   'code_session_new',

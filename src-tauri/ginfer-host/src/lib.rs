@@ -12,6 +12,7 @@ pub mod local_inference;
 pub mod local_host;
 pub mod local_host_registry;
 pub mod model_downloads;
+pub mod model_storage;
 pub mod response_route;
 pub mod service;
 pub mod service_owner;
@@ -19,3 +20,12 @@ pub mod transport;
 pub mod lan_sharing;
 
 pub mod client;
+
+#[cfg(test)]
+#[path = "../tests/common/resource_measurement.rs"]
+pub(crate) mod resource_measurement;
+
+pub mod hardware_profile;
+
+#[cfg(windows)]
+pub(crate) mod hardware_profile_windows;

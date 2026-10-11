@@ -10,30 +10,78 @@ const size = (bytes) => Number.isFinite(Number(bytes)) ? `${(Number(bytes) / 2 *
 const instanceKey = (ref) => `${ref.host_id}/${ref.instance_id}`
 const parseOrigins = (value) => value.split(/\r?\n/).map((origin) => origin.trim()).filter(Boolean)
 const lastSeen = (client) => client.last_seen_unix_ms ? `Last seen ${new Date(client.last_seen_unix_ms).toLocaleString()}` : 'No requests yet'
-const renderKey = (view) => JSON.stringify({ ...view, hosts: array(view.hosts).map((host) => ({ ...host,
-  snapshot: host.snapshot && { ...host.snapshot, revision: undefined,
-    local_administrator: host.snapshot.local_administrator && { active_requests: host.snapshot.local_administrator.active_requests },
-    clients: array(host.snapshot.clients).map((client) => ({ ...client, active_instances: undefined, last_seen_unix_ms: lastSeen(client) })) },
-})) })
+// These are the values used by the view and its action closures. Activity text
+// has its own nodes, so a paired client's poll need not replace its controls.
+const renderKey = (view) => JSON.stringify([
+  view.client_name, view.local_error, view.fleet,
+  array(view.discovered).map((host) => [host.host_id, host.name, host.urls]),
+  array(view.hosts).map((host) => {
+    const snapshot = host.snapshot
+    return [host.host_id, host.name, host.local, host.online, host.offline, host.error,
+      host.base_url, host.certificate_sha256, snapshot && [
+        snapshot.display_name, snapshot.gpus, snapshot.models, snapshot.launch_profiles,
+        snapshot.lan_sharing, snapshot.model_management, snapshot.hardware_profile,
+        host.online && ['running', 'cancelling'].includes(snapshot.hardware_profile?.status) && snapshot.hardware_profile.started_unix_ms != null
+          ? Math.floor((Date.now() - snapshot.hardware_profile.started_unix_ms) / 1000) : null,
+        snapshot.inventory_errors,
+        snapshot.profile_error, snapshot.fleet, snapshot.fleet_membership,
+        array(snapshot.instances).map((instance) => [instance.instance_id, instance.session_id,
+          instance.display_name, instance.status, instance.configuration, instance.profile,
+          instance.upstream_model_id, instance.last_error]),
+        array(snapshot.clients).map((client) => [client.client_id, client.name, client.local]),
+        !!snapshot.local_administrator,
+      ]]
+  }),
+])
+const firstMap = (entries, key) => {
+  const result = new Map()
+  for (const entry of entries) {
+    const id = key(entry)
+    if (!result.has(id)) result.set(id, entry)
+  }
+  return result
+}
 
 export function createManager(root, invoke, listen, storage = globalThis.localStorage) {
   const document = root.ownerDocument
+  const preferences = new Map()
   const readPreference = (key, fallback) => {
-    try { return JSON.parse(storage.getItem(`ginfer-manager.${key}`)) ?? fallback } catch { return fallback }
+    try {
+      const saved = storage.getItem(`ginfer-manager.${key}`)
+      if (saved == null) return fallback
+      const value = JSON.parse(saved)
+      preferences.set(key, JSON.stringify(value))
+      return value ?? fallback
+    } catch { return fallback }
   }
   const savePreference = (key, value) => {
-    try { storage.setItem(`ginfer-manager.${key}`, JSON.stringify(value)) } catch { /* Display preferences are optional. */ }
+    const serialized = JSON.stringify(value)
+    if (preferences.get(key) === serialized) return
+    try {
+      storage.setItem(`ginfer-manager.${key}`, serialized)
+      preferences.set(key, serialized)
+    } catch { /* Only successful writes are cached; the next observation retries. */ }
   }
   const state = { view: { hosts: [], discovered: [], fleet: null }, selected: readPreference('host', null),
-    ignored: new Set(readPreference('ignored', [])), sections: new Map(), catalogs: new Map(),
+    ignored: new Set(readPreference('ignored', [])), sections: new Map(), catalogs: new Map(), profileGroups: new Map(),
     busy: false, notice: '', error: '', errorSource: null, dialog: null, stopped: false }
   const subscriptions = []
   let snapshotKey
+  let presentationKey
   let pendingRender = false
+  let indexedView
+  let indexes
+  const clientActivity = new Map()
+  const instanceActivity = new Map()
+  let administratorActivity
 
-  function append(node, ...children) {
-    for (const child of children.flat(Infinity)) if (child != null) node.append(child.nodeType ? child : document.createTextNode(String(child)))
+  function appendChildren(node, children) {
+    for (const child of children) {
+      if (Array.isArray(child)) appendChildren(node, child)
+      else if (child != null) node.append(child.nodeType ? child : document.createTextNode(String(child)))
+    }
   }
+  const append = (node, ...children) => appendChildren(node, children)
   function h(tag, properties = {}, ...children) {
     const node = document.createElement(tag)
     for (const [key, value] of Object.entries(properties)) {
@@ -43,7 +91,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       else if (key === 'value') node.value = value
       else if (value != null) node.setAttribute(key, value)
     }
-    append(node, children)
+    appendChildren(node, children)
     return node
   }
   const button = (label, action, disabled = false, className = '') => h('button', {
@@ -51,34 +99,58 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   const note = (content) => h('p', { class: 'muted' }, content)
   const badge = (status) => h('span', { class: `badge ${status}` }, text(status, 'unknown'))
   const online = (host) => host?.online === true
-  const selectedHost = () => array(state.view.hosts).find((host) => host.host_id === state.selected)
-  const hostName = (id) => text(array(state.view.hosts).find((host) => host.host_id === id)?.name, id)
-  const instances = () => array(state.view.hosts).flatMap((host) => array(host.snapshot?.instances).map((instance) => ({ host, instance })))
+  const profiling = (host) => ['running', 'cancelling'].includes(host?.snapshot?.hardware_profile?.status)
+  function observation() {
+    if (indexedView === state.view) return indexes
+    const hosts = array(state.view.hosts)
+    indexes = { hosts: firstMap(hosts, (host) => host.host_id),
+      discovered: firstMap(array(state.view.discovered), (host) => host.host_id),
+      models: new Map(), gpus: new Map(), instances: new Map(), instanceRows: [],
+      pools: firstMap(array(state.view.fleet?.snapshot?.pools), (pool) => pool.id),
+      members: firstMap(array(state.view.fleet?.snapshot?.members), (member) => member.host.host_id),
+      issues: new Map() }
+    for (const host of hosts) {
+      indexes.models.set(host.host_id, firstMap(array(host.snapshot?.models), (model) => model.id))
+      indexes.gpus.set(host.host_id, firstMap(array(host.snapshot?.gpus).map((gpu, index) => ({ gpu, index })), (entry) => entry.gpu.uuid))
+      for (const instance of array(host.snapshot?.instances)) {
+        const row = { host, instance }
+        const key = instanceKey({ host_id: host.host_id, instance_id: instance.instance_id })
+        if (!indexes.instances.has(key)) indexes.instances.set(key, row)
+        indexes.instanceRows.push(row)
+      }
+    }
+    for (const issue of array(state.view.fleet?.host_issues)) {
+      if (!indexes.issues.has(issue.host_id)) indexes.issues.set(issue.host_id, [])
+      indexes.issues.get(issue.host_id).push(issue)
+    }
+    indexedView = state.view
+    return indexes
+  }
+  const selectedHost = () => observation().hosts.get(state.selected)
+  const hostName = (id) => text(observation().hosts.get(id)?.name, id)
+  const instances = () => observation().instanceRows
   const displayedInstance = (host, instance) => {
-    const model = array(host.snapshot?.models).find((model) => model.id === instance.profile?.model_id)
+    const model = observation().models.get(host.host_id)?.get(instance.profile?.model_id)
     return model ? modelLabel(model) : instance.configuration?.artifact ? modelLabel({ path: instance.configuration.artifact })
       : text(instance.upstream_model_id || instance.display_name)
   }
   const instanceLabel = (ref) => {
-    const row = instances().find(({ host, instance }) => host.host_id === ref.host_id && instance.instance_id === ref.instance_id)
+    const row = observation().instances.get(instanceKey(ref))
     return row ? `${row.host.name} · ${displayedInstance(row.host, row.instance)}` : `${hostName(ref.host_id)} · ${ref.instance_id}`
   }
   const hostRequest = (host, operation, args = {}) => ({ action: 'host', host_id: host.host_id, operation, args })
 
   function apply(view) {
     if (state.stopped || !view) return
-    const key = renderKey(view)
-    const changed = key !== snapshotKey
-    const previousError = state.error
-    const previousSelected = state.selected
-    snapshotKey = key
     state.view = view
+    indexedView = null
+    indexes = null
     if (state.errorSource === 'runtime') state.error = ''
     if (!array(view.hosts).some((host) => host.host_id === state.selected)) {
       state.selected = array(view.hosts).find((host) => host.local)?.host_id || array(view.hosts)[0]?.host_id || null
     }
     savePreference('host', state.selected)
-    if (changed || previousError !== state.error || previousSelected !== state.selected) render()
+    render(false)
   }
 
   async function refresh() {
@@ -192,8 +264,11 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   }
 
   function launchDialog(host, instance = null) {
+    if (profiling(host)) return
     const snapshot = host.snapshot || {}
     const models = array(snapshot.models)
+    const modelById = firstMap(models, (entry) => entry.id)
+    const gpuById = firstMap(array(snapshot.gpus).map((gpu, index) => ({ gpu, index })), (entry) => entry.gpu.uuid)
     const profiles = array(snapshot.launch_profiles).flatMap((entry) =>
       array(instance ? entry.compatible_gpu_groups : entry.gpu_groups).map((group) => ({ entry, group })))
     const previous = instance?.profile || {}
@@ -205,8 +280,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         disabled: kind === 'profile' && !profiles.length, onchange: () => { mode = kind; fill() } }),
       kind === 'profile' ? 'Saved profile' : 'Custom settings')))
     const gpuNames = (group) => group.map((id) => {
-      const index = array(snapshot.gpus).findIndex((gpu) => gpu.uuid === id)
-      return `GPU ${index} · ${text(snapshot.gpus[index]?.display_name || snapshot.gpus[index]?.name, id)}`
+      const entry = gpuById.get(id)
+      return `GPU ${entry?.index ?? -1} · ${text(entry?.gpu.display_name || entry?.gpu.name, id)}`
     }).join(' + ')
     function fill() {
       if (mode === 'profile') {
@@ -240,7 +315,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       specField.addEventListener('change', updateWidth)
       updateWidth()
       const updateTarget = () => {
-        const target = models.find((entry) => entry.id === modelField.querySelector('select').value)?.metadata?.identity?.model_id
+        const target = modelById.get(modelField.querySelector('select').value)?.metadata?.identity?.model_id
         for (const option of specField.querySelectorAll('option')) {
           option.disabled = option.value === 'mtp' ? target !== 'qwen3.8-flash-next' : option.value === 'dflash' && target === 'qwen3.8-flash-next'
         }
@@ -255,6 +330,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       [radios, content, ...(instance?.active_requests > 0 ? [h('label', { class: 'check' },
         h('input', { type: 'checkbox', name: 'force' }), `Interrupt ${instance.active_requests} active request(s)`)] : [])],
       instance ? 'Reload' : 'Start', (form) => {
+        const latest = observation().hosts.get(host.host_id)
+        if (!online(latest) || profiling(latest)) throw new Error('Wait until the Host is online and hardware profiling has stopped before launching a model.')
         const guard = instance ? { instance_id: instance.instance_id, expected_session_id: instance.session_id ?? null, force: checked(form, 'force') } : {}
         if (mode === 'profile') {
           const choice = profiles[Number(fieldValue(form, 'profile_choice'))]
@@ -285,26 +362,113 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   function instanceCard(host, instance) {
     const configuration = instance.profile || instance.configuration || {}
     const running = ['ready', 'starting', 'stopping'].includes(instance.status)
+    const currentFailure = online(host) && instance.status === 'failed'
+    const diagnosticSection = `instance-diagnostic:${host.host_id}:${instance.instance_id}:`
+    const diagnosticKey = `${diagnosticSection}${currentFailure ? 'current' : 'previous'}`
+    state.sections.delete(`${diagnosticSection}${currentFailure ? 'previous' : 'current'}`)
     const gpuLabels = array(configuration.gpu_uuids).map((uuid) => {
-      const index = array(host.snapshot?.gpus).findIndex((gpu) => gpu.uuid === uuid)
-      return `GPU ${index >= 0 ? index : '?'} · ${text(host.snapshot?.gpus?.[index]?.display_name || host.snapshot?.gpus?.[index]?.name, uuid)}`
+      const entry = observation().gpus.get(host.host_id)?.get(uuid)
+      return `GPU ${entry?.index ?? '?'} · ${text(entry?.gpu.display_name || entry?.gpu.name, uuid)}`
     })
-    const installed = array(host.snapshot?.models).find((model) => model.id === configuration.model_id)
+    const installed = observation().models.get(host.host_id)?.get(configuration.model_id)
     const name = installed ? modelLabel(installed) : displayedInstance(host, instance)
     const facts = [['GPU group', gpuLabels.join(' + ') || '—'], ['Engine port', text(instance.configuration?.port, 'Allocated when started')],
       ['Active requests', instance.active_requests ?? 0], ['Context / requests', `${text(configuration.max_context)} / ${text(configuration.concurrency)}`]]
+    const factNodes = facts.map(([label, value]) => {
+      const content = h('strong', {}, value)
+      if (label === 'Active requests') instanceActivity.set(instance.instance_id, content)
+      return h('div', {}, label, content)
+    })
     const execute = async (operation) => {
+      if (operation === 'start' && profiling(observation().hosts.get(host.host_id))) return
       try { await run(hostRequest(host, 'instance', { instance_id: instance.instance_id, operation,
         expected_session_id: instance.session_id ?? null, force: false }), operation === 'start' ? 'Model starting' : 'Instance stopped') }
       catch { /* The native error remains visible. */ }
     }
     return h('article', { class: 'card', 'data-instance': instance.instance_id },
       h('div', { class: 'card-title' }, h('h3', {}, name), badge(online(host) ? instance.status : 'offline')),
-      h('div', { class: 'facts' }, facts.map(([label, value]) => h('div', {}, label, h('strong', {}, value)))),
-      instance.last_error ? h('p', { class: 'section-error' }, instance.last_error) : null,
-      h('div', { class: 'actions' }, button('Start', () => execute('start'), !online(host) || running),
+      h('div', { class: 'facts' }, factNodes),
+      instance.last_error ? h('div', {},
+        currentFailure ? h('p', { class: 'section-error', role: 'alert' }, 'Engine failed. Open error details for the diagnostic.') : null,
+        h('details', { class: 'instance-diagnostic', 'data-section': diagnosticKey, open: state.sections.get(diagnosticKey) ?? false },
+          h('summary', {}, currentFailure ? 'Startup or runtime error details' : 'Previous startup error'),
+          h('pre', { class: 'mono' }, instance.last_error))) : null,
+      h('div', { class: 'actions' }, button('Start', () => execute('start'), !online(host) || profiling(host) || running),
         button('Stop', () => execute('stop'), !online(host) || !running || instance.status === 'stopping'),
-        button('Reload', () => launchDialog(host, instance), !online(host) || instance.status === 'stopping' || !array(host.snapshot?.models).length)))
+        button('Reload', () => {
+          const latest = observation().instances.get(instanceKey({ host_id: host.host_id, instance_id: instance.instance_id }))
+          launchDialog(latest?.host || host, latest?.instance || instance)
+        }, !online(host) || profiling(host) || instance.status === 'stopping' || !array(host.snapshot?.models).length)))
+  }
+
+  function hardwareProfileSection(host) {
+    const profile = host.snapshot?.hardware_profile
+    if (!profile) return null
+    const running = profiling(host)
+    const resumable = profile.job_id != null && array(profile.gpu_uuids).length > 0 && ['interrupted', 'cancelled', 'failed'].includes(profile.status)
+    const end = profile.finished_unix_ms ?? (running && online(host) ? Date.now() : null)
+    const elapsed = profile.started_unix_ms == null || end == null ? null
+      : Math.max(0, Math.floor((end - profile.started_unix_ms) / 1000))
+    const blocked = !online(host)
+    const gpus = array(host.snapshot?.gpus)
+    const known = gpus.filter(gpu => gpu.name && gpu.compute_capability)
+    const selected = state.profileGroups.get(host.host_id) || []
+    const selectedGpus = selected.map(uuid => known.find(gpu => gpu.uuid === uuid))
+    const validGroup = [1, 2, 4].includes(selected.length) && selectedGpus.every(gpu => gpu &&
+      gpu.name === selectedGpus[0]?.name && gpu.compute_capability === selectedGpus[0]?.compute_capability)
+    const groupLabel = (group) => group.map(uuid => {
+      const index = gpus.findIndex(gpu => gpu.uuid === uuid)
+      return index < 0 ? uuid : `GPU ${index + 1}: ${gpus[index].display_name || gpus[index].name} (${uuid})`
+    }).join(' + ')
+    const choose = (uuid, checked) => {
+      state.profileGroups.set(host.host_id, checked ? [...selected, uuid] : selected.filter(value => value !== uuid))
+      render()
+    }
+    const execute = async (action) => {
+      const args = { action, ...(['ensure', 'refresh'].includes(action) ? { gpu_uuids: selected } : {}) }
+      try { await run(hostRequest(host, 'hardware_profile', args), action === 'cancel' ? 'Profiling cancellation requested' : 'Hardware profile job accepted') }
+      catch { /* Shared action errors remain visible. */ }
+    }
+    return h('section', { class: 'card', 'aria-label': 'Hardware profile' },
+      h('h2', {}, 'Hardware profile'),
+      h('p', { role: 'status' }, `${profile.status}${elapsed == null ? '' : ` · ${elapsed.toLocaleString()} seconds elapsed`}${online(host) ? '' : ' · last reported, host offline'}`),
+      array(profile.gpu_uuids).length ? note(`Job GPU group: ${groupLabel(profile.gpu_uuids)}`) : null,
+      profile.engine_path ? note(`Job Engine: ${profile.engine_path}`) : null,
+      array(profile.pending_gpu_groups).length ? h('div', {}, note('Pending saved deployment groups'),
+        h('ul', {}, profile.pending_gpu_groups.map(group => h('li', {}, `TP${group.length}: ${groupLabel(group)}`))),
+        note('Cancel stops the current job and queue. Resume continues the retained work.')) : null,
+      array(profile.stale_groups).map(group => h('section', { class: 'card', 'aria-label': `Stale GPU group ${groupLabel(group.gpu_uuids)}` },
+        h('p', {}, `Hardware changed — re-profile · ${group.expected_duration_ms == null
+          ? 'recent full installs took 22–73 minutes; time varies by hardware'
+          : `~${Math.ceil(group.expected_duration_ms / 60000)} minutes`}`),
+        note(`TP${group.gpu_uuids.length}: ${groupLabel(group.gpu_uuids)}`),
+        h('p', { class: 'muted mono' }, group.profile_path),
+        button('Select group to re-profile', () => { state.profileGroups.set(host.host_id, [...group.gpu_uuids]); render() }, blocked || running))),
+      running ? h('progress', { 'aria-label': 'Hardware profiling in progress' }) : null,
+      note('Recent full installs took 22–73 minutes; time varies by hardware. Closing this window leaves the Host job running. Model launches wait until profiling stops.'),
+      profile.status === 'completed' ? note('Hardware profiling completed. This does not qualify a model or its full-context capacity.') : null,
+      resumable ? note(profile.checkpoint_available
+        ? 'A saved checkpoint is available. Resume validates its inputs before continuing; checkpoint presence alone does not prove compatibility.'
+        : 'Resume retries the saved job inputs. The producer validates any retained progress before continuing.') : null,
+      !profile.available && !running ? note('Choose a GPU group; the Host checks that a compatible hardware profiler is installed.') : null,
+      profile.error ? h('p', { class: 'section-error', role: 'alert' }, profile.error) : null,
+      profile.diagnostic_tail ? h('details', { class: 'instance-diagnostic', 'data-section': `hardware-profile-log:${host.host_id}`, open: state.sections.get(`hardware-profile-log:${host.host_id}`) ?? false },
+        h('summary', {}, 'Profiling log'), h('pre', { class: 'mono' }, profile.diagnostic_tail)) : null,
+      !running ? h('fieldset', { disabled: state.busy || blocked }, h('legend', {}, 'Choose GPU group'),
+        note("Select 1, 2 or 4 GPUs of the same model and compute capability. The Host binds the profile to the selected GPU set and TP degree."),
+        [...new Set(known.map(gpu => gpu.compute_capability))].map(sm => h('div', {}, note(`SM ${sm}`),
+          known.filter(gpu => gpu.compute_capability === sm).map(gpu => h('label', { class: 'check' },
+            h('input', { type: 'checkbox', checked: selected.includes(gpu.uuid), 'aria-label': groupLabel([gpu.uuid]),
+              disabled: !selected.includes(gpu.uuid) && selectedGpus[0] &&
+                (gpu.name !== selectedGpus[0].name || gpu.compute_capability !== selectedGpus[0].compute_capability),
+              onchange: event => choose(gpu.uuid, event.target.checked) }), groupLabel([gpu.uuid]))))),
+        selected.length ? [note(`Selected group: ${groupLabel(selected)}`), button('Clear GPU selection', () => { state.profileGroups.set(host.host_id, []); render() }, blocked)] : null,
+        !validGroup ? note('Choose an explicit homogeneous GPU group before preparing or refreshing.') : null) : null,
+      h('div', { class: 'actions' },
+        profile.status === 'idle' ? button('Prepare hardware profile', () => execute('ensure'), blocked || !validGroup) : null,
+        profile.status !== 'idle' && !running ? button('Refresh hardware profile', () => execute('refresh'), blocked || !validGroup) : null,
+        resumable ? button('Resume profiling', () => execute('resume'), blocked) : null,
+        running ? button(profile.status === 'cancelling' ? 'Cancelling profiling…' : array(profile.pending_gpu_groups).length ? 'Cancel profiling and queue' : 'Cancel profiling', () => execute('cancel'), !online(host) || profile.status === 'cancelling') : null))
   }
 
   function modelsSection(host) {
@@ -346,13 +510,36 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
 
   function clientsSection(host) {
     const clients = array(host.snapshot?.clients)
-    const rows = clients.map((client) => h('div', { class: 'list-row row' }, h('div', {}, h('div', { class: 'title' }, client.name),
-      h('p', {}, `${client.active_requests || 0} active request(s) · ${lastSeen(client)}`),
-      h('div', { class: 'mono' }, client.client_id)), client.local ? badge('local') : button('Revoke', () => confirm('Revoke client',
-        `Revoke ${client.name} on ${host.name}? This removes its grant to this host.`, hostRequest(host, 'revoke', { client_id: client.client_id }), 'Client revoked'), !online(host), 'danger')))
+    const rows = clients.map((client) => {
+      const activity = h('p', {}, `${client.active_requests || 0} active request(s) · ${lastSeen(client)}`)
+      clientActivity.set(client.client_id, activity)
+      return h('div', { class: 'list-row row', 'data-client': client.client_id }, h('div', {}, h('div', { class: 'title' }, client.name),
+        activity, h('div', { class: 'mono' }, client.client_id)), client.local ? badge('local') : button('Revoke', () => confirm('Revoke client',
+          `Revoke ${client.name} on ${host.name}? This removes its grant to this host.`, hostRequest(host, 'revoke', { client_id: client.client_id }), 'Client revoked'), !online(host), 'danger'))
+    })
     const administrator = host.snapshot?.local_administrator
+    administratorActivity = administrator ? note(`Local administrator · ${administrator.active_requests || 0} active request(s)`) : null
     return section('clients', `Paired clients · ${clients.length}`, [rows.length ? rows : note('No paired clients.'),
-      administrator ? note(`Local administrator · ${administrator.active_requests || 0} active request(s)`) : null])
+      administratorActivity])
+  }
+
+  function updateActivity() {
+    // Activity-only observations do not need the model/pool indexes.
+    const host = array(state.view.hosts).find((entry) => entry.host_id === state.selected)
+    for (const client of array(host?.snapshot?.clients)) {
+      const node = clientActivity.get(client.client_id)
+      const value = `${client.active_requests || 0} active request(s) · ${lastSeen(client)}`
+      if (node && node.textContent !== value) node.textContent = value
+    }
+    if (administratorActivity) {
+      const value = `Local administrator · ${host?.snapshot?.local_administrator?.active_requests || 0} active request(s)`
+      if (administratorActivity.textContent !== value) administratorActivity.textContent = value
+    }
+    for (const instance of array(host?.snapshot?.instances)) {
+      const node = instanceActivity.get(instance.instance_id)
+      const value = String(instance.active_requests ?? 0)
+      if (node && node.textContent !== value) node.textContent = value
+    }
   }
 
   function sharingSection(host) {
@@ -386,7 +573,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       const registration = hosts.find((entry) => entry.host_id === id)
       const published = registration?.snapshot?.fleet
       const locator = published?.kind === 'coordinator' ? published.fleet.authority : current?.host_id === id ? current : null
-      const discovered = array(state.view.discovered).find((entry) => entry.host_id === id)
+      const discovered = observation().discovered.get(id)
       const input = addresses.querySelector('textarea')
       input.value = array(locator?.origins).length ? locator.origins.join('\n') : array(discovered?.urls).length ? discovered.urls.join('\n') : text(registration?.base_url, '')
       input.readOnly = id !== host.host_id && published?.kind === 'coordinator'
@@ -409,9 +596,10 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const fleet = state.view.fleet.snapshot
     const eligible = new Set([fleet.authority.host_id, ...array(fleet.members).map((member) => member.host.host_id)])
     const all = instances().map(({ host, instance }) => ({ host_id: host.host_id, instance_id: instance.instance_id }))
-    const ordered = [...array(pool?.members).map((member) => member.instance), ...all.filter((ref) => !array(pool?.members).some((member) => instanceKey(member.instance) === instanceKey(ref)))]
+    const oldMembers = firstMap(array(pool?.members), (member) => instanceKey(member.instance))
+    const ordered = [...array(pool?.members).map((member) => member.instance), ...all.filter((ref) => !oldMembers.has(instanceKey(ref)))]
     const choices = ordered.map((ref, index) => {
-      const old = array(pool?.members).find((member) => instanceKey(member.instance) === instanceKey(ref))
+      const old = oldMembers.get(instanceKey(ref))
       return h('div', { class: 'pool-choice', 'data-ref': instanceKey(ref) }, h('label', { class: 'check' },
         h('input', { type: 'checkbox', name: 'member', value: String(index), checked: !!old }),
         `${instanceLabel(ref)}${eligible.has(ref.host_id) ? '' : ' · joins this fleet'}`),
@@ -434,7 +622,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   function assignmentDialog(assignment = null) {
     const report = state.view.fleet
     const fleet = report.snapshot
-    const coordinator = array(state.view.hosts).find((host) => host.host_id === fleet.authority.host_id)
+    const coordinator = observation().hosts.get(fleet.authority.host_id)
     const clients = array(coordinator?.snapshot?.clients)
     const existingId = assignment?.client_id || report.client_id || clients[0]?.client_id
     const clientChoices = clients.map((client) => [client.client_id, `${client.name}${client.client_id === report.client_id ? ' · this client' : ''}`])
@@ -442,14 +630,15 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const hostChoices = [...new Map([[fleet.authority.host_id, hostName(fleet.authority.host_id)],
       ...array(fleet.members).map((member) => [member.host.host_id, member.display_name])]).entries()]
     const eligible = new Set(hostChoices.map(([id]) => id))
-    const refs = [...array(assignment?.preferred_instances), ...instances().filter(({ host }) => eligible.has(host.host_id))
-      .map(({ host, instance }) => ({ host_id: host.host_id, instance_id: instance.instance_id }))]
-      .filter((ref, index, source) => source.findIndex((entry) => instanceKey(entry) === instanceKey(ref)) === index)
+    const refByKey = firstMap([...array(assignment?.preferred_instances), ...instances().filter(({ host }) => eligible.has(host.host_id))
+      .map(({ host, instance }) => ({ host_id: host.host_id, instance_id: instance.instance_id }))], instanceKey)
+    const refs = [...refByKey.values()]
+    const assignments = firstMap(array(fleet.assignments), (entry) => entry.client_id)
     const clientField = select('Client', 'client', clientChoices, existingId)
     clientField.querySelector('select').disabled = !!assignment
     const preferences = h('div')
     const fill = () => {
-      const saved = array(fleet.assignments).find((entry) => entry.client_id === clientField.querySelector('select').value)
+      const saved = assignments.get(clientField.querySelector('select').value)
       preferences.replaceChildren(
         checks('Visible work pools', 'pool', array(fleet.pools).map((pool) => [pool.id, pool.name]), saved?.pool_ids || []),
         checks('Preferred hosts', 'preferred_host', hostChoices, saved?.preferred_hosts || []),
@@ -464,7 +653,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         if (!client_id) throw new Error('Choose a coordinator client')
         return run({ action: 'fleet_update', update: { expected_revision: fleet.revision, operation: 'set_client_assignment',
           assignment: { client_id, pool_ids: checkedValues(form, 'pool'), preferred_hosts: checkedValues(form, 'preferred_host'),
-            preferred_instances: checkedValues(form, 'preferred_instance').map((key) => refs.find((ref) => instanceKey(ref) === key)) } } }, 'Client assignment saved')
+            preferred_instances: checkedValues(form, 'preferred_instance').map((key) => refByKey.get(key)) } } }, 'Client assignment saved')
       })
   }
 
@@ -474,23 +663,25 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const writable = report.connected === true && !!fleet
     const update = (operation) => run({ action: 'fleet_update', update: { expected_revision: fleet.revision, ...operation } }, 'Fleet updated')
     const coordinatorName = hostName(report.authority?.host_id)
-    const coordinator = array(state.view.hosts).find((entry) => entry.host_id === report.authority?.host_id)
+    const index = observation()
+    const coordinator = index.hosts.get(report.authority?.host_id)
     const hostIssues = array(report.host_issues)
     const hostIds = new Set([...array(state.view.hosts).map((entry) => entry.host_id), ...hostIssues.map((issue) => issue.host_id)])
     const hostStatuses = [...hostIds].map((id) => {
-      const entry = array(state.view.hosts).find((entry) => entry.host_id === id)
-      const issues = hostIssues.filter((issue) => issue.host_id === id)
+      const entry = index.hosts.get(id)
+      const issues = index.issues.get(id) || []
       const problems = issues.filter((issue) => !issue.offline).map((issue) => issue.message)
       if (entry?.error && !entry.offline) problems.push(entry.error)
       const offline = entry?.offline || issues.some((issue) => issue.offline)
       const status = problems.length ? 'Needs attention' : offline ? 'Offline' : online(entry) ? 'Online' : 'Unavailable'
-      const name = entry?.name || array(fleet?.members).find((member) => member.host.host_id === id)?.display_name || hostName(id)
+      const name = entry?.name || index.members.get(id)?.display_name || hostName(id)
       return h('div', { class: 'list-row fleet-host', 'data-fleet-host': id },
         h('div', { class: 'row' }, h('div', { class: 'title' }, name),
           h('span', { class: `badge ${problems.length ? 'failed' : status === 'Online' ? 'ready' : 'offline'}`, role: 'status' }, status)),
         [...new Set(problems)].map((problem) => h('p', { class: 'section-error' }, problem)))
     })
-    const clientName = (id) => array(coordinator?.snapshot?.clients).find((client) => client.client_id === id)?.name || id
+    const clients = firstMap(array(coordinator?.snapshot?.clients), (client) => client.client_id)
+    const clientName = (id) => clients.get(id)?.name || id
     const membership = host.snapshot?.fleet_membership?.membership
     const sameAuthority = membership?.authority?.host_id === report.authority?.host_id
       && membership?.authority?.certificate_sha256 === report.authority?.certificate_sha256
@@ -505,7 +696,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         { action: 'fleet_update', update: { expected_revision: fleet.revision, operation: 'delete_pool', pool_id: pool.id } }, 'Work pool deleted'), !writable, 'danger')))))
     const assignments = array(fleet?.assignments).map((assignment) => h('div', { class: 'list-row row' }, h('div', {},
       h('div', { class: 'title' }, clientName(assignment.client_id)),
-      h('p', {}, `Pools: ${array(assignment.pool_ids).map((id) => fleet.pools.find((pool) => pool.id === id)?.name || id).join(', ') || 'None'}`),
+      h('p', {}, `Pools: ${array(assignment.pool_ids).map((id) => index.pools.get(id)?.name || id).join(', ') || 'None'}`),
       h('p', {}, `Preferred hosts: ${array(assignment.preferred_hosts).map(hostName).join(', ') || 'None'}`),
       h('p', {}, `Preferred instances: ${array(assignment.preferred_instances).map(instanceLabel).join(', ') || 'None'}`)),
       button('Edit assignment', () => assignmentDialog(assignment), !writable)))
@@ -516,7 +707,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const enroll = () => {
       const published = host.snapshot?.fleet
       const locator = published?.kind === 'coordinator' ? published.fleet.authority : null
-      const origins = locator?.origins || array(state.view.discovered).find((entry) => entry.host_id === host.host_id)?.urls || [host.base_url]
+      const origins = locator?.origins || observation().discovered.get(host.host_id)?.urls || [host.base_url]
       dialog('Enroll fleet member', `Add ${host.name} to the coordinator’s catalog. This does not replace its own pairing grant.`,
         [h('label', {}, 'Addresses reachable by fleet clients', h('textarea', { name: 'origins', required: '' }, origins.join('\n')))], 'Enroll',
         (form) => update({ operation: 'enroll_member', member: { display_name: host.name, host: { host_id: host.host_id,
@@ -546,14 +737,25 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       h('h3', {}, 'Member hosts'), memberRows.length ? memberRows : note('No additional fleet members.')])
   }
 
-  function render() {
+  function render(force = true) {
     if (state.stopped) return
     if (document.hidden) { pendingRender = true; return }
     pendingRender = false
+    const key = renderKey(state.view)
+    const presentation = JSON.stringify([state.selected, state.busy, state.error, state.notice, [...state.ignored]])
+    if (!force && key === snapshotKey && presentation === presentationKey) {
+      updateActivity()
+      return
+    }
+    snapshotKey = key
+    presentationKey = presentation
+    clientActivity.clear()
+    instanceActivity.clear()
+    administratorActivity = null
     for (const details of root.querySelectorAll('details[data-section]')) state.sections.set(details.dataset.section, details.open)
     const hosts = array(state.view.hosts)
     const host = selectedHost()
-    const nearby = array(state.view.discovered).filter((entry) => !hosts.some((host) => host.host_id === entry.host_id) && !state.ignored.has(entry.host_id))
+    const nearby = array(state.view.discovered).filter((entry) => !observation().hosts.has(entry.host_id) && !state.ignored.has(entry.host_id))
     const header = h('header', {}, h('div', { class: 'brand' }, h('img', { src: 'icon.png', alt: '' }),
       h('div', {}, h('strong', {}, 'GInfer Server Manager'), h('small', {}, `${hosts.filter(online).length} of ${hosts.length} hosts online`))),
       h('div', { class: 'actions' }, state.busy ? h('span', { class: 'muted', role: 'status' }, 'Working…') : null, button('Refresh', refresh)))
@@ -576,9 +778,10 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     } else {
       append(main, h('div', { class: 'heading' }, h('div', {}, h('h1', {}, host.snapshot?.display_name || host.name),
         h('div', { class: 'muted mono' }, host.base_url)), h('div', { class: 'actions' }, badge(online(host) ? 'ready' : host.offline ? 'offline' : 'failed'),
-        button('Start a model…', () => launchDialog(host), !online(host) || !array(host.snapshot?.models).length, 'primary'))),
+        button('Start a model…', () => launchDialog(host), !online(host) || profiling(host) || !array(host.snapshot?.models).length, 'primary'))),
       !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
         host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,
+      hardwareProfileSection(host),
       array(host.snapshot?.instances).length ? array(host.snapshot.instances).map((instance) => instanceCard(host, instance))
         : h('div', { class: 'empty' }, h('strong', {}, 'No instances'), 'Choose an installed model to start one. Models never start automatically.'),
       modelsSection(host), sharingSection(host), clientsSection(host), fleetSection(host))
@@ -603,7 +806,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     subscriptions.forEach((unsubscribe) => unsubscribe())
   }
   function showLatest() {
-    if (!document.hidden && pendingRender) render()
+    if (!document.hidden && pendingRender) render(false)
   }
   return { start, stop, apply, refresh }
 }

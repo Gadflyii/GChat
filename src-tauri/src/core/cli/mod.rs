@@ -3,15 +3,16 @@
 //! This module is only compiled when the `cli` feature is enabled.
 //!
 //! The CLI targets the app's single inference provider: `ginfer`. Models are
-//! stored in `<data>/ginfer/models/<model_id>/` as a `.ginfer` artifact plus a
-//! `model.yml`. Engines live under `<data>/ginfer/linux/<architecture>/bin` on
+//! stored in the shared selected model root as a `.ginfer` artifact plus a
+//! `model.yml`, with existing model locations remaining discoverable. Engines
+//! live under `<data>/ginfer/linux/<architecture>/bin` on
 //! Linux and `<data>/ginfer/bin` on Windows. App downloads are available here.
 
 pub mod integrations;
 
 use std::path::{Path, PathBuf};
 
-use crate::core::app::commands::resolve_jan_data_folder;
+use crate::core::app::commands::resolve_data_folder;
 
 // Re-export impl functions and config types so the binary can call them directly.
 // `load_ginfer_model_impl` is explicitly documented as usable without an AppHandle.
@@ -19,12 +20,9 @@ pub use tauri_plugin_ginfer::{
     load_ginfer_model_impl, CliEndpointSettings, GinferConfig, GinferLoadRequest, GinferState,
 };
 
-/// The only inference provider the CLI runs: ginfer. Its binary and models
-/// live under `<data_folder>/<LOCAL_PROVIDER>/`.
+/// The only inference provider the CLI runs: ginfer. Its runtime state and
+/// binaries live under `<data_folder>/<LOCAL_PROVIDER>/`.
 pub const LOCAL_PROVIDER: &str = "ginfer";
-
-/// On-disk subfolder holding the model tree, at `<data_folder>/<MODELS_ROOT>/models/`.
-pub const MODELS_ROOT: &str = "ginfer";
 
 // ── State constructors ─────────────────────────────────────────────────────
 
@@ -54,7 +52,7 @@ pub type ModelEntry = (String, ModelYml);
 /// Embedding models are excluded: they cannot serve `/v1/chat/completions`, so
 /// offering them anywhere the CLI leads is a dead end.
 pub fn list_chat_models() -> Vec<ModelEntry> {
-    let data_folder = resolve_jan_data_folder();
+    let data_folder = resolve_data_folder();
     match crate::core::ginfer_models::adopt_root_ginfer_models_in(&data_folder) {
         Ok(report) => {
             for adopted in report.adopted {
@@ -78,48 +76,23 @@ pub fn list_chat_models() -> Vec<ModelEntry> {
 
 /// Same as [`list_chat_models`], against an explicit data folder.
 pub fn list_chat_models_in(data_folder: &Path) -> Vec<ModelEntry> {
-    use std::fs;
-
-    let models_root = data_folder.join(MODELS_ROOT).join("models");
-
-    if !models_root.exists() {
-        return Vec::new();
-    }
-
+    let locations = match crate::core::ginfer_models::enumerate_model_locations_in(data_folder) {
+        Ok(locations) => locations,
+        Err(error) => {
+            log::warn!("Could not enumerate GInfer models: {error}");
+            return Vec::new();
+        }
+    };
     let mut results = Vec::new();
-    let mut stack = vec![models_root.clone()];
-
-    while let Some(dir) = stack.pop() {
-        let yml_path = dir.join("model.yml");
-        if yml_path.exists() {
-            if let Ok(content) = fs::read_to_string(&yml_path) {
-                if let Ok(yml) = serde_yaml::from_str::<ModelYml>(&content) {
-                    // model_id = path relative to models_root, always using
-                    // forward slashes so Windows `\` separators never leak
-                    // into config files (e.g. TOML) or API responses.
-                    let model_id = dir
-                        .strip_prefix(&models_root)
-                        .unwrap_or(&dir)
-                        .to_string_lossy()
-                        .into_owned()
-                        .replace('\\', "/");
-                    if !yml.embedding {
-                        results.push((model_id, yml));
-                    }
-                    continue; // don't recurse into a model directory
-                }
-            }
-        }
-        // Recurse into subdirectories
-        if let Ok(entries) = fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    stack.push(entry.path());
+    for location in locations {
+        if let Ok(content) = std::fs::read_to_string(&location.manifest_path) {
+            if let Ok(yml) = serde_yaml::from_str::<ModelYml>(&content) {
+                if !yml.embedding {
+                    results.push((location.model_id, yml));
                 }
             }
         }
     }
-
     results.sort_by(|a, b| a.0.cmp(&b.0));
     results
 }
@@ -130,33 +103,21 @@ pub fn list_chat_models_in(data_folder: &Path) -> Vec<ModelEntry> {
 ///   - absolute (`/…` or `C:\…`) — used verbatim
 ///   - relative — joined with the GChat data folder
 pub fn resolve_model_by_id(model_id: &str) -> Result<PathBuf, String> {
-    resolve_model_by_id_in(&resolve_jan_data_folder(), model_id)
+    resolve_model_by_id_in(&resolve_data_folder(), model_id)
 }
 
 /// Same as [`resolve_model_by_id`], against an explicit data folder.
 pub fn resolve_model_by_id_in(data_folder: &Path, model_id: &str) -> Result<PathBuf, String> {
-    let yml_path = data_folder
-        .join(MODELS_ROOT)
-        .join("models")
-        .join(model_id)
-        .join("model.yml");
-
-    if !yml_path.exists() {
-        return Err(format!(
-            "Model '{model_id}' is not installed. \
-            Run `gchat-cli models list` to see available models."
-        ));
-    }
-
-    let content = std::fs::read_to_string(&yml_path).map_err(|e| e.to_string())?;
+    let location = crate::core::ginfer_models::find_model_location_in(data_folder, model_id)?
+        .ok_or_else(|| format!("Model '{model_id}' is not installed. Run `gchat-cli models list` to see available models."))?;
+    let content = std::fs::read_to_string(location.manifest_path).map_err(|e| e.to_string())?;
     let yml: ModelYml = serde_yaml::from_str(&content).map_err(|e| e.to_string())?;
-
-    let pb = PathBuf::from(&yml.model_path);
-    if pb.is_absolute() {
-        Ok(pb)
+    let path = PathBuf::from(yml.model_path);
+    Ok(if path.is_absolute() {
+        path
     } else {
-        Ok(data_folder.join(pb))
-    }
+        data_folder.join(path)
+    })
 }
 
 // ── Binary auto-discovery ──────────────────────────────────────────────────
@@ -167,7 +128,7 @@ pub fn resolve_model_by_id_in(data_folder: &Path, model_id: &str) -> Result<Path
 /// Linux: `<data_folder>/ginfer/linux/sm120a/bin/ginfer-serve`.
 /// Windows: `<data_folder>/ginfer/bin/ginfer-serve.exe`.
 pub fn discover_ginfer_binary() -> Option<PathBuf> {
-    discover_ginfer_binary_in(&resolve_jan_data_folder())
+    discover_ginfer_binary_in(&resolve_data_folder())
 }
 
 /// Same as [`discover_ginfer_binary`], against an explicit data folder.
@@ -295,11 +256,10 @@ pub async fn fetch_hf_ginfer_files(
 
 /// Download one `.ginfer` file from HuggingFace and write a `model.yml` for it.
 ///
-/// The model is stored at `<data_folder>/ginfer/models/<repo_id>/<filename>`
-/// — the model tree the desktop app downloads into, so the two stay
-/// interchangeable.
+/// Uses the shared selected model root and canonical `model.ginfer`;
+/// existing artifacts and partial downloads in previous roots are left alone.
 ///
-/// The file is streamed to `<filename>.part` and renamed only once the download
+/// The file is streamed to `model.ginfer.part` and renamed only once the download
 /// completes, so an interrupted run never leaves a truncated `.ginfer` behind a
 /// `model.yml` that claims it is ready.
 ///
@@ -311,17 +271,30 @@ pub async fn download_hf_model(
     hf_token: Option<&str>,
     on_progress: impl Fn(u64, u64) + Send,
 ) -> Result<String, String> {
+    download_hf_model_in(&resolve_data_folder(), repo_id, file, hf_token, on_progress).await
+}
+
+/// The same download against the caller's existing resolved data folder.
+pub async fn download_hf_model_in(
+    data_folder: &Path,
+    repo_id: &str,
+    file: &HfFileInfo,
+    hf_token: Option<&str>,
+    on_progress: impl Fn(u64, u64) + Send,
+) -> Result<String, String> {
     use futures_util::StreamExt;
     use tokio::io::AsyncWriteExt;
 
-    let data_folder = resolve_jan_data_folder();
-    let model_dir = data_folder.join(MODELS_ROOT).join("models").join(repo_id);
+    let location = crate::core::ginfer_models::model_import_location_in(data_folder, repo_id)?;
+    let model_dir = PathBuf::from(&location.model_dir);
     tokio::fs::create_dir_all(&model_dir)
         .await
         .map_err(|e| e.to_string())?;
 
-    let dest_path = model_dir.join(&file.filename);
-    let part_path = model_dir.join(format!("{}.part", file.filename));
+    let dest_path = PathBuf::from(&location.artifact_path);
+    let mut part_name = dest_path.as_os_str().to_owned();
+    part_name.push(".part");
+    let part_path = PathBuf::from(part_name);
 
     // ── Download ──────────────────────────────────────────────────────────
     let client = reqwest::Client::new();
@@ -369,19 +342,19 @@ pub async fn download_hf_model(
         .map_err(|e| e.to_string())?;
 
     // ── Write model.yml ───────────────────────────────────────────────────
-    // model_path is relative to the GChat data folder
-    let rel_path = format!("{MODELS_ROOT}/models/{repo_id}/{}", file.filename);
     let display_name = repo_id.rsplit('/').next().unwrap_or(repo_id);
-
-    let mut yml = format!(
-        "model_path: {rel_path}\nname: {display_name}\nsize_bytes: {}\nembedding: false\n",
-        file.size
-    );
-    if let Some(sha) = &file.sha256 {
-        yml.push_str(&format!("sha256: {sha}\n"));
-    }
-
-    tokio::fs::write(model_dir.join("model.yml"), yml)
+    let yml = {
+        let mut metadata = serde_json::json!({
+            "model_path":location.model_path, "name":display_name,
+            "size_bytes":file.size, "embedding":false,
+        });
+        if let Some(sha) = &file.sha256 {
+            metadata["sha256"] = serde_json::json!(sha);
+        }
+        serde_yaml::to_string(&metadata).map_err(|e| e.to_string())?
+    };
+    let manifest_path = PathBuf::from(location.manifest_path);
+    tokio::fs::write(manifest_path, yml)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -391,7 +364,7 @@ pub async fn download_hf_model(
 // ── App config ────────────────────────────────────────────────────────────
 
 pub fn cli_get_data_folder() -> PathBuf {
-    resolve_jan_data_folder()
+    resolve_data_folder()
 }
 
 #[cfg(test)]
@@ -406,7 +379,7 @@ mod tests {
     }
 
     fn write_model(data_folder: &Path, model_id: &str, yml: &str) {
-        let dir = data_folder.join(MODELS_ROOT).join("models").join(model_id);
+        let dir = data_folder.join("ginfer/models").join(model_id);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("model.yml"), yml).unwrap();
     }
@@ -429,7 +402,7 @@ mod tests {
              name: Embedder\nembedding: true\n",
         );
         // A directory with no model.yml is not a model.
-        std::fs::create_dir_all(data.join(MODELS_ROOT).join("models").join("junk")).unwrap();
+        std::fs::create_dir_all(data.join("ginfer/models/junk")).unwrap();
 
         let models = list_chat_models_in(&data);
         let ids: Vec<&str> = models.iter().map(|(id, _)| id.as_str()).collect();
@@ -500,6 +473,83 @@ mod tests {
         let data = temp_data_folder("no-bin");
         assert!(discover_ginfer_binary_in(&data).is_none());
         let _ = std::fs::remove_dir_all(&data);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn hf_download_uses_shared_placement_and_preserves_legacy_partial() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let temporary = tempfile::tempdir().unwrap();
+        let admitted_data = std::env::var_os("GCHAT_WSL_PLACEMENT_FIXTURE_DATA_PATH");
+        let data = admitted_data.as_ref().map(PathBuf::from)
+            .unwrap_or_else(|| temporary.path().join("data"));
+        std::fs::create_dir_all(&data).unwrap();
+        let repo = "fixture/wsl-cli";
+        let original = data.join("ginfer/models").join(repo);
+        std::fs::create_dir_all(&original).unwrap();
+        let legacy_partial = original.join("fixture.ginfer.part");
+        assert!(!legacy_partial.exists());
+        std::fs::write(&legacy_partial, b"retained interrupted download").unwrap();
+        write_model(&data, "fixture/legacy-cli", "model_path: ginfer/models/fixture/legacy-cli/model.ginfer\nname: Legacy CLI\n");
+        let legacy_model = data.join("ginfer/models/fixture/legacy-cli/model.ginfer");
+        std::fs::write(&legacy_model, b"retained legacy artifact").unwrap();
+
+        let location = crate::core::ginfer_models::model_import_location_in(&data, repo).unwrap();
+        let destination = PathBuf::from(&location.artifact_path);
+        assert!(!destination.exists());
+        if admitted_data.is_some() {
+            assert!(!destination.starts_with(&data), "admitted 9p storage must redirect to native storage");
+            assert!(Path::new(&location.model_path).is_absolute());
+            ginfer_host::model_storage::require_native_model_storage(destination.parent().unwrap()).unwrap();
+        }
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let payload = b"NINFER\0\x03loopback fixture";
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept())
+                .await.unwrap().unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                let count = tokio::time::timeout(std::time::Duration::from_secs(5), socket.read(&mut buffer))
+                    .await.unwrap().unwrap();
+                assert!(count > 0 && request.len() + count <= 4096);
+                request.extend_from_slice(&buffer[..count]);
+            }
+            assert!(request.starts_with(b"GET /fixture.ginfer HTTP/1.1\r\n"));
+            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", payload.len()).as_bytes())
+                .await.unwrap();
+            socket.write_all(payload).await.unwrap();
+        });
+        let file = HfFileInfo {
+            filename: "fixture.ginfer".into(), size: payload.len() as u64, sha256: None,
+            download_url: format!("http://{address}/fixture.ginfer"),
+        };
+        let progress = AtomicU64::new(0);
+        let model_id = tokio::time::timeout(std::time::Duration::from_secs(10),
+            download_hf_model_in(&data, repo, &file, None, |downloaded, total| {
+                assert_eq!(total, payload.len() as u64);
+                progress.store(downloaded, Ordering::SeqCst);
+            }))
+            .await.unwrap().unwrap();
+        server.await.unwrap();
+        assert_eq!(model_id, repo);
+        assert_eq!(progress.load(Ordering::SeqCst), payload.len() as u64);
+        assert_eq!(std::fs::read(&destination).unwrap(), payload);
+        assert!(!destination.with_extension("ginfer.part").exists());
+        assert_eq!(std::fs::read(&legacy_partial).unwrap(), b"retained interrupted download");
+        assert_eq!(std::fs::read(&legacy_model).unwrap(), b"retained legacy artifact");
+        let metadata: ModelYml = serde_yaml::from_str(&std::fs::read_to_string(&location.manifest_path).unwrap()).unwrap();
+        assert_eq!(metadata.model_path, location.model_path);
+        assert_eq!(metadata.size_bytes, payload.len() as u64);
+        let listed = list_chat_models_in(&data);
+        let ids: Vec<&str> = listed.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids, vec!["fixture/legacy-cli", repo]);
+        assert_eq!(resolve_model_by_id_in(&data, repo).unwrap(), destination);
+        assert_eq!(resolve_model_by_id_in(&data, "fixture/legacy-cli").unwrap(), legacy_model);
     }
 
     #[test]

@@ -5,6 +5,9 @@ title: "Autoload the first GInfer model as the persisted default"
 
 # 2026-08-30 — Autoload the first GInfer model as the persisted default
 
+The preload-default and forced-opt-in policy below is superseded by
+[default model and API startup off](2026-10-10-default-model-and-api-startup-off.md).
+
 - **Context:** GChat's cold-start policy left the model selector blank and the
   only installed GInfer model stopped until the user selected it again. That
   contradicted the product's install-and-run experience, and later background

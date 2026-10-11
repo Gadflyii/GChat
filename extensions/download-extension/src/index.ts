@@ -13,6 +13,7 @@ interface DownloadItem {
   sha256?: string
   size?: number
   model_id?: string
+  model_storage_root?: string
 }
 
 type DownloadEvent = {

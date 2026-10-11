@@ -50,40 +50,26 @@ fn resolve_data_folder_from_config(config_file: &Path, default_folder: &Path) ->
         .unwrap_or_else(|| default_folder.to_path_buf())
 }
 
-/// Resolve the GChat config file path without an AppHandle (for CLI use).
-/// Mirrors the logic in get_configuration_file_path() using the dirs crate.
-pub fn resolve_config_file_path() -> PathBuf {
-    let package_name = env!("CARGO_PKG_NAME");
-
-    // On Linux, prefer the XDG config dir first (matches Tauri behaviour)
-    #[cfg(target_os = "linux")]
-    if let Some(config_dir) = dirs::config_dir() {
-        let path = config_dir.join(package_name);
-        if path.exists() {
-            return path.join(CONFIGURATION_FILE_NAME);
-        }
-    }
-
-    // Primary path: data_dir/GChat  (e.g. ~/Library/Application Support/GChat on macOS)
-    if let Some(data_dir) = dirs::data_dir() {
-        let path = data_dir.join(package_name);
-        if !path.exists() {
-            let _ = fs::create_dir_all(&path);
-        }
-        return path.join(CONFIGURATION_FILE_NAME);
-    }
-
-    // Last resort: home directory
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_default();
-    PathBuf::from(home).join(CONFIGURATION_FILE_NAME)
+/// Read the desktop's selected data folder without starting the application.
+pub fn resolve_data_folder() -> PathBuf {
+    let app_directory = dirs::data_dir()
+        .map(|directory| directory.join(env!("GCHAT_BUNDLE_IDENTIFIER")))
+        .unwrap_or_else(|| {
+            PathBuf::from(
+                std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                    .expect("Failed to determine the home directory"),
+            )
+        });
+    resolve_app_data_folder(&app_directory)
 }
 
-/// Resolve the GChat data folder path without an AppHandle (for CLI use).
-/// Reads AppConfiguration from the config file; falls back to the default location.
-pub fn resolve_jan_data_folder() -> PathBuf {
-    let config_file = resolve_config_file_path();
+/// Share desktop configuration precedence with headless CLI and installers.
+pub fn resolve_app_data_folder(app_data_directory: &Path) -> PathBuf {
+    let config_file = configuration_file_path_from(app_data_directory);
+    resolve_data_folder_from_config(&config_file, &default_cli_data_folder())
+}
+
+fn default_cli_data_folder() -> PathBuf {
     let app_name = std::env::var("APP_NAME").unwrap_or_else(|_| "GChat".to_string());
     let data_dir = dirs::data_dir().unwrap_or_else(|| {
         let home = std::env::var("HOME")
@@ -91,8 +77,7 @@ pub fn resolve_jan_data_folder() -> PathBuf {
             .unwrap_or_default();
         PathBuf::from(home)
     });
-    let default_folder = build_default_data_folder(&data_dir, &app_name);
-    resolve_data_folder_from_config(&config_file, &default_folder)
+    build_default_data_folder(&data_dir, &app_name)
 }
 
 #[tauri::command]
@@ -203,6 +188,10 @@ pub fn get_configuration_file_path<R: Runtime>(app_handle: tauri::AppHandle<R>) 
         PathBuf::from(home_dir)
     });
 
+    configuration_file_path_from(&app_path)
+}
+
+fn configuration_file_path_from(app_path: &Path) -> PathBuf {
     let package_name = env!("CARGO_PKG_NAME");
     #[cfg(target_os = "linux")]
     let old_data_dir = {
@@ -223,7 +212,7 @@ pub fn get_configuration_file_path<R: Runtime>(app_handle: tauri::AppHandle<R>) 
         .unwrap_or(&app_path.join("../"))
         .join(package_name);
 
-    select_configuration_file_path(&app_path, &old_data_dir)
+    select_configuration_file_path(app_path, &old_data_dir)
 }
 
 #[tauri::command]
@@ -384,6 +373,113 @@ mod tests {
             resolve_data_folder_from_config(&config_file, &root.path().join("default")),
             custom
         );
+    }
+
+    #[cfg(all(target_os = "linux", feature = "cli"))]
+    #[test]
+    fn cli_uses_shared_configuration_without_creating_competing_roots() {
+        const FIXTURE_ROOT: &str = "GCHAT_CLI_CONFIG_FIXTURE_ROOT";
+        let root = match std::env::var_os(FIXTURE_ROOT) {
+            Some(root) => PathBuf::from(root),
+            None => {
+                let root = tempdir().unwrap();
+                let result = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "core::app::commands::tests::cli_uses_shared_configuration_without_creating_competing_roots",
+                        "--nocapture",
+                    ])
+                    .env(FIXTURE_ROOT, root.path())
+                    .env("XDG_DATA_HOME", root.path().join("data"))
+                    .env("XDG_CONFIG_HOME", root.path().join("config"))
+                    .output()
+                    .unwrap();
+                assert!(
+                    result.status.success(),
+                    "{}{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                );
+                return;
+            }
+        };
+        let current = root.join("data").join(env!("GCHAT_BUNDLE_IDENTIFIER"));
+        let legacy = root.join("config/gchat");
+        let custom = root.join("custom-workspace");
+        fs::create_dir_all(&current).unwrap();
+        let config = serde_json::to_vec(&AppConfiguration {
+            data_folder: custom.to_string_lossy().into_owned(),
+            ..AppConfiguration::default()
+        })
+        .unwrap();
+        let config_file = current.join(CONFIGURATION_FILE_NAME);
+        fs::write(&config_file, &config).unwrap();
+        assert_eq!(resolve_data_folder(), custom);
+        assert_eq!(resolve_app_data_folder(&current), custom);
+        assert_eq!(crate::core::cli::cli_get_data_folder(), custom);
+        assert_eq!(
+            crate::core::server::state_file::state_path(),
+            custom.join(crate::core::server::state_file::SERVER_STATE_FILE),
+        );
+        let model_dir = custom.join("ginfer/models/fixture/config-selection");
+        fs::create_dir_all(&model_dir).unwrap();
+        fs::write(
+            model_dir.join("model.yml"),
+            "model_path: ginfer/models/fixture/config-selection/model.ginfer\n",
+        )
+        .unwrap();
+        assert_eq!(crate::core::cli::list_chat_models()[0].0, "fixture/config-selection");
+        assert_eq!(
+            crate::core::cli::resolve_model_by_id("fixture/config-selection").unwrap(),
+            model_dir.join("model.ginfer"),
+        );
+        let runtime = custom.join("ginfer/linux/sm120a/bin/ginfer-serve");
+        fs::create_dir_all(runtime.parent().unwrap()).unwrap();
+        fs::write(&runtime, "fixture; never executed").unwrap();
+        assert_eq!(crate::core::cli::discover_ginfer_binary(), Some(runtime));
+        assert_eq!(fs::read(&config_file).unwrap(), config);
+        assert!(!legacy.exists());
+        assert!(!root.join("data/gchat").exists());
+
+        fs::create_dir_all(&legacy).unwrap();
+        let existing = root.join("existing-workspace");
+        fs::write(
+            legacy.join(CONFIGURATION_FILE_NAME),
+            serde_json::to_vec(&AppConfiguration {
+                data_folder: existing.to_string_lossy().into_owned(),
+                ..AppConfiguration::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(resolve_data_folder(), existing);
+        assert_eq!(resolve_app_data_folder(&current), existing);
+        fs::write(legacy.join(CONFIGURATION_FILE_NAME), "{invalid").unwrap();
+        assert_eq!(resolve_data_folder(), default_cli_data_folder());
+        assert!(!root.join("data/gchat").exists());
+        assert_eq!(fs::read(&config_file).unwrap(), config);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn installer_resolves_current_and_existing_legacy_custom_data_folder() {
+        let root = tempdir().unwrap();
+        let current = root.path().join("app.gchat");
+        let legacy = root.path().join("gchat");
+        fs::create_dir_all(&current).unwrap();
+        let write_config = |directory: &Path, folder: &Path| {
+            fs::write(directory.join(CONFIGURATION_FILE_NAME), serde_json::to_vec(&AppConfiguration {
+                data_folder: folder.to_string_lossy().into_owned(),
+                ..AppConfiguration::default()
+            }).unwrap()).unwrap();
+        };
+        let custom = root.path().join("custom-models");
+        write_config(&current, &custom);
+        assert_eq!(resolve_app_data_folder(&current), custom);
+        fs::create_dir_all(&legacy).unwrap();
+        let existing = root.path().join("existing-custom-models");
+        write_config(&legacy, &existing);
+        assert_eq!(resolve_app_data_folder(&current), existing);
     }
 
     #[test]

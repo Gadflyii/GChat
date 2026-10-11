@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-#* icon.ico для Windows: full-bleed logo-app.png без macOS-полей, чтобы значок
-#* в панели задач занимал плитку как у соседних приложений. tauri icon берёт
-#* icon.ico из icon.png с ~18% полями (под Dock), отчего иконка выглядела меньше.
-#* macOS (icon.icns) и Linux (icon.png) не трогаем — это чисто Windows-ассет.
+# Generate Windows ICO frames from the canonical GChat/Manager PNG.
 from __future__ import annotations
 
 import io
@@ -13,7 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "web-app" / "public" / "images" / "logo-app.png"
+SRC = ROOT / "src-tauri" / "icons" / "icon.png"
 OUT = ROOT / "src-tauri" / "icons" / "icon.ico"
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 

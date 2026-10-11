@@ -73,8 +73,10 @@ impl FleetClient {
     /// Discover published locators only when no authority was already selected.
     /// An unreachable selected authority never causes a local election.
     pub async fn read(&self) -> Result<FleetCatalog, String> {
-        let mut registered = self.client.registered().await?;
-        let mut authority = self.client.fleet_authority().await?;
+        let (mut registered, mut authority) = {
+            let observation = self.client.view().await?;
+            (observation.saved.values().cloned().collect::<Vec<_>>(), observation.fleet_authority.clone())
+        };
         let mut host_issues = Vec::new();
         if authority.is_none() {
             let views = futures_util::future::join_all(registered.iter().map(|host| {
@@ -200,7 +202,7 @@ impl FleetClient {
                         return Err("Fleet coordinator selection changed while loading its catalog; refresh to use the selected coordinator.".into());
                     }
                     report.authority = Some(fleet.authority.clone());
-                    self.client.save_fleet_snapshot(fleet.clone()).await?;
+                    self.client.save_fleet_snapshot(&fleet).await?;
                     report.host_issues.extend(self.sync_membership(&fleet,&registered).await);
                     report.snapshot = Some(fleet);
                     report.connected = true;
@@ -288,6 +290,11 @@ impl FleetClient {
             .map(|member| FleetHostIssue::new(member.host.host_id, FleetHostPhase::Membership,
                 ClientError::Problem("Membership report pending; this host is not paired with these applications.".into())))
             .collect();
+        if !registered.iter().any(|host| host.host_id != fleet.authority.host_id) {
+            return issues;
+        }
+        let projection = fleet.validated();
+        let validated = &projection;
         issues.extend(futures_util::future::join_all(registered.iter()
             .filter(|host| host.host_id != fleet.authority.host_id).map(|host| async move {
             let result = async {
@@ -304,7 +311,7 @@ impl FleetClient {
                     _ if enrolled => return Err("This enrolled host publishes a different coordinator; review its fleet membership explicitly.".into()),
                     _ => return Ok::<(), ClientError>(()),
                 }
-                let body = serde_json::to_value(fleet.membership(host.host_id)?)
+                let body = serde_json::to_value(validated.as_ref().map_err(Clone::clone)?.membership(host.host_id)?)
                     .map_err(|error| ClientError::Problem(error.to_string()))?;
                 self.request(host.host_id, reqwest::Method::POST, "/host/v1/fleet/membership", Some(&body)).await?;
                 Ok(())
@@ -335,7 +342,7 @@ impl FleetClient {
         {
             return Err("Fleet update returned a different coordinator".into());
         }
-        self.client.save_fleet_snapshot(fleet.clone()).await?;
+        self.client.save_fleet_snapshot(&fleet).await?;
         Ok(fleet)
     }
 

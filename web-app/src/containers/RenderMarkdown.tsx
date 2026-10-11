@@ -278,30 +278,6 @@ function RenderMarkdownComponent({
     return { code: CodeRenderer, ...(components ?? {}) }
   }, [enableHtmlPreview, components, delegateProps])
 
-  const containsMath =
-    normalizedContent.includes('$$') ||
-    /(^|[^\\])\$[^$\n]+\$/.test(normalizedContent)
-
-  if (
-    content.length > 0 &&
-    content.length < 32 &&
-    !components &&
-    !containsMath
-  ) {
-    return (
-      <div
-        dir="auto"
-        className={cn(
-          'markdown wrap-break-word select-text whitespace-pre-wrap',
-          isUser && 'is-user',
-          className
-        )}
-      >
-        {content}
-      </div>
-    )
-  }
-
   // Render the markdown content
   return (
     <div

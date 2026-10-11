@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::core::app::commands::resolve_jan_data_folder;
+use crate::core::app::commands::resolve_data_folder;
 
 /// File name inside the GChat data folder.
 pub const SERVER_STATE_FILE: &str = "local-api-server.json";
@@ -72,7 +72,7 @@ impl LocalApiServerState {
 }
 
 pub fn state_path() -> PathBuf {
-    resolve_jan_data_folder().join(SERVER_STATE_FILE)
+    resolve_data_folder().join(SERVER_STATE_FILE)
 }
 
 /// Read the mirrored state, falling back to defaults when the file is absent or

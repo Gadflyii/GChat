@@ -61,6 +61,22 @@ yarn dev
 
 ---
 
+## Managed model storage under WSL
+
+Linux GChat, Manager and the CLI share managed model placement. If the default
+model directory resolves to WSL's Windows-backed 9p filesystem, new downloads
+use `$XDG_DATA_HOME/ginfer/managed-models/<root-hash>`, or
+`$HOME/.local/share/ginfer/managed-models/<root-hash>` when the XDG location is
+unavailable or Windows-backed. The hash identifies the canonical original model
+root, keeping custom app data folders separate. An explicit model storage folder
+must be Linux-backed under WSL.
+
+Manifests remain beside their artifacts and record absolute payload paths outside
+the app data folder. Discovery includes existing packages and installed download
+roots. Existing artifacts and partials are not migrated. A paused Windows-backed
+transfer must be restarted as a new native download; its original files remain.
+Native Windows and ordinary Linux storage paths keep their existing behavior.
+
 ## Where GChat stores data on Windows
 
 Dev (`make dev-windows` / `yarn dev`) and the installed `GChat.exe` **share the same data folders** — there is no separate dev profile. Anything you delete from these paths affects both.

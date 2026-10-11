@@ -85,6 +85,13 @@ pub fn run() {
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
         core::benchmark_submission::submit_benchmark,
         core::benchmark_submission::delete_benchmark,
+        core::connectors::connector_accounts,
+        core::connectors::connector_configure,
+        core::connectors::connector_begin_auth,
+        core::connectors::connector_auth_status,
+        core::connectors::connector_cancel_auth,
+        core::connectors::connector_select_account,
+        core::connectors::connector_disconnect,
         core::engine_hosts::engine_hosts_command,
         // FS commands - Deperecate soon
         core::filesystem::commands::join_path,
@@ -101,6 +108,9 @@ pub fn run() {
         core::filesystem::commands::write_yaml,
         core::filesystem::commands::read_yaml,
         core::ginfer_models::adopt_root_ginfer_models,
+        core::ginfer_models::ginfer_model_locations,
+        core::ginfer_models::ginfer_model_import_location,
+        core::ginfer_models::delete_ginfer_model,
         core::filesystem::commands::decompress,
         core::filesystem::commands::normalize_backend_layout,
         core::filesystem::commands::open_dialog,
@@ -415,6 +425,7 @@ pub fn run() {
     let app_builder = app_builder.manage(core::terminal::TerminalState::default());
 
     let app = app_builder
+        .manage(Arc::new(core::connectors::AccountsState::default()))
         .manage(AppState {
             app_token: Some(generate_app_token()),
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),

@@ -650,7 +650,7 @@ async fn delayed_snapshot_merges_other_apps_changes_and_rejects_replaced_or_forg
     };
     second.set_fleet_authority(authority.clone()).await.unwrap();
     let cache:ginfer_host::fleet::FleetSnapshot=serde_json::from_value(json!({"schema":"ginfer-fleet-v1","authority":authority,"revision":1,"members":[{"host":authority,"display_name":"After"}],"pools":[],"assignments":[]})).unwrap();
-    second.save_fleet_snapshot(cache.clone()).await.unwrap();
+    second.save_fleet_snapshot(&cache).await.unwrap();
     gate.release.notify_one();
     assert_eq!(poll.await.unwrap().unwrap()["display_name"], "After");
     let current = first.registered().await.unwrap();
@@ -741,7 +741,7 @@ async fn manager_first_import_uses_registered_owners_configured_data_and_preserv
     std::fs::write(&source, &bytes).unwrap();
     let executable = std::env::current_exe().unwrap();
     let owner =
-        ginfer_host::local_host_registry::Owner::Desktop(ginfer_host::local_host::LocalHost {
+        ginfer_host::local_host_registry::Owner::Desktop(Box::new(ginfer_host::local_host::LocalHost {
             binary: executable.clone(),
             engine: executable,
             engine_runtimes: Default::default(),
@@ -752,7 +752,7 @@ async fn manager_first_import_uses_registered_owners_configured_data_and_preserv
             name: "Local".into(),
             nvidia_smi: "nvidia-smi".into(),
             listen: "127.0.0.1:7443".parse().unwrap(),
-        });
+        }));
     let vault = Arc::new(Vault::default());
     vault
         .set(host.client_id, "existing grant credential")

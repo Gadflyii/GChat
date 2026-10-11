@@ -51,6 +51,9 @@ p { margin: 6px 0 12px; }
 .notice { margin: 14px 22px 0; padding: 10px 13px; border: 1px solid var(--rule); border-radius: 6px; background: var(--panel); overflow-wrap: anywhere; }
 .notice.error { border-color: var(--red); }
 .section-error { color: var(--red); margin: 8px 0; font-size: 12px; overflow-wrap: anywhere; }
+.instance-diagnostic { margin: 8px 0; }
+.instance-diagnostic > summary { color: var(--muted); cursor: pointer; }
+.instance-diagnostic > pre { margin: 8px 0; max-height: 16rem; overflow: auto; white-space: pre-wrap; }
 .fleet-host-statuses { border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; }
 .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
 .card-title { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 8px; }

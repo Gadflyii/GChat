@@ -165,7 +165,7 @@ notify-rust = "4"
 
 [target.'cfg(windows)'.dependencies]
 libc = "0.2.172"
-windows-sys = { version = "0.60.2", features = ["Win32_Storage_FileSystem", "Win32_Globalization"] }
+windows-sys = { version = "0.60.2", features = ["Win32_Storage_FileSystem", "Win32_Globalization", "Win32_Foundation", "Win32_System_Threading"] }
 winreg = "0.52"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

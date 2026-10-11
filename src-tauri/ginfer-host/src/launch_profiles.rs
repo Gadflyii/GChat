@@ -197,18 +197,18 @@ impl LaunchProfile {
                     && g.compute_capability.as_deref() == Some(&self.compute_capability)
                     && g.memory_mib >= self.min_memory_mib_per_gpu
             })
-            .map(|g| g.uuid.clone())
+            .map(|g| g.uuid.as_str())
             .collect();
-        fn choose(all: &[String], n: usize, picked: &mut Vec<String>, out: &mut Vec<Vec<String>>) {
+        fn choose<'a>(all: &[&'a str], n: usize, picked: &mut Vec<&'a str>, out: &mut Vec<Vec<String>>) {
             if n == 0 {
-                out.push(picked.clone());
+                out.push(picked.iter().map(|uuid| (*uuid).to_owned()).collect());
                 return;
             }
             if all.len() < n {
                 return;
             }
             for i in 0..=all.len() - n {
-                picked.push(all[i].clone());
+                picked.push(all[i]);
                 choose(&all[i + 1..], n - 1, picked, out);
                 picked.pop();
             }
@@ -429,6 +429,30 @@ mod tests {
         p.qualification.free_bytes_per_gpu = Some(HEADROOM_BYTES);
         p.qualification.full_context_requests = 1;
         assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn gpu_group_choices_preserve_input_order_and_reserved_members() {
+        let mut p = profile();
+        let gpus: Vec<_> = ["GPU-d", "GPU-a", "GPU-c", "GPU-b"].into_iter().map(|uuid| Gpu {
+            uuid: uuid.into(), name: "Fixture GPU".into(), display_name: None,
+            memory_mib: 32607, compute_capability: Some("12.0".into()),
+        }).collect();
+        p.tp = 1;
+        assert_eq!(p.gpu_groups(&gpus, &BTreeSet::new()), vec![
+            vec!["GPU-d"], vec!["GPU-a"], vec!["GPU-c"], vec!["GPU-b"],
+        ]);
+        p.tp = 2;
+        assert_eq!(p.gpu_groups(&gpus, &BTreeSet::new()), vec![
+            vec!["GPU-d", "GPU-a"], vec!["GPU-d", "GPU-c"], vec!["GPU-d", "GPU-b"],
+            vec!["GPU-a", "GPU-c"], vec!["GPU-a", "GPU-b"], vec!["GPU-c", "GPU-b"],
+        ]);
+        assert_eq!(p.gpu_groups(&gpus, &BTreeSet::from(["GPU-a".into()])), vec![
+            vec!["GPU-d", "GPU-c"], vec!["GPU-d", "GPU-b"], vec!["GPU-c", "GPU-b"],
+        ]);
+        p.tp = 4;
+        assert_eq!(p.gpu_groups(&gpus, &BTreeSet::new()), vec![vec!["GPU-d", "GPU-a", "GPU-c", "GPU-b"]]);
+        assert!(p.gpu_groups(&gpus, &BTreeSet::from(["GPU-a".into()])).is_empty());
     }
     #[test]
     fn profile_evidence_must_meet_its_selected_headroom() {
