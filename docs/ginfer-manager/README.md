@@ -16,8 +16,8 @@ Documentation-only handoffs do not rebuild accepted binaries.
 Current item: `GCHAT-STRUCTURED-OUTPUT-ENABLEMENT`, approved October 11.
 Deliverable: agent-capable Host deployments enable the existing Engine
 structured-output flag by default, with an explicit saved deployment setting to
-disable it. GChat and Manager expose the same control; the universal GInfer
-Engine/CLI default stays OFF. An omitted Host setting means ON, and explicit
+disable it. GChat and Manager expose the same control. Ron has now selected
+Engine/CLI default ON with an explicit off flag; C1 owns that Engine change. An omitted Host setting means ON, and explicit
 OFF survives profile save, reload and restart. A preset override must retain
 model/GPU/payload validation and stop claiming qualification when its options
 differ from the recorded catalog. Historical profile evidence does not qualify
@@ -50,18 +50,59 @@ affected frontend lint/typecheck and the Linux Host build PASS. Retained Host:
 [focused results](../../../out/structured-output-20261011/host-gate-result.json)
 and [UI results](../../../out/structured-output-20261011/frontend-manager-acceptance.json).
 
-The live ON/OFF gate has not started. C1's new `FLASH-STRUCTURED-ALLOWED-TOKEN-WIDTH`
-evidence shows strict schema sampling crashes because the frontend expects
-7760 padded mask words while Flash supplies 7753 semantic words. Source inspection
-of our intended accepted `4c63` runtime shows the same semantic-vocabulary mask
-allocation. Its prior Ready/Stop result does not establish constrained sampling.
-Cancel the provisional GPU booking before launching; do not repeat the known
-failure or change speculation/limits to evade it. C1 owns the Engine correction.
-The fresh private test state is prepared without a Host/model process; the
-accepted build and concise evidence are retained. No job or guard is held.
-Next action: bind C1's corrected accepted SM120a runtime, then make the required
-one real ON/OFF Host request pair. Release qualification and native Windows
-remain excluded.
+The real pair is unblocked by C1's Engine fixes merged as `a59c489ad` on October 11.
+The earlier Flash mask-width failure expected 7760 padded words but supplied 7753
+semantic words; the old `4c63` runtime is excluded from this gate. Its Ready/Stop
+evidence did not qualify constrained sampling.
+
+Real acceptance **PASS** at 16:02:34–16:03:37Z on the local RTX 5090:
+
+- ON omits the Host setting; actual argv includes `--structured-outputs`.
+  The single strict-schema request returns HTTP 200 with `{"ok":true}` and
+  `finish_reason: stop`.
+- OFF explicitly saves false; this tested Engine receives no enable flag.
+  The same request returns HTTP 400, code `structured_outputs_not_supported`,
+  type `invalid_request_error`. Saved OFF remains false.
+
+The accepted Host uses C1's clean Release/SM120a server `2cc592d46`, containing
+`a59c489ad`, with its receiving loader closure. Runtime location:
+`/ai/kernel-agent/run_workdir/local/c1-structured-io-check-20261011/gchat-sm120a-2cc592d46/apps/ginfer-serve`.
+Actual process executable and mapped providers agree with C1's nine-file loader
+receipt. Both cases preserve the same in-place SMOL artifact/v2 profile and
+TP1/C1/131072/INT8/fixed3 MTP/AUTO arena/1 GiB device headroom, graphs ON and
+explicit disabled Host prefix cache. Only structured-output enablement differs.
+This is a functional check, not model quality, speed, release or full-context
+qualification.
+
+The first controller attempt stops before a schema request: Start correctly
+returns HTTP 202 Accepted, while the harness expects 200. The owning API also
+requires a JSON object for Stop. The control is corrected against
+`service.rs:1941–1948` and `body_json`; failed-attempt evidence is retained in
+`attempt1-accepted-status/`. No product or model setting is changed. The real
+pair then runs once; passing source/component cases are reused.
+
+Ordinary Stop leaves both exact Engine PIDs absent between cases. Host exits 0,
+its private listener closes, both canonical guards return and booking 507 is
+cancelled. Private Host state and generated credentials are retired after the
+root audit; accepted Host, cited public results, borrowed runtime/model/profile
+sources remain. Evidence: `out/structured-output-20261011/{live-pair-result.json,
+on-response.json,off-response.json,saved-settings-observation.json,
+runtime-binding.json,private-fixture-retirement.json}`.
+
+The 15:52Z decision approves the unchanged product Host AUTO launch; the
+schedule's explicit Host-RAM flag guidance governs engine bench runs. This
+runtime's documented default is flat 4 GiB, not the older 25% formula. The
+existing controller retains the local emergency backstop, finite deadline and
+exact process/lock lifetime. There is no wrapper or new Host setting.
+
+Next action: reviewed main integration of this accepted change. Ron's subsequent
+Engine-default-ON decision requires Host false to emit C1's explicit off flag;
+the tested `2cc592d46` still defaults OFF. Coordinate that flag mapping with C1
+before the new Engine default becomes the product runtime. These results do not
+claim that a saved OFF works by omission against a default-ON Engine. The Linux
+tray diagnosis is already merged/closed; Open/Exit is owed to Ron's desktop
+release walkthrough. Gbot's design is approved separately, with source-only
+SSH/vault/session work allowed while development VMs await setup.
 
 ## Accepted hardware profile installation
 
