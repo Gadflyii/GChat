@@ -453,6 +453,7 @@ mod tests {
             "xfce4",
             "tigervnc-standalone-server",
             "dbus-x11",
+            "dbus-user-session",
             "at-spi2-core",
         ] {
             assert!(packages.contains(&serde_json::json!(package)));
@@ -466,6 +467,22 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(session.contains("dbus-update-activation-environment"));
+        assert!(
+            session.find("desktop.env").unwrap() < session.find("systemd-notify --ready").unwrap()
+        );
+        let unit = files
+            .iter()
+            .find(|v| v["path"] == "/etc/systemd/user/gbot-desktop.service")
+            .unwrap()["content"]
+            .as_str()
+            .unwrap();
+        assert!(unit.contains("Type=notify") && unit.contains("NotifyAccess=all"));
+        let startup = data["runcmd"].as_array().unwrap().last().unwrap()[2]
+            .as_str()
+            .unwrap();
+        assert!(startup.contains("systemctl start user@$uid.service"));
+        assert!(startup.contains("is-active --quiet gbot-desktop.service"));
+        assert!(startup.find("is-active").unwrap() < startup.find("GBOT_READY_KEY").unwrap());
         assert!(
             session.contains("-localhost yes")
                 && session.contains("-AcceptKeyEvents=0")

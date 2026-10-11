@@ -12,7 +12,7 @@ mod linux {
     use serde_json::{json, Value};
     use std::{error::Error, path::PathBuf, sync::Arc, time::Duration};
     use tokio::{
-        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
         process::Command,
     };
     use uuid::Uuid;
@@ -148,6 +148,32 @@ mod linux {
         if !auth.success() {
             return Err("guest authentication refused".into());
         }
+        let result = desktop_gate(&mut client, evidence).await;
+        let diagnostics = async {
+            let channel = client.channel_open_session().await?;
+            channel.exec(true, "(cat /tmp/gbot-cua-gate.stderr; XDG_RUNTIME_DIR=/run/user/$(id -u) systemctl --user status gbot-desktop.service --no-pager; journalctl --user -u gbot-desktop.service -n 60 --no-pager) 2>&1").await?;
+            let mut bytes = Vec::new();
+            channel.into_stream().read_to_end(&mut bytes).await?;
+            tokio::fs::write(evidence.join("guest-diagnostics.txt"), bytes).await?;
+            Ok::<(), Box<dyn Error + Send + Sync>>(())
+        }.await;
+        if let Err(error) = diagnostics {
+            tokio::fs::write(
+                evidence.join("guest-diagnostics-error.txt"),
+                error.to_string(),
+            )
+            .await?;
+        }
+        let _ = client
+            .disconnect(russh::Disconnect::ByApplication, "gate finished", "en")
+            .await;
+        let _ = client.await;
+        result
+    }
+    async fn desktop_gate(
+        client: &mut client::Handle<Peer>,
+        evidence: &std::path::Path,
+    ) -> Result<()> {
         let terminal = client.channel_open_session().await?;
         terminal
         .exec(
@@ -156,7 +182,9 @@ mod linux {
         )
         .await?;
         let mut channel = client.channel_open_session().await?;
-        channel.exec(true, "/usr/local/bin/gbot-cua").await?;
+        channel
+            .exec(true, "/usr/local/bin/gbot-cua 2>/tmp/gbot-cua-gate.stderr")
+            .await?;
         loop {
             match channel.wait().await {
                 Some(russh::ChannelMsg::Success) => break,
@@ -222,10 +250,6 @@ mod linux {
         stream.get_mut().shutdown().await?;
         drop(stream);
         drop(terminal.into_stream());
-        client
-            .disconnect(russh::Disconnect::ByApplication, "gate finished", "en")
-            .await?;
-        client.await?;
         println!("PASS: real frame plus AT-SPI About action and dialog readback");
         Ok(())
     }

@@ -636,7 +636,13 @@ kernel when video was disabled. A bounded one-variable VGA screen proves
 Linux/cloud-init startup (one boot, Linux banner and init-local), with the same
 image, CPU, memory and network. The adapter now keeps emulated VGA; Xvnc
 remains the actual bot desktop. This screen is not final qualification.
-Next: one full corrected guest gate in a fresh finite slot on CPUs112–113.
+Current corrected full gate: guest `5d3369a5-4e19-40eb-adba-6950569753c7`,
+QEMU3846032, source6a55fc91c. Debian cloud-init is installing guest packages;
+all QEMU threads stay on CPUs112–113 and SSH listens on127.0.0.1:45345.
+The finite slot ends20:55Z; the gate itself has a900-second bound. Next:
+completed setup, real Cua frame and AT-SPI action/readback, then stop and
+remove the fixture credential. S1 evidence/first-guest6-live-proof.json records
+actual execution; domiflist is empty as designed.
 
 Source gates passed: three focused first-boot, XML/lifecycle and selected-port
 cases; strict all-target Clippy; opt-in guest fixture build. Evidence:
@@ -673,7 +679,7 @@ channels remains an explicit integration item.
 | GChat / local | `/ai/gchat-worktrees/gbot-kvm-cloud-init-c21` | Pushed candidate source; retain until reviewed merge. |
 | GChat / local | `/ai/gchat/out/gbot-kvm-prep-20261011/` | Source gates, official artifact receipts and cold-failure evidence; fixture/Cua unpack retained only through physical gate. |
 | GChat / S1 | `/ai/gbot-vms/images/debian-13-genericcloud-amd64-20261001-2618.qcow2` | Exact341508096-byte base, checked against official SHA512SUMS; reuse, no duplicate. |
-| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; first-guest5 stopped; boot/VGA comparison retained. Failed UUID directories retain concise evidence only. |
+| GChat / S1 | `/ai/gbot-vms/controller/`, `/ai/gbot-vms/evidence/`, `/ai/gbot-vms/kvm-ready-fixture`, `/ai/gbot-vms/s1-guest-gate.sh` | Private fixture vault, gate results and bounded driver; first-guest6 running as above; earlier boot/VGA comparison retained. Failed UUID directories retain concise evidence only. |
 | GChat / local | `/ai/gchat/out/oi057-linux-packages-20261011/` | DEB/AppImage/Manager artifacts and minimal archive checks from main0705; historical05a engine, no current-engine/Flash qualification. |
 
 OI-057 packages passed minimal archive inspection; the stock Ubuntu Desktop
@@ -691,3 +697,13 @@ Boot comparison evidence: S1 `evidence/boot5/{serial.log,vga-serial.log,
 first-guest5-cpu-registers.txt,grub.cfg}`. The image explicitly enables serial
 earlyprintk, yet the no-video route produces no Linux banner; VGA reaches
 cloud-init in eight seconds. No image/kernel/host policy was changed.
+
+First-guest6 completed Debian provisioning and vault-key SSH authentication,
+but cloud-init's user-unit start raced the user-manager/bus startup. The saved
+serial log reports the absent user bus, and Cua MCP then closes before its
+first reply. Credential removal and guest stop both pass. The shared setup
+now installs dbus-user-session, starts the user manager synchronously and waits
+on the notify-type desktop unit. Its Ready notification follows X-server/env
+publication and XFCE launch; the boot marker is emitted only after active-unit
+confirmation in one fail-fast shell stage. Cua stderr is retained in the
+dedicated guest for diagnosis; the full corrected gate remains pending.
