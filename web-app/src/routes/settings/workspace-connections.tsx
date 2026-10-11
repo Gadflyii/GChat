@@ -34,7 +34,6 @@ import {
   type ConnectorService,
 } from '@/services/workspace-connectors'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.settings.workspace_connections)({
   component: WorkspaceConnections,
 })
@@ -405,10 +404,12 @@ export function WorkspaceConnections() {
   }, [receiveSnapshot])
 
   useEffect(() => {
+    const snapshotRef = snapshotSequence
+    const flowRef = flowSequence
     void loadAccounts()
     return () => {
-      snapshotSequence.current++
-      flowSequence.current++
+      snapshotRef.current++
+      flowRef.current++
     }
   }, [loadAccounts])
 
