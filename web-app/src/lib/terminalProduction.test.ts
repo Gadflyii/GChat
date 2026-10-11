@@ -97,6 +97,7 @@ describe('production terminal runtime', () => {
         '\x1b[9999;0$y',
         '\x1b[?9999;0$y',
         '\x1b[4;1$y',
+        '\x1b[O', // Enabling focus reports announces this unopened terminal is unfocused.
         '\x1b[?1004;1$y',
         '\x1b[4;2$y',
         '\x1b[?1004;2$y',
