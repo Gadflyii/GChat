@@ -1,0 +1,810 @@
+//! Vault-backed SSH transport for one explicitly selected guest session.
+//!
+//! Worker channels use newline-delimited JSON: Hello, Request, Reply. Only the
+//! fixed guest entrypoint is passed to SSH's shell; operation arguments are data.
+//! A view carries raw guest-loopback bytes and establishes no desktop capability.
+
+use std::{
+    fmt,
+    net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr},
+    ops::Deref,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex as StdMutex,
+    },
+    time::Duration,
+};
+
+use russh::{
+    client,
+    keys::{PrivateKey, PrivateKeyWithHashAlg, PublicKey, PublicKeyOrCertificate},
+    Channel, Disconnect,
+};
+use serde::de::DeserializeOwned;
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::{TcpListener, TcpStream},
+    sync::{oneshot, watch, Mutex, Notify},
+    task::{JoinHandle, JoinSet},
+};
+
+use crate::{
+    contract::{
+        ContractError, GuestCapability, GuestHello, GuestReply, GuestRequest, OperationId,
+        SessionIdentity, SshConnection,
+    },
+    vault::{Vault, VaultError},
+};
+
+const WORKER_COMMAND: &str = "gbot-guest --stdio";
+
+#[derive(Clone, Copy, Debug)]
+pub struct SshPolicy {
+    /// Bounds connection/authentication/guest inspection, not guest output.
+    pub connect_timeout: Duration,
+    pub keepalive_interval: Duration,
+    pub keepalive_max: usize,
+}
+
+impl Default for SshPolicy {
+    fn default() -> Self {
+        Self {
+            connect_timeout: Duration::from_secs(30),
+            keepalive_interval: Duration::from_secs(15),
+            keepalive_max: 3,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SshError {
+    Contract(ContractError),
+    Vault(VaultError),
+    MissingCredential,
+    InvalidCredential,
+    EncryptedCredentialUnsupported,
+    UnsupportedCredentialAlgorithm,
+    InvalidPolicy,
+    PeerRejected,
+    AuthenticationRejected,
+    Transport,
+    TimedOut,
+    Protocol,
+    Closed,
+    CleanupUnproven,
+    /// Some request bytes may have reached the guest. Reconcile, never replay.
+    UncertainOutcome {
+        operation_id: OperationId,
+    },
+}
+
+impl fmt::Display for SshError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Contract(error) => error.fmt(f),
+            Self::Vault(error) => error.fmt(f),
+            Self::MissingCredential => f.write_str("SSH credential is missing from secure storage"),
+            Self::InvalidCredential => f.write_str("SSH credential must be an OpenSSH private key"),
+            Self::EncryptedCredentialUnsupported => f.write_str("Passphrase-protected key import is not supported yet"),
+            Self::UnsupportedCredentialAlgorithm => f.write_str("This SSH transport supports Ed25519 and ECDSA credentials; RSA is not enabled"),
+            Self::InvalidPolicy => f.write_str("SSH timeouts and keepalive count must be positive"),
+            Self::PeerRejected => f.write_str("Guest SSH key does not match the selected peer"),
+            Self::AuthenticationRejected => f.write_str("Guest rejected the selected SSH credential"),
+            Self::Transport => f.write_str("Guest SSH transport failed"),
+            Self::TimedOut => f.write_str("Guest SSH connection or liveness check timed out"),
+            Self::Protocol => f.write_str("Guest worker did not return the expected protocol message"),
+            Self::Closed => f.write_str("Guest SSH connection is closed"),
+            Self::CleanupUnproven => f.write_str("Guest SSH transport cleanup could not be confirmed"),
+            Self::UncertainOutcome { .. } => f.write_str("Guest operation outcome is unknown; inspect its operation identity before retrying"),
+        }
+    }
+}
+
+impl std::error::Error for SshError {}
+
+impl From<ContractError> for SshError {
+    fn from(value: ContractError) -> Self {
+        Self::Contract(value)
+    }
+}
+
+struct Peer {
+    key: PublicKey,
+    rejected: Arc<AtomicBool>,
+}
+
+impl client::Handler for Peer {
+    type Error = russh::Error;
+
+    async fn check_server_key(
+        &mut self,
+        offered: &PublicKeyOrCertificate,
+    ) -> Result<bool, Self::Error> {
+        let accepted = match offered {
+            PublicKeyOrCertificate::PublicKey { key, .. } => key.key_data() == self.key.key_data(),
+            PublicKeyOrCertificate::Certificate(_) => false,
+        };
+        if !accepted {
+            self.rejected.store(true, Ordering::Release);
+        }
+        Ok(accepted)
+    }
+
+    // The library's defaults accept several server-initiated channel kinds.
+    // This owner never requests reverse forwarding, agent forwarding or X11.
+    #[allow(clippy::too_many_arguments)]
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        _channel: Channel<client::Msg>,
+        _address: &str,
+        _port: u32,
+        _origin: &str,
+        _origin_port: u32,
+        _reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn server_channel_open_forwarded_streamlocal(
+        &mut self,
+        _channel: Channel<client::Msg>,
+        _path: &str,
+        _reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn server_channel_open_agent_forward(
+        &mut self,
+        _channel: Channel<client::Msg>,
+        _reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn server_channel_open_session(
+        &mut self,
+        _channel: Channel<client::Msg>,
+        _reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    #[allow(clippy::too_many_arguments)]
+    async fn server_channel_open_direct_tcpip(
+        &mut self,
+        _channel: Channel<client::Msg>,
+        _host: &str,
+        _port: u32,
+        _origin: &str,
+        _origin_port: u32,
+        _reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn server_channel_open_direct_streamlocal(
+        &mut self,
+        _channel: Channel<client::Msg>,
+        _path: &str,
+        _reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+    async fn server_channel_open_x11(
+        &mut self,
+        _channel: Channel<client::Msg>,
+        _origin: &str,
+        _port: u32,
+        _reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+type Client = client::Handle<Peer>;
+type Worker = BufReader<russh::ChannelStream<client::Msg>>;
+
+// Every shared client reference is a lease. Its release wakes the connection
+// owner after dropping the reference, including cancelled request/view tasks.
+struct ClientLease {
+    client: Option<Arc<Client>>,
+    released: Arc<Notify>,
+}
+
+impl Clone for ClientLease {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            released: self.released.clone(),
+        }
+    }
+}
+
+impl Deref for ClientLease {
+    type Target = Client;
+    fn deref(&self) -> &Client {
+        self.client.as_deref().expect("live client lease")
+    }
+}
+
+impl Drop for ClientLease {
+    fn drop(&mut self) {
+        drop(self.client.take());
+        self.released.notify_one();
+    }
+}
+
+/// Drop initiates shutdown; only `close().await` proves that owned tasks ended.
+pub struct SshSession {
+    hello: GuestHello,
+    shared: Arc<ConnectionOwner>,
+    policy: SshPolicy,
+}
+
+impl fmt::Debug for SshSession {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SshSession")
+            .field("identity", &self.hello.identity)
+            .field("closed", &self.shared.closed.load(Ordering::Acquire))
+            .finish_non_exhaustive()
+    }
+}
+
+struct ConnectionOwner {
+    client: StdMutex<Option<ClientLease>>,
+    socket: Arc<std::net::TcpStream>,
+    shutdown: StdMutex<Option<oneshot::Sender<()>>>,
+    owner: Mutex<Option<JoinHandle<Result<(), SshError>>>>,
+    view: Mutex<Option<ViewTunnel>>,
+    closed: AtomicBool,
+    close_task: Mutex<Option<JoinHandle<Result<(), SshError>>>>,
+    close_result: StdMutex<Option<Result<(), SshError>>>,
+}
+
+struct CancelConnect(Option<oneshot::Sender<()>>);
+impl Drop for CancelConnect {
+    fn drop(&mut self) {
+        if let Some(sender) = self.0.take() {
+            let _ = sender.send(());
+        }
+    }
+}
+
+impl SshSession {
+    /// Credentials are unencrypted OpenSSH key bytes loaded only from `vault`.
+    pub async fn connect(
+        connection: &SshConnection,
+        expected: SessionIdentity,
+        vault: &dyn Vault,
+        policy: SshPolicy,
+    ) -> Result<Self, SshError> {
+        connection.endpoint.validate()?;
+        connection.pinned_host_key.validate()?;
+        connection.credential_ref.validate()?;
+        expected.validate()?;
+        if policy.connect_timeout.is_zero()
+            || policy.keepalive_interval.is_zero()
+            || policy.keepalive_max == 0
+        {
+            return Err(SshError::InvalidPolicy);
+        }
+        let public = format!(
+            "{} {}",
+            connection.pinned_host_key.algorithm, connection.pinned_host_key.public_key
+        );
+        let pinned = PublicKey::from_openssh(&public)
+            .map_err(|_| SshError::Contract(ContractError::InvalidHostKey))?;
+        let secret = vault
+            .get(connection.credential_ref.as_uuid())
+            .await
+            .map_err(SshError::Vault)?
+            .ok_or(SshError::MissingCredential)?;
+        let private = PrivateKey::from_openssh(secret.expose_secret())
+            .map_err(|_| SshError::InvalidCredential)?;
+        if private.is_encrypted() {
+            return Err(SshError::EncryptedCredentialUnsupported);
+        }
+        if !matches!(
+            private.algorithm(),
+            russh::keys::Algorithm::Ed25519 | russh::keys::Algorithm::Ecdsa { .. }
+        ) {
+            return Err(SshError::UnsupportedCredentialAlgorithm);
+        }
+        drop(secret);
+        let connection = connection.clone();
+        let (cancel, cancelled) = oneshot::channel();
+        let mut cancellation = CancelConnect(Some(cancel));
+        // The owner keeps the handshake future alive through socket shutdown.
+        // Dropping a public connect future does not abandon russh's spawned KEX.
+        let task = tokio::spawn(connect_owned(
+            connection, expected, pinned, private, policy, cancelled,
+        ));
+        let result = task.await.map_err(|_| SshError::CleanupUnproven)?;
+        cancellation.0.take();
+        result
+    }
+
+    pub fn hello(&self) -> &GuestHello {
+        &self.hello
+    }
+
+    fn client(&self) -> Result<ClientLease, SshError> {
+        if self.shared.closed.load(Ordering::Acquire) {
+            return Err(SshError::Closed);
+        }
+        let guard = self
+            .shared
+            .client
+            .lock()
+            .map_err(|_| SshError::CleanupUnproven)?;
+        let client = guard.as_ref().ok_or(SshError::Closed)?;
+        if client.is_closed() {
+            return Err(SshError::Closed);
+        }
+        Ok(client.clone())
+    }
+
+    pub async fn request(&self, request: GuestRequest) -> Result<GuestReply, SshError> {
+        request.validate(&self.hello)?;
+        let client = self.client()?;
+        let (mut worker, hello) = worker(&client, self.hello.identity).await?;
+        request.validate(&hello)?;
+        let mut bytes = serde_json::to_vec(&request).map_err(|_| SshError::Protocol)?;
+        bytes.push(b'\n');
+        // A partial write, lost reply or invalid reply may follow a real effect.
+        // Preserve the operation identity for service-owned reconciliation.
+        let uncertain = || SshError::UncertainOutcome {
+            operation_id: request.operation_id,
+        };
+        worker
+            .get_mut()
+            .write_all(&bytes)
+            .await
+            .map_err(|_| uncertain())?;
+        worker.get_mut().flush().await.map_err(|_| uncertain())?;
+        let reply: GuestReply = read_json(&mut worker).await.map_err(|_| uncertain())?;
+        reply.validate(&request).map_err(|_| uncertain())?;
+        // The validated reply already establishes the outcome; an EOF-send
+        // failure cannot turn that known result back into an unknown effect.
+        let _ = worker.get_mut().shutdown().await;
+        Ok(reply)
+    }
+
+    pub async fn ping(&self) -> Result<(), SshError> {
+        let client = self.client()?;
+        tokio::time::timeout(self.policy.connect_timeout, client.send_ping())
+            .await
+            .map_err(|_| SshError::TimedOut)?
+            .map_err(|_| SshError::Transport)?;
+        if client.is_closed() {
+            return Err(SshError::Closed);
+        }
+        Ok(())
+    }
+
+    pub async fn open_view(&self) -> Result<SocketAddr, SshError> {
+        let mut view = self.shared.view.lock().await;
+        if view.is_some() {
+            return Err(SshError::Protocol);
+        }
+        self.hello.validate(&self.hello.identity)?;
+        if !self
+            .hello
+            .capabilities
+            .contains(&GuestCapability::ViewTransport)
+        {
+            return Err(SshError::Contract(ContractError::CapabilityUnavailable));
+        }
+        let endpoint = self
+            .hello
+            .view
+            .as_ref()
+            .ok_or(SshError::Contract(ContractError::InvalidViewEndpoint))?;
+        // This slice approves only the IPv4 guest-loopback view endpoint.
+        if endpoint.host != IpAddr::V4(Ipv4Addr::LOCALHOST) {
+            return Err(SshError::Contract(ContractError::InvalidViewEndpoint));
+        }
+        let client = self.client()?;
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .map_err(|_| SshError::Transport)?;
+        let address = listener.local_addr().map_err(|_| SshError::Transport)?;
+        if self.shared.closed.load(Ordering::Acquire) {
+            return Err(SshError::Closed);
+        }
+        let (stop, stopped) = watch::channel(false);
+        let port = endpoint.port;
+        let task = tokio::spawn(view_owner(listener, client, port, stopped));
+        *view = Some(ViewTunnel {
+            stop,
+            task: Some(task),
+        });
+        Ok(address)
+    }
+
+    pub async fn close_view(&self) -> Result<(), SshError> {
+        // Retain the view's join in shared state until it has been observed.
+        // Cancellation of a caller cannot discard an in-flight teardown.
+        let mut guard = self.shared.view.lock().await;
+        if let Some(view) = guard.as_mut() {
+            view.stop.send_replace(true);
+            let result = view
+                .task
+                .as_mut()
+                .ok_or(SshError::CleanupUnproven)?
+                .await
+                .map_err(|_| SshError::CleanupUnproven)
+                .and_then(|value| value);
+            guard.take();
+            result?;
+        }
+        Ok(())
+    }
+
+    pub async fn close(&self) -> Result<(), SshError> {
+        let mut task = self.shared.close_task.lock().await;
+        if let Some(result) = *self
+            .shared
+            .close_result
+            .lock()
+            .map_err(|_| SshError::CleanupUnproven)?
+        {
+            return result;
+        }
+        if task.is_none() {
+            self.shared.closed.store(true, Ordering::Release);
+            let shared = self.shared.clone();
+            *task = Some(tokio::spawn(close_owned(shared)));
+        }
+        let result = task
+            .as_mut()
+            .ok_or(SshError::CleanupUnproven)?
+            .await
+            .map_err(|_| SshError::CleanupUnproven)
+            .and_then(|value| value);
+        *self
+            .shared
+            .close_result
+            .lock()
+            .map_err(|_| SshError::CleanupUnproven)? = Some(result);
+        task.take();
+        result
+    }
+}
+
+impl Drop for ConnectionOwner {
+    fn drop(&mut self) {
+        // No task is spawned from Drop, including after runtime destruction.
+        self.view.get_mut().take();
+        if let Ok(client) = self.client.get_mut() {
+            client.take();
+        }
+        let _ = self.socket.shutdown(Shutdown::Both);
+        if let Ok(shutdown) = self.shutdown.get_mut() {
+            if let Some(shutdown) = shutdown.take() {
+                let _ = shutdown.send(());
+            }
+        }
+        // The already-created owner drains the session. Drop is not a join proof.
+    }
+}
+
+async fn connect_owned(
+    connection: SshConnection,
+    expected: SessionIdentity,
+    pinned: PublicKey,
+    private: PrivateKey,
+    policy: SshPolicy,
+    mut cancelled: oneshot::Receiver<()>,
+) -> Result<SshSession, SshError> {
+    let deadline = tokio::time::Instant::now() + policy.connect_timeout;
+    let stream = tokio::select! {
+        result = TcpStream::connect((connection.endpoint.hostname.as_str(), connection.endpoint.port)) => result.map_err(|_| SshError::Transport)?,
+        _ = &mut cancelled => return Err(SshError::Closed),
+        _ = tokio::time::sleep_until(deadline) => return Err(SshError::TimedOut),
+    };
+    let standard = stream.into_std().map_err(|_| SshError::Transport)?;
+    let socket = Arc::new(standard.try_clone().map_err(|_| SshError::Transport)?);
+    let stream = TcpStream::from_std(standard).map_err(|_| SshError::Transport)?;
+    let mut setup = Box::pin(establish(
+        stream,
+        socket.clone(),
+        connection.endpoint.user,
+        expected,
+        pinned,
+        private,
+        policy,
+    ));
+    let interrupted = tokio::select! {
+        result = &mut setup => return result,
+        _ = &mut cancelled => SshError::Closed,
+        _ = tokio::time::sleep_until(deadline) => SshError::TimedOut,
+    };
+    let _ = socket.shutdown(Shutdown::Both);
+    // Await the SAME future; connect_stream may already own a spawned KEX task.
+    if let Ok(session) = setup.await {
+        session.close().await?;
+    }
+    Err(interrupted)
+}
+
+async fn establish(
+    stream: TcpStream,
+    socket: Arc<std::net::TcpStream>,
+    user: String,
+    expected: SessionIdentity,
+    pinned: PublicKey,
+    private: PrivateKey,
+    policy: SshPolicy,
+) -> Result<SshSession, SshError> {
+    let rejected = Arc::new(AtomicBool::new(false));
+    let config = Arc::new(client::Config {
+        keepalive_interval: Some(policy.keepalive_interval),
+        keepalive_max: policy.keepalive_max,
+        ..Default::default()
+    });
+    let mut client = client::connect_stream(
+        config,
+        stream,
+        Peer {
+            key: pinned,
+            rejected: rejected.clone(),
+        },
+    )
+    .await
+    .map_err(|_| {
+        if rejected.load(Ordering::Acquire) {
+            SshError::PeerRejected
+        } else {
+            SshError::Transport
+        }
+    })?;
+    let inspection = async {
+        let auth = client
+            .authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(private), None))
+            .await
+            .map_err(|_| SshError::Transport)?;
+        if !auth.success() {
+            return Err(SshError::AuthenticationRejected);
+        }
+        let (worker, hello) = worker(&client, expected).await?;
+        drop(worker);
+        Ok(hello)
+    }
+    .await;
+    let hello = match inspection {
+        Ok(hello) => hello,
+        Err(error) => {
+            let _ = socket.shutdown(Shutdown::Both);
+            // Authentication/inspection failures retain the owned session join.
+            let _ = client.await;
+            return Err(error);
+        }
+    };
+    let client = Arc::new(client);
+    let owned = client.clone();
+    let released = Arc::new(Notify::new());
+    let owner_released = released.clone();
+    let client = ClientLease {
+        client: Some(client),
+        released,
+    };
+    let shutdown_socket = socket.clone();
+    let (shutdown, shutdown_requested) = oneshot::channel();
+    let owner = tokio::spawn(async move {
+        let _ = shutdown_requested.await;
+        let graceful = tokio::time::timeout(
+            policy.connect_timeout,
+            owned.disconnect(
+                Disconnect::ByApplication,
+                "Workspace connection closed",
+                "en",
+            ),
+        )
+        .await;
+        if !matches!(graceful, Ok(Ok(()))) {
+            let _ = shutdown_socket.shutdown(Shutdown::Both);
+        }
+        let mut owned = owned;
+        let client = loop {
+            // Register before checking ownership. notify_one also preserves a
+            // permit when the final lease drops before this future is polled.
+            let release = owner_released.notified();
+            match Arc::try_unwrap(owned) {
+                Ok(client) => break client,
+                Err(shared) => {
+                    owned = shared;
+                    release.await;
+                }
+            }
+        };
+        tokio::pin!(client);
+        if tokio::time::timeout(policy.connect_timeout, &mut client)
+            .await
+            .is_err()
+        {
+            let _ = shutdown_socket.shutdown(Shutdown::Both);
+            let _ = client.await;
+        }
+        // Both success and protocol error here mean the session task terminated.
+        Ok(())
+    });
+    Ok(SshSession {
+        hello,
+        shared: Arc::new(ConnectionOwner {
+            client: StdMutex::new(Some(client)),
+            socket,
+            shutdown: StdMutex::new(Some(shutdown)),
+            owner: Mutex::new(Some(owner)),
+            view: Mutex::new(None),
+            closed: AtomicBool::new(false),
+            close_task: Mutex::new(None),
+            close_result: StdMutex::new(None),
+        }),
+        policy,
+    })
+}
+
+async fn close_owned(shared: Arc<ConnectionOwner>) -> Result<(), SshError> {
+    // Closing the socket first releases independently awaited worker channels;
+    // their outcomes remain uncertain, not silently cancelled or replayed.
+    let _ = shared.socket.shutdown(Shutdown::Both);
+    let view_result = {
+        let mut guard = shared.view.lock().await;
+        if let Some(view) = guard.as_mut() {
+            view.stop.send_replace(true);
+            let result = match view.task.as_mut() {
+                Some(task) => task
+                    .await
+                    .map_err(|_| SshError::CleanupUnproven)
+                    .and_then(|value| value),
+                None => Err(SshError::CleanupUnproven),
+            };
+            guard.take();
+            result
+        } else {
+            Ok(())
+        }
+    };
+    shared
+        .client
+        .lock()
+        .map_err(|_| SshError::CleanupUnproven)?
+        .take();
+    if let Some(shutdown) = shared
+        .shutdown
+        .lock()
+        .map_err(|_| SshError::CleanupUnproven)?
+        .take()
+    {
+        let _ = shutdown.send(());
+    }
+    let result = shared
+        .owner
+        .lock()
+        .await
+        .take()
+        .ok_or(SshError::CleanupUnproven)?
+        .await
+        .map_err(|_| SshError::CleanupUnproven)?;
+    result?;
+    // A transport error can be caused by this intentional socket shutdown.
+    // It does not erase the observed joins; panic/unproven cleanup still fails.
+    if view_result == Err(SshError::CleanupUnproven) {
+        return view_result;
+    }
+    Ok(())
+}
+
+// Raw russh Channels do not close on Drop; its ChannelStream does. Preserve
+// that close-on-drop behavior while awaiting exec acceptance as well.
+struct OpeningChannel(Option<Channel<client::Msg>>);
+impl Drop for OpeningChannel {
+    fn drop(&mut self) {
+        if let Some(channel) = self.0.take() {
+            drop(channel.into_stream());
+        }
+    }
+}
+
+async fn worker(
+    client: &Client,
+    expected: SessionIdentity,
+) -> Result<(Worker, GuestHello), SshError> {
+    let mut opening = OpeningChannel(Some(
+        client
+            .channel_open_session()
+            .await
+            .map_err(|_| SshError::Transport)?,
+    ));
+    let channel = opening.0.as_mut().ok_or(SshError::Protocol)?;
+    channel
+        .exec(true, WORKER_COMMAND)
+        .await
+        .map_err(|_| SshError::Transport)?;
+    // Request acceptance precedes worker stdout in the SSH protocol.
+    loop {
+        match channel.wait().await {
+            Some(russh::ChannelMsg::Success) => break,
+            Some(russh::ChannelMsg::WindowAdjusted { .. }) => {}
+            _ => return Err(SshError::Protocol),
+        }
+    }
+    let channel = opening.0.take().ok_or(SshError::Protocol)?;
+    let mut worker = BufReader::new(channel.into_stream());
+    let hello: GuestHello = read_json(&mut worker).await?;
+    hello.validate(&expected)?;
+    Ok((worker, hello))
+}
+
+async fn read_json<T: DeserializeOwned>(worker: &mut Worker) -> Result<T, SshError> {
+    let mut bytes = Vec::new();
+    worker
+        .read_until(b'\n', &mut bytes)
+        .await
+        .map_err(|_| SshError::Transport)?;
+    if bytes.last() != Some(&b'\n') {
+        return Err(SshError::Protocol);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| SshError::Protocol)
+}
+
+struct ViewTunnel {
+    stop: watch::Sender<bool>,
+    task: Option<JoinHandle<Result<(), SshError>>>,
+}
+
+impl Drop for ViewTunnel {
+    fn drop(&mut self) {
+        self.stop.send_replace(true);
+    }
+}
+
+async fn view_owner(
+    listener: TcpListener,
+    client: ClientLease,
+    guest_port: u16,
+    mut stopped: watch::Receiver<bool>,
+) -> Result<(), SshError> {
+    let mut connections = JoinSet::new();
+    let result = loop {
+        if *stopped.borrow() {
+            break Ok(());
+        }
+        tokio::select! {
+            _ = stopped.changed() => break Ok(()),
+            result = listener.accept() => {
+                let (mut local, origin) = match result {
+                    Ok(pair) => pair,
+                    Err(_) => break Err(SshError::Transport),
+                };
+                let client = client.clone();
+                connections.spawn(async move {
+                    let channel = client.channel_open_direct_tcpip("127.0.0.1", u32::from(guest_port), origin.ip().to_string(), u32::from(origin.port())).await.map_err(|_| SshError::Transport)?;
+                    let mut remote = channel.into_stream();
+                    tokio::io::copy_bidirectional(&mut local, &mut remote).await.map_err(|_| SshError::Transport)?;
+                    Ok::<(), SshError>(())
+                });
+            },
+            result = connections.join_next(), if !connections.is_empty() => {
+                match result {
+                    Some(Ok(Ok(()))) => {},
+                    _ => break Err(SshError::Transport),
+                }
+            },
+        }
+    };
+    drop(listener);
+    connections.abort_all();
+    while let Some(result) = connections.join_next().await {
+        if let Err(error) = result {
+            if !error.is_cancelled() {
+                return Err(SshError::CleanupUnproven);
+            }
+        }
+    }
+    result
+}

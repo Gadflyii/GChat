@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Own Gbot workspace connections in the local service](2026-10-11-own-gbot-workspaces-in-local-service.md)
+
 - **2026-10-11** — [Enable structured outputs in Host deployments](2026-10-11-enable-structured-outputs-in-host-deployments.md)
 
 - **2026-10-11** — [Design local-first Gbot and guided computer setup](2026-10-11-design-local-first-gbot-and-computer-setup.md) — product design approved; implementation scoped separately

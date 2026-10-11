@@ -1,0 +1,939 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+use tokio::sync::{Mutex, OwnedMutexGuard};
+use uuid::Uuid;
+
+use crate::contract::{
+    ContractError, GuestCapability, GuestHello, GuestOperationKind, GuestOperationState,
+    GuestOutcome, GuestReply, GuestRequest, GuestResult, OperationId, ServicePc, SessionIdentity,
+    WorkspaceConfig, WorkspaceId,
+};
+use crate::store::Store;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewReason {
+    ServiceRestarted,
+    SessionDisconnected,
+    OutcomeUnknown,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OperationState {
+    InFlight,
+    Completed,
+    Failed,
+    Cancelled,
+    NeedsReview { reason: ReviewReason },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperationCompletion {
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl From<OperationCompletion> for OperationState {
+    fn from(completion: OperationCompletion) -> Self {
+        match completion {
+            OperationCompletion::Completed => Self::Completed,
+            OperationCompletion::Failed => Self::Failed,
+            OperationCompletion::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OperationRecord {
+    pub id: OperationId,
+    pub identity: SessionIdentity,
+    pub capability: GuestCapability,
+    pub target_operation_id: Option<OperationId>,
+    pub state: OperationState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DurableState {
+    pub service_id: Uuid,
+    pub service_pc: ServicePc,
+    pub workspaces: Vec<WorkspaceConfig>,
+    pub operations: Vec<OperationRecord>,
+}
+
+impl DurableState {
+    fn new() -> Self {
+        Self {
+            service_id: Uuid::new_v4(),
+            service_pc: ServicePc::default(),
+            workspaces: Vec::new(),
+            operations: Vec::new(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), ServiceError> {
+        if self.service_id.is_nil() {
+            return Err(ServiceError::InvalidState);
+        }
+        let mut workspaces = BTreeSet::new();
+        for workspace in &self.workspaces {
+            workspace
+                .validate()
+                .map_err(|_| ServiceError::InvalidState)?;
+            if !workspaces.insert(workspace.id) {
+                return Err(ServiceError::InvalidState);
+            }
+        }
+        let mut operations = BTreeSet::new();
+        for operation in &self.operations {
+            operation
+                .id
+                .validate()
+                .map_err(|_| ServiceError::InvalidState)?;
+            operation
+                .identity
+                .validate()
+                .map_err(|_| ServiceError::InvalidState)?;
+            if !operations.insert(operation.id)
+                || !workspaces.contains(&operation.identity.workspace_id)
+                || matches!(
+                    operation.capability,
+                    GuestCapability::DesktopCapture
+                        | GuestCapability::DesktopInput
+                        | GuestCapability::ViewTransport
+                )
+            {
+                return Err(ServiceError::InvalidState);
+            }
+        }
+        for operation in &self.operations {
+            match (operation.capability, operation.target_operation_id) {
+                (GuestCapability::Status | GuestCapability::Cancel, Some(target_id)) => {
+                    if target_id == operation.id
+                        || !self.operations.iter().any(|target| {
+                            target.id == target_id && target.identity == operation.identity
+                        })
+                    {
+                        return Err(ServiceError::InvalidState);
+                    }
+                }
+                (GuestCapability::Status | GuestCapability::Cancel, None) | (_, Some(_)) => {
+                    return Err(ServiceError::InvalidState);
+                }
+                (_, None) => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ServiceError {
+    AlreadyRunning,
+    Persistence,
+    InvalidState,
+    Contract(ContractError),
+    WorkspaceNotFound,
+    WorkspaceInUse,
+    SessionUnavailable,
+    SessionMismatch,
+    OperationNotFound,
+    DuplicateOperation,
+    OperationState,
+}
+
+impl fmt::Display for ServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Contract(error) => fmt::Display::fmt(error, formatter),
+            _ => formatter.write_str(match self {
+                Self::Persistence => "could not persist Gbot state",
+                Self::AlreadyRunning => "Gbot state is already owned by a running service",
+                Self::InvalidState => "invalid Gbot state",
+                Self::WorkspaceNotFound => "workspace is not registered",
+                Self::WorkspaceInUse => "workspace has a live session or unresolved operation",
+                Self::SessionUnavailable => "verified guest session is unavailable",
+                Self::SessionMismatch => "guest session does not match",
+                Self::OperationNotFound => "operation is not recorded; its outcome is unknown",
+                Self::DuplicateOperation => "operation is already recorded; do not replay it",
+                Self::OperationState => "operation requires review or is already finished",
+                Self::Contract(_) => unreachable!(),
+            }),
+        }
+    }
+}
+
+impl std::error::Error for ServiceError {}
+
+struct RuntimeState {
+    durable: DurableState,
+    sessions: BTreeMap<WorkspaceId, GuestHello>,
+}
+
+pub struct Service {
+    store: Arc<Store>,
+    state: Arc<Mutex<RuntimeState>>,
+}
+
+impl Service {
+    pub async fn open(path: impl Into<PathBuf>) -> Result<Self, ServiceError> {
+        let store = Arc::new(Store::open(path.into()).await?);
+        let loaded = store.load().await?;
+        let initial = loaded.is_none();
+        let mut durable = loaded.unwrap_or_else(DurableState::new);
+        durable.validate()?;
+        let mut recovered = false;
+        for operation in &mut durable.operations {
+            if operation.state == OperationState::InFlight {
+                operation.state = OperationState::NeedsReview {
+                    reason: ReviewReason::ServiceRestarted,
+                };
+                recovered = true;
+            }
+        }
+        if initial || recovered {
+            store.save(&durable).await?;
+        }
+        Ok(Self {
+            store,
+            state: Arc::new(Mutex::new(RuntimeState {
+                durable,
+                sessions: BTreeMap::new(),
+            })),
+        })
+    }
+
+    pub async fn snapshot(&self) -> DurableState {
+        self.state.lock().await.durable.clone()
+    }
+
+    pub async fn live_sessions(&self) -> Vec<SessionIdentity> {
+        self.state
+            .lock()
+            .await
+            .sessions
+            .values()
+            .map(|hello| hello.identity)
+            .collect()
+    }
+
+    async fn commit(
+        &self,
+        mut state: OwnedMutexGuard<RuntimeState>,
+        next: DurableState,
+    ) -> Result<OwnedMutexGuard<RuntimeState>, ServiceError> {
+        let store = self.store.clone();
+        // Cancellation of the caller must not release ownership during a disk commit.
+        tokio::spawn(async move {
+            store.save(&next).await?;
+            state.durable = next;
+            Ok(state)
+        })
+        .await
+        .map_err(|_| ServiceError::Persistence)?
+    }
+
+    pub async fn register_workspace(&self, config: WorkspaceConfig) -> Result<(), ServiceError> {
+        config.validate().map_err(ServiceError::Contract)?;
+        let state = self.state.clone().lock_owned().await;
+        let mut next = state.durable.clone();
+        if let Some(existing) = next
+            .workspaces
+            .iter_mut()
+            .find(|workspace| workspace.id == config.id)
+        {
+            if *existing == config {
+                return Ok(());
+            }
+            if state.sessions.contains_key(&config.id)
+                || state.durable.operations.iter().any(|operation| {
+                    operation.identity.workspace_id == config.id
+                        && matches!(
+                            operation.state,
+                            OperationState::InFlight | OperationState::NeedsReview { .. }
+                        )
+                })
+            {
+                return Err(ServiceError::WorkspaceInUse);
+            }
+            *existing = config;
+        } else {
+            next.workspaces.push(config);
+        }
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
+    /// The caller owns and verifies the transport; only its session binding is retained here.
+    pub async fn register_session(
+        &self,
+        expected: SessionIdentity,
+        hello: GuestHello,
+    ) -> Result<(), ServiceError> {
+        hello.validate(&expected).map_err(ServiceError::Contract)?;
+        let mut state = self.state.clone().lock_owned().await;
+        if !state
+            .durable
+            .workspaces
+            .iter()
+            .any(|workspace| workspace.id == expected.workspace_id)
+        {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        let mut next = state.durable.clone();
+        let mut changed = false;
+        for operation in &mut next.operations {
+            if operation.identity.workspace_id == expected.workspace_id
+                && operation.identity != expected
+                && operation.state == OperationState::InFlight
+            {
+                operation.state = OperationState::NeedsReview {
+                    reason: ReviewReason::SessionDisconnected,
+                };
+                changed = true;
+            }
+        }
+        if changed {
+            state = self.commit(state, next).await?;
+        }
+        state.sessions.insert(expected.workspace_id, hello);
+        Ok(())
+    }
+
+    pub async fn disconnect_session(&self, identity: SessionIdentity) -> Result<(), ServiceError> {
+        let mut state = self.state.clone().lock_owned().await;
+        let hello = state
+            .sessions
+            .get(&identity.workspace_id)
+            .ok_or(ServiceError::SessionUnavailable)?;
+        if hello.identity != identity {
+            return Err(ServiceError::SessionMismatch);
+        }
+        // A dead connection must not remain dispatchable if its review write fails.
+        state.sessions.remove(&identity.workspace_id);
+        let mut next = state.durable.clone();
+        for operation in &mut next.operations {
+            if operation.identity == identity && operation.state == OperationState::InFlight {
+                operation.state = OperationState::NeedsReview {
+                    reason: ReviewReason::SessionDisconnected,
+                };
+            }
+        }
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
+    pub async fn begin_operation(
+        &self,
+        request: &GuestRequest,
+    ) -> Result<OperationRecord, ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        let hello = state
+            .sessions
+            .get(&request.identity.workspace_id)
+            .ok_or(ServiceError::SessionUnavailable)?;
+        request.validate(hello).map_err(ServiceError::Contract)?;
+        if state
+            .durable
+            .operations
+            .iter()
+            .any(|operation| operation.id == request.operation_id)
+        {
+            return Err(ServiceError::DuplicateOperation);
+        }
+        let target_operation_id = if let GuestOperationKind::Status { operation_id }
+        | GuestOperationKind::Cancel { operation_id } =
+            &request.operation
+        {
+            let target = state
+                .durable
+                .operations
+                .iter()
+                .find(|operation| operation.id == *operation_id)
+                .ok_or(ServiceError::OperationNotFound)?;
+            if target.identity != request.identity {
+                return Err(ServiceError::SessionMismatch);
+            }
+            Some(*operation_id)
+        } else {
+            None
+        };
+        let operation = OperationRecord {
+            id: request.operation_id,
+            identity: request.identity,
+            capability: request.operation.capability(),
+            target_operation_id,
+            state: OperationState::InFlight,
+        };
+        let mut next = state.durable.clone();
+        next.operations.push(operation.clone());
+        drop(self.commit(state, next).await?);
+        Ok(operation)
+    }
+
+    pub async fn finish_operation(
+        &self,
+        id: OperationId,
+        identity: SessionIdentity,
+        completion: OperationCompletion,
+    ) -> Result<(), ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        let mut next = state.durable.clone();
+        let operation = next
+            .operations
+            .iter_mut()
+            .find(|operation| operation.id == id)
+            .ok_or(ServiceError::OperationNotFound)?;
+        if operation.identity != identity {
+            return Err(ServiceError::SessionMismatch);
+        }
+        if operation.state == OperationState::from(completion) {
+            return Ok(());
+        }
+        if operation.state != OperationState::InFlight {
+            return Err(ServiceError::OperationState);
+        }
+        let session = state
+            .sessions
+            .get(&identity.workspace_id)
+            .ok_or(ServiceError::SessionUnavailable)?;
+        if session.identity != identity {
+            return Err(ServiceError::SessionMismatch);
+        }
+        operation.state = completion.into();
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
+    pub async fn mark_operation_uncertain(
+        &self,
+        id: OperationId,
+        identity: SessionIdentity,
+    ) -> Result<(), ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        let mut next = state.durable.clone();
+        let operation = next
+            .operations
+            .iter_mut()
+            .find(|operation| operation.id == id)
+            .ok_or(ServiceError::OperationNotFound)?;
+        if operation.identity != identity {
+            return Err(ServiceError::SessionMismatch);
+        }
+        if operation.state != OperationState::InFlight {
+            return Ok(());
+        }
+        operation.state = OperationState::NeedsReview {
+            reason: ReviewReason::OutcomeUnknown,
+        };
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
+    pub async fn reconcile_operation(
+        &self,
+        request: &GuestRequest,
+        reply: &GuestReply,
+    ) -> Result<(), ServiceError> {
+        reply.validate(request).map_err(ServiceError::Contract)?;
+        let target_id = match &request.operation {
+            GuestOperationKind::Status { operation_id }
+            | GuestOperationKind::Cancel { operation_id } => *operation_id,
+            _ => return Err(ServiceError::OperationState),
+        };
+        let (observed, probe_state) = match &reply.outcome {
+            GuestOutcome::Success {
+                result: GuestResult::Status { state } | GuestResult::Cancel { state },
+            } => (observed_state(state), OperationState::Completed),
+            GuestOutcome::Error { .. } => (
+                OperationState::NeedsReview {
+                    reason: ReviewReason::OutcomeUnknown,
+                },
+                OperationState::Failed,
+            ),
+            _ => return Err(ServiceError::OperationState),
+        };
+        let state = self.state.clone().lock_owned().await;
+        let hello = state
+            .sessions
+            .get(&request.identity.workspace_id)
+            .ok_or(ServiceError::SessionUnavailable)?;
+        request.validate(hello).map_err(ServiceError::Contract)?;
+        let mut next = state.durable.clone();
+        let probe_index = next
+            .operations
+            .iter()
+            .position(|operation| operation.id == request.operation_id)
+            .ok_or(ServiceError::OperationNotFound)?;
+        let target_index = next
+            .operations
+            .iter()
+            .position(|operation| operation.id == target_id)
+            .ok_or(ServiceError::OperationNotFound)?;
+        let probe = &next.operations[probe_index];
+        if probe.identity != request.identity
+            || next.operations[target_index].identity != request.identity
+        {
+            return Err(ServiceError::SessionMismatch);
+        }
+        if probe.capability != request.operation.capability()
+            || probe.target_operation_id != Some(target_id)
+            || probe.state != OperationState::InFlight
+            || probe_index == target_index
+        {
+            return Err(ServiceError::OperationState);
+        }
+        // A delayed probe cannot undo a recorded terminal result.
+        if matches!(
+            next.operations[target_index].state,
+            OperationState::InFlight | OperationState::NeedsReview { .. }
+        ) {
+            next.operations[target_index].state = observed;
+        }
+        next.operations[probe_index].state = probe_state;
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+}
+
+fn observed_state(state: &GuestOperationState) -> OperationState {
+    match state {
+        GuestOperationState::Running => OperationState::InFlight,
+        GuestOperationState::Completed {
+            exit_code: Some(code),
+        } if *code != 0 => OperationState::Failed,
+        GuestOperationState::Completed { .. } => OperationState::Completed,
+        GuestOperationState::Cancelled => OperationState::Cancelled,
+        GuestOperationState::Failed { .. } => OperationState::Failed,
+        GuestOperationState::Unknown => OperationState::NeedsReview {
+            reason: ReviewReason::OutcomeUnknown,
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contract::{
+        BotPc, GuestError, GuestErrorCode, GuestPath, Hypervisor, SessionId, SshConnection,
+        SshEndpoint, SshHostPublicKey, VaultCredentialRef, WorkspaceConnection,
+        GUEST_PROTOCOL_VERSION,
+    };
+
+    fn workspace() -> WorkspaceConfig {
+        WorkspaceConfig {
+            id: WorkspaceId::new(),
+            name: "Fixture VM".into(),
+            service_pc: ServicePc::Local,
+            bot_pc: BotPc::LocalVm {
+                host_id: Uuid::new_v4(),
+                vm_id: "fixture-vm".into(),
+                hypervisor: Hypervisor::Kvm,
+            },
+            connection: WorkspaceConnection::Ssh(SshConnection {
+                endpoint: SshEndpoint {
+                    hostname: "127.0.0.1".into(),
+                    port: 2222,
+                    user: "fixture".into(),
+                },
+                pinned_host_key: SshHostPublicKey {
+                    algorithm: "ssh-ed25519".into(),
+                    public_key: "AAAA".into(),
+                },
+                credential_ref: VaultCredentialRef::new(),
+            }),
+        }
+    }
+
+    fn hello(identity: SessionIdentity) -> GuestHello {
+        GuestHello {
+            protocol_version: GUEST_PROTOCOL_VERSION,
+            identity,
+            capabilities: [
+                GuestCapability::Exec,
+                GuestCapability::Read,
+                GuestCapability::Write,
+                GuestCapability::Status,
+                GuestCapability::Cancel,
+            ]
+            .into(),
+            view: None,
+        }
+    }
+
+    fn exec(identity: SessionIdentity) -> GuestRequest {
+        GuestRequest {
+            identity,
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Exec {
+                program: "fixture-command".into(),
+                args: vec!["private-operation-payload-not-durable".into()],
+                cwd: GuestPath("/fixture".into()),
+                env: BTreeMap::from([(
+                    "FIXTURE_SECRET".into(),
+                    "private-vault-value-not-durable".into(),
+                )]),
+            },
+        }
+    }
+
+    fn probe(request: &GuestRequest, cancel: bool) -> GuestRequest {
+        GuestRequest {
+            identity: request.identity,
+            operation_id: OperationId::new(),
+            operation: if cancel {
+                GuestOperationKind::Cancel {
+                    operation_id: request.operation_id,
+                }
+            } else {
+                GuestOperationKind::Status {
+                    operation_id: request.operation_id,
+                }
+            },
+        }
+    }
+
+    fn reply(request: &GuestRequest, state: GuestOperationState) -> GuestReply {
+        GuestReply {
+            identity: request.identity,
+            operation_id: request.operation_id,
+            outcome: GuestOutcome::Success {
+                result: if matches!(request.operation, GuestOperationKind::Cancel { .. }) {
+                    GuestResult::Cancel { state }
+                } else {
+                    GuestResult::Status { state }
+                },
+            },
+        }
+    }
+
+    async fn operation_state(service: &Service, id: OperationId) -> OperationState {
+        service
+            .snapshot()
+            .await
+            .operations
+            .into_iter()
+            .find(|record| record.id == id)
+            .unwrap()
+            .state
+    }
+
+    #[tokio::test]
+    async fn restart_preserves_vault_references_and_requires_operation_review() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let service = Service::open(&path).await.unwrap();
+        let config = workspace();
+        service.register_workspace(config.clone()).await.unwrap();
+        let identity = SessionIdentity {
+            workspace_id: config.id,
+            session_id: SessionId::new(),
+        };
+        service
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        let finished = exec(identity);
+        let interrupted = exec(identity);
+        service.begin_operation(&finished).await.unwrap();
+        service
+            .finish_operation(
+                finished.operation_id,
+                identity,
+                OperationCompletion::Completed,
+            )
+            .await
+            .unwrap();
+        service.begin_operation(&interrupted).await.unwrap();
+        let service_id = service.snapshot().await.service_id;
+        let persisted = std::fs::read_to_string(&path).unwrap();
+        assert!(!persisted.contains("private-operation-payload-not-durable"));
+        assert!(!persisted.contains("private-vault-value-not-durable"));
+        let WorkspaceConnection::Ssh(connection) = &config.connection else {
+            unreachable!()
+        };
+        assert!(persisted.contains(&connection.credential_ref.as_uuid().to_string()));
+        drop(service);
+
+        let reopened = Service::open(&path).await.unwrap();
+        let state = reopened.snapshot().await;
+        assert_eq!(state.service_id, service_id);
+        assert_eq!(state.service_pc, ServicePc::Local);
+        assert_eq!(state.workspaces, vec![config.clone()]);
+        assert!(reopened.live_sessions().await.is_empty());
+        assert_eq!(
+            operation_state(&reopened, finished.operation_id).await,
+            OperationState::Completed
+        );
+        assert_eq!(
+            operation_state(&reopened, interrupted.operation_id).await,
+            OperationState::NeedsReview {
+                reason: ReviewReason::ServiceRestarted
+            }
+        );
+        assert_eq!(
+            reopened.begin_operation(&interrupted).await,
+            Err(ServiceError::SessionUnavailable)
+        );
+        reopened
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        assert_eq!(
+            reopened.begin_operation(&interrupted).await,
+            Err(ServiceError::DuplicateOperation)
+        );
+        let status = probe(&interrupted, false);
+        reopened.begin_operation(&status).await.unwrap();
+        reopened
+            .reconcile_operation(&status, &reply(&status, GuestOperationState::Unknown))
+            .await
+            .unwrap();
+        assert_eq!(
+            operation_state(&reopened, interrupted.operation_id).await,
+            OperationState::NeedsReview {
+                reason: ReviewReason::OutcomeUnknown
+            }
+        );
+        drop(reopened);
+        let recovered = Service::open(&path).await.unwrap();
+        assert_eq!(
+            operation_state(&recovered, interrupted.operation_id).await,
+            OperationState::NeedsReview {
+                reason: ReviewReason::OutcomeUnknown
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn state_owner_is_exclusive_until_service_drop() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let first = Service::open(&path).await.unwrap();
+        let service_id = first.snapshot().await.service_id;
+        assert!(matches!(
+            Service::open(&path).await,
+            Err(ServiceError::AlreadyRunning)
+        ));
+        drop(first);
+        let next = Service::open(&path).await.unwrap();
+        assert_eq!(next.snapshot().await.service_id, service_id);
+    }
+
+    #[tokio::test]
+    async fn failed_commit_preserves_published_state_and_prior_bytes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let service = Service::open(&path).await.unwrap();
+        let first = workspace();
+        let second = workspace();
+        let (first_result, second_result) = tokio::join!(
+            service.register_workspace(first.clone()),
+            service.register_workspace(second.clone()),
+        );
+        first_result.unwrap();
+        second_result.unwrap();
+        let before = service.snapshot().await;
+        assert_eq!(before.workspaces.len(), 2);
+        let prior_bytes = std::fs::read(&path).unwrap();
+        let retained = directory.path().join("retained-state.json");
+        std::fs::rename(&path, &retained).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert_eq!(
+            service.register_workspace(workspace()).await,
+            Err(ServiceError::Persistence)
+        );
+        assert_eq!(service.snapshot().await, before);
+        assert_eq!(std::fs::read(&retained).unwrap(), prior_bytes);
+    }
+
+    #[tokio::test]
+    async fn operation_reconciliation_binds_target_identity_and_preserves_terminal_outcomes() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = Service::open(directory.path().join("state.json"))
+            .await
+            .unwrap();
+        let config = workspace();
+        service.register_workspace(config.clone()).await.unwrap();
+        let identity = SessionIdentity {
+            workspace_id: config.id,
+            session_id: SessionId::new(),
+        };
+        service
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        let target = exec(identity);
+        let other = exec(identity);
+        service.begin_operation(&target).await.unwrap();
+        service.begin_operation(&other).await.unwrap();
+        let status = probe(&target, false);
+        service.begin_operation(&status).await.unwrap();
+        let mut substituted = status.clone();
+        substituted.operation = GuestOperationKind::Status {
+            operation_id: other.operation_id,
+        };
+        assert_eq!(
+            service
+                .reconcile_operation(
+                    &substituted,
+                    &reply(&substituted, GuestOperationState::Running)
+                )
+                .await,
+            Err(ServiceError::OperationState)
+        );
+        service
+            .mark_operation_uncertain(target.operation_id, identity)
+            .await
+            .unwrap();
+        let missing = GuestReply {
+            identity,
+            operation_id: status.operation_id,
+            outcome: GuestOutcome::Error {
+                error: GuestError {
+                    code: GuestErrorCode::NotFound,
+                    message: "worker journal has no result".into(),
+                },
+            },
+        };
+        service
+            .reconcile_operation(&status, &missing)
+            .await
+            .unwrap();
+        assert_eq!(
+            operation_state(&service, status.operation_id).await,
+            OperationState::Failed
+        );
+        assert_eq!(
+            operation_state(&service, target.operation_id).await,
+            OperationState::NeedsReview {
+                reason: ReviewReason::OutcomeUnknown
+            }
+        );
+        let failed = probe(&target, false);
+        service.begin_operation(&failed).await.unwrap();
+        service
+            .reconcile_operation(
+                &failed,
+                &reply(
+                    &failed,
+                    GuestOperationState::Completed { exit_code: Some(7) },
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            operation_state(&service, target.operation_id).await,
+            OperationState::Failed
+        );
+
+        let cancel = probe(&other, true);
+        service.begin_operation(&cancel).await.unwrap();
+        service
+            .reconcile_operation(&cancel, &reply(&cancel, GuestOperationState::Running))
+            .await
+            .unwrap();
+        assert_eq!(
+            operation_state(&service, other.operation_id).await,
+            OperationState::InFlight
+        );
+        let delayed = probe(&other, false);
+        service.begin_operation(&delayed).await.unwrap();
+        let acknowledged = probe(&other, true);
+        service.begin_operation(&acknowledged).await.unwrap();
+        service
+            .reconcile_operation(
+                &acknowledged,
+                &reply(&acknowledged, GuestOperationState::Cancelled),
+            )
+            .await
+            .unwrap();
+        service
+            .finish_operation(other.operation_id, identity, OperationCompletion::Cancelled)
+            .await
+            .unwrap();
+        service
+            .reconcile_operation(&delayed, &reply(&delayed, GuestOperationState::Running))
+            .await
+            .unwrap();
+        service
+            .mark_operation_uncertain(other.operation_id, identity)
+            .await
+            .unwrap();
+        assert_eq!(
+            operation_state(&service, other.operation_id).await,
+            OperationState::Cancelled
+        );
+        assert_eq!(
+            service
+                .finish_operation(other.operation_id, identity, OperationCompletion::Completed)
+                .await,
+            Err(ServiceError::OperationState)
+        );
+
+        let foreign_config = workspace();
+        service
+            .register_workspace(foreign_config.clone())
+            .await
+            .unwrap();
+        let foreign_identity = SessionIdentity {
+            workspace_id: foreign_config.id,
+            session_id: SessionId::new(),
+        };
+        service
+            .register_session(foreign_identity, hello(foreign_identity))
+            .await
+            .unwrap();
+        for cancel in [false, true] {
+            let mut cross_workspace = probe(&target, cancel);
+            cross_workspace.identity = foreign_identity;
+            assert_eq!(
+                service.begin_operation(&cross_workspace).await,
+                Err(ServiceError::SessionMismatch)
+            );
+        }
+        let mut altered = config;
+        altered.name = "Different VM".into();
+        assert_eq!(
+            service.register_workspace(altered).await,
+            Err(ServiceError::WorkspaceInUse)
+        );
+        service.disconnect_session(identity).await.unwrap();
+        service
+            .finish_operation(other.operation_id, identity, OperationCompletion::Cancelled)
+            .await
+            .unwrap();
+        let replacement = SessionIdentity {
+            workspace_id: identity.workspace_id,
+            session_id: SessionId::new(),
+        };
+        service
+            .register_session(replacement, hello(replacement))
+            .await
+            .unwrap();
+        let mut cross_session = probe(&target, false);
+        cross_session.identity = replacement;
+        assert_eq!(
+            service.begin_operation(&cross_session).await,
+            Err(ServiceError::SessionMismatch)
+        );
+        assert_eq!(
+            service
+                .finish_operation(
+                    target.operation_id,
+                    replacement,
+                    OperationCompletion::Failed
+                )
+                .await,
+            Err(ServiceError::SessionMismatch)
+        );
+    }
+}

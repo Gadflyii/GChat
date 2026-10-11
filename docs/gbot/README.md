@@ -5,10 +5,11 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Status: design for Ron's review, updated October 11, 2026. Product choices below
-are approved design inputs. Implementation mechanisms and physical compatibility
-still need qualification. This change creates no service, VM, provider resource
-or dependency and authorizes no build or provisioning.
+Status: Ron approved the design; it is merged into GChat main. October 11 step 1
+implements the local-first service skeleton, vault-held SSH sessions, guest-tools
+contract and SSH-tunnelled view channel. Development VMs are not yet available.
+Current verification is limited to focused contracts and a loopback SSH fixture;
+no real desktop input, provisioning or native Windows execution is authorized.
 
 ## Decided product scope
 
@@ -360,10 +361,45 @@ separate authorization and release schedule.
 
 ### Step 1: GChat workspace connection
 
-October 11 preparation is **source-only planning**, while the structured-output
-gate waits for its runtime. The design remains held from main for Ron's review.
-No implementation, VM creation, worker installation, dependency adoption or
-cloud operation is authorized by these notes.
+October 11 implementation is **source-only until the development VMs exist**.
+Ron approved the design and authorized a service skeleton, vault-held SSH
+sessions, the guest-tools contract and an SSH-tunnelled view channel. The local
+loopback fixture uses generated files and a synthetic view stream. S2 is Ron's
+active desktop and must not be a bot target. No VM/cloud provisioning, worker
+installation or desktop input is included.
+
+The service owns persisted workspace records and operation reconciliation. It
+does not introduce another agent executor. A service restart discards transport
+handles; operations without a known outcome need reconciliation, not replay.
+The existing shared agent runtime remains the execution owner.
+
+Focused acceptance for this slice:
+
+1. Persist and reopen a workspace with vault references only; reconcile an
+   interrupted operation without repeating it or claiming a live connection.
+2. Reject wrong workspace/session identities and unavailable guest capabilities;
+   a remote failure never routes to local machine tools.
+3. Verify native-vault failure handling and that keys cannot enter persisted
+   records or diagnostic output.
+4. Use one hermetic loopback SSH server to verify pinned identity, in-memory
+   authentication, generated guest file/command operations, cancellation and
+   disconnect. A wrong peer key must be refused.
+5. Carry an echo stream over a guest-loopback-only SSH view channel; verify close
+   and reconnect lifetime. This proves transport, not desktop capture or input.
+6. Run focused crate checks and strict Clippy; no full product suite or model run.
+
+The workstation has an SSH client but no SSH server. Ron approved `russh` 0.63.1
+on October 11 at approximately 16:30 UTC for in-memory client authentication and
+a hermetic server fixture. The service pins that exact version with its `ring`
+backend. The library requires Rust 1.85; the service requires 1.89 for the shared
+OS file lock that prevents two processes from owning its state. The selected
+toolchain is 1.98. Fixtures must
+demonstrate key authentication, exec/file transfer, cancellation, keepalive and
+forwarding before this dependency is accepted for the slice. Initial credential
+handling admits unencrypted OpenSSH keys held in the vault; encrypted-key
+passphrase import remains a gap, without a key-file or global-agent workaround.
+Physical frame/input/takeover,
+Windows and M365 gates await dedicated guests and Ron's release authorization.
 
 The first implementation slice connects GChat to an existing, dedicated bot
 computer and proves that commands, files, captured frames and input belong to
@@ -429,21 +465,24 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
 supersedes the initial draft's unassigned-cloud scope without changing runtime
-code. Baseline is GChat main `058702dd8` composed into draft `10eb91e15`.
+code. Approved design `9c8c3b8ca` is merged; current implementation baseline is
+GChat main `42d8c401e`.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-design-20261010`, branch `docs/gbot-design` | Current docs-only candidate; retain until reviewed/merged. |
+| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-workspace-connection-42d`, branch `feat/gbot-workspace-connection-42d` | Source-only step-1 candidate; no live guest or service. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-design-20261011/` | Concise input/research and document-check evidence; no binary, model or VM copy. |
 
-Deliverable: this coherent design incorporates Ron's October 11 decisions with
-provider/session constraints and explicit remaining implementation choices.
-Acceptance for this docs step passes: coordinator readback, two independent
-design reviews, primary-source references, 351 resolved local document links,
-no stale active scope and `git diff --check`. No service, VM, paid layer,
-dependency install, build or model run is part of the deliverable. Retain concise
-checks in `/ai/gchat/out/gbot-design-20261011/document-links.json` and
-`design-review.json`; no disposable build or VM needs retirement.
-Next action: Ron reviews the committed/pushed docs-only branch before main
-integration. The workspace-connection notes above are the next implementation
-slice's plan; implementation awaits Ron's authorization.
+Deliverable: the local-first service skeleton, vault-backed SSH transport,
+session-bound guest-tools contract and tunnelled view transport. Acceptance is
+the focused step-1 cases above. Physical desktop readiness and unattended agent
+execution are not established by this skeleton. The approved design's completed
+review evidence remains in `/ai/gchat/out/gbot-design-20261011/`.
+Next action: compose the service/contract/vault/SSH owners, then run the bounded
+loopback gate. No
+existing desktop, model, profile or host configuration is a fixture target.
+
+The raw view tunnel is bidirectional transport. It must not be advertised as a
+read-only desktop panel: VNC input/clipboard mediation and takeover exclusivity
+remain part of the later dedicated-guest integration. A worker restart or unknown
+operation ID cannot authorize replay of a possibly completed external effect.
