@@ -48,6 +48,9 @@ export type EngineHardwareProfile = {
   error: string | null
   available: boolean
 }
+export const hardwareProfileBusy = (profile?: EngineHardwareProfile) =>
+  profile?.status === 'running' || profile?.status === 'cancelling'
+
 export type EngineSnapshot = {
   hardware_profile?: EngineHardwareProfile
   lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };

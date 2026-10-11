@@ -1,10 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import type { EngineHardwareProfile as HardwareProfileStatus, EngineHardwareProfileAction } from '@/services/engines'
+import { hardwareProfileBusy, type EngineHardwareProfile as HardwareProfileStatus, type EngineHardwareProfileAction } from '@/services/engines'
 import type { ModelGpu } from '@/lib/model-release'
-
-export const hardwareProfileBusy = (profile?: HardwareProfileStatus) =>
-  profile?.status === 'running' || profile?.status === 'cancelling'
 
 export function EngineHardwareProfile({ profile, gpus, offline, disabled, action }: {
   profile: HardwareProfileStatus; offline: boolean; disabled: boolean;

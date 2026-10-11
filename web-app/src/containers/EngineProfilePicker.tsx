@@ -1,7 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import type { EngineSnapshot } from '@/services/engines'
-import { hardwareProfileBusy } from '@/containers/EngineHardwareProfile'
+import { hardwareProfileBusy, type EngineSnapshot } from '@/services/engines'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 
 const selectStyle: CSSProperties = {
