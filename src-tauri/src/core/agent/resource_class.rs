@@ -16,11 +16,13 @@ pub enum ResourceClass {
     Unknown,
 }
 
-pub(super) fn connector_tool(name: &str) -> Option<&'static crate::core::connectors::ConnectorTool> {
+pub(super) fn connector_tool(
+    name: &str,
+) -> Option<&'static crate::core::connectors::ConnectorTool> {
     crate::core::connectors::tool(name).or_else(|| {
-        crate::core::connectors::tools().iter().find(|tool| {
-            super::ginfer_client::wire_tool_name(tool.name) == name
-        })
+        crate::core::connectors::tools()
+            .iter()
+            .find(|tool| super::ginfer_client::wire_tool_name(tool.name) == name)
     })
 }
 
@@ -129,21 +131,50 @@ mod tests {
 
     #[test]
     fn capability_discovery_reads_do_not_receive_connector_approval() {
-        assert_eq!(resource_class_for("capability_search"), ResourceClass::PureRead);
-        assert_eq!(resource_class_for("capability_read"), ResourceClass::PureRead);
+        assert_eq!(
+            resource_class_for("capability_search"),
+            ResourceClass::PureRead
+        );
+        assert_eq!(
+            resource_class_for("capability_read"),
+            ResourceClass::PureRead
+        );
         assert_eq!(resource_class_for("mcp_call"), ResourceClass::ApprovalGated);
     }
 
     #[test]
     fn workspace_connectors_use_semantic_effects_and_exact_registered_names() {
-        for name in ["google.gmail.search", "google.calendar.freebusy", "microsoft.calendar.free_busy", "microsoft.excel.read_range"] {
+        for name in [
+            "google.gmail.search",
+            "google.calendar.freebusy",
+            "microsoft.calendar.free_busy",
+            "microsoft.excel.read_range",
+        ] {
             assert_eq!(resource_class_for(name), ResourceClass::PureRead, "{name}");
-            assert_eq!(resource_class_for(&super::super::ginfer_client::wire_tool_name(name)), ResourceClass::PureRead);
+            assert_eq!(
+                resource_class_for(&super::super::ginfer_client::wire_tool_name(name)),
+                ResourceClass::PureRead
+            );
         }
-        for name in ["google.gmail.send", "google.drive.share", "microsoft.outlook.send", "microsoft.onedrive.delete"] {
-            assert_eq!(resource_class_for(name), ResourceClass::ApprovalGated, "{name}");
+        for name in [
+            "google.gmail.send",
+            "google.drive.share",
+            "microsoft.outlook.send",
+            "microsoft.onedrive.delete",
+        ] {
+            assert_eq!(
+                resource_class_for(name),
+                ResourceClass::ApprovalGated,
+                "{name}"
+            );
         }
-        assert_eq!(resource_class_for("google.gmail.unregistered"), ResourceClass::Unknown);
-        assert_eq!(resource_class_for("microsoft.outlook.send.raw"), ResourceClass::Unknown);
+        assert_eq!(
+            resource_class_for("google.gmail.unregistered"),
+            ResourceClass::Unknown
+        );
+        assert_eq!(
+            resource_class_for("microsoft.outlook.send.raw"),
+            ResourceClass::Unknown
+        );
     }
 }

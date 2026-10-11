@@ -214,11 +214,11 @@ const SettingsMenu = () => {
                             className={cn(
                               'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground',
                               isActive && 'bg-foreground/20',
-                               // hidden for the local provider during setup
-                               // remote provider
-                               provider.provider === LOCAL_GINFER_PROVIDER &&
-                                 stepSetupRemoteProvider &&
-                                 'hidden'
+                              // hidden for the local provider during setup
+                              // remote provider
+                              provider.provider === LOCAL_GINFER_PROVIDER &&
+                                stepSetupRemoteProvider &&
+                                'hidden'
                             )}
                             onClick={() =>
                               navigate({
@@ -248,7 +248,9 @@ const SettingsMenu = () => {
             )
           })}
 
-          <div className="mt-4 px-2"><NativeIntegrationControls /></div>
+          <div className="mt-4 px-2">
+            <NativeIntegrationControls />
+          </div>
 
           {/* Model Providers section */}
           <div className="mt-4">
@@ -275,10 +277,10 @@ const SettingsMenu = () => {
                     key={provider.provider}
                     className={cn(
                       'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground',
-                       isRouteActive && 'bg-foreground/20',
-                       provider.provider === LOCAL_GINFER_PROVIDER &&
-                         stepSetupRemoteProvider &&
-                         'hidden'
+                      isRouteActive && 'bg-foreground/20',
+                      provider.provider === LOCAL_GINFER_PROVIDER &&
+                        stepSetupRemoteProvider &&
+                        'hidden'
                     )}
                     onClick={() =>
                       navigate({

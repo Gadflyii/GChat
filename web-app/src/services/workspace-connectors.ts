@@ -76,10 +76,19 @@ export const cancelConnectorAuth = (flowId: string) =>
 export const selectConnectorAccount = (
   provider: ConnectorProvider,
   accountId: string
-) => invoke<ConnectorAccountsView>('connector_select_account', { provider, accountId })
+) =>
+  invoke<ConnectorAccountsView>('connector_select_account', {
+    provider,
+    accountId,
+  })
 
 export const disconnectConnectorAccount = (
   provider: ConnectorProvider,
   accountId: string,
   revoke: boolean
-) => invoke<ConnectorAccountsView>('connector_disconnect', { provider, accountId, revoke })
+) =>
+  invoke<ConnectorAccountsView>('connector_disconnect', {
+    provider,
+    accountId,
+    revoke,
+  })

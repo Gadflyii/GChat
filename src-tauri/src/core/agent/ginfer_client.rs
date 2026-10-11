@@ -1498,7 +1498,10 @@ mod tests {
             .any(|tool| tool["function"]["name"] == "os_fs_hash"));
         request.loaded_native_tools.insert("os.fs.hash".into());
         let loaded_payload = completion_request_payload("model", &request);
-        assert!(loaded_payload["tools"].as_array().unwrap().iter()
+        assert!(loaded_payload["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
             .any(|tool| tool["function"]["name"] == "os_fs_hash"));
         let response: CompletionEnvelope = serde_json::from_value(serde_json::json!({
             "choices":[{"message":{"tool_calls":[{"function":{
@@ -1525,18 +1528,27 @@ mod tests {
             "choices":[{"message":{"tool_calls":[{"function":{
                 "name":"connector_call","arguments":call.to_string()
             }}]}}], "usage":{}, "x_ginfer":{"finish_reason":"stop_token"}
-        })).unwrap();
-        let structured = normalize_completion_with_tools(response, &[
-            serde_json::json!({"function":{"name":"connector_call"}})
-        ]).unwrap();
+        }))
+        .unwrap();
+        let structured = normalize_completion_with_tools(
+            response,
+            &[serde_json::json!({"function":{"name":"connector_call"}})],
+        )
+        .unwrap();
         for raw in [plain.as_str(), atem, structured.content.as_str()] {
             let parsed = parse_tool_calls(raw).unwrap();
             assert_eq!(parsed.calls[0].tool, "google.gmail.search");
             assert_eq!(parsed.calls[0].args, arguments);
-            assert_eq!(super::super::resource_class::resource_class_for(&parsed.calls[0].tool), super::super::resource_class::ResourceClass::PureRead);
+            assert_eq!(
+                super::super::resource_class::resource_class_for(&parsed.calls[0].tool),
+                super::super::resource_class::ResourceClass::PureRead
+            );
         }
         let unknown = serde_json::json!([{"tool":"connector_call","args":{"name":"google.gmail.unregistered","arguments":{}}}]);
-        assert!(parse_tool_calls(&unknown.to_string()).unwrap_err().to_string().contains("Unknown Workspace connector tool"));
+        assert!(parse_tool_calls(&unknown.to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("Unknown Workspace connector tool"));
     }
 
     #[tokio::test]

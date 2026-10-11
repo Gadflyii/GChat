@@ -22,6 +22,7 @@ import { Route as EnginesIndexRouteImport } from './routes/engines/index'
 import { Route as BenchmarkIndexRouteImport } from './routes/benchmark/index'
 import { Route as AgentsIndexRouteImport } from './routes/agents/index'
 import { Route as ThreadsThreadIdRouteImport } from './routes/threads/$threadId'
+import { Route as SettingsWorkspaceConnectionsRouteImport } from './routes/settings/workspace-connections'
 import { Route as SettingsShortcutsRouteImport } from './routes/settings/shortcuts'
 import { Route as SettingsPrivacyRouteImport } from './routes/settings/privacy'
 import { Route as SettingsMcpServersRouteImport } from './routes/settings/mcp-servers'
@@ -106,6 +107,12 @@ const ThreadsThreadIdRoute = ThreadsThreadIdRouteImport.update({
   path: '/threads/$threadId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsWorkspaceConnectionsRoute =
+  SettingsWorkspaceConnectionsRouteImport.update({
+    id: '/settings/workspace-connections',
+    path: '/settings/workspace-connections',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const SettingsShortcutsRoute = SettingsShortcutsRouteImport.update({
   id: '/settings/shortcuts',
   path: '/settings/shortcuts',
@@ -220,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/settings/mcp-servers': typeof SettingsMcpServersRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/workspace-connections': typeof SettingsWorkspaceConnectionsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/agents/': typeof AgentsIndexRoute
   '/benchmark/': typeof BenchmarkIndexRoute
@@ -253,6 +261,7 @@ export interface FileRoutesByTo {
   '/settings/mcp-servers': typeof SettingsMcpServersRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/workspace-connections': typeof SettingsWorkspaceConnectionsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/agents': typeof AgentsIndexRoute
   '/benchmark': typeof BenchmarkIndexRoute
@@ -287,6 +296,7 @@ export interface FileRoutesById {
   '/settings/mcp-servers': typeof SettingsMcpServersRoute
   '/settings/privacy': typeof SettingsPrivacyRoute
   '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/workspace-connections': typeof SettingsWorkspaceConnectionsRoute
   '/threads/$threadId': typeof ThreadsThreadIdRoute
   '/agents/': typeof AgentsIndexRoute
   '/benchmark/': typeof BenchmarkIndexRoute
@@ -322,6 +332,7 @@ export interface FileRouteTypes {
     | '/settings/mcp-servers'
     | '/settings/privacy'
     | '/settings/shortcuts'
+    | '/settings/workspace-connections'
     | '/threads/$threadId'
     | '/agents/'
     | '/benchmark/'
@@ -355,6 +366,7 @@ export interface FileRouteTypes {
     | '/settings/mcp-servers'
     | '/settings/privacy'
     | '/settings/shortcuts'
+    | '/settings/workspace-connections'
     | '/threads/$threadId'
     | '/agents'
     | '/benchmark'
@@ -388,6 +400,7 @@ export interface FileRouteTypes {
     | '/settings/mcp-servers'
     | '/settings/privacy'
     | '/settings/shortcuts'
+    | '/settings/workspace-connections'
     | '/threads/$threadId'
     | '/agents/'
     | '/benchmark/'
@@ -422,6 +435,7 @@ export interface RootRouteChildren {
   SettingsMcpServersRoute: typeof SettingsMcpServersRoute
   SettingsPrivacyRoute: typeof SettingsPrivacyRoute
   SettingsShortcutsRoute: typeof SettingsShortcutsRoute
+  SettingsWorkspaceConnectionsRoute: typeof SettingsWorkspaceConnectionsRoute
   ThreadsThreadIdRoute: typeof ThreadsThreadIdRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   BenchmarkIndexRoute: typeof BenchmarkIndexRoute
@@ -525,6 +539,13 @@ declare module '@tanstack/react-router' {
       path: '/threads/$threadId'
       fullPath: '/threads/$threadId'
       preLoaderRoute: typeof ThreadsThreadIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/workspace-connections': {
+      id: '/settings/workspace-connections'
+      path: '/settings/workspace-connections'
+      fullPath: '/settings/workspace-connections'
+      preLoaderRoute: typeof SettingsWorkspaceConnectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings/shortcuts': {
@@ -678,6 +699,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsMcpServersRoute: SettingsMcpServersRoute,
   SettingsPrivacyRoute: SettingsPrivacyRoute,
   SettingsShortcutsRoute: SettingsShortcutsRoute,
+  SettingsWorkspaceConnectionsRoute: SettingsWorkspaceConnectionsRoute,
   ThreadsThreadIdRoute: ThreadsThreadIdRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   BenchmarkIndexRoute: BenchmarkIndexRoute,

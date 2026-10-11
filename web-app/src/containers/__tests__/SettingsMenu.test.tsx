@@ -57,7 +57,10 @@ vi.mock('@/hooks/useModelProvider', () => ({
 
 vi.mock('@/stores/code-terminal-store', () => ({
   useCodeTerminalStore: (selector: (state: unknown) => unknown) =>
-    selector({ enabled: true, setEnabled: integrationMocks.setOpenCodeEnabled }),
+    selector({
+      enabled: true,
+      setEnabled: integrationMocks.setOpenCodeEnabled,
+    }),
 }))
 
 vi.mock('@/stores/hermes-agent-store', () => ({
@@ -131,7 +134,9 @@ describe('SettingsMenu', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('common:https_proxy')).toBeInTheDocument()
     expect(screen.getByText('common:mcp-servers')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Workspace connections' })).toHaveAttribute('href', '/settings/workspace-connections')
+    expect(
+      screen.getByRole('link', { name: 'Workspace connections' })
+    ).toHaveAttribute('href', '/settings/workspace-connections')
   })
 
   it('shows the saved integration choices', () => {
@@ -149,9 +154,7 @@ describe('SettingsMenu', () => {
     const user = userEvent.setup()
     render(<SettingsMenu />)
 
-    await user.click(
-      screen.getByRole('switch', { name: 'Hermes integration' })
-    )
+    await user.click(screen.getByRole('switch', { name: 'Hermes integration' }))
 
     expect(integrationMocks.setHermesEnabled).toHaveBeenCalledWith(false)
     expect(integrationMocks.stopTerminal).toHaveBeenCalledWith('hermes')

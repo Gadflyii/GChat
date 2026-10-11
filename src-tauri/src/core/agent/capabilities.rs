@@ -898,20 +898,43 @@ mod tests {
 
     #[test]
     fn workspace_connectors_share_exact_catalog_and_compact_discovery() {
-        let mut catalog = catalog_from_mcp(McpToolsResponse { servers: vec![], tools: vec![] }).unwrap();
-        let names = ["google.gmail.search", "google.gmail.send", "microsoft.outlook.read"];
-        let descriptors = crate::core::connectors::tools().iter()
+        let mut catalog = catalog_from_mcp(McpToolsResponse {
+            servers: vec![],
+            tools: vec![],
+        })
+        .unwrap();
+        let names = [
+            "google.gmail.search",
+            "google.gmail.send",
+            "microsoft.outlook.read",
+        ];
+        let descriptors = crate::core::connectors::tools()
+            .iter()
             .filter(|tool| names.contains(&tool.name))
-            .cloned().map(crate::core::connectors::ConnectedTool::from).collect();
+            .cloned()
+            .map(crate::core::connectors::ConnectedTool::from)
+            .collect();
         catalog.insert_connectors(descriptors).unwrap();
         let disabled = BTreeSet::from(["google::google_gmail_send".into()]);
-        let read = catalog.available_connected_tool("google_gmail_search", &disabled).unwrap();
+        let read = catalog
+            .available_connected_tool("google_gmail_search", &disabled)
+            .unwrap();
         assert_eq!(read.identity, "google.gmail.search");
         assert_eq!(read.server, "google");
-        assert_eq!(read.input_schema["properties"]["account_id"]["type"], "string");
-        assert!(matches!(catalog.target(&read.name), Some(CapabilityTarget::Native(name)) if name == "google.gmail.search"));
-        assert!(catalog.available_connected_tool("google_gmail_send", &disabled).is_none());
-        assert!(catalog.search("gmail", &disabled).iter().all(|tool| tool.identity != "google.gmail.send"));
+        assert_eq!(
+            read.input_schema["properties"]["account_id"]["type"],
+            "string"
+        );
+        assert!(
+            matches!(catalog.target(&read.name), Some(CapabilityTarget::Native(name)) if name == "google.gmail.search")
+        );
+        assert!(catalog
+            .available_connected_tool("google_gmail_send", &disabled)
+            .is_none());
+        assert!(catalog
+            .search("gmail", &disabled)
+            .iter()
+            .all(|tool| tool.identity != "google.gmail.send"));
         let available = catalog.available_agent_tool_names(&disabled);
         assert!(available.contains("google.gmail.search"));
         assert!(available.contains("microsoft.outlook.read"));
@@ -919,14 +942,21 @@ mod tests {
         let functions = catalog.agent_mcp_functions(&disabled);
         assert_eq!(functions.len(), 4);
         assert_eq!(functions[3]["function"]["name"], "connector_call");
-        assert!(functions.iter().all(|function| !names.iter().any(|name| function["function"]["name"] == wire_tool_name(name))));
+        assert!(functions.iter().all(|function| !names
+            .iter()
+            .any(|name| function["function"]["name"] == wire_tool_name(name))));
         let all_disabled = BTreeSet::from([
-            "google::google_gmail_search".into(), "google::google_gmail_send".into(),
+            "google::google_gmail_search".into(),
+            "google::google_gmail_send".into(),
             "microsoft::microsoft_outlook_read".into(),
         ]);
         assert_eq!(catalog.agent_mcp_functions(&all_disabled).len(), 3);
         let approval = RecordingApproval::allow();
-        let scoped = DisabledApproval { disabled: &disabled, catalog: &catalog, inner: &approval };
+        let scoped = DisabledApproval {
+            disabled: &disabled,
+            catalog: &catalog,
+            inner: &approval,
+        };
         assert_eq!(scoped.permission("google.gmail.send"), Permission::Deny);
     }
 
@@ -982,11 +1012,20 @@ mod tests {
         let advertised = catalog.agent_mcp_functions(&disabled);
         assert_eq!(advertised.len(), 3);
         assert_eq!(
-            advertised.iter().map(|tool| tool["function"]["name"].as_str().unwrap()).collect::<Vec<_>>(),
+            advertised
+                .iter()
+                .map(|tool| tool["function"]["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
             ["capability_search", "capability_read", "mcp_call"]
         );
-        assert!(catalog.search("read", &disabled).iter().all(|tool| tool.name != one));
-        assert!(catalog.search("read", &disabled).iter().any(|tool| tool.name == two));
+        assert!(catalog
+            .search("read", &disabled)
+            .iter()
+            .all(|tool| tool.name != one));
+        assert!(catalog
+            .search("read", &disabled)
+            .iter()
+            .any(|tool| tool.name == two));
         assert!(catalog.available_mcp_tool(&one, &disabled).is_none());
         assert!(catalog.available_mcp_tool(&two, &disabled).is_some());
         let approval = RecordingApproval::allow();

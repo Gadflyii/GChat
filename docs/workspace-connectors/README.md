@@ -109,11 +109,12 @@ account; these prerequisites are not available yet. Source fixtures cannot be
 reported as live sign-in or provider qualification.
 
 Next: generate the Settings route and run affected formatting, native checks and
-focused fixtures after C3 releases its
-hardware-profiling interval on October 11 (current booking 396: 00:08–01:08 UTC).
-Wait for its actual end before starting checks. GChat cancelled unused
-CPU booking 394; it holds no build/GPU guard or live job. Reuse existing dependency
-and Cargo caches. Native account acceptance remains a separate unmet prerequisite.
+focused fixtures. C3 returned the workstation at 00:31:43 UTC and cancelled 396.
+GChat CPU-only booking 397 is 00:41–01:06 UTC on October 11, CPUs 0–31; no GPU/model.
+Evidence is owned under `/ai/gchat/out/workspace-connectors-20261011/gate-397/`;
+reuse the existing Ubuntu image, aligned dependency graph and Cargo cache.
+The candidate imports accepted main `ab4c047fe`; passing terminal/default gates
+are reused. Native account acceptance remains a separate unmet prerequisite.
 No publication, signing, production account mutation, new dependency or paid
 Arbitor implementation is authorized by this task.
 
