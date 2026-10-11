@@ -19,3 +19,7 @@ pub mod transport;
 pub mod lan_sharing;
 
 pub mod client;
+
+#[cfg(test)]
+#[path = "../tests/common/resource_measurement.rs"]
+pub(crate) mod resource_measurement;

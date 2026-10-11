@@ -16,7 +16,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, Notify, RwLock};
 use uuid::Uuid;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -139,7 +139,7 @@ pub struct Host {
     pub model_dirs: Vec<PathBuf>,
     pub artifact_sets: Vec<PathBuf>,
     lifecycle: Mutex<()>,
-    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
+    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
 }
 /// An authenticated HTTP caller, not a persistent desktop connection.
@@ -164,23 +164,24 @@ fn now_unix_ms() -> u64 {
 struct RequestLease {
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
     principal: Principal,
-    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
+    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     id: Uuid,
 }
 struct DrainGuard {
-    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, (bool, usize)>>>,
+    traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     id: Uuid,
 }
 impl Drop for DrainGuard {
     fn drop(&mut self) {
-        self.traffic.lock().unwrap().entry(self.id).or_default().0 = false;
+        self.traffic.lock().unwrap().entry(self.id).or_default().draining = false;
     }
 }
 impl Drop for RequestLease {
     fn drop(&mut self) {
-        if let Some((_, count)) = self.traffic.lock().unwrap().get_mut(&self.id) {
-            *count = count.saturating_sub(1);
-        }
+        let idle = if let Some(traffic) = self.traffic.lock().unwrap().get_mut(&self.id) {
+            traffic.count = traffic.count.saturating_sub(1);
+            (traffic.count == 0).then(|| traffic.idle.clone())
+        } else { None };
         let mut activity = self.activity.lock().unwrap();
         if let Some(caller) = activity.get_mut(&self.principal) {
             if let Some(count) = caller.instances.get_mut(&self.id) {
@@ -191,7 +192,18 @@ impl Drop for RequestLease {
             }
             caller.last_seen_unix_ms = Some(now_unix_ms());
         }
+        drop(activity);
+        if let Some(idle) = idle {
+            idle.notify_waiters();
+        }
     }
+}
+
+#[derive(Default)]
+struct InstanceTraffic {
+    draining: bool,
+    count: usize,
+    idle: Arc<Notify>,
 }
 
 // Secrets never pass through desktop-visible snapshots or command logs.
@@ -484,7 +496,15 @@ impl Host {
             let mut pending: Vec<_> = roots.into_iter().map(|p| (p, false)).chain(sets.into_iter().map(|p|(p,true))).collect();
             let mut found = Vec::new();
             let mut errors = Vec::new();
+            type DirectoryListing = Result<Vec<Result<std::ffi::OsString, String>>, String>;
+            let mut directories: BTreeMap<PathBuf, DirectoryListing> = BTreeMap::new();
+            let mut paths = BTreeSet::new();
+            let mut rejected = BTreeMap::new();
+            let mut published = BTreeSet::new();
             while let Some((path, artifact_set)) = pending.pop() {
+                if !paths.insert((path.as_os_str().to_owned(), artifact_set)) {
+                    continue;
+                }
                 let metadata = match std::fs::symlink_metadata(&path) {
                     Ok(m) => m,
                     Err(e) => {
@@ -497,11 +517,23 @@ impl Host {
                     continue;
                 }
                 if metadata.is_dir() && !artifact_set {
-                    match std::fs::read_dir(&path) {
+                    let resolved = match path.canonicalize() {
+                        Ok(path) => path,
+                        Err(e) => {
+                            errors.push(serde_json::json!({"path":path,"error":e.to_string()}));
+                            continue;
+                        }
+                    };
+                    let listing = directories.entry(resolved).or_insert_with(|| {
+                        std::fs::read_dir(&path)
+                            .map(|entries| entries.map(|entry| entry.map(|entry| entry.file_name()).map_err(|e| e.to_string())).collect())
+                            .map_err(|e| e.to_string())
+                    });
+                    match &*listing {
                         Ok(entries) => {
                             for entry in entries {
                                 match entry {
-                                    Ok(entry) => pending.push((entry.path(), false)),
+                                    Ok(name) => pending.push((path.join(name), false)),
                                     Err(e) => errors.push(
                                         serde_json::json!({"path":path,"error":e.to_string()}),
                                     ),
@@ -513,26 +545,39 @@ impl Host {
                         }
                     }
                 } else if artifact_set || path.extension().and_then(|s| s.to_str()) == Some("ginfer") {
-                    let result = if artifact_set {
-                        artifact_set_members(&path)
-                    } else {
-                        inspect_artifact(&path).and_then(|metadata| {
-                            path.canonicalize()
-                                .map(|payload| vec![(payload, metadata)])
-                                .map_err(|e| e.to_string())
-                        })
+                    let resolved = match path.canonicalize() {
+                        Ok(path) => path,
+                        Err(e) => {
+                            errors.push(serde_json::json!({"path":path,"error":e.to_string()}));
+                            continue;
+                        }
                     };
-                    match result.and_then(|members| {
-                        path.canonicalize()
-                            .map(|p| (p, members))
-                            .map_err(|e| e.to_string())
-                    }) {
-                        Ok((path, members)) => {
+                    let key = (resolved.clone(), artifact_set);
+                    if published.contains(&key) {
+                        continue;
+                    }
+                    if let Some(error) = rejected.get(&key) {
+                        errors.push(serde_json::json!({"path":path,"error":error}));
+                        continue;
+                    }
+                    // Each pass owns one validation per resolved entry. Rejected
+                    // entries still report against each configured path.
+                    let result = if artifact_set {
+                        artifact_set_members(&resolved)
+                    } else {
+                        inspect_artifact(&resolved).map(|metadata| vec![(resolved.clone(), metadata)])
+                    };
+                    match result {
+                        Ok(members) => {
+                            published.insert(key);
                             for (payload, metadata) in members {
-                                found.push((path.clone(), payload, metadata, artifact_set));
+                                found.push((resolved.clone(), payload, metadata, artifact_set));
                             }
                         }
-                        Err(e) => errors.push(serde_json::json!({"path":path,"error":e})),
+                        Err(e) => {
+                            errors.push(serde_json::json!({"path":path,"error":e}));
+                            rejected.insert(key, e);
+                        }
                     }
                 }
             }
@@ -584,10 +629,14 @@ impl Host {
     }
     pub async fn refresh_processes(&self) -> Result<(), String> {
         let probes = self.processes.lock().await.pending_readiness().await?;
-        let observations = futures_util::future::join_all(
-            probes.into_iter().map(|probe| probe.observe()),
-        ).await;
+        let (observations, exits) = tokio::join!(
+            futures_util::future::join_all(probes.readiness.into_iter().map(|probe| probe.observe())),
+            futures_util::future::join_all(probes.exits.into_iter().map(|drain| drain.observe())),
+        );
         let mut processes = self.processes.lock().await;
+        for observation in exits {
+            processes.confirm_exit(observation);
+        }
         for observation in observations.into_iter().flatten() {
             processes.confirm_readiness(observation)?;
         }
@@ -602,28 +651,52 @@ impl Host {
         drop(sharing);
         let processes = self.processes.lock().await;
         let reserved = processes.reserved_gpus(None);
+        let observations: Vec<_> = processes.instances().map(|i| (
+            i.instance_id, i.session_id, i.status.clone(), i.last_error.clone(),
+            i.launch.clone(), i.model_metadata.clone(),
+        )).collect();
+        let revision = self.revision.load(Ordering::SeqCst);
+        drop(processes);
+        let profiles = data.profiles.clone();
+        let host_id = data.host_id;
+        let name = data.name.clone();
+        let fleet = data.fleet.clone();
+        let usage = self.client_projection(&data);
+        let membership = match Self::membership_view(&data) {
+            Ok(view) => serde_json::json!(view),
+            Err(error) => serde_json::json!({"error":error}),
+        };
+        let models = self.inventory.read().await.clone();
+        drop(data);
+        let launch_profiles = self.launch_profiles.read().await.clone();
+        let mut model_index: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for model in &models {
+            let metadata = &model.metadata;
+            model_index.entry((metadata.identity.model_id.as_str(), metadata.identity.weights_id.as_str(),
+                metadata.tp_size, metadata.draft_tp, metadata.size_bytes)).or_default().push(model);
+        }
         let mut available_profiles = vec![];
-        for profile in self.launch_profiles.read().await.iter() {
-            for model in self
-                .inventory
-                .read()
-                .await
-                .iter()
-                .filter(|m| profile.matches_model(m))
-            {
+        for profile in &launch_profiles {
+            let key = (profile.identity.model_id.as_str(), profile.identity.weights_id.as_str(),
+                profile.tp, profile.draft_tp, profile.artifact_bytes);
+            if let Some(matching) = model_index.get(&key) {
+                let groups = profile.gpu_groups(&self.gpus, &reserved);
+                let compatible = profile.gpu_groups(&self.gpus, &Default::default());
+                for model in matching {
                 available_profiles.push(serde_json::json!({"profile":profile,"model_id":model.id,
-                    "gpu_groups":profile.gpu_groups(&self.gpus, &reserved),
-                    "compatible_gpu_groups":profile.gpu_groups(&self.gpus, &Default::default())}));
+                    "gpu_groups":groups,"compatible_gpu_groups":compatible}));
+                }
             }
         }
-        let mut instances: Vec<_> = processes.instances().map(|i| serde_json::json!({
-            "instance_id": i.instance_id, "session_id": i.session_id, "display_name": i.launch.model_id,
-            "upstream_model_id": i.launch.model_id, "status": i.status, "last_error": i.last_error,
-            "configuration": i.launch, "model_metadata": i.model_metadata,
-            "profile": data.profiles.get(&i.instance_id),
+        let instance_ids: BTreeSet<_> = observations.iter().map(|(id, ..)| *id).collect();
+        let mut instances: Vec<_> = observations.iter().map(|(id, session, status, error, launch, metadata)| serde_json::json!({
+            "instance_id": id, "session_id": session, "display_name": launch.model_id,
+            "upstream_model_id": launch.model_id, "status": status, "last_error": error,
+            "configuration": launch, "model_metadata": metadata,
+            "profile": profiles.get(id),
         })).collect();
-        for (id, profile) in &data.profiles {
-            if !processes.instances().any(|i| i.instance_id == *id) {
+        for (id, profile) in &profiles {
+            if !instance_ids.contains(id) {
                 instances.push(serde_json::json!({
                     "instance_id":id,"session_id":null,"display_name":profile.model_id.to_string(),
                     "upstream_model_id":"","status":"stopped","last_error":null,
@@ -631,11 +704,6 @@ impl Host {
                 }));
             }
         }
-        let usage = self.client_projection(&data);
-        let membership = match Self::membership_view(&data) {
-            Ok(view) => serde_json::json!(view),
-            Err(error) => serde_json::json!({"error":error}),
-        };
         {
             let traffic = self.traffic.lock().unwrap();
             for instance in &mut instances {
@@ -645,20 +713,20 @@ impl Host {
                 {
                     instance["active_requests"] = traffic
                         .get(&id)
-                        .map(|(_, count)| *count)
+                        .map(|traffic| traffic.count)
                         .unwrap_or(0)
                         .into();
                 }
             }
         }
-        serde_json::json!({"protocol_version":1,"host_id":data.host_id,"boot_id":self.boot_id,
+        serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
             "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
                 "active":network["active"],"port":network["port"],"error":network["error"]},
-            "display_name":data.name,"revision":self.revision.load(Ordering::SeqCst),
-            "fleet":data.fleet,
+            "display_name":name,"revision":revision,
+            "fleet":fleet,
             "fleet_membership":membership,
             "clients":usage["clients"],"local_administrator":usage["local_administrator"],
-            "instances":instances,"gpus":self.gpus,"models":*self.inventory.read().await,
+            "instances":instances,"gpus":self.gpus,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "launch_profiles":available_profiles,"profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
@@ -855,24 +923,29 @@ impl Host {
         Ok(id)
     }
     async fn stop_instance(&self, id: Uuid, force: bool) -> Result<(), String> {
-        self.traffic.lock().unwrap().entry(id).or_default().0 = true;
+        let idle = {
+            let mut traffic = self.traffic.lock().unwrap();
+            let traffic = traffic.entry(id).or_default();
+            traffic.draining = true;
+            traffic.idle.clone()
+        };
         let _draining = DrainGuard {
             traffic: self.traffic.clone(),
             id,
         };
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-        while !force
-            && self
-                .traffic
-                .lock()
-                .unwrap()
-                .get(&id)
-                .is_some_and(|(_, count)| *count > 0)
-        {
-            if tokio::time::Instant::now() >= deadline {
+        while !force {
+            let notified = idle.notified();
+            tokio::pin!(notified);
+            // Register before inspecting the count so the last release cannot
+            // be lost between the check and the await.
+            notified.as_mut().enable();
+            if !self.traffic.lock().unwrap().get(&id).is_some_and(|traffic| traffic.count > 0) {
+                break;
+            }
+            if tokio::time::timeout_at(deadline, notified).await.is_err() {
                 return Err("instance still has active requests; retry after completion or choose force-stop".into());
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
         }
         let result = self.processes.lock().await.stop(id).await;
         self.revision.fetch_add(1, Ordering::SeqCst);
@@ -918,11 +991,11 @@ impl Host {
             .ok_or("missing authenticated inference principal")?;
         let lease = {
             let mut traffic = self.traffic.lock().unwrap();
-            let (draining, count) = traffic.entry(id).or_default();
-            if *draining {
+            let traffic = traffic.entry(id).or_default();
+            if traffic.draining {
                 return Err("instance is draining".into());
             }
-            *count += 1;
+            traffic.count += 1;
             let mut activity = self.activity.lock().unwrap();
             let caller = activity.entry(principal).or_default();
             *caller.instances.entry(id).or_default() += 1;
@@ -962,13 +1035,16 @@ impl Host {
             if !bytes.is_empty() {
                 let mut body: serde_json::Value =
                     serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+                drop(bytes);
                 if !body.is_object() {
                     return Err("inference body must be a JSON object".into());
                 }
                 if suffix != "v1/ginfer/benchmark" {
                     body["model"] = model.into();
                 }
-                upstream = upstream.json(&body);
+                let serialized = serde_json::to_vec(&body).map_err(|e| e.to_string())?;
+                drop(body);
+                upstream = upstream.header("content-type", "application/json").body(serialized);
             }
         }
         let response = upstream.send().await.map_err(|e| e.to_string())?;
@@ -1910,6 +1986,314 @@ mod target_launch_tests {
 }
 
 #[cfg(all(test, unix))]
+mod resource_tests {
+    use super::*;
+    use std::{future::Future, os::unix::fs::PermissionsExt};
+
+    async fn fixture() -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = dir.path().join("engine");
+        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let models = dir.path().join("models");
+        std::fs::create_dir(&models).unwrap();
+        let metadata = serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
+        let mut bytes = b"NINFER\0\x03".to_vec();
+        bytes.extend((metadata.len() as u64).to_le_bytes());
+        bytes.extend(metadata.as_bytes());
+        bytes.resize(4096, 0);
+        std::fs::write(models.join("model.ginfer"), &bytes).unwrap();
+        let gpus = (0..4).map(|index| Gpu {
+            uuid: format!("GPU-fixture-{index}"), name: "Fixture GPU".into(),
+            display_name: None, memory_mib: 32768, compute_capability: Some("12.0".into()),
+        }).collect();
+        let host = Host::open(dir.path().join("state"), "Resource fixture".into(), engine,
+            vec![models], vec![], gpus).await.unwrap();
+        let request = LaunchRequest {
+            instance_id: None, qualified_profile_id: None, model_id: host.inventory.read().await[0].id,
+            gpu_uuids: vec!["GPU-fixture-0".into()], max_context: 8192, concurrency: 1,
+            options: LaunchOptions::default(),
+        };
+        (dir, host, request)
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_inference_body_one_mib_preserves_json_and_model() {
+        let (_dir, host, request) = fixture().await;
+        let id = host.launch(request).await.unwrap();
+        let port = host.processes.lock().await.instances().find(|instance| instance.instance_id == id).unwrap().launch.port;
+        let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let capture = received.clone();
+        let upstream = hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(hyper::service::make_service_fn(move |_| {
+            let capture = capture.clone();
+            async move { Ok::<_, std::convert::Infallible>(hyper::service::service_fn(move |req: Request<Body>| {
+                let capture = capture.clone();
+                async move {
+                    let body = match req.uri().path() {
+                        "/health" => "{}".to_owned(),
+                        "/v1/models" => serde_json::json!({"data":[{"id":"muse-glimmer-30b/nvfp4"}]}).to_string(),
+                        _ => {
+                            let content_type = req.headers().get("content-type").map(|value| value.to_str().unwrap().to_owned());
+                            let bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+                            let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                            capture.lock().unwrap().push((content_type, value));
+                            "{}".to_owned()
+                        }
+                    };
+                    Ok::<_, std::convert::Infallible>(Response::new(Body::from(body)))
+                }
+            })) }
+        }));
+        let server = tokio::spawn(upstream);
+        host.refresh_processes().await.unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let call = |suffix: &str, bytes: Vec<u8>| Request::post(format!("/host/v1/instances/{id}/inference/{suffix}"))
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "text/plain").body(Body::from(bytes)).unwrap();
+        let mut original = serde_json::json!({"model":"caller-alias", "messages":[{"role":"user", "content":"Unicode 🐦\nquoted \"text\""}], "padding":""});
+        let prefix_bytes = serde_json::to_vec(&original).unwrap().len();
+        original["padding"] = "x".repeat(1024 * 1024 - prefix_bytes).into();
+        let bytes = serde_json::to_vec(&original).unwrap();
+        let input_bytes = bytes.len();
+        let request = call("v1/chat/completions", bytes);
+        let measurement = crate::resource_measurement::Measurement::start();
+        let response = host.clone().route(request).await.unwrap();
+        let status = response.status();
+        let response_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        measurement.finish("service_resource_inference_body_one_mib");
+        let benchmark = host.clone().route(call("v1/ginfer/benchmark", br#"{"model":"benchmark-owned"}"#.to_vec())).await.unwrap();
+        let invalid_object = host.clone().route(call("v1/chat/completions", b"[]".to_vec())).await.unwrap();
+        let invalid_json = host.clone().route(call("v1/chat/completions", b"{broken".to_vec())).await.unwrap();
+        let captured = received.lock().unwrap().clone();
+        host.processes.lock().await.shutdown().await.unwrap();
+        server.abort();
+        let _ = server.await;
+        original["model"] = "muse-glimmer-30b/nvfp4".into();
+        assert_eq!(input_bytes, 1024 * 1024);
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(response_bytes.as_ref(), b"{}");
+        assert_eq!(benchmark.status(), StatusCode::OK);
+        assert_eq!(invalid_object.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(invalid_json.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(captured.len(), 2);
+        assert_eq!(captured[0], (Some("application/json".to_owned()), original));
+        assert_eq!(captured[1], (Some("application/json".to_owned()), serde_json::json!({"model":"benchmark-owned"})));
+    }
+
+    #[tokio::test]
+    async fn service_body_cap_uses_actual_bytes_with_exact_and_unreliable_hints() {
+        let mut exact = Request::new(Body::from("12345678"));
+        assert_eq!(bounded_body(&mut exact, 8).await.unwrap(), b"12345678");
+        let mut over = Request::new(Body::from("123456789"));
+        assert_eq!(bounded_body(&mut over, 8).await.unwrap_err(), "request exceeds host body limit");
+        let chunks = futures_util::stream::iter([Ok::<_, std::convert::Infallible>("1234"), Ok("5678")]);
+        let mut unknown = Request::builder().header("content-length", u64::MAX.to_string()).body(Body::wrap_stream(chunks)).unwrap();
+        assert_eq!(bounded_body(&mut unknown, 8).await.unwrap(), b"12345678");
+        let chunks = futures_util::stream::iter([Ok::<_, std::convert::Infallible>("1234"), Ok("56789")]);
+        let mut misleading = Request::builder().header("content-length", "1").body(Body::wrap_stream(chunks)).unwrap();
+        assert_eq!(bounded_body(&mut misleading, 8).await.unwrap_err(), "request exceeds host body limit");
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_scan_deduplicates_managed_paths_and_refreshes_errors() {
+        use sha2::Digest;
+        let (dir, host, _) = fixture().await;
+        let package = host.downloads.root().join("package");
+        std::fs::create_dir(&package).unwrap();
+        let payload = package.join("model.ginfer");
+        std::fs::copy(dir.path().join("models/model.ginfer"), &payload).unwrap();
+        let id = Uuid::new_v4();
+        let download = crate::model_downloads::Download {
+            id, release: crate::model_downloads::Release {
+                name: "Owned local fixture".into(), identity: host.inventory.read().await[0].metadata.identity.clone(),
+                url: "https://huggingface.co/SectileLabs/fixture/resolve/0000000000000000000000000000000000000000/model.ginfer".into(),
+                sha256: hex::encode(Sha256::digest(std::fs::read(&payload).unwrap())), bytes: 4096,
+                tp: 1, qualified_sm: vec!["12.0".into()], min_vram_mib_per_gpu: 32768,
+                capabilities: vec![], launch_profiles: vec![],
+            }, status: "installed".into(), received: 4096, bytes_per_second: 0,
+            error: None, path: Some(payload.clone()), storage_root: host.downloads.root(),
+        };
+        std::fs::write(dir.path().join("state/model-downloads.json"),
+            serde_json::to_vec(&BTreeMap::from([(id, download)])).unwrap()).unwrap();
+        let executable = dir.path().join("engine");
+        drop(host);
+        let broken = dir.path().join("models/broken.ginfer");
+        std::fs::write(&broken, b"invalid fixture").unwrap();
+        let missing = dir.path().join("missing.ginfer");
+        let models_alias = dir.path().join("models/.");
+        let host = Host::open(dir.path().join("state"), "Ignored".into(), executable,
+            vec![dir.path().join("models"), models_alias.clone(), package, payload.clone(), missing.clone()], vec![], vec![]).await.unwrap();
+        host.data.lock().await.local_artifacts.push(payload.clone());
+        let ids: BTreeMap<_, _> = host.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        println!("RESOURCE_SCAN_PHASE_BEGIN managed_packages=1 visible_models=2 duplicate_sources=root/job/local/configured");
+        let measurement = crate::resource_measurement::Measurement::start();
+        host.scan().await.unwrap();
+        measurement.finish("service_resource_scan_one_pass");
+        let first = host.snapshot().await;
+        std::fs::OpenOptions::new().write(true).open(&payload).unwrap().set_len(8192).unwrap();
+        std::fs::remove_file(&broken).unwrap();
+        host.scan().await.unwrap();
+        let second = host.snapshot().await;
+        let refreshed: BTreeMap<_, _> = host.inventory.read().await.iter().map(|model| (model.path.clone(), model.id)).collect();
+        assert_eq!(ids, refreshed);
+        assert_eq!(first["models"].as_array().unwrap().len(), 2);
+        let errors = first["inventory_errors"].as_array().unwrap();
+        assert_eq!(errors.len(), 3);
+        assert!(errors.iter().any(|error| error["path"] == broken.to_string_lossy().as_ref()));
+        assert!(errors.iter().any(|error| error["path"] == models_alias.join("broken.ginfer").to_string_lossy().as_ref()));
+        assert_eq!(second["inventory_errors"].as_array().unwrap().len(), 1);
+        assert_eq!(second["inventory_errors"][0]["path"], missing.to_string_lossy().as_ref());
+        assert_eq!(second["models"].as_array().unwrap().iter().find(|model| model["path"] == payload.to_string_lossy().as_ref()).unwrap()["metadata"]["size_bytes"], 8192);
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_snapshot_matches_catalog_and_reserved_instances() {
+        let (dir, host, request) = fixture().await;
+        std::fs::copy(dir.path().join("models/model.ginfer"), dir.path().join("models/second.ginfer")).unwrap();
+        host.scan().await.unwrap();
+        let models = host.inventory.read().await.clone();
+        let mut catalog = Vec::new();
+        for index in 0..174 {
+            let mut profile: crate::launch_profiles::LaunchProfile = serde_json::from_value(serde_json::json!({
+                "id":format!("fixture-{index}"), "name":"Synthetic resource fixture", "platform":std::env::consts::OS,
+                "identity":models[0].metadata.identity, "artifact_sha256":"a".repeat(64), "artifact_bytes":4096,
+                "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU", "compute_capability":"12.0", "vram_tier_gib":32,
+                "min_memory_mib_per_gpu":32768, "max_context":8192, "concurrency":1, "options":{},
+                "qualification":{"tier":"full-context-tested", "evidence":"synthetic fixture only", "engine_revision":"fixture", "free_bytes_per_gpu":1_u64 << 30, "full_context_requests":1}
+            })).unwrap();
+            match index { 0 => profile.tp = 2, 1 => profile.artifact_bytes = 8192, 2 => profile.identity.weights_id = "groupwise-int".into(), _ => {} }
+            catalog.push(profile);
+        }
+        *host.launch_profiles.write().await = catalog.clone();
+        let mut ids = Vec::new();
+        for index in 0..4 {
+            let mut request = request.clone();
+            request.gpu_uuids = vec![format!("GPU-fixture-{index}")];
+            ids.push(host.launch(request).await.unwrap());
+        }
+        let offline_id = Uuid::new_v4();
+        let mut offline = request.clone();
+        offline.instance_id = Some(offline_id);
+        offline.gpu_uuids = vec!["GPU-offline".into()];
+        host.data.lock().await.profiles.insert(offline_id, offline.clone());
+        let reserved = host.processes.lock().await.reserved_gpus(None);
+        let expected: Vec<_> = catalog.iter().flat_map(|profile| models.iter().filter(|model| profile.matches_model(model)).map(|model| serde_json::json!({
+            "profile":profile, "model_id":model.id, "gpu_groups":profile.gpu_groups(&host.gpus, &reserved),
+            "compatible_gpu_groups":profile.gpu_groups(&host.gpus, &Default::default()),
+        }))).collect();
+        let measurement = crate::resource_measurement::Measurement::start();
+        let snapshot = host.snapshot().await;
+        measurement.finish("service_resource_snapshot_174_profiles_4_instances");
+        host.processes.lock().await.shutdown().await.unwrap();
+        assert_eq!(snapshot["launch_profiles"], serde_json::json!(expected));
+        let instances = snapshot["instances"].as_array().unwrap();
+        assert_eq!(instances.len(), 5);
+        let stopped = instances.iter().find(|instance| instance["instance_id"] == offline_id.to_string()).unwrap();
+        assert_eq!(stopped["status"], "stopped");
+        assert!(stopped["session_id"].is_null());
+        assert_eq!(stopped["profile"], serde_json::to_value(offline).unwrap());
+        for id in ids {
+            let instance = instances.iter().find(|instance| instance["instance_id"] == id.to_string()).unwrap();
+            assert_eq!(instance["status"], "starting");
+            assert!(instance["session_id"].is_string());
+            assert_eq!(instance["profile"]["model_id"], request.model_id.to_string());
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
+    async fn service_resource_stop_waits_for_final_stream_and_force_keeps_leases() {
+        let (_dir, host, request) = fixture().await;
+        let id = host.launch(request.clone()).await.unwrap();
+        let port = host.processes.lock().await.instances().find(|i| i.instance_id == id).unwrap().launch.port;
+        let senders = Arc::new(std::sync::Mutex::new(Vec::<hyper::body::Sender>::new()));
+        let serve = |port| {
+        let capture = senders.clone();
+        let upstream = hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(hyper::service::make_service_fn(move |_| {
+            let capture = capture.clone();
+            async move { Ok::<_, std::convert::Infallible>(hyper::service::service_fn(move |req: Request<Body>| {
+                let capture = capture.clone();
+                async move {
+                    let body = match req.uri().path() {
+                        "/health" => Body::from("{}"),
+                        "/v1/models" => Body::from(serde_json::json!({"data":[{"id":"muse-glimmer-30b/nvfp4"}]}).to_string()),
+                        _ => { let (sender, body) = Body::channel(); capture.lock().unwrap().push(sender); body }
+                    };
+                    Ok::<_, std::convert::Infallible>(Response::new(body))
+                }
+            })) }
+        }));
+        tokio::spawn(upstream)
+        };
+        let server = serve(port);
+        host.refresh_processes().await.unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let inference = || Request::post(format!("/host/v1/instances/{id}/inference/v1/chat/completions"))
+            .header("authorization", format!("Bearer {token}")).body(Body::from("{}")).unwrap();
+        let first = host.clone().route(inference()).await.unwrap();
+        let second = host.clone().route(inference()).await.unwrap();
+        let stop = Request::post(format!("/host/v1/instances/{id}/stop"))
+            .header("authorization", format!("Bearer {token}")).body(Body::from("{}")).unwrap();
+        let mut stopping = Box::pin(host.clone().route(stop));
+        let polls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let capture = polls.clone();
+        let measurement = crate::resource_measurement::Measurement::start();
+        let mut stopping = tokio::spawn(futures_util::future::poll_fn(move |cx| {
+            capture.fetch_add(1, Ordering::SeqCst);
+            stopping.as_mut().poll(cx)
+        }));
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        let draining = host.clone().route(inference()).await.unwrap();
+        drop(first);
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        let waiting_for_second = !stopping.is_finished();
+        drop(second);
+        let released = tokio::time::Instant::now();
+        let outcome = tokio::time::timeout(Duration::from_secs(3), &mut stopping).await;
+        if outcome.is_err() {
+            stopping.abort();
+            let _ = stopping.await;
+        }
+        let release_ns = released.elapsed().as_nanos();
+        measurement.finish("service_resource_stop_two_withheld_streams");
+        println!("RESOURCE_DRAIN polls={} withheld_ms=240 final_release_ns={release_ns}", polls.load(Ordering::SeqCst));
+        let after = host.snapshot().await;
+        server.abort();
+        let _ = server.await;
+        let start = Request::post(format!("/host/v1/instances/{id}/start"))
+            .header("authorization", format!("Bearer {token}")).body(Body::from("{}")).unwrap();
+        let started = host.clone().route(start).await.unwrap();
+        let port = host.processes.lock().await.instances().find(|i| i.instance_id == id).unwrap().launch.port;
+        let server = serve(port);
+        host.refresh_processes().await.unwrap();
+        let first = host.clone().route(inference()).await.unwrap();
+        let second = host.clone().route(inference()).await.unwrap();
+        let force = Request::post(format!("/host/v1/instances/{id}/stop"))
+            .header("authorization", format!("Bearer {token}")).body(Body::from("{\"force\":true}")).unwrap();
+        let forced = tokio::time::timeout(Duration::from_secs(3), host.clone().route(force)).await;
+        let after_force = host.snapshot().await;
+        drop(first);
+        drop(second);
+        host.processes.lock().await.shutdown().await.unwrap();
+        server.abort();
+        let _ = server.await;
+        assert_eq!(draining.status(), StatusCode::BAD_REQUEST);
+        assert!(waiting_for_second);
+        assert_eq!(outcome.unwrap().unwrap().unwrap().status(), StatusCode::OK);
+        assert_eq!(after["instances"][0]["status"], "stopped");
+        assert_eq!(after["instances"][0]["active_requests"], 0);
+        assert_eq!(started.status(), StatusCode::OK);
+        assert_eq!(forced.unwrap().unwrap().status(), StatusCode::OK);
+        assert_eq!(after_force["instances"][0]["status"], "stopped");
+        assert_eq!(after_force["instances"][0]["active_requests"], 2);
+        assert_ne!(after_force["instances"][0]["session_id"], after["instances"][0]["session_id"]);
+    }
+}
+
+#[cfg(all(test, unix))]
 mod lifecycle_tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
@@ -2491,7 +2875,10 @@ mod lifecycle_tests {
 }
 async fn bounded_body(req: &mut Request<Body>, limit: usize) -> Result<Vec<u8>, String> {
     use hyper::body::HttpBody;
-    let mut bytes = Vec::new();
+    let capacity = req.body().size_hint().exact()
+        .filter(|size| *size <= limit as u64)
+        .map_or(0, |size| size as usize);
+    let mut bytes = Vec::with_capacity(capacity);
     while let Some(chunk) = req.body_mut().data().await {
         let chunk = chunk.map_err(|e| e.to_string())?;
         if bytes.len() + chunk.len() > limit {

@@ -23,7 +23,58 @@ Engine speed work are excluded. The sole issue authority is GInfer
 `docs/maintainer/open-work.md`; [remaining acceptance](../agent-runtime/remaining-acceptance.md)
 records unavailable physical prerequisites without making a second issue list.
 
-## Current bug-remediation phase
+## Active serving and Host/Manager resource fixes — October 11
+
+Ron/bubbs assigned OI-115–119 and C1-CORE-021 at 01:11 UTC, due 04:00 UTC.
+Deliver implemented clear ownership improvements and one focused before/after
+request or catalog-pass measurement for each changed behavior, preserving public
+protocols, exact stream bytes/tails, model/session identity, limits, constant-time
+authentication, full hashes, journal durability and cross-client freshness.
+Use the existing review evidence and master rows; no repeat review campaign.
+This is CPU-only source work: no model/GPU, native Windows build, installer,
+release, signing, provider access, dependency change or policy/limit adjustment.
+
+Candidate: `/ai/gchat-worktrees/review-resources-72cd`, branch
+`perf/gchat-review-resources-72cd`, baseline main `72cd661bf`. Root owns
+integration, measurements, review, commits and the sole master-list updates.
+Eight agents own disjoint stream, download, inventory, registry, lifecycle,
+service, Manager-native and Manager-UI leaves. All changes to `service.rs` have
+one owner; all changes to `engine_host.rs` have one owner. Agents prepare focused
+fixtures and measurement questions, and freeze source before root execution;
+they do not run local compiles or suites. Shared Cargo target and aligned frontend
+graph are reused. Evidence: `/ai/gchat/out/review-resources-20261011/`.
+The separate GInfer candidate and C1-CORE-021 are owned in
+`/ai/ginfer-worktrees/response-store-review-20261011/docs/response-store/README.md`.
+Source is frozen for measured gates. Independent source reviews accept stream,
+request credential, registry, inventory/profile, lifecycle, Manager and service
+ownership changes, including the corrected per-path directory diagnostics and
+Stop-during-exit-drain final diagnostics. All eight owners are frozen.
+Original-source measurement overlays are at
+`/ai/gchat-worktrees/review-resources-baseline-72cd` (branch `test/gchat-review-resources-baseline-72cd`, original 72cd661bf):
+test additions and extraction-only original production helpers, not copied
+reference algorithms. Both use the same compiler/profile, fixtures and shared
+Cargo target. Retain both sources until accepted; no model copies or anonymous
+build directories are allocated. CPU booking 400, October 11 01:50–02:15 UTC,
+CPUs 16–31 only; canonical local-build guard, no GPU/model. No job has started.
+
+Next: one original/candidate measurement each for fragmented SSE, response handle,
+authenticated request, bounded tail/drain, 1 MiB inference body, catalog/profile
+pass, journal/full SHA with unrelated control, real unchanged TLS fleet read,
+174-profile snapshot, request drain, launcher/bootstrap and Manager projection.
+Candidate correctness controls exercise changed boundaries; affected Host/Manager
+check and strict Clippy follow. Manager UI uses the actual modules in the same
+JSDOM fixture, with DOM/serialization/storage work counts, not native idle/RSS.
+Rows close only for demonstrated scope; remaining subfindings are explicit.
+Linux `df`, daemon worker-count selection and physical Windows SCM/UNC/native-idle
+qualification remain unresolved; no arbitrary ABI, thread cap or gain is invented.
+
+C1-CORE-021 is signed/merged as GInfer dev/next 7af8f6114. Strict original/candidate
+owning oracle tests pass; one near-capacity put allocations 21,228→16, requested
+bytes 6,430,400→3,288 and total wall 4.832 ms→3.330 microseconds. Post-merge owning
+fixture passes using the source-identical accepted binary. One served continuation
+chain awaits the next merged-source donor; no older-engine result is substituted.
+
+## Accepted Host/Manager bug fixes — October 10
 
 The Host/Manager review was merged and pushed as main `0dd5d45ce`. The master
 rows are merged in GInfer dev/next `c72edea85`. Ron's next instruction is to fix

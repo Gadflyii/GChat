@@ -22,6 +22,7 @@ pub fn model_metadata(value: &mut Value, alias: &str) -> bool {
 
 pub struct AliasEvents {
     pending: Vec<u8>,
+    scanned: usize,
     alias: String,
     scope: Option<crate::response_route::ResponseScope>,
 }
@@ -29,6 +30,7 @@ impl AliasEvents {
     pub fn new(alias: &str) -> Self {
         Self {
             pending: Vec::new(),
+            scanned: 0,
             alias: alias.into(),
             scope: None,
         }
@@ -37,27 +39,34 @@ impl AliasEvents {
         self.pending.extend_from_slice(bytes);
         let mut output = Vec::new();
         let mut consumed = 0;
-        for index in 0..self.pending.len() {
-            let end = if self.pending[index..].starts_with(b"\r\n\r\n") {
+        let mut index = self.scanned;
+        while index < self.pending.len() {
+            let remaining = &self.pending[index..];
+            let end = if remaining.starts_with(b"\r\n\r\n") {
                 Some(index + 4)
-            } else if self.pending[index..].starts_with(b"\n\n") {
+            } else if remaining.starts_with(b"\n\n") {
                 Some(index + 2)
             } else {
                 None
             };
             if let Some(end) = end {
-                if index < consumed {
-                    continue;
-                }
-                output.extend(rewrite_event(
+                rewrite_event(
                     &self.pending[consumed..end],
                     &self.alias,
                     self.scope.as_ref(),
-                )?);
+                    &mut output,
+                )?;
                 consumed = end;
+                index = end;
+            } else if b"\r\n\r\n".starts_with(remaining) || b"\n\n".starts_with(remaining) {
+                // Only a delimiter prefix can change when the next fragment arrives.
+                break;
+            } else {
+                index += 1;
             }
         }
         self.pending.drain(..consumed);
+        self.scanned = index - consumed;
         Ok(output)
     }
     pub fn finish(self) -> Result<(), String> {
@@ -73,21 +82,35 @@ fn rewrite_event(
     frame: &[u8],
     alias: &str,
     scope: Option<&crate::response_route::ResponseScope>,
-) -> Result<Vec<u8>, String> {
+    output: &mut Vec<u8>,
+) -> Result<(), String> {
     let text = std::str::from_utf8(frame).map_err(|e| e.to_string())?;
-    let data: Vec<_> = text
+    let mut lines = text
         .lines()
         .filter_map(|line| {
             line.strip_prefix("data:")
                 .map(|s| s.strip_prefix(' ').unwrap_or(s))
-        })
-        .collect();
-    if data.is_empty() {
-        return Ok(frame.to_vec());
-    }
-    let data = data.join("\n");
+        });
+    let Some(first) = lines.next() else {
+        output.extend_from_slice(frame);
+        return Ok(());
+    };
+    let data = if let Some(second) = lines.next() {
+        let capacity = first.len() + second.len() + 1
+            + lines.clone().map(|line| line.len() + 1).sum::<usize>();
+        let mut data = String::with_capacity(capacity);
+        data.push_str(first);
+        for line in std::iter::once(second).chain(lines) {
+            data.push('\n');
+            data.push_str(line);
+        }
+        std::borrow::Cow::Owned(data)
+    } else {
+        std::borrow::Cow::Borrowed(first)
+    };
     if data.trim() == "[DONE]" {
-        return Ok(frame.to_vec());
+        output.extend_from_slice(frame);
+        return Ok(());
     }
     let mut value: Value =
         serde_json::from_str(&data).map_err(|e| format!("invalid upstream event JSON: {e}"))?;
@@ -96,22 +119,25 @@ fn rewrite_event(
         changed |= scope.rewrite(&mut value);
     }
     if !changed {
-        return Ok(frame.to_vec());
+        output.extend_from_slice(frame);
+        return Ok(());
     }
-    let mut result = String::new();
+    output.reserve(frame.len());
     let mut wrote = false;
     for line in text.lines() {
         if line.starts_with("data:") {
             if !wrote {
-                result.push_str(&format!("data: {}\n", value));
+                output.extend_from_slice(b"data: ");
+                serde_json::to_writer(&mut *output, &value).map_err(|e| e.to_string())?;
+                output.push(b'\n');
                 wrote = true;
             }
         } else {
-            result.push_str(line);
-            result.push('\n');
+            output.extend_from_slice(line.as_bytes());
+            output.push(b'\n');
         }
     }
-    Ok(result.into_bytes())
+    Ok(())
 }
 
 pub async fn alias_response(
@@ -180,6 +206,45 @@ pub async fn alias_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "one fragmented-request resource measurement"]
+    fn request_resource_measurement_fragmented_alias_event() {
+        let generated = "x".repeat(8192);
+        let value = serde_json::json!({"model":"upstream","choices":[{"delta":{"content":generated}}]});
+        let input = format!("event: message\r\ndata: {value}\r\n\r\ndata: {{\"usage\":{{\"completion_tokens\":1}}}}\n\ndata: [DONE]\n\n");
+        let mut expected_value = value.clone();
+        expected_value["model"] = "ginfer/host/instance".into();
+        let expected = format!("event: message\ndata: {expected_value}\n\ndata: {{\"usage\":{{\"completion_tokens\":1}}}}\n\ndata: [DONE]\n\n");
+        let measurement = crate::resource_measurement::Measurement::start();
+        let mut events = AliasEvents::new("ginfer/host/instance");
+        let mut output = Vec::new();
+        for byte in input.as_bytes() {
+            output.extend(events.push(std::slice::from_ref(byte)).unwrap());
+        }
+        events.finish().unwrap();
+        measurement.finish("fragmented_alias_event");
+        assert_eq!(output, expected.as_bytes());
+    }
+
+    #[test]
+    fn request_resources_delimiter_fragments_preserve_raw_frames_and_errors() {
+        let input = b": ping\r\n\r\n\r\n: next\n\ndata: [DONE]\r\n\r\n";
+        for split in 0..=input.len() {
+            let mut events = AliasEvents::new("alias");
+            let mut output = events.push(&input[..split]).unwrap();
+            output.extend(events.push(&input[split..]).unwrap());
+            events.finish().unwrap();
+            assert_eq!(output, input, "split {split}");
+        }
+        for invalid in [&b"data: {broken}\n\n"[..], &b"data: \xff\n\n"[..]] {
+            let mut events = AliasEvents::new("alias");
+            for byte in &invalid[..invalid.len() - 1] {
+                assert!(events.push(std::slice::from_ref(byte)).unwrap().is_empty());
+            }
+            assert!(events.push(&invalid[invalid.len() - 1..]).is_err());
+        }
+    }
+
     #[test]
     fn response_event_handles_keep_item_and_tool_identifiers_unchanged() {
         let scope = crate::response_route::ResponseScope {

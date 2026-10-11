@@ -35,27 +35,60 @@ struct InventoryObject {
 
 impl Directory {
     fn nvfp4_kv_available(&self) -> bool {
-        if self.identity.model_id == "qwen3.8-flash-next" {
-            let tensor = |name: &str, rank: serde_json::Value| self.objects.iter()
-                .any(|object| object.kind == "tensor" && object.name == name && object.rank == rank);
-            return tensor("nvfp4_kv/profile_v2", "all".into())
-                && self.objects.iter().any(|object| object.kind == "resource" && object.name == "nvfp4_kv/provenance")
-                && (0..self.tp_size).all(|rank| {
-                    let placement: serde_json::Value = if self.tp_size == 1 { "all".into() } else { rank.into() };
-                    ["nvfp4_kv/body_inverse_global_scales", "nvfp4_kv/mtp_inverse_global_scales"]
-                        .iter().all(|name| tensor(name, placement.clone()))
-                });
-        }
-        let suffixes: &[&str] = match self.identity.model_id.as_str() {
-            "qwen3.8-27b" => &["profile_v1", "inverse_global_scales"],
-            "muse-glimmer-30b" => &["profile_v2", "full_inverse_global_scales", "sliding_inverse_global_scales"],
+        let model = self.identity.model_id.as_str();
+        let required = match model {
+            "qwen3.8-flash-next" | "qwen3.8-27b" => 0b011,
+            "muse-glimmer-30b" => 0b111,
             _ => return false,
         };
-        (0..self.tp_size).all(|rank| suffixes.iter().all(|suffix| {
-            let name = format!("text/kv_cache/nvfp4_g16/{suffix}");
-            self.objects.iter().any(|object| object.kind == "tensor" && object.name == name
-                && (object.rank == rank || object.rank == "all"))
-        }))
+        let flash = model == "qwen3.8-flash-next";
+        let mut profile = false;
+        let mut provenance = false;
+        let mut present = [0u8; 4];
+        let ready = |present: &[u8], profile, provenance| {
+            (!flash || (profile && provenance)) && present.iter().all(|bits| *bits == required)
+        };
+        // Inventory validates TP before this pass; each bit is one required tensor.
+        for object in &self.objects {
+            if flash && object.kind == "resource" && object.name == "nvfp4_kv/provenance" {
+                provenance = true;
+                if ready(&present[..self.tp_size as usize], profile, provenance) {
+                    return true;
+                }
+            }
+            if object.kind != "tensor" {
+                continue;
+            }
+            let bit = match (model, object.name.as_str()) {
+                ("qwen3.8-flash-next", "nvfp4_kv/profile_v2") => {
+                    profile |= object.rank == "all";
+                    0
+                }
+                ("qwen3.8-flash-next", "nvfp4_kv/body_inverse_global_scales")
+                | ("qwen3.8-27b", "text/kv_cache/nvfp4_g16/profile_v1")
+                | ("muse-glimmer-30b", "text/kv_cache/nvfp4_g16/profile_v2") => 0b001,
+                ("qwen3.8-flash-next", "nvfp4_kv/mtp_inverse_global_scales")
+                | ("qwen3.8-27b", "text/kv_cache/nvfp4_g16/inverse_global_scales")
+                | ("muse-glimmer-30b", "text/kv_cache/nvfp4_g16/full_inverse_global_scales") => 0b010,
+                ("muse-glimmer-30b", "text/kv_cache/nvfp4_g16/sliding_inverse_global_scales") => 0b100,
+                _ => continue,
+            };
+            if object.rank == "all" {
+                if !flash || self.tp_size == 1 {
+                    for rank in &mut present[..self.tp_size as usize] {
+                        *rank |= bit;
+                    }
+                }
+            } else if !flash || self.tp_size != 1 {
+                if let Some(rank) = object.rank.as_u64().filter(|rank| *rank < u64::from(self.tp_size)) {
+                    present[rank as usize] |= bit;
+                }
+            }
+            if ready(&present[..self.tp_size as usize], profile, provenance) {
+                return true;
+            }
+        }
+        ready(&present[..self.tp_size as usize], profile, provenance)
     }
 }
 
@@ -253,6 +286,51 @@ mod tests {
         assert!(serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
         value["objects"][2]["rank"] = 0.into();
         assert!(!serde_json::from_value::<Directory>(value).unwrap().nvfp4_kv_available());
+    }
+
+    #[test]
+    fn legacy_nvfp4_calibration_requires_each_tensor_on_every_rank() {
+        for (model, suffixes) in [
+            ("qwen3.8-27b", vec!["profile_v1", "inverse_global_scales"]),
+            ("muse-glimmer-30b", vec!["profile_v2", "full_inverse_global_scales", "sliding_inverse_global_scales"]),
+        ] {
+            for tp in [1, 2, 4] {
+                let mut value = directory();
+                value["identity"]["model_id"] = model.into();
+                value["tp_size"] = tp.into();
+                let mut objects = Vec::new();
+                for suffix in &suffixes {
+                    for rank in 0..tp {
+                        objects.push(serde_json::json!({"kind":"tensor", "rank":rank,
+                            "name":format!("text/kv_cache/nvfp4_g16/{suffix}")}));
+                    }
+                }
+                value["objects"] = objects.into();
+                assert!(serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
+                for index in 0..value["objects"].as_array().unwrap().len() {
+                    let mut missing = value.clone();
+                    missing["objects"].as_array_mut().unwrap().remove(index);
+                    assert!(!serde_json::from_value::<Directory>(missing).unwrap().nvfp4_kv_available());
+                    for invalid in [serde_json::json!("0"), serde_json::json!(0.0), serde_json::json!(-1), serde_json::json!(tp), serde_json::Value::Null] {
+                        let mut misplaced = value.clone();
+                        misplaced["objects"][index]["rank"] = invalid;
+                        assert!(!serde_json::from_value::<Directory>(misplaced).unwrap().nvfp4_kv_available());
+                    }
+                    let mut wrong_kind = value.clone();
+                    wrong_kind["objects"][index]["kind"] = "resource".into();
+                    assert!(!serde_json::from_value::<Directory>(wrong_kind).unwrap().nvfp4_kv_available());
+                }
+                // One shared tensor can cover all ranks; repeated copies cannot replace another name.
+                value["objects"][0]["rank"] = "all".into();
+                assert!(serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
+                let duplicate = value["objects"][0].clone();
+                value["objects"].as_array_mut().unwrap().push(duplicate);
+                assert!(serde_json::from_value::<Directory>(value.clone()).unwrap().nvfp4_kv_available());
+                let last_name = format!("text/kv_cache/nvfp4_g16/{}", suffixes.last().unwrap());
+                value["objects"].as_array_mut().unwrap().retain(|object| object["name"] != last_name);
+                assert!(!serde_json::from_value::<Directory>(value).unwrap().nvfp4_kv_available());
+            }
+        }
     }
 
     #[test]

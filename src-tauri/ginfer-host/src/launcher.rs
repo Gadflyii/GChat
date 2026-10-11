@@ -7,11 +7,22 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
+thread_local! {
+    static CONTROL_WORK: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(test)]
+pub(crate) fn control_work_counts() -> (usize, usize) {
+    CONTROL_WORK.with(std::cell::Cell::get)
+}
+
 pub struct LocalControl {
     client: reqwest::Client,
     origin: reqwest::Url,
     token: String,
     host_id: uuid::Uuid,
+    fingerprint: String,
 }
 
 #[derive(Clone, serde::Deserialize)]
@@ -111,6 +122,12 @@ impl LocalControl {
     }
 
     pub fn open(directory: &Path, origin: &str) -> Result<Self, String> {
+        Self::open_reusing(directory, origin, None)
+    }
+
+    pub(crate) fn open_reusing(directory: &Path, origin: &str, previous: Option<Self>) -> Result<Self, String> {
+        #[cfg(test)]
+        CONTROL_WORK.with(|counts| { let (opens, clients) = counts.get(); counts.set((opens + 1, clients)); });
         let state: Persistent = serde_json::from_reader(std::io::BufReader::new(
             std::fs::File::open(directory.join("host.json")).map_err(|e| {
                 format!(
@@ -129,11 +146,23 @@ impl LocalControl {
         {
             return Err("host address must be an HTTPS origin".into());
         }
+        let fingerprint = state.certificate.fingerprint();
+        // Re-read local authority on every attempt before reusing its TLS pool.
+        if let Some(previous) = previous {
+            if previous.origin == origin && previous.host_id == state.host_id
+                && previous.token == state.pairing_admin_token && previous.fingerprint == fingerprint {
+                return Ok(previous);
+            }
+        }
+        let client = pinned_client(&fingerprint)?;
+        #[cfg(test)]
+        CONTROL_WORK.with(|counts| { let (opens, clients) = counts.get(); counts.set((opens, clients + 1)); });
         Ok(Self {
-            client: pinned_client(&state.certificate.fingerprint())?,
+            client,
             origin,
             token: state.pairing_admin_token,
             host_id: state.host_id,
+            fingerprint,
         })
     }
 
@@ -203,8 +232,8 @@ struct Choice {
     concurrency: u64,
 }
 
-fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
-    let occupied: std::collections::BTreeSet<_> = snapshot["instances"]
+fn occupied_gpus<'a>(snapshot: &'a Value, replacing: Option<&str>) -> std::collections::BTreeSet<&'a str> {
+    snapshot["instances"]
         .as_array()
         .into_iter()
         .flatten()
@@ -222,7 +251,23 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
                 .flatten()
         })
         .filter_map(Value::as_str)
-        .collect();
+        .collect()
+}
+
+fn group_available(group: &[Value], occupied: &std::collections::BTreeSet<&str>) -> bool {
+    !group.iter().any(|g| g.as_str().is_none_or(|id| occupied.contains(id)))
+}
+
+fn has_choices(snapshot: &Value) -> bool {
+    let occupied = occupied_gpus(snapshot, None);
+    snapshot["launch_profiles"].as_array().into_iter().flatten().any(|entry| {
+        entry["compatible_gpu_groups"].as_array().into_iter().flatten()
+            .filter_map(Value::as_array).any(|group| group_available(group, &occupied))
+    })
+}
+
+fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
+    let occupied = occupied_gpus(snapshot, replacing);
     let mut result = vec![];
     for entry in snapshot["launch_profiles"].as_array().into_iter().flatten() {
         for group in entry["compatible_gpu_groups"]
@@ -231,10 +276,7 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
             .flatten()
             .filter_map(Value::as_array)
         {
-            if group
-                .iter()
-                .any(|g| g.as_str().is_none_or(|id| occupied.contains(id)))
-            {
+            if !group_available(group, &occupied) {
                 continue;
             }
             let profile = &entry["profile"];
@@ -470,10 +512,9 @@ async fn menu_control(control: LocalControl) -> Result<(), String> {
         if let Some(error) = snapshot["profile_error"].as_str() {
             println!("Profile catalog: {error}");
         }
-        let available = choices(&snapshot, None);
         if snapshot["models"].as_array().is_none_or(Vec::is_empty) {
             println!("\nNo local models registered. Download a model or add an existing local package.");
-        } else if available.is_empty() {
+        } else if !has_choices(&snapshot) {
             println!("\nNo launch profiles match the installed models and available GPU groups.");
         }
         println!("\nInstances:");
@@ -572,6 +613,33 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn menu_availability_resource_pass() {
+        let snapshot = json!({"instances": [], "launch_profiles": (0..174).map(|index| {
+            json!({"model_id":"model","profile":{"id":index,"name":"Fixture","concurrency":4},
+                "compatible_gpu_groups":[["gpu0"],["gpu1"]]})
+        }).collect::<Vec<_>>()});
+        let started = std::time::Instant::now();
+        assert!(has_choices(&snapshot));
+        eprintln!("RESOURCE_LAUNCHER profiles=174 groups=348 elapsed={:?}", started.elapsed());
+    }
+    #[test]
+    fn menu_availability_matches_choices_without_rendering_them() {
+        let mut snapshot = json!({"instances": [], "launch_profiles": (0..174).map(|index| {
+            json!({"model_id":"model","profile":{"id":index,"name":"Fixture","concurrency":4},
+                "compatible_gpu_groups":[["gpu0"],["gpu1"]]})
+        }).collect::<Vec<_>>()});
+        for status in ["ready", "starting", "stopping", "stopped", "failed"] {
+            snapshot["instances"] = json!([{"instance_id":"occupied","status":status,
+                "configuration":{"gpu_uuids":["gpu0","gpu1"]}}]);
+            assert_eq!(has_choices(&snapshot), !choices(&snapshot, None).is_empty());
+        }
+        snapshot["instances"] = json!([]);
+        for groups in [json!([[123]]), json!([null]), json!([]), json!([[]])] {
+            snapshot["launch_profiles"] = json!([{"compatible_gpu_groups":groups}]);
+            assert_eq!(has_choices(&snapshot), !choices(&snapshot, None).is_empty());
+        }
+    }
     #[test]
     fn gpu_labels_identify_distinct_devices_and_occupancy() {
         let snapshot = json!({"gpus":[

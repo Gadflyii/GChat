@@ -3,7 +3,7 @@
 
 use super::engine_registry::InstanceStatus;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     path::PathBuf,
     time::Duration,
 };
@@ -24,7 +24,63 @@ pub fn validate_runtimes(runtimes: &BTreeMap<String, PathBuf>) -> Result<(), Str
     Ok(())
 }
 
-type Diagnostics = Arc<Mutex<Vec<u8>>>;
+const DIAGNOSTIC_TAIL_BYTES: usize = 16_384;
+type Diagnostics = Arc<Mutex<VecDeque<u8>>>;
+
+#[derive(Default)]
+struct OutputReaders(Vec<Option<tokio::task::JoinHandle<()>>>);
+impl Drop for OutputReaders {
+    fn drop(&mut self) {
+        for reader in self.0.iter().flatten() {
+            reader.abort();
+        }
+    }
+}
+
+struct PendingExit {
+    exit: std::process::ExitStatus,
+    diagnostics: Diagnostics,
+    readers: tokio::sync::Mutex<OutputReaders>,
+}
+
+pub(crate) struct ProcessObservations {
+    pub readiness: Vec<StartupProbe>,
+    pub exits: Vec<ExitDrain>,
+}
+
+pub(crate) struct ExitDrain {
+    instance_id: Uuid,
+    session_id: Uuid,
+    pending: Arc<PendingExit>,
+}
+
+pub(crate) struct ExitObservation {
+    instance_id: Uuid,
+    session_id: Uuid,
+    last_error: String,
+}
+
+impl ExitDrain {
+    pub(crate) async fn observe(self) -> ExitObservation {
+        let mut readers = self.pending.readers.lock().await;
+        // Each reader retains its full sequential deadline outside the process lock.
+        for slot in &mut readers.0 {
+            if let Some(reader) = slot {
+                if tokio::time::timeout(Duration::from_secs(1), &mut *reader).await.is_err() {
+                    reader.abort();
+                }
+                *slot = None;
+            }
+        }
+        let mut tail = self.pending.diagnostics.lock().unwrap_or_else(|e| e.into_inner());
+        let detail = String::from_utf8_lossy(tail.make_contiguous());
+        ExitObservation {
+            instance_id: self.instance_id,
+            session_id: self.session_id,
+            last_error: format!("engine exited unexpectedly: {}\n{}", self.pending.exit, detail.trim()),
+        }
+    }
+}
 
 fn capture_output(reader: impl AsyncRead + Unpin + Send + 'static, diagnostics: Diagnostics) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -34,9 +90,9 @@ fn capture_output(reader: impl AsyncRead + Unpin + Send + 'static, diagnostics: 
             if count == 0 { break; }
             eprint!("{}", String::from_utf8_lossy(&chunk[..count]));
             let mut tail = diagnostics.lock().unwrap_or_else(|e| e.into_inner());
-            tail.extend_from_slice(&chunk[..count]);
-            let excess = tail.len().saturating_sub(16_384);
+            let excess = (tail.len() + count).saturating_sub(DIAGNOSTIC_TAIL_BYTES);
             tail.drain(..excess);
+            tail.extend(chunk[..count].iter().copied());
         }
     })
 }
@@ -226,7 +282,8 @@ pub struct ManagedInstance {
     api_key: String,
     started: tokio::time::Instant,
     diagnostics: Diagnostics,
-    output_readers: Vec<tokio::task::JoinHandle<()>>,
+    output_readers: OutputReaders,
+    pending_exit: Option<Arc<PendingExit>>,
 }
 
 pub struct HostProcesses {
@@ -432,11 +489,11 @@ impl HostProcesses {
             .kill_on_drop(true)
             .spawn()
             .map_err(|e| format!("could not start engine: {e}"))?;
-        let diagnostics = Arc::new(Mutex::new(Vec::new()));
-        let output_readers = vec![
-            capture_output(child.stdout.take().expect("piped stdout"), diagnostics.clone()),
-            capture_output(child.stderr.take().expect("piped stderr"), diagnostics.clone()),
-        ];
+        let diagnostics = Arc::new(Mutex::new(VecDeque::with_capacity(DIAGNOSTIC_TAIL_BYTES)));
+        let output_readers = OutputReaders(vec![
+            Some(capture_output(child.stdout.take().expect("piped stdout"), diagnostics.clone())),
+            Some(capture_output(child.stderr.take().expect("piped stderr"), diagnostics.clone())),
+        ]);
         let session_id = Uuid::new_v4();
         self.instances.insert(
             launch.instance_id,
@@ -453,6 +510,7 @@ impl HostProcesses {
                 started: tokio::time::Instant::now(),
                 diagnostics,
                 output_readers,
+                pending_exit: None,
             },
         );
         Ok(session_id)
@@ -517,26 +575,40 @@ impl HostProcesses {
             instance.child = None;
         }
         instance.model_metadata = None;
+        // A reaped session retains its final diagnostic until its drain commits.
         instance.status = InstanceStatus::Stopped;
         Ok(())
     }
 
-    pub(crate) async fn pending_readiness(&mut self) -> Result<Vec<StartupProbe>, String> {
-        let mut probes = Vec::new();
+    pub(crate) async fn pending_readiness(&mut self) -> Result<ProcessObservations, String> {
+        let mut observations = ProcessObservations { readiness: Vec::new(), exits: Vec::new() };
         for instance in self.instances.values_mut() {
+            if let Some(pending) = &instance.pending_exit {
+                observations.exits.push(ExitDrain {
+                    instance_id: instance.instance_id,
+                    session_id: instance.session_id,
+                    pending: pending.clone(),
+                });
+                continue;
+            }
             let Some(child) = instance.child.as_mut() else {
                 continue;
             };
             if let Some(exit) = child.try_wait().map_err(|e| e.to_string())? {
                 instance.child = None;
-                instance.status = InstanceStatus::Failed;
+                instance.status = InstanceStatus::Stopping;
                 instance.model_metadata = None;
-                for mut reader in instance.output_readers.drain(..) {
-                    if tokio::time::timeout(Duration::from_secs(1), &mut reader).await.is_err() { reader.abort(); }
-                }
-                let tail = instance.diagnostics.lock().unwrap_or_else(|e| e.into_inner());
-                let detail = String::from_utf8_lossy(&tail);
-                instance.last_error = Some(format!("engine exited unexpectedly: {exit}\n{}", detail.trim()));
+                let pending = Arc::new(PendingExit {
+                    exit,
+                    diagnostics: instance.diagnostics.clone(),
+                    readers: tokio::sync::Mutex::new(std::mem::take(&mut instance.output_readers)),
+                });
+                observations.exits.push(ExitDrain {
+                    instance_id: instance.instance_id,
+                    session_id: instance.session_id,
+                    pending: pending.clone(),
+                });
+                instance.pending_exit = Some(pending);
                 continue;
             }
             if instance.status != InstanceStatus::Starting {
@@ -549,7 +621,7 @@ impl HostProcesses {
                 instance.last_error = Some("engine startup timed out".into());
                 continue;
             }
-            probes.push(StartupProbe {
+            observations.readiness.push(StartupProbe {
                 instance_id: instance.instance_id,
                 session_id: instance.session_id,
                 model_id: instance.launch.model_id.clone(),
@@ -558,7 +630,25 @@ impl HostProcesses {
                 client: self.client.clone(),
             });
         }
-        Ok(probes)
+        Ok(observations)
+    }
+
+    pub(crate) fn confirm_exit(&mut self, observation: ExitObservation) {
+        let Some(instance) = self.instances.get_mut(&observation.instance_id) else {
+            return;
+        };
+        if instance.session_id != observation.session_id
+            || !matches!(instance.status, InstanceStatus::Stopping | InstanceStatus::Stopped)
+            || instance.child.is_some()
+            || instance.pending_exit.is_none()
+        {
+            return;
+        }
+        instance.last_error = Some(observation.last_error);
+        if instance.status == InstanceStatus::Stopping {
+            instance.status = InstanceStatus::Failed;
+        }
+        instance.pending_exit = None;
     }
 
     pub(crate) fn confirm_readiness(&mut self, observation: ReadyObservation) -> Result<(), String> {
@@ -596,6 +686,202 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
+    fn fixture_launch(artifact: &std::path::Path, instance_id: Uuid) -> EngineLaunch {
+        EngineLaunch {
+            instance_id, artifact: artifact.to_owned(),
+            artifact_dependencies: vec![artifact.to_owned()], artifact_set: false,
+            model_id: "fixture".into(), gpu_uuids: vec!["GPU-fixture".into()],
+            tp: 1, port: 40121, max_context: 4096, concurrency: 1,
+            options: LaunchOptions::default(),
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "one noisy-child resource measurement"]
+    async fn request_resource_measurement_noisy_child_tail() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("engine");
+        std::fs::write(&executable, "#!/bin/sh\ncat \"$1\"\nexit 7\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        let mut payload: Vec<u8> = (0..65_536).map(|index| b'a' + (index % 26) as u8).collect();
+        payload[65_400] = 0xff;
+        payload.push(b'\n');
+        std::fs::write(&artifact, &payload).unwrap();
+        let expected = String::from_utf8_lossy(&payload[payload.len() - 16_384..]);
+        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
+            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
+        *host.processes.lock().await = HostProcesses::new(executable,
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let id = Uuid::new_v4();
+        let measurement = crate::resource_measurement::Measurement::start();
+        {
+            let mut processes = host.processes.lock().await;
+            processes.launch(fixture_launch(&artifact, id)).unwrap();
+            processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap().wait().await.unwrap();
+        }
+        host.refresh_processes().await.unwrap();
+        measurement.finish("noisy_child_tail");
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["status"], "failed");
+        assert_eq!(snapshot["instances"][0]["last_error"],
+            format!("engine exited unexpectedly: exit status: 7\n{}", expected.trim()));
+        assert!(host.processes.lock().await.reserved_gpus(None).is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "one gated-reader action resource measurement"]
+    async fn request_resource_measurement_exit_drain_action() {
+        use std::{future::Future, task::Poll};
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("engine");
+        std::fs::write(&executable, "#!/bin/sh\n(sleep 0.5; printf 'late diagnostic\\n') &\nexit 7\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture").unwrap();
+        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
+            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
+        *host.processes.lock().await = HostProcesses::new(executable,
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let id = Uuid::new_v4();
+        {
+            let mut processes = host.processes.lock().await;
+            processes.launch(fixture_launch(&artifact, id)).unwrap();
+            processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap().wait().await.unwrap();
+        }
+        let (entered, ready) = tokio::sync::oneshot::channel();
+        let observer = host.clone();
+        let refresh = tokio::spawn(async move {
+            let mut refresh = Box::pin(observer.refresh_processes());
+            std::future::poll_fn(|context| match refresh.as_mut().poll(context) {
+                Poll::Pending => Poll::Ready(()),
+                Poll::Ready(result) => panic!("fixture reader must still be held: {result:?}"),
+            }).await;
+            entered.send(()).unwrap();
+            refresh.await
+        });
+        ready.await.unwrap();
+        let measurement = crate::resource_measurement::Measurement::start();
+        let snapshot = host.snapshot().await;
+        measurement.finish("exit_drain_snapshot_action");
+        assert_eq!(snapshot["instances"][0]["instance_id"], id.to_string());
+        refresh.await.unwrap().unwrap();
+        let final_snapshot = host.snapshot().await;
+        assert_eq!(final_snapshot["instances"][0]["status"], "failed");
+        assert_eq!(final_snapshot["instances"][0]["last_error"],
+            "engine exited unexpectedly: exit status: 7\nlate diagnostic");
+    }
+
+    #[tokio::test]
+    async fn request_resources_stopped_session_retains_pending_exit_diagnostic() {
+        use std::{future::Future, task::Poll};
+        use tokio::io::AsyncWriteExt;
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("engine");
+        std::fs::write(&executable, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture").unwrap();
+        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
+            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
+        *host.processes.lock().await = HostProcesses::new(executable,
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let id = Uuid::new_v4();
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let (session, exit) = {
+            let mut processes = host.processes.lock().await;
+            let session = processes.launch(fixture_launch(&artifact, id)).unwrap();
+            let instance = processes.instances.get_mut(&id).unwrap();
+            instance.output_readers = OutputReaders(vec![Some(capture_output(reader, instance.diagnostics.clone()))]);
+            let child = instance.child.as_mut().unwrap();
+            child.kill().await.unwrap();
+            (session, child.try_wait().unwrap().unwrap())
+        };
+        let mut refresh = Box::pin(host.refresh_processes());
+        std::future::poll_fn(|context| match refresh.as_mut().poll(context) {
+            Poll::Pending => Poll::Ready(()),
+            Poll::Ready(result) => panic!("open reader must delay exit publication: {result:?}"),
+        }).await;
+        tokio::time::timeout(Duration::from_millis(500), async {
+            host.processes.lock().await.stop(id).await.unwrap();
+        }).await.unwrap();
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["status"], "stopped");
+        assert_eq!(snapshot["instances"][0]["session_id"], session.to_string());
+        assert!(snapshot["instances"][0]["last_error"].is_null());
+        drop(refresh);
+        let mut retry = Box::pin(host.refresh_processes());
+        std::future::poll_fn(|context| match retry.as_mut().poll(context) {
+            Poll::Pending => Poll::Ready(()),
+            Poll::Ready(result) => panic!("Stop must retain the cancelled session drain: {result:?}"),
+        }).await;
+        writer.write_all(b"final diagnostic after Stop\n").await.unwrap();
+        writer.shutdown().await.unwrap();
+        retry.await.unwrap();
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["status"], "stopped");
+        assert_eq!(snapshot["instances"][0]["session_id"], session.to_string());
+        assert_eq!(snapshot["instances"][0]["last_error"],
+            format!("engine exited unexpectedly: {exit}\nfinal diagnostic after Stop"));
+    }
+
+    #[tokio::test]
+    async fn request_resources_exit_drain_survives_cancel_and_fences_relaunch() {
+        use std::{future::Future, task::Poll};
+        use tokio::io::AsyncWriteExt;
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("engine");
+        std::fs::write(&executable, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture").unwrap();
+        let host = crate::service::Host::open(directory.path().join("host"), "fixture".into(),
+            executable.clone(), Vec::new(), Vec::new(), Vec::new()).await.unwrap();
+        *host.processes.lock().await = HostProcesses::new(executable,
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let id = Uuid::new_v4();
+        let (mut writer, reader) = tokio::io::duplex(4096);
+        let session = {
+            let mut processes = host.processes.lock().await;
+            let session = processes.launch(fixture_launch(&artifact, id)).unwrap();
+            let instance = processes.instances.get_mut(&id).unwrap();
+            instance.output_readers = OutputReaders(vec![Some(capture_output(reader, instance.diagnostics.clone()))]);
+            instance.child.as_mut().unwrap().kill().await.unwrap();
+            session
+        };
+        let mut first_refresh = Box::pin(host.refresh_processes());
+        std::future::poll_fn(|context| {
+            match first_refresh.as_mut().poll(context) {
+                Poll::Pending => Poll::Ready(()),
+                Poll::Ready(result) => panic!("open reader must delay exit publication: {result:?}"),
+            }
+        }).await;
+        let snapshot = tokio::time::timeout(Duration::from_millis(500), host.snapshot()).await.unwrap();
+        assert_eq!(snapshot["instances"][0]["status"], "stopping");
+        assert!(snapshot["instances"][0]["last_error"].is_null());
+        drop(first_refresh);
+        let mut second_refresh = Box::pin(host.refresh_processes());
+        std::future::poll_fn(|context| {
+            match second_refresh.as_mut().poll(context) {
+                Poll::Pending => Poll::Ready(()),
+                Poll::Ready(result) => panic!("cancelled observation must retain the reader: {result:?}"),
+            }
+        }).await;
+        tokio::time::timeout(Duration::from_millis(500), async {
+            let mut processes = host.processes.lock().await;
+            processes.stop(id).await.unwrap();
+            let next = processes.launch(fixture_launch(&artifact, id)).unwrap();
+            assert_ne!(session, next);
+        }).await.unwrap();
+        writer.write_all(b"late diagnostic from previous session\n").await.unwrap();
+        writer.shutdown().await.unwrap();
+        second_refresh.await.unwrap();
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["status"], "starting");
+        assert!(snapshot["instances"][0]["last_error"].is_null());
+        host.processes.lock().await.shutdown().await.unwrap();
+    }
+
     #[tokio::test]
     async fn launches_each_gpu_with_its_declared_runtime_without_fallback() {
         let dir = tempfile::tempdir().unwrap();
@@ -630,7 +916,7 @@ mod tests {
             host.launch(request).unwrap();
             tokio::time::timeout(Duration::from_secs(5), async {
                 loop {
-                    let output = host.instances.get(&id).unwrap().diagnostics.lock().unwrap().clone();
+                    let output: Vec<_> = host.instances.get(&id).unwrap().diagnostics.lock().unwrap().iter().copied().collect();
                     if String::from_utf8_lossy(&output).contains(&format!("{sm}:{gpu}")) { break; }
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
