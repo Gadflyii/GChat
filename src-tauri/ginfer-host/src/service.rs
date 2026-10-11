@@ -1044,9 +1044,7 @@ impl Host {
                 if suffix != "v1/ginfer/benchmark" {
                     body["model"] = model.into();
                 }
-                let serialized = serde_json::to_vec(&body).map_err(|e| e.to_string())?;
-                drop(body);
-                upstream = upstream.header("content-type", "application/json").body(serialized);
+                upstream = upstream.json(&body);
             }
         }
         let response = upstream.send().await.map_err(|e| e.to_string())?;
