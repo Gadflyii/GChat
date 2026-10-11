@@ -45,6 +45,7 @@ there is no legacy user base and no migration shim.
 | `extensions/ginfer-extension/`            | Driver for the ginfer engine. Provider id `ginfer` (the only local provider). |
 | `src-tauri/`                              | Rust/Tauri shell: `src/lib.rs`, `src/main.rs`, plugins, capabilities, bundle configs.  |
 | `src-tauri/plugins/tauri-plugin-ginfer/`  | Desktop/CLI adapters for host-owned serving; CLI HTTP endpoint forwarding. |
+| `src-tauri/gbot-service/`                | Local-first Gbot service, vault-backed SSH workspaces and guest-tool transport; current scope in `docs/gbot/README.md`. |
 | `src-tauri/plugins/tauri-plugin-hardware/`| GPU/CPU/RAM probing that feeds the NVIDIA/CUDA hardware gate.                        |
 | `pre-install/`                            | Pre-built extension tarballs bundled into the installer, named `gchat-<ext>-<ver>.tgz`. |
 | `scripts/`                                | Build, packaging, signing, download helpers.                                          |
