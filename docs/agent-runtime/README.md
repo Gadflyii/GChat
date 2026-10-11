@@ -11,7 +11,7 @@ gate passes at 11:36Z: the TUI renders, one typed prompt persists, and the same
 session answers `ok` with normal completion and no tools. The full requested
 marker was not returned; no model-quality claim is made. Normal Code/Host Stop,
 app/Host exit, closed private listeners, unchanged standalone configuration and
-guard return are verified. The private test root is removed; reviewed merge remains pending.
+guard return are verified. The private test root is removed; the correction is merged/pushed on main `058702dd8` and its source tree is retired.
 No Windows or release change occurred. The existing frontend chunk
 warning remains an OI-074 item. Configuration ownership is
 merged and pushed on main `7fe8363b1`; its eight focused checks and actual

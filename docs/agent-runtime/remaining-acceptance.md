@@ -4,6 +4,27 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## Current Linux reasoning menu correction
+
+Ron reports the Linux reasoning popup is white and differs from Windows.
+The control uses a native HTML select, whose popup follows WebKit/platform
+styling. The candidate replaces it with the existing themed Radix radio menu,
+retaining all six effort values, Off, the bulb toggle and re-enable behavior.
+No reasoning levels, budgets, dependencies or model defaults change.
+
+The three focused selection/keyboard/disabled-state cases pass, as do affected
+source lint and frontend typecheck. Candidate source is on
+`fix/gchat-s2-acceptance-058`; evidence is
+`/ai/gchat/out/s2-acceptance-20261011/reasoning-dropdown-proposal.json`.
+The corrected Linux frontend and desktop build pass; the build container is
+removed and the guard returns at 13:08:19Z. The private Linux app's actual
+opened radio menu is visible at 13:10:35Z, with dark background `rgb(17,19,22)`,
+light text, all six options and the saved High selection. Ron accepts its
+appearance. Native keyboard input is not claimed: the X11 focus attempt stops
+before sending a key; the focused DOM fixtures cover keyboard behavior.
+No native Windows or release change. Build and visible proof are retained in
+`reasoning-build-6b199362-1300/` and `reasoning-menu-visible.json`.
+
 ## Current Linux Code TUI correction
 
 Repository `/ai/gchat`; subject `docs/agent-runtime/`; baseline main `7fe8363b1`,
@@ -66,9 +87,10 @@ Booking 485 is cancelled. All 11 standalone configuration entries remain unchang
 the verified return. `cleanup-result.json` confirms removal of the private
 test root and 95,838,208 allocated bytes; no owned process or model remains.
 
-Next unresolved action: complete the reviewed main merge, then recover the
-OI-069/OI-071 S2 paired-Host acceptance prerequisites. Source remains
-`f2de958f3`; no Windows or release change occurred.
+The correction is merged and pushed on main `058702dd8`; its source tree is
+retired and accepted desktop/resources and evidence remain. OI-069/OI-071
+S2 acceptance is current in `docs/ginfer-manager/README.md`. No Windows or
+release change occurred.
 Code TUI acceptance is PASS. OI-068 remains PARTIAL for Hermes/Windows and the
 broader active-worker compaction scope.
 

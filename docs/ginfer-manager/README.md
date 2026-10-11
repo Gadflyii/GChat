@@ -16,44 +16,77 @@ Documentation-only handoffs do not rebuild accepted binaries.
 
 Repository `/ai/gchat`; subject `docs/ginfer-manager/`; baseline main `058702dd8`.
 Candidate `/ai/gchat-worktrees/s2-acceptance-058`, branch
-`fix/gchat-s2-acceptance-058`, combines the reviewed tray source with current main
-for this acceptance. The merge and native gates are pending; neither source
-integration nor native PASS is claimed by this plan.
+`fix/gchat-s2-acceptance-058`, composes the reviewed tray source with current main
+at pushed `6b199362d`. Component check, strict Clippy and Manager build pass;
+the exact four-file package and its accepted Host `257252131` are verified.
+No Windows, release, signing, calibration or model copies are included.
 
-The bounded native S2 gate uses Ron's logged-in Linux session and Secret Service:
-pair the isolated client with the private Host, restart Manager, verify the saved
-grant is restored, then exercise tray Hide, Open and Exit. Hide/Open must affect
-the actual candidate window; Exit must end Manager while the same private Host
-remains alive. Catalog visibility is checked with isolated Linux client/worker
-roles. Full-worker execution is admitted only with exactly matched runtimes,
-complete profiles and artifacts; visibility alone does not qualify it.
+Native GChat pairing on S2 passes using the actual Secret Service. FIFO worker
+878 starts the private Host and GChat in Ron's active X11 session 8475. Pair
+at 12:50:42Z issues client `789bcdb4-4fa1-4618-8dc4-a9803adb430f` for the private
+local coordinator. Ordinary Close exits 0; the tracked restart at 12:51:53Z
+preserves the private XDG scope and saved grant. The restarted process retrieves
+an authenticated snapshot at 12:56:23Z using the same Host, client, certificate
+and origin. Its client last-seen time advances beyond the restart time; no
+second Pair is performed. This qualifies native GChat saved-grant restoration,
+not Manager tray interaction or local WSLg remote pairing.
 
-Full-worker prerequisites remain unverified. The earlier S2 SMOL artifact was
-intentionally pruned at 06:15 UTC; Bubbs now names an existing candidate at
-`/mnt/data/models/qwen3.8-flash-next/v1-smol/qwen38_flash_smol_mtp.ginfer`, pending
-read-only verification. The retained `73e` server expects schema 1 while the
-available profile is complete v2, and the exact `822` CLI has no matching serve
-sibling; C3 is identifying a compatible SM86 v2 server. These are retained-runtime
-limitations, not proof that S2 has no suitable artifact or runtime anywhere.
-WSLg has no Secret Service; it cannot substitute for S2's native secure-storage
-gate. Verify the exact matched closure before any full-worker launch. No Windows
-work, release/signing, installation, calibration or model copies are included.
+Ordinary Forget at 13:02:20Z returns no credential cleanup warning. UUID-scoped
+Secret Service metadata changes from one item to zero at 13:03:05Z, and the
+coordinator's ordinary revoke endpoint removes only that disposable grant.
+No secret contents are inspected. The worker's final normal Close and graceful
+Host shutdown finish at 13:03:37Z. Final process/port verification and retained
+small evidence are recorded in `out/s2-acceptance-20261011/native-worker-evidence/`.
+The separate source-proven Manager omission of credential cleanup warnings is
+open; this successful cleanup does not exercise its error branch.
 
-The focused secure-storage UI case passes 1/1 in 519 ms at 11:57 UTC. This
-observable UI fixture is reusable; native Secret Service pairing, grant restore
-and tray lifecycle remain pending.
+Tray qualification remains open. Native 873 fails before input on a harness
+process-visibility assumption; 874 fails before input on an ownerless watcher
+entry. Ron corrects the earlier headless claim: S2 has an active desktop. The
+one authorized retry 877 ignores confirmed stale registrations but finds no
+candidate-owned SNI registration over 10 seconds. No Pair or tray input occurs.
+All four owned processes are absent and private port 17443 is free. This is the
+GChat Linux tray-registration defect, not an absent desktop; no fourth attempt
+is authorized. Constructor success precedes asynchronous AppIndicator
+registration, so source `tray_ready` alone does not prove a registered icon.
 
-Next action: root resolves the source merge, verifies the actual S2 session,
-Secret Service/tray and owned fixture prerequisites, then admits the bounded
-pair/restart/grant and tray gate. Preserve the earlier tray screen and package
-checks below as historical evidence; they do not satisfy this new native gate.
+The real two-worker gate is blocked before Ready. Exact clean GInfer `66452662d`
+builds its app-only SM86 server in FIFO 872 at 12:22:41Z; its native ELF closure
+resolves without a donor overlay. It uses the in-place v3 SMOL artifact and
+complete 3090 v2 profile. Its unchanged C1/131072/INT8/fixed3 MTP/AUTO-arena
+launch fails at 13:00:26Z with `Flash actual Host owners cannot preserve
+whole-host RAM headroom`. No S2 inference or shared-worker qualification follows.
+
+The local accepted `670` runtime also fails expert-refill startup at 12:59:40Z:
+CUDA free 936,992,768 bytes is below the configured 1 GiB headroom. Its model
+exits and both canonical locks return at 13:00:22Z. This older runtime predates
+the current startup fixes; it is historical evidence, not a new current-engine
+claim. The 13:01Z decision authorizes exactly one unchanged local launch with
+C3's accepted `candidate-ready-quote-4c63-120a/apps/ginfer-serve` and its matching
+sibling library closure (source-equivalent to `8317c64f2`). Next unresolved
+question: does that current runtime admit the unchanged launch? Full shared
+catalog/assignments, simultaneous two-host dispatch, saturation, cancellation
+and disconnect/recovery still require two actual Ready instances.
+
+The local WSLg client uses its genuine service-owner local grant; S2 uses its
+native-vault grant. Both see the same coordinator before models are Ready.
+That observation does not qualify assigned pools or real worker dispatch.
+No instance IDs, capacity witnesses, model settings or limits are fabricated.
+
+Evidence: `/ai/gchat/out/s2-acceptance-20261011/` contains source/package gates,
+`serve-664-build-verified-readonly.json`, `s2-pair-restored.json`,
+`s2-native-forget.json`, `paired-grant-revoked.json`, `local-model-status.json`,
+`s2-model-status-final.json`, and the two native evidence subfolders.
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| GChat coordinator / local | `/ai/gchat-worktrees/s2-acceptance-058` | Candidate source/merge; retain until reviewed integration and acceptance |
-| GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011` | Owned current gate evidence; no native result or live job claimed yet |
-| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi071-pair-tray-20261011` | Owned isolated pairing/tray fixture; retain through bounded gate and verified teardown |
-| GChat coordinator / local and S2 | Earlier exact package/screen paths below | Retain accepted producers and original tray/storage evidence; no model/profile duplication |
+| GChat coordinator / local | `/ai/gchat-worktrees/s2-acceptance-058` | Current candidate; retain until reviewed integration |
+| GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011` | Concise gate evidence and current UI candidate; retain accepted evidence |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi071-pair-tray-20261011` | Owned package/fixtures; retire after final worker process audit and local evidence retention |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-serve-66452662d` | Owned source/app-only build; retire after gate and runtime absence proof |
+| GChat coordinator / S2 | `/mnt/data/ai/gchat-oi069-worker-20261011` | Disposable native fixture; finished 13:03:37Z, retire after retaining cited evidence |
+| GChat coordinator / local | `/ai/gchat/out/s2-acceptance-20261011/local-worker` | Private stopped fixture; current runtime rerun and UI check only; no model/profile copies |
+| C3 / local and S2 | Exact artifact/profile/runtime paths in evidence | Read-only borrowed prerequisites; never delete |
 
 ## Accepted hardware profile installation
 
