@@ -6,6 +6,28 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
+## Current item — OI-116 Linux available disk space
+
+GChat main `2ad018261` contains the accepted resource review. The coordinator
+approved Linux-only rustix 1.1.4 statvfs on October 11: preserve raw path/error
+behavior, isolate the blocking query, check available-byte multiplication, and
+remove the subprocess. This uses an already locked/cached crate; Windows and
+other supported OS behavior remain unchanged. Acceptance is the focused
+available-space regression and Host strict Clippy, CPU only. No native app, GPU,
+release, signing or publication.
+
+Implemented in `da85b9adf`. The focused raw-path/symlink/missing/NUL/empty-path
+fixture passes (1/1), and Host all-target strict Clippy passes with zero warnings
+on the offline Ubuntu 24/Rust 1.98 toolchain. Evidence:
+`/ai/gchat/out/review-resources-20261011/oi116-native-space/{path-fixture,clippy}.log`.
+No new crate version or package download was required. Next: normal main merge. Owned tree
+`/ai/gchat-worktrees/oi116-native-space-2ad`, branch
+`fix/gchat-oi116-native-space-2ad`, baseline `2ad018261`, no live job. Reuse
+`/ai/gchat/out/review-resources-20261011/` target cache and concise evidence.
+OI-118 retains default Tokio workers; the next Manager change will measure the
+representative concurrent workload before choosing a count.
+
+
 ## Current outcome and acceptance
 
 The active October 11 work below supersedes the completed remediation gates.
@@ -14,7 +36,7 @@ The sole issue authority is GInfer `docs/maintainer/open-work.md`;
 prerequisites. Preserve skills, permissions, cancellation, context semantics,
 host identity, user state, models and supported protocols.
 
-## Active serving and Host/Manager resource fixes — October 11
+## Accepted serving and Host/Manager resource fixes — October 11
 
 Ron/bubbs assigned OI-115–119 and C1-CORE-021 at 01:11 UTC, due 04:00 UTC.
 Deliver clear ownership improvements and one focused before/after request or
@@ -103,13 +125,14 @@ returned75 before any compile/test while C2 held the canonical build guard.
 After that reservation cleared, ordinary CPU16–31 admission completed the final
 fixture and lint by 02:33:31 UTC; its container exited0 and is absent. The unused
 02:45–02:50 fallback booking404 is cancelled. No GChat job, guard holder or waiter
-remains. Next: normal GChat main merge, with OI-116/118 limits retained and the
-C1-owned served smoke scheduled. No passing unchanged check was repeated.
+remains. This source merged to GChat main `2ad018261`; the C1-owned served
+smoke remains scheduled. No passing unchanged check was repeated.
 
-OI-116 retains Linux `df` pending explicit rustix 1.1.4 direct-dependency approval.
-The prepared patch is outside the source; Windows uses its native API, whose
-physical UNC/extended-path check remains unrun. OI-118 retains default Tokio
-worker count because these isolated fixtures cannot justify a cap. Native SCM,
+OI-116 now replaces Linux `df` with the approved locked rustix 1.1.4 native
+query, as verified above. Windows uses its native API; the physical
+UNC/extended-path check remains unrun. The coordinator kept default Tokio
+workers for OI-118; a representative concurrent control/scan/journal measurement
+rides the next Manager change before choosing a count. Native SCM,
 Manager idle/private bytes, media peak memory and slow-NAS qualification are not
 established by this CPU gate. These limits remain explicit on the master rows.
 
