@@ -100,6 +100,7 @@ struct Guest {
     echo_address: SocketAddr,
     desktop_claim: Mutex<Option<OperationId>>,
     stale: std::sync::atomic::AtomicBool,
+    wrong_version: std::sync::atomic::AtomicBool,
 }
 
 fn failure(message: impl Into<String>) -> GuestError {
@@ -452,7 +453,7 @@ impl server::Handler for Peer {
                         serde_json::from_slice(&bytes.drain(..=end).collect::<Vec<_>>()).unwrap();
                     let result = match request["method"].as_str().unwrap() {
                         "initialize" => {
-                            serde_json::json!({"protocolVersion":"2025-06-18","serverInfo":{"name":"cua-driver","version":"0.34.1"},"capabilities":{"tools":{}}})
+                            serde_json::json!({"protocolVersion":"2025-06-18","serverInfo":{"name":"cua-driver","version":if self.guest.wrong_version.load(std::sync::atomic::Ordering::Acquire) { "wrong" } else { "0.34.1" }},"capabilities":{"tools":{}}})
                         }
                         "notifications/initialized" => continue,
                         "tools/list" => serde_json::json!({"tools":[
@@ -467,6 +468,13 @@ impl server::Handler for Peer {
                             let operation =
                                 self.guest.desktop_claim.lock().unwrap().take().unwrap();
                             assert_eq!(bufferless_dispatch(&self.guest, operation), 1);
+                            let lose =
+                                self.guest.lose_reply.lock().unwrap().take() == Some(operation);
+                            if lose {
+                                session.eof(channel)?;
+                                session.close(channel)?;
+                                return Ok(());
+                            }
                             serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}]})
                         }
                         _ => panic!("unexpected MCP method"),
@@ -743,6 +751,7 @@ impl Fixture {
             echo_address,
             desktop_claim: Mutex::new(None),
             stale: std::sync::atomic::AtomicBool::new(false),
+            wrong_version: std::sync::atomic::AtomicBool::new(false),
         });
         let handles = Arc::new(Mutex::new(Vec::new()));
         let config = Arc::new(server::Config {
@@ -1075,9 +1084,12 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             .await,
             Err(SshError::MissingCredential)
         ));
+        fixture.guest.wrong_version.store(true, std::sync::atomic::Ordering::Release);
+        assert!(matches!(SshSession::connect(&fixture.connection, expected, fixture.vault.as_ref(), policy()).await, Err(SshError::Protocol)));
+        fixture.guest.wrong_version.store(false, std::sync::atomic::Ordering::Release);
         let session = fixture.connect().await;
         let mut wrong_identity = fixture.request(GuestOperationKind::Read {
-            path: fixture.path("guest.txt"),
+            path: fixture.path("guest file's.txt"),
             offset: 0,
             length: 1,
         });
@@ -1102,7 +1114,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             success(
                 runtime
                     .request(fixture.request(GuestOperationKind::Write {
-                        path: fixture.path("guest.txt"),
+                        path: fixture.path("guest file's.txt"),
                         offset: 0,
                         data: b"from guest".to_vec(),
                         truncate: true,
@@ -1116,7 +1128,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             success(
                 runtime
                     .request(fixture.request(GuestOperationKind::Read {
-                        path: fixture.path("guest.txt"),
+                        path: fixture.path("guest file's.txt"),
                         offset: 5,
                         length: 5,
                     }))
@@ -1128,7 +1140,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             }
         );
         assert_eq!(
-            tokio::fs::read(fixture.directory.path().join("guest.txt"))
+            tokio::fs::read(fixture.directory.path().join("guest file's.txt"))
                 .await
                 .unwrap(),
             b"from guest"
@@ -1234,6 +1246,10 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
                 .unwrap();
         assert_eq!(hello, fixture.guest.hello);
+        let response = client.request(post("/v1/desktop/tools", serde_json::to_vec(&expected).unwrap())).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let tools: serde_json::Value = serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
+        assert_eq!(tools.as_array().unwrap().len(), 2);
         let command = fixture.script("http.sh", "printf http\n").await;
         let response = client
             .request(post(
@@ -1320,6 +1336,15 @@ async fn cancellation_and_lost_reply_reconcile_without_redispatch() {
             OperationState::Completed);
         assert_eq!(tokio::fs::read(fixture.directory.path().join("effect.txt")).await.unwrap(), b"once");
         assert_eq!(fixture.guest.dispatches.lock().unwrap()[&effect.operation_id], 1);
+        let desktop = fixture.request(GuestOperationKind::Desktop { tool: "invoke_menu".into(), arguments: serde_json::json!({}) });
+        *fixture.guest.lose_reply.lock().unwrap() = Some(desktop.operation_id);
+        assert!(matches!(runtime.request(desktop.clone()).await, Err(WorkspaceError::Transport(SshError::UncertainOutcome { operation_id })) if operation_id == desktop.operation_id));
+        let status = fixture.request(GuestOperationKind::Status { operation_id: desktop.operation_id });
+        assert_eq!(success(runtime.request(status).await.unwrap()), GuestResult::Status { state: GuestOperationState::Unknown });
+        assert!(matches!(runtime.request(desktop.clone()).await, Err(WorkspaceError::State(ServiceError::DuplicateOperation))));
+        assert_eq!(fixture.guest.dispatches.lock().unwrap()[&desktop.operation_id], 1);
+        let next = fixture.request(GuestOperationKind::Desktop { tool: "get_window_state".into(), arguments: serde_json::json!({}) });
+        assert!(matches!(success(runtime.request(next).await.unwrap()), GuestResult::Desktop { .. }));
         runtime.close().await.unwrap();
         fixture.shutdown().await;
     }).await.expect("bounded operation/recovery test timed out");
