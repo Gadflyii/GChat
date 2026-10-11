@@ -82,6 +82,7 @@ mod linux {
             "type_text",
             "set_value",
             "press_key",
+            "hotkey",
             "click",
             "verify_state",
         ];
@@ -93,11 +94,26 @@ mod linux {
             json!({"role":"user","content":"Please create the text file now."}),
         ];
         let client = Client::new();
+        let response = client
+            .get(format!("{}/v1/models", url.trim_end_matches('/')).parse()?)
+            .await?;
+        let status = response.status();
+        let bytes = hyper::body::to_bytes(response.into_body()).await?;
+        tokio::fs::write(evidence.join("served-models.json"), &bytes).await?;
+        if !status.is_success() {
+            return Err(format!("model inventory HTTP {status}").into());
+        }
+        let models: Value = serde_json::from_slice(&bytes)?;
+        let entries = models["data"].as_array().ok_or("missing model inventory")?;
+        if entries.len() != 1 {
+            return Err("the gate requires one served model".into());
+        }
+        let model = entries[0]["id"].as_str().ok_or("missing served model ID")?;
         let mut turn = 0;
         loop {
             turn += 1;
             let request = Request::post(format!("{}/v1/chat/completions",url.trim_end_matches('/'))).header("content-type","application/json")
-                .body(Body::from(serde_json::to_vec(&json!({"model":"qwen38_27b_int_df2","messages":messages,"tools":tools,"tool_choice":"auto"}))?))?;
+                .body(Body::from(serde_json::to_vec(&json!({"model":model,"messages":messages,"tools":tools,"tool_choice":"auto"}))?))?;
             let response = client.request(request).await?;
             let status = response.status();
             let bytes = hyper::body::to_bytes(response.into_body()).await?;
