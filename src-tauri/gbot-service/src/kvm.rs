@@ -24,7 +24,14 @@ pub struct GuestBinary {
 
 impl GuestBinary {
     fn validate(&self) -> io::Result<()> {
-        if !self.url.starts_with("https://")
+        let uri: hyper::Uri = self
+            .url
+            .parse()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid guest binary URL"))?;
+        if uri.scheme_str() != Some("https")
+            || uri.host().is_none()
+            || uri.query().is_some()
+            || self.url.contains(['@', '#'])
             || self
                 .url
                 .bytes()
@@ -497,6 +504,8 @@ mod tests {
         assert!(unpinned.cloud_init().is_err());
         let mut bad = settings;
         bad.worker.url = "http://example.test/key'".into();
+        assert!(bad.cloud_init().is_err());
+        bad.worker.url = "https://example.test/worker?token=private".into();
         assert!(bad.cloud_init().is_err());
     }
 

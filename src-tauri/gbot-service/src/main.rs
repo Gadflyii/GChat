@@ -1,6 +1,8 @@
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
+#[cfg(target_os = "linux")]
+use clap::Subcommand;
 use gbot_service::{api::Api, service::Service, vault::NativeVault};
 
 #[derive(Parser)]
@@ -13,10 +15,12 @@ struct Args {
     data_folder: Option<PathBuf>,
     #[arg(long, default_value_t = 0)]
     port: u16,
+    #[cfg(target_os = "linux")]
     #[command(subcommand)]
     command: Option<Mode>,
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Subcommand)]
 enum Mode {
     #[cfg(target_os = "linux")]
@@ -77,6 +81,7 @@ async fn kvm(command: KvmCommand) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(target_os = "linux")]
     if let Some(mode) = args.command {
         match mode {
             #[cfg(target_os = "linux")]
