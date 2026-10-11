@@ -3100,7 +3100,10 @@ mod lifecycle_tests {
         assert_eq!(restarted["instances"][0]["configuration"]["benchmark_profile"], reference);
         let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(state.join("host.json")).unwrap()).unwrap();
         assert_eq!(saved["profiles"][id.to_string()]["benchmark_profile"], reference);
-        host.stop(id).await.unwrap();
+        let response = host.clone().route(Request::post(format!("/host/v1/instances/{id}/stop"))
+            .header("authorization",format!("Bearer {token}"))
+            .body(Body::from("{}")).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
         host.shutdown_hardware_profile().await.unwrap();
         drop(host);
         let reopened = Host::open(state, "Fixture".into(), engine, vec![models], vec![], gpus).await.unwrap();
