@@ -25,6 +25,32 @@ before sending a key; the focused DOM fixtures cover keyboard behavior.
 No native Windows or release change. Build and visible proof are retained in
 `reasoning-build-6b199362-1300/` and `reasoning-menu-visible.json`.
 
+## Current Unix PTY window geometry correction
+
+GCHAT-UNIX-PTY-PIXEL-GEOMETRY is a separate source-proven resize units defect.
+The shared Code/Hermes terminal hook divided container pixels by rows/columns;
+native `terminal_resize` forwards those values unchanged as whole-window
+`PtySize.pixel_width/pixel_height`. The correction sends integer
+`clientWidth/clientHeight` directly, preserves the existing row/column fit, and
+also reports a pixel-only resize when the fitted grid does not change. Showing
+the terminal or starting a new visible generation synchronizes the same geometry.
+No native PTY contract, request field, dependency or terminal parser changes.
+
+Candidate: `/ai/gchat-worktrees/unix-pty-pixel-geometry-254`, branch
+`fix/gchat-unix-pty-pixel-geometry-254`, baseline origin/main `254c0f8fd`.
+Only source and the existing owning fixture are prepared; no build, model,
+desktop action or live job was run. Next: coordinator source review and the named
+CPU-only fixture `CodeTerminalHost > reports whole-window PTY pixels when the
+fitted rows and columns stay unchanged`, followed by affected lint/typecheck.
+The fixture covers full 960 by 739 pixels and 961 by 740 at the same 24 rows and
+80 columns. Tests and installed geometry acceptance remain pending.
+
+The contrary same-session observation is retained at
+`/ai/gchat/out/linux-code-tui-20261011/geometry-probe.json`: supplying full 960 by
+739 pixels did not resume the blank TUI. This resize correction is not its cause
+or a replacement for the accepted production DECRQM parser correction below.
+No mouse-input failure or downstream mouse-behavior improvement is claimed.
+
 ## Current Linux Code TUI correction
 
 Repository `/ai/gchat`; subject `docs/agent-runtime/`; baseline main `7fe8363b1`,

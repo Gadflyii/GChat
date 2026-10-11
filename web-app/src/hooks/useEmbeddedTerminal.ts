@@ -71,17 +71,6 @@ const LIGHT_TERMINAL_THEME: ITheme = {
   brightWhite: '#ffffff',
 }
 
-function terminalCellPixels(
-  container: HTMLDivElement | null,
-  rows: number,
-  cols: number
-): { width: number; height: number } {
-  return {
-    width: Math.max(1, Math.floor((container?.clientWidth ?? 0) / cols)),
-    height: Math.max(1, Math.floor((container?.clientHeight ?? 0) / rows)),
-  }
-}
-
 type EmbeddedTerminal = {
   containerRef: RefObject<HTMLDivElement | null>
   terminalRef: RefObject<Terminal | null>
@@ -129,6 +118,21 @@ export function useEmbeddedTerminal({
     generationRef.current = next.generation
     setStatus(next)
   }, [])
+
+  const resizeNativeTerminal = useCallback((rows: number, cols: number) => {
+    const generation = generationRef.current
+    const container = containerRef.current
+    if (generation === 0 || !container) return
+    // PTY pixels describe the whole window, not a character cell.
+    void resizeTerminal(
+      terminalId,
+      generation,
+      Math.max(2, rows),
+      Math.max(2, cols),
+      container.clientWidth,
+      container.clientHeight
+    ).catch(() => undefined)
+  }, [terminalId])
 
   useEffect(() => {
     const container = containerRef.current
@@ -239,17 +243,7 @@ export function useEmbeddedTerminal({
       ).catch((reason) => setError(String(reason)))
     })
     const resizeDisposable = terminal.onResize(({ rows, cols }) => {
-      const generation = generationRef.current
-      if (generation === 0) return
-      const pixels = terminalCellPixels(container, rows, cols)
-      void resizeTerminal(
-        terminalId,
-        generation,
-        Math.max(2, rows),
-        Math.max(2, cols),
-        pixels.width,
-        pixels.height
-      ).catch(() => undefined)
+      resizeNativeTerminal(rows, cols)
     })
 
     let resizeFrame = 0
@@ -258,10 +252,13 @@ export function useEmbeddedTerminal({
       resizeFrame = window.requestAnimationFrame(() => {
         const dimensions = fitAddon.proposeDimensions()
         if (!dimensions) return
-        terminal.resize(
-          Math.max(2, dimensions.cols),
-          Math.max(2, dimensions.rows)
-        )
+        const cols = Math.max(2, dimensions.cols)
+        const rows = Math.max(2, dimensions.rows)
+        if (cols === terminal.cols && rows === terminal.rows) {
+          resizeNativeTerminal(rows, cols)
+        } else {
+          terminal.resize(cols, rows)
+        }
       })
     }
     const observer =
@@ -281,7 +278,7 @@ export function useEmbeddedTerminal({
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [available, terminalId, updateStatus])
+  }, [available, terminalId, updateStatus, resizeNativeTerminal])
 
   useEffect(() => {
     const terminal = terminalRef.current
@@ -297,15 +294,18 @@ export function useEmbeddedTerminal({
       const terminal = terminalRef.current
       const dimensions = fitAddonRef.current?.proposeDimensions()
       if (terminal && dimensions) {
-        terminal.resize(
-          Math.max(2, dimensions.cols),
-          Math.max(2, dimensions.rows)
-        )
+        const cols = Math.max(2, dimensions.cols)
+        const rows = Math.max(2, dimensions.rows)
+        if (cols === terminal.cols && rows === terminal.rows) {
+          resizeNativeTerminal(rows, cols)
+        } else {
+          terminal.resize(cols, rows)
+        }
       }
       terminal?.focus()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [visible])
+  }, [visible, status.generation, resizeNativeTerminal])
 
   return {
     containerRef,

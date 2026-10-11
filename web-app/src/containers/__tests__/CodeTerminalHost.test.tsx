@@ -260,6 +260,7 @@ describe('CodeTerminalHost', () => {
     mocks.updateCodeBridgePolicy.mockResolvedValue(undefined)
     runtimeState.activeModels = ['qwen']
     mocks.writeTerminal.mockResolvedValue(undefined)
+    mocks.resizeTerminal.mockResolvedValue(undefined)
     mocks.attachTerminal.mockResolvedValue({
       phase: 'idle',
       generation: 0,
@@ -281,6 +282,62 @@ describe('CodeTerminalHost', () => {
       launch: 'open_code',
       replayComplete: true,
     }))
+  })
+
+  it('reports whole-window PTY pixels when the fitted rows and columns stay unchanged', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrame = 0
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.set(++nextFrame, callback)
+      return nextFrame
+    })
+    const cancelFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => {
+      frames.delete(id)
+    })
+    let notifyResize: (() => void) | undefined
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = () => callback([], this as unknown as ResizeObserver)
+      }
+      observe() {}
+      disconnect() {}
+    })
+    const flushFrames = () => {
+      const pending = [...frames.values()]
+      frames.clear()
+      pending.forEach(callback => callback(0))
+    }
+    const rendered = render(<CodeTerminalHost visible />)
+    try {
+      await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
+      const pane = screen.getByTestId('code-terminal')
+      Object.defineProperties(pane, {
+        clientWidth: { configurable: true, value: 960 },
+        clientHeight: { configurable: true, value: 739 },
+      })
+      act(flushFrames)
+      expect(mocks.resizeTerminal).toHaveBeenLastCalledWith(
+        'code:/data/agent-workspace', 1, 24, 80, 960, 739
+      )
+
+      mocks.resizeTerminal.mockClear()
+      Object.defineProperties(pane, {
+        clientWidth: { configurable: true, value: 961 },
+        clientHeight: { configurable: true, value: 740 },
+      })
+      expect(notifyResize).toBeDefined()
+      act(() => { notifyResize!(); flushFrames() })
+      expect(mocks.resizeTerminal).toHaveBeenCalledTimes(1)
+      expect(mocks.resizeTerminal).toHaveBeenLastCalledWith(
+        'code:/data/agent-workspace', 1, 24, 80, 961, 740
+      )
+    } finally {
+      rendered.unmount()
+      requestFrame.mockRestore()
+      cancelFrame.mockRestore()
+      vi.unstubAllGlobals()
+    }
   })
 
   it('starts only on Code entry, attaches before launch and retains live output across navigation', async () => {
