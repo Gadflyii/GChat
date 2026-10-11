@@ -120,7 +120,11 @@ fn installed_desktop_host(
     #[cfg(not(target_os = "linux"))]
     let binary = _resource_directory
         .join("resources/bin")
-        .join(if cfg!(windows) { "ginfer-host.exe" } else { "ginfer-host" });
+        .join(if cfg!(windows) {
+            "ginfer-host.exe"
+        } else {
+            "ginfer-host"
+        });
     #[cfg(target_os = "linux")]
     let engine = provider.join("linux/sm120a/bin/ginfer-serve");
     #[cfg(not(target_os = "linux"))]
@@ -164,7 +168,8 @@ pub async fn prepare_installed_hardware<R: tauri::Runtime>(
         crate::core::app::commands::get_jan_data_folder_path(app.clone()),
         app.path().resource_dir().map_err(|e| e.to_string())?,
         None,
-    ).await
+    )
+    .await
 }
 
 pub async fn prepare_installed_hardware_from_paths(
@@ -173,14 +178,21 @@ pub async fn prepare_installed_hardware_from_paths(
     gpu_uuids: Option<Vec<String>>,
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
     installed_desktop_host(&data_folder, &resource_directory)?
-        .ensure_shared_running().await?;
+        .ensure_shared_running()
+        .await?;
     initialize_data_folder(&data_folder).await?;
-    let host_id = client().local_host().await?.ok_or("Local Host is unavailable")?;
+    let host_id = client()
+        .local_host()
+        .await?
+        .ok_or("Local Host is unavailable")?;
     client()
-        .hardware_profile(host_id, ginfer_host::hardware_profile::HardwareProfileRequest {
-            action: ginfer_host::hardware_profile::HardwareProfileAction::Ensure,
-            gpu_uuids,
-        })
+        .hardware_profile(
+            host_id,
+            ginfer_host::hardware_profile::HardwareProfileRequest {
+                action: ginfer_host::hardware_profile::HardwareProfileAction::Ensure,
+                gpu_uuids,
+            },
+        )
         .await
         .map_err(String::from)
 }
@@ -324,6 +336,7 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
                     .ok_or("benchmark request is required")?,
             )
             .map_err(|e| e.to_string())?;
+            tauri_plugin_ginfer::benchmark::validate_request(&request, &target)?;
             let hardware = response_json(
                 self::request(
                     reference.host_id,
@@ -422,6 +435,29 @@ fn benchmark_info(
             })
         })
         .ok_or("instance snapshot missing")?;
+    benchmark_session_from_instance(
+        instance,
+        &resolved.upstream_model_id,
+        format!(
+            "{} — {}",
+            resolved.upstream_model_id,
+            snapshot
+                .get("display_name")
+                .and_then(Value::as_str)
+                .unwrap_or("Host")
+        ),
+        reference.model_alias(),
+        resolved.session_id.map(|s| s.to_string()),
+    )
+}
+
+fn benchmark_session_from_instance(
+    instance: &Value,
+    model_id: &str,
+    display_name: String,
+    target_id: String,
+    session_id: Option<String>,
+) -> Result<tauri_plugin_ginfer::benchmark::BenchmarkSession, String> {
     let config = instance
         .get("configuration")
         .ok_or("instance configuration missing")?;
@@ -432,23 +468,28 @@ fn benchmark_info(
             .and_then(|v| u32::try_from(v).ok())
     };
     Ok(tauri_plugin_ginfer::benchmark::BenchmarkSession {
-        display_name: format!(
-            "{} — {}",
-            resolved.upstream_model_id,
-            snapshot
-                .get("display_name")
-                .and_then(Value::as_str)
-                .unwrap_or("Host")
-        ),
+        display_name,
         pid: None,
-        target_id: reference.model_alias(),
-        session_id: resolved.session_id.map(|s| s.to_string()),
-        model_id: resolved.upstream_model_id.clone(),
+        target_id,
+        session_id,
+        model_id: model_id.into(),
         model_path: config
             .get("artifact")
             .and_then(Value::as_str)
-            .unwrap_or("")
+            .filter(|path| !path.is_empty())
+            .ok_or("instance artifact missing")?
             .into(),
+        benchmark_profile: match config
+            .get("benchmark_profile")
+            .filter(|value| !value.is_null())
+        {
+            Some(value) => Some(
+                serde_json::from_value(value.clone())
+                    .map_err(|error| format!("invalid instance benchmark profile: {error}"))?,
+            ),
+            None => None,
+        },
+        tp: number("tp"),
         max_context: instance
             .get("model_metadata")
             .and_then(|m| m.get("max_model_len"))
@@ -459,24 +500,28 @@ fn benchmark_info(
         vision: config
             .get("vision")
             .and_then(Value::as_bool)
-            .unwrap_or(false),
+            .ok_or("instance vision setting missing")?,
         spec: config
             .get("spec")
             .and_then(Value::as_str)
-            .unwrap_or("auto")
+            .ok_or("instance speculation setting missing")?
             .into(),
-        draft_tokens: number("draft_tokens").unwrap_or(0),
-        draft_tp: number("draft_tp").unwrap_or(0),
+        draft_tokens: number("draft_tokens").ok_or("instance draft width missing")?,
+        draft_tp: number("draft_tp").ok_or("instance draft TP missing")?,
+        draft_policy: config
+            .get("draft_policy")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         kv_dtype: config
             .get("kv_dtype")
             .and_then(Value::as_str)
-            .unwrap_or("auto")
+            .ok_or("instance KV dtype missing")?
             .into(),
-        prefill_chunk: number("prefill_chunk").unwrap_or(0),
+        prefill_chunk: number("prefill_chunk").ok_or("instance prefill setting missing")?,
         cuda_graph: !config
             .get("no_cuda_graph")
             .and_then(Value::as_bool)
-            .unwrap_or(false),
+            .ok_or("instance graph setting missing")?,
     })
 }
 
@@ -731,6 +776,56 @@ mod live_tests;
 #[cfg(test)]
 mod registration_tests {
     use super::*;
+
+    #[test]
+    fn benchmark_session_retains_actual_launch_profile_without_defaulting_missing_facts() {
+        let reference = ginfer_host::max_perf::MaxPerfProfileRef::new(
+            ginfer_host::max_perf::MaxPerfModelClass::Qwen27IntDflashQ4,
+        );
+        let instance = json!({"model_metadata":{"max_model_len":8181},"configuration":{
+            "artifact":"/fixture/model.ginfer","benchmark_profile":reference,"tp":1,"concurrency":8,
+            "vision":true,"spec":"dflash","draft_tokens":7,"draft_tp":1,"draft_policy":"fixed",
+            "kv_dtype":"int8","prefill_chunk":0,"no_cuda_graph":false}});
+        let read = |value: &Value| {
+            benchmark_session_from_instance(
+                value,
+                "qwen3.8-27b/groupwise-int-dflash2-q4",
+                "fixture".into(),
+                "ginfer/host/instance".into(),
+                Some("fixture-session".into()),
+            )
+        };
+        let info = read(&instance).unwrap();
+        assert_eq!(info.benchmark_profile, Some(reference));
+        assert_eq!(info.tp, Some(1));
+        assert_eq!(info.draft_policy.as_deref(), Some("fixed"));
+        assert_eq!(info.max_context, 8181);
+        assert_eq!(info.max_concurrency, 8);
+        for field in [
+            "spec",
+            "draft_tokens",
+            "draft_tp",
+            "vision",
+            "kv_dtype",
+            "no_cuda_graph",
+        ] {
+            let mut missing = instance.clone();
+            missing["configuration"]
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+            assert!(read(&missing).is_err(), "{field}");
+        }
+        let mut missing = instance;
+        let config = missing["configuration"].as_object_mut().unwrap();
+        config.remove("benchmark_profile");
+        config.remove("tp");
+        config.remove("draft_policy");
+        let unknown = read(&missing).unwrap();
+        assert!(unknown.benchmark_profile.is_none());
+        assert!(unknown.tp.is_none());
+        assert!(unknown.draft_policy.is_none());
+    }
 
     #[tokio::test]
     #[ignore = "requires an unlocked native OS credential vault"]

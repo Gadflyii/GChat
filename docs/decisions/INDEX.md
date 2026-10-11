@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Bind Standard Benchmark to versioned Max Perf launches](2026-10-11-bind-standard-benchmarks-to-versioned-max-perf.md)
+
 - **2026-10-11** — [Enable structured outputs in Host deployments](2026-10-11-enable-structured-outputs-in-host-deployments.md)
 
 - **2026-10-11** — [Design local-first Gbot and guided computer setup](2026-10-11-design-local-first-gbot-and-computer-setup.md) — product design approved; implementation scoped separately

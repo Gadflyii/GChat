@@ -1,4 +1,5 @@
 use crate::state::{BenchmarkControl, GinferState, SessionInfo};
+use ginfer_host::max_perf::{self, MaxPerfProfileRef};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -14,6 +15,8 @@ pub struct BenchmarkRequest {
     pub benchmark_id: String,
     pub run_id: String,
     pub session_pid: Option<i32>,
+    #[serde(default)]
+    pub expected_session_id: Option<String>,
     pub prompt_tokens: u32,
     pub max_output_tokens: u32,
     pub concurrencies: Vec<u32>,
@@ -29,12 +32,15 @@ pub struct BenchmarkSession {
     pub session_id: Option<String>,
     pub model_id: String,
     pub model_path: String,
+    pub benchmark_profile: Option<MaxPerfProfileRef>,
+    pub tp: Option<u32>,
     pub max_context: u32,
     pub max_concurrency: u32,
     pub vision: bool,
     pub spec: String,
     pub draft_tokens: u32,
     pub draft_tp: u32,
+    pub draft_policy: Option<String>,
     pub kv_dtype: String,
     pub prefill_chunk: u32,
     pub cuda_graph: bool,
@@ -65,12 +71,15 @@ impl BenchmarkTarget {
                 session_id: None,
                 model_id: session.model_id.clone(),
                 model_path: session.model_path.clone(),
+                benchmark_profile: None,
+                tp: None,
                 max_context: session.max_context,
                 max_concurrency: session.max_concurrency.max(1),
                 vision: session.vision,
                 spec: session.spec.clone(),
                 draft_tokens: session.draft_tokens,
                 draft_tp: session.draft_tp,
+                draft_policy: None,
                 kv_dtype: session.kv_dtype.clone(),
                 prefill_chunk: session.prefill_chunk,
                 cuda_graph: !session.no_cuda_graph,
@@ -229,14 +238,41 @@ fn effective_concurrency(session: &BenchmarkTarget) -> u32 {
     }
 }
 
-fn validate_request(request: &BenchmarkRequest, session: &BenchmarkTarget) -> Result<(), String> {
-    if !["standard", "serving", "long-context", "big-bench", "custom"].contains(&request.benchmark_id.as_str()) {
+pub fn validate_request(
+    request: &BenchmarkRequest,
+    session: &BenchmarkTarget,
+) -> Result<(), String> {
+    if !["standard", "serving", "long-context", "big-bench", "custom"]
+        .contains(&request.benchmark_id.as_str())
+    {
         return Err("unknown benchmark identity".into());
     }
-    if request.benchmark_id == "standard" && (request.prompt_tokens != 2048 ||
-        request.max_output_tokens != 500 || request.warmup_rounds != 1 || request.measured_rounds != 1 ||
-        request.concurrencies != [1, 4, 8].into_iter().filter(|c| *c <= effective_concurrency(session)).collect::<Vec<_>>()) {
-        return Err("Standard Benchmark requires the fixed 2048/500 workload and all supported C1/C4/C8 points".into());
+    if request.benchmark_id == "standard" {
+        let expected = request
+            .expected_session_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
+            .ok_or("Standard Benchmark requires the selected engine session identity")?;
+        if session.session_id.as_deref() != Some(expected) {
+            return Err(
+                "selected benchmark engine session changed; select the current session explicitly"
+                    .into(),
+            );
+        }
+        max_perf::validate_standard_workload(
+            request.prompt_tokens,
+            request.max_output_tokens,
+            &request.concurrencies,
+            request.warmup_rounds,
+            request.measured_rounds,
+        )
+        .map_err(|error| error.to_string())?;
+        let profile = session
+            .benchmark_profile
+            .as_ref()
+            .ok_or("Standard Benchmark requires a versioned Max Perf session")?;
+        max_perf::validate_configuration(profile, &expected_configuration(session)?)
+            .map_err(|error| error.to_string())?;
     }
     if request.run_id.trim().is_empty() || request.run_id.len() > 128 {
         return Err("benchmark run_id must contain 1..=128 characters".into());
@@ -277,6 +313,94 @@ fn validate_request(request: &BenchmarkRequest, session: &BenchmarkTarget) -> Re
     Ok(())
 }
 
+fn expected_configuration(session: &BenchmarkSession) -> Result<serde_json::Value, String> {
+    let (model, weights) = session
+        .model_id
+        .split_once('/')
+        .filter(|(model, weights)| !model.is_empty() && !weights.is_empty())
+        .ok_or("selected benchmark session has no exact artifact identity")?;
+    Ok(serde_json::json!({
+        "model": model, "weights": weights,
+        "tp": session.tp.ok_or("selected benchmark session has no TP observation")?,
+        "draft_tp": session.draft_tp, "max_context": session.max_context,
+        "max_concurrency": session.max_concurrency, "kv_dtype": session.kv_dtype,
+        "spec": session.spec, "draft_tokens": session.draft_tokens,
+        "draft_policy": session.draft_policy.as_deref().ok_or("selected benchmark session has no draft policy")?,
+        "cuda_graph": session.cuda_graph, "vision": session.vision,
+    }))
+}
+
+fn validate_report_configuration(
+    request: &BenchmarkRequest,
+    session: &BenchmarkSession,
+    concurrency: u32,
+    report: &PointReport,
+    previous: Option<&PointReport>,
+) -> Result<(), String> {
+    if request.benchmark_id != "standard" {
+        return Ok(());
+    }
+    let profile = session
+        .benchmark_profile
+        .as_ref()
+        .ok_or("Standard Benchmark requires a versioned Max Perf session")?;
+    max_perf::validate_configuration(profile, &report.configuration)
+        .map_err(|error| error.to_string())?;
+    let expected = expected_configuration(session)?;
+    for (field, value) in expected
+        .as_object()
+        .expect("session configuration is an object")
+    {
+        if report.configuration.get(field) != Some(value) {
+            return Err(format!(
+                "benchmark report {field} does not match the selected session"
+            ));
+        }
+    }
+    if report
+        .configuration
+        .get("engine_build")
+        .and_then(serde_json::Value::as_str)
+        .filter(|build| !build.trim().is_empty())
+        .is_none()
+    {
+        return Err("benchmark report has no engine build identity".into());
+    }
+    if report.corpus.trim().is_empty()
+        || previous.is_some_and(|previous| previous.corpus != report.corpus)
+    {
+        return Err("benchmark corpus is missing or changed between points".into());
+    }
+    if previous.is_some_and(|previous| previous.configuration != report.configuration) {
+        return Err("benchmark engine build or configuration changed between points".into());
+    }
+    for wave in report.warmup.iter().chain(&report.measured) {
+        validate_standard_wave(
+            concurrency,
+            wave.computed_tokens,
+            wave.cached_tokens,
+            wave.output_tokens,
+        )?;
+    }
+    Ok(())
+}
+
+/// Both native reports and the existing public v1 payload must carry exact wave budgets.
+pub fn validate_standard_wave(
+    concurrency: u32,
+    computed: u64,
+    cached: u64,
+    output: u64,
+) -> Result<(), String> {
+    if computed.checked_add(cached)
+        != Some(u64::from(max_perf::INPUT_TOKENS) * u64::from(concurrency))
+        || output != u64::from(max_perf::OUTPUT_TOKENS) * u64::from(concurrency)
+    {
+        return Err("benchmark wave does not match the Standard token workload".into());
+    }
+    Ok(())
+}
+
 fn emit_progress<R: Runtime>(
     app_handle: &tauri::AppHandle<R>,
     request: &BenchmarkRequest,
@@ -303,7 +427,7 @@ async fn execute_benchmark<R: Runtime>(
     control: &Arc<BenchmarkControl>,
 ) -> Result<BenchmarkResult, String> {
     let started_at_ms = unix_millis();
-    let mut points = Vec::new();
+    let mut points: Vec<BenchmarkPoint> = Vec::new();
     for (index, &concurrency) in request.concurrencies.iter().enumerate() {
         if control.cancelled.load(Ordering::Acquire) {
             return Err("benchmark cancelled".into());
@@ -335,6 +459,13 @@ async fn execute_benchmark<R: Runtime>(
             .json::<PointReport>()
             .await
             .map_err(|e| format!("invalid benchmark report: {e}"))?;
+        validate_report_configuration(
+            request,
+            session,
+            concurrency,
+            &report,
+            points.first().map(|point| &point.evidence),
+        )?;
         points.push(score(request, concurrency, report)?);
         emit_progress(app_handle, request, index + 1, concurrency, "complete");
     }
@@ -444,6 +575,7 @@ mod tests {
             benchmark_id: "custom".into(),
             run_id: "run-1".into(),
             session_pid: Some(1),
+            expected_session_id: None,
             prompt_tokens: 512,
             max_output_tokens: 128,
             concurrencies: vec![1, 2, 4],
@@ -452,21 +584,158 @@ mod tests {
         }
     }
 
+    fn standard_configuration() -> serde_json::Value {
+        serde_json::json!({"engine_build":"fixture-engine-build", "model":"qwen3.8-27b",
+            "weights":"groupwise-int-dflash2-q4", "tp":1, "draft_tp":1,
+            "max_context":8181, "max_concurrency":8, "kv_dtype":"int8", "spec":"dflash",
+            "draft_tokens":7, "draft_policy":"fixed", "cuda_graph":true, "vision":true})
+    }
+
+    fn standard_session() -> BenchmarkTarget {
+        BenchmarkTarget {
+            info: BenchmarkSession {
+                display_name: "fixture".into(),
+                pid: None,
+                target_id: "ginfer/host/instance".into(),
+                session_id: Some("fixture-session".into()),
+                model_id: "qwen3.8-27b/groupwise-int-dflash2-q4".into(),
+                model_path: "/fixture/model.ginfer".into(),
+                benchmark_profile: Some(
+                    max_perf::MaxPerfProfile::for_configuration(&standard_configuration())
+                        .unwrap()
+                        .reference,
+                ),
+                tp: Some(1),
+                max_context: 8181,
+                max_concurrency: 8,
+                vision: true,
+                spec: "dflash".into(),
+                draft_tokens: 7,
+                draft_tp: 1,
+                draft_policy: Some("fixed".into()),
+                kv_dtype: "int8".into(),
+                prefill_chunk: 0,
+                cuda_graph: true,
+            },
+            base_url: "http://127.0.0.1:1".into(),
+            api_key: "fixture".into(),
+            client: reqwest::Client::new(),
+        }
+    }
+
+    fn standard_request() -> BenchmarkRequest {
+        BenchmarkRequest {
+            benchmark_id: "standard".into(),
+            expected_session_id: Some("fixture-session".into()),
+            prompt_tokens: max_perf::INPUT_TOKENS,
+            max_output_tokens: max_perf::OUTPUT_TOKENS,
+            concurrencies: max_perf::CONCURRENCIES.to_vec(),
+            warmup_rounds: max_perf::WARMUP_ROUNDS,
+            measured_rounds: max_perf::MEASURED_ROUNDS,
+            ..request()
+        }
+    }
+
     #[test]
-    fn standard_requires_its_fixed_workload_and_supported_points() {
-        let mut value = request();
-        value.benchmark_id = "standard".into();
-        value.prompt_tokens = 2048;
-        value.max_output_tokens = 500;
+    fn standard_requires_its_profile_session_and_complete_fixed_workload() {
+        let mut value = standard_request();
+        let paired = standard_session();
+        assert!(validate_request(&value, &paired).is_ok());
+        assert!(validate_request(&value, &session(8)).is_err());
         value.concurrencies = vec![1, 4];
-        assert!(validate_request(&value, &session(4)).is_ok());
-        assert!(validate_request(&value, &session(8)).is_err());
+        assert!(validate_request(&value, &paired).is_err());
         value.concurrencies = vec![1, 4, 8];
-        assert!(validate_request(&value, &session(8)).is_ok());
         value.measured_rounds = 2;
-        assert!(validate_request(&value, &session(8)).is_err());
+        assert!(validate_request(&value, &paired).is_err());
+        value.measured_rounds = 1;
+        value.expected_session_id = Some("previous-session".into());
+        assert!(validate_request(&value, &paired).is_err());
+        value.expected_session_id = None;
+        assert!(validate_request(&value, &paired).is_err());
+        value = standard_request();
+        let mut wrong_profile = paired.clone();
+        wrong_profile
+            .info
+            .benchmark_profile
+            .as_mut()
+            .unwrap()
+            .version += 1;
+        assert!(validate_request(&value, &wrong_profile).is_err());
+        let mut unknown_facts = paired.clone();
+        unknown_facts.info.tp = None;
+        assert!(validate_request(&value, &unknown_facts).is_err());
+        unknown_facts = paired.clone();
+        unknown_facts.info.draft_policy = None;
+        assert!(validate_request(&value, &unknown_facts).is_err());
         value.benchmark_id = "custom".into();
         assert!(validate_request(&value, &session(8)).is_ok());
+    }
+
+    #[test]
+    fn standard_checks_actual_report_and_preserves_native_v1_fields() {
+        let value = serde_json::json!({
+            "configuration":standard_configuration(), "schema":"ginfer-resident-benchmark-v1", "corpus":"fixture-corpus",
+            "warmup":[{"full_cold_prompt":true,"cold_pp":2048.0,"computed_tokens":2048,"compute_seconds":1.0,
+                "cached_tokens":0,"output_tokens":500,"mean_ttft_seconds":1.0,"decode_tokens":499,"decode_rounds":100,
+                "decode_seconds":2.0,"prefill_seconds_sum":1.0,"decode_seconds_sum":2.0,"request_seconds_sum":3.0,"wall_seconds":3.0}],
+            "measured":[{"full_cold_prompt":false,"cold_pp":null,"computed_tokens":0,"compute_seconds":0.0,
+                "cached_tokens":2048,"output_tokens":500,"mean_ttft_seconds":0.01,"decode_tokens":499,"decode_rounds":100,
+                "decode_seconds":2.0,"prefill_seconds_sum":0.01,"decode_seconds_sum":2.0,"request_seconds_sum":2.01,"wall_seconds":2.01}]
+        });
+        let report: PointReport = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&report).unwrap(), value);
+        let request = standard_request();
+        let session = standard_session();
+        validate_report_configuration(&request, &session, 1, &report, None).unwrap();
+        let point = score(&request, 1, report.clone()).unwrap();
+        assert_eq!(point.cold_prompt_tokens_per_second, Some(2048.0));
+        assert_eq!(point.prompt_tokens_per_second, Some(204800.0));
+        assert_eq!(point.generation_tokens_per_second, Some(249.5));
+        for (field, wrong) in [
+            ("max_context", serde_json::json!(131072)),
+            ("draft_policy", serde_json::json!("auto")),
+            ("spec", serde_json::json!("auto")),
+            ("weights", serde_json::json!("nvfp4-dflash2-q4")),
+            ("tp", serde_json::json!(2)),
+            ("draft_tp", serde_json::json!(0)),
+            ("cuda_graph", serde_json::json!(false)),
+        ] {
+            let mut changed = report.clone();
+            changed.configuration[field] = wrong;
+            assert!(
+                validate_report_configuration(&request, &session, 1, &changed, None).is_err(),
+                "{field}"
+            );
+        }
+        let mut changed = report.clone();
+        changed.configuration["engine_build"] = "another-build".into();
+        assert!(
+            validate_report_configuration(&request, &session, 1, &changed, Some(&report)).is_err()
+        );
+        let mut wrong_session = session.info.clone();
+        wrong_session.model_id = "qwen3.8-27b/nvfp4-dflash2-q4".into();
+        assert!(validate_report_configuration(&request, &wrong_session, 1, &report, None).is_err());
+        changed = report.clone();
+        changed.warmup[0].output_tokens -= 1;
+        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
+        changed = report.clone();
+        changed.measured[0].cached_tokens -= 1;
+        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
+        changed = report.clone();
+        changed.corpus.clear();
+        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
+        changed.corpus = " \t\n".into();
+        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
+        changed.corpus = "different-corpus".into();
+        assert!(
+            validate_report_configuration(&request, &session, 1, &changed, Some(&report)).is_err()
+        );
+        changed = report.clone();
+        changed.configuration["engine_build"] = " \t\n".into();
+        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
+        changed = report;
+        changed.schema = "ginfer-resident-benchmark-v2".into();
+        assert!(score(&request, 1, changed).is_err());
     }
 
     #[test]

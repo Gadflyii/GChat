@@ -134,6 +134,7 @@ it('defaults to the running local model, excludes unavailable targets and benchm
   expect(screen.getByLabelText('Hardware profile')).toHaveValue('')
   expect(screen.getByRole('option', { name: /Current settings · C1/ })).toBeInTheDocument()
   fireEvent.change(selector, { target: { value: 'ginfer/remote/instance' } })
+  fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
   fireEvent.click(screen.getByRole('button', { name: /Run benchmark/ }))
   await waitFor(() => expect(mocks.run).toHaveBeenCalledWith(expect.anything(), 'ginfer/remote/instance'))
 })
@@ -141,6 +142,7 @@ it('defaults to the running local model, excludes unavailable targets and benchm
 it('blocks benchmarking for pending changes and confirms before restarting the selected server', async () => {
   render(<Page />)
   await screen.findByRole('option', { name: /Current settings · C1/ })
+  fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
   const option = screen.getByRole('option', { name: /C4 profile/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   expect(screen.getByRole('alert')).toHaveTextContent('unloads the current model')
@@ -152,4 +154,31 @@ it('blocks benchmarking for pending changes and confirms before restarting the s
   fireEvent.click(screen.getByRole('button', { name: 'Apply & Restart Server' }))
   await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('profile_launch', { host_id: 'local', body: expect.objectContaining({ profile_id: 'c4', instance_id: 'instance', expected_session_id: 'session' }) }))
   await waitFor(() => expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeEnabled())
+})
+
+it('refuses a mismatched Standard session and pins the Max Perf session and all three points', async () => {
+  const first = render(<Page />)
+  await screen.findByRole('option', { name: /Current settings · C1/ })
+  expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: /Run benchmark/ }))
+  expect(mocks.run).not.toHaveBeenCalled()
+  expect(screen.getByRole('alert')).toHaveTextContent('recorded GBench Max Perf v1 profile')
+  first.unmount()
+  mocks.list.mockResolvedValue([{
+    target_id: 'ginfer/local/instance', session_id: 'max-perf-session', pid: null,
+    model_id: 'qwen3.8-27b/groupwise-int-dflash2-q4', display_name: 'Qwen INT',
+    model_path: '/fixture.ginfer', is_embedding: false, max_context: 8181,
+    max_concurrency: 8, tp: 1, vision: true, spec: 'dflash', draft_tokens: 7,
+    draft_tp: 1, draft_policy: 'fixed', kv_dtype: 'int8', kv_arena_bytes: 'auto',
+    prefill_chunk: 0, no_cuda_graph: false,
+    benchmark_profile: { id: 'gbench-max-perf', version: 1, model_class: 'qwen27-int-dflash-q4' },
+  }])
+  render(<Page />)
+  await waitFor(() => expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: /Run benchmark/ }))
+  await waitFor(() => expect(mocks.run).toHaveBeenCalledWith(expect.objectContaining({
+    benchmark_id: 'standard', expected_session_id: 'max-perf-session',
+    prompt_tokens: 2048, max_output_tokens: 500, concurrencies: [1, 4, 8],
+    warmup_rounds: 1, measured_rounds: 1,
+  }), 'ginfer/local/instance'))
 })

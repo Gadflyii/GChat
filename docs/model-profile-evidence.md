@@ -6,8 +6,17 @@ engine, artifact, hardware, and settings; they do not qualify later runtime buil
 The current contract is [model management](model-management.md). Outstanding release
 acceptance belongs in [open work](open-work.md), not this evidence record.
 
-Current OI-072 disposition is in the [Manager authority](ginfer-manager/README.md#current-engine-profile-repair--oi-072): source-only audit complete; exact Muse
-TP1 C4/131,072 NVFP4/native-draft physical qualification waits for Ron's release
+Ron’s October 11 release decision selects dense NVFP4 target weights with an
+all-Q4 DFlash2 drafter and NVFP4 long KV, named `<model>_nvfp4_df2q4.ginfer`.
+Qwen’s exact identity is `qwen3.8-27b/nvfp4-dflash2-q4`; Muse’s existing
+`muse-glimmer-30b/nvfp4` identity already represents its all-Q4 drafter.
+Native-NVFP4 drafter combinations below are historical evidence, not current
+release guidance. This decision does not promote any physical qualification or
+define a Muse Max Perf profile.
+
+The OI-072 disposition in the [Manager authority](ginfer-manager/README.md#current-engine-profile-repair--oi-072)
+concerns the historical Muse TP1 C4/131,072 NVFP4/native-draft profile: its
+source-only audit is complete; physical qualification waits for Ron’s release
 gate. No development Engine or artifact matrix is promoted by this audit.
 The September fixed C4/131,072 Muse profile stays unchanged as evidence of its
 tested `922e5a8` settings. A separate automatic candidate targets installed native

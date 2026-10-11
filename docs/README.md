@@ -14,6 +14,7 @@ Start with the root [README](../README.md) for product scope and releases, or
 | Verification and its limits | [Critical flows](testing-critical-flows.md) |
 | Model/profile ownership and launcher | [Model management](model-management.md) |
 | Recorded profile qualification | [Profile evidence](model-profile-evidence.md) |
+| Standard Benchmark and Max Perf launch policy | [GBench](benchmark/README.md) |
 | GInfer host UI state | [Host UI](host-ui/README.md) |
 | Standalone GInfer Server Manager | [Manager status](ginfer-manager/README.md) |
 | Network host installation and pairing | [Host setup](lan-host-setup.md) |

@@ -182,6 +182,7 @@ async fn load_on_host(
         let mut options = profile.options;
         options.structured_outputs = requested.structured_outputs;
         let launch = LaunchRequest {
+            benchmark_profile: None,
             instance_id: Some(instance_id),
             qualified_profile_id: if changed { None } else { Some(profile.id) },
             model_id: model.id,
@@ -226,6 +227,7 @@ async fn load_on_host(
         (group.len() == model.metadata.tp_size as usize).then_some(group)
     }).ok_or("No unreserved homogeneous GPU group is available; manage existing instances in Engines")?;
     let launch = LaunchRequest {
+        benchmark_profile: None,
         instance_id: None,
         qualified_profile_id: None,
         model_id: model.id,
@@ -402,6 +404,7 @@ mod tests {
         .unwrap();
         let model_id = host.inventory.read().await[0].id;
         let launch = LaunchRequest {
+            benchmark_profile: None,
             instance_id: None,
             qualified_profile_id: None,
             model_id,

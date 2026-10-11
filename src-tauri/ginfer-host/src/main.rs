@@ -785,6 +785,7 @@ mod tests {
         assert_eq!(polls.load(Ordering::SeqCst), idle_polls);
         let id = uuid::Uuid::new_v4();
         let launch = || EngineLaunch {
+            benchmark_profile: None,
             instance_id: id, artifact: artifact.clone(), artifact_dependencies: vec![artifact.clone()],
             artifact_set: false, model_id: "fixture".into(), gpu_uuids: vec!["GPU-fixture".into()],
             tp: 1, port, max_context: 4096, concurrency: 1, options: LaunchOptions::default(),

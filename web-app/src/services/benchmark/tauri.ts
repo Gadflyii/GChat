@@ -1,7 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { BenchmarkProfileReference } from '@/services/engines'
 
 export type BenchmarkSessionInfo = {
+  benchmark_profile?: BenchmarkProfileReference | null
+  tp?: number
+  draft_policy?: string
   target_id: string
   display_name?: string
   session_id?: string | null
@@ -26,6 +30,7 @@ export type BenchmarkRequest = {
   benchmark_id: 'standard' | 'serving' | 'long-context' | 'big-bench' | 'custom'
   run_id: string
   session_pid: number | null
+  expected_session_id?: string | null
   prompt_tokens: number
   max_output_tokens: number
   concurrencies: number[]
@@ -65,6 +70,7 @@ export type BenchmarkConfiguration = {
   tp: number; draft_tp: number; max_context: number; max_concurrency: number
   kv_dtype: string; spec: string; draft_tokens: number; draft_policy: string
   cuda_graph: boolean; vision: boolean
+  prefix_reuse?: boolean
 }
 
 export type BenchmarkWave = {
@@ -82,6 +88,9 @@ export type BenchmarkResult = {
   started_at_ms: number
   completed_at_ms: number
   session: {
+    benchmark_profile?: BenchmarkProfileReference | null
+    tp?: number
+    draft_policy?: string
     display_name: string
     pid: number | null
     target_id: string

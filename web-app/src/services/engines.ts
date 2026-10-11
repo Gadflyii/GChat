@@ -17,14 +17,28 @@ export type EngineInstance = {
   model_metadata?: Record<string, unknown>
 }
 export type EngineLaunchOptions = {
-  vision: boolean; structured_outputs: boolean; spec: 'auto' | 'none' | 'dflash'; draft_tokens: number; draft_tp: number;
+  vision: boolean; structured_outputs: boolean; spec: 'auto' | 'none' | 'dflash' | 'mtp'; draft_tokens: number; draft_tp: number;
+  draft_policy?: 'auto' | 'fixed' | 'adaptive';
   kv_dtype: 'auto' | 'bf16' | 'int8' | 'nvfp4'; kv_arena_bytes: number | null;
   kv_arena_headroom_bytes?: number;
   host_kv_cache_bytes: number | null; prefill_chunk: number; no_cuda_graph: boolean;
 }
 export type EngineLaunchProfile = EngineLaunchOptions & {
   qualified_profile_id?: string | null;
+  benchmark_profile?: BenchmarkProfileReference | null;
   instance_id?: string; model_id: string; gpu_uuids: string[]; max_context: number; concurrency: number;
+}
+export type BenchmarkModelClass = 'qwen27-int-dflash-q4' | 'qwen27-nvfp4-dflash-q4' | 'flash-smol-mtp' | 'flash-int-mtp'
+export type BenchmarkProfileReference = {
+  id: 'gbench-max-perf'; version: 1; model_class: BenchmarkModelClass
+}
+export type EngineMaxPerfProfile = {
+  model_id: string
+  profile: {
+    reference: BenchmarkProfileReference; id: string; name: string
+    max_context: number; concurrency: number; tp: number; options: EngineLaunchOptions
+  }
+  compatible_gpu_groups: string[][]
 }
 export type EngineHardwareProfileAction = 'ensure' | 'refresh' | 'resume' | 'cancel'
 export type EngineHardwareProfile = {
@@ -52,6 +66,7 @@ export const hardwareProfileBusy = (profile?: EngineHardwareProfile) =>
   profile?.status === 'running' || profile?.status === 'cancelling'
 
 export type EngineSnapshot = {
+  max_perf_profiles?: EngineMaxPerfProfile[]
   hardware_profile?: EngineHardwareProfile
   lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];

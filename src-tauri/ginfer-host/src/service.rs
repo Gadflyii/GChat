@@ -44,6 +44,8 @@ pub struct LaunchRequest {
     pub instance_id: Option<Uuid>,
     #[serde(default)]
     pub qualified_profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub benchmark_profile: Option<crate::max_perf::MaxPerfProfileRef>,
     pub model_id: Uuid,
     pub gpu_uuids: Vec<String>,
     pub max_context: u32,
@@ -758,6 +760,18 @@ impl Host {
                 }
             }
         }
+        let mut max_perf_profiles = vec![];
+        for model in &models {
+            let metadata = &model.metadata;
+            if let Ok(profile) = crate::max_perf::profile_for_identity(
+                &metadata.identity, metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available,
+            ) {
+                let groups = profile.gpu_groups(&self.gpus, &reserved);
+                let compatible = profile.gpu_groups(&self.gpus, &Default::default());
+                max_perf_profiles.push(serde_json::json!({"profile":profile,"model_id":model.id,
+                    "gpu_groups":groups,"compatible_gpu_groups":compatible}));
+            }
+        }
         let instance_ids: BTreeSet<_> = observations.iter().map(|(id, ..)| *id).collect();
         let mut instances: Vec<_> = observations
             .iter()
@@ -805,8 +819,9 @@ impl Host {
             "instances":instances,"gpus":self.gpus,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "launch_profiles":available_profiles,"profile_error":*self.profile_error.read().await,
+            "max_perf_profiles":max_perf_profiles,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
-                "managed_root":self.downloads.root(),"engine_presets_available":!available_profiles.is_empty()}})
+                "managed_root":self.downloads.root(),"engine_presets_available":!available_profiles.is_empty() || !max_perf_profiles.is_empty()}})
     }
     pub async fn authenticated(&self, request: &Request<Body>) -> bool {
         self.principal(request).await.is_some()
@@ -908,6 +923,32 @@ impl Host {
                 "artifact changed since inventory scan; refresh inventory before loading".into(),
             );
         }
+        if let Some(reference) = &request.benchmark_profile {
+            reference.resolve().map_err(|error| error.to_string())?;
+            if request.qualified_profile_id.is_some() {
+                return Err("GBench Max Perf is separate from qualified capacity profiles".into());
+            }
+            let profile = crate::max_perf::profile_for_identity(&metadata.identity,
+                metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available)
+                .map_err(|error| error.to_string())?;
+            if profile.reference != *reference || profile.max_context != request.max_context
+                || profile.concurrency != request.concurrency || profile.options != request.options
+            {
+                return Err("settings no longer match GBench Max Perf; select it again or explicitly use custom settings".into());
+            }
+            if let Some(id) = request.instance_id {
+                let saved_tp = self.data.lock().await.profiles.get(&id)
+                    .map(|saved| saved.gpu_uuids.len());
+                let live_tp = self.processes.lock().await.instances()
+                    .find(|instance| instance.instance_id == id).map(|instance| instance.launch.tp);
+                if saved_tp.is_some_and(|tp| tp != 1) || live_tp.is_some_and(|tp| tp != 1) {
+                    return Err("GBench Max Perf cannot convert an existing TP2/TP4 instance".into());
+                }
+            }
+            if !profile.gpu_groups(&self.gpus, &Default::default()).contains(&request.gpu_uuids) {
+                return Err("GPU group is incompatible with GBench Max Perf".into());
+            }
+        }
         if let Some(profile_id) = &request.qualified_profile_id {
             let profile = self
                 .launch_profiles
@@ -969,6 +1010,7 @@ impl Host {
             port,
             max_context: request.max_context,
             concurrency: request.concurrency,
+            benchmark_profile: request.benchmark_profile.clone(),
             options: request.options.clone(),
         })
     }
@@ -1717,22 +1759,29 @@ impl Host {
                         return Err("unknown instance".into());
                     }
                 }
-                let profile = self
-                    .launch_profiles
-                    .read()
-                    .await
-                    .iter()
-                    .find(|p| p.id == selection.profile_id)
-                    .cloned()
-                    .ok_or("unknown qualified profile")?;
-                let mut request = LaunchRequest {
-                    instance_id: selection.instance_id,
-                    qualified_profile_id: Some(profile.id),
-                    model_id: selection.model_id,
-                    gpu_uuids: selection.gpu_uuids,
-                    max_context: profile.max_context,
-                    concurrency: profile.concurrency,
-                    options: profile.options,
+                let mut request = if selection.profile_id.starts_with("gbench-max-perf-") {
+                    let model = self.inventory.read().await.iter()
+                        .find(|model| model.id == selection.model_id).cloned().ok_or("model is not installed")?;
+                    let metadata = &model.metadata;
+                    let profile = crate::max_perf::profile_for_identity(&metadata.identity,
+                        metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available)
+                        .map_err(|error| error.to_string())?;
+                    if profile.id != selection.profile_id {
+                        return Err("unknown GBench Max Perf profile for this artifact".into());
+                    }
+                    if selection.structured_outputs == Some(false) {
+                        return Err("GBench Max Perf uses the Host structured-output default; explicitly use custom settings to change it".into());
+                    }
+                    LaunchRequest {instance_id:selection.instance_id,qualified_profile_id:None,
+                        benchmark_profile:Some(profile.reference),model_id:selection.model_id,
+                        gpu_uuids:selection.gpu_uuids,max_context:profile.max_context,
+                        concurrency:profile.concurrency,options:profile.options}
+                } else {
+                    let profile = self.launch_profiles.read().await.iter()
+                        .find(|p| p.id == selection.profile_id).cloned().ok_or("unknown qualified profile")?;
+                    LaunchRequest {instance_id:selection.instance_id,qualified_profile_id:Some(profile.id),
+                        benchmark_profile:None,model_id:selection.model_id,gpu_uuids:selection.gpu_uuids,
+                        max_context:profile.max_context,concurrency:profile.concurrency,options:profile.options}
                 };
                 let mut launch = self.prepare_launch(&request).await?;
                 let enabled = selection.structured_outputs.unwrap_or(true);
@@ -2014,6 +2063,7 @@ mod target_launch_tests {
         .await
         .unwrap();
         let request = LaunchRequest {
+            benchmark_profile: None,
             instance_id: None,
             qualified_profile_id: None,
             model_id: host.inventory.read().await[0].id,
@@ -2198,6 +2248,7 @@ mod resource_tests {
         .await
         .unwrap();
         let request = LaunchRequest {
+            benchmark_profile: None,
             instance_id: None,
             qualified_profile_id: None,
             model_id: host.inventory.read().await[0].id,
@@ -2966,6 +3017,100 @@ mod lifecycle_tests {
     use std::os::unix::fs::PermissionsExt;
 
     #[tokio::test]
+    async fn max_perf_profile_selection_persists_and_refuses_modified_or_stale_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = dir.path().join("state");
+        let models = dir.path().join("models");
+        std::fs::create_dir(&models).unwrap();
+        let engine = dir.path().join("ginfer-serve");
+        std::fs::write(&engine,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/argv\"\n: > \"$(dirname \"$0\")/argv-ready\"\nexec sleep 60\n").unwrap();
+        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(dir.path().join("ginfer"), b"fixture profiling CLI").unwrap();
+        let hardware = crate::hardware_profile::group_profile_path(&state, &["GPU-test".into()]);
+        std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
+        std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
+        let metadata = serde_json::json!({"identity":{"model_id":"qwen3.8-flash-next","weights_id":"smol-q2g64"},
+            "tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
+        let mut artifact = b"NINFER\0\x03".to_vec();
+        artifact.extend((metadata.len() as u64).to_le_bytes());
+        artifact.extend(metadata.as_bytes());
+        artifact.resize(4096, 0);
+        let artifact_path = models.join("fixture.ginfer");
+        std::fs::write(&artifact_path, artifact).unwrap();
+        let gpus = vec![Gpu {uuid:"GPU-test".into(),name:"Fixture".into(),display_name:None,
+            memory_mib:32768,compute_capability:Some("8.6".into())}];
+        let host = Host::open(state.clone(), "Fixture".into(), engine.clone(), vec![models.clone()], vec![], gpus.clone()).await.unwrap();
+        let available = host.snapshot().await;
+        assert!(available["launch_profiles"].as_array().unwrap().is_empty());
+        assert_eq!(available["max_perf_profiles"].as_array().unwrap().len(), 1);
+        let entry = &available["max_perf_profiles"][0];
+        assert!(entry["profile"].get("qualification").is_none());
+        assert_eq!(entry["compatible_gpu_groups"], serde_json::json!([["GPU-test"]]));
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let selection = serde_json::json!({"profile_id":entry["profile"]["id"],
+            "model_id":entry["model_id"],"gpu_uuids":["GPU-test"]});
+        let response = host.clone().route(Request::post("/host/v1/profile-launch")
+            .header("authorization",format!("Bearer {token}"))
+            .body(Body::from(selection.to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response: serde_json::Value = serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
+        let id: Uuid = serde_json::from_value(response["instance_id"].clone()).unwrap();
+        let before = host.snapshot().await;
+        let instance = &before["instances"][0];
+        let reference = entry["profile"]["reference"].clone();
+        assert_eq!(instance["configuration"]["benchmark_profile"], reference);
+        assert_eq!(instance["profile"]["benchmark_profile"], reference);
+        assert!(instance["profile"]["qualified_profile_id"].is_null());
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !dir.path().join("argv-ready").is_file() { tokio::time::sleep(Duration::from_millis(10)).await; }
+        }).await.unwrap();
+        let argv = std::fs::read_to_string(dir.path().join("argv")).unwrap();
+        let argv: Vec<_> = argv.lines().collect();
+        assert_eq!(argv[0], artifact_path.to_str().unwrap());
+        for pair in [["--max-context","8181"],["--max-concurrency","8"],["--tp","1"],
+            ["--spec","mtp"],["--draft-policy","fixed"],["--draft-tokens","3"],["--kv-dtype","int8"]] {
+            assert!(argv.windows(2).any(|actual| actual == pair));
+        }
+        for flag in ["--kv-arena-bytes","--host-kv-cache-bytes","--prefill-chunk","--no-cuda-graph"] {
+            assert!(!argv.contains(&flag));
+        }
+        assert!(argv.contains(&"--vision") && argv.contains(&"--structured-outputs"));
+        let mut altered = instance["profile"].clone();
+        altered["max_context"] = 8192.into();
+        let response = host.clone().route(Request::post(format!("/host/v1/instances/{id}/reload"))
+            .header("authorization",format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"configuration":altered,"expected_session_id":instance["session_id"]}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(host.snapshot().await["instances"][0]["session_id"], instance["session_id"]);
+        let mut stale = selection.clone();
+        stale["instance_id"] = id.to_string().into();
+        stale["expected_session_id"] = Uuid::new_v4().to_string().into();
+        let response = host.clone().route(Request::post("/host/v1/profile-launch")
+            .header("authorization",format!("Bearer {token}"))
+            .body(Body::from(stale.to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(host.snapshot().await["instances"][0]["session_id"], instance["session_id"]);
+        let response = host.clone().route(Request::post(format!("/host/v1/instances/{id}/restart"))
+            .header("authorization",format!("Bearer {token}"))
+            .body(Body::from("{}")).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let restarted = host.snapshot().await;
+        assert_ne!(restarted["instances"][0]["session_id"], instance["session_id"]);
+        assert_eq!(restarted["instances"][0]["configuration"]["benchmark_profile"], reference);
+        let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(state.join("host.json")).unwrap()).unwrap();
+        assert_eq!(saved["profiles"][id.to_string()]["benchmark_profile"], reference);
+        host.stop(id).await.unwrap();
+        host.shutdown_hardware_profile().await.unwrap();
+        drop(host);
+        let reopened = Host::open(state, "Fixture".into(), engine, vec![models], vec![], gpus).await.unwrap();
+        let snapshot = reopened.snapshot().await;
+        assert_eq!(snapshot["instances"][0]["status"], "stopped");
+        assert_eq!(snapshot["instances"][0]["profile"]["benchmark_profile"], reference);
+        reopened.shutdown_hardware_profile().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn inventory_reports_rejections_and_recovers_on_rescan() {
         let dir = tempfile::tempdir().unwrap();
         let models = dir.path().join("models");
@@ -3080,6 +3225,7 @@ mod lifecycle_tests {
         .await
         .unwrap();
         let profile = LaunchRequest {
+            benchmark_profile: None,
             instance_id: None,
             qualified_profile_id: None,
             model_id: host.inventory.read().await[0].id,

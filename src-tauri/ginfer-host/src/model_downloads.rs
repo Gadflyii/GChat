@@ -1058,6 +1058,7 @@ mod tests {
                 (retained_profile, retained_model, "GPU-retained"),
             ] {
                 host.data.lock().await.profiles.insert(instance_id, LaunchRequest {
+                    benchmark_profile: None,
                     instance_id: Some(instance_id), qualified_profile_id: None, model_id,
                     gpu_uuids: vec![gpu.into()], max_context: 4096, concurrency: 1,
                     options: Default::default(),
@@ -1145,6 +1146,7 @@ mod tests {
             (retained_profile, retained_model, "GPU-retained"),
         ] {
             host.data.lock().await.profiles.insert(instance_id, LaunchRequest {
+                benchmark_profile: None,
                 instance_id: Some(instance_id), qualified_profile_id: None, model_id,
                 gpu_uuids: vec![gpu.into()], max_context: 4096, concurrency: 1,
                 options: Default::default(),
@@ -1281,6 +1283,7 @@ mod tests {
         }
         for (instance_id, model_id, gpu) in profiles {
             host.data.lock().await.profiles.insert(instance_id, LaunchRequest {
+                benchmark_profile: None,
                 instance_id: Some(instance_id), qualified_profile_id: None, model_id,
                 gpu_uuids: vec![gpu.into()], max_context: 4096, concurrency: 1,
                 options: Default::default(),
@@ -1377,6 +1380,7 @@ mod tests {
         let raw = models.iter().find(|model| !model.artifact_set).unwrap();
         let dependent = models.iter().find(|model| model.artifact_set && model.metadata.tp_size == 1).unwrap();
         host.launch(LaunchRequest {
+            benchmark_profile: None,
             instance_id: None, qualified_profile_id: None, model_id: dependent.id,
             gpu_uuids: vec!["GPU-test".into()], max_context: 4096, concurrency: 1,
             options: Default::default(),
@@ -1471,6 +1475,7 @@ mod tests {
         let raw_b = models.iter().find(|model| model.path == package_b.join("model.ginfer")).unwrap().id;
         let alias = models.iter().find(|model| model.artifact_set).unwrap().id;
         let active = host.launch(LaunchRequest {
+            benchmark_profile: None,
             instance_id: None, qualified_profile_id: None, model_id: alias,
             gpu_uuids: vec!["GPU-test".into()], max_context: 4096, concurrency: 1,
             options: Default::default(),
@@ -1527,6 +1532,7 @@ mod tests {
             (stopped_alias, alias, "GPU-stopped-alias"),
         ] {
             host.data.lock().await.profiles.insert(instance_id, LaunchRequest {
+                benchmark_profile: None,
                 instance_id: Some(instance_id), qualified_profile_id: None, model_id,
                 gpu_uuids: vec![gpu.into()], max_context: 4096, concurrency: 1,
                 options: Default::default(),
@@ -1616,6 +1622,7 @@ mod tests {
         let raw_a = models.iter().find(|model| model.path == package_a.join("model.ginfer")).unwrap().id;
         let raw_b = models.iter().find(|model| model.path == package_b.join("model.ginfer")).unwrap().id;
         let mut profile = LaunchRequest {
+            benchmark_profile: None,
             instance_id: None, qualified_profile_id: None, model_id: raw_b,
             gpu_uuids: vec!["GPU-test".into()], max_context: 4096, concurrency: 1,
             options: Default::default(),
