@@ -135,6 +135,12 @@ const SettingsMenu = () => {
       isEnabled: true,
     },
     {
+      title: 'Workspace connections',
+      route: route.settings.workspace_connections,
+      hasSubMenu: false,
+      isEnabled: true,
+    },
+    {
       title: 'common:mcp-servers',
       route: route.settings.mcp_servers,
       hasSubMenu: false,

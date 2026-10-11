@@ -30,9 +30,10 @@ The single master backlog is [GInfer open work](/ai/ginfer-worktrees/open-work/d
 ## Selected design
 
 One native account owner manages browser-based OAuth PKCE, public app registration
-configuration, per-service grants, selected accounts and refresh. Tokens and any
-Google desktop registration secret belong in the OS credential vault; frontend and
-model receive public metadata only. Use existing dependencies. Provider adapters
+configuration, per-service grants, selected accounts and refresh. Refresh tokens
+and any Google desktop registration secret are stored in the OS credential vault;
+access tokens are cached only in native memory. Frontend and model receive public
+metadata only. Use existing dependencies. Provider adapters
 own exact API hosts, endpoints, methods, schemas, paging and response conversion.
 No arbitrary authenticated HTTP tool. A binary redirect may never forward bearer
 credentials to a storage host. Microsoft disconnect must not revoke unrelated app
@@ -49,12 +50,13 @@ connection/reconnect and disconnect with accurate account/service availability.
 
 | Owner | Paths / deliverable | Status |
 | --- | --- | --- |
-| Root | Subject record, integration, review, master TODOs | In progress |
-| review_host_transport | `core/connectors/mod.rs`, `accounts.rs`, native command registration | Shared account lifecycle and API contract |
-| review_host_catalog | `core/connectors/google.rs` | Google typed adapters |
-| review_host_startup | `core/connectors/microsoft.rs` | Microsoft typed adapters |
-| review_host_process | Existing shared agent capability, tool, permission and command dispatch | Shared runtime wiring |
-| review_master_findings | Settings connections route, service client and focused UI fixtures | Account connection UI |
+| Root | Subject record, integration, review, master TODOs | Source integration complete; checks pending |
+| review_host_transport | `core/connectors/mod.rs`, `accounts.rs`, native command registration | Implemented; nine auth fixtures unrun |
+| review_host_catalog | `core/connectors/google.rs`, bundled Workspace guidance | Implemented; five provider fixtures unrun |
+| review_host_startup | `core/connectors/microsoft.rs` | Implemented; five provider fixtures unrun |
+| review_host_process | Existing shared agent capability, tool, permission and command dispatch | Implemented; five runtime fixtures unrun |
+| review_master_findings | Settings connections route, service client and focused UI fixtures | Implemented; twelve connection UI fixtures unrun |
+| fix_oi111 | Independent account, provider, dispatch and UI source review | Accepted revised source; no execution claim |
 
 All source lives in `/ai/gchat-worktrees/workspace-connectors-f111`, branch
 `feat/gchat-workspace-connectors`, baseline `f111810ec`, owned by GChat/root.
@@ -62,6 +64,36 @@ Main stays unchanged pending reviewed integration. No connector build, model run
 GPU booking, live account, registration or provider mutation has begun. Agents
 write disjoint files; root reviews actual diffs and commits before compilation.
 No disposable build directory or copied model/artifact exists for this subject.
+Native bundled Google Workspace and Microsoft 365 guidance replaces the bundled
+external `gog-workspace` skill; user-installed skills are not pruned.
+
+## Current implementation
+
+The account owner uses system-browser sign-in, a loopback callback, PKCE and the
+existing credential vault. Public metadata records selected accounts and actual
+consented scopes. Cancellation and disconnect serialize with durable credential
+updates. Cancel can report Connected if the durable sign-in commit has already
+begun. Each provider owns typed request construction and binary content;
+Microsoft responses remove preauthenticated storage URLs before publication.
+
+All three modes resolve the same account before approval and use the same dispatch:
+
+| Mode | Discovery and execution |
+| --- | --- |
+| Chat | `gchat_capability_search`, `gchat_capability_read`, `gchat_capability_call` |
+| Code | `gchat_search_capabilities`, `gchat_read_capability`, `gchat_call_capability` |
+| Agent | `capability_search`, `capability_read`, `connector_call` with `name` and `arguments` |
+
+Discovery includes only connected, consented tools and loads schemas on demand.
+Agent model responses normalize compact connector calls before batch validation,
+loop detection and read/mutation classification. Approval previews identify the
+account and operation without exposing message bodies or binary payloads.
+
+Independent source review caught and corrected cancellation during vault commit,
+disconnect metadata rollback, unchecked partial consent, exposed Graph storage
+URLs, lost pending sign-in state after navigation and eager schema injection.
+The review accepts the revised source; compilation, formatting and fixtures have
+not run. No connector feature is installed or live-qualified.
 
 ## Acceptance and next action
 
@@ -74,10 +106,17 @@ read/write acceptance require real registered client IDs and a user-approved tes
 account; these prerequisites are not available yet. Source fixtures cannot be
 reported as live sign-in or provider qualification.
 
-Next: freeze the account/tool contract, implement each assigned source boundary,
-then review and run focused checks after the current installed reconnect gate
-releases its CPU guard. No publication, signing, production account mutation,
-new dependency or paid Arbitor implementation is authorized by this task.
+Next: commit and push the reviewed source, then generate the Settings route and
+run affected formatting, native checks and focused fixtures after C3 releases its
+hardware-profiling interval on October 11 (current booking 396: 00:08–01:08 UTC).
+Wait for its actual end before starting checks. GChat cancelled unused
+CPU booking 394; it holds no build/GPU guard or live job. Reuse existing dependency
+and Cargo caches. Native account acceptance remains a separate unmet prerequisite.
+No publication, signing, production account mutation, new dependency or paid
+Arbitor implementation is authorized by this task.
+
+See [connection setup and supported operations](operations.md) and the
+[account/runtime decision](../decisions/2026-10-10-own-native-workspace-connectors.md).
 
 ## Provider authorities
 

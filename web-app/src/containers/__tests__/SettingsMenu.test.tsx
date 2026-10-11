@@ -131,6 +131,7 @@ describe('SettingsMenu', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('common:https_proxy')).toBeInTheDocument()
     expect(screen.getByText('common:mcp-servers')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Workspace connections' })).toHaveAttribute('href', '/settings/workspace-connections')
   })
 
   it('shows the saved integration choices', () => {

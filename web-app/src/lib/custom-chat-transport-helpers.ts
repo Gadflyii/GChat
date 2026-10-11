@@ -66,7 +66,7 @@ export function buildToolsRecord(
 export function buildCapabilityDiscoveryTools(): Record<string, Tool> {
   return {
     gchat_capability_search: {
-      description: 'Search enabled GChat native and connected MCP capabilities by name or purpose. Returns matching names and short descriptions.',
+      description: 'Search enabled GChat native and connected tools by name or purpose. Returns matching names and short descriptions.',
       inputSchema: jsonSchema({
         type: 'object', properties: { query: { type: 'string', minLength: 1 } },
         required: ['query'], additionalProperties: false,
@@ -80,7 +80,7 @@ export function buildCapabilityDiscoveryTools(): Record<string, Tool> {
       }),
     } as Tool,
     gchat_capability_call: {
-      description: 'Call one enabled GChat native or connected MCP capability by its exact name, with arguments matching its schema.',
+      description: 'Call one enabled GChat native or connected tool by its exact name, with arguments matching its schema.',
       inputSchema: jsonSchema({
         type: 'object',
         properties: { name: { type: 'string' }, arguments: { type: 'object' } },

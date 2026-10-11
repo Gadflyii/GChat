@@ -84,6 +84,13 @@ pub fn run() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
         core::benchmark_submission::submit_benchmark,
+        core::connectors::connector_accounts,
+        core::connectors::connector_configure,
+        core::connectors::connector_begin_auth,
+        core::connectors::connector_auth_status,
+        core::connectors::connector_cancel_auth,
+        core::connectors::connector_select_account,
+        core::connectors::connector_disconnect,
         core::engine_hosts::engine_hosts_command,
         // FS commands - Deperecate soon
         core::filesystem::commands::join_path,
@@ -414,6 +421,7 @@ pub fn run() {
     let app_builder = app_builder.manage(core::terminal::TerminalState::default());
 
     let app = app_builder
+        .manage(Arc::new(core::connectors::AccountsState::default()))
         .manage(AppState {
             app_token: Some(generate_app_token()),
             mcp_servers: Arc::new(Mutex::new(HashMap::new())),

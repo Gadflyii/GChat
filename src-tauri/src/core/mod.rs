@@ -6,6 +6,7 @@ pub mod code_sessions;
 pub mod app;
 pub mod artifact;
 pub mod benchmark_submission;
+pub mod connectors;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod downloads;
