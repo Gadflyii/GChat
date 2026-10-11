@@ -5,6 +5,8 @@ title: "Add a \"Launch\" page to install + configure external coding agents / as
 
 # 2026-06-01 — Add a "Launch" page to install + configure external coding agents / assistants against the local OpenAI-compatible API
 
+The original OpenCode configuration placement below is historical. The [current decision](2026-10-11-isolate-managed-opencode-configuration.md) stores all managed Code configuration in the selected GChat data folder.
+
 - **Context:** To use Atomic Chat's local models from external agents
  (Claude Code, Codex CLI, OpenCode, Hermes, OpenClaw) users had to
  hand-edit each agent's config to point at `http://localhost:1337/v1`.

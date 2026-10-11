@@ -4,7 +4,84 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
-## Current walkthrough defect correction
+## Current Code configuration isolation
+
+Repository `/ai/gchat`; subject `docs/agent-runtime/`; baseline main `1e61155b4`,
+branch `fix/gchat-opencode-data-root-1e611`, owned source
+`/ai/gchat-worktrees/opencode-data-root-1e611`. The October 11 decision assigns
+GCHAT-CODE-MANAGED-CONFIG-DATA-ROOT: managed configuration and all managed OpenCode
+children must use the selected GChat data folder without writing the user's
+standalone OpenCode configuration. The owning master rows were read before changes.
+
+The implementation is complete in reviewed/pushed product `6a8d81383`.
+Independent review accepts the source and saved evidence for managed ownership;
+it explicitly excludes natural embedded TUI acceptance.
+One directory, `<data>/code/opencode`, owns configuration, theme, plugins and
+update logs. Desktop and CLI resolve the selected app data folder once per
+operation. Every managed child receives `XDG_CONFIG_HOME=<data>/code`,
+`OPENCODE_CONFIG_DIR=<data>/code/opencode` and `OPENCODE_CONFIG` pointing at the
+preferred writable document. Readiness, embedded and external Launch, CLI,
+updater and offline session deletion use this contract. HOME is unchanged; there
+is no standalone import or fallback. Stock project and HOME/.opencode discovery
+remain upstream behavior; this correction isolates managed writes.
+
+All eight owning cases pass, including real PTY and external-shell environment
+witnesses. Strict Clippy, affected Launch lint, frontend typecheck/build and the
+corrected Linux desktop pass. CPU booking 474 returned at 10:17 after producer
+exit. No source changed after these checks.
+
+The isolated Linux/WSLg Code configuration and routing check passes with stock
+OpenCode 1.18.21, the accepted 257 Host, accepted 670 runtime/profile and the
+existing FlashNext SMOL artifact in place. Native readiness resolves the private
+managed JSONC. The actual OpenCode process has unchanged HOME and the expected
+configuration environment; its loaded provider/model and MCP connection match
+GChat. Its session is saved as a Code sidebar reference. One public API prompt
+on that same session returns `OI068_CODE_DATA_ROOT_OK`, finishes with `stop`,
+makes no tool call and becomes idle. All 11 pre-existing standalone configuration
+entries retain exact bytes, hashes, modes and mtimes through full teardown.
+This is configuration/model/bridge evidence, not inference performance or
+physical model qualification.
+
+Embedded terminal interaction remains incomplete. Its parsed xterm buffer is
+blank apart from the launch command, and the once-only native PTY prompt never
+enters OpenCode's message history. The API prompt above was submitted only after
+that session was confirmed to contain zero messages. It does not establish a
+natural TUI response. GCHAT-CODE-LINUX-TUI-BLANK records this separate observed
+defect; its cause is unproven. OI-068 remains PARTIAL for that Code walkthrough,
+Hermes/Windows and broader active-worker scope.
+
+Ordinary Code Stop reports Exited; ordinary sidebar Stop leaves the Host instance
+stopped with zero active requests. Model booking 478 (10:24–10:39) returned at
+10:35 after Engine/OpenCode absence and closed facade/upstream/Code listeners.
+The guard exits 0. App and Host exit normally, all five private listeners close,
+and the private test root releases 95,911,936 allocated bytes at 10:37.
+The clean merged prior agent tree is retired (302,551,040 allocated bytes);
+its exact baseline LICENSE/agent-skills resources are preserved in the accepted
+donor first. Original models, runtime, profile and Windows installation remain intact.
+
+Acceptance scope is the requested managed-configuration correction: focused cases
+and one isolated Linux Code configuration/routing check without repurposing HOME.
+No full suites, Engine/model build, calibration, dependency/tool installation,
+Windows build/run or release/sign/publication. The existing overwritten global
+configuration has no known immediate before-image; no restoration is claimed.
+Driver corrections are recorded in the evidence packet: typed Host routes/snapshot
+fields must be read before commands, Radix menus opened through supported keyboard
+interaction, and process ownership checked as paths/arguments rather than raw
+command substrings. Failed driver observations are excluded from product evidence.
+
+Current next action: coordinator review/main merge of this correction and assignment
+of the separate terminal defect; no owned live job or booking remains. The original
+next paired-Host acceptance items are OI-069/OI-071.
+
+| Owner / host | Exact path | Purpose / retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/opencode-data-root-1e611` | Reviewed candidate; retain through coordinator merge |
+| GChat / local | `/ai/gchat/out/opencode-data-root-20261011/` | `focused-result.json`, `code-config-functional-result.json`, `runtime-api-after.json`, exact standalone snapshots, blank terminal and cleanup evidence; tested desktop retained |
+| GChat / local | Same packet `test-root/` | Removed after normal teardown |
+| GChat / local | `/ai/gchat/out/agent-walkthrough-20261011/` | Accepted three-defect evidence and tested baseline; preserve |
+| GChat / local | `/ai/gchat-worktrees/agent-walkthrough-869` | Retired; baseline resource links replaced with exact retained copies |
+
+## Accepted walkthrough defect correction
 
 Repository `/ai/gchat`; subject `docs/agent-runtime/`; baseline main869a368b1,
 branch `fix/gchat-agent-walkthrough-869`, owned source
@@ -60,12 +137,13 @@ no exact restoration or wholly isolated user-configuration claim is made. The
 master GCHAT-CODE-MANAGED-CONFIG-DATA-ROOT row retains this owning correction.
 Broader OI-068 remains PARTIAL for Code/Hermes/Windows and active-worker scope.
 
-Current next action: coordinator review/main merge of this single three-defect
-change, without release/sign/publication. No owned live job or booking remains.
+The three-defect change is merged and pushed on main `1e61155b4`. No owned live
+job or booking remains. Current Code isolation and its separate terminal blocker
+are recorded above; no release/sign/publication occurred.
 
 | Owner / host | Exact path | Purpose / retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/agent-walkthrough-869` | Current reviewed candidate; retain until coordinator merge |
+| GChat / local | `/ai/gchat-worktrees/agent-walkthrough-869` | Retired after preserving exact baseline resources |
 | GChat / local | `/ai/gchat/out/agent-walkthrough-20261011/` |19 focused PASS, tested desktop and real-model-result.json / exact saved-error and cleanup evidence |
 | GChat / local | Same packet `runtime-donor/usr/bin/gchat` | Tested b51909e63 Linux developer desktop; preserve without rebuilding |
 | GChat / local | Same packet `test-root/` | Deleted after normal resource return; concise generated evidence retained |

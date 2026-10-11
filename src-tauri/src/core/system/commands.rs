@@ -2798,15 +2798,25 @@ pub(crate) fn opencode_model_config(model: &str, context: Option<u32>) -> serde_
 }
 
 #[tauri::command]
-pub async fn configure_opencode(
+pub async fn configure_opencode<R: Runtime>(
+    app: AppHandle<R>,
     api_url: String,
     model: String,
     api_key: Option<String>,
 ) -> Result<(), String> {
-    let home = agent_home_dir()?;
-    let dir = super::opencode_config::config_directory(&home);
+    configure_opencode_in(&get_jan_data_folder_path(app), api_url, model, api_key).await
+}
+
+pub(crate) async fn configure_opencode_in(
+    data: &Path,
+    api_url: String,
+    model: String,
+    api_key: Option<String>,
+) -> Result<(), String> {
+    let dir = super::opencode_config::config_directory(data);
+    let context = fetch_opencode_model_context(&api_url, &model, api_key.as_deref()).await;
     std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create ~/.config/opencode: {}", e))?;
+        .map_err(|e| format!("Failed to create {}: {e}", dir.display()))?;
     let path = super::opencode_config::writable_config_path(&dir);
 
     let mut root: serde_json::Value = if path.exists() {
@@ -2832,7 +2842,6 @@ pub async fn configure_opencode(
         .as_deref()
         .filter(|k| !k.is_empty())
         .unwrap_or("gchat");
-    let context = fetch_opencode_model_context(&api_url, &model, api_key.as_deref()).await;
     let model_config = opencode_model_config(&model, context);
     let mut models = serde_json::Map::new();
     models.insert(model.clone(), model_config);
@@ -4553,11 +4562,23 @@ pub fn configure_cline(
 /// using a just-configured agent in one click. The terminal stays open after
 /// the command (it launches an interactive TUI agent like codex/claude).
 #[tauri::command]
-pub fn open_agent_terminal(command: String, proxy: Option<ProxyEnv>) -> Result<(), String> {
+pub fn open_agent_terminal<R: Runtime>(
+    app: AppHandle<R>,
+    agent_id: String,
+    command: String,
+    proxy: Option<ProxyEnv>,
+) -> Result<(), String> {
     let command = command.trim().to_string();
     if command.is_empty() {
         return Err("Empty terminal command".to_string());
     }
+    let environment = if agent_id == "opencode" {
+        agent_terminal_environment(&agent_id, &get_jan_data_folder_path(app))
+    } else {
+        Vec::new()
+    };
+    #[cfg(unix)]
+    let command = agent_terminal_payload(&command, &environment)?;
 
     #[cfg(target_os = "macos")]
     {
@@ -4598,6 +4619,7 @@ pub fn open_agent_terminal(command: String, proxy: Option<ProxyEnv>) -> Result<(
         // applied below reaches the interactive agent.
         let mut cmd = std::process::Command::new("cmd");
         cmd.args(["/C", "start", "", "cmd", "/K", &command]);
+        cmd.envs(environment);
         // The launched console inherits this `cmd`'s environment, so refresh the
         // PATH from the registry (+ npm global prefix) here — otherwise a console
         // started from a GUI launched before Node/npm was installed inherits a
@@ -4644,6 +4666,39 @@ pub fn open_agent_terminal(command: String, proxy: Option<ProxyEnv>) -> Result<(
 
     #[allow(unreachable_code)]
     Ok(())
+}
+
+fn agent_terminal_environment(
+    agent_id: &str,
+    data: &Path,
+) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    if agent_id == "opencode" {
+        super::opencode_config::child_env(&super::opencode_config::config_directory(data))
+    } else {
+        Vec::new()
+    }
+}
+
+#[cfg(unix)]
+fn agent_terminal_payload(
+    command: &str,
+    environment: &[(std::ffi::OsString, std::ffi::OsString)],
+) -> Result<String, String> {
+    // Terminal emulators can reuse an existing server with its own environment.
+    // Carry the selected root in the shell payload, including Terminal.app's
+    // AppleScript launch, rather than relying on emulator process inheritance.
+    let mut payload = String::new();
+    for (name, value) in environment {
+        let name = name
+            .to_str()
+            .ok_or("The managed Code environment name must be valid Unicode")?;
+        let value = value.to_str().ok_or(
+            "The managed Code configuration path must be valid Unicode for a terminal launch",
+        )?;
+        payload.push_str(&format!("{name}='{}' ", value.replace('\'', "'\\''")));
+    }
+    payload.push_str(command);
+    Ok(payload)
 }
 
 /// Launch a GUI editor for the "IDEs & Editors" integrations (VS Code,
@@ -4782,6 +4837,169 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+
+    #[cfg(unix)]
+    #[test]
+    fn managed_agent_terminal_payload_carries_literal_selected_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("selected 'data $(echo injected)");
+        let environment = super::agent_terminal_environment("opencode", &data);
+        let payload = super::agent_terminal_payload(
+            r#"bash -c 'printf "%s\n" "$XDG_CONFIG_HOME" "$OPENCODE_CONFIG_DIR" "$OPENCODE_CONFIG"'"#,
+            &environment,
+        ).unwrap();
+        let output = std::process::Command::new("bash")
+            .args(["-c", &payload])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let directory = data.join("code/opencode");
+        let expected = format!(
+            "{}\n{}\n{}\n",
+            data.join("code").display(),
+            directory.display(),
+            directory.join("opencode.jsonc").display()
+        );
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+        // Identity, rather than the raw command text, chooses the managed route.
+        let unrelated = super::agent_terminal_environment("codex", &data);
+        assert!(unrelated.is_empty());
+        assert_eq!(
+            super::agent_terminal_payload("opencode --help", &unrelated).unwrap(),
+            "opencode --help"
+        );
+    }
+
+    #[tokio::test]
+    async fn desktop_and_cli_opencode_configuration_use_selected_data_root() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("selected data");
+        let directory = super::super::opencode_config::config_directory(&data);
+        std::fs::create_dir_all(&directory).unwrap();
+        let json = directory.join("opencode.json");
+        std::fs::write(&json, r#"{"lowerLayer":"retained"}"#).unwrap();
+        let jsonc = directory.join("opencode.jsonc");
+        std::fs::write(
+            &jsonc,
+            r#"{
+            // Retain settings in the managed file, including other providers.
+            "provider": {"other":{"name":"Other provider"}},
+            "permission": {"edit":"ask"},
+        }"#,
+        )
+        .unwrap();
+        let standalone = root
+            .path()
+            .join("standalone/.config/opencode/opencode.jsonc");
+        std::fs::create_dir_all(standalone.parent().unwrap()).unwrap();
+        let sentinel = b"Standalone config must neither be parsed nor replaced.";
+        std::fs::write(&standalone, sentinel).unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let api_url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let models = serde_json::json!({"data":[
+            {"id":"desktop-model","max_model_len":131072},
+            {"id":"cli-model","max_model_len":65536},
+        ]})
+        .to_string();
+        let metadata = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 4096];
+                let count = socket.read(&mut request).await.unwrap();
+                assert!(String::from_utf8_lossy(&request[..count]).starts_with("GET /v1/models "));
+                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", models.len(), models);
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let app = tauri::test::mock_app();
+        app.manage(crate::test_support::TestDataRoot(data.clone()));
+        super::configure_opencode(
+            app.handle().clone(),
+            api_url.clone(),
+            "desktop-model".into(),
+            None,
+        )
+        .await
+        .unwrap();
+        let desktop = super::super::opencode_config::read_config_file(&jsonc).unwrap();
+        assert_eq!(desktop["model"], "gchat/desktop-model");
+        assert_eq!(
+            desktop["provider"]["gchat"]["models"]["desktop-model"]["limit"]["context"],
+            131072
+        );
+        assert_eq!(
+            desktop["provider"]["gchat"]["models"]["desktop-model"]["temperature"],
+            false
+        );
+        assert_eq!(desktop["provider"]["gchat"]["options"]["apiKey"], "gchat");
+
+        let agent = crate::core::cli::integrations::find("opencode").unwrap();
+        crate::core::cli::integrations::configure(
+            agent,
+            &data,
+            &api_url,
+            "cli-model",
+            "fixture-key",
+        )
+        .await
+        .unwrap();
+        metadata.await.unwrap();
+        let configured = super::super::opencode_config::read_merged_global_config(&directory)
+            .unwrap()
+            .unwrap();
+        assert_eq!(configured["model"], "gchat/cli-model");
+        assert_eq!(
+            configured["provider"]["gchat"]["options"]["baseURL"],
+            api_url
+        );
+        assert_eq!(
+            configured["provider"]["gchat"]["options"]["apiKey"],
+            "fixture-key"
+        );
+        assert_eq!(
+            configured["provider"]["gchat"]["models"]["cli-model"]["limit"],
+            serde_json::json!({"context":65536,"output":65536})
+        );
+        assert_eq!(
+            configured["provider"]["gchat"]["models"]["cli-model"]["temperature"],
+            false
+        );
+        assert_eq!(configured["provider"]["other"]["name"], "Other provider");
+        assert_eq!(configured["permission"]["edit"], "ask");
+        assert_eq!(configured["lowerLayer"], "retained");
+        assert_eq!(std::fs::read(&standalone).unwrap(), sentinel.to_vec());
+        assert_eq!(
+            std::fs::read_to_string(&json).unwrap(),
+            r#"{"lowerLayer":"retained"}"#
+        );
+
+        let environment: std::collections::HashMap<_, _> =
+            crate::core::cli::integrations::child_env(
+                agent,
+                &data,
+                &api_url,
+                "cli-model",
+                "fixture-key",
+            )
+            .into_iter()
+            .collect();
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("XDG_CONFIG_HOME")),
+            Some(&data.join("code").into_os_string())
+        );
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("OPENCODE_CONFIG_DIR")),
+            Some(&directory.into_os_string())
+        );
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("OPENCODE_CONFIG")),
+            Some(&jsonc.into_os_string())
+        );
+        assert!(!environment.contains_key(std::ffi::OsStr::new("HOME")));
+    }
 
     #[test]
     fn opencode_model_entry_leaves_sampling_to_the_served_model() {
