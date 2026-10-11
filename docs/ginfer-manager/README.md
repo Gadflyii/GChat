@@ -11,6 +11,58 @@ independent package and native X11 acceptance pass. The older `2a6e21ff2`
 Linux proof remains historical evidence. Package paths and proof are recorded below.
 Documentation-only handoffs do not rebuild accepted binaries.
 
+## Structured outputs in Host deployments
+
+Current item: `GCHAT-STRUCTURED-OUTPUT-ENABLEMENT`, approved October 11.
+Deliverable: agent-capable Host deployments enable the existing Engine
+structured-output flag by default, with an explicit saved deployment setting to
+disable it. GChat and Manager expose the same control; the universal GInfer
+Engine/CLI default stays OFF. An omitted Host setting means ON, and explicit
+OFF survives profile save, reload and restart. A preset override must retain
+model/GPU/payload validation and stop claiming qualification when its options
+differ from the recorded catalog. Historical profile evidence does not qualify
+this changed startup setting.
+
+The touched-file audit also identifies `GCHAT-HOST-ZERO-PREFIX-CACHE`: an omitted
+Host cache limit selects AUTO, explicit zero disables it, and a positive value
+selects exact bytes. Preserve those three values through API, saved deployment,
+UI and argv instead of filtering zero out. This mismatch is not an established
+cause of the separate S2 RAM-headroom failure.
+
+Acceptance: focused Host argv/default/persistence cases, then one real
+schema-valid request with structured outputs ON and the same otherwise-valid
+request receiving the typed disabled rejection with OFF. Existing small owning
+UI cases cover the explicit controls; no full suite or model matrix. Use one
+isolated Linux Host and the accepted local SMOL artifact/profile/runtime in
+place; keep admission guards, context, concurrency, KV dtype and speculation
+unchanged. No Engine build, hardware calibration, native Windows change,
+installer/release/signing/publication or Gbot implementation.
+
+Owned candidate: `/ai/gchat-worktrees/structured-outputs-058`, branch
+`fix/gchat-structured-outputs-058`, baseline main `058702dd8`. Evidence and accepted
+Host build belong in `/ai/gchat/out/structured-output-20261011/`; retain concise
+results and the accepted build, retire the private state after normal stop.
+Source `e65778645` is frozen. Three exact Host cases PASS (argv/serde,
+validated preset/save/restart/reopen, recorded catalog defaults), plus five
+GChat and seven Manager cases. Strict Host/plugin Clippy, plugin check,
+affected frontend lint/typecheck and the Linux Host build PASS. Retained Host:
+`/ai/gchat/out/structured-output-20261011/accepted-host/ginfer-host`;
+[focused results](../../../out/structured-output-20261011/host-gate-result.json)
+and [UI results](../../../out/structured-output-20261011/frontend-manager-acceptance.json).
+
+The live ON/OFF gate has not started. C1's new `FLASH-STRUCTURED-ALLOWED-TOKEN-WIDTH`
+evidence shows strict schema sampling crashes because the frontend expects
+7760 padded mask words while Flash supplies 7753 semantic words. Source inspection
+of our intended accepted `4c63` runtime shows the same semantic-vocabulary mask
+allocation. Its prior Ready/Stop result does not establish constrained sampling.
+Cancel the provisional GPU booking before launching; do not repeat the known
+failure or change speculation/limits to evade it. C1 owns the Engine correction.
+The fresh private test state is prepared without a Host/model process; the
+accepted build and concise evidence are retained. No job or guard is held.
+Next action: bind C1's corrected accepted SM120a runtime, then make the required
+one real ON/OFF Host request pair. Release qualification and native Windows
+remain excluded.
+
 ## Accepted hardware profile installation
 
 Deliverable: one Host-owned resumable profile-v2 job, invoked by the GChat

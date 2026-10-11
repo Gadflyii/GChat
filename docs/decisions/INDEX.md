@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Enable structured outputs in Host deployments](2026-10-11-enable-structured-outputs-in-host-deployments.md)
+
 - **2026-10-11** — [Preserve logical assignment in desktop bundles](2026-10-11-preserve-desktop-logical-assignment.md)
 
 - **2026-10-11** — [Keep managed OpenCode configuration in the GChat data folder](2026-10-11-isolate-managed-opencode-configuration.md)
