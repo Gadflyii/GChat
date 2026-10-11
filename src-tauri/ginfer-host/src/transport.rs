@@ -58,7 +58,7 @@ async fn read_snapshot(
         .await
         .map_err(ClientError::from)?;
     let snapshot = response_json(response).await?;
-    let parsed: crate::engine_registry::HostSnapshot = serde_json::from_value(snapshot.clone())
+    let parsed = crate::engine_registry::HostSnapshot::deserialize(&snapshot)
         .map_err(|e| ClientError::Problem(e.to_string()))?;
     if parsed.host_id != expected
         || parsed.protocol_version != crate::engine_registry::HOST_PROTOCOL_VERSION

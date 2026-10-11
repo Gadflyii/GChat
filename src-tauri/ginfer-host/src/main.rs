@@ -75,6 +75,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(std::io::Error::other)?;
     Ok(())
 }
+
+#[cfg(any(windows, test))]
+async fn pending_checkpoints(
+    mut pending: tokio::sync::watch::Receiver<bool>,
+    period: Duration,
+    mut report: impl FnMut(),
+) {
+    let mut interval = Some(tokio::time::interval(period));
+    loop {
+        if !*pending.borrow_and_update() {
+            // Drop the timer registration completely while SCM reports Running.
+            interval = None;
+            if pending.changed().await.is_err() { return; }
+            continue;
+        }
+        let interval = interval.get_or_insert_with(|| {
+            tokio::time::interval_at(tokio::time::Instant::now() + period, period)
+        });
+        tokio::select! {
+            changed = pending.changed() => {
+                if changed.is_err() { return; }
+            }
+            _ = interval.tick() => report(),
+        }
+    }
+}
+
 async fn run(
     args: Args,
     ready: impl FnOnce() -> Result<(), String>,
@@ -201,10 +228,9 @@ async fn run(
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tick.tick().await;
-            if let Err(e) = monitor_host.refresh_processes().await {
+            if let Err(e) = refresh_nonempty_processes(&monitor_host).await {
                 eprintln!("Engine monitoring: {e}");
             }
-            monitor_host.revision.fetch_add(1, Ordering::SeqCst);
         }
     });
     let scan_host = host.clone();
@@ -251,6 +277,16 @@ async fn run(
     host.processes.lock().await.shutdown().await?;
     outcome
 }
+
+async fn refresh_nonempty_processes(host: &Host) -> Result<bool, String> {
+    if host.processes.lock().await.instances().next().is_none() {
+        return Ok(false);
+    }
+    let result = host.refresh_processes().await;
+    host.revision.fetch_add(1, Ordering::SeqCst);
+    result.map(|_| true)
+}
+
 async fn shutdown_signal() {
     #[cfg(unix)]
     {
@@ -274,10 +310,75 @@ fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
     #[test]
     fn cmp_alias_uses_device_identity_not_generic_driver_name() {
         assert_eq!(super::gpu_display_alias("0x20C210DE"), Some("NVIDIA CMP 170HX"));
         assert_eq!(super::gpu_display_alias("0x220410DE"), None);
         assert_eq!(super::gpu_display_alias("N/A"), None);
+    }
+
+    #[tokio::test]
+    async fn scm_checkpoints_sleep_while_running_and_resume_pending() {
+        let period = std::time::Duration::from_millis(20);
+        let (state, receiver) = tokio::sync::watch::channel(true);
+        let reports = Arc::new(AtomicUsize::new(0));
+        let polls = Arc::new(AtomicUsize::new(0));
+        let observed = reports.clone();
+        let candidate_polls = polls.clone();
+        let candidate = tokio::spawn(async move {
+            let future = super::pending_checkpoints(receiver, period, move || {
+                observed.fetch_add(1, Ordering::SeqCst);
+            });
+            tokio::pin!(future);
+            std::future::poll_fn(|context| {
+                candidate_polls.fetch_add(1, Ordering::SeqCst);
+                future.as_mut().poll(context)
+            }).await;
+        });
+        tokio::time::sleep(period * 3).await;
+        assert!(reports.load(Ordering::SeqCst) >= 2);
+        state.send(false).unwrap();
+        tokio::time::sleep(period).await; // Let the Running transition settle.
+        let running_reports = reports.load(Ordering::SeqCst);
+        let running_polls = polls.load(Ordering::SeqCst);
+        let baseline_ticks = Arc::new(AtomicUsize::new(0));
+        let baseline_work = baseline_ticks.clone();
+        let baseline = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(period);
+            loop {
+                interval.tick().await;
+                baseline_work.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        tokio::time::sleep(period * 5).await;
+        baseline.abort();
+        let _ = baseline.await;
+        assert!(baseline_ticks.load(Ordering::SeqCst) >= 4);
+        assert_eq!(reports.load(Ordering::SeqCst), running_reports);
+        assert_eq!(polls.load(Ordering::SeqCst), running_polls);
+        eprintln!("SCM portable correctness, synthetic timer comparison: timer ticks={}, candidate Running polls=0, checkpoint reports=0",
+            baseline_ticks.load(Ordering::SeqCst));
+        state.send(true).unwrap();
+        tokio::time::sleep(period * 3).await;
+        assert!(reports.load(Ordering::SeqCst) >= running_reports + 2);
+        drop(state);
+        tokio::time::timeout(period * 3, candidate).await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn empty_host_monitor_resource_pass() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = ginfer_host::service::Host::open(directory.path().into(), "Empty monitor".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let initial = host.revision.load(std::sync::atomic::Ordering::SeqCst);
+        let start = std::time::Instant::now();
+        let refreshed = super::refresh_nonempty_processes(&host).await.unwrap();
+        let elapsed = start.elapsed();
+        let revision_changes = host.revision.load(std::sync::atomic::Ordering::SeqCst) - initial;
+        assert!(host.snapshot().await["instances"].as_array().unwrap().is_empty());
+        eprintln!("RESOURCE_EMPTY_MONITOR elapsed={elapsed:?} refreshed={refreshed} revision_changes={revision_changes}");
     }
 }

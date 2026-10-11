@@ -110,7 +110,7 @@ pub struct ClientState {
     path: Option<PathBuf>,
     installation_id: Option<Uuid>,
     imported: BTreeSet<PathBuf>,
-    fleet_authority: Option<crate::fleet::AuthorityLocator>,
+    pub(crate) fleet_authority: Option<crate::fleet::AuthorityLocator>,
     fleet_snapshot: Option<crate::fleet::FleetSnapshot>,
     pub saved: BTreeMap<Uuid, SavedHost>,
     pub registry: EngineRegistry,
@@ -245,15 +245,35 @@ fn reload(state: &mut ClientState) -> Result<(), String> {
     Ok(())
 }
 fn persist(state: &ClientState) -> Result<(), String> {
+    #[derive(Serialize)]
+    struct DocumentRef<'a> {
+        schema: &'static str,
+        installation_id: Option<Uuid>,
+        hosts: HostsRef<'a>,
+        imported: &'a BTreeSet<PathBuf>,
+        fleet_authority: Option<&'a crate::fleet::AuthorityLocator>,
+        fleet_snapshot: Option<&'a crate::fleet::FleetSnapshot>,
+    }
+    struct HostsRef<'a>(&'a BTreeMap<Uuid, SavedHost>);
+    impl Serialize for HostsRef<'_> {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            use serde::ser::SerializeSeq;
+            let mut hosts = serializer.serialize_seq(Some(self.0.len()))?;
+            for host in self.0.values() {
+                hosts.serialize_element(host)?;
+            }
+            hosts.end()
+        }
+    }
     crate::service::write_private(
         state.path.as_ref().ok_or("host registry not initialized")?,
-        &serde_json::to_vec(&Document {
-            schema: "ginfer-host-client-v1".into(),
+        &serde_json::to_vec(&DocumentRef {
+            schema: "ginfer-host-client-v1",
             installation_id: state.installation_id,
-            hosts: state.saved.values().cloned().collect(),
-            imported: state.imported.clone(),
-            fleet_authority: state.fleet_authority.clone(),
-            fleet_snapshot: state.fleet_snapshot.clone(),
+            hosts: HostsRef(&state.saved),
+            imported: &state.imported,
+            fleet_authority: state.fleet_authority.as_ref(),
+            fleet_snapshot: state.fleet_snapshot.as_ref(),
         })
         .map_err(|e| e.to_string())?,
     )
@@ -280,6 +300,32 @@ fn publish_fleet_authority(
     if let Err(error) = persist(state) {
         state.fleet_authority = previous;
         state.fleet_snapshot = cache;
+        return Err(error);
+    }
+    Ok(())
+}
+fn publish_fleet_snapshot(state: &mut ClientState, snapshot: &crate::fleet::FleetSnapshot) -> Result<(), String> {
+    if state.fleet_authority.as_ref().is_none_or(|authority| {
+        authority.host_id != snapshot.authority.host_id
+            || authority.certificate_sha256 != snapshot.authority.certificate_sha256
+    }) {
+        return Err("fleet authority changed while observing its catalog".into());
+    }
+    if let Some(previous) = &state.fleet_snapshot {
+        if previous.authority.host_id == snapshot.authority.host_id
+            && previous.revision > snapshot.revision
+        {
+            return Err("stale fleet snapshot".into());
+        }
+        // The caller reloaded the document under the cross-process lock. A
+        // failed publication restores this value, so its next attempt retries.
+        if previous == snapshot {
+            return Ok(());
+        }
+    }
+    let previous = state.fleet_snapshot.replace(snapshot.clone());
+    if let Err(error) = persist(state) {
+        state.fleet_snapshot = previous;
         return Err(error);
     }
     Ok(())
@@ -572,11 +618,9 @@ impl Client {
             let alternatives = state
                 .discovery
                 .as_ref()
-                .map(|d| d.hosts())
+                .map(|d| d.urls(id))
                 .unwrap_or_default()
                 .into_iter()
-                .filter(|h| h.host_id == id.to_string())
-                .flat_map(|h| h.urls)
                 .filter(|url| url != &host.base_url)
                 .collect::<std::collections::BTreeSet<_>>();
             (state.registry.poll_connection(id)?, host, alternatives)
@@ -635,7 +679,7 @@ impl Client {
                     state.registry.disconnect(connection);
                     return Err("host registration changed while observing its snapshot".into());
                 }
-                let validated = serde_json::from_value(snapshot.clone())
+                let validated = crate::engine_registry::HostSnapshot::deserialize(&snapshot)
                     .map_err(|e| e.to_string())
                     .and_then(|parsed| state.registry.reconcile(connection, parsed));
                 if let Err(error) = validated {
@@ -855,8 +899,7 @@ impl Client {
                         .map(|origin| endpoint(origin))
                         .collect::<Result<Vec<_>, _>>()?
                 } else if let Some(id) = expected {
-                    self.state.lock().await.discovery.as_ref().map(|discovery| discovery.hosts())
-                    .unwrap_or_default().into_iter().find(|host| host.host_id == id.to_string())
+                    self.state.lock().await.discovery.as_ref().and_then(|discovery| discovery.host(id))
                     .ok_or("Host is no longer nearby; refresh discovery or enter its address manually")?.urls
                 } else {
                     vec![endpoint(
@@ -1100,34 +1143,20 @@ impl Client {
     }
     pub async fn save_fleet_snapshot(
         &self,
-        snapshot: crate::fleet::FleetSnapshot,
+        snapshot: &crate::fleet::FleetSnapshot,
     ) -> Result<(), String> {
         snapshot.validate()?;
         let _op = self.operation.lock().await;
         let _lock = self.lock_registry().await?;
         let mut state = self.state.lock().await;
         reload(&mut state)?;
-        if state.fleet_authority.as_ref().is_none_or(|authority| {
-            authority.host_id != snapshot.authority.host_id
-                || authority.certificate_sha256 != snapshot.authority.certificate_sha256
-        }) {
-            return Err("fleet authority changed while observing its catalog".into());
-        }
-        if let Some(previous) = &state.fleet_snapshot {
-            if previous.authority.host_id == snapshot.authority.host_id
-                && previous.revision > snapshot.revision
-            {
-                return Err("stale fleet snapshot".into());
-            }
-        }
-        let previous = state.fleet_snapshot.replace(snapshot);
-        if let Err(e) = persist(&state) {
-            state.fleet_snapshot = previous;
-            return Err(e);
-        }
-        Ok(())
+        publish_fleet_snapshot(&mut state, snapshot)
     }
 }
+
+#[cfg(test)]
+#[path = "client_registry_tests.rs"]
+mod registry_tests;
 
 fn argument_id(args: &Value, field: &str) -> Result<Uuid, String> {
     args.get(field)

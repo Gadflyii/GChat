@@ -6,24 +6,137 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Outcome and acceptance
+## Current outcome and acceptance
 
-Deliver coherent shared tool discovery/execution, accurate incomplete agent
-outcomes, current profile evidence, frontend loading improvements and reviewed
-Host/Manager cleanup. Preserve skills, connectors, permissions, cancellation,
-context semantics, host identity, saved history, models and supported protocols.
-Pass composed `make verify` and the relevant strict Clippy checks, update the
-local Windows apps, refresh Linux packages, verify the affected installed
-behavior, merge/push and retire owned disposable outputs.
+The active October 11 work below supersedes the completed remediation gates.
+The sole issue authority is GInfer `docs/maintainer/open-work.md`;
+[remaining acceptance](../agent-runtime/remaining-acceptance.md) records physical
+prerequisites. Preserve skills, permissions, cancellation, context semantics,
+host identity, user state, models and supported protocols.
 
-Ron approved controlled React/parser/Vitest dependency alignment (OI-105).
-Other dependency/platform changes, Server 2 administration, reduced sampling,
-context/concurrency or physical guards, model/user-data deletion and unrelated
-Engine speed work are excluded. The sole issue authority is GInfer
-`docs/maintainer/open-work.md`; [remaining acceptance](../agent-runtime/remaining-acceptance.md)
-records unavailable physical prerequisites without making a second issue list.
+## Active serving and Host/Manager resource fixes — October 11
 
-## Current bug-remediation phase
+Ron/bubbs assigned OI-115–119 and C1-CORE-021 at 01:11 UTC, due 04:00 UTC.
+Deliver clear ownership improvements and one focused before/after request or
+catalog-pass measurement for each changed behavior. Preserve exact stream/tail
+output, model/session identity, limits, constant-time authentication, complete
+hashes, journal durability and cross-client freshness. No model/GPU, native
+Windows build, installer, release, signing or policy/limit change is in this
+GChat gate. Dependency changes require a separate decision.
+
+Candidate `/ai/gchat-worktrees/review-resources-72cd`, branch
+`perf/gchat-review-resources-72cd`, baseline main `72cd661bf`. Production fixes
+are in `d3463459d`, warning fixes in `fed89a83f`, test-only heap attribution in
+`5aae3604d`, and the final forwarding simplification in `f51816632`. Root owns
+integration, measurements and master updates; all eight disjoint owners are
+frozen. Independent reviews accept the stream, credential, registry, inventory,
+lifecycle, service, native Manager and UI changes, including per-path inventory
+errors and Stop-during-exit-drain diagnostic ownership.
+
+Original-source fixtures at
+`/ai/gchat-worktrees/review-resources-baseline-72cd`, branch
+`test/gchat-review-resources-baseline-72cd`, retain original main production with
+test additions and extraction-only helpers called by production. Measurements
+use original `da3cf4cd9` and candidate `fed89a83f`, the same Rust 1.98/debug
+profile and accepted offline Ubuntu 24 toolchain, CPU16–31. Retain both sources
+through acceptance, shared Cargo/frontend caches, and evidence at
+`/ai/gchat/out/review-resources-20261011/gate400/`. No model copies or separate
+build directories were allocated.
+
+### Measured scope
+
+Each row is one owning CPU fixture, not a model-throughput or native idle claim.
+Allocation bytes are requested Rust allocator bytes, not RSS/private memory.
+
+| Owning operation | Original → candidate | Observable control |
+| --- | --- | --- |
+| 8 KiB SSE in one-byte fragments | 352 → 0.669 ms; 50 → 34 allocations | Exact events and malformed-frame errors |
+| Snapshot action during 500 ms exit-reader gate | 501 → 0.121 ms | Final diagnostics, cancellation and replacement session |
+| Noisy 65,537-byte child tail | 173,096 → 128,704 requested bytes | Exact retained 16 KiB and echo behavior |
+| Four-field response handle | 3 → 2 allocations; 88 → 24 requested bytes | Handle shape and identity |
+| Whole authenticated loopback request | 64 → 64 allocations; 173 → 171 microseconds | No demonstrated gain; constant-time/session/CORS controls retained |
+| One fresh managed scan with duplicate paths | 194 → 143 allocations; 73,417 → 30,217 requested bytes | Fresh inventory and distinct raw-path errors |
+| 174-profile/4-instance snapshot | 54,582 → 52,304 allocations; 8.57 → 8.61 ms | Exact profiles/reservations; no wall-time gain |
+| Two withheld request streams | 7 → 3 drain polls; final release 14.6 → 0.556 ms | Same force behavior and 30-second deadline |
+| One journal write plus complete 4,194,335-byte SHA | Unrelated task's maximum gap 12.9 → 2.13 ms; requested bytes 2,110,481 → 1,060,276 | Same full SHA, durable 603-byte journal and retry/cancellation controls |
+| Fresh 174-profile/8-GPU catalog pass | 219,078 → 207,887 allocations; thread CPU 239 → 216 ms | Identical 6,148 choices; read bytes/calls unchanged; opens unmeasured |
+| Unchanged real TLS catalog read | 1 → 0 atomic registry replacements; 1,293 → 0 published bytes | Fresh durable comparison, pins and failed-write retry |
+| 174-profile launcher availability | 979 → 33.8 microseconds | Exact occupied-GPU availability |
+| Five delayed bootstrap attempts | 5 → 1 client constructions/TLS connections; state opens remain 5 | Fresh authority rotation and existing retry bounds |
+| One empty-host monitor pass | Revision changes 1 → 0 | Timer still wakes each second; no eliminated-wakeup claim |
+| Native Manager projection, 8 hosts × 174 profiles | 71,051 → 16,026 allocations; thread CPU 18.5 → 12.9 ms; requested bytes 10,121,110 → 3,904,775 | Exactly equal 313,340-byte serialized snapshot |
+| Paired-client UI activity refresh in JSDOM | 134 → 0 created elements; 1 → 0 root replacements/storage writes; 135 → 0 flatten calls | Current labels, latest action guards, focus and visibility |
+
+The 1 MiB forwarding fixture passes a prepared Request directly to the Host
+route and consumes the response. Its interval includes the same-process mock
+upstream; inbound HTTP/request construction is excluded. With the identical new
+live-allocation helper, original `4016165eb` versus final production `f51816632`
+measures 170 → 171 allocations, 11,335,566 → 11,335,702 requested bytes, and
+3,857,403 → 3,857,539 peak bytes above start: no demonstrated gain. The counter
+covers process-wide requested Rust allocation layouts, excluding native memory,
+allocator overhead and OS RSS; it does not isolate Host heap. The single-chunk
+input also cannot demonstrate fragmented-body growth savings. Early raw-buffer
+release remains explicit lifetime cleanup. Reqwest already synchronously owns
+JSON serialization; the redundant manual path was removed.
+
+### Verification and next action
+
+Valid candidate gates: 16 resource fixtures, 60 focused correctness controls and
+12 Manager UI cases pass. Original runs execute the corresponding 16 resource
+fixtures and one original UI case; three candidate-only UI cases are explicitly
+skipped. Host/Manager all-target check and strict Clippy, plus focused JavaScript
+lint, pass with zero warnings at `fed89a83f`. Snapshot byte equality passes.
+The final one-body fixture passes at `f51816632`, and Host/Manager all-target
+strict Clippy passes again after the forwarding/helper changes, zero warnings.
+Evidence: `candidate/{body-final,host-clippy-final,manager-clippy-final}.log`.
+No full suite or installed/native Windows acceptance is claimed.
+
+The first candidate attempt accidentally reused the original Cargo binary at a
+shared absolute source alias. Its results are invalidated and retained only in
+`candidate-stale-binary/`. Advancing the owning source timestamp forces rustc to
+read the actual source on each switch; candidate compilation and its distinct
+105-test inventory were verified before accepting measurements. Setup/fixture
+failures are corrected in the owning scripts/source, without warning suppression.
+
+CPU booking400 ended before 02:04 UTC and is cancelled. Early final admission
+returned75 before any compile/test while C2 held the canonical build guard.
+After that reservation cleared, ordinary CPU16–31 admission completed the final
+fixture and lint by 02:33:31 UTC; its container exited0 and is absent. The unused
+02:45–02:50 fallback booking404 is cancelled. No GChat job, guard holder or waiter
+remains. Next: normal GChat main merge, with OI-116/118 limits retained and the
+C1-owned served smoke scheduled. No passing unchanged check was repeated.
+
+OI-116 retains Linux `df` pending explicit rustix 1.1.4 direct-dependency approval.
+The prepared patch is outside the source; Windows uses its native API, whose
+physical UNC/extended-path check remains unrun. OI-118 retains default Tokio
+worker count because these isolated fixtures cannot justify a cap. Native SCM,
+Manager idle/private bytes, media peak memory and slow-NAS qualification are not
+established by this CPU gate. These limits remain explicit on the master rows.
+
+C1-CORE-021 is signed/merged as GInfer dev/next `7af8f6114`. Strict original and
+candidate owning tests pass; one near-capacity put allocations 21,228 → 16,
+requested bytes 6,430,400 → 3,288 and total wall 4.832 ms → 3.330 microseconds.
+The post-merge owning fixture passes on the source-identical accepted binary.
+The served continuation chain is assigned to C1's post-merge smoke on merged
+dev/next `9b7d10cdd` (contains `7af8f6114`), Ada4090 after 03:10 UTC. GChat takes
+no additional live action or build; C1's result is pending. Its separate authority is
+`/ai/ginfer-worktrees/response-store-review-20261011/docs/response-store/README.md`.
+
+### Owned disk and job inventory
+
+Keep the two resource sources, ResponseStore source and small accepted binaries,
+shared build/dependency caches, every cited evidence packet, models, profiles,
+user state and release artifacts. October 11 remote hygiene verified S1, S2,
+Ada4090 and laptop reachable, with no own retirement candidate. Four clean,
+merged and pushed local historical source trees are retired after exact live-use
+and shared-cache checks: 1,154,691,072 allocated bytes removed. Their branch refs
+and external evidence stay. Matching-owner no-force Git removal fixes the
+root-output permission failures; no ignored shared-cache symlink is followed.
+Receipts: `out/review-resources-20261011/disk-{local,remote}-survey.md` and the
+coordinated `/ai/coordination/disk-hygiene-20261011/GChat.md`. No fleet-wide
+cleanliness or current native artifact-size claim is made.
+
+## Accepted Host/Manager bug fixes — October 10
 
 The Host/Manager review was merged and pushed as main `0dd5d45ce`. The master
 rows are merged in GInfer dev/next `c72edea85`. Ron's next instruction is to fix
@@ -167,7 +280,7 @@ remains separate with C2. The candidate reuses nine dependency aliases from the
 retained OI-074 physical graph and the shared `/ai/gchat/src-tauri/target`; no
 new dependency installation or model copy is created.
 
-## Current state and next action
+## Accepted October 9 remediation state
 
 Windows installation and actual continued Chat/sidebar Stop/Start/Reload pass.
 Original history, models, profiles, credentials and Host identity are preserved;

@@ -56,12 +56,14 @@ impl LocalHost {
         )).await?.connect().await
     }
 
-    async fn connect(&self) -> Result<(LocalControl, serde_json::Value), String> {
-        let control = LocalControl::open(&self.directory, &format!("https://{}", self.listen))?;
-        let snapshot = tokio::time::timeout(Duration::from_secs(2), control.snapshot())
+    async fn connect(&self, control: &mut Option<LocalControl>) -> Result<serde_json::Value, String> {
+        let previous = control.take();
+        *control = Some(LocalControl::open_reusing(&self.directory,
+            &format!("https://{}", self.listen), previous)?);
+        let snapshot = tokio::time::timeout(Duration::from_secs(2), control.as_ref().unwrap().snapshot())
             .await
             .map_err(|_| "local host connection timed out".to_string())??;
-        Ok((control, snapshot))
+        Ok(snapshot)
     }
 
     fn validate_storage(&self, snapshot: &serde_json::Value) -> Result<(), String> {
@@ -91,9 +93,10 @@ impl LocalHost {
 
     pub async fn ensure_running(&self) -> Result<LocalControl, String> {
         self.validate()?;
-        if let Ok((control, snapshot)) = self.connect().await {
+        let mut control = None;
+        if let Ok(snapshot) = self.connect(&mut control).await {
             self.validate_storage(&snapshot)?;
-            return Ok(control);
+            return Ok(control.unwrap());
         }
         let mut child = None;
         // An initializing owner must retain ownership before its endpoint is ready.
@@ -171,14 +174,14 @@ impl LocalHost {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         let mut exit = None;
         loop {
-            if let Ok((control, snapshot)) = self.connect().await {
+            if let Ok(snapshot) = self.connect(&mut control).await {
                 self.validate_storage(&snapshot)?;
                 if let Some(mut child) = child {
                     tokio::spawn(async move {
                         let _ = child.wait().await;
                     });
                 }
-                return Ok(control);
+                return Ok(control.unwrap());
             }
             if let Some(process) = child.as_mut() {
                 if let Some(status) = process.try_wait().map_err(|e| e.to_string())? {
@@ -224,4 +227,157 @@ pub fn desktop_runtimes(provider: &std::path::Path) -> Result<std::collections::
     }
     crate::engine_host::validate_runtimes(&runtimes)?;
     Ok(runtimes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
+    #[tokio::test]
+    async fn delayed_bootstrap_reuses_tls_only_with_fresh_local_authority() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = crate::service::Host::open(directory.path().into(), "Delayed bootstrap".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let connections = Arc::new(AtomicUsize::new(0));
+        let server_requests = requests.clone();
+        let server_connections = connections.clone();
+        let serving_host = host.clone();
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    Some(_) = connections.join_next(), if !connections.is_empty() => {},
+                    socket = listener.accept() => {
+                        let (socket, _) = socket.unwrap();
+                        server_connections.fetch_add(1, Ordering::SeqCst);
+                        let acceptor = acceptor.clone();
+                        let requests = server_requests.clone();
+                        let host = serving_host.clone();
+                        connections.spawn(async move {
+                            if let Ok(tls) = acceptor.accept(socket).await {
+                                let service = hyper::service::service_fn(move |request| {
+                                    let host = host.clone();
+                                    let waiting = requests.fetch_add(1, Ordering::SeqCst) < 4;
+                                    async move {
+                                        if waiting {
+                                            Ok::<_, std::convert::Infallible>(hyper::Response::builder().status(503)
+                                                .body(hyper::Body::from(r#"{"error":"starting"}"#)).unwrap())
+                                        } else { host.route(request).await }
+                                    }
+                                });
+                                let _ = hyper::server::conn::Http::new().serve_connection(tls, service).await;
+                            }
+                        });
+                    }
+                }
+            }
+        });
+        let local = LocalHost {
+            binary: std::env::current_exe().unwrap(), engine: std::env::current_exe().unwrap(),
+            engine_runtimes: Default::default(), directory: directory.path().into(), desktop_provider: None,
+            models: vec![], artifact_sets: vec![], name: "Fixture".into(), nvidia_smi: "unused".into(), listen: address,
+        };
+        let owner = ServiceOwner::acquire(directory.path()).unwrap();
+        let before = crate::launcher::control_work_counts();
+        let control = tokio::time::timeout(Duration::from_secs(2), local.ensure_running()).await.unwrap().unwrap();
+        let after_candidate = crate::launcher::control_work_counts();
+        assert_eq!((after_candidate.0 - before.0, after_candidate.1 - before.1), (5, 1));
+        assert_eq!(connections.load(Ordering::SeqCst), 1);
+        assert_eq!(control.host_id(), host.data.lock().await.host_id);
+        assert!(ServiceOwner::acquire(directory.path()).is_err());
+        let mut cached = Some(control);
+        host.data.lock().await.pairing_admin_token = "rotated local authority".into();
+        host.save().await.unwrap();
+        assert!(local.connect(&mut cached).await.is_ok(), "rotation must use the new token");
+        assert_eq!(crate::launcher::control_work_counts().1, after_candidate.1 + 1);
+        host.data.lock().await.host_id = uuid::Uuid::new_v4();
+        host.save().await.unwrap();
+        let snapshot = local.connect(&mut cached).await.unwrap();
+        assert_eq!(snapshot["host_id"].as_str(), Some(cached.as_ref().unwrap().host_id().to_string().as_str()));
+        assert_eq!(crate::launcher::control_work_counts().1, after_candidate.1 + 2);
+        // A freshly changed pin must discard even a live pooled TLS connection.
+        host.data.lock().await.certificate = crate::transport::HostCertificate::generate().unwrap();
+        host.save().await.unwrap();
+        assert!(local.connect(&mut cached).await.is_err());
+        assert_eq!(crate::launcher::control_work_counts().1, after_candidate.1 + 3);
+        std::fs::write(directory.path().join("host.json"), b"invalid state").unwrap();
+        assert!(local.connect(&mut cached).await.is_err());
+        assert!(cached.is_none(), "invalid authority must discard the previous control");
+        host.save().await.unwrap();
+        assert!(local.connect(&mut cached).await.is_err());
+        assert_eq!(crate::launcher::control_work_counts().1, after_candidate.1 + 4);
+        drop(owner);
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn delayed_bootstrap_resource_pass() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = crate::service::Host::open(directory.path().into(), "Delayed bootstrap".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let connections = Arc::new(AtomicUsize::new(0));
+        let server_requests = requests.clone();
+        let server_connections = connections.clone();
+        let serving_host = host.clone();
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    Some(_) = connections.join_next(), if !connections.is_empty() => {},
+                    socket = listener.accept() => {
+                        let (socket, _) = socket.unwrap();
+                        server_connections.fetch_add(1, Ordering::SeqCst);
+                        let acceptor = acceptor.clone();
+                        let requests = server_requests.clone();
+                        let host = serving_host.clone();
+                        connections.spawn(async move {
+                            if let Ok(tls) = acceptor.accept(socket).await {
+                                let service = hyper::service::service_fn(move |request| {
+                                    let host = host.clone();
+                                    let waiting = requests.fetch_add(1, Ordering::SeqCst) < 4;
+                                    async move {
+                                        if waiting {
+                                            Ok::<_, std::convert::Infallible>(hyper::Response::builder().status(503)
+                                                .body(hyper::Body::from(r#"{"error":"starting"}"#)).unwrap())
+                                        } else { host.route(request).await }
+                                    }
+                                });
+                                let _ = hyper::server::conn::Http::new().serve_connection(tls, service).await;
+                            }
+                        });
+                    }
+                }
+            }
+        });
+        let local = LocalHost {
+            binary: std::env::current_exe().unwrap(), engine: std::env::current_exe().unwrap(),
+            engine_runtimes: Default::default(), directory: directory.path().into(), desktop_provider: None,
+            models: vec![], artifact_sets: vec![], name: "Fixture".into(), nvidia_smi: "unused".into(), listen: address,
+        };
+        let owner = ServiceOwner::acquire(directory.path()).unwrap();
+        let before = crate::launcher::control_work_counts();
+        let start = std::time::Instant::now();
+        let control = tokio::time::timeout(Duration::from_secs(2), local.ensure_running()).await.unwrap().unwrap();
+        let candidate = start.elapsed();
+        let after = crate::launcher::control_work_counts();
+        assert_eq!(requests.load(Ordering::SeqCst), 5);
+        assert_eq!(after.0 - before.0, 5);
+        assert_eq!(control.host_id(), host.data.lock().await.host_id);
+        assert!(ServiceOwner::acquire(directory.path()).is_err());
+        eprintln!("RESOURCE_BOOTSTRAP attempts=5 elapsed={candidate:?} state_opens={} client_constructions={} tls_connections={}",
+            after.0 - before.0, after.1 - before.1, connections.load(Ordering::SeqCst));
+        drop(owner);
+        server.abort();
+        let _ = server.await;
+    }
 }

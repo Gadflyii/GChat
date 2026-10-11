@@ -650,7 +650,7 @@ async fn delayed_snapshot_merges_other_apps_changes_and_rejects_replaced_or_forg
     };
     second.set_fleet_authority(authority.clone()).await.unwrap();
     let cache:ginfer_host::fleet::FleetSnapshot=serde_json::from_value(json!({"schema":"ginfer-fleet-v1","authority":authority,"revision":1,"members":[{"host":authority,"display_name":"After"}],"pools":[],"assignments":[]})).unwrap();
-    second.save_fleet_snapshot(cache.clone()).await.unwrap();
+    second.save_fleet_snapshot(&cache).await.unwrap();
     gate.release.notify_one();
     assert_eq!(poll.await.unwrap().unwrap()["display_name"], "After");
     let current = first.registered().await.unwrap();

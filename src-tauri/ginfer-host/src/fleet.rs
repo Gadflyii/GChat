@@ -255,14 +255,16 @@ fn validate_placement(
     Ok(())
 }
 
-impl FleetSnapshot {
-    /// Project identities/configuration only, never remote inference credentials.
-    pub fn membership(&self, host_id: Uuid) -> Result<HostMembershipProjection, String> {
-        self.validate()?;
+/// One immutable catalog observation may project several hosts without
+/// revalidating the whole catalog for every member.
+pub(crate) struct ValidatedFleet<'a>(&'a FleetSnapshot);
+impl ValidatedFleet<'_> {
+    pub(crate) fn membership(&self, host_id: Uuid) -> Result<HostMembershipProjection, String> {
+        let fleet = self.0;
         if host_id.is_nil() {
             return Err("Host membership needs a valid host identity".into());
         }
-        let pools: Vec<_> = self
+        let pools: Vec<_> = fleet
             .pools
             .iter()
             .filter_map(|pool| {
@@ -273,13 +275,14 @@ impl FleetSnapshot {
                     .cloned()
                     .collect();
                 (!members.is_empty()).then(|| FleetPool {
+                    id: pool.id,
+                    name: pool.name.clone(),
                     members,
-                    ..pool.clone()
                 })
             })
             .collect();
         let pool_ids: BTreeSet<_> = pools.iter().map(|pool| pool.id).collect();
-        let assignments = self
+        let assignments = fleet
             .assignments
             .iter()
             .filter_map(|assignment| {
@@ -312,12 +315,24 @@ impl FleetSnapshot {
             .collect();
         Ok(HostMembershipProjection {
             schema: MEMBERSHIP_SCHEMA.into(),
-            authority: self.authority.clone(),
+            authority: fleet.authority.clone(),
             host_id,
-            revision: self.revision,
+            revision: fleet.revision,
             pools,
             assignments,
         })
+    }
+}
+
+impl FleetSnapshot {
+    pub(crate) fn validated(&self) -> Result<ValidatedFleet<'_>, String> {
+        self.validate()?;
+        Ok(ValidatedFleet(self))
+    }
+
+    /// Project identities/configuration only, never remote inference credentials.
+    pub fn membership(&self, host_id: Uuid) -> Result<HostMembershipProjection, String> {
+        self.validated()?.membership(host_id)
     }
 
     pub fn validate(&self) -> Result<(), String> {

@@ -26,6 +26,7 @@ struct Status {
     handle: ServiceStatusHandle,
     state: ServiceState,
     checkpoint: u32,
+    pending: tokio::sync::watch::Sender<bool>,
 }
 impl Status {
     fn report(&mut self, state: ServiceState, failed: bool) -> Result<(), String> {
@@ -43,6 +44,11 @@ impl Status {
             0
         };
         self.state = state;
+        self.pending.send_if_modified(|current| {
+            if *current == pending { return false; }
+            *current = pending;
+            true
+        });
         self.handle
             .set_service_status(ServiceStatus {
                 service_type: ServiceType::OWN_PROCESS,
@@ -85,10 +91,12 @@ fn service_main(_arguments: Vec<OsString>) {
             return;
         }
     };
+    let (pending, pending_changes) = tokio::sync::watch::channel(true);
     let status = Arc::new(Mutex::new(Status {
         handle,
         state: ServiceState::StartPending,
         checkpoint: 0,
+        pending,
     }));
     if status
         .lock()
@@ -112,10 +120,8 @@ fn service_main(_arguments: Vec<OsString>) {
             .map_err(|e| e.to_string())?;
         let result = runtime.block_on(async {
             let progress_status = status.clone();
-            let progress = tokio::spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(3));
-                loop {
-                    interval.tick().await;
+            let progress = tokio::spawn(super::pending_checkpoints(
+                pending_changes, Duration::from_secs(3), move || {
                     let mut state = progress_status.lock().unwrap();
                     let current = state.state;
                     if matches!(
@@ -124,8 +130,8 @@ fn service_main(_arguments: Vec<OsString>) {
                     ) {
                         let _ = state.report(current, false);
                     }
-                }
-            });
+                },
+            ));
             let ready_status = status.clone();
             let stop_status = status.clone();
             let result = super::run(
