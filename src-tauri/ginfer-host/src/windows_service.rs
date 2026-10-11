@@ -45,7 +45,9 @@ impl Status {
         };
         self.state = state;
         self.pending.send_if_modified(|current| {
-            if *current == pending { return false; }
+            if *current == pending {
+                return false;
+            }
             *current = pending;
             true
         });
@@ -121,7 +123,9 @@ fn service_main(_arguments: Vec<OsString>) {
         let result = runtime.block_on(async {
             let progress_status = status.clone();
             let progress = tokio::spawn(super::pending_checkpoints(
-                pending_changes, Duration::from_secs(3), move || {
+                pending_changes,
+                Duration::from_secs(3),
+                move || {
                     let mut state = progress_status.lock().unwrap();
                     let current = state.state;
                     if matches!(

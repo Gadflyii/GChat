@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-11** — [Own hardware profile installation in Host](2026-10-11-own-hardware-profile-installation-in-host.md)
+
 - **2026-10-11** — [Correct CJK dependency provider metadata](20261011-correct-cjk-provider-dependencies.md)
 
 - [Own native Workspace accounts and share connector execution](2026-10-10-own-native-workspace-connectors.md)

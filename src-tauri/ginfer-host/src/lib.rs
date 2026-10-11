@@ -23,3 +23,8 @@ pub mod client;
 #[cfg(test)]
 #[path = "../tests/common/resource_measurement.rs"]
 pub(crate) mod resource_measurement;
+
+pub mod hardware_profile;
+
+#[cfg(windows)]
+pub(crate) mod hardware_profile_windows;

@@ -84,6 +84,17 @@ pub fn resolve_config_file_path() -> PathBuf {
 /// Reads AppConfiguration from the config file; falls back to the default location.
 pub fn resolve_jan_data_folder() -> PathBuf {
     let config_file = resolve_config_file_path();
+    resolve_data_folder_from_config(&config_file, &default_cli_data_folder())
+}
+
+/// The installer receives the effective app-data directory from its owning package.
+/// Use the desktop's existing configuration precedence without inventing an identifier.
+pub fn resolve_installer_data_folder(app_data_directory: &Path) -> PathBuf {
+    let config_file = configuration_file_path_from(app_data_directory);
+    resolve_data_folder_from_config(&config_file, &default_cli_data_folder())
+}
+
+fn default_cli_data_folder() -> PathBuf {
     let app_name = std::env::var("APP_NAME").unwrap_or_else(|_| "GChat".to_string());
     let data_dir = dirs::data_dir().unwrap_or_else(|| {
         let home = std::env::var("HOME")
@@ -91,8 +102,7 @@ pub fn resolve_jan_data_folder() -> PathBuf {
             .unwrap_or_default();
         PathBuf::from(home)
     });
-    let default_folder = build_default_data_folder(&data_dir, &app_name);
-    resolve_data_folder_from_config(&config_file, &default_folder)
+    build_default_data_folder(&data_dir, &app_name)
 }
 
 #[tauri::command]
@@ -203,6 +213,10 @@ pub fn get_configuration_file_path<R: Runtime>(app_handle: tauri::AppHandle<R>) 
         PathBuf::from(home_dir)
     });
 
+    configuration_file_path_from(&app_path)
+}
+
+fn configuration_file_path_from(app_path: &Path) -> PathBuf {
     let package_name = env!("CARGO_PKG_NAME");
     #[cfg(target_os = "linux")]
     let old_data_dir = {
@@ -223,7 +237,7 @@ pub fn get_configuration_file_path<R: Runtime>(app_handle: tauri::AppHandle<R>) 
         .unwrap_or(&app_path.join("../"))
         .join(package_name);
 
-    select_configuration_file_path(&app_path, &old_data_dir)
+    select_configuration_file_path(app_path, &old_data_dir)
 }
 
 #[tauri::command]
@@ -384,6 +398,28 @@ mod tests {
             resolve_data_folder_from_config(&config_file, &root.path().join("default")),
             custom
         );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn installer_resolves_current_and_existing_legacy_custom_data_folder() {
+        let root = tempdir().unwrap();
+        let current = root.path().join("app.gchat");
+        let legacy = root.path().join("gchat");
+        fs::create_dir_all(&current).unwrap();
+        let write_config = |directory: &Path, folder: &Path| {
+            fs::write(directory.join(CONFIGURATION_FILE_NAME), serde_json::to_vec(&AppConfiguration {
+                data_folder: folder.to_string_lossy().into_owned(),
+                ..AppConfiguration::default()
+            }).unwrap()).unwrap();
+        };
+        let custom = root.path().join("custom-models");
+        write_config(&current, &custom);
+        assert_eq!(resolve_installer_data_folder(&current), custom);
+        fs::create_dir_all(&legacy).unwrap();
+        let existing = root.path().join("existing-custom-models");
+        write_config(&legacy, &existing);
+        assert_eq!(resolve_installer_data_folder(&current), existing);
     }
 
     #[test]

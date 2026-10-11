@@ -11,6 +11,123 @@ independent package and native X11 acceptance pass. The older `2a6e21ff2`
 Linux proof remains historical evidence. Package paths and proof are recorded below.
 Documentation-only handoffs do not rebuild accepted binaries.
 
+## Current item — hardware profile installation
+
+Deliverable: one Host-owned resumable profile-v2 job, invoked by the GChat
+installer and hardware-inventory refresh, visible in GChat and Manager. Model
+launches are held while it measures; ordinary Engine startup only reads the
+saved profile. Use the existing producer's matching-profile fast path and
+durable `<output>.install-state.json` resume without replacing it with a partial
+accepted profile. Explicit authenticated inventory Scan runs Ensure for saved
+groups. At Engine launch, the existing reader fingerprint rejection marks the exact group stale;
+the UI offers an explicit re-profile action. No automatic change detection,
+periodic profiling or duplicated fingerprint implementation is claimed.
+Keep exact invocation inputs, including `--reprofile` when an interrupted forced
+refresh must resume. The producer owns fingerprint/completeness decisions.
+
+Approved October 11 gates: focused Host, installer and UI fixtures; one installed
+local5090 invocation reusing its existing complete v2 profile; one short bounded
+measurement interrupt/resume check. No full calibration, model/full-context
+qualification, publication/signing, new dependency or Engine measurement recipe
+change. CPU/GPU booking covers only actual measurement. C3 has already validated
+complete 22–73 minute installs; paths and source authority are in
+`/ai/coordination/flash-next/profile-v2-paths.md`.
+
+Candidate `/ai/gchat-worktrees/hardware-profile-install-e91`, branch
+`feat/gchat-hardware-profile-install-e91`, baseline main `e91c7c136`; source
+`d2994568f` is committed and pushed. Reuse the accepted OI105 node/core graph
+read-only. Focused evidence is retained in
+`/ai/gchat/out/hardware-profile-install-20261011/`.
+October 11 ownership correction: mixed-SM hosts use profiles bound to an exact
+selected device group and its compatible CLI image, not a merged all-host
+profile. The architect binds exactly one configured deployment: its visible GPU UUID
+set (TP1 or its homogeneous TP group), with a canonical profile under the Host
+profile root keyed by the sorted UUID set. This is a Host deployment binding:
+the v2 reader fingerprints sorted physical inventory and checks selected-rank
+membership; it does not enforce exact deployment-set equality. C3 supplied the
+accepted full v2 CLI closure. The Host preserves the exact visible GPU set, runtime,
+output and
+forced-refresh setting through interruption; selected launch order remains a
+deployment input, not a separate profile identity. Ordinary snapshot polling stays
+read-only. New jobs retain failed checkpoints in their original workspace;
+only a producer-completed profile can replace the accepted group profile.
+
+Source review corrected crash lifetime, configured-path propagation, forced
+refresh recovery, publication-only retries and post-spawn queue ownership.
+Stale detection matches the actual native diagnostic's inline suffix and the
+launched profile path. The first-install bootstrap shares the desktop path
+resolver, retaining custom data folders and registered providers. Fresh installs
+prepare Host/runtime and display **Choose GPU group**, without
+a default even on a one-GPU machine. The user explicitly selects an ordered,
+same-SM group, sees the expected duration, saves that deployment and starts its
+one job. Existing deployments install the saved exact group; no combinations
+are enumerated automatically. A model is not admitted without that group's
+complete profile. Recent complete installs took 22–73 minutes; this integration
+does not shorten the recipe. The installer waits only for verified file setup
+and Host handoff, not the long calibration.
+
+Explicit Scan and installer preparation process only saved deployment groups,
+serially under one reservation. Cancel retains the current recipe and pending
+groups; Resume continues them. Reader rejection is matched to the launched
+group's actual profile path. Profiling status is separate from model-capacity
+qualification.
+
+Focused frontend checks pass: five hardware-profile UI cases, one picker guard,
+six typed IPC cases, four Manager cases and one Linux installer fixture. A
+Manager expression syntax error and a Vitest hook returning its IPC mock were
+fixed before the affected reruns; passing unrelated cases were reused. Focused
+frontend/Manager lint and frontend type checking pass. Shared status helpers now
+live outside React component exports, removing the Fast Refresh warning.
+
+Focused native proofs pass: six Host lifecycle/publication/queue/stale checks,
+one registry check, one GPU configuration preservation check and two owning
+installer checks. Host/Manager strict Clippy, GChat CLI checking and Linux-hosted
+Windows GNU checking pass. The native test helper and one MSRV-compatible
+Clippy correction were fixed before the affected checks.
+
+The first installed Linux handoff failed before profiling: the Host exited with
+`Address already in use (os error 98)`. Actual bind probes show 7443 and 7444
+occupied although Linux `ss` lists no listener; the existing mirrored Windows
+owner is left untouched. The isolated installed gate uses verified-free 17443
+in its private configuration and locator. This gate does not qualify default-port
+coexistence. C3's accepted full CLI and server use production670 with their exact
+six-library closure; inherited donor RPATHs require explicit installed-library
+preloads for this development gate, not a release relocation claim.
+
+Installed Linux acceptance passes at October 11 04:43:38–04:43:50 UTC:
+matching complete-v2 Ensure reused the original profile byte-for-byte. A bounded
+forced refresh wrote a 798,631-byte native checkpoint. Actual Host `SIGKILL`
+stopped its profiler; the replacement installed Host kept the interrupted recipe.
+Resume used the same workspace, GPU grant and forced-refresh setting and emitted
+`Hardware install resume`. This checkpoint retained platform/GPU measurements
+and **zero completed CPU node/format groups**; no completed CPU-format retention
+or full calibration is claimed. Cancel reaped the resumed native child and kept
+the checkpoint. Both accepted and original profiles remained unchanged, and all
+owned Host/profiler processes and canonical guards were released. Evidence:
+`installed-gate-d2994568f/reuse-resume-result.json` and its public status records
+under the subject evidence directory.
+
+The implementation is merge-ready. Deadline 08:00 UTC. Ron's standing rule
+excludes native Windows development builds/runs. The already installed Windows GNU target passes from Linux; normal
+completion, cancellation, actual Host-loss lifetime, MSVC and native installer
+checks remain owed to his scheduled pre-release Windows gate.
+
+Owned inventory: this candidate and the accepted OI105 node/core graph are
+retained for the current item. Merged clean OI076 and OI072 candidate trees were
+retired October 11 after ancestry/publication and live-job checks, reclaiming
+555,421,696 allocated bytes; branches and external evidence remain. No owned
+profiling job is running. The shared Rust cache remains at
+`/ai/gchat/src-tauri/target`; bounded owning checks use the accepted Rust image
+and canonical build guard. The original complete local v2 profile and Ron's
+canonical profile, locator and model state remained read-only. The installed gate
+used a separate owned prefix and the same CPU0–31/Mem0/GPU UUID grant. Its tested
+d299 Host binary, native checkpoint and concise status/log evidence are retained;
+duplicate bundle/runtime/installed Engine copies and the private launcher were
+retired after all owned processes exited, reclaiming 1,723,944,960 allocated
+bytes (1.606 GiB). C3's original CLI/server/library closure and shared caches
+remain intact. The retired prefix is evidence, not an active deployment. See
+`installed-gate-d2994568f/cleanup.json`.
+
 ## Outcome and acceptance
 
 The standalone Manager requested in

@@ -7,10 +7,11 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 
 
-def install(bundle, destination, provider, config_root, link_dir, apply=False):
+def install(bundle, destination, provider, config_root, link_dir, apply=False, gpu_uuids=()):
     for path in (destination, provider, config_root, link_dir):
         if not path.is_absolute() or path == Path('/'):
             raise ValueError('choose absolute dedicated directories, not filesystem roots')
@@ -74,6 +75,23 @@ def install(bundle, destination, provider, config_root, link_dir, apply=False):
             json.dump(configuration, stream, indent=2)
     link_dir.mkdir(parents=True, exist_ok=True)
     link.symlink_to(destination / 'bin/ginfer')
+    prepare = [str(destination / 'bin/ginfer-host'), 'prepare-hardware',
+               '--engine', str(destination / 'bin/ginfer')]
+    if registered:
+        # The Host resolves the existing registration; these paths are only an
+        # unused bootstrap seed, not a replacement for its owner or storage.
+        prepare += ['--data-dir', str(provider / 'host'), '--desktop-provider', str(provider)]
+    else:
+        prepare += ['--installed-configuration', str(destination / 'bin/ginfer-launch.json')]
+    for uuid in gpu_uuids:
+        prepare += ['--gpu', uuid]
+    environment = os.environ.copy()
+    environment['XDG_CONFIG_HOME'] = str(config_root)
+    result = subprocess.run(prepare, check=True, capture_output=True, text=True, env=environment)
+    status = json.loads(result.stdout)
+    print(f"Hardware preparation: {status['status']} (owned by the shared Host).")
+    if not status.get('gpu_uuids'):
+        print('Choose GPU group in GChat or GInfer Manager. No calibration was started.')
     print(f'Installed. Launch: {link}')
     if str(link_dir) not in os.environ.get('PATH', '').split(os.pathsep):
         print(f'Add {link_dir} to your shell PATH to use the bare ginfer command.')
@@ -86,6 +104,8 @@ def main():
                         default=Path(os.environ.get('XDG_DATA_HOME') or Path.home() / '.local/share') / 'ginfer')
     parser.add_argument('--link-directory', type=Path, default=Path.home() / '.local/bin')
     parser.add_argument('--install', action='store_true')
+    parser.add_argument('--gpu', action='append', default=[],
+                        help='exact ordered deployment GPU UUID; repeat for TP2/TP4')
     args = parser.parse_args()
     config = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config')
     if len(sys.argv) == 1 and sys.stdin.isatty():
@@ -101,7 +121,7 @@ def main():
             return
         args.install = True
     install(Path(__file__).resolve().parent, args.install_directory, args.provider_directory,
-            config, args.link_directory, args.install)
+            config, args.link_directory, args.install, args.gpu)
 
 
 if __name__ == '__main__':

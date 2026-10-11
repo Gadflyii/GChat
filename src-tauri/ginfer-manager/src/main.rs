@@ -197,6 +197,7 @@ enum ManagerRequest {
 enum HostOperation {
     Snapshot,
     Scan,
+    HardwareProfile,
     Clients,
     Catalog,
     Storage,
@@ -297,6 +298,13 @@ impl ManagerState {
                 let (method, path) = match operation {
                     HostOperation::Snapshot => {
                         return self.client.snapshot(host_id).await.map_err(String::from)
+                    }
+                    HostOperation::HardwareProfile => {
+                        let request: ginfer_host::hardware_profile::HardwareProfileRequest =
+                            serde_json::from_value(args).map_err(|error| error.to_string())?;
+                        let status = self.client.hardware_profile(host_id, request)
+                            .await.map_err(String::from)?;
+                        return serde_json::to_value(status).map_err(|error| error.to_string());
                     }
                     HostOperation::Scan => (Method::POST, "/host/v1/scan".into()),
                     HostOperation::Clients => (Method::GET, "/host/v1/clients".into()),

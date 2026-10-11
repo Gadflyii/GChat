@@ -6,6 +6,7 @@ Install a bundled GInfer runtime for the current user without starting inference
 param(
     [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'GInfer'),
     [string]$ProviderDirectory = (Join-Path $env:APPDATA 'GInfer\data'),
+    [string[]]$GpuUuids = @(),
     [switch]$NoPath,
     [switch]$Install
 )
@@ -84,7 +85,7 @@ if (Test-Path -LiteralPath $locator) {
 }
 Write-Output "Runtime installation: $destination"
 if (-not $NoPath) { Write-Output 'Setup adds its bin directory to your user PATH.' }
-Write-Output 'Setup does not start services, load models, or replace an existing host.'
+Write-Output 'Setup reuses or starts the per-user Host for hardware preparation; it does not load models or replace an existing owner.'
 if (-not $Install) {
     Write-Output 'Preview only. Repeat with -Install to install for this user; no administrator rights are needed.'
     return
@@ -111,6 +112,22 @@ if (-not $NoPath) {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     $paths = @($userPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ne $bin })
     [Environment]::SetEnvironmentVariable('Path', ((@($bin) + $paths) -join ';'), 'User')
+}
+$prepareArguments = @('prepare-hardware', '--engine', (Join-Path $bin 'ginfer.exe'))
+if ($null -ne $configuration) {
+    $prepareArguments += @('--installed-configuration', (Join-Path $bin 'ginfer-launch.json'))
+} else {
+    # Only a bootstrap seed: prepare-hardware resolves the registered owner and
+    # never substitutes these paths for its existing state or model storage.
+    $prepareArguments += @('--data-dir', (Join-Path $ProviderDirectory 'host'), '--desktop-provider', $ProviderDirectory)
+}
+foreach ($uuid in $GpuUuids) { $prepareArguments += @('--gpu', $uuid) }
+$preparation = & (Join-Path $bin 'ginfer-host.exe') @prepareArguments
+if ($LASTEXITCODE -ne 0) { throw "Hardware preparation handoff failed (exit $LASTEXITCODE); the installed runtime was retained." }
+$status = $preparation | ConvertFrom-Json
+Write-Output "Hardware preparation: $($status.status) (owned by the shared Host)."
+if (@($status.gpu_uuids).Count -eq 0) {
+    Write-Output 'Choose GPU group in GChat or GInfer Manager. No calibration was started.'
 }
 if (-not $NoPath) { Write-Output 'Installed. In a new terminal, type ginfer.' }
 Write-Output "Launch now: & '$bin\ginfer.exe'"

@@ -52,6 +52,48 @@ saved connection; **Revoke** under Paired clients invalidates a host grant.
 An offline host shows **GInfer offline** and its last-known inventory. Reconnect
 before starting, changing or stopping an instance there.
 
+## Prepare the hardware profile
+
+The Host needs a matching GInfer v2 profiling CLI alongside its serving runtime.
+On first installation, open **Hardware profile → Choose GPU group**. No GPU is
+selected automatically, even on a one-GPU computer. Explicitly select 1, 2 or 4
+GPUs of the same SM; incompatible choices become disabled. Click
+**Prepare hardware profile** to save that deployment group and start its job.
+Stop active models on the host before preparing or refreshing measurements.
+
+The profile is bound to the sorted GPU UUID set and TP degree. Selection order
+remains an input to the deployment's GPU visibility and ranks; changing order
+does not create a different profile identity. The panel shows the current job's
+GPU group and Engine, plus pending saved deployment groups.
+
+Recent complete installs took 22–73 minutes, varying by hardware. The panel
+shows elapsed time, an indeterminate progress indicator and **Profiling log**;
+it does not promise an end time or percentage. One Host-owned job processes
+saved groups serially and holds model launches until the queue stops. Closing
+GChat or Manager leaves it running. Installation waits for file setup and Host
+handoff, not for the long measurements to finish.
+
+Use **Cancel profiling** or **Cancel profiling and queue** to stop owned work.
+The Host retains the current recipe and unfinished groups. **Resume profiling**
+continues that recipe and queue, preserving forced refresh and the original
+group. Resume is available for saved interrupted work even before a checkpoint
+exists. A reported checkpoint has not yet proved compatibility: the producer
+validates its inputs before reusing progress. Completion means the producer
+published a complete hardware profile, not model or full-context qualification.
+Interrupted or failed work retains the accepted profile; incomplete measurements
+are not installed as a complete profile.
+
+Installation and an explicit authenticated **Scan** ensure only saved deployment
+groups, reusing matching complete profiles where possible. Ordinary **Refresh**,
+snapshot updates and Engine startup remain read-only; they do not detect hardware
+changes or start calibration. If the native Engine reader rejects a group's
+fingerprint, its exact profile appears as **Hardware changed — re-profile**.
+Click **Select group to re-profile**, then **Refresh hardware profile** (or
+**Prepare hardware profile** if no job has been started). Selecting the group
+alone starts nothing. The duration hint uses that group's previous measured
+duration when available, otherwise the 22–73-minute range. An unrelated startup
+error does not establish a hardware change.
+
 ## Run models
 
 Select a host and use **Start a model**. Choose a saved profile and GPU
@@ -79,7 +121,8 @@ DFlash2 or MTP requires a positive supported draft width. Flash uses MTP; Qwen
 custom configuration is not proof of GPU qualification; use its measured profile
 when one is available.
 
-Under Models, **Scan** refreshes inventory, **Add local model…** registers an
+Under Models, **Scan** refreshes inventory and ensures hardware profiles for
+saved deployment groups as described above. **Add local model…** registers an
 existing local `.ginfer`, and **Storage…** chooses managed download storage.
 **Show available downloads** lists compatible published packages. Download
 progress supports pause/resume. Existing source-model locations remain in place.

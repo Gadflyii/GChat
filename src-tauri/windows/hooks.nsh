@@ -1,5 +1,6 @@
 ; GChat — NSIS installer hooks
-; Extends the default Tauri uninstaller to clean application data directories
+; Hands per-user installation to the shared Host and extends the uninstaller
+; to clean application data directories
 ; outside the Tauri-managed bundle ID path when the user opts in to
 ; "Delete app data".
 ;
@@ -20,6 +21,26 @@
 ;
 ; A custom data_folder set by the user via "Change data folder location"
 ; is NOT covered by these hooks — the user is responsible for cleaning it.
+
+!macro NSIS_HOOK_POSTINSTALL
+  ; The GChat CLI resolves the same saved/custom data folder as the desktop,
+  ; installs its verified runtime and returns after shared Host job handoff.
+  ; Wait only for verified copying and bounded Host handoff, so an immediate
+  ; desktop launch cannot race runtime installation. Never wait for calibration.
+  SetShellVarContext current
+  StrCpy $0 -1
+  ClearErrors
+  ExecWait '"$INSTDIR\resources\bin\gchat-cli.exe" prepare-hardware --resource-directory "$INSTDIR" --app-data-directory "$APPDATA\${BUNDLEID}"' $0
+  ${If} ${Errors}
+    StrCpy $0 -1
+  ${EndIf}
+  ${If} $0 <> 0
+    DetailPrint "Hardware preparation handoff failed (exit $0). Open GChat or GInfer Manager to review hardware readiness and retry."
+    ${IfNot} ${Silent}
+      MessageBox MB_OK|MB_ICONEXCLAMATION "GChat was installed, but hardware preparation could not be handed to the shared Host. Open GChat or GInfer Manager to review hardware readiness and retry. No calibration success is claimed."
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
   ${If} $DeleteAppDataCheckboxState = 1
