@@ -494,7 +494,10 @@ impl server::Handler for Peer {
         let guest = self.guest.clone();
         if args[1] == "hello" {
             if guest.stale.load(std::sync::atomic::Ordering::Acquire) {
-                handle.exit_status_request(channel, 65).await?;
+                handle
+                    .exit_status_request(channel, 65)
+                    .await
+                    .map_err(|_| russh::Error::Disconnect)?;
             } else {
                 assert_eq!(
                     args[2],
@@ -509,11 +512,21 @@ impl server::Handler for Peer {
                         channel,
                         format!("GBOT-SSH-1\n{}\n{}\n", args[2], args[3]).into_bytes(),
                     )
-                    .await?;
-                handle.exit_status_request(channel, 0).await?;
+                    .await
+                    .map_err(|_| russh::Error::Disconnect)?;
+                handle
+                    .exit_status_request(channel, 0)
+                    .await
+                    .map_err(|_| russh::Error::Disconnect)?;
             }
-            handle.eof(channel).await?;
-            handle.close(channel).await?;
+            handle
+                .eof(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .close(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
             return Ok(());
         }
         let id = OperationId(Uuid::parse_str(&args[4]).unwrap());
@@ -525,10 +538,22 @@ impl server::Handler for Peer {
                 .insert(id, GuestOperationState::Unknown)
                 .is_none());
             *guest.desktop_claim.lock().unwrap() = Some(id);
-            handle.data(channel, b"claimed\n".to_vec()).await?;
-            handle.exit_status_request(channel, 0).await?;
-            handle.eof(channel).await?;
-            handle.close(channel).await?;
+            handle
+                .data(channel, b"claimed\n".to_vec())
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .exit_status_request(channel, 0)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .eof(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
+            handle
+                .close(channel)
+                .await
+                .map_err(|_| russh::Error::Disconnect)?;
             return Ok(());
         }
         if args[1] == "finish" {
