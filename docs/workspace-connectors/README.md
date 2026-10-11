@@ -3,7 +3,8 @@
 ## Current outcome and scope
 
 Ron authorized adding these connectors to the master TODO list and implementing
-both through parallel agents on October 10, 2026. Deliver bundled Windows/Linux
+both through parallel agents on October 10, 2026: “lets get those added to the to
+do list and your agents can do it.” Deliver bundled Windows/Linux
 account connections and typed service tools in the existing shared Chat, Agent
 and Code runtime. Gbot will use that runtime when its implementation is authorized;
 this task does not implement Gbot. User-connected SaaS accounts are integrations,
@@ -60,6 +61,7 @@ connection/reconnect and disconnect with accurate account/service availability.
 
 All source lives in `/ai/gchat-worktrees/workspace-connectors-f111`, branch
 `feat/gchat-workspace-connectors`, baseline `f111810ec`, owned by GChat/root.
+Reviewed implementation `a7ab93e63` is committed and pushed to the source remote.
 Main stays unchanged pending reviewed integration. No connector build, model run,
 GPU booking, live account, registration or provider mutation has begun. Agents
 write disjoint files; root reviews actual diffs and commits before compilation.
@@ -106,8 +108,8 @@ read/write acceptance require real registered client IDs and a user-approved tes
 account; these prerequisites are not available yet. Source fixtures cannot be
 reported as live sign-in or provider qualification.
 
-Next: commit and push the reviewed source, then generate the Settings route and
-run affected formatting, native checks and focused fixtures after C3 releases its
+Next: generate the Settings route and run affected formatting, native checks and
+focused fixtures after C3 releases its
 hardware-profiling interval on October 11 (current booking 396: 00:08–01:08 UTC).
 Wait for its actual end before starting checks. GChat cancelled unused
 CPU booking 394; it holds no build/GPU guard or live job. Reuse existing dependency
