@@ -152,6 +152,51 @@ test('secure storage results show neutral success and an error alert only on fai
   assert.deepEqual(requests(app).map((request) => request.action), ['secure_storage', 'secure_storage', 'secure_storage'])
 })
 
+test('Forget removes the host while its credential warning survives snapshots and refresh errors', async (t) => {
+  const warning = 'Native credential deletion was denied'
+  const app = await manager(t, fixture(), (request, view) => {
+    assert.deepEqual(request, { action: 'forget', host_id: pairedId })
+    view.hosts = view.hosts.filter((host) => host.host_id !== pairedId)
+    view.refresh_error = 'Coordinator refresh unavailable'
+    return { forgotten: pairedId, credential_cleanup_warning: warning }
+  })
+  app.document.querySelectorAll('.host-button')[1].click()
+  button(app.document, 'Forget this host').click()
+  button(app.document.querySelector('[role="dialog"]'), 'Forget host').click()
+  await completed(app, (calls) => calls.length === 1)
+  assert.equal(app.document.querySelector('[role="dialog"]'), null, 'successful Forget closes confirmation')
+  assert.equal(app.document.querySelectorAll('.host-button').length, 1)
+  assert.equal(app.document.querySelector('.notice[role="status"]').textContent, 'Host forgotten')
+  const alerts = () => [...app.document.querySelectorAll('.notice[role="alert"]')].map((node) => node.textContent)
+  assert.deepEqual(alerts(), ['The action completed. Refresh failed: Coordinator refresh unavailable',
+    `OS credential cleanup needs attention: ${warning}`])
+
+  const updated = structuredClone(app.view)
+  updated.hosts[0].snapshot.instances[0].active_requests++
+  delete updated.refresh_error
+  await app.publish(updated)
+  assert.equal(app.document.querySelectorAll('.host-button').length, 1)
+  assert.equal(app.document.querySelector('.notice[role="status"]').textContent, 'Host forgotten')
+  assert.ok(alerts().includes(`OS credential cleanup needs attention: ${warning}`))
+  assert.equal(requests(app).length, 1, 'snapshot delivery must not retry Forget or vault deletion')
+})
+
+test('Forget with no credential warning shows ordinary successful removal', async (t) => {
+  const app = await manager(t, fixture(), (request, view) => {
+    assert.deepEqual(request, { action: 'forget', host_id: pairedId })
+    view.hosts = view.hosts.filter((host) => host.host_id !== pairedId)
+    return { forgotten: pairedId, credential_cleanup_warning: null }
+  })
+  app.document.querySelectorAll('.host-button')[1].click()
+  button(app.document, 'Forget this host').click()
+  button(app.document.querySelector('[role="dialog"]'), 'Forget host').click()
+  await completed(app, (calls) => calls.length === 1)
+  assert.equal(app.document.querySelector('[role="dialog"]'), null)
+  assert.equal(app.document.querySelectorAll('.host-button').length, 1)
+  assert.equal(app.document.querySelector('.notice[role="status"]').textContent, 'Host forgotten')
+  assert.equal(app.document.querySelector('.notice[role="alert"]'), null)
+})
+
 test('heartbeat-only snapshots retain Manager controls and keyboard focus', async (t) => {
   const app = await manager(t)
   const refresh = button(app.document, 'Refresh')

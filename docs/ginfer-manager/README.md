@@ -13,6 +13,20 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Current credential cleanup warning fix
+
+`GCHAT-MANAGER-FORGET-CREDENTIAL-WARNING` uses baseline main `254c0f8fd`,
+candidate `/ai/gchat-worktrees/manager-forget-credential-warning-254`, branch
+`fix/manager-forget-credential-warning-254`. Manager must preserve successful
+saved-host removal while displaying returned OS credential cleanup warnings,
+including alongside refresh errors and across unrelated snapshots. The owning
+UI and two existing DOM-fixture cases pass (2/2, 566 ms total). The actual Forget
+interaction removes the host, retains the warning across an unrelated snapshot,
+shows refresh failure separately, and preserves null-warning success. No
+Host/vault behavior, native application or user credential changes
+are included. Evidence belongs in `out/manager-forget-credential-warning-20261011/`;
+the source tree is retained for review, with existing Node dependencies reused.
+
 ## Closed Linux tray registration diagnosis
 
 `GCHAT-MANAGER-LINUX-TRAY-NO-SNI` is closed by the October 11 15:44Z decision:
@@ -97,8 +111,9 @@ coordinator's ordinary revoke endpoint removes only that disposable grant.
 No secret contents are inspected. The worker's final normal Close and graceful
 Host shutdown finish at 13:03:37Z. Final process/port verification passes; retained
 small evidence is recorded in `out/s2-acceptance-20261011/native-worker-evidence/`.
-The separate source-proven Manager omission of credential cleanup warnings is
-open; this successful cleanup does not exercise its error branch.
+This successful native cleanup does not exercise the credential-deletion error
+branch. The separate Manager presentation correction is covered by the focused
+DOM cases above; main integration and installed presentation remain unclaimed.
 
 Linux Manager tray registration and native Hide are accepted by the October 11
 15:44Z decision. Original 874/877 missing-registration claims were probe false

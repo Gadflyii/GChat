@@ -64,7 +64,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   }
   const state = { view: { hosts: [], discovered: [], fleet: null }, selected: readPreference('host', null),
     ignored: new Set(readPreference('ignored', [])), sections: new Map(), catalogs: new Map(), profileGroups: new Map(),
-    busy: false, notice: '', error: '', errorSource: null, dialog: null, stopped: false }
+    busy: false, notice: '', warning: '', error: '', errorSource: null, dialog: null, stopped: false }
   const subscriptions = []
   let snapshotKey
   let presentationKey
@@ -167,11 +167,16 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     state.error = ''
     state.errorSource = 'action'
     state.notice = ''
+    state.warning = ''
     render()
     try {
       const response = await invoke('manager_request', { request })
       apply(response.view)
       state.notice = success
+      const cleanupWarning = response.result?.credential_cleanup_warning
+      if (typeof cleanupWarning === 'string' && cleanupWarning.trim()) {
+        state.warning = `OS credential cleanup needs attention: ${cleanupWarning}`
+      }
       if (response.view?.refresh_error) state.error = `The action completed. Refresh failed: ${response.view.refresh_error}`
       return response.result
     } catch (error) {
@@ -768,7 +773,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     if (document.hidden) { pendingRender = true; return }
     pendingRender = false
     const key = renderKey(state.view)
-    const presentation = JSON.stringify([state.selected, state.busy, state.error, state.notice, [...state.ignored]])
+    const presentation = JSON.stringify([state.selected, state.busy, state.error, state.notice, state.warning, [...state.ignored]])
     if (!force && key === snapshotKey && presentation === presentationKey) {
       updateActivity()
       return
@@ -812,8 +817,11 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         : h('div', { class: 'empty' }, h('strong', {}, 'No instances'), 'Choose an installed model to start one. Models never start automatically.'),
       modelsSection(host), sharingSection(host), clientsSection(host), fleetSection(host))
     }
-    root.replaceChildren(...[header, state.error ? h('div', { class: 'notice error', role: 'alert' }, state.error) :
-      state.notice ? h('div', { class: 'notice', role: 'status' }, state.notice) : null, h('div', { class: 'layout' }, sidebar, main)].filter(Boolean))
+    root.replaceChildren(...[header,
+      state.error ? h('div', { class: 'notice error', role: 'alert' }, state.error) : null,
+      state.notice ? h('div', { class: 'notice', role: 'status' }, state.notice) : null,
+      state.warning ? h('div', { class: 'notice', role: 'alert' }, state.warning) : null,
+      h('div', { class: 'layout' }, sidebar, main)].filter(Boolean))
   }
 
   async function start() {
