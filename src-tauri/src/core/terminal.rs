@@ -666,7 +666,7 @@ pub async fn code_workspace_resolve<R: Runtime>(
 
 fn command_for_shell(
     cwd: &Path,
-    opencode_tui_config: Option<&Path>,
+    opencode_directory: Option<&Path>,
     hermes_appearance: Option<TerminalAppearance>,
 ) -> CommandBuilder {
     #[cfg(windows)]
@@ -690,8 +690,14 @@ fn command_for_shell(
     if let Some(path) = super::system::commands::agent_runtime_path() {
         command.env("PATH", path);
     }
-    if let Some(path) = opencode_tui_config {
-        command.env("OPENCODE_TUI_CONFIG", path.as_os_str());
+    if let Some(directory) = opencode_directory {
+        for (key, value) in super::system::opencode_config::child_env(directory) {
+            command.env(key, value);
+        }
+        command.env(
+            "OPENCODE_TUI_CONFIG",
+            directory.join("gchat-tui.json").as_os_str(),
+        );
     }
     if let Some(appearance) = hermes_appearance {
         command.env(
@@ -1019,10 +1025,13 @@ pub fn terminal_spawn<R: Runtime>(
         )?),
         TerminalLaunch::Hermes => Some(quote_hermes_command(request.executable.as_deref())?),
     };
-    let opencode_tui_config = match request.launch {
+    let opencode_directory = match request.launch {
         TerminalLaunch::Shell | TerminalLaunch::Hermes => None,
         TerminalLaunch::OpenCode => {
-            Some(install_gchat_opencode_theme(&opencode_config_directory()?)?)
+            let data = super::app::commands::get_jan_data_folder_path(app.clone());
+            let directory = super::system::opencode_config::config_directory(&data);
+            install_gchat_opencode_theme(&directory)?;
+            Some(directory)
         }
     };
     let hermes_appearance = match request.launch {
@@ -1081,13 +1090,12 @@ pub fn terminal_spawn<R: Runtime>(
             terminal_id.label()
         )
     })?;
-    let mut command = command_for_shell(&cwd, opencode_tui_config.as_deref(), hermes_appearance);
+    let mut command = command_for_shell(&cwd, opencode_directory.as_deref(), hermes_appearance);
     let mut bridge = None;
-    if request.launch == TerminalLaunch::OpenCode {
+    if let Some(config_directory) = opencode_directory.as_deref() {
         let inherited_config = std::env::var("OPENCODE_CONFIG_CONTENT").ok();
-        let configured = super::system::opencode_config::read_merged_global_config(
-            &opencode_config_directory()?,
-        )?;
+        let configured =
+            super::system::opencode_config::read_merged_global_config(config_directory)?;
         let default_model =
             opencode_bridge_model(configured.as_ref(), inherited_config.as_deref())?;
         let connection = super::code_bridge::prepare_session(
@@ -1139,7 +1147,7 @@ pub fn terminal_spawn<R: Runtime>(
         let config = opencode_bridge_config(
             inherited_config.as_deref(),
             &connection.url,
-            &opencode_config_directory()?.join("gchat-caller.mjs"),
+            &config_directory.join("gchat-caller.mjs"),
         )?;
         command.env("OPENCODE_CONFIG_CONTENT", config);
         command.env("GCHAT_BRIDGE_TOKEN", connection.token);
@@ -1433,12 +1441,6 @@ pub fn terminal_stop(
     Ok(status)
 }
 
-fn opencode_config_directory() -> Result<PathBuf, String> {
-    Ok(super::system::opencode_config::config_directory(
-        &super::system::commands::agent_home_dir()?,
-    ))
-}
-
 fn opencode_bridge_config(
     existing: Option<&str>,
     url: &str,
@@ -1515,8 +1517,8 @@ fn write_managed_terminal_asset(path: &Path, content: &str) -> Result<(), String
 }
 
 /// Install the GChat theme without changing the user's normal OpenCode theme.
-/// Only the embedded process receives OPENCODE_TUI_CONFIG, while OpenCode's
-/// required global theme directory contains the shared theme definition.
+/// The embedded process receives OPENCODE_TUI_CONFIG and the selected managed
+/// directory contains its theme and plugins.
 fn install_gchat_opencode_theme(config_directory: &Path) -> Result<PathBuf, String> {
     let theme_directory = config_directory.join("themes");
     std::fs::create_dir_all(&theme_directory).map_err(|error| {
@@ -1691,10 +1693,14 @@ fn opencode_configuration_state(directory: &Path) -> Result<OpenCodeConfiguratio
 }
 
 #[tauri::command]
-pub async fn opencode_readiness(custom_path: Option<String>) -> Result<OpenCodeReadiness, String> {
+pub async fn opencode_readiness<R: Runtime>(
+    app: AppHandle<R>,
+    custom_path: Option<String>,
+) -> Result<OpenCodeReadiness, String> {
+    let data = super::app::commands::get_jan_data_folder_path(app);
+    let config_directory = super::system::opencode_config::config_directory(&data);
     let detection =
         super::system::commands::detect_agent_installed("opencode".to_string(), custom_path).await;
-    let config_directory = opencode_config_directory()?;
     let config_path = super::system::opencode_config::writable_config_path(&config_directory);
     let config_state = match opencode_configuration_state(&config_directory) {
         Ok(state) => state,
@@ -2775,49 +2781,87 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn real_pty_runs_a_shell_and_captures_output() {
-        let state = TerminalState::default();
-        let temp = tempfile::tempdir().unwrap();
-        let request = TerminalSpawnRequest {
-            terminal_id: TerminalId::Code,
-            cwd: temp.path().to_string_lossy().into_owned(),
-            rows: 24,
-            cols: 80,
-            launch: TerminalLaunch::Shell,
-            executable: None,
-            appearance: None,
-            code_session_id: None,
-            bridge_policy: None,
-        };
+    fn real_pty_code_environment_uses_selected_data_and_preserves_other_shells() {
+        use std::{ffi::OsString, os::unix::ffi::OsStrExt};
 
-        // Exercise the same portable-pty primitives as the command without a
-        // Tauri runtime; command/state extraction itself is generated by Tauri.
-        let pty_system = native_pty_system();
-        let pair = pty_system.openpty(PtySize::default()).unwrap();
-        let mut reader = pair.master.try_clone_reader().unwrap();
-        let mut writer = pair.master.take_writer().unwrap();
-        let tui_config = temp.path().join("gchat-tui.json");
-        let mut command = command_for_shell(
-            &canonical_working_directory(&request.cwd).unwrap(),
-            Some(&tui_config),
-            None,
-        );
-        command.env("PS1", "");
-        let mut child = pair.slave.spawn_command(command).unwrap();
-        drop(pair.slave);
-        writer.write_all(b"printf '__GCHAT_PTY_OK__\\n'\r").unwrap();
-        writer
-            .write_all(b"printf '__GCHAT_TUI__%s\\n' \"$OPENCODE_TUI_CONFIG\"\r")
-            .unwrap();
-        writer.write_all(b"exit\r").unwrap();
-        writer.flush().unwrap();
-        let mut output = String::new();
-        reader.read_to_string(&mut output).unwrap();
-        let status = child.wait().unwrap();
-        assert!(status.success());
-        assert!(output.contains("__GCHAT_PTY_OK__"));
-        assert!(output.contains("__GCHAT_TUI__"));
-        assert!(output.contains("gchat-tui.json"));
-        state.shutdown();
+        let data = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let directory = super::super::system::opencode_config::config_directory(data.path());
+        install_gchat_opencode_theme(&directory).unwrap();
+        let config_path = directory.join("opencode.jsonc");
+        let config = br#"{"model":"gchat/fixture-selected"}"#;
+        std::fs::write(&config_path, config).unwrap();
+        let keys = [
+            "HOME",
+            "XDG_CONFIG_HOME",
+            "OPENCODE_CONFIG_DIR",
+            "OPENCODE_CONFIG",
+            "OPENCODE_TUI_CONFIG",
+            "HERMES_TUI_THEME",
+        ];
+        let inherited: Vec<OsString> = keys
+            .iter()
+            .map(|key| std::env::var_os(key).unwrap_or_default())
+            .collect();
+
+        for launch in [
+            TerminalLaunch::OpenCode,
+            TerminalLaunch::Shell,
+            TerminalLaunch::Hermes,
+        ] {
+            let witness = project.path().join(format!("{launch:?}-environment"));
+            let copied_config = project.path().join(format!("{launch:?}-configuration"));
+            let mut command = command_for_shell(
+                project.path(),
+                (launch == TerminalLaunch::OpenCode).then_some(directory.as_path()),
+                (launch == TerminalLaunch::Hermes).then_some(TerminalAppearance::Dark),
+            );
+            // Run a deterministic child through the real PTY with the production
+            // environment, without loading the user's interactive shell profile.
+            command.get_argv_mut().extend([
+                OsString::from("/bin/sh"),
+                OsString::from("-c"),
+                OsString::from(
+                    r#"printf '%s\0' "$HOME" "$XDG_CONFIG_HOME" "$OPENCODE_CONFIG_DIR" "$OPENCODE_CONFIG" "$OPENCODE_TUI_CONFIG" "$HERMES_TUI_THEME" "$PWD" > "$GCHAT_TEST_ENV_FILE"
+if [ "$OPENCODE_CONFIG" = "$GCHAT_TEST_EXPECTED_CONFIG" ]; then
+    cat "$OPENCODE_CONFIG" > "$GCHAT_TEST_CONFIG_FILE"
+fi
+printf '__GCHAT_PTY_OK__\n'"#,
+                ),
+            ]);
+            command.env("GCHAT_TEST_ENV_FILE", witness.as_os_str());
+            command.env("GCHAT_TEST_EXPECTED_CONFIG", config_path.as_os_str());
+            command.env("GCHAT_TEST_CONFIG_FILE", copied_config.as_os_str());
+
+            let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+            let mut reader = pair.master.try_clone_reader().unwrap();
+            let mut child = pair.slave.spawn_command(command).unwrap();
+            drop(pair.slave);
+            let mut output = String::new();
+            reader.read_to_string(&mut output).unwrap();
+            assert!(child.wait().unwrap().success());
+            assert!(output.contains("__GCHAT_PTY_OK__"));
+
+            let mut expected = inherited.clone();
+            if launch == TerminalLaunch::OpenCode {
+                expected[1] = data.path().join("code").into_os_string();
+                expected[2] = data.path().join("code/opencode").into_os_string();
+                expected[3] = config_path.clone().into_os_string();
+                expected[4] = directory.join("gchat-tui.json").into_os_string();
+                assert_eq!(std::fs::read(&copied_config).unwrap(), config);
+            } else {
+                assert!(!copied_config.exists());
+            }
+            if launch == TerminalLaunch::Hermes {
+                expected[5] = "dark".into();
+            }
+            expected.push(project.path().as_os_str().to_owned());
+            let expected: Vec<u8> = expected
+                .iter()
+                .flat_map(|value| value.as_os_str().as_bytes().iter().copied().chain([0]))
+                .collect();
+            assert_eq!(std::fs::read(&witness).unwrap(), expected, "{launch:?}");
+        }
+        assert_eq!(std::env::var_os("HOME").unwrap_or_default(), inherited[0]);
     }
 }

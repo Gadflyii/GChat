@@ -430,6 +430,9 @@ pub async fn delete_reference(data: &Path, thread: &Value) -> Result<(), String>
         let output = tokio::process::Command::new(executable)
             .args(["session", "delete", id])
             .current_dir(directory)
+            .envs(super::system::opencode_config::child_env(
+                &super::system::opencode_config::config_directory(data),
+            ))
             .output()
             .await
             .map_err(|error| format!("Could not delete Code session: {error}"))?;
@@ -589,6 +592,59 @@ mod tests {
         assert_eq!(reloaded["title"], "Actual task");
         assert_eq!(reloaded["metadata"]["code"]["title"], "Actual task");
         assert_eq!(reloaded["metadata"]["is_favorite"], true);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn offline_session_delete_uses_selected_managed_config_and_preserves_home() {
+        use std::os::unix::{ffi::OsStrExt, fs::PermissionsExt};
+
+        let data = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let executable = project.path().join("opencode-fixture");
+        std::fs::write(
+            &executable,
+            r#"#!/bin/sh
+printf '%s\0' "$1" "$2" "$3" "$HOME" "$XDG_CONFIG_HOME" "$OPENCODE_CONFIG_DIR" "$OPENCODE_CONFIG" "$PWD" > delete-witness
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let home = std::env::var_os("HOME").unwrap_or_default();
+        let row = write_reference(
+            data.path(),
+            &json!({"id":"ses_isolated_delete","title":"Managed configuration"}),
+            project.path().to_str().unwrap(),
+            Some(executable.to_str().unwrap()),
+        )
+        .unwrap();
+
+        delete_reference(data.path(), &row).await.unwrap();
+
+        let expected = [
+            "session".into(),
+            "delete".into(),
+            "ses_isolated_delete".into(),
+            home.clone(),
+            data.path().join("code").into_os_string(),
+            data.path().join("code/opencode").into_os_string(),
+            data.path()
+                .join("code/opencode/opencode.jsonc")
+                .into_os_string(),
+            project.path().as_os_str().to_owned(),
+        ];
+        let expected: Vec<u8> = expected
+            .iter()
+            .flat_map(|value| value.as_os_str().as_bytes().iter().copied().chain([0]))
+            .collect();
+        assert_eq!(
+            std::fs::read(project.path().join("delete-witness")).unwrap(),
+            expected
+        );
+        assert!(get_reference(data.path(), "code-ses_isolated_delete")
+            .unwrap()
+            .is_none());
+        assert_eq!(std::env::var_os("HOME").unwrap_or_default(), home);
     }
 
     #[tokio::test]
