@@ -8,7 +8,7 @@ not a prerequisite.
 Status: Ron approved the design; it is merged into GChat main. October 11 step 1
 implements the local-first service skeleton, vault-held SSH sessions, guest-tools
 contract and SSH-tunnelled view channel. Development VMs are not yet available.
-Current verification is limited to focused contracts and a loopback SSH fixture;
+The focused contracts and actual loopback SSH fixture pass;
 no real desktop input, provisioning or native Windows execution is authorized.
 
 ## Decided product scope
@@ -478,9 +478,23 @@ session-bound guest-tools contract and tunnelled view transport. Acceptance is
 the focused step-1 cases above. Physical desktop readiness and unattended agent
 execution are not established by this skeleton. The approved design's completed
 review evidence remains in `/ai/gchat/out/gbot-design-20261011/`.
-Next action: compose the service/contract/vault/SSH owners, then run the bounded
-loopback gate. No
-existing desktop, model, profile or host configuration is a fixture target.
+The service/contract/vault/SSH owners are composed. On October 11 the focused
+gate passed 12 library cases and two actual SSH loopback cases. After correcting
+the HTTP parser's oversized error return, its affected HTTP case and composed
+SSH/HTTP case passed again; strict Clippy passed for all crate targets. Tested
+source is `1a5771def`, from main `42d8c401e`; evidence is
+`/ai/gchat/out/gbot-workspace-20261011/result.json` and its six focused logs.
+The loopback fixture verifies pinned vault-key authentication, generated guest
+command/file operations, cancellation, keepalive, forwarding and shutdown. A
+lost reply followed by service restart reconciles one completed file effect
+without dispatching it again. Native-vault provider availability, encrypted-key
+passphrase import and RSA authentication remain unqualified or unsupported.
+The CPU booking ended at 16:48:48 UTC; owned containers and generated guest files
+are gone and the canonical build guard was returned. The shared build cache is
+retained. No existing desktop, model, profile or host configuration was a target.
+
+Next action: reviewed main integration. Dedicated-guest desktop capture/input,
+takeover, Windows and M365 connection qualification await their approved guests.
 
 The raw view tunnel is bidirectional transport. It must not be advertised as a
 read-only desktop panel: VNC input/clipboard mediation and takeover exclusivity
