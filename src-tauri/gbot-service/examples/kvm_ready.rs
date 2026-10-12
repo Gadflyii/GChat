@@ -5,6 +5,7 @@ mod linux {
         contract::*,
         kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, CUA_REVISION},
         service::Service,
+        ssh::desktop_model_result,
         vault::{NativeVault, Secret, Vault},
         workspace::WorkspaceRuntime,
     };
@@ -14,6 +15,7 @@ mod linux {
     use std::{
         error::Error,
         path::{Path, PathBuf},
+        process::Stdio,
         sync::Arc,
         time::Duration,
     };
@@ -24,6 +26,26 @@ mod linux {
     };
     use uuid::Uuid;
     type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+
+    async fn guest_key(
+        mut console: impl tokio::io::AsyncBufRead + Unpin,
+        mut log: impl tokio::io::AsyncWrite + Unpin,
+    ) -> Result<PublicKey> {
+        let marker = b"GBOT_READY_KEY ";
+        let mut line = Vec::new();
+        loop {
+            line.clear();
+            if console.read_until(b'\n', &mut line).await? == 0 {
+                return Err("guest console closed before Ready".into());
+            }
+            log.write_all(&line).await?;
+            if let Some(offset) = line.windows(marker.len()).position(|part| part == marker) {
+                log.flush().await?;
+                let key = std::str::from_utf8(&line[offset + marker.len()..])?;
+                return Ok(PublicKey::from_openssh(key.trim())?);
+            }
+        }
+    }
 
     async fn operation(
         runtime: &WorkspaceRuntime,
@@ -62,12 +84,6 @@ mod linux {
             _ => Err("unexpected desktop reply".into()),
         }
     }
-    fn text_only(mut result: Value) -> Value {
-        if let Some(content) = result["content"].as_array_mut() {
-            content.retain(|item| item["type"] != "image");
-        }
-        result
-    }
     async fn model_task(
         runtime: &WorkspaceRuntime,
         identity: SessionIdentity,
@@ -78,9 +94,7 @@ mod linux {
         let names = [
             "list_windows",
             "get_window_state",
-            "invoke_menu",
             "type_text",
-            "set_value",
             "press_key",
             "hotkey",
             "click",
@@ -88,14 +102,25 @@ mod linux {
         ];
         let mut tools: Vec<Value> = catalog.iter().filter(|tool| names.contains(&tool.name.as_str())).map(|tool|
             json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.input_schema}})).collect();
-        tools.push(json!({"type":"function","function":{"name":"open_editor","description":"Open Mousepad on the dedicated bot desktop. Use this once, then accessibility tools to type and save.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}));
+        tools.push(json!({"type":"function","function":{"name":"open_editor","description":"Open Mousepad on the dedicated bot desktop. Use this once, then foreground input tools to type and save.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}));
         let mut messages = vec![
-            json!({"role":"system","content":"You operate a dedicated Linux bot computer through AT-SPI accessibility tools. Open Mousepad, type exactly one line: Hello from Gbot. Save it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop accessibility, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving."}),
+            json!({"role":"system","content":"You operate a dedicated Linux bot computer through accessibility observations and real foreground input. Open Mousepad, type exactly one line: Hello from Gbot. Save it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop foreground input, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving."}),
             json!({"role":"user","content":"Please create the text file now."}),
         ];
         let client = Client::new();
+        let api_key = std::env::var("GBOT_MODEL_API_KEY").ok();
+        let authorize = |builder: hyper::http::request::Builder| match &api_key {
+            Some(key) => builder.header("authorization", format!("Bearer {key}")),
+            None => builder,
+        };
         let response = client
-            .get(format!("{}/v1/models", url.trim_end_matches('/')).parse()?)
+            .request(
+                authorize(Request::get(format!(
+                    "{}/v1/models",
+                    url.trim_end_matches('/')
+                )))
+                .body(Body::empty())?,
+            )
             .await?;
         let status = response.status();
         let bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -109,11 +134,49 @@ mod linux {
             return Err("the gate requires one served model".into());
         }
         let model = entries[0]["id"].as_str().ok_or("missing served model ID")?;
+        let context_tokens = entries[0]["max_model_len"]
+            .as_u64()
+            .ok_or("missing served context capacity")?;
+        let helper = std::env::var_os("GBOT_CONTEXT_PREPARER")
+            .ok_or("shared context preparer is required for this gate")?;
+        let mut preparer = Command::new("node")
+            .arg(helper)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+        let mut context_input = preparer.stdin.take().ok_or("context input missing")?;
+        let mut context_output =
+            BufReader::new(preparer.stdout.take().ok_or("context output missing")?).lines();
         let mut turn = 0;
         loop {
             turn += 1;
-            let request = Request::post(format!("{}/v1/chat/completions",url.trim_end_matches('/'))).header("content-type","application/json")
-                .body(Body::from(serde_json::to_vec(&json!({"model":model,"messages":messages,"tools":tools,"tool_choice":"auto"}))?))?;
+            let completion_url = format!("{}/v1/chat/completions", url.trim_end_matches('/'));
+            let context_request = json!({"url":completion_url,"threadId":identity.session_id,"contextTokens":context_tokens,"body":{"model":model,"messages":messages,"tools":tools,"tool_choice":"auto"}});
+            context_input
+                .write_all(format!("{context_request}\n").as_bytes())
+                .await?;
+            context_input.flush().await?;
+            let prepared: Value = serde_json::from_str(
+                &context_output
+                    .next_line()
+                    .await?
+                    .ok_or("shared context preparer exited")?,
+            )?;
+            tokio::fs::write(
+                evidence.join(format!("context-{turn}.json")),
+                serde_json::to_vec_pretty(&prepared)?,
+            )
+            .await?;
+            let body = prepared["body"]
+                .as_str()
+                .ok_or_else(|| format!("context preparation failed: {prepared}"))?;
+            let request = authorize(Request::post(format!(
+                "{}/v1/chat/completions",
+                url.trim_end_matches('/')
+            )))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_owned()))?;
             let response = client.request(request).await?;
             let status = response.status();
             let bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -170,7 +233,7 @@ mod linux {
                     }
                 } else if names.contains(&name) {
                     match desktop(runtime, identity, name, arguments).await {
-                        Ok(value) => text_only(value),
+                        Ok(value) => value,
                         Err(error) => json!({"error":error.to_string()}),
                     }
                 } else {
@@ -184,10 +247,16 @@ mod linux {
                     serde_json::to_vec_pretty(&result)?,
                 )
                 .await?;
+                let projected = desktop_model_result(&result);
                 messages.push(
-                    json!({"role":"tool","tool_call_id":call["id"],"content":result.to_string()}),
+                    json!({"role":"tool","tool_call_id":call["id"],"content":projected.to_string()}),
                 );
             }
+            tokio::fs::write(
+                evidence.join("conversation.json"),
+                serde_json::to_vec_pretty(&messages)?,
+            )
+            .await?;
             println!("Model turn {turn}: {} tools", calls.len());
         }
         tokio::fs::write(
@@ -195,6 +264,7 @@ mod linux {
             serde_json::to_vec_pretty(&messages)?,
         )
         .await?;
+        preparer.kill().await?;
         match operation(
             runtime,
             identity,
@@ -239,19 +309,9 @@ mod linux {
         {
             return Err("cannot read owned console".into());
         }
-        let mut console = BufReader::new(tokio::fs::File::open(tty).await?).lines();
-        let mut log = tokio::fs::File::create(evidence.join("serial.log")).await?;
-        let key = loop {
-            let line = console
-                .next_line()
-                .await?
-                .ok_or("guest console closed before Ready")?;
-            log.write_all(format!("{line}\n").as_bytes()).await?;
-            if let Some((_, key)) = line.split_once("GBOT_READY_KEY ") {
-                break PublicKey::from_openssh(key.trim())?;
-            }
-        };
-        log.flush().await?;
+        let console = BufReader::new(tokio::fs::File::open(tty).await?);
+        let log = tokio::fs::File::create(evidence.join("serial.log")).await?;
+        let key = guest_key(console, log).await?;
         let key = key.to_openssh()?;
         let mut fields = key.split_whitespace();
         let identity = SessionIdentity {
@@ -380,6 +440,24 @@ mod linux {
         cleanup?;
         result??;
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn non_utf8_console_keeps_raw_bytes_and_verifies_host_key() {
+        let private = PrivateKey::random(
+            &mut russh::keys::key::safe_rng(),
+            russh::keys::Algorithm::Ed25519,
+        )
+        .unwrap();
+        let expected = private.public_key().to_openssh().unwrap();
+        let mut input = b"boot \xff\xfe\n".to_vec();
+        input.extend_from_slice(format!("GBOT_READY_KEY {expected}\r\n").as_bytes());
+        let mut log = Vec::new();
+        let key = guest_key(BufReader::new(input.as_slice()), &mut log)
+            .await
+            .unwrap();
+        assert_eq!(key.to_openssh().unwrap(), expected);
+        assert_eq!(log, input);
     }
 }
 #[cfg(target_os = "linux")]

@@ -11,8 +11,13 @@ contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparati
 acceptance-host proposals; the Debian image and Host tools are staged, with
 first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
 on `feat/gbot-cua-service-be226`; the parser-fixed model task exposed an idle
-Cua session-lifecycle gap, now fixed. The model task is blocked on raw MCP
-window-state history filling the approved context before the file is saved.
+Cua session-lifecycle gap, now fixed. Canonical model-facing elements and the shared Chat compactor are implemented.
+The released Qwen SMOL task on Ada RTX4090 opens Mousepad but is blocked at
+Save As: the window belongs to Mousepad, whose AT-SPI endpoint stops answering.
+The image dependencies are corrected; that correction did not resolve the hang.
+The model and dedicated guest are stopped. No saved-file PASS exists.
+Later Engine revision `96082415c` admits SMOL on Blackwell; this Ada retry did
+not change host or settings.
 The focused contracts and actual loopback SSH fixture pass.
 No user desktop input or native Windows execution is authorized. Ron separately
 approved the isolated S1 Debian guest and its harmless accessibility gate below.
@@ -682,7 +687,7 @@ Only this task's local/S1 paths were cleaned; no fleet-wide cleanliness claim.
 Repository GChat, candidate `feat/gbot-cua-service-be226` from merged main
 `be2267586`, owned tree `/ai/gchat-worktrees/gbot-cua-service-be226`.
 Deliverable: production service connects to the approved guest through pinned
-Cua MCP over SSH; one dense-INT model task opens Mousepad, types a line, saves
+Cua MCP over SSH; one released SMOL model task opens Mousepad, types a line, saves
 `~/hello.txt`, and verifies the bytes independently through SSH. Text-only AT-SPI;
 no human session, Vision, Windows, cloud provisioning, or performance claims.
 
@@ -710,7 +715,7 @@ XML `on_screen_only` parameter. GInfer's strict JSON parameter parser returned
 that call as content, preventing typing/saving; independent SSH readback found
 no file. This does not qualify the end-to-end model task.
 
-**Current decision (2026-10-11 23:41Z):** exact GInfer `19cc62bc5` built
+**Earlier parser gate (2026-10-11 23:41Z):** exact GInfer `19cc62bc5` built
 both `ginfer` and `ginfer-serve` on S1, Release SM120a, GNU12.4/CUDA13.3.73.
 The 570-target build passed. The post-build `ginfer --version` probe was invalid
 for that CLI and exited1; this was a harness probe failure, not a compilation
@@ -735,50 +740,138 @@ appears in text content, structured `tree_markdown`, and structured `elements`.
 The two snapshots were13833 and22992 bytes. This is a separate model-facing
 history/representation issue; the file was not saved and the task is not qualified.
 
-Next action: obtain the owning model-adapter decision for one canonical
-structured representation and the shared compaction path; do not increase the
-model context, truncate trees arbitrarily, alter the prompt, or retry unchanged.
-The transport/lifecycle change is source-ready; model acceptance stays blocked.
-Evidence: S1 `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/`,
-including `model-1..7.json`, `tool-*.json` and `model-stop.json` (PID4048678 absent,
-normal exit0, 17.8s, end23:41:05Z). Dedicated guest95ce015c is stopped and its vault
-credential deleted. Both own S1 and local bookings/guards are returned.
-The preceding idle-failure evidence remains at `gate-parser-19cc62bc5/`.
-Pinned lifecycle authority is retained under local
-`out/gbot-cua-service-20261011/cua-pin-lifecycle/`. Only independent SSH readback
-of the actual saved bytes qualifies the task; no `hello.txt` PASS exists yet.
+**Current model handoff:** the service owns model-facing Cua
+projection: one elements list with role, name, element token and state; complete
+raw MCP replies remain in the task log. Text and tree_markdown duplicates are
+removed, with actionable state and incomplete-tree/error metadata retained.
+The opt-in Rust driver uses the existing Chat `prepareGInferContextRequest` via
+a bundled Node bridge, including exact engine token counts and shared compaction.
+This is a development-gate bridge, not a production Node dependency or a second
+compaction policy. The unchanged desktop prompt remains the acceptance task.
 
-Approved runtime on S1 GPU0, at most 20 minutes while a model runs:
-`/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/build120/apps/ginfer-serve`.
-Artifact:
-`/media/ron/SSD_RAID/ai/ginfer-artifacts/qwen38-muse-tp1-tp2-tp4-2026-09-02-r1/qwen38_27b_int_df2.ginfer`.
-Profile:
-`/media/ron/SSD_RAID/ai/tmp-c4-gbench-scoreboard-20261011/results/pro1-r2/profiles/dense-qwen-int.json`.
-Effective launch: artifact first, `--tp 1 --max-context 16384 --max-concurrency 2
---kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy --no-profile
---hardware-profile <above>`, bound to localhost. Greedy avoids the open sampled
-speculation defect. This is a functional task, not a GBench/performance claim.
-The new runtime must identify the requested source before task dispatch; model
-settings remain unchanged.
+Default recommended Gbot brain: released Qwen or Muse SMOL, with at least128K
+context and full native context where VRAM permits. Qwen SMOL is the first gate
+at262144 context/C2 on S1 PRO GPU0; Muse SMOL is checked only after Qwen passes. Earlier dense
+INT/16384 and intermediate32768/131072 gate sizing are superseded. The Qwen
+artifact is copied once to S1 SSD and verified against the release SHA256SUMS;
+a rejected hardware profile is reported rather than bypassed.
+
+Both focused projection cases, strict all-target Clippy and the changed gate
+build pass. S1 SSD artifact copy is verified against the release manifest
+(9576802560 bytes). The S1 Qwen SMOL attempt exited before model load: at
+`19cc62bc5`, `Package::gpu_requirements` explicitly admits this identity on SM86
+and SM89 but rejects SM120. The hardware profile was accepted (`inventory_match=1`);
+there was no model request or saved file. Evidence: S1
+`/ai/gbot-vms/cua-service-20261011/gate-smol-projection-19cc62bc5/`.
+
+**Current decision (2026-10-12 03:03Z): native foreground activation.**
+The private guest diagnosis established the Save As failure: Mousepad's main
+thread enters `gtk_dialog_run` from the AT-SPI D-Bus `DoAction` callback. Its
+nested dialog loop cannot service further accessibility calls until the dialog
+closes. The focused Save As window belongs to Mousepad, not a portal process;
+independent AT-SPI calls also time out. GVfs and xdg-user-dirs were present.
+The stack, independent calls and guest recovery differences are retained under
+S1 `save-deadlock-backtrace-20261012/`; its guest is stopped and undefined and
+the diagnostic credentials are removed.
+
+The owning service now uses AT-SPI only to observe the tree. Its model-facing
+catalog exposes native click and keyboard operations, omitting `invoke_menu`,
+`set_value` and accessibility action metadata. A click resolves the current
+window's element token to visible enabled geometry, then sends screen
+coordinates to Cua with `delivery_mode=foreground` and no accessibility target.
+Hidden/frameless controls are refused: Cua's element-click fallback would still
+invoke `DoAction`, so merely setting delivery mode is insufficient. Keyboard
+operations target the foreground window without element addressing. Every input
+invalidates cached tokens; the next click requires a fresh observation. Known
+refusals remain durable operation receipts, and full raw MCP replies remain in
+the task log. See the [activation decision](../decisions/2026-10-12-activate-gbot-controls-through-foreground-input.md).
+
+**Focused result:** native-input cases2/2, projection cases2/2, hermetic native
+input and Cua idle-revival cases1/1 each, strict all-target Clippy and the
+fixture build PASS. Logs: local `out/gbot-cua-service-20261011/native-activation/`.
+The first integration compile caught a fixture JSON-macro expression error;
+parenthesizing that expression corrected it before any guest/model ran.
+
+**Next acceptance:** ONE unchanged `hello.txt` task through the production service. Use released
+SHA-verified Qwen SMOL on S1 PRO GPU0, an accepted Engine at or after `96082415c`,
+context262144/C2/INT8/DFlashK7/greedy/no-thinking. The guest remains private and
+pinned to112–113; no human desktop, prompt workaround, calibration or timeout
+change. Acceptance is model-created `/home/gbot/hello.txt` with exact SSH readback
+`Hello from Gbot.` (with optional final newline), followed by guest/model stop and vault-key deletion.
+The exact runtime and matching-device profile are pending the runtime owner's
+path. Muse remains unstarted until Qwen passes. This is functional acceptance,
+not a GBench or performance claim.
+
+**Prior result (2026-10-12 01:07:51Z): blocked.** The image-dependency retry
+reached Ready and opened Save As but did not save the file. Native focus and
+independent bus lookup identified Mousepad PID5054/window23068952; the
+accessibility bus returned `org.freedesktop.DBus.Error.NoReply`. No separate
+portal owner was supported. The attributed stack now supersedes the earlier
+unresolved `do_sys_poll` observation.
+
+The Engine exited normally at `2026-10-12T01:07:51Z`, PID `1600086` absent.
+The fixture's later `fetch failed` followed the explicit Engine stop and is a
+cleanup error, not the cause of Save As failure. Guest stop and vault-key
+deletion passed; its definition is removed. GPU/build guards and both bookings
+are returned. Evidence on S1, under
+`/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps-r1/`:
+`save-dialog-owner-result.json`, `save-dialog-deps-r1-atspi.log`,
+`save-dialog-deps-r1-diagnostics.log`, `tool-7-call_d3d990922363beb5.json`,
+`tool-8-call_72e73344f0adcd71.json` and `gate-result.json`. Ada's exact terminal
+receipt is `/ai/gbot-models/gate-ada-smol-guest-deps-r1/model-stop.json`.
+
+The guest dependency omission is corrected by `4a0eb0050`: focused first-boot
+case (1), strict all-target Clippy and fixture build pass. A pre-Ready fixture
+failure on a binary serial byte is corrected by `faa0e8918`: raw console bytes
+are retained and only the public-key marker is decoded; focused regression (1),
+strict example Clippy and build pass. The fresh guest then reached Ready.
+Focused logs are retained locally under `out/gbot-cua-service-20261011/` as
+`guest-dependencies-{focused,clippy,build}.log` and
+`console-byte-{focused,clippy,build}.log`. Private controller roots and a fresh
+isolated keyring prevent retry password mismatch without touching user config.
+
+Earlier lifecycle/context failures remain concise evidence at S1
+`gate-parser-19cc62bc5/` and `gate-lifecycle-19cc62bc5/`; their models and guests
+are stopped and credentials deleted. The original missing-dependency capture
+remains at `gate-ada-smol-98fd8622f/`. Pinned native ownership/lifecycle source is
+retained locally under `out/gbot-cua-service-20261011/cua-pin-lifecycle/`.
+
+Historical Ada gate used accepted `ec1666210` SM89 runtime and the matching
+RTX4090 schema2 profile. Its model is stopped and temporary API key removed.
+S1 and Ada copies of `qwen38_27b_smol_df2.ginfer` were verified against release
+SHA `ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`.
+Reuse the existing S1 SSD artifact; no further model copy is needed.
 
 Evidence and owned inventory:
 
 | Owner / host | Path | State and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Source-ready transport/lifecycle change; real task blocked on model-facing history. |
+| GChat / Ada | `/ai/gbot-models/qwen38_27b_smol_df2.ginfer` | Release SHA verified after one S1-to-Ada copy;9576802560 bytes. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-98fd8622f/` | Failed save-task evidence; Engine stopped normally, temporary key removed. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-98fd8622f/` | Save As hang and diagnostics retained; superseded guest5d49b52f retired after saving guest metadata here. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps/` | Pre-Ready console failure evidence retained; guest7873f825 retired after saving metadata; no model ran. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps-r1/` | Failed retry/native ownership/independent NoReply evidence retained; guest stopped, definition removed, vault key deleted. |
+| GChat / S1 | `/ai/gbot-vms/26f614f7-a986-4b57-9dd1-c92fe851a1d4` | Stopped latest failing guest overlay retained for the open AT-SPI bug; no live domain or credential. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps-r1/` | Engine normal exit0/END01:07:51Z/PID1600086 absent; key removed, guards and booking returned. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate-guest-deps` | Current source-tested fixture retained for the unresolved task; no active job. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps/` | Pre-launch staging retained; the pre-Ready guest failure launched no model. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle/projection checks retained; guest-dependency fixture, strict Clippy and build passed. |
 | GChat / local | `/ai/gchat/out/gbot-cua-service-20261011/` | Focused check logs, supervisor scripts and raw tool-call response retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/evidence/` | First integrated connection and API-ID failure evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate2/` | Model task/raw response/readback and normal-stop evidence retained. `model-2.json`, `choices[0].message.content`, is the exact native markup. |
-| GChat / S1 | `/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/` | Exact-source build passed, native-build-receipt.json retained; accepted runtime for the remaining functional gate. |
+| GChat / S1 | `/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/` | Exact-source build passed, native-build-receipt.json retained; rejects Qwen SMOL on SM120. Retained for authorized read-only donor reuse. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-parser-19cc62bc5/` | Failed parser-fixed gate; desktop idle-expired, no saved file. Model/guest stopped and credential deleted; evidence retained. |
-| GChat / S1 | `/ai/gbot-vms/6fae39a5-220a-4cbc-802d-0135ff040354` | Failed test guest stopped; native undefine required before removing its disposable disk. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/` | Desktop/frame/type/menu pass; model context overflow before save. Model/guest stopped, vault credential deleted; evidence retained. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-gate-lifecycle` | Changed-service fixture; focused SSH/Clippy passed. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Accepted integration fixture, API-ID discovery enabled and rejected prompt guidance absent. Reusable until source changes. |
-| GChat / S1 | `/ai/gbot-vms/18b93479-d663-4b12-9715-7894d2e03e89`, `/ai/gbot-vms/cfbeb614-85d0-4b06-a447-c7a91763b692` | Failed task guests stopped, vault references deleted; disposable disks may be removed after native undefine. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate-lifecycle` | Superseded binary retired in October12 cleanup; focused evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Superseded binary retired in October12 cleanup; integration evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-smol-projection-19cc62bc5/` | Profile accepted; Engine SM120 identity refusal before model load. Model/guest stopped, vault cleared; evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/disposable-cleanup-20261012.json` | Five stopped failed-task guests undefined then removed,7.393GiB freed; accepted baseline, Ubuntu guest, raw evidence/runtime/models retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/save-retry-disposable-cleanup.json` | Two superseded stopped guest directories retired after preserving metadata and task evidence;1.489GiB freed. Latest failing candidate retained. |
 
-Latest model PID4048678 exited normally with code0 and was absent at
-2026-10-11T23:41:05Z; the guest is stopped and its credential deleted. No model,
-guest or GPU lock remains held. Initial fixture root/keyring failures occurred
+Prior model PID4054261 exited with code1 before load and was absent at
+2026-10-11T23:54:08Z; the guest is stopped and its credential deleted. That failed attempt holds no model or GPU lock. The new isolated Ada gate
+has one dedicated S1 guest; it never uses a human desktop. Initial fixture root/keyring failures occurred
 before VM creation; separate evidence roots and fresh private keyrings prevent
 them without touching Ron's configuration.
+
+October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/package bulk. Task evidence, image bases and stopped open candidates remain. All five hosts checked; approximately 60.3 GB recovered. Report and per-path receipts: `/ai/coordination/disk-hygiene-20261012/GChat.md` and `GChat.json`. Earlier failed-guest recovery and the additional1.489GiB save-retry cleanup are excluded from that total.

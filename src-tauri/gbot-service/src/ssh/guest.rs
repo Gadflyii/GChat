@@ -18,6 +18,7 @@ pub struct DesktopTool {
 pub(super) struct Mcp {
     stream: BufReader<russh::ChannelStream<client::Msg>>,
     next_id: u64,
+    input: super::native::Input,
 }
 
 impl Mcp {
@@ -80,6 +81,7 @@ pub(super) async fn open(
     let mut mcp = Mcp {
         stream: BufReader::new(channel.into_stream()),
         next_id: 0,
+        input: super::native::Input::default(),
     };
     let initialized = mcp.rpc("initialize", json!({"protocolVersion":"2025-06-18", "capabilities":{},"clientInfo":{"name":"gbot-service","version":env!("CARGO_PKG_VERSION")}})).await?;
     if initialized["serverInfo"]["name"] != "cua-driver"
@@ -117,7 +119,7 @@ pub(super) async fn open(
         }
     }
     if !tools.iter().any(|tool| tool.name == "get_window_state")
-        || !tools.iter().any(|tool| tool.name == "invoke_menu")
+        || !tools.iter().any(|tool| tool.name == "click")
         || !tools.iter().any(|tool| tool.name == "start_session")
     {
         return Err(SshError::Protocol);
@@ -142,7 +144,7 @@ pub(super) async fn open(
             session_id: expected.session_id,
         }),
     };
-    Ok((mcp, hello, tools))
+    Ok((mcp, hello, super::native::catalog(tools)))
 }
 
 fn quote(value: &str) -> String {
@@ -373,9 +375,17 @@ impl SshSession {
             } else if active["structuredContent"]["active"] != true {
                 return Err(uncertain());
             } else {
-                mcp.rpc("tools/call", json!({"name":tool,"arguments":arguments}))
-                    .await
-                    .map_err(|_| uncertain())?
+                match mcp.input.prepare(tool, &arguments) {
+                    Ok(native) => {
+                        let result = mcp
+                            .rpc("tools/call", json!({"name":tool,"arguments":native}))
+                            .await
+                            .map_err(|_| uncertain())?;
+                        mcp.input.observe(tool, &result);
+                        result
+                    }
+                    Err(refusal) => refusal,
+                }
             };
             let status = if result["isError"] == true { "1" } else { "0" };
             let bytes = serde_json::to_vec(&result).map_err(|_| uncertain())?;

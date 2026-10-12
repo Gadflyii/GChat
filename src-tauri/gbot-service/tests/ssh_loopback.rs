@@ -103,6 +103,7 @@ struct Guest {
     wrong_version: std::sync::atomic::AtomicBool,
     cua_active: std::sync::atomic::AtomicBool,
     reject_start: std::sync::atomic::AtomicBool,
+    desktop_calls: Mutex<Vec<serde_json::Value>>,
 }
 
 fn failure(message: impl Into<String>) -> GuestError {
@@ -458,11 +459,13 @@ impl server::Handler for Peer {
                             serde_json::json!({"protocolVersion":"2025-06-18","serverInfo":{"name":"cua-driver","version":if self.guest.wrong_version.load(std::sync::atomic::Ordering::Acquire) { "wrong" } else { "0.34.1" }},"capabilities":{"tools":{}}})
                         }
                         "notifications/initialized" => continue,
-                        "tools/list" => serde_json::json!({"tools":[
-                            {"name":"start_session","description":"Activate or revive owned session","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}},
-                            {"name":"get_window_state","description":"Read accessible window","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}},
-                            {"name":"invoke_menu","description":"Invoke accessible menu","inputSchema":{"type":"object","properties":{"session":{"type":"string"}}}}
-                        ]}),
+                        "tools/list" => serde_json::json!({"tools":
+                            (["start_session", "get_window_state", "invoke_menu", "set_value", "click", "type_text", "press_key", "hotkey"].into_iter().map(|name|
+                                serde_json::json!({"name":name,"description":"Pinned tool","inputSchema":{"type":"object","properties":{
+                                    "session":{"type":"string"},"pid":{"type":"integer"},"window_id":{"type":"integer"},
+                                    "element_token":{"type":"string"},"text":{"type":"string"},"key":{"type":"string"},"keys":{"type":"array","items":{"type":"string"}}
+                                }}})).collect::<Vec<_>>())
+                        }),
                         "tools/call" => {
                             assert_eq!(
                                 request["params"]["arguments"]["session"],
@@ -486,6 +489,11 @@ impl server::Handler for Peer {
                                         .load(std::sync::atomic::Ordering::Acquire),
                                     "desktop action dispatched to an expired Cua session"
                                 );
+                                self.guest
+                                    .desktop_calls
+                                    .lock()
+                                    .unwrap()
+                                    .push(request["params"].clone());
                                 let operation =
                                     self.guest.desktop_claim.lock().unwrap().take().unwrap();
                                 assert_eq!(bufferless_dispatch(&self.guest, operation), 1);
@@ -496,7 +504,7 @@ impl server::Handler for Peer {
                                     session.close(channel)?;
                                     return Ok(());
                                 }
-                                serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}]})
+                                serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}],"structuredContent":{"pid":42,"window_id":7,"window_bounds":{"x":100,"y":200,"width":640,"height":480},"elements":[{"element_token":"fresh","frame":{"x":120,"y":230,"w":40,"h":20},"enabled":true}]}})
                             }
                         }
                         _ => panic!("unexpected MCP method"),
@@ -776,6 +784,7 @@ impl Fixture {
             wrong_version: std::sync::atomic::AtomicBool::new(false),
             cua_active: std::sync::atomic::AtomicBool::new(false),
             reject_start: std::sync::atomic::AtomicBool::new(false),
+            desktop_calls: Mutex::default(),
         });
         let handles = Arc::new(Mutex::new(Vec::new()));
         let config = Arc::new(server::Config {
@@ -1193,8 +1202,8 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             .iter()
             .all(|op| op.state == OperationState::Completed));
         runtime.ping(expected).await.unwrap();
-        assert_eq!(runtime.desktop_tools(expected).await.unwrap().len(), 3);
-        let desktop = fixture.request(GuestOperationKind::Desktop { tool:"invoke_menu".into(),arguments:serde_json::json!({"session":"model-supplied-untrusted"}) });
+        assert_eq!(runtime.desktop_tools(expected).await.unwrap().len(), 5);
+        let desktop = fixture.request(GuestOperationKind::Desktop { tool:"get_window_state".into(),arguments:serde_json::json!({"session":"model-supplied-untrusted"}) });
         assert!(matches!(success(runtime.request(desktop).await.unwrap()),GuestResult::Desktop { result } if result["isError"] == false));
 
         let view = runtime.open_view(expected).await.unwrap();
@@ -1273,7 +1282,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
         let response = client.request(post("/v1/desktop/tools", serde_json::to_vec(&expected).unwrap())).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let tools: serde_json::Value = serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
-        assert_eq!(tools.as_array().unwrap().len(), 3);
+        assert_eq!(tools.as_array().unwrap().len(), 5);
         let command = fixture.script("http.sh", "printf http\n").await;
         let response = client
             .request(post(
@@ -1328,7 +1337,7 @@ async fn cua_idle_revival_and_refused_start_never_dispatches_actions() {
                 .cua_active
                 .store(false, std::sync::atomic::Ordering::Release);
             let request = fixture.request(GuestOperationKind::Desktop {
-                tool: "invoke_menu".into(),
+                tool: "get_window_state".into(),
                 arguments: serde_json::json!({"session":"model-owned"}),
             });
             let id = request.operation_id;
@@ -1346,7 +1355,7 @@ async fn cua_idle_revival_and_refused_start_never_dispatches_actions() {
             .reject_start
             .store(true, std::sync::atomic::Ordering::Release);
         let request = fixture.request(GuestOperationKind::Desktop {
-            tool: "invoke_menu".into(),
+            tool: "get_window_state".into(),
             arguments: serde_json::json!({}),
         });
         let id = request.operation_id;
@@ -1412,7 +1421,7 @@ async fn cancellation_and_lost_reply_reconcile_without_redispatch() {
             OperationState::Completed);
         assert_eq!(tokio::fs::read(fixture.directory.path().join("effect.txt")).await.unwrap(), b"once");
         assert_eq!(fixture.guest.dispatches.lock().unwrap()[&effect.operation_id], 1);
-        let desktop = fixture.request(GuestOperationKind::Desktop { tool: "invoke_menu".into(), arguments: serde_json::json!({}) });
+        let desktop = fixture.request(GuestOperationKind::Desktop { tool: "get_window_state".into(), arguments: serde_json::json!({}) });
         *fixture.guest.lose_reply.lock().unwrap() = Some(desktop.operation_id);
         assert!(matches!(runtime.request(desktop.clone()).await, Err(WorkspaceError::Transport(SshError::UncertainOutcome { operation_id })) if operation_id == desktop.operation_id));
         let status = fixture.request(GuestOperationKind::Status { operation_id: desktop.operation_id });
@@ -1424,4 +1433,38 @@ async fn cancellation_and_lost_reply_reconcile_without_redispatch() {
         runtime.close().await.unwrap();
         fixture.shutdown().await;
     }).await.expect("bounded operation/recovery test timed out");
+}
+
+#[tokio::test]
+async fn foreground_input_never_dispatches_accessibility_actions() {
+    timeout(WAIT, async {
+        let fixture = Fixture::new().await;
+        let identity = fixture.guest.hello.identity;
+        let service = Arc::new(Service::open(&fixture.directory.path().join("service.json")).await.unwrap());
+        let runtime = fixture.runtime(service).await;
+        runtime.connect(identity).await.unwrap();
+        let catalog = runtime.desktop_tools(identity).await.unwrap();
+        assert!(!catalog.iter().any(|tool| ["invoke_menu", "set_value", "start_session"].contains(&tool.name.as_str())));
+        let read = fixture.request(GuestOperationKind::Desktop { tool: "get_window_state".into(), arguments: serde_json::json!({"pid":42,"window_id":7}) });
+        runtime.request(read).await.unwrap();
+        let click = || fixture.request(GuestOperationKind::Desktop { tool: "click".into(), arguments: serde_json::json!({"pid":42,"window_id":7,"element_token":"fresh"}) });
+        assert!(matches!(success(runtime.request(click()).await.unwrap()), GuestResult::Desktop { result } if result["isError"] == false));
+        let calls = fixture.guest.desktop_calls.lock().unwrap().clone();
+        assert_eq!(calls[1], serde_json::json!({"name":"click","arguments":{"pid":42,"window_id":7,"x":140.0,"y":240.0,"coordinate_frame":"desktop","delivery_mode":"foreground","session":identity.session_id.as_uuid().to_string()}}));
+        let stale = click();
+        let stale_id = stale.operation_id;
+        assert!(matches!(success(runtime.request(stale).await.unwrap()), GuestResult::Desktop { result } if result["structuredContent"]["code"] == "stale_element"));
+        assert!(!fixture.guest.dispatches.lock().unwrap().contains_key(&stale_id));
+        let targeting = fixture.request(GuestOperationKind::Desktop { tool:"type_text".into(),arguments:serde_json::json!({"pid":42,"window_id":7,"element_token":"fresh","text":"hello"}) });
+        let targeting_id = targeting.operation_id;
+        assert!(matches!(success(runtime.request(targeting).await.unwrap()), GuestResult::Desktop { result } if result["isError"] == true));
+        assert!(!fixture.guest.dispatches.lock().unwrap().contains_key(&targeting_id));
+        let typing = fixture.request(GuestOperationKind::Desktop { tool:"type_text".into(),arguments:serde_json::json!({"pid":42,"window_id":7,"text":"hello"}) });
+        runtime.request(typing).await.unwrap();
+        let args = fixture.guest.desktop_calls.lock().unwrap().last().unwrap()["arguments"].clone();
+        assert_eq!(args["delivery_mode"], "foreground");
+        assert!(args.get("element_token").is_none());
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    }).await.expect("bounded native input test timed out");
 }
