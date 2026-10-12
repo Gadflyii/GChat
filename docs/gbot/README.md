@@ -27,41 +27,54 @@ in main `8440b5f7a`. Bots inherit no accounts. Their focused service/native/UI,
 lint, types, check and strict Clippy evidence is retained.
 
 Main `13f88c042` includes resumable Linux KVM onboarding, pinned guest delivery,
-independent service ownership and schedules. Settings enablement opens guided
-setup. The wizard checks prerequisites and pinned assets, persists setup identity,
-and admits a bot only after SSH, desktop-file and view-only media readiness.
-Focused service, adapter, wizard and native-route cases, frontend types, native
-check and strict Clippy pass. These establish source behavior. Native bootstrap, native vault and detached
-process lifetime also pass in the private S1 gate below; packaged wizard,
-client-window exit/sleep and live scheduled dispatch still need installed checks.
+independent service ownership and schedules. Setup holds tasks, guest operations,
+viewing and takeover until its persisted stage is Ready; Resume setup keeps the
+same saved computer. Source `30a8be28a` passes two admission/restart and thirteen
+UI cases, frontend types/lint, service check and strict Clippy.
 
-The dedicated VM gate found an archive-symlink seed defect; the merged repair
-embeds the exact pinned bytes. Readiness diagnostics then identified obsolete
-keyboard arguments in the setup owner. The correction uses the Cua adapter's
-current foreground-input contract and passes one focused case, check and strict
-Clippy. The same persisted S1 guest reached Ready after service restart/resume:
-editor input/save, independent file readback and view-only media passed. A real
-isolated Chromium form also passed navigate/type/submit with exact independent
-SSH readback. The temporary guest and private roots are retired. Evidence:
-`out/gchat-open-items-20261012/readiness-input/` and `readiness-physical/`.
-These qualify the Linux API owner; installed wizard presentation, packaged
-bootstrap, Hyper-V/cloud/M365 creation and remote service selection remain
-unfinished. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
-separates source gaps, accepted evidence and remaining gates.
+The dedicated S1 guest reached Ready after service restart/resume. Editor
+input/save, independent file readback, view-only media and an isolated Chromium
+form passed. The native background owner separately passed vault/discovery,
+detached lifetime, duplicate-owner refusal, shutdown and same-identity restart.
+Those guests/private roots are retired. Reuse the receipts in
+`out/gchat-open-items-20261012/readiness-physical/`, `setup-admission/` and
+`installed-bootstrap/`; these are separate from installed presentation.
 
-The current setup correction closes premature admission: a registered SSH
-session alone does not make an owned VM ready. The service holds tasks, guest
-operations, desktop viewing and takeover until its persisted setup reaches
-Ready. The wizard reopens the saved computer with Resume setup; it does not
-create another VM. Source `30a8be28a` passes two admission/restart cases, thirteen affected UI
-cases, frontend types/lint, service check and strict all-target Clippy. The
-native background owner also passes on S1 with the accepted `17f202edb`
-desktop executable (its bootstrap is unchanged): detached caller lifetime,
-native vault, secret-free discovery, duplicate-owner refusal, authenticated
-shutdown and same-identity restart. The private root and processes are retired.
-Evidence: `out/gchat-open-items-20261012/setup-admission/` and
-`installed-bootstrap/native-result.json`. That binary predates the new UI;
-installed wizard, client-window exit and sleep/resume remain owed.
+The installed wizard correction is source `f39961b6c`, branch
+`test/gbot-installed-wizard-e7d` in
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on reviewed main
+`e7d761c2f`. It asks separately where the service runs and where the bot's
+computer lives. Five selected wizard/route cases, types/Vite, lint (zero errors)
+and one incremental Linux desktop build pass. The build ran
+22:50:33–22:51:47 UTC; local booking 576 was canceled and its guards released.
+
+Ron approved the disposable installed-desktop gate at 22:49 UTC. The unsigned
+DEB `2.0.42+wizard20261012.f39961b6c` passed in a pinned Debian 13 S1 guest with
+private X11/Xvnc and native Secret Service: enable/setup entry, separate
+service/computer questions and actionable local-KVM prerequisite hold. No VM was
+created or admitted Ready. Closing the actual GChat window left the same native
+service PID and identity running, with authenticated HTTP 200 and unauthenticated
+401 before and after close. Explicit shutdown removed the service and discovery.
+The guest, disk, private keys/daemons and booking 1415 were retired at 23:11:08 UTC,
+freeing 9.93 GB. Runtime libraries were installed only in the disposable guest;
+its full closure and screenshots are retained in
+`installed-wizard/desktop-guest/receipt.json` and `cleanup.json`.
+
+The first and only GUI launch ran at 23:04:14 UTC and rendered by 23:07:26.
+Synchronous bundled-resource installation blocked startup: the busy main thread
+held the copied VM image's verification file open, then returned to event polling.
+No retry or rendering change ran. This debug-build timing is not a release
+performance measurement. Package provenance is in
+`installed-wizard/package-provenance.json`; historical base Engine/Host/CLI
+resources were outside this GUI-only qualification. Extracted staging and copied
+inputs are retired; the developer DEB and tested desktop remain for review.
+
+Installed Linux wizard presentation and DEB window-close continuity now pass.
+Completed wizard creation/resume, sleep/restart, live scheduled dispatch,
+Hyper-V/cloud/M365 creation, remote service selection and installer opt-in remain
+open. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
+separates accepted evidence from those remaining gates. The earlier dedicated bot
+guest and Ubuntu acceptance disk were retired; their saved evidence remains valid.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -697,8 +710,8 @@ journal publication; the UI keeps that reason visible and requests service resta
 Accepted main `500a5f2cb` includes independent service ownership and durable restart recovery. Background source `a2b0053a9`
 (source `77c6cab04`) survives client disconnect, reconnects persisted state and
 drains authenticated Quit in a focused API process fixture. That fixture uses a
-memory vault, inert executor and future schedule. Installed/AppImage bootstrap,
-native vault, client-exit/sleep and model-backed scheduled dispatch remain owed.
+memory vault, inert executor and future schedule. Native bootstrap/vault and installed DEB client-window exit now pass.
+AppImage-specific lifetime, sleep/restart and model-backed scheduled dispatch remain owed.
 See `docs/gbot/background-service.md`; the
 master scheduled/background row remains PARTIAL.
 
@@ -708,15 +721,15 @@ and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
 `7bf139610`. Compact output is merged as `9ab394244`. The channel/browser/control and runtime integration is merged in `45ac4ae7e`.
 Human assistance `32231c6ba` is incorporated in current main, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
-Coordinator tree: `fix/gbot-readiness-detail-500a` at
+Coordinator tree: `test/gbot-installed-wizard-e7d` at
 `/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on reviewed main
-`13f88c042`, which includes background ownership, the seed repair and Settings enablement, guest delivery `ec21a1874` and native report `e49219967`.
+`e7d761c2f`, with separate service/computer questions in `f39961b6c`.
 Deliverable: reconcile GChat/Manager/Gbot open work and implement guided setup,
 shared Chat workers, explicit per-bot account/tool wiring, schedules and KVM
 onboarding. Acceptance: focused
 observable-behavior fixtures, affected lint/types and Rust checks, current master
 rows and reviewable source, plus one dedicated-VM setup/browser gate. No new
-dependency, native Windows build, model/GPU, person's desktop or release change. Installed background continuity remains unqualified; KVM setup does not install host tools.
+dependency, native Windows build, model/GPU, person's desktop or release change. Installed DEB background continuity passes; KVM setup does not install host tools.
 Verification: reuse the first-wave focused receipts accepted in main `8440b5f7a`.
 Scheduling adds six initial service cases, three changed retry/API/publication-fault
 cases and ten frontend cases with affected lint/types. KVM adds two durable setup
@@ -727,7 +740,7 @@ and service Clippy. Logs `wave2-*` record the combined gate; component handoffs 
 then failed desktop readiness with lost failure detail. That historical failure
 is superseded by the accepted diagnostic and current-contract input fixes:
 the persisted guest reached Ready and the isolated browser exact-readback gate
-passed. Installed wizard presentation remains unqualified. Pinned guest resource/data delivery is implemented
+passed. Installed wizard presentation and DEB GUI-exit continuity now pass. Pinned guest resource/data delivery is implemented
 in `ec21a1874`; its one focused fixture, native check and strict Clippy pass.
 See [asset delivery](asset-delivery.md). Native v2 report consumption in
 `e49219967` passes eight owning Rust and 34 frontend cases plus owning checks;
@@ -737,46 +750,36 @@ Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 
 | Owner / path | Revision and purpose | Live work / retention |
 | --- | --- | --- |
-| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `fix/gbot-readiness-detail-500a`, reviewed main `500a5f2cb` | Readiness fix accepted main `13f88c042`; focused restart/check/Clippy PASS. Current tree retained for next setup gate. |
+| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `test/gbot-installed-wizard-e7d`, reviewed main `e7d761c2f`, candidate `f39961b6c` | Two-question wizard; five focused UI cases/types/lint and desktop build pass. Installed presentation/prerequisite hold and native service continuity after ordinary GUI close PASS; source/docs retained for merge. |
+| S1 desktop guest: `/ai/gbot-vms/iwdesktop`, domain `fd8f57dd-8e85-4d4d-a14a-08492345dd68` | Pinned Debian 13 desktop, isolated XFCE/Xvnc and native vault; CPU booking 1415, cores 48–51 | Retired at 23:11:08 UTC: domain/disk/private keys/daemons absent, SSH port closed, booking canceled; 9.93 GB freed. Retain `installed-wizard/desktop-guest/` evidence. |
+| S1 package staging: `/ai/gbot-vms/iwpackage` | Current `f39961b6c` desktop and accepted Cua runtime/assets; historical accepted OI-057 engine resources remain outside this GUI gate | One unsigned developer DEB; no Engine build or qualification. Extracted staging and copied inputs retired; retain tested DEB and provenance through review. |
 | First-wave setup/worker/connector trees | Source incorporated in main `8440b5f7a`; branches and evidence retained | Owned worktrees retired; at least 0.77 GiB freed, `first-wave-retirement.json`. |
 | Scheduler agent: `/ai/gchat-worktrees/gbot-scheduled-tasks-3259` | `d78d8dcd1`, integrated as `f769d1ead` | Accepted in main `b1502528b`; no live job, eligible for verified retirement. |
 | KVM agent: `/ai/gchat-worktrees/gbot-kvm-onboarding-ce826` | `312152b2f`, integrated as `89e4a22f4` | Accepted in main `b1502528b`; no live job or guest, eligible for verified retirement. |
 | Updater: `/ai/gchat-worktrees/updater-offline-8440` | Evidence docs `73eb666c8`, integrated as `a2f908594` | Accepted in main `b1502528b`; 19 offline metadata cases PASS, eligible for verified retirement; no signing/publication. |
 | Web fixtures: `/ai/gchat-worktrees/web-warning-8440` | `e0e8ac49d` and docs `3d7ded0db`, integrated as `2c1bb9c41` / `03139b2bd` | Accepted in main `b1502528b`; all 26 selected cases PASS, eligible for verified retirement; no full suite. |
-| Shared cache: `/ai/gchat/src-tauri/target` | User-authorized pruning completed 20:56:45Z | 99.34 → 25.74 GB allocated; 73.60 GB freed. Current closure/product outputs retained, no live job. Receipt `disk-cleanup.md`. |
+| Shared cache: `/ai/gchat/src-tauri/target` | User-authorized pruning; final accounting before current build | 99.34 → 29.57 GB allocated, 69.77 GB net reclaimed. Current closure/product outputs retained. Receipt `disk-cleanup.md`. |
 | Asset/report agents: `/ai/gchat-worktrees/gbot-asset-delivery-89e4`, `/ai/gchat-worktrees/gbench-native-v2-report-89e4` | Pushed `58747bb28` / `c6b18cc69`, integrated as `ec21a1874` / `e49219967` | Accepted in main `ca4346ba2`; clean, no live jobs, eligible for verified retirement. |
-| Background owner: `/ai/gchat-worktrees/gbot-background-ec21` | `feat/gbot-background-ec21`, tested source `77c6cab04`, final `a2b0053a9` | Accepted in main `500a5f2cb`, gate END 20:46:51Z. One process and eleven UI cases plus checks PASS; installed/native/live lifetime owed. No live job. |
+| Background owner: `/ai/gchat-worktrees/gbot-background-ec21` | `feat/gbot-background-ec21`, tested source `77c6cab04`, final `a2b0053a9` | Accepted in main `500a5f2cb`, gate END 20:46:51Z. One process and eleven UI cases plus checks PASS; native vault and installed DEB GUI-exit continuity PASS; AppImage/sleep/live dispatch owed. No live job. |
 | Setup gate: `/ai/gchat-worktrees/gbot-wizard-e492` | `test/gbot-wizard-e492`, seed source `eac5e6688`, final `427a2bc29` | Accepted in main `a5490907d`; fixture and physical ISO digest PASS, desktop readiness failed. Both owned guests/private roots retired at 20:51Z; source tree now retired after clean/pushed merge, evidence retained. |
 | Merged tree retirement | Seven verified clean/pushed ancestors of main | First five: 1.35 GB apparent; final two: 0.55 GB allocated freed; paths and preservation in `disk-cleanup.md`. Dirty/unmerged/unpushed sources retained. |
 
-Current item: installed Gbot wizard/bootstrap and background service lifetime,
-in repository `/ai/gchat`, subject `docs/gbot/`, candidate
+Completed item: the two-question installed Linux Gbot wizard in repository
+`/ai/gchat`, subject `docs/gbot/`, candidate
 `/ai/gchat-worktrees/gbot-browser-physical-2e735` on
-`fix/gbot-readiness-detail-500a`. Diagnostic source is accepted in main
-`13f88c042`; current input-contract correction `17f202edb` is pushed for review.
-The owning fixture, check, strict Clippy and incremental example passed in
-17 seconds. The same persisted dedicated S1 guest reached Ready after resume;
-the isolated Chromium form then passed exact independent SSH readback.
-Receipts: `readiness-input/result.json` and
-`readiness-physical/readiness-browser-note.md` under the existing evidence root.
-Product removal retired its VM, key and private roots; the service exited zero.
-
-Next unresolved action: exercise the current native executable's real vault,
-detached owner and discovery, then verify the wizard's visible prerequisite and
-resume states on an isolated display. Acceptance: ordinary client closure leaves
-the same service and durable state available; explicit service shutdown releases
-ownership; unfinished setup remains accessible and cannot be presented as Ready.
-Reuse accepted setup/browser/media evidence. A build agent owns the current
-Linux executable and embedded frontend build, local CPUs 0–31,
-21:54–22:14 UTC, shared Cargo cache and canonical compile lock; deadline 22:15.
-Evidence goes in `out/gchat-open-items-20261012/installed-bootstrap/`.
-No model/GPU, person's desktop, host installation, new dependency, Windows
-build, release or publication belongs to this item. Hyper-V/cloud/M365 creation
-and remote service selection remain open.
-Owned disk cleanup finished at 20:56:45Z: Cargo target 25.74 GB, 73.60 GB allocated
-freed, plus 1.35 GB apparent source size from five merged trees. Two newly merged trees
-were subsequently retired (0.55 GB allocated). After focused verification, the
-current Cargo target is 26.81 GB and filesystem availability is 102.22 GB. Inventory and
+`test/gbot-installed-wizard-e7d`. Source `f39961b6c` passes five affected UI cases,
+frontend types/lint, one incremental desktop build and one installed DEB gate:
+separate service/computer choices, honest local prerequisite hold and same-service
+continuity after ordinary GUI close. Actual guest END was 23:11:08 UTC; all owned
+guest/service/key roots are retired and bookings 576/1415 canceled. Evidence:
+`out/gchat-open-items-20261012/installed-wizard/desktop-guest/receipt.json`.
+No model/GPU, person's desktop, host installation, new dependency, Windows build,
+release or publication ran. Remaining setup/platform/sleep gates stay explicit.
+Next unresolved action: fix the source-proven synchronous Linux resource-install
+startup block without racing Host/Gbot admission; inspect its existing readiness
+owners before changing execution. Release performance is not measured here.
+Owned disk cleanup reclaimed 69.77 GB net and left the target at 29.57 GB
+before this build; seven merged source trees were removed. Inventory and
 receipts: `/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`. Product setup does not default its brain to
 GChat's UI-owned port1337 facade: its explicit assignment must select a persistent
 Host or other inference endpoint for client-exit continuity.

@@ -6,6 +6,25 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
+Completed item: the two-question Linux Gbot wizard, source `f39961b6c` from
+main `e7d761c2f` in `test/gbot-installed-wizard-e7d`. Five affected wizard/route
+cases, frontend types/Vite, lint and the incremental desktop build pass. The
+unsigned developer DEB `2.0.42+wizard20261012.f39961b6c` passed one installed gate
+in Ron's approved disposable Debian 13 desktop guest: enable/setup entry,
+separate service/computer questions and the local-KVM prerequisite hold. Ordinary
+GChat window close preserved the same native-vault authenticated service PID and
+identity. Explicit shutdown and guest/domain/disk/key/daemon retirement passed;
+actual END 23:11:08 UTC, 9.93 GB freed and booking 1415 canceled.
+
+The historical base Engine/Host/CLI were outside this GUI-only gate. No model,
+GPU, Windows, nested VM, completed wizard creation/resume, sleep/restart or
+release/performance qualification ran. First launch rendered after synchronous
+asset installation; its debug timing is recorded as a separate startup finding.
+Next: fix that source-proven blocking owner while preserving launch admission.
+Evidence, screenshots, guest-only closure and cleanup:
+`out/gchat-open-items-20261012/installed-wizard/desktop-guest/receipt.json`.
+Earlier guest/disks are retired and their saved evidence remains valid.
+
 This reconciliation uses reviewed main `13f88c042`, including background ownership and seed repair, plus `ec21a1874`
 (guest delivery) and `e49219967` (native reports), the master rows and saved
 receipts. A source fix, a focused fixture and an installed acceptance gate are
@@ -17,10 +36,10 @@ is part of this plan. The master list remains the sole issue-status authority.
 | Item | Current behavior / remaining work | Smallest useful gate |
 | --- | --- | --- |
 | General agent delegation from Chat | Main `8440b5f7a` supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
-| Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed presentation is still untested. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
-| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Source `30a8be28a` holds operations until persisted Ready and reopens the same saved setup; 2 service/13 UI cases, check/strict Clippy/types/lint pass. Native detached bootstrap/vault/restart pass separately. Installed wizard, Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
+| Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed DEB enable/setup presentation passes on `f39961b6c`; prerequisite hold prevents creation. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
+| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Source `30a8be28a` holds operations until persisted Ready and reopens the same saved setup; 2 service/13 UI cases, check/strict Clippy/types/lint pass. Native detached bootstrap/vault/restart pass separately. Installed wizard presentation/prerequisite hold passes; completed wizard creation/resume, Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
 | Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
-| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; Native detached lifetime, vault and authenticated shutdown/restart now pass; GUI/AppImage client-exit/sleep and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
+| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; native detached lifetime, vault and authenticated shutdown/restart now pass; installed DEB ordinary GUI close keeps the same native service alive. AppImage-specific lifetime, sleep/restart and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
 | Browser tools | Typed browser catalog/schema and one real isolated Chromium form pass: exact native window binding, navigation, typing and trusted input submission, independently verified over pinned-host system SSH. | Broader browser tasks and installed presentation remain separate; no model or performance claim. |
 
 ### Bugs, decisions and incomplete diagnostics
@@ -81,7 +100,7 @@ unchanged from the source used for this gate.
 | Google / Microsoft connectors | 36 focused auth/provider/runtime/UI cases. | App registration, real OAuth consent/refresh/revocation and read operations. |
 | Gbot Linux executor | Exact desktop overwrite + two actual Cua file evaluators passed. | Broader task set and Vision; new cua-bench dependency closure is not approved. |
 | Gbot runtime/media | Linux packaged runtime; physical frame, 440 Hz audio, view-only/takeover/revocation passed. | Browser playback/audio permission behavior; Windows/M365 runtime and media. |
-| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed. | Guest reboot/reconnect, installed GUI/AppImage client-exit/sleep and live scheduled dispatch; native detached process/vault/restart PASS. |
+| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed. | Guest reboot/reconnect, AppImage-specific client-exit, sleep and live scheduled dispatch; native detached process/vault/restart and installed DEB GUI-exit continuity PASS. |
 | OI-073 public board | One disposable publish/read/delete and app delete path passed. | Broader retry/replay/concurrent/fault cases remain parked; never use official series as tests. |
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |
@@ -108,8 +127,8 @@ Product removal retired the guest, disk and vault key; the service exited
 normally. Owned private S1 roots `gd20261012`, `gdctl`, `gdcfg` and `gdrun` are
 removed and the CPU booking released. Source assets, other guests and retained
 evidence remain. Receipts: `out/gchat-open-items-20261012/readiness-input/` and
-`readiness-physical/`. The native lifetime gate below passes. Next: installed wizard,
-client-window exit/sleep and live scheduled dispatch;
+`readiness-physical/`. The native lifetime gate below passes. Installed wizard/prerequisite hold and ordinary DEB window-close continuity pass.
+Next: completed wizard creation/resume, sleep and live scheduled dispatch;
 Hyper-V/cloud/M365 and remote service selection remain explicit source gaps.
 
 Source `30a8be28a` closes premature admission after setup interruption or
@@ -131,8 +150,9 @@ bootstrap, not the new wizard or installed client-window exit/sleep. Evidence:
 `out/gchat-open-items-20261012/installed-bootstrap/native-result.json` and
 `native-cleanup.json`.
 
-Coordinator tree: `fix/gbot-readiness-detail-500a` in
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `13f88c042`, which includes background ownership, seed repair and `ec21a1874` / `e49219967`.
+Coordinator tree: `test/gbot-installed-wizard-e7d` in
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on reviewed main
+`e7d761c2f`, including background ownership, seed/readiness repair and admission.
 The first wave (opt-in/LAN setup, transactional credential creation, Chat workers,
 per-bot connectors and disabled-embedding startup) is merged there. The second wave
 integrates schedules (`f769d1ead`), KVM onboarding (`89e4a22f4`) and the complete
@@ -141,8 +161,8 @@ fixture, frontend types, native check and strict native/service Clippy pass.
 Component receipts and `wave2-*` logs are in
 `/ai/gchat/out/gchat-open-items-20261012/`. Reuse passing first-wave evidence;
 no installed UI, new VM, live OAuth or active-worker recovery qualification is
-claimed for these changes. Schedules now belong to the independent service; installed client-exit continuity
-remains unqualified. KVM refuses missing
+claimed for these changes. Schedules now belong to the independent service; installed DEB client-exit continuity
+passes; AppImage-specific lifetime, sleep and live dispatch remain unqualified. KVM refuses missing
 host prerequisites/assets and does not install tools or substitute another PC.
 
 The disabled-embedding startup correction has one focused case and frontend types
@@ -150,9 +170,10 @@ PASS (`ann-test.log` / `ann-types.log`). Explicit VectorDB diagnostics remain.
 The PTY geometry fixture passes (`pty-geometry-test.log`), without a native mouse
 or blank-TUI cause claim. First-wave agent worktrees are retired after main merge;
 second-wave source is merged and its owned trees can retire after live-use checks.
-User-authorized cleanup retired seven clean merged trees and freed 73.60 GB
-allocated Cargo cache; the target is 26.81 GB. Source cleanup freed 1.35 GB apparent
-size from the first five trees and 0.55 GB allocated from the final two.
+User-authorized cleanup retired seven clean merged trees. Final net Cargo
+reduction was 69.77 GB, from 99.34 to 29.57 GB before the current build. Source
+cleanup freed 1.35 GB apparent size from the first five trees and 0.55 GB
+allocated from the final two.
 Current closures, accepted packages and evidence remain. Inventory:
 `/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`.
 
@@ -195,11 +216,11 @@ Evidence: `/ai/gchat/out/oi057-linux-desktop-acceptance-20261011/result.json`,
 with the two terminal Chat receipts, saved-session/vault receipts, visible
 screenshots and resource-return receipts linked there. The immutable package
 receipt remains `/ai/gchat/out/oi057-linux-packages-20261011/artifact-result.json`.
-Retain the stopped S1 `/ai/gbot-vms/gchat-linux-accept` disk/clean-os snapshot,
-accepted packages and concise evidence as the Linux desktop baseline. The
-docs-only candidate is `/ai/gchat-worktrees/oi057-desktop-result-e15`; retire it
-after merge. Those subsequent items are now accepted; current implementation
-and unrun scope are listed above.
+The S1 `/ai/gbot-vms/gchat-linux-accept` disk, clean-os snapshot and old package
+copies were retired in the authorized October 12 cleanup at 00:28 UTC. Retained
+screenshots, results and package receipts preserve this historical qualification;
+they do not provide a runnable desktop baseline. Current implementation and
+unrun scope are listed above.
 
 ## Current Linux reasoning menu correction
 
