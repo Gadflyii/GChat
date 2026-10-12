@@ -107,6 +107,8 @@ pub struct BenchmarkPoint {
     pub cached_prompt_tokens: u64,
     pub cold_prompt_tokens_per_second: Option<f64>,
     pub prompt_tokens_per_second: Option<f64>,
+    pub warm_prefill_tokens_per_second_per_request: Option<f64>,
+    pub warm_cached_ttft_seconds: Option<f64>,
     pub generation_tokens_per_second: Option<f64>,
     pub per_request_generation_tokens_per_second: Option<f64>,
     pub evidence: PointReport,
@@ -142,8 +144,9 @@ struct BenchmarkProgress {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Wave {
     full_cold_prompt: bool,
-    cold_pp: Option<f64>,
     computed_tokens: u64,
+    observed_compute_tokens: u64,
+    logical_prompt_tokens: u64,
     compute_seconds: f64,
     cached_tokens: u64,
     output_tokens: u64,
@@ -155,6 +158,44 @@ pub struct Wave {
     decode_seconds_sum: f64,
     request_seconds_sum: f64,
     wall_seconds: f64,
+    prefix_reuse: bool,
+    warm_cached_prompt: bool,
+    warm_prefill_status: WarmPrefillStatus,
+    #[serde(deserialize_with = "required_nullable")]
+    warm_prefill_seconds_mean: Option<f64>,
+    #[serde(deserialize_with = "required_nullable")]
+    warm_cached_ttft_seconds: Option<f64>,
+    #[serde(deserialize_with = "required_nullable")]
+    warm_pp_effective_per_request: Option<f64>,
+}
+
+fn required_nullable<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<f64>, D::Error> {
+    Option::<f64>::deserialize(d)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WarmPrefillStatus {
+    Cached,
+    PrefixReuseDisabled,
+    PrefixIncomplete,
+    PrefillTimerUnavailable,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Phase {
+    prefix_reuse: bool,
+    warmup: Vec<Wave>,
+    measured: Vec<Wave>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Workload {
+    prompt_tokens: u32,
+    output_tokens: u32,
+    concurrency: u32,
+    warmup_rounds: u32,
+    measured_rounds: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -162,8 +203,118 @@ pub struct PointReport {
     configuration: serde_json::Value,
     schema: String,
     corpus: String,
-    warmup: Vec<Wave>,
-    measured: Vec<Wave>,
+    workload: Workload,
+    cold_prefill: Phase,
+    warm_generation: Phase,
+    #[serde(default)]
+    hardware: Option<serde_json::Value>,
+}
+
+fn validate_report(
+    request: &BenchmarkRequest,
+    concurrency: u32,
+    report: &PointReport,
+) -> Result<(), String> {
+    let workload = &report.workload;
+    if report.schema != "ginfer-resident-benchmark-v2"
+        || workload.prompt_tokens != request.prompt_tokens
+        || workload.output_tokens != request.max_output_tokens
+        || workload.concurrency != concurrency
+        || workload.warmup_rounds != request.warmup_rounds
+        || workload.measured_rounds != request.measured_rounds
+        || report.cold_prefill.prefix_reuse
+        || report
+            .configuration
+            .get("prefix_reuse")
+            .and_then(serde_json::Value::as_bool)
+            != Some(report.warm_generation.prefix_reuse)
+    {
+        return Err("invalid native v2 benchmark workload or phase policy".into());
+    }
+    let logical = u64::from(concurrency) * u64::from(request.prompt_tokens);
+    let output = u64::from(concurrency) * u64::from(request.max_output_tokens);
+    for (cold, phase) in [
+        (true, &report.cold_prefill),
+        (false, &report.warm_generation),
+    ] {
+        if phase.warmup.len() != request.warmup_rounds as usize
+            || phase.measured.len() != request.measured_rounds as usize
+        {
+            return Err("invalid native v2 benchmark round counts".into());
+        }
+        for wave in phase.warmup.iter().chain(&phase.measured) {
+            if wave.logical_prompt_tokens != logical
+                || wave.computed_tokens.checked_add(wave.cached_tokens) != Some(logical)
+                || wave.observed_compute_tokens > wave.computed_tokens
+                || wave.output_tokens != output
+                || wave.decode_tokens > output - u64::from(concurrency)
+                || wave.prefix_reuse != phase.prefix_reuse
+                || [
+                    wave.compute_seconds,
+                    wave.mean_ttft_seconds,
+                    wave.decode_seconds,
+                    wave.prefill_seconds_sum,
+                    wave.decode_seconds_sum,
+                    wave.request_seconds_sum,
+                    wave.wall_seconds,
+                ]
+                .iter()
+                .any(|v| !v.is_finite() || *v < 0.0)
+                || wave.wall_seconds <= 0.0
+                || [
+                    wave.warm_prefill_seconds_mean,
+                    wave.warm_cached_ttft_seconds,
+                    wave.warm_pp_effective_per_request,
+                ]
+                .into_iter()
+                .flatten()
+                .any(|v| !v.is_finite() || v <= 0.0)
+            {
+                return Err("invalid native v2 benchmark wave counters or timers".into());
+            }
+            let full_cold = wave.cached_tokens == 0
+                && wave.computed_tokens == logical
+                && wave.observed_compute_tokens == logical;
+            let full_warm = phase.prefix_reuse
+                && wave.cached_tokens == logical
+                && wave.computed_tokens == 0
+                && wave.observed_compute_tokens == 0;
+            // Native status also checks each lane's timer. A positive sum does not prove
+            // every lane had a usable duration; retain its unavailable observation.
+            let valid_prefill = wave.warm_prefill_status == WarmPrefillStatus::Cached;
+            let valid_status = match wave.warm_prefill_status {
+                WarmPrefillStatus::PrefixReuseDisabled => !phase.prefix_reuse,
+                WarmPrefillStatus::PrefixIncomplete => phase.prefix_reuse && !full_warm,
+                WarmPrefillStatus::PrefillTimerUnavailable => full_warm,
+                WarmPrefillStatus::Cached => full_warm && wave.prefill_seconds_sum > 0.0,
+            };
+            let close = |actual: Option<f64>, expected: Option<f64>| match (actual, expected) {
+                (None, None) => true,
+                (Some(a), Some(b)) => (a - b).abs() <= 1e-9 * a.abs().max(b.abs()).max(1.0),
+                _ => false,
+            };
+            if wave.full_cold_prompt != full_cold
+                || (cold && !full_cold)
+                || wave.warm_cached_prompt != full_warm
+                || !valid_status
+                || !close(
+                    wave.warm_prefill_seconds_mean,
+                    (full_warm && valid_prefill)
+                        .then(|| wave.prefill_seconds_sum / f64::from(concurrency)),
+                )
+                || !close(
+                    wave.warm_pp_effective_per_request,
+                    (full_warm && valid_prefill).then(|| logical as f64 / wave.prefill_seconds_sum),
+                )
+                || (wave.warm_cached_ttft_seconds.is_some()
+                    && (!full_warm
+                        || !close(wave.warm_cached_ttft_seconds, Some(wave.mean_ttft_seconds))))
+            {
+                return Err("inconsistent native v2 cold or cached-prefill evidence".into());
+            }
+        }
+    }
+    Ok(())
 }
 
 fn safe_rate(tokens: u64, seconds: f64) -> f64 {
@@ -179,23 +330,32 @@ fn score(
     concurrency: u32,
     report: PointReport,
 ) -> Result<BenchmarkPoint, String> {
-    if report.schema != "ginfer-resident-benchmark-v1"
-        || report.warmup.len() != request.warmup_rounds as usize
-        || report.measured.len() != request.measured_rounds as usize
-    {
-        return Err("invalid resident benchmark report".into());
-    }
-    let sum = |field: fn(&Wave) -> f64| report.measured.iter().map(field).sum::<f64>();
+    validate_report(request, concurrency, &report)?;
+    let measured = &report.warm_generation.measured;
+    let sum = |field: fn(&Wave) -> f64| measured.iter().map(field).sum::<f64>();
     let count = concurrency * request.measured_rounds;
-    let output: u64 = report.measured.iter().map(|w| w.output_tokens).sum();
-    let cached = report.measured.iter().map(|w| w.cached_tokens).sum();
-    let decode_tokens = report.measured.iter().map(|w| w.decode_tokens).sum();
+    let output: u64 = measured.iter().map(|w| w.output_tokens).sum();
+    let cached = measured.iter().map(|w| w.cached_tokens).sum();
+    let decode_tokens = measured.iter().map(|w| w.decode_tokens).sum();
     if output != u64::from(count) * u64::from(request.max_output_tokens) {
         return Err("benchmark did not return the exact output budget".into());
     }
-    let mean_ttft_sum = sum(|w| w.mean_ttft_seconds);
+    let cold = &report.cold_prefill.measured;
+    let cold_seconds: f64 = cold.iter().map(|w| w.compute_seconds).sum();
+    let cold_tokens: u64 = cold.iter().map(|w| w.computed_tokens).sum();
+    let complete_cold_timer = cold.iter().all(|w| w.compute_seconds > 0.0);
+    let cached_prefill = measured
+        .iter()
+        .all(|w| w.warm_prefill_status == WarmPrefillStatus::Cached);
+    let prefill_seconds = sum(|w| w.prefill_seconds_sum);
+    let cached_ttft = measured
+        .iter()
+        .all(|w| w.warm_cached_ttft_seconds.is_some());
     let decode_seconds = sum(|w| w.decode_seconds);
-    let tg = (decode_seconds > 0.0).then(|| safe_rate(decode_tokens, decode_seconds));
+    let tg = measured
+        .iter()
+        .all(|wave| wave.decode_seconds > 0.0)
+        .then(|| safe_rate(decode_tokens, decode_seconds));
     Ok(BenchmarkPoint {
         concurrency,
         requested_prompt_tokens: request.prompt_tokens,
@@ -204,13 +364,18 @@ fn score(
         average_prompt_tokens: f64::from(request.prompt_tokens),
         average_completion_tokens: output as f64 / f64::from(count),
         cached_prompt_tokens: cached,
-        cold_prompt_tokens_per_second: report.warmup[0].cold_pp,
-        prompt_tokens_per_second: (mean_ttft_sum > 0.0).then(|| {
+        cold_prompt_tokens_per_second: complete_cold_timer
+            .then(|| safe_rate(cold_tokens, cold_seconds)),
+        // v1's logical-input/TTFT PP has no v2 alias.
+        prompt_tokens_per_second: None,
+        warm_prefill_tokens_per_second_per_request: cached_prefill.then(|| {
             safe_rate(
                 u64::from(count) * u64::from(request.prompt_tokens),
-                mean_ttft_sum,
+                prefill_seconds,
             )
         }),
+        warm_cached_ttft_seconds: cached_ttft
+            .then(|| sum(|w| w.mean_ttft_seconds) / f64::from(request.measured_rounds)),
         generation_tokens_per_second: tg,
         per_request_generation_tokens_per_second: tg.map(|value| value / f64::from(concurrency)),
         evidence: report.clone(),
@@ -374,7 +539,13 @@ fn validate_report_configuration(
     if previous.is_some_and(|previous| previous.configuration != report.configuration) {
         return Err("benchmark engine build or configuration changed between points".into());
     }
-    for wave in report.warmup.iter().chain(&report.measured) {
+    if !report.warm_generation.prefix_reuse {
+        return Err("Standard Benchmark requires warm-generation prefix reuse".into());
+    }
+    for wave in [&report.cold_prefill, &report.warm_generation]
+        .into_iter()
+        .flat_map(|phase| phase.warmup.iter().chain(&phase.measured))
+    {
         validate_standard_wave(
             concurrency,
             wave.computed_tokens,
@@ -459,6 +630,7 @@ async fn execute_benchmark<R: Runtime>(
             .json::<PointReport>()
             .await
             .map_err(|e| format!("invalid benchmark report: {e}"))?;
+        validate_report(request, concurrency, &report)?;
         validate_report_configuration(
             request,
             session,
@@ -472,7 +644,7 @@ async fn execute_benchmark<R: Runtime>(
     Ok(BenchmarkResult {
         benchmark_id: request.benchmark_id.clone(),
         hardware: None,
-        methodology: "ginfer-resident-max-perf-v1",
+        methodology: "ginfer-resident-max-perf-v2",
         run_id: request.run_id.clone(),
         started_at_ms,
         completed_at_ms: unix_millis(),
@@ -672,142 +844,245 @@ mod tests {
     }
 
     #[test]
-    fn standard_checks_actual_report_and_preserves_native_v1_fields() {
-        let value = serde_json::json!({
-            "configuration":standard_configuration(), "schema":"ginfer-resident-benchmark-v1", "corpus":"fixture-corpus",
-            "warmup":[{"full_cold_prompt":true,"cold_pp":2048.0,"computed_tokens":2048,"compute_seconds":1.0,
-                "cached_tokens":0,"output_tokens":500,"mean_ttft_seconds":1.0,"decode_tokens":499,"decode_rounds":100,
-                "decode_seconds":2.0,"prefill_seconds_sum":1.0,"decode_seconds_sum":2.0,"request_seconds_sum":3.0,"wall_seconds":3.0}],
-            "measured":[{"full_cold_prompt":false,"cold_pp":null,"computed_tokens":0,"compute_seconds":0.0,
-                "cached_tokens":2048,"output_tokens":500,"mean_ttft_seconds":0.01,"decode_tokens":499,"decode_rounds":100,
-                "decode_seconds":2.0,"prefill_seconds_sum":0.01,"decode_seconds_sum":2.0,"request_seconds_sum":2.01,"wall_seconds":2.01}]
-        });
-        let report: PointReport = serde_json::from_value(value.clone()).unwrap();
-        assert_eq!(serde_json::to_value(&report).unwrap(), value);
-        let request = standard_request();
-        let session = standard_session();
-        validate_report_configuration(&request, &session, 1, &report, None).unwrap();
-        let point = score(&request, 1, report.clone()).unwrap();
-        assert_eq!(point.cold_prompt_tokens_per_second, Some(2048.0));
-        assert_eq!(point.prompt_tokens_per_second, Some(204800.0));
-        assert_eq!(point.generation_tokens_per_second, Some(249.5));
-        for (field, wrong) in [
-            ("max_context", serde_json::json!(131072)),
-            ("draft_policy", serde_json::json!("auto")),
-            ("spec", serde_json::json!("auto")),
-            ("weights", serde_json::json!("nvfp4-dflash2-q4")),
-            ("tp", serde_json::json!(2)),
-            ("draft_tp", serde_json::json!(0)),
-            ("cuda_graph", serde_json::json!(false)),
-        ] {
-            let mut changed = report.clone();
-            changed.configuration[field] = wrong;
-            assert!(
-                validate_report_configuration(&request, &session, 1, &changed, None).is_err(),
-                "{field}"
-            );
-        }
-        let mut changed = report.clone();
-        changed.configuration["engine_build"] = "another-build".into();
-        assert!(
-            validate_report_configuration(&request, &session, 1, &changed, Some(&report)).is_err()
-        );
-        let mut wrong_session = session.info.clone();
-        wrong_session.model_id = "qwen3.8-27b/nvfp4-dflash2-q4".into();
-        assert!(validate_report_configuration(&request, &wrong_session, 1, &report, None).is_err());
-        changed = report.clone();
-        changed.warmup[0].output_tokens -= 1;
-        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
-        changed = report.clone();
-        changed.measured[0].cached_tokens -= 1;
-        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
-        changed = report.clone();
-        changed.corpus.clear();
-        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
-        changed.corpus = " \t\n".into();
-        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
-        changed.corpus = "different-corpus".into();
-        assert!(
-            validate_report_configuration(&request, &session, 1, &changed, Some(&report)).is_err()
-        );
-        changed = report.clone();
-        changed.configuration["engine_build"] = " \t\n".into();
-        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
-        changed = report;
-        changed.schema = "ginfer-resident-benchmark-v2".into();
-        assert!(score(&request, 1, changed).is_err());
-    }
-
-    #[test]
     fn validation_caps_points_to_resident_server_concurrency() {
         assert!(validate_request(&request(), &session(4)).is_ok());
         assert!(validate_request(&request(), &session(2)).is_err());
         assert!(validate_request(&request(), &session(0)).is_err());
     }
 
-    #[test]
-    fn scores_cold_compute_cached_ttft_and_exact_batch_decode_separately() {
-        let request = request();
-        let wave = || Wave {
-            computed_tokens: 512,
-            full_cold_prompt: true,
-            compute_seconds: 0.512,
-            decode_rounds: 127,
-            cold_pp: Some(1000.0),
-            cached_tokens: 1024,
-            output_tokens: 256,
-            mean_ttft_seconds: 0.01,
-            decode_tokens: 254,
-            decode_seconds: 2.0,
-            prefill_seconds_sum: 0.02,
-            decode_seconds_sum: 4.0,
-            request_seconds_sum: 4.02,
-            wall_seconds: 2.01,
-        };
-        let report = PointReport {
-            configuration: serde_json::json!({}),
-            schema: "ginfer-resident-benchmark-v1".into(),
-            corpus: "test".into(),
-            warmup: vec![wave()],
-            measured: vec![wave()],
-        };
-        let point = score(&request, 2, report).unwrap();
-        assert_eq!(point.cold_prompt_tokens_per_second, Some(1000.0));
-        assert_eq!(point.prompt_tokens_per_second, Some(102400.0));
-        assert_eq!(point.generation_tokens_per_second, Some(127.0));
-        assert_eq!(point.per_request_generation_tokens_per_second, Some(63.5));
+    fn captured_report() -> PointReport {
+        serde_json::from_str(include_str!("fixtures/native-v2-c1.json")).unwrap()
+    }
+
+    fn captured_request() -> BenchmarkRequest {
+        BenchmarkRequest {
+            prompt_tokens: 2048,
+            max_output_tokens: 500,
+            measured_rounds: 3,
+            concurrencies: vec![1],
+            ..request()
+        }
     }
 
     #[test]
-    fn rejects_truncated_output_and_keeps_unobserved_rates_unavailable() {
-        let request = request();
-        let wave = || Wave {
-            cold_pp: None,
-            full_cold_prompt: false,
-            computed_tokens: 0,
-            compute_seconds: 0.0,
-            cached_tokens: 512,
-            output_tokens: 128,
-            mean_ttft_seconds: 0.01,
-            decode_tokens: 0,
-            decode_rounds: 0,
-            decode_seconds: 0.0,
-            prefill_seconds_sum: 0.0,
-            decode_seconds_sum: 0.0,
-            request_seconds_sum: 1.0,
-            wall_seconds: 1.0,
-        };
-        let mut report = PointReport {
-            configuration: serde_json::json!({}),
-            schema: "ginfer-resident-benchmark-v1".into(),
-            corpus: "test".into(),
-            warmup: vec![wave()],
-            measured: vec![wave()],
-        };
+    fn captured_v2_scores_measured_phases_without_v1_pp_alias() {
+        let report = captured_report();
+        let request = captured_request();
         let point = score(&request, 1, report.clone()).unwrap();
-        assert_eq!(point.cold_prompt_tokens_per_second, None);
-        assert_eq!(point.generation_tokens_per_second, None);
-        report.measured[0].output_tokens -= 1;
+        let cold = &report.cold_prefill.measured;
+        let warm = &report.warm_generation.measured;
+        let rate = |tokens: u64, seconds: f64| tokens as f64 / seconds;
+        assert_eq!(
+            point.cold_prompt_tokens_per_second,
+            Some(rate(6144, cold.iter().map(|w| w.compute_seconds).sum()))
+        );
+        assert_eq!(point.prompt_tokens_per_second, None);
+        assert_eq!(
+            point.warm_prefill_tokens_per_second_per_request,
+            Some(rate(6144, warm.iter().map(|w| w.prefill_seconds_sum).sum()))
+        );
+        assert_eq!(
+            point.generation_tokens_per_second,
+            Some(rate(1497, warm.iter().map(|w| w.decode_seconds).sum()))
+        );
+        assert_eq!(point.completed_requests, 3);
+        assert_eq!(point.evidence.schema, "ginfer-resident-benchmark-v2");
+    }
+
+    #[test]
+    fn cached_prefill_rate_keeps_per_request_scope_at_c4() {
+        let mut report = captured_report();
+        report.workload.concurrency = 4;
+        for phase in [&mut report.cold_prefill, &mut report.warm_generation] {
+            for wave in phase.warmup.iter_mut().chain(&mut phase.measured) {
+                wave.logical_prompt_tokens *= 4;
+                wave.computed_tokens *= 4;
+                wave.observed_compute_tokens *= 4;
+                wave.cached_tokens *= 4;
+                wave.output_tokens *= 4;
+                wave.decode_tokens *= 4;
+                wave.prefill_seconds_sum *= 4.0;
+                wave.decode_seconds_sum *= 4.0;
+                wave.request_seconds_sum *= 4.0;
+            }
+        }
+        let request = captured_request();
+        let single = score(&request, 1, captured_report()).unwrap();
+        let parallel = score(&request, 4, report).unwrap();
+        assert_eq!(
+            parallel.warm_prefill_tokens_per_second_per_request,
+            single.warm_prefill_tokens_per_second_per_request
+        );
+        assert_eq!(
+            parallel.warm_cached_ttft_seconds,
+            single.warm_cached_ttft_seconds
+        );
+        assert_eq!(
+            parallel.per_request_generation_tokens_per_second,
+            single.generation_tokens_per_second
+        );
+    }
+
+    #[test]
+    fn v2_refuses_missing_phase_wrong_workload_and_invalid_observations() {
+        let value: serde_json::Value =
+            serde_json::from_str(include_str!("fixtures/native-v2-c1.json")).unwrap();
+        let request = captured_request();
+        for field in ["cold_prefill", "warm_generation", "workload"] {
+            let mut changed = value.clone();
+            changed.as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<PointReport>(changed).is_err(),
+                "{field}"
+            );
+        }
+        for (pointer, wrong) in [
+            ("/schema", serde_json::json!("ginfer-resident-benchmark-v1")),
+            ("/workload/concurrency", serde_json::json!(4)),
+            ("/workload/prompt_tokens", serde_json::json!(4096)),
+            ("/workload/measured_rounds", serde_json::json!(1)),
+            ("/cold_prefill/prefix_reuse", serde_json::json!(true)),
+            (
+                "/cold_prefill/measured/0/cached_tokens",
+                serde_json::json!(1),
+            ),
+            (
+                "/cold_prefill/measured/0/observed_compute_tokens",
+                serde_json::json!(2047),
+            ),
+            (
+                "/warm_generation/measured/0/output_tokens",
+                serde_json::json!(499),
+            ),
+            (
+                "/warm_generation/measured/0/decode_tokens",
+                serde_json::json!(500),
+            ),
+            (
+                "/warm_generation/measured/0/decode_seconds",
+                serde_json::json!(-1),
+            ),
+            (
+                "/warm_generation/measured/0/warm_pp_effective_per_request",
+                serde_json::json!(123),
+            ),
+            (
+                "/warm_generation/measured/0/warm_prefill_status",
+                serde_json::json!("unknown"),
+            ),
+        ] {
+            let mut changed = value.clone();
+            *changed.pointer_mut(pointer).unwrap() = wrong;
+            assert!(
+                serde_json::from_value::<PointReport>(changed)
+                    .and_then(|r| score(&request, 1, r).map_err(serde::de::Error::custom))
+                    .is_err(),
+                "{pointer}"
+            );
+        }
+        for field in [
+            "warm_prefill_seconds_mean",
+            "warm_pp_effective_per_request",
+            "warm_cached_ttft_seconds",
+        ] {
+            let mut changed = value.clone();
+            changed["warm_generation"]["measured"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+            assert!(
+                serde_json::from_value::<PointReport>(changed).is_err(),
+                "{field}"
+            );
+        }
+        let mut report = captured_report();
+        report.warm_generation.measured.pop();
         assert!(score(&request, 1, report).is_err());
+    }
+
+    #[test]
+    fn v2_keeps_missing_timers_and_incomplete_prefix_unavailable() {
+        let request = captured_request();
+        let mut partial = captured_report();
+        partial.warm_generation.measured[0].decode_seconds = 0.0;
+        assert!(score(&request, 1, partial)
+            .unwrap()
+            .generation_tokens_per_second
+            .is_none());
+        let mut report = captured_report();
+        for wave in &mut report.cold_prefill.measured {
+            wave.compute_seconds = 0.0;
+        }
+        for wave in &mut report.warm_generation.measured {
+            wave.decode_seconds = 0.0;
+            wave.prefill_seconds_sum = 0.0;
+            wave.warm_prefill_seconds_mean = None;
+            wave.warm_pp_effective_per_request = None;
+            wave.warm_prefill_status = WarmPrefillStatus::PrefillTimerUnavailable;
+        }
+        let point = score(&request, 1, report).unwrap();
+        assert!(point.cold_prompt_tokens_per_second.is_none());
+        assert!(point.generation_tokens_per_second.is_none());
+        assert!(point.warm_prefill_tokens_per_second_per_request.is_none());
+    }
+
+    #[test]
+    fn incomplete_prefix_and_individual_timer_failure_do_not_invent_warm_rates() {
+        let request = captured_request();
+        let mut report = captured_report();
+        for wave in &mut report.warm_generation.measured {
+            wave.warm_prefill_status = WarmPrefillStatus::PrefillTimerUnavailable;
+            wave.warm_prefill_seconds_mean = None;
+            wave.warm_pp_effective_per_request = None;
+            wave.warm_cached_ttft_seconds = None;
+        }
+        let point = score(&request, 1, report.clone()).unwrap();
+        assert!(point.warm_prefill_tokens_per_second_per_request.is_none());
+        assert!(point.warm_cached_ttft_seconds.is_none());
+        for wave in &mut report.warm_generation.measured {
+            wave.cached_tokens -= 1;
+            wave.computed_tokens = 1;
+            wave.observed_compute_tokens = 1;
+            wave.warm_cached_prompt = false;
+            wave.warm_prefill_status = WarmPrefillStatus::PrefixIncomplete;
+        }
+        assert!(score(&request, 1, report)
+            .unwrap()
+            .warm_prefill_tokens_per_second_per_request
+            .is_none());
+    }
+
+    #[test]
+    fn standard_still_refuses_changed_session_configuration_and_workload() {
+        let mut report = captured_report();
+        report.configuration = standard_configuration();
+        report.configuration["prefix_reuse"] = true.into();
+        let session = standard_session();
+        let request = standard_request();
+        validate_report_configuration(&request, &session, 1, &report, None).unwrap();
+        for field in [
+            "max_context",
+            "draft_policy",
+            "spec",
+            "weights",
+            "tp",
+            "draft_tp",
+            "cuda_graph",
+        ] {
+            let mut changed = report.clone();
+            changed.configuration[field] = serde_json::Value::Null;
+            assert!(
+                validate_report_configuration(&request, &session, 1, &changed, None).is_err(),
+                "{field}"
+            );
+        }
+        let mut changed = report.clone();
+        changed.configuration["engine_build"] = "changed".into();
+        assert!(
+            validate_report_configuration(&request, &session, 1, &changed, Some(&report)).is_err()
+        );
+        changed = report;
+        changed.warm_generation.measured[0].output_tokens -= 1;
+        assert!(validate_report_configuration(&request, &session, 1, &changed, None).is_err());
     }
 }
