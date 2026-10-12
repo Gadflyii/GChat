@@ -15,6 +15,7 @@ function chooseLan() {
     target: { value: ' Writer ' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByLabelText(/Another computer on the LAN/))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
@@ -30,7 +31,7 @@ function fillConnection() {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
 }
 
-it('requires a supported computer choice and cancels without importing credentials', () => {
+it('asks separately where the service runs and where the bot computer lives', () => {
   const save = vi.fn()
   const cancel = vi.fn()
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={cancel} />)
@@ -39,6 +40,14 @@ it('requires a supported computer choice and cancels without importing credentia
     target: { value: 'Writer' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
+  expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
+  expect(screen.queryByLabelText(/A separate local VM/)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  expect(screen.getByText('Step 3 of 5 · Computer')).toBeInTheDocument()
+  expect(screen.queryByLabelText('This PC (recommended)')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   for (const choice of [/Cloud hosted/, /M365 Cloud PC/]) {
     fireEvent.click(screen.getByLabelText(choice))
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()

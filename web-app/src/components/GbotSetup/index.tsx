@@ -31,7 +31,7 @@ const computers = [
   ],
   ['m365', 'M365 Cloud PC', 'The Cloud PC connection is not available yet.'],
 ] as const
-const steps = ['Name', 'Computer', 'Connection', 'Review']
+const steps = ['Name', 'Service', 'Computer', 'Connection', 'Review']
 
 export default function GbotSetup({
   save,
@@ -44,7 +44,7 @@ export default function GbotSetup({
   localReady: (id: string) => Promise<void>
   resume?: { id: string; name: string }
 }) {
-  const [step, setStep] = useState(resume ? 2 : 0)
+  const [step, setStep] = useState(resume ? 3 : 0)
   const [computer, setComputer] = useState(resume ? 'local' : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -65,10 +65,10 @@ export default function GbotSetup({
   const canContinue =
     step === 0
       ? Boolean(connection.name.trim())
-      : step === 1
+      : step === 2
         ? computer === 'lan' || computer === 'local'
-        : step === 2
-          ? Boolean(
+        : step === 3
+          ? computer === 'lan' && Boolean(
               connection.hostname.trim() &&
                 connection.user.trim() &&
                 connection.key.trim() &&
@@ -80,7 +80,7 @@ export default function GbotSetup({
           : true
   const submit = async () => {
     if (saving || !canContinue) return
-    if (step < 3) {
+    if (step < 4) {
       setStep(step + 1)
       return
     }
@@ -112,8 +112,8 @@ export default function GbotSetup({
       <div>
         <h3 className="font-medium">Set up your bot</h3>
         <p className="text-sm text-muted-foreground">
-          Step {step + 1} of {computer === 'local' ? 3 : 4} ·{' '}
-          {step === 2 && computer === 'local'
+          Step {step + 1} of {computer === 'local' ? 4 : 5} ·{' '}
+          {step === 3 && computer === 'local'
             ? 'Review and setup'
             : steps[step]}
         </p>
@@ -131,6 +131,10 @@ export default function GbotSetup({
       )}
       {step === 1 && (
         <>
+          <p className="text-sm text-muted-foreground">
+            The service keeps your bot's tasks and schedules running. Its
+            computer is a separate choice in the next step.
+          </p>
           <fieldset className="space-y-2">
             <legend className="mb-2 text-sm font-medium">
               Where should the Gbot service run?
@@ -150,6 +154,14 @@ export default function GbotSetup({
               Another PC on the LAN — setup not available yet
             </label>
           </fieldset>
+          <p className="text-sm text-muted-foreground">
+            On this PC, the service continues after you close GChat. Tasks pause
+            while this PC is asleep or turned off.
+          </p>
+        </>
+      )}
+      {step === 2 && (
+        <>
           <fieldset className="space-y-2">
             <legend className="mb-2 text-sm font-medium">
               Where should the bot's computer be?
@@ -182,14 +194,14 @@ export default function GbotSetup({
           </p>
         </>
       )}
-      {step === 2 && computer === 'local' && (
+      {step === 3 && computer === 'local' && (
         <KvmSetup
           name={connection.name}
           initialId={resume?.id}
           connected={localReady}
         />
       )}
-      {step === 2 && computer === 'lan' && (
+      {step === 3 && computer === 'lan' && (
         <>
           <p className="text-sm text-muted-foreground">
             Enter the connection details for the prepared bot computer. Verify
@@ -238,7 +250,7 @@ export default function GbotSetup({
           </label>
         </>
       )}
-      {step === 3 && (
+      {step === 4 && (
         <>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
             <dt>Bot</dt>
@@ -265,9 +277,9 @@ export default function GbotSetup({
         </p>
       )}
       <div className="flex gap-2">
-        {!(step === 2 && computer === 'local') && (
+        {!(step === 3 && computer === 'local') && (
           <Button disabled={saving || !canContinue}>
-            {saving ? 'Saving…' : step === 3 ? 'Save bot' : 'Continue'}
+            {saving ? 'Saving…' : step === 4 ? 'Save bot' : 'Continue'}
           </Button>
         )}
         {step > 0 && !resume && (
