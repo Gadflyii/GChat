@@ -21,6 +21,10 @@ pub struct GbotState {
 }
 
 impl GbotState {
+    pub(crate) async fn is_stopped(&self) -> bool {
+        self.connection.lock().await.stopped
+    }
+
     pub(crate) async fn client<R: Runtime>(
         &self,
         app: &AppHandle<R>,

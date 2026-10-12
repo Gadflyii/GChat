@@ -77,6 +77,9 @@ async fn native<R: Runtime>(
 }
 
 pub async fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool>, String> {
+    if app.state::<super::gbot::GbotState>().is_stopped().await {
+        return Ok(Vec::new());
+    }
     let catalog: Vec<gbot_service::connectors::ConnectorTool> =
         serde_json::from_value(native(app, "catalog", Value::Null).await?)
             .map_err(|_| "Invalid native connector catalog")?;
@@ -200,6 +203,7 @@ struct NativeOperation {
 
 pub struct BotConnectorHost {
     state: Arc<AccountsState>,
+    stopping: std::sync::atomic::AtomicBool,
     operations: std::sync::Mutex<std::collections::BTreeMap<uuid::Uuid, NativeOperation>>,
 }
 
@@ -209,6 +213,7 @@ impl BotConnectorHost {
         state.initialize(root)?;
         Ok(Self {
             state,
+            stopping: std::sync::atomic::AtomicBool::new(false),
             operations: std::sync::Mutex::new(std::collections::BTreeMap::new()),
         })
     }
@@ -217,6 +222,8 @@ impl BotConnectorHost {
 impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
     fn close(&self) -> gbot_service::connectors::ConnectorFuture<'_, ()> {
         Box::pin(async {
+            self.stopping
+                .store(true, std::sync::atomic::Ordering::Release);
             let operations = std::mem::take(
                 &mut *self
                     .operations
@@ -238,6 +245,9 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
         arguments: Value,
     ) -> gbot_service::connectors::ConnectorFuture<'a, Value> {
         Box::pin(async move {
+            if self.stopping.load(std::sync::atomic::Ordering::Acquire) {
+                return Err("Native connector service is stopping".into());
+            }
             fn encode(value: impl serde::Serialize) -> Result<Value, String> {
                 serde_json::to_value(value).map_err(|_| "Invalid native connector result".into())
             }
