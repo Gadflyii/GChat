@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-12** — [Own SSH workspace creation in the Gbot service](2026-10-12-own-ssh-workspace-creation-in-the-gbot-service.md)
+
 - **2026-10-12** — [Wrap Cua media in Gbot control leases](2026-10-12-wrap-cua-media-in-gbot-control-leases.md)
 
 - **2026-10-12** — [Adopt Cua above Gbot workspace lifecycle](2026-10-12-adopt-cua-above-gbot-workspace-lifecycle.md)
@@ -444,3 +446,6 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-12** — [Persist Gbot human assistance in its task channel](2026-10-12-persist-gbot-human-assistance.md)
 
 - **2026-10-12** — [Use Cua native media for Gbot's first release](2026-10-12-use-cua-native-media-for-gbot.md)
+
+- **2026-10-12** — [Own SSH workspace creation in the Gbot service](2026-10-12-own-ssh-workspace-creation-in-the-gbot-service.md)
+- **2026-10-12** — [Share Chat workers and scope Gbot connector accounts](2026-10-12-share-chat-workers-and-scope-gbot-connectors.md)

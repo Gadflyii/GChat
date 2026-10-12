@@ -6,8 +6,12 @@ Ron authorized adding these connectors to the master TODO list and implementing
 both through parallel agents on October 10, 2026: “lets get those added to the to
 do list and your agents can do it.” Deliver bundled Windows/Linux
 account connections and typed service tools in the existing shared Chat, Agent
-and Code runtime. Gbot will use that runtime when its implementation is authorized;
-this task does not implement Gbot. User-connected SaaS accounts are integrations,
+and Code runtime. The October 12 Gbot candidate uses the same native provider
+and vault through explicit per-bot account links; it never reads global account
+selection. Scoped catalog/admission, write approvals, cancellation and durable
+effect receipts have focused service/native evidence. Live OAuth remains pending
+app registration. See [Gbot's current record](../gbot/README.md#current-record-and-inventory).
+User-connected SaaS accounts are integrations,
 not an expansion of GChat LAN host/workspace management or paid Arbitor features.
 
 Google services: Gmail, Calendar, Drive, Docs, Sheets, Slides, People contacts and

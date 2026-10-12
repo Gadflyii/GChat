@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tauri::{ipc::Channel, AppHandle, Manager, Runtime};
 use tauri_plugin_ginfer::state::GinferState;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Notify};
 use tokio_util::sync::CancellationToken;
 
 use super::approval::ApprovalGate;
@@ -219,6 +219,16 @@ const CONTROL_TOOLS: &[(&str, &str, &str)] = &[
         r#"{"type":"object","properties":{"definitionId":{"type":"string"},"task":{"type":"string"}},"required":["definitionId","task"],"additionalProperties":false}"#,
     ),
     (
+        "agent.spawn",
+        "Start an independent General Agent worker for a task and return its runId immediately. Inherits this conversation's model placement, tools, permissions and folders. Include all context the worker needs in task. Use agent.wait or agent.monitor to collect the result; agent.cancel stops it. Optional assignment uses an exact instance or pool from agent.list.",
+        r#"{"type":"object","properties":{"task":{"type":"string"},"assignment":{"type":"object","properties":{"target":{"oneOf":[{"type":"object","properties":{"kind":{"const":"current"}},"required":["kind"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"fleet"}},"required":["kind"],"additionalProperties":false},{"type":"object","properties":{"kind":{"enum":["instance","pool"]},"id":{"type":"string"}},"required":["kind","id"],"additionalProperties":false}]},"vision":{"type":"boolean"},"minimumContext":{"type":"integer","minimum":0}},"additionalProperties":false}},"required":["task"],"additionalProperties":false}"#,
+    ),
+    (
+        "agent.wait",
+        "Wait for a delegated worker in this conversation and collect its terminal result and durable record. Cancelling the wait does not cancel the worker; use agent.cancel to stop it.",
+        r#"{"type":"object","properties":{"runId":{"type":"string"}},"required":["runId"],"additionalProperties":false}"#,
+    ),
+    (
         "agent.monitor",
         "Inspect a delegated run in this conversation.",
         r#"{"type":"object","properties":{"runId":{"type":"string"}},"required":["runId"],"additionalProperties":false}"#,
@@ -352,6 +362,8 @@ pub struct CapabilityExecuteRequest {
     pub run_id: String,
     pub session_id: String,
     #[serde(default)]
+    pub parent_run_id: Option<String>,
+    #[serde(default)]
     pub model_id: Option<String>,
     pub tool_name: String,
     pub arguments: Value,
@@ -402,8 +414,33 @@ fn delegated_session_id(thread: &str, identity: &str) -> String {
     format!("chat-delegate-{}", hex::encode(&digest[..16]))
 }
 
-fn active_delegations() -> &'static Mutex<BTreeMap<String, (String, bool)>> {
-    static ACTIVE: OnceLock<Mutex<BTreeMap<String, (String, bool)>>> = OnceLock::new();
+struct Delegation {
+    owner: String,
+    state: Mutex<(bool, Option<String>)>,
+    finished: Notify,
+    task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+}
+
+impl Delegation {
+    fn new(owner: String) -> Self {
+        Self {
+            owner,
+            state: Mutex::new((true, None)),
+            finished: Notify::new(),
+            task: Mutex::new(None),
+        }
+    }
+
+    fn finish(&self, error: Option<String>) {
+        if let Ok(mut state) = self.state.lock() {
+            *state = (false, error);
+        }
+        self.finished.notify_waiters();
+    }
+}
+
+fn active_delegations() -> &'static Mutex<BTreeMap<String, Arc<Delegation>>> {
+    static ACTIVE: OnceLock<Mutex<BTreeMap<String, Arc<Delegation>>>> = OnceLock::new();
     ACTIVE.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
@@ -455,8 +492,9 @@ pub async fn execute_with_sink<R: Runtime>(
     };
     let mcp_content = matches!(target, CapabilityTarget::Mcp { .. });
     match identity.as_str() {
+        "agent.spawn" => return spawn_worker(app, request, emit).await,
         "skill.invoke" | "agent.run" => return run_delegated(app, request, &identity, emit).await,
-        "skill.list" | "agent.list" | "agent.monitor" | "agent.cancel" => {
+        "skill.list" | "agent.list" | "agent.wait" | "agent.monitor" | "agent.cancel" => {
             emit(AgentEvent::TurnStarted {
                 run_id: request.run_id.clone(),
                 session_id: request.session_id.clone(),
@@ -674,7 +712,7 @@ async fn execute_control<R: Runtime>(
             json!({"definitions": definitions::list_definitions(&data)?, "pools": usable,
                 "fleet":pools.fleet,"assignment":pools.assignment})
         }
-        "agent.monitor" | "agent.cancel" => {
+        "agent.wait" | "agent.monitor" | "agent.cancel" => {
             let run_id = required(&request.arguments, "runId")?;
             let active_entry = active_delegations()
                 .lock()
@@ -683,7 +721,7 @@ async fn execute_control<R: Runtime>(
                 .cloned();
             let owned = active_entry
                 .as_ref()
-                .is_some_and(|(owner, _)| owner == &request.session_id)
+                .is_some_and(|entry| entry.owner == request.session_id)
                 || super::runs::list_runs(&data)?.iter().any(|run| {
                     run.run_id == run_id
                         && run.origin_session_id.as_deref() == Some(&request.session_id)
@@ -691,14 +729,31 @@ async fn execute_control<R: Runtime>(
             if !owned {
                 return Err("Delegated run does not belong to this conversation".into());
             }
+            if identity == "agent.wait" {
+                if let Some(entry) = &active_entry {
+                    wait_delegation(&app, &request.run_id, entry).await?;
+                }
+            }
+            let (active, error) = active_entry
+                .as_ref()
+                .map(|entry| {
+                    entry
+                        .state
+                        .lock()
+                        .map(|state| state.clone())
+                        .map_err(|error| error.to_string())
+                })
+                .transpose()?
+                .unwrap_or((false, None));
             if identity == "agent.cancel" {
-                commands::agent_cancel_turn(app.state(), run_id.into()).await?;
-                json!({"cancelled":true,"runId":run_id})
+                if active {
+                    commands::agent_cancel_turn(app.state(), run_id.into()).await?;
+                }
+                json!({"cancelled":active,"runId":run_id})
             } else {
                 let record = super::runs::list_runs(&data)?
                     .into_iter()
                     .find(|run| run.run_id == run_id);
-                let active = active_entry.is_some_and(|(_, active)| active);
                 let events = if active {
                     super::studio::operation(app.clone(), "monitor", json!({})).await?["active"]
                         [run_id]
@@ -706,7 +761,7 @@ async fn execute_control<R: Runtime>(
                 } else {
                     Value::Null
                 };
-                json!({"runId":run_id,"active":active,"events":events,"record":record})
+                json!({"runId":run_id,"active":active,"events":events,"record":record,"error":error})
             }
         }
         _ => return Err("Unknown control capability".into()),
@@ -716,6 +771,192 @@ async fn execute_control<R: Runtime>(
         error: None,
         run: None,
     })
+}
+
+async fn wait_delegation<R: Runtime>(
+    app: &AppHandle<R>,
+    wait_id: &str,
+    entry: &Delegation,
+) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let (cancel_tx, mut cancel_rx) = oneshot::channel();
+    state
+        .tool_call_cancellations
+        .lock()
+        .await
+        .insert(wait_id.into(), cancel_tx);
+    let result = async {
+        loop {
+            let notified = entry.finished.notified();
+            tokio::pin!(notified);
+            // Register before checking state so completion cannot race this wait.
+            notified.as_mut().enable();
+            if !entry.state.lock().map_err(|error| error.to_string())?.0 {
+                return Ok(());
+            }
+            tokio::select! {
+                _ = &mut notified => {},
+                _ = &mut cancel_rx => return Err("Worker wait cancelled".into()),
+            }
+        }
+    }
+    .await;
+    state.tool_call_cancellations.lock().await.remove(wait_id);
+    result
+}
+
+async fn spawn_worker<R: Runtime>(
+    app: AppHandle<R>,
+    request: CapabilityExecuteRequest,
+    emit: Arc<dyn Fn(AgentEvent) -> Result<(), String> + Send + Sync>,
+) -> Result<CapabilityExecuteResult, String> {
+    let task = required(&request.arguments, "task")?.to_owned();
+    let parent_run_id = request
+        .parent_run_id
+        .clone()
+        .filter(|id| !id.trim().is_empty())
+        .ok_or("A parent Chat turn is required to dispatch a worker")?;
+    let data = get_jan_data_folder_path(app.clone());
+    let mut definition = definitions::general_agent();
+    if let Some(assignment) = request.arguments.get("assignment") {
+        let assignment: super::worker_pools::RoleAssignment =
+            serde_json::from_value(assignment.clone())
+                .map_err(|error| format!("Invalid worker assignment: {error}"))?;
+        definition
+            .role_assignments
+            .insert("agent".into(), assignment);
+    }
+    definitions::validate_role_assignments(&definition, &definition.role_assignments)?;
+    let model_id =
+        crate::core::code_bridge::select_model(&app, &definition, &data, request.model_id.clone())
+            .await
+            .map_err(|error| format!("No ready GInfer instance for worker task: {error}"))?;
+    let session_id = format!("chat-worker-{}", uuid::Uuid::new_v4());
+    let agent_request = AgentTurnRequest {
+        run_id: request.run_id.clone(),
+        session_id: session_id.clone(),
+        origin_session_id: Some(request.session_id.clone()),
+        parent_run_id: Some(parent_run_id.clone()),
+        model_id,
+        user_message: task,
+        definition_id: Some("general".into()),
+        role_assignments: definition.role_assignments,
+        selected_skill: request.selected_skill,
+        attachments: request.attachments,
+        working_dir: request.working_dir,
+        external_roots: request.external_roots,
+        max_steps: None,
+        auto_approve: request.auto_approve,
+        disabled_tools: request.disabled_tools,
+    };
+    let entry = Arc::new(Delegation::new(request.session_id.clone()));
+    {
+        let mut runs = active_delegations()
+            .lock()
+            .map_err(|error| error.to_string())?;
+        if runs.contains_key(&request.run_id)
+            || super::runs::list_runs(&data)?
+                .iter()
+                .any(|run| run.run_id == request.run_id)
+        {
+            return Err(format!("Delegated run `{}` already exists", request.run_id));
+        }
+        runs.insert(request.run_id.clone(), entry.clone());
+    }
+    let (ready_tx, ready_rx) = oneshot::channel();
+    let ready_cell = Arc::new(Mutex::new(Some(ready_tx)));
+    let task_entry = entry.clone();
+    let handle = tauri::async_runtime::spawn(async move {
+        let terminal = Arc::new(Mutex::new(false));
+        let terminal_sink = terminal.clone();
+        let event_emit = emit.clone();
+        let sink = Arc::new(move |event: AgentEvent| {
+            if matches!(event, AgentEvent::TurnFinished { .. }) {
+                if let Ok(mut finished) = terminal_sink.lock() {
+                    *finished = true;
+                }
+            }
+            // A worker remains owned by the runtime when its Chat view closes.
+            let _ = event_emit(event);
+            Ok(())
+        });
+        let ready = ready_cell.clone();
+        let registered = Arc::new(move || {
+            if let Ok(mut sender) = ready.lock() {
+                if let Some(sender) = sender.take() {
+                    let _ = sender.send(());
+                }
+            }
+        });
+        let result =
+            commands::run_turn_with_sink_ready(app, agent_request, sink, Some(registered)).await;
+        if let Err(error) = &result {
+            if !terminal.lock().map(|finished| *finished).unwrap_or(false) {
+                let _ = emit(AgentEvent::StepError {
+                    message: error.clone(),
+                    category: "delegation".into(),
+                });
+                let _ = emit(AgentEvent::TurnFinished {
+                    reason: "failed".into(),
+                    step_count: 0,
+                });
+            }
+        }
+        task_entry.finish(result.err());
+    });
+    *entry.task.lock().map_err(|error| error.to_string())? = Some(handle);
+    if ready_rx.await.is_err() {
+        let error = entry
+            .state
+            .lock()
+            .map_err(|error| error.to_string())?
+            .1
+            .clone()
+            .unwrap_or_else(|| "Worker could not register with the shared runtime".into());
+        active_delegations()
+            .lock()
+            .map_err(|error| error.to_string())?
+            .remove(&request.run_id);
+        return Err(error);
+    }
+    Ok(CapabilityExecuteResult {
+        content: json!({"runId":request.run_id,"sessionId":session_id,"originSessionId":request.session_id,
+            "parentRunId":parent_run_id,"status":"running"}),
+        error: None,
+        run: None,
+    })
+}
+
+/// Normal application exit cancels and joins Chat workers before model shutdown.
+pub async fn shutdown<R: Runtime>(app: &AppHandle<R>) {
+    let entries = active_delegations()
+        .lock()
+        .map(|runs| {
+            runs.iter()
+                .map(|(id, entry)| (id.clone(), entry.clone()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut handles = Vec::new();
+    for (run_id, entry) in entries {
+        let handle = entry.task.lock().ok().and_then(|mut task| task.take());
+        if let Some(handle) = handle {
+            let _ = commands::agent_cancel_turn(app.state(), run_id).await;
+            handles.push(handle);
+        }
+    }
+    let joined = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        for handle in &mut handles {
+            let _ = handle.await;
+        }
+    })
+    .await;
+    if joined.is_err() {
+        for handle in handles {
+            handle.abort();
+        }
+        log::warn!("Chat worker shutdown exceeded the shared runtime exit grace period");
+    }
 }
 
 async fn run_delegated<R: Runtime>(
@@ -767,6 +1008,7 @@ async fn run_delegated<R: Runtime>(
         run_id: request.run_id.clone(),
         session_id: run_session,
         origin_session_id: Some(request.session_id.clone()),
+        parent_run_id: request.parent_run_id,
         model_id,
         user_message: task,
         definition_id: Some(definition_id),
@@ -786,7 +1028,10 @@ async fn run_delegated<R: Runtime>(
         if runs.contains_key(&request.run_id) {
             return Err(format!("Delegated run `{}` already exists", request.run_id));
         }
-        runs.insert(request.run_id.clone(), (request.session_id, true));
+        runs.insert(
+            request.run_id.clone(),
+            Arc::new(Delegation::new(request.session_id)),
+        );
     }
     let summary = Arc::new(Mutex::new((None::<String>, None::<String>, 0u32)));
     let captured = summary.clone();
@@ -810,7 +1055,7 @@ async fn run_delegated<R: Runtime>(
         .map_err(|error| error.to_string())?
         .get_mut(&request.run_id)
     {
-        entry.1 = false;
+        entry.finish(result.as_ref().err().cloned());
     }
     let (reply, reason, step_count) = summary.lock().map_err(|error| error.to_string())?.clone();
     let error = result.err();
@@ -1066,12 +1311,13 @@ mod tests {
         let request = CapabilityExecuteRequest {
             run_id: "test-capability-read".into(),
             session_id: "test-thread".into(),
+            parent_run_id: None,
             model_id: None,
             tool_name: read.name.clone(),
             arguments: json!({"path":"note.txt"}),
             working_dir: Some(root.path().to_string_lossy().into()),
             external_roots: vec![],
-            auto_approve: false,
+            auto_approve:false,
             selected_skill: None,
             disabled_tools: vec![],
             attachments: vec![],
@@ -1100,12 +1346,13 @@ mod tests {
         let disabled = CapabilityExecuteRequest {
             run_id: "test-capability-denied".into(),
             session_id: "test-thread".into(),
+            parent_run_id: None,
             model_id: None,
             tool_name: "os_fs_read".into(),
             arguments: json!({"path":"note.txt"}),
             working_dir: Some(root.path().to_string_lossy().into()),
             external_roots: vec![],
-            auto_approve: false,
+            auto_approve:false,
             selected_skill: None,
             disabled_tools: vec!["gchat-native::os_fs_read".into()],
             attachments: vec![],
@@ -1160,6 +1407,7 @@ mod tests {
         let request = CapabilityExecuteRequest {
             run_id: "chat-excel-read".into(),
             session_id: "ordinary-chat".into(),
+            parent_run_id: None,
             model_id: None,
             tool_name: "os_fs_read_document".into(),
             arguments: json!({"path":workbook}),
@@ -1204,7 +1452,7 @@ mod tests {
         assert_eq!(result.content["details"]["truncated"], false);
         {
             let events = events.lock().unwrap();
-            assert!(events.iter().any(|event| matches!(event, AgentEvent::FolderAccessRequested { tool, .. } if tool == "os.fs.read_document")));
+            assert!(events.iter().any(|event| matches!(event, AgentEvent::FolderAccessRequested {tool, .. } if tool == "os.fs.read_document")));
             assert!(
                 matches!(events.last(), Some(AgentEvent::TurnFinished { reason, .. }) if reason == "reply")
             );
@@ -1233,6 +1481,7 @@ mod tests {
         let request = CapabilityExecuteRequest {
             run_id: "missing-vision-model".into(),
             session_id: "test-thread".into(),
+            parent_run_id: None,
             model_id: Some("not-ready".into()),
             tool_name: "vision_describe".into(),
             arguments: json!({"path":"image.png"}),
@@ -1253,5 +1502,226 @@ mod tests {
             .lock()
             .await
             .is_empty());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn chat_general_workers_collect_cancel_and_reopen_with_parent_policy() {
+        use super::super::ginfer_client::GinferConnection;
+        use super::super::test_support::{ScriptedGinferServer, ScriptedResponse, TestFleet};
+        use std::time::Duration;
+        use tauri_plugin_ginfer::state::{GinferSession, SessionInfo, SessionOwner};
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        let server = ScriptedGinferServer::start(vec![
+            ScriptedResponse::tool_call(
+                "os_fs_write",
+                json!({"path":"disabled.txt","content":"forbidden"}),
+            ),
+            ScriptedResponse::tool_call("os_shell_run", json!({"cmd":"/bin/true"})),
+            ScriptedResponse::tool_call("reply", json!({"text":"Second independent result"})),
+        ])
+        .await;
+        let GinferConnection::Local { port, .. } = server.client().target().connection else {
+            unreachable!()
+        };
+        let fleet = TestFleet::start().await;
+        let owner = SessionOwner {
+            control: Arc::new(
+                ginfer_host::launcher::LocalControl::open(
+                    &fleet.directory.path().join("host"),
+                    &fleet.origin,
+                )
+                .unwrap(),
+            ),
+            connection: ginfer_host::launcher::LocalConnection {
+                instance_id: uuid::Uuid::new_v4(),
+                session_id: uuid::Uuid::new_v4(),
+                model_id: "scripted-test-model".into(),
+                port: port.try_into().unwrap(),
+                api_key: String::new(),
+            },
+        };
+        let model = ginfer_host::engine_registry::InstanceRef {
+            host_id: owner.control.host_id(),
+            instance_id: owner.connection.instance_id,
+        }
+        .model_alias();
+        let info: SessionInfo = serde_json::from_value(json!({"pid":1,"port":port,"model_id":"scripted-test-model",
+            "model_path":"test.ginfer","is_embedding":false,"vision":true,"api_key":"","max_concurrency":3,"max_context":32768})).unwrap();
+        let state = GinferState::default();
+        state.ginfer_process.lock().await.insert(
+            1,
+            GinferSession {
+                owner,
+                info,
+                endpoint: None,
+            },
+        );
+        let pool = super::super::worker_pools::WorkerPool {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: "Chat workers".into(),
+            members: vec![super::super::worker_pools::PoolMember {
+                instance_id: model.clone(),
+                worker_limit: 2,
+            }],
+        };
+        std::fs::write(
+            data.join("agent-worker-pools.json"),
+            serde_json::to_vec(&vec![pool.clone()]).unwrap(),
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .manage(fleet.client.clone())
+            .manage(AppState::default())
+            .manage(crate::test_support::TestDataRoot(data.clone()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let parent = format!("parent-{}", uuid::Uuid::new_v4());
+        let request = |id: &str, tool: &str, arguments: Value| CapabilityExecuteRequest {
+            run_id: id.into(),
+            session_id: parent.clone(),
+            parent_run_id: Some("user-turn-1".into()),
+            model_id: Some(model.clone()),
+            tool_name: tool.into(),
+            arguments,
+            working_dir: Some(root.path().to_string_lossy().into()),
+            external_roots: vec![],
+            auto_approve: false,
+            selected_skill: None,
+            disabled_tools: vec!["gchat-native::os_fs_write".into()],
+            attachments: vec![],
+        };
+        let first = format!("worker-first-{}", uuid::Uuid::new_v4());
+        let second = format!("worker-second-{}", uuid::Uuid::new_v4());
+        let first_events = Arc::new(Mutex::new(Vec::new()));
+        let captured = first_events.clone();
+        let approval_arrived = Arc::new(Notify::new());
+        let arrival = approval_arrived.clone();
+        let first_result = execute_with_sink(
+            app.handle().clone(),
+            request(
+                &first,
+                "agent_spawn",
+                json!({"task":"First independent task",
+            "assignment":{"target":{"kind":"pool","id":pool.id}}}),
+            ),
+            Arc::new(move |event| {
+                if matches!(event, AgentEvent::ApprovalRequested { .. }) {
+                    arrival.notify_one();
+                }
+                captured.lock().unwrap().push(event);
+                Ok(())
+            }),
+        )
+        .await
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(3), approval_arrived.notified())
+            .await
+            .unwrap();
+        let second_result = execute_with_sink(
+            app.handle().clone(),
+            request(
+                &second,
+                "agent_spawn",
+                json!({"task":"Second independent task"}),
+            ),
+            Arc::new(|_| Ok(())),
+        )
+        .await
+        .unwrap();
+        assert_ne!(
+            first_result.content["sessionId"],
+            second_result.content["sessionId"]
+        );
+        assert_eq!(first_result.content["parentRunId"], "user-turn-1");
+        let collect =
+            |run: &str| request(&format!("wait-{run}"), "agent_wait", json!({"runId":run}));
+        let second_done = tokio::time::timeout(
+            Duration::from_secs(4),
+            execute_with_sink(app.handle().clone(), collect(&second), Arc::new(|_| Ok(()))),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            second_done.content["record"]["finalReply"],
+            "Second independent result"
+        );
+        let captured = first_events.lock().unwrap();
+        assert!(captured.iter().any(|event| {
+            let event = match event {
+                AgentEvent::StageActivity { event, .. } => event.as_ref(),
+                event => event,
+            };
+            matches!(event, AgentEvent::ToolCallExecuted { result }
+                if result.call.tool == "os.fs.write" && result.outcome.status == ToolStatus::Denied)
+        }), "Worker events: {captured:?}");
+        drop(captured);
+        assert!(!root.path().join("disabled.txt").exists());
+        execute_with_sink(
+            app.handle().clone(),
+            request("cancel-control", "agent_cancel", json!({"runId":first})),
+            Arc::new(|_| Ok(())),
+        )
+        .await
+        .unwrap();
+        let cancelled_done = tokio::time::timeout(
+            Duration::from_secs(3),
+            execute_with_sink(
+                app.handle().clone(),
+                collect(&first),
+                Arc::new(|_| Ok(())),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(cancelled_done.content["record"]["status"], "cancelled");
+        assert_eq!(
+            cancelled_done.content["record"]["roleAssignments"]["agent"]["target"]["id"],
+            pool.id
+        );
+        assert!(!root.path().join("disabled.txt").exists());
+        assert!(app
+            .state::<AppState>()
+            .tool_call_cancellations
+            .lock()
+            .await
+            .is_empty());
+        for id in [&first, &second] {
+            active_delegations().lock().unwrap().remove(id);
+        }
+        let reopened = tauri::test::mock_app();
+        reopened.manage(AppState::default());
+        reopened.manage(crate::test_support::TestDataRoot(data.clone()));
+        let restored = execute_with_sink(
+            reopened.handle().clone(),
+            collect(&first),
+            Arc::new(|_| Ok(())),
+        )
+        .await
+        .unwrap();
+        assert_eq!(restored.content["record"]["originSessionId"], parent);
+        assert_eq!(restored.content["record"]["parentRunId"], "user-turn-1");
+        assert_eq!(
+            restored.content["record"]["status"],
+            "cancelled"
+        );
+        let restored_result = execute_with_sink(
+            reopened.handle().clone(), collect(&second), Arc::new(|_| Ok(())),
+        ).await.unwrap();
+        assert_eq!(restored_result.content["record"]["finalReply"], "Second independent result");
+        assert_eq!(restored_result.content["record"]["parentRunId"], "user-turn-1");
+        let mut foreign = collect(&first);
+        foreign.session_id = "another-conversation".into();
+        assert!(
+            execute_with_sink(reopened.handle().clone(), foreign, Arc::new(|_| Ok(())))
+                .await
+                .unwrap_err()
+                .contains("does not belong")
+        );
     }
 }

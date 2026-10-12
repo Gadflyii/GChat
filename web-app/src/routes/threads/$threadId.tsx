@@ -116,6 +116,7 @@ import AgentFolderAccessDialog from '@/containers/dialogs/AgentFolderAccessDialo
 import { useTranslation } from '@/i18n/react-i18next-compat'
 
 const CHAT_STATUS = {
+  READY: 'ready',
   STREAMING: 'streaming',
   SUBMITTED: 'submitted',
 } as const
@@ -187,6 +188,15 @@ function ThreadDetail() {
   const selectedModel = useModelProvider((state) => state.selectedModel)
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
   const agentRun = useAgentRun((state) => state.runs[threadId])
+  const workerRuns = useAgentRun(
+    useShallow((state) =>
+      Object.fromEntries(
+        Object.entries(state.runs).filter(
+          ([, run]) => run.originSessionId === threadId
+        )
+      )
+    )
+  )
   const chatMessagesRef = useRef<UIMessage[]>([])
 
   // Get system message from the thread's assigned assistant instructions.
@@ -1011,13 +1021,21 @@ function ThreadDetail() {
     sessionData.tools = []
     useChatSessions.getState().clearToolBatches(threadId)
     stop()
+    for (const worker of Object.values(workerRuns)) {
+      if (worker.runId && worker.finishedAtMs === undefined)
+        void cancelAgentTurn(worker.runId).catch(() =>
+          toast.error(t('chat:agentErrors.cancelFailed'))
+        )
+    }
     if (isAgentRunning && agentRun?.runId) {
       if (agentRun.pendingApproval) {
         useAgentRun.getState().clearPendingApproval(threadId, agentRun.pendingApproval.approval_id)
       }
       void cancelAgentTurn(agentRun.runId).catch(() => toast.error(t('chat:agentErrors.cancelFailed')))
     }
-  }, [agentRun?.pendingApproval, agentRun?.runId, isAgentRunning, sessionData, stop, t, threadId])
+  }, [agentRun?.pendingApproval, agentRun?.runId, isAgentRunning, sessionData, stop, t, threadId,
+    workerRuns,
+  ])
   const requestActive = (!historyReady && !historyRestoreError) || isAgentRunning || status === CHAT_STATUS.SUBMITTED || status === CHAT_STATUS.STREAMING || pendingToolBatches > 0
   const inputStatus = requestActive ? CHAT_STATUS.SUBMITTED : status
   const visibleMessages = useMemo(() => chatMessages.filter((message) => !isImportedConversationContext(message)), [chatMessages])
@@ -1112,6 +1130,50 @@ function ThreadDetail() {
                     )}
                   <AgentApprovalDialog threadId={threadId} />
                   <AgentFolderAccessDialog threadId={threadId} />
+                  {Object.entries(workerRuns)
+                    .filter(
+                      ([, worker]) =>
+                        !visibleMessages.some(
+                          (message) =>
+                            chatCapabilityRun(message)?.run_id === worker.runId
+                        )
+                    )
+                    .map(([key, worker]) => (
+                      <div key={key}>
+                        <MessageItem
+                          message={buildAgentUIMessage(worker)}
+                          isFirstMessage={false}
+                          isLastMessage
+                          status={
+                            worker.finishedAtMs === undefined
+                              ? CHAT_STATUS.SUBMITTED
+                              : CHAT_STATUS.READY
+                          }
+                          requestActive={worker.finishedAtMs === undefined}
+                          reasoningContainerRef={reasoningContainerRef}
+                          hideActions
+                        />
+                        {worker.finishedAtMs === undefined && worker.runId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              void cancelAgentTurn(worker.runId!).catch(() =>
+                                toast.error(t('chat:agentErrors.cancelFailed'))
+                              )
+                            }
+                          >
+                            Stop worker
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  {Object.keys(workerRuns).map((key) => (
+                    <div key={`worker-dialogs-${key}`}>
+                      <AgentApprovalDialog threadId={key} />
+                      <AgentFolderAccessDialog threadId={key} />
+                    </div>
+                  ))}
                   {historyRestoreError && (
                     <div role="alert" className="my-3 space-y-2 rounded-xl border p-4 text-sm">
                       <p>Could not restore conversation context: {historyRestoreError}</p>

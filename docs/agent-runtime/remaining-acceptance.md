@@ -15,18 +15,18 @@ is part of this plan. The master list remains the sole issue-status authority.
 
 | Item | Current behavior / remaining work | Smallest useful gate |
 | --- | --- | --- |
-| General agent delegation from Chat | Chat can run saved agent/team definitions. Ad-hoc worker creation, parallel dispatch and cancellation need a shared-runtime contract and implementation. | One parent dispatching two workers, consuming both results and cancelling one; persist/reopen the run. |
+| General agent delegation from Chat | Candidate supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
 | Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. This candidate adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Installed presentation is still untested. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
 | Automatic bot computer setup | KVM adapter has dedicated-guest evidence, but product onboarding does not create a VM. Hyper-V, cloud provider creation/live cost review and M365 connection are unfinished. Remote service selection is also unwired. | One dedicated KVM VM through the actual UI first; Windows/M365 at the release window. No person's desktop. |
-| Per-bot connectors and research | Shared Google/Microsoft provider tools exist. Bot-specific account linking, isolation and executor tool exposure still need wiring; bots start with no inherited accounts. | Two bot identities using different fake accounts; one live OAuth read after app registration. Research reuses shared tools. |
-| Scheduled/background Gbot work | Tasks are durable, but exiting GChat stops its service child. User scheduling and independent service lifetime/sleep recovery are unfinished. | One due task, interrupted service, restart without duplicate side effects; use a fake clock. |
+| Per-bot connectors and research | Candidate links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
+| Scheduled/background Gbot work | Tasks are durable, but exiting GChat stops its service child. A service-running scheduler is being implemented with a persistent limitation notice; independent service lifetime/sleep recovery remains open. | Due/disabled/recovery/missed-run cases with fake clock and no duplicate ambiguous effects. |
 | Browser tools | Typed browser catalog/schema is covered. A real guest browser form task is unrun. | One dedicated-guest form submit and independent SSH readback; no model needed. |
 
 ### Bugs, decisions and incomplete diagnostics
 
 | Master item | What remains | Next evidence / dependency |
 | --- | --- | --- |
-| GBOT-SETUP-CREDENTIAL-ORPHAN | SSH import commits the vault key before workspace persistence; failure of the second request leaves an unreferenced key, and retry imports another. | Make creation transactional in the owning service; one injected workspace-save failure proves key cleanup and safe retry. |
+| GBOT-SETUP-CREDENTIAL-ORPHAN | Candidate replaces the two requests with a service-owned transaction and stable vault slot. | Five service failure/retry cases and five route cases PASS, with service check/strict Clippy. Native endpoint admission PASS. Cross-store power-loss/reload recovery is not qualified. |
 | GCHAT-GBENCH-NATIVE-V2-REPORT | Native report v2 does not match GChat's v1 report reader. | Agree the owning field/scoring contract; one captured real report fixture. |
 | OI-069 | Pair/restart/grant restore passed; shared-pool queue, cancellation and recovery across two Ready hosts did not. | Resolve the worker startup/RAM blocker, then one two-host job lifecycle. |
 | OI-072-RUNTIME | Muse runtime memory loss has no demonstrated allocation owner/fix. | Reuse capture evidence; one admitted candidate and an ownership timeline only when authorized. |
@@ -34,7 +34,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-066 | Guard diagnosis is closed; fit-message source/landing needs confirmation. | Locate the owning source/result before claiming the presentation fix landed. Profile qualification is OI-072. |
 | OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; 19 offline cases are unrun and the live feed is not published. | Run only the existing offline cases; signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
-| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | Startup probes report unavailable ANN while embeddings are disabled. | Determine whether disabled features should probe; one startup diagnostic check. |
+| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Candidate removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
 | OI-074 / GCHAT-BROWSER-BASELINE-DATA | Large frontend chunk and stale browser-data advisories remain. | One affected bundle/tooling check after a source change; no unrelated upgrades. |
 | GCHAT-WEB-TEST-DIAGNOSTICS | Reviewed warning-reduction candidate has no run of its focused cases. | Run the existing affected cases, not the full web suite. |
@@ -48,7 +48,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | Native successful-vault style and actual failed credential deletion presentation. |
 | GCHAT-SHARED-APP-ICON | Shared source/icon overlay accepted. | Installed GChat and Manager windows/trays show the same intended icon. |
 | GCHAT-HARDWARE-PROFILE-INSTALL | Linux exact-group reuse, interrupt/resume and cancellation. | Native Windows normal/cancel/Host-loss lifetime and MSVC release build. |
-| GCHAT-UNIX-PTY-PIXEL-GEOMETRY | Source is merged; Linux TUI/input acceptance covers a different parser fix. | Named pixel-only resize fixture is unrun; native geometry/mouse behavior is not qualified. |
+| GCHAT-UNIX-PTY-PIXEL-GEOMETRY | Source is merged; Linux TUI/input acceptance covers a different parser fix. | Named pixel-only resize fixture PASS (one case); native geometry/mouse behavior is not qualified. |
 | OI-072 model/profile qualification | Historical evidence and source binding audit. | Exact current Muse TP1 C4/131072 NVFP4 KV + Q4 DFlash2 artifact/engine at the scheduled release gate. |
 | Google / Microsoft connectors | 36 focused auth/provider/runtime/UI cases. | App registration, real OAuth consent/refresh/revocation and read operations. |
 | Gbot Linux executor | Exact desktop overwrite + two actual Cua file evaluators passed. | Broader task set and Vision; new cua-bench dependency closure is not approved. |
@@ -58,22 +58,31 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |
 
-Order: finish opt-in/LAN setup, then shared general-agent dispatch and bot account/tool
-wiring; complete automatic KVM onboarding before the other computer adapters.
-Scheduling follows service-lifetime ownership. Fix report-contract and reproduced
+Order: land completed opt-in/LAN setup, shared general-agent dispatch and bot
+account/tool wiring; complete automatic KVM onboarding before the other computer
+adapters. Service-running scheduling is explicit; independent background operation
+still needs its owning service lifetime. Fix report-contract and reproduced
 functional blockers as their owning decisions become available. Platform/release
 checks stay explicit; they do not block unrelated source implementation.
 
 Current candidate: `feat/gchat-open-items-setup-bfd` in
 `/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on `bfd42e530`.
-Outcome: an accurate list/test plan and the first usable setup correction.
-Acceptance: focused settings/sidebar/setup/route cases, affected lint and types;
-no native build, dependency change, model run, provisioning or release publication.
-Verification: 39 focused cases in four files, affected ESLint and frontend types
-PASS. Evidence: `/ai/gchat/out/gchat-open-items-20261012/`. No installed UI or
-VM qualification is claimed. Next: normal source review/merge, then fix the
-credential-orphan failure before extending computer provisioning. General agent
-dispatch is the next feature; per-bot connectors and scheduling remain explicit.
+Outcome: an accurate list/test plan, opt-in guided LAN setup, shared Chat workers
+and isolated per-bot connector access. Focused native/service lifecycle cases,
+frontend cases, affected lint/types, native check and strict Clippy pass.
+Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
+
+Transactional setup is integrated as `7b53ea942`; shared workers as `325998951`
+and per-bot connectors as `ce8261bfe`. The combined connector service/native
+cases and native endpoint admission pass. One fixture initially omitted the
+required guest identity argument; correcting that test invocation allowed the
+owning gates to run. This was a test compilation defect, not a product failure.
+Scheduling and KVM onboarding remain on isolated implementation branches.
+No installed UI, VM, live OAuth or active-worker recovery qualification is claimed.
+The startup correction `3afd4ea8a` has one focused case and frontend types PASS;
+evidence is `ann-test.log` / `ann-types.log`. Explicit VectorDB diagnostics remain
+available. The PTY geometry fixture passes; reuse `pty-geometry-test.log`, without
+a native mouse or blank-TUI cause claim.
 
 ## Accepted Ubuntu Desktop packages — OI-057
 
@@ -152,14 +161,13 @@ also reports a pixel-only resize when the fitted grid does not change. Showing
 the terminal or starting a new visible generation synchronizes the same geometry.
 No native PTY contract, request field, dependency or terminal parser changes.
 
-Candidate: `/ai/gchat-worktrees/unix-pty-pixel-geometry-254`, branch
-`fix/gchat-unix-pty-pixel-geometry-254`, baseline origin/main `254c0f8fd`.
-Only source and the existing owning fixture are prepared; no build, model,
-desktop action or live job was run. Next: coordinator source review and the named
-CPU-only fixture `CodeTerminalHost > reports whole-window PTY pixels when the
-fitted rows and columns stay unchanged`, followed by affected lint/typecheck.
-The fixture covers full 960 by 739 pixels and 961 by 740 at the same 24 rows and
-80 columns. Tests and installed geometry acceptance remain pending.
+Source `a0e51478d` is merged as `97b387202`. The named CPU-only fixture
+`CodeTerminalHost > reports whole-window PTY pixels when the fitted rows and
+columns stay unchanged` PASS on October 12: full 960 by 739 pixels and 961 by
+740 at the same 24 rows and 80 columns. Evidence:
+`/ai/gchat/out/gchat-open-items-20261012/pty-geometry-test.log`.
+No new source change or repeat test was needed. Installed geometry and mouse
+acceptance remain pending.
 
 The contrary same-session observation is retained at
 `/ai/gchat/out/linux-code-tui-20261011/geometry-probe.json`: supplying full 960 by

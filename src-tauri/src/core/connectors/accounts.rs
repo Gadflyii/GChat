@@ -1678,6 +1678,78 @@ mod tests {
             token_type: Some("Bearer".into()),
         }
     }
+
+    #[test]
+    fn bot_linked_accounts_ignore_global_selection_and_filter_consent() {
+        let (_directory, state, _vault) = fixture();
+        state
+            .update(|document| {
+                document
+                    .accounts
+                    .insert("bot-a".into(), account("bot-a", Access::ReadOnly));
+                document
+                    .accounts
+                    .insert("bot-b".into(), account("bot-b", Access::ReadWrite));
+                document
+                    .selected_accounts
+                    .insert(Provider::Google, "bot-b".into());
+                Ok(())
+            })
+            .unwrap();
+        let a = vec!["bot-a".to_owned()];
+        let b = vec!["bot-b".to_owned()];
+        assert!(super::super::catalog_for_accounts(&state, Some(&[]))
+            .unwrap()
+            .is_empty());
+        let catalog = super::super::catalog_for_accounts(&state, Some(&a)).unwrap();
+        assert!(catalog
+            .iter()
+            .any(|tool| tool.name == "google.calendar.list"));
+        assert!(catalog
+            .iter()
+            .all(|tool| !tool.write && !tool.description.contains("bot-b")));
+        for (links, expected) in [(&a, "bot-a"), (&b, "bot-b")] {
+            assert_eq!(
+                super::super::prepare_linked(
+                    &state,
+                    links,
+                    "google.calendar.list",
+                    json!({"calendar_id":"primary"})
+                )
+                .unwrap()["account_id"],
+                expected
+            );
+        }
+        assert!(super::super::prepare_linked(
+            &state,
+            &a,
+            "google.calendar.list",
+            json!({"account_id":"bot-b","calendar_id":"primary"})
+        )
+        .is_err());
+        assert!(
+            super::super::prepare_linked(&state, &a, "google.calendar.create", json!({})).is_err()
+        );
+        assert!(super::super::prepare_linked(
+            &state,
+            &[a[0].clone(), b[0].clone()],
+            "google.calendar.list",
+            json!({"calendar_id":"primary"})
+        )
+        .is_err());
+        state
+            .update(|document| {
+                document.accounts.get_mut("bot-a").unwrap().needs_reconnect = true;
+                Ok(())
+            })
+            .unwrap();
+        assert!(super::super::catalog_for_accounts(&state, Some(&a))
+            .unwrap()
+            .is_empty());
+        assert!(
+            super::super::prepare_linked(&state, &a, "google.calendar.list", json!({})).is_err()
+        );
+    }
     fn break_metadata_write(directory: &tempfile::TempDir) {
         let path = directory.path().join("workspace-connections.json");
         std::fs::remove_file(&path).unwrap();

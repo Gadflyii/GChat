@@ -20,6 +20,7 @@ export type CapabilityCatalog = {
 export type CapabilityExecuteRequest = {
   run_id: string
   session_id: string
+  parent_run_id?: string
   model_id?: string
   tool_name: string
   arguments: Record<string, unknown>

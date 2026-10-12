@@ -175,6 +175,8 @@ export type AgentRunRecord = {
   id: string
   runId: string
   sessionId: string
+  originSessionId?: string | null
+  parentRunId?: string | null
   definitionId: string
   definitionName: string
   userMessage: string
@@ -453,6 +455,8 @@ export type AgentRunTrace = {
 
 export type AgentRunState = {
   runId?: string
+  originSessionId?: string
+  parentRunId?: string
   startedAtMs?: number
   finishedAtMs?: number
   status: AgentRunStatus
@@ -465,6 +469,8 @@ export type AgentRunState = {
 
 export type AgentRunSummary = {
   run_id: string
+  origin_session_id?: string
+  parent_run_id?: string
   status: AgentRunStatus
   definition?: {
     id: string

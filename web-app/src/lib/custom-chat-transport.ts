@@ -302,7 +302,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
     }
 
     const controlNames = new Set([
-      'skill_list', 'skill_view', 'skill_invoke', 'agent_list', 'agent_run', 'agent_monitor', 'agent_cancel',
+      'skill_list', 'skill_view', 'skill_invoke', 'agent_list', 'agent_run', 'agent_spawn', 'agent_wait', 'agent_monitor', 'agent_cancel',
     ])
     this.tools = {
       ...buildToolsRecord(ragTools, capabilityTools.filter((tool) => controlNames.has(tool.name)), disabledToolKeys),
@@ -599,6 +599,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
           this.tools.gchat_capability_search && 'Discover native and connected tools with gchat_capability_search, read an exact schema with gchat_capability_read, then invoke that exact name with gchat_capability_call. Disabled tools remain unavailable. Calls use this conversation’s permissions, approvals, folders, and cancellation.',
           this.tools.skill_list && 'GChat skills are available through skill_list. Read instructions with skill_view and apply a skill using skill_invoke.',
           this.tools.agent_list && 'Discover saved agents and worker pools with agent_list; dispatch them using agent_run.',
+          this.tools.agent_spawn && 'Delegate independent tasks to General Agent workers with agent_spawn. Provide each worker the context it needs; workers inherit this conversation’s permissions, folders and tool availability. Spawn returns a durable runId without waiting, so you can dispatch independent workers before collecting their results with agent_wait or inspecting agent_monitor. Use agent_cancel to stop a worker. Optional placement uses exact available instances or pools from agent_list.',
           attachedDocuments?.length && `Attached local documents: ${JSON.stringify(attachedDocuments.map(({name, path}) => ({name, path})))}. Read their content through capability discovery when needed; these references have not been indexed for retrieval.`,
           workspace.primaryRoot && `Conversation workspace: ${JSON.stringify(workspace.primaryRoot.path)}.`,
           workspace.externalRoots.length > 0 && `Connected folders: ${JSON.stringify(workspace.externalRoots.map(({path, canEdit}) => ({path, canEdit})))}.`,

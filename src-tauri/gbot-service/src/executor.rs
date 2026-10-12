@@ -1,4 +1,4 @@
-//! Cua owns iteration; this boundary journals and authorizes every guest effect.
+//! Cua owns iteration; this boundary journals and authorizes tool effects.
 use std::{
     collections::BTreeMap, future::Future, path::PathBuf, pin::Pin, process::Stdio, sync::Arc,
 };
@@ -13,6 +13,7 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
+    connectors::ConnectorRequest,
     contract::*,
     service::ServiceError,
     ssh::desktop_model_result,
@@ -25,6 +26,13 @@ pub type ApprovalFuture<'a> = Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
 
 pub trait ToolApproval: Send + Sync {
     fn approve<'a>(&'a self, task: Uuid, request: &'a GuestRequest) -> ApprovalFuture<'a>;
+    fn approve_connector<'a>(
+        &'a self,
+        _task: Uuid,
+        _request: &'a ConnectorRequest,
+    ) -> ApprovalFuture<'a> {
+        Box::pin(async { false })
+    }
 }
 
 #[derive(Debug)]
@@ -48,7 +56,7 @@ impl std::fmt::Display for ExecutorError {
             Self::NeedsReview => {
                 f.write_str("task has an unresolved effect; review before resuming")
             }
-            Self::Denied => f.write_str("guest action was not approved"),
+            Self::Denied => f.write_str("tool action was not approved"),
             Self::ChildFailed => f.write_str("Cua executor stopped before task completion"),
             Self::Cancelled => f.write_str("Cua task cancelled"),
         }
@@ -84,6 +92,7 @@ pub enum ToolBinding {
     WriteFile,
     CuaGuide,
     AskHuman,
+    Connector { name: String },
 }
 
 impl FunctionTool {
@@ -123,7 +132,7 @@ impl FunctionTool {
                     .and_then(Value::as_u64)
                     .ok_or(ExecutorError::InvalidMessage)?,
             },
-            ToolBinding::CuaGuide | ToolBinding::AskHuman => {
+            ToolBinding::CuaGuide | ToolBinding::AskHuman | ToolBinding::Connector { .. } => {
                 return Err(ExecutorError::InvalidMessage)
             }
             ToolBinding::WriteFile => GuestOperationKind::Write {
@@ -170,6 +179,16 @@ pub struct TaskCall {
     pub not_executed: bool,
 }
 
+/// External effects are never represented as guest RPCs or retried without a known receipt.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ConnectorCall {
+    pub call_id: String,
+    pub name: String,
+    pub arguments: Value,
+    pub request: ConnectorRequest,
+    pub reply: Option<Value>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HelpStatus {
@@ -196,6 +215,8 @@ pub struct TaskRecord {
     pub messages: Vec<Value>,
     pub tools: Vec<FunctionTool>,
     pub calls: Vec<TaskCall>,
+    #[serde(default)]
+    pub connector_calls: Vec<ConnectorCall>,
     #[serde(default)]
     pub help_requests: Vec<HelpRequest>,
     pub model_replies: Vec<Value>,
@@ -292,6 +313,7 @@ impl CuaTask {
             messages,
             tools,
             calls: vec![],
+            connector_calls: vec![],
             help_requests: vec![],
             model_replies: vec![],
             context: vec![],
@@ -318,6 +340,10 @@ impl CuaTask {
                 .calls
                 .iter()
                 .any(|call| call.reply.is_none() || call.reply.as_ref().is_some_and(uncertain))
+                || record
+                    .connector_calls
+                    .iter()
+                    .any(|call| call.reply.is_none())
             {
                 TaskState::NeedsReview
             } else if record
@@ -356,6 +382,19 @@ impl CuaTask {
             .calls
             .iter()
             .any(|call| call.reply.is_none() || call.reply.as_ref().is_some_and(uncertain))
+            || self
+                .record
+                .connector_calls
+                .iter()
+                .any(|call| call.reply.is_none())
+    }
+
+    pub(crate) async fn replace_connector_tools(&mut self, tools: Vec<FunctionTool>) -> Result<()> {
+        self.record
+            .tools
+            .retain(|tool| !matches!(tool.binding, ToolBinding::Connector { .. }));
+        self.record.tools.extend(tools);
+        self.save().await
     }
 
     pub(crate) async fn pause(&mut self) -> Result<()> {
@@ -624,6 +663,20 @@ impl CuaTask {
             .ok_or(ExecutorError::InvalidMessage)?
             .to_owned();
         let args = payload["arguments"].clone();
+        if let Some(call) = self
+            .record
+            .connector_calls
+            .iter()
+            .find(|call| call.call_id == call_id)
+        {
+            if call.name != name || call.arguments != args {
+                return Err(ExecutorError::InvalidMessage);
+            }
+            let result = call.reply.clone().ok_or(ExecutorError::NeedsReview)?;
+            self.record_tool_message(&call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
         if let Some(call) = self.record.calls.iter().find(|c| c.call_id == call_id) {
             if call.name != name || call.arguments != args {
                 return Err(ExecutorError::InvalidMessage);
@@ -651,6 +704,15 @@ impl CuaTask {
         }
         if matches!(tool.binding, ToolBinding::AskHuman) {
             return self.ask_human(&call_id, &args).await;
+        }
+        if let ToolBinding::Connector {
+            name: provider_name,
+        } = &tool.binding
+        {
+            let provider_name = provider_name.clone();
+            return self
+                .connector_tool(runtime, approval, call_id, name, provider_name, args)
+                .await;
         }
         let request = GuestRequest {
             identity: self.record.identity,
@@ -709,6 +771,68 @@ impl CuaTask {
         if uncertain(&reply) {
             return Err(ExecutorError::NeedsReview);
         }
+        Ok(result)
+    }
+
+    async fn connector_tool(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        approval: &dyn ToolApproval,
+        call_id: String,
+        name: String,
+        provider_name: String,
+        args: Value,
+    ) -> Result<Value> {
+        let request = match runtime
+            .prepare_connector(self.record.identity, &provider_name, args.clone())
+            .await
+        {
+            Ok(request) => request,
+            Err(error) => {
+                let result = json!({"error":error.to_string(),"effect":"none"});
+                self.record_tool_message(&call_id, &result);
+                self.save().await?;
+                return Ok(result);
+            }
+        };
+        if request.operation.write && !approval.approve_connector(self.record.id, &request).await {
+            return Err(ExecutorError::Denied);
+        }
+        self.record.connector_calls.push(ConnectorCall {
+            call_id: call_id.clone(),
+            name,
+            arguments: args,
+            request: request.clone(),
+            reply: None,
+        });
+        self.save().await?;
+        let result = match runtime.execute_connector(&request).await {
+            Ok(result) => result,
+            Err(error @ (WorkspaceError::State(_) | WorkspaceError::ShuttingDown)) => {
+                let result = json!({"status":"skipped","effect":"none","reason":error.to_string()});
+                self.record
+                    .connector_calls
+                    .last_mut()
+                    .ok_or(ExecutorError::InvalidMessage)?
+                    .reply = Some(result.clone());
+                self.record_tool_message(&call_id, &result);
+                self.save().await?;
+                if let WorkspaceError::State(error) = error {
+                    return Err(ExecutorError::State(error));
+                }
+                return Err(ExecutorError::Cancelled);
+            }
+            // A provider transport error may follow a committed write. Retain the unresolved
+            // receipt, just as an uncertain guest effect, rather than automatically retrying.
+            Err(_) => return Err(ExecutorError::NeedsReview),
+        };
+        self.record
+            .connector_calls
+            .last_mut()
+            .ok_or(ExecutorError::InvalidMessage)?
+            .reply = Some(result.clone());
+        self.record_tool_message(&call_id, &result);
+        self.save().await?;
         Ok(result)
     }
 
@@ -771,11 +895,22 @@ impl CuaTask {
             .filter_map(|call| call["id"].as_str().map(str::to_owned))
             .collect();
         for id in pending {
-            let result = match self.record.calls.iter().find(|call| call.call_id == id) {
-                Some(call) if !call.not_executed => {
-                    project(call.reply.as_ref().ok_or(ExecutorError::NeedsReview)?)
+            let result = if let Some(call) = self
+                .record
+                .connector_calls
+                .iter()
+                .find(|call| call.call_id == id)
+            {
+                call.reply.clone().ok_or(ExecutorError::NeedsReview)?
+            } else {
+                match self.record.calls.iter().find(|call| call.call_id == id) {
+                    Some(call) if !call.not_executed => {
+                        project(call.reply.as_ref().ok_or(ExecutorError::NeedsReview)?)
+                    }
+                    _ => {
+                        json!({"status":"skipped","effect":"none","reason":"human_takeover_replan"})
+                    }
                 }
-                _ => json!({"status":"skipped","effect":"none","reason":"human_takeover_replan"}),
             };
             self.record_tool_message(&id, &result);
         }
@@ -899,6 +1034,356 @@ mod tests {
         let service = Arc::new(Service::open(directory.join("service.json")).await.unwrap());
         (task, WorkspaceRuntime::new(service, Arc::new(NativeVault)))
     }
+    struct FakeConnectors {
+        calls: std::sync::Mutex<Vec<crate::connectors::PreparedConnector>>,
+        hold: std::sync::atomic::AtomicBool,
+        started: Notify,
+        cancelled: std::sync::atomic::AtomicBool,
+    }
+    impl Default for FakeConnectors {
+        fn default() -> Self {
+            Self {
+                calls: Default::default(),
+                hold: Default::default(),
+                started: Notify::new(),
+                cancelled: Default::default(),
+            }
+        }
+    }
+    impl crate::connectors::ConnectorHost for FakeConnectors {
+        fn accounts(
+            &self,
+        ) -> crate::connectors::ConnectorFuture<'_, Vec<crate::connectors::ConnectorAccount>>
+        {
+            Box::pin(async {
+                Ok([("a", "google", "calendar"), ("b", "microsoft", "mail")]
+                    .into_iter()
+                    .map(
+                        |(id, provider, service)| crate::connectors::ConnectorAccount {
+                            id: id.into(),
+                            provider: provider.into(),
+                            display_name: id.into(),
+                            email: None,
+                            services: vec![service.into()],
+                            access: "read_write".into(),
+                            granted_scopes: vec![],
+                            needs_reconnect: false,
+                        },
+                    )
+                    .collect())
+            })
+        }
+        fn catalog<'a>(
+            &'a self,
+            linked: &'a [String],
+        ) -> crate::connectors::ConnectorFuture<'a, Vec<crate::connectors::ConnectorTool>> {
+            Box::pin(async move {
+                Ok([
+                    ("a", "google.calendar.list", false),
+                    ("a", "google.calendar.create", true),
+                    ("b", "microsoft.mail.list", false),
+                ]
+                .into_iter()
+                .filter(|(id, _, _)| linked.iter().any(|linked| linked == id))
+                .map(|(_, name, write)| crate::connectors::ConnectorTool {
+                    name: name.into(),
+                    description: name.into(),
+                    input_schema: json!({"type":"object"}),
+                    write,
+                })
+                .collect())
+            })
+        }
+        fn prepare<'a>(
+            &'a self,
+            linked: &'a [String],
+            name: &'a str,
+            mut arguments: Value,
+        ) -> crate::connectors::ConnectorFuture<'a, crate::connectors::PreparedConnector> {
+            Box::pin(async move {
+                let id = if name.starts_with("google.") {
+                    "a"
+                } else {
+                    "b"
+                };
+                let requested = arguments
+                    .get("account_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or(id);
+                if requested != id || !linked.iter().any(|linked| linked == requested) {
+                    return Err("account is not linked to this bot".into());
+                }
+                arguments
+                    .as_object_mut()
+                    .ok_or("invalid arguments")?
+                    .insert("account_id".into(), json!(id));
+                Ok(crate::connectors::PreparedConnector {
+                    name: name.into(),
+                    account_id: id.into(),
+                    arguments,
+                    write: name.ends_with("create"),
+                })
+            })
+        }
+        fn execute<'a>(
+            &'a self,
+            request: &'a crate::connectors::PreparedConnector,
+        ) -> crate::connectors::ConnectorFuture<'a, Value> {
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(request.clone());
+                if self.hold.load(std::sync::atomic::Ordering::Acquire) {
+                    struct Cancelled<'a>(&'a std::sync::atomic::AtomicBool);
+                    impl Drop for Cancelled<'_> {
+                        fn drop(&mut self) {
+                            self.0.store(true, std::sync::atomic::Ordering::Release);
+                        }
+                    }
+                    let _cancel = Cancelled(&self.cancelled);
+                    self.started.notify_one();
+                    return std::future::pending().await;
+                }
+                Ok(json!({"account_id":request.account_id}))
+            })
+        }
+    }
+    #[derive(Default)]
+    struct ConnectorApproval(std::sync::Mutex<Vec<ConnectorRequest>>);
+    impl ToolApproval for ConnectorApproval {
+        fn approve<'a>(&'a self, _: Uuid, _: &'a GuestRequest) -> ApprovalFuture<'a> {
+            Box::pin(async { false })
+        }
+        fn approve_connector<'a>(
+            &'a self,
+            _: Uuid,
+            request: &'a ConnectorRequest,
+        ) -> ApprovalFuture<'a> {
+            Box::pin(async move {
+                self.0.lock().unwrap().push(request.clone());
+                true
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn bot_connector_isolation_approval_receipts_and_cancellation() {
+        use crate::connectors::BotConnectorAccounts;
+        let dir = tempfile::tempdir().unwrap();
+        let service = Arc::new(
+            Service::open(dir.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let host = Arc::new(FakeConnectors::default());
+        let runtime = WorkspaceRuntime::new(service.clone(), Arc::new(NativeVault))
+            .with_connectors(host.clone());
+        let mut identities = Vec::new();
+        for name in ["A", "B"] {
+            let id = WorkspaceId::new();
+            let identity = SessionIdentity {
+                workspace_id: id,
+                session_id: SessionId::new(),
+            };
+            service
+                .register_workspace(WorkspaceConfig {
+                    id,
+                    name: name.into(),
+                    service_pc: ServicePc::Local,
+                    bot_pc: BotPc::LocalVm {
+                        host_id: Uuid::new_v4(),
+                        vm_id: name.into(),
+                        hypervisor: Hypervisor::Kvm,
+                    },
+                    connection: WorkspaceConnection::Ssh(SshConnection {
+                        endpoint: SshEndpoint {
+                            hostname: "127.0.0.1".into(),
+                            port: 22,
+                            user: "fixture".into(),
+                        },
+                        pinned_host_key: SshHostPublicKey {
+                            algorithm: "ssh-ed25519".into(),
+                            public_key: "AAAA".into(),
+                        },
+                        credential_ref: VaultCredentialRef::new(),
+                    }),
+                })
+                .await
+                .unwrap();
+            service
+                .register_session(
+                    identity,
+                    GuestHello {
+                        protocol_version: GUEST_PROTOCOL_VERSION,
+                        identity,
+                        capabilities: [GuestCapability::Exec].into(),
+                        view: None,
+                    },
+                )
+                .await
+                .unwrap();
+            assert!(runtime
+                .bot_connectors(id)
+                .await
+                .unwrap()
+                .account_ids
+                .is_empty());
+            assert!(runtime.connector_tools(id).await.unwrap().is_empty());
+            identities.push(identity);
+        }
+        for (identity, account) in identities.iter().zip(["a", "b"]) {
+            runtime
+                .save_bot_connectors(BotConnectorAccounts {
+                    workspace_id: identity.workspace_id,
+                    account_ids: vec![account.into()],
+                })
+                .await
+                .unwrap();
+        }
+        assert!(runtime
+            .save_bot_connectors(BotConnectorAccounts {
+                workspace_id: identities[0].workspace_id,
+                account_ids: vec!["not-owned".into()]
+            })
+            .await
+            .is_err());
+        let mut a = CuaTask::create(
+            dir.path().join("a.json"),
+            identities[0],
+            vec![],
+            runtime
+                .connector_tools(identities[0].workspace_id)
+                .await
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        let mut b = CuaTask::create(
+            dir.path().join("b.json"),
+            identities[1],
+            vec![],
+            runtime
+                .connector_tools(identities[1].workspace_id)
+                .await
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert!(a
+            .snapshot()
+            .tools
+            .iter()
+            .all(|tool| !tool.name.starts_with("microsoft.")));
+        assert!(b
+            .snapshot()
+            .tools
+            .iter()
+            .all(|tool| !tool.name.starts_with("google.")));
+        let approval = ConnectorApproval::default();
+        let read = json!({"call_id":"read-a","name":"google.calendar.list","arguments":{}});
+        assert_eq!(
+            a.tool(&runtime, &approval, &read).await.unwrap()["account_id"],
+            "a"
+        );
+        assert_eq!(
+            b.tool(
+                &runtime,
+                &approval,
+                &json!({"call_id":"read-b","name":"microsoft.mail.list","arguments":{}})
+            )
+            .await
+            .unwrap()["account_id"],
+            "b"
+        );
+        assert!(approval.0.lock().unwrap().is_empty());
+        let denied = json!({"call_id":"other-account","name":"google.calendar.list","arguments":{"account_id":"b"}});
+        assert_eq!(
+            a.tool(&runtime, &approval, &denied).await.unwrap()["effect"],
+            "none"
+        );
+        assert_eq!(host.calls.lock().unwrap().len(), 2);
+        let write = json!({"call_id":"write-a","name":"google.calendar.create","arguments":{"event":"fixture"}});
+        assert!(matches!(
+            a.tool(&runtime, &Deny, &write).await,
+            Err(ExecutorError::Denied)
+        ));
+        assert_eq!(host.calls.lock().unwrap().len(), 2);
+        a.tool(&runtime, &approval, &write).await.unwrap();
+        assert_eq!(
+            approval.0.lock().unwrap()[0].operation.arguments["account_id"],
+            "a"
+        );
+        assert!(
+            a.snapshot().calls.is_empty(),
+            "connector must not enter guest RPC journal"
+        );
+        drop(a);
+        let mut a = CuaTask::open(dir.path().join("a.json")).await.unwrap();
+        a.tool(&runtime, &approval, &write).await.unwrap();
+        assert_eq!(
+            host.calls.lock().unwrap().len(),
+            3,
+            "known receipt must not execute twice"
+        );
+        runtime
+            .save_bot_connectors(BotConnectorAccounts {
+                workspace_id: identities[0].workspace_id,
+                account_ids: vec![],
+            })
+            .await
+            .unwrap();
+        assert!(runtime
+            .connector_tools(identities[0].workspace_id)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            runtime
+                .bot_connectors(identities[1].workspace_id)
+                .await
+                .unwrap()
+                .account_ids,
+            vec!["b"]
+        );
+        runtime
+            .save_bot_connectors(BotConnectorAccounts {
+                workspace_id: identities[0].workspace_id,
+                account_ids: vec!["a".into()],
+            })
+            .await
+            .unwrap();
+        host.hold.store(true, std::sync::atomic::Ordering::Release);
+        a.record.transition(TaskState::Running, "fixture running");
+        let pending = json!({"call_id":"pending","name":"google.calendar.create","arguments":{}});
+        {
+            let effect = a.tool(&runtime, &approval, &pending);
+            tokio::pin!(effect);
+            tokio::select! {
+                _ = host.started.notified() => {},
+                _ = &mut effect => panic!("fixture should wait for cancellation"),
+            }
+        }
+        assert!(host.cancelled.load(std::sync::atomic::Ordering::Acquire));
+        a.cancel().await.unwrap();
+        assert_eq!(a.snapshot().state, TaskState::NeedsReview);
+        drop(a);
+        let mut a = CuaTask::open(dir.path().join("a.json")).await.unwrap();
+        assert!(matches!(
+            a.tool(&runtime, &approval, &pending).await,
+            Err(ExecutorError::NeedsReview)
+        ));
+        assert_eq!(
+            host.calls.lock().unwrap().len(),
+            4,
+            "unknown receipt must not replay"
+        );
+        let saved = service.snapshot().await.connector_accounts;
+        drop(runtime);
+        drop(service);
+        let recovered = Service::open(dir.path().join("service.json"))
+            .await
+            .unwrap();
+        assert_eq!(recovered.snapshot().await.connector_accounts, saved);
+    }
+
     fn recorded_call(identity: SessionIdentity, reply: bool) -> TaskCall {
         let request = GuestRequest {
             identity,

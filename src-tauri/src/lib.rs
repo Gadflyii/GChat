@@ -703,6 +703,8 @@ pub fn run() {
 
                         let state = app_handle.state::<AppState>();
 
+                        core::agent::capabilities::shutdown(&app_handle).await;
+
                         #[cfg(not(any(target_os = "ios", target_os = "android")))]
                         core::code_bridge::shutdown(&app_handle).await;
 

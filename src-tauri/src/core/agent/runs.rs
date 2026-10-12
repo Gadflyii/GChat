@@ -27,6 +27,8 @@ pub struct AgentRunRecord {
     pub session_id: String,
     #[serde(default)]
     pub origin_session_id: Option<String>,
+    #[serde(default)]
+    pub parent_run_id: Option<String>,
     pub definition_id: String,
     pub definition_name: String,
     #[serde(default)]
@@ -176,6 +178,7 @@ impl AgentRunRecord {
             run_id: run_id.into(),
             session_id: session_id.into(),
             origin_session_id: origin_session_id.map(str::to_owned),
+            parent_run_id: None,
             definition_id: definition.id.clone(),
             definition_name: definition.name.clone(),
             user_message: user_message.into(),

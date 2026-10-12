@@ -744,6 +744,7 @@ async fn execute_tool<R: Runtime>(
         selected_skill: None,
         attachments: vec![],
         disabled_tools: policy.disabled_tools,
+        parent_run_id: None,
     };
     {
         let mut state = lock_registry()?;
@@ -1060,6 +1061,7 @@ async fn start_run<R: Runtime>(
         auto_approve: policy.auto_approve,
         disabled_tools: policy.disabled_tools,
         origin_session_id: policy.origin_session_id,
+        parent_run_id: None,
     };
     let run_id_for_task = run_id.clone();
     let app_for_task = app.clone();

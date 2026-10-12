@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
+import GbotConnectors from '@/components/GbotConnectors'
 import GbotSetup, { type BotConnection } from '@/components/GbotSetup'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
@@ -104,6 +105,7 @@ function GbotPage() {
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
   const setupOffered = useRef(false)
+  const setupIdentity = useRef<{ id: string; computerId: string } | null>(null)
   const refresh = useCallback(async () => {
     try {
       const value = await gbot<BotState>('state')
@@ -188,40 +190,40 @@ function GbotPage() {
     const [algorithm, publicKey] = connection.hostKey.trim().split(/\s+/)
     if (!algorithm || !publicKey)
       throw new Error('Enter the dedicated computer’s SSH host public key')
-    const imported = await gbot<{ credential_ref: string }>('credentials/ssh', {
+    const identity = setupIdentity.current || {
+      id: crypto.randomUUID(),
+      computerId: crypto.randomUUID(),
+    }
+    setupIdentity.current = identity
+    const created = await gbot<{ id: string }>('workspaces/ssh', {
+      id: identity.id,
+      name: connection.name,
+      service_pc: { kind: 'local' },
+      bot_pc: { kind: 'lan', computer_id: identity.computerId },
+      endpoint: {
+        hostname: connection.hostname,
+        port: Number(connection.port),
+        user: connection.user,
+      },
+      pinned_host_key: { algorithm, public_key: publicKey },
       private_key: connection.key,
       passphrase: connection.passphrase || null,
     })
-    const id = crypto.randomUUID()
-    await gbot('workspaces', {
-      id,
-      name: connection.name,
-      service_pc: { kind: 'local' },
-      bot_pc: { kind: 'lan', computer_id: crypto.randomUUID() },
-      connection: {
-        kind: 'ssh',
-        endpoint: {
-          hostname: connection.hostname,
-          port: Number(connection.port),
-          user: connection.user,
-        },
-        pinned_host_key: { algorithm, public_key: publicKey },
-        credential_ref: imported.credential_ref,
-      },
-    })
-    setSelected(id)
+    setupIdentity.current = null
+    setSelected(created.id)
     setAdding(false)
     await refresh()
   }
-  if (!gbotEnabled) return (
-    <div className="flex h-full flex-col">
-      <HeaderPage>Gbot</HeaderPage>
-      <div className="space-y-3 p-5">
-        <p>Enable Gbot to set up your bot's separate computer workspace.</p>
-        <Button onClick={() => setGbotEnabled(true)}>Enable Gbot</Button>
+  if (!gbotEnabled)
+    return (
+      <div className="flex h-full flex-col">
+        <HeaderPage>Gbot</HeaderPage>
+        <div className="space-y-3 p-5">
+          <p>Enable Gbot to set up your bot's separate computer workspace.</p>
+          <Button onClick={() => setGbotEnabled(true)}>Enable Gbot</Button>
+        </div>
       </div>
-    </div>
-  )
+    )
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <HeaderPage>
@@ -259,7 +261,10 @@ function GbotPage() {
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => setAdding(!adding)}
+            onClick={() => {
+              if (adding) setupIdentity.current = null
+              setAdding(!adding)
+            }}
           >
             Add bot
           </Button>
@@ -301,7 +306,15 @@ function GbotPage() {
               {error}
             </p>
           )}
-          {adding && <GbotSetup save={add} cancel={() => setAdding(false)} />}
+          {adding && (
+            <GbotSetup
+              save={add}
+              cancel={() => {
+                setupIdentity.current = null
+                setAdding(false)
+              }}
+            />
+          )}
           {bot && (
             <>
               <div className="flex flex-wrap items-center gap-2">
@@ -371,6 +384,7 @@ function GbotPage() {
                   {executorError}
                 </p>
               )}
+              <GbotConnectors key={bot.id} workspaceId={bot.id} />
               <details className="rounded-lg border p-3">
                 <summary className="cursor-pointer text-sm">Bot brain</summary>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">

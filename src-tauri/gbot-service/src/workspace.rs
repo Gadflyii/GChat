@@ -1,4 +1,5 @@
-use serde::Serialize;
+use russh::keys::PublicKey;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     sync::{
@@ -10,24 +11,29 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::{
+    connectors::{
+        BotConnectorAccounts, BotConnectors, ConnectorHost, ConnectorRequest, PreparedConnector,
+    },
     contract::{
-        GuestHello, GuestOperationKind, GuestOutcome, GuestReply, GuestRequest, GuestResult,
-        OperationId, ServicePc, SessionIdentity, VaultCredentialRef, WorkspaceConfig,
-        WorkspaceConnection, WorkspaceId,
+        BotPc, ContractError, GuestHello, GuestOperationKind, GuestOutcome, GuestReply,
+        GuestRequest, GuestResult, OperationId, ServicePc, SessionIdentity, SshConnection,
+        SshEndpoint, SshHostPublicKey, VaultCredentialRef, WorkspaceConfig, WorkspaceConnection,
+        WorkspaceId,
     },
     executor::Assignment,
     media::{CloseView, MediaError, MediaLease, OpenView, ViewTicket},
     service::{
         ModelAssignment, OperationCompletion, Service, ServiceError, SessionControl,
-        SessionControlState,
+        SessionControlState, SshWorkspaceCreationError,
     },
-    ssh::{import_ssh_key, ImportedSshKey, SshError, SshPolicy, SshSession},
+    ssh::{import_ssh_key, prepare_ssh_key, ImportedSshKey, SshError, SshPolicy, SshSession},
     vault::{Secret, Vault, VaultError},
 };
 
 #[derive(Debug)]
 pub enum WorkspaceError {
     State(ServiceError),
+    Creation(SshWorkspaceCreationError),
     Transport(SshError),
     Media(MediaError),
     NotFound,
@@ -37,12 +43,14 @@ pub enum WorkspaceError {
     ShuttingDown,
     Vault(VaultError),
     CredentialCleanup(VaultError),
+    Connector(String),
 }
 
 impl std::fmt::Display for WorkspaceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::State(error) => error.fmt(f),
+            Self::Creation(error) => error.fmt(f),
             Self::Transport(error) => error.fmt(f),
             Self::Media(error) => error.fmt(f),
             Self::NotFound => f.write_str("workspace is not registered"),
@@ -57,6 +65,7 @@ impl std::fmt::Display for WorkspaceError {
                 f,
                 "Model assignment was saved, but the old credential could not be removed: {error}"
             ),
+            Self::Connector(error) => f.write_str(error),
         }
     }
 }
@@ -78,6 +87,20 @@ impl From<MediaError> for WorkspaceError {
     }
 }
 
+/// Secrets are input-only and are never serialized into workspace state or responses.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateSshWorkspace {
+    pub id: WorkspaceId,
+    pub name: String,
+    pub service_pc: ServicePc,
+    pub bot_pc: BotPc,
+    pub endpoint: SshEndpoint,
+    pub pinned_host_key: SshHostPublicKey,
+    pub private_key: String,
+    pub passphrase: Option<String>,
+}
+
 pub struct WorkspaceRuntime {
     service: Arc<Service>,
     vault: Arc<dyn Vault>,
@@ -86,6 +109,7 @@ pub struct WorkspaceRuntime {
     lifecycle: Mutex<BTreeMap<WorkspaceId, Arc<Mutex<()>>>>,
     resume_observations: Mutex<BTreeMap<WorkspaceId, GuestReply>>,
     stopping: AtomicBool,
+    connectors: Option<Arc<dyn ConnectorHost>>,
 }
 
 #[derive(Serialize)]
@@ -104,7 +128,124 @@ impl WorkspaceRuntime {
             lifecycle: Mutex::new(BTreeMap::new()),
             resume_observations: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
+            connectors: None,
         }
+    }
+
+    pub fn with_connectors(mut self, connectors: Arc<dyn ConnectorHost>) -> Self {
+        self.connectors = Some(connectors);
+        self
+    }
+
+    pub async fn bot_connectors(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<BotConnectors, WorkspaceError> {
+        self.accepting()?;
+        let account_ids = self.service.connector_accounts(workspace_id).await?;
+        let accounts = match &self.connectors {
+            Some(host) => host.accounts().await.map_err(WorkspaceError::Connector)?,
+            None => Vec::new(),
+        };
+        Ok(BotConnectors {
+            account_ids,
+            accounts,
+        })
+    }
+
+    pub async fn save_bot_connectors(
+        &self,
+        links: BotConnectorAccounts,
+    ) -> Result<BotConnectors, WorkspaceError> {
+        let current = self.bot_connectors(links.workspace_id).await?;
+        // Disconnected references may be removed; only currently owned accounts may be linked.
+        if links.account_ids.iter().any(|id| {
+            !current.accounts.iter().any(|account| account.id == *id)
+                && !current.account_ids.contains(id)
+        }) {
+            return Err(WorkspaceError::Connector(
+                "Choose an existing Workspace account".into(),
+            ));
+        }
+        let workspace_id = links.workspace_id;
+        self.service.save_connector_accounts(links).await?;
+        self.bot_connectors(workspace_id).await
+    }
+
+    pub async fn connector_tools(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<crate::executor::FunctionTool>, WorkspaceError> {
+        self.accepting()?;
+        let links = self.service.connector_accounts(workspace_id).await?;
+        let Some(host) = &self.connectors else {
+            return Ok(Vec::new());
+        };
+        Ok(host
+            .catalog(&links)
+            .await
+            .map_err(WorkspaceError::Connector)?
+            .into_iter()
+            .map(|tool| crate::executor::FunctionTool {
+                binding: crate::executor::ToolBinding::Connector {
+                    name: tool.name.clone(),
+                },
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.input_schema,
+            })
+            .collect())
+    }
+
+    pub async fn prepare_connector(
+        &self,
+        identity: SessionIdentity,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<ConnectorRequest, WorkspaceError> {
+        self.accepting()?;
+        let links = self
+            .service
+            .connector_accounts(identity.workspace_id)
+            .await?;
+        let host = self.connectors.as_ref().ok_or_else(|| {
+            WorkspaceError::Connector("Workspace connectors are unavailable".into())
+        })?;
+        let operation: PreparedConnector = host
+            .prepare(&links, name, arguments)
+            .await
+            .map_err(WorkspaceError::Connector)?;
+        if !links.contains(&operation.account_id)
+            || operation
+                .arguments
+                .get("account_id")
+                .and_then(serde_json::Value::as_str)
+                != Some(operation.account_id.as_str())
+        {
+            return Err(WorkspaceError::Connector(
+                "Connector account was not explicitly linked to this bot".into(),
+            ));
+        }
+        Ok(ConnectorRequest {
+            identity,
+            operation,
+        })
+    }
+
+    pub async fn execute_connector(
+        &self,
+        request: &ConnectorRequest,
+    ) -> Result<serde_json::Value, WorkspaceError> {
+        self.accepting()?;
+        self.service.admit_connector(request).await?;
+        self.connectors
+            .as_ref()
+            .ok_or_else(|| {
+                WorkspaceError::Connector("Workspace connectors are unavailable".into())
+            })?
+            .execute(&request.operation)
+            .await
+            .map_err(WorkspaceError::Connector)
     }
 
     fn accepting(&self) -> Result<(), WorkspaceError> {
@@ -122,6 +263,46 @@ impl WorkspaceRuntime {
             .entry(workspace)
             .or_default()
             .clone()
+    }
+
+    pub async fn create_ssh_workspace(
+        &self,
+        input: CreateSshWorkspace,
+    ) -> Result<WorkspaceConfig, WorkspaceError> {
+        self.accepting()?;
+        let config = WorkspaceConfig {
+            id: input.id,
+            name: input.name,
+            service_pc: input.service_pc,
+            bot_pc: input.bot_pc,
+            connection: WorkspaceConnection::Ssh(SshConnection {
+                endpoint: input.endpoint,
+                pinned_host_key: input.pinned_host_key,
+                // This setup owns the same slot across failures, retries and restarts.
+                credential_ref: VaultCredentialRef(input.id.as_uuid()),
+            }),
+        };
+        config.validate().map_err(ServiceError::Contract)?;
+        let WorkspaceConnection::Ssh(connection) = &config.connection else {
+            unreachable!()
+        };
+        PublicKey::from_openssh(&format!(
+            "{} {}",
+            connection.pinned_host_key.algorithm, connection.pinned_host_key.public_key
+        ))
+        .map_err(|_| ServiceError::Contract(ContractError::InvalidHostKey))?;
+        let (_, key) = prepare_ssh_key(
+            Secret::new(input.private_key.into_bytes()),
+            input
+                .passphrase
+                .map(|value| Secret::new(value.into_bytes())),
+        )
+        .await?;
+        self.accepting()?;
+        self.service
+            .create_ssh_workspace(config, key, self.vault.clone())
+            .await
+            .map_err(WorkspaceError::Creation)
     }
 
     pub async fn import_ssh_key(

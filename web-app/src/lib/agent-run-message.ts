@@ -1,6 +1,8 @@
 import type { UIMessage } from 'ai'
+import { agentTurnStatus } from './agent-outcome'
 import type {
   AgentRunState,
+  AgentRunRecord,
   AgentRunSummary,
   AgentToolStatus,
 } from '@/types/agent'
@@ -36,6 +38,10 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
 
   return {
     run_id: state.runId ?? '',
+    ...(state.originSessionId
+      ? { origin_session_id: state.originSessionId }
+      : {}),
+    ...(state.parentRunId ? { parent_run_id: state.parentRunId } : {}),
     status: state.status,
     ...(state.trace.definition
       ? {
@@ -97,6 +103,43 @@ export function buildAgentRunSummary(state: AgentRunState): AgentRunSummary {
           },
         }
       : {}),
+  }
+}
+
+export function buildAgentRecordSummary(
+  record: AgentRunRecord
+): AgentRunSummary {
+  return {
+    run_id: record.runId,
+    status: record.status,
+    ...(record.originSessionId
+      ? { origin_session_id: record.originSessionId }
+      : {}),
+    ...(record.parentRunId ? { parent_run_id: record.parentRunId } : {}),
+    definition: {
+      id: record.definitionId,
+      name: record.definitionName,
+      kind: record.kind,
+      model_instance_id: record.defaultModelInstanceId,
+    },
+    stages: record.stages.map((stage) => ({
+      id: stage.stageId,
+      name: stage.name,
+      role: 'worker',
+      status: agentTurnStatus(stage.status),
+      step_count: stage.stepCount,
+      duration_ms: stage.durationMs,
+      model_instance_id: stage.modelInstanceId,
+      model_id: stage.modelId,
+      ...(stage.reasoningEffort
+        ? { reasoning_effort: stage.reasoningEffort }
+        : {}),
+    })),
+    ...(record.finishReason ? { finish_reason: record.finishReason } : {}),
+    step_count: record.totalSteps,
+    duration_ms: Math.max(0, record.finishedAtMs - record.startedAtMs),
+    tools: [],
+    loops: [],
   }
 }
 
