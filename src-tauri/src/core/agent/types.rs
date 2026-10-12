@@ -172,6 +172,9 @@ pub struct AgentTurnRequest {
     /// Owning ordinary Chat thread for delegated runs; absent for Studio/Code.
     #[serde(default)]
     pub origin_session_id: Option<String>,
+    /// Parent Chat user turn, shared by independent workers dispatched for it.
+    #[serde(default)]
+    pub parent_run_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

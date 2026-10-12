@@ -775,38 +775,49 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
                 .lock()
                 .await
                 .remove(&request.run_id);
-            if cancellation.is_cancelled() {
-                let event = AgentEvent::TurnFinished {
-                    reason: "cancelled".into(),
-                    step_count: 0,
-                };
-                let outcome = Ok(super::runner::AgentTurnOutcome {
+            let cancelled = cancellation.is_cancelled();
+            let event = AgentEvent::TurnFinished {
+                reason: if cancelled { "cancelled" } else { "failed" }.into(),
+                step_count: 0,
+            };
+            let outcome = if cancelled {
+                Ok(super::runner::AgentTurnOutcome {
                     reply: None,
                     reason: "cancelled".into(),
                     step_count: 0,
                     inference: Default::default(),
-                });
-                let mut record = AgentRunRecord::completed(super::runs::CompletedRun {
-                    id: &storage_id,
-                    run_id: &request.run_id,
-                    session_id: &request.session_id,
-                    origin_session_id: request.origin_session_id.as_deref(),
-                    user_message: &user_message,
-                    definition: &definition,
-                    started_at_ms,
-                    events: std::slice::from_ref(&event),
-                    result: &outcome,
-                });
-                record.workspace = Some(working_dir.to_string_lossy().into_owned());
-                let record_data = data_folder.clone();
-                tokio::task::spawn_blocking(move || record_run(&record_data, record))
-                    .await
-                    .map_err(|error| error.to_string())??;
-                super::studio::observe(&request.run_id, &event);
-                emit(event)?;
-                return Ok(());
+                })
+            } else {
+                Err(error.clone())
+            };
+            let mut record = AgentRunRecord::completed(super::runs::CompletedRun {
+                id: &storage_id,
+                run_id: &request.run_id,
+                session_id: &request.session_id,
+                origin_session_id: request.origin_session_id.as_deref(),
+                user_message: &user_message,
+                definition: &definition,
+                started_at_ms,
+                events: std::slice::from_ref(&event),
+                result: &outcome,
+            });
+            record.workspace = Some(working_dir.to_string_lossy().into_owned());
+            record.parent_run_id = request.parent_run_id.clone();
+            let record_data = data_folder.clone();
+            tokio::task::spawn_blocking(move || record_run(&record_data, record))
+                .await
+                .map_err(|error| error.to_string())??;
+            if !cancelled {
+                let failure = AgentEvent::StepError {
+                    message: error.clone(),
+                    category: "dispatch".into(),
+                };
+                super::studio::observe(&request.run_id, &failure);
+                emit(failure)?;
             }
-            return Err(error);
+            super::studio::observe(&request.run_id, &event);
+            emit(event)?;
+            return if cancelled { Ok(()) } else { Err(error) };
         }
     };
     let fleet_revision = dispatcher.fleet_revision;
@@ -950,6 +961,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
                 });
                 let record_data = data_folder.clone();
                 record.workspace = Some(working_dir.to_string_lossy().into_owned());
+                record.parent_run_id = request.parent_run_id.clone();
                 record.fleet_revision = fleet_revision;
                 let output_workspace = data_folder.join("agent-runs").join(&storage_id);
                 if output_workspace.is_dir() {

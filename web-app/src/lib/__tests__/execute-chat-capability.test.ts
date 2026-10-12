@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
-import { useAgentRun } from '@/hooks/useAgentRun'
+import { chatWorkerRunKey, useAgentRun } from '@/hooks/useAgentRun'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { useThreads } from '@/hooks/useThreads'
 import { seedServiceHub } from '@/test/service-hub'
 import { executeChatCapability, chatCapabilityRun, conversationAttachments } from '../execute-chat-capability'
 import type { CapabilitiesService } from '@/services/capabilities/types'
-import type { AgentEvent } from '@/types/agent'
+import type { AgentEvent, AgentRunRecord } from '@/types/agent'
 import { newUserThreadContent } from '../completion'
 import { convertThreadMessageToUIMessage } from '../messages'
 import { createImageAttachment, createDocumentAttachment } from '@/types/attachment'
@@ -103,6 +103,182 @@ describe('Chat capability execution', () => {
     expect(execute.mock.calls[0][0]).toMatchObject({ session_id: 'a', model_id: 'a-model', auto_approve: true, working_dir: '/workspace', external_roots: [{ path: '/reference', can_edit: false }], disabled_tools: ['tools::write'] })
     expect(result.content).toMatchObject({ result: 'Saved result', agent_run: { status: 'finished', step_count: 2 } })
     expect(chatCapabilityRun({ id: 'reply', role: 'assistant', parts: [{ type: 'tool-agent_run', toolCallId: 'call', state: 'output-available', input: {}, output: result.content }] })).toMatchObject({ status: 'finished', step_count: 2 })
+  })
+
+  it('keeps asynchronous workers independent and retains their parent and collected result in saved Chat history', async () => {
+    useConversationPolicy.getState().setWorkingDir('parent', '/workspace')
+    useConversationPolicy
+      .getState()
+      .addExternalRoot('parent', {
+        rootId: 'reference',
+        name: 'Reference',
+        path: '/reference',
+        canEdit: false,
+      })
+    useToolAvailable
+      .getState()
+      .setToolDisabledForThread('parent', 'gchat-native', 'os_fs_write', false)
+    const transport = new CustomChatTransport(undefined, 'parent')
+    useChatSessions.getState().ensureSession(
+      'parent',
+      transport,
+      () =>
+        new Chat({
+          id: 'parent',
+          transport,
+          messages: [
+            {
+              id: 'parent-turn',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Run two independent tasks' }],
+            },
+          ],
+        })
+    )
+    const handlers = new Map<string, (event: AgentEvent) => void>()
+    let record: AgentRunRecord
+    const execute = vi.fn<CapabilitiesService['execute']>(
+      async (request, event) => {
+        if (request.tool_name !== 'agent_spawn')
+          return { content: { runId: record.runId, active: false, record } }
+        handlers.set(request.run_id, event)
+        event({
+          type: 'turn_started',
+          run_id: request.run_id,
+          session_id: `worker-${request.run_id}`,
+        })
+        return {
+          content: {
+            runId: request.run_id,
+            sessionId: `worker-${request.run_id}`,
+            originSessionId: request.session_id,
+            parentRunId: request.parent_run_id,
+            status: 'running',
+          },
+        }
+      }
+    )
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const service = seedServiceHub({
+      capabilities: { execute, cancel, getCatalog: vi.fn() },
+    }).capabilities()
+    const firstAbort = new AbortController()
+    const secondAbort = new AbortController()
+    const first = await executeChatCapability({
+      service,
+      threadId: 'parent',
+      modelId: 'selected-model',
+      toolName: 'agent_spawn',
+      arguments: { task: 'First task' },
+      signal: firstAbort.signal,
+    })
+    const second = await executeChatCapability({
+      service,
+      threadId: 'parent',
+      modelId: 'selected-model',
+      toolName: 'agent_spawn',
+      arguments: { task: 'Second task' },
+      signal: secondAbort.signal,
+    })
+    const firstId = (first.content as { runId: string }).runId
+    const secondId = (second.content as { runId: string }).runId
+    const firstKey = chatWorkerRunKey('parent', firstId)
+    const secondKey = chatWorkerRunKey('parent', secondId)
+    expect(firstId).not.toBe(secondId)
+    for (const [request] of execute.mock.calls) {
+      expect(request).toMatchObject({
+        session_id: 'parent',
+        parent_run_id: 'parent-turn',
+        model_id: 'selected-model',
+        auto_approve: false,
+        working_dir: '/workspace',
+        external_roots: [{ path: '/reference', can_edit: false }],
+        disabled_tools: ['gchat-native::os_fs_write'],
+      })
+    }
+    // A subsequent parent capability must not replace either worker's event state.
+    useAgentRun.getState().startRun('parent', 'ordinary-parent-tool')
+    handlers.get(firstId)!({
+      type: 'assistant_delta',
+      text: 'First result',
+    })
+    secondAbort.abort()
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(secondId)
+    handlers.get(secondId)!({
+      type: 'turn_finished',
+      reason: 'cancelled',
+      step_count: 1,
+    })
+    expect(useAgentRun.getState().getRun(firstKey)).toMatchObject({
+      runId: firstId,
+      status: 'running',
+      originSessionId: 'parent',
+      parentRunId: 'parent-turn',
+      trace: { assistantText: 'First result' },
+    })
+    expect(useAgentRun.getState().getRun(secondKey)).toMatchObject({
+      runId: secondId,
+      status: 'cancelled',
+      trace: { assistantText: '' },
+    })
+    handlers.get(firstId)!({
+      type: 'turn_finished',
+      reason: 'reply',
+      step_count: 1,
+    })
+    firstAbort.abort()
+    expect(cancel).toHaveBeenCalledTimes(1)
+    record = {
+      schemaVersion: 3,
+      id: firstId,
+      runId: firstId,
+      sessionId: `worker-${firstId}`,
+      originSessionId: 'parent',
+      parentRunId: 'parent-turn',
+      definitionId: 'general',
+      definitionName: 'General Agent',
+      userMessage: 'First task',
+      kind: 'standard',
+      status: 'finished',
+      finishReason: 'reply',
+      startedAtMs: 100,
+      finishedAtMs: 200,
+      totalSteps: 1,
+      finalReply: 'First result',
+      defaultModelInstanceId: 'selected-model',
+      stages: [],
+    }
+    const collected = await executeChatCapability({
+      service,
+      threadId: 'parent',
+      toolName: 'agent_wait',
+      arguments: { runId: firstId },
+      signal: new AbortController().signal,
+    })
+    const saved = JSON.parse(
+      JSON.stringify({
+        id: 'collected',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-agent_wait',
+            toolCallId: 'wait',
+            state: 'output-available',
+            input: { runId: firstId },
+            output: collected.content,
+          },
+        ],
+      })
+    )
+    useAgentRun.getState().clearAll()
+    expect(chatCapabilityRun(saved)).toMatchObject({
+      run_id: firstId,
+      origin_session_id: 'parent',
+      parent_run_id: 'parent-turn',
+      status: 'finished',
+      step_count: 1,
+    })
+    expect(saved.parts[0].output.record.finalReply).toBe('First result')
   })
 
   it('invokes an exact discovered capability through the original policy-aware executor', async () => {

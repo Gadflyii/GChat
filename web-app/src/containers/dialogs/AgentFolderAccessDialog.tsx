@@ -26,7 +26,7 @@ export default function AgentFolderAccessDialog({ threadId: owningThreadId, inli
     owningThreadId
       ? state.runs[owningThreadId]?.pendingFolderAccess ? owningThreadId : undefined
       : Object.keys(state.runs).find(
-        (candidate) => candidate !== inlineThreadId && state.runs[candidate].pendingFolderAccess !== undefined
+        (candidate) => candidate !== inlineThreadId && (!inlineThreadId || state.runs[candidate].originSessionId !== inlineThreadId) && state.runs[candidate].pendingFolderAccess !== undefined
       )
   )
   const run = useAgentRun((state) =>
@@ -48,7 +48,7 @@ export default function AgentFolderAccessDialog({ threadId: owningThreadId, inli
     try {
       if (allow) {
         const root = await resolveConversationWorkspaceRoot(request.path)
-        useConversationPolicy.getState().addExternalRoot(threadId, {
+        useConversationPolicy.getState().addExternalRoot(run.originSessionId ?? threadId, {
           ...root,
           canEdit: true,
         })

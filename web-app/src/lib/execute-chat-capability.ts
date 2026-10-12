@@ -1,12 +1,15 @@
 import { generateId, type UIMessage } from 'ai'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
-import { useAgentRun } from '@/hooks/useAgentRun'
+import { chatWorkerRunKey, useAgentRun } from '@/hooks/useAgentRun'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { useThreads } from '@/hooks/useThreads'
 import type { CapabilitiesService } from '@/services/capabilities/types'
-import type { AgentAttachment, AgentRunSummary } from '@/types/agent'
+import type { AgentAttachment, AgentRunRecord, AgentRunSummary } from '@/types/agent'
 import { useChatSessions } from '@/stores/chat-session-store'
-import { buildAgentRunSummary } from './agent-run-message'
+import {
+  buildAgentRecordSummary,
+  buildAgentRunSummary,
+} from './agent-run-message'
 import { useAppState } from '@/hooks/useAppState'
 import { capabilitySchema, capabilitySearchResults } from './custom-chat-transport-helpers'
 
@@ -48,6 +51,12 @@ export async function executeChatCapability({
     })
   }
   const runId = `capability-${generateId()}`
+  const spawning = toolName === 'agent_spawn'
+  const messages =
+    useChatSessions.getState().sessions[threadId]?.chat.messages ?? []
+  const parentRunId =
+    messages.findLast((message) => message.role === 'user')?.id ?? runId
+  const stateKey = spawning ? chatWorkerRunKey(threadId, runId) : threadId
   const policy = useConversationPolicy.getState()
   const workspace = policy.getWorkspace(threadId)
   const markDelegation = () => {
@@ -62,8 +71,11 @@ export async function executeChatCapability({
       useConversationPolicy.getState().setActiveDefinition(threadId)
     }
   }
-  useAgentRun.getState().startRun(threadId, runId)
-  const ownsRun = () => useAgentRun.getState().getRun(threadId).runId === runId
+  useAgentRun.getState().startRun(
+    stateKey, runId,
+    spawning ? { originSessionId: threadId, parentRunId } : undefined
+  )
+  const ownsRun = () => useAgentRun.getState().getRun(stateKey).runId === runId
   const cancel = () => { void service.cancel(runId).catch(console.error) }
   signal.addEventListener('abort', cancel)
   let completed = false
@@ -71,6 +83,7 @@ export async function executeChatCapability({
     const result = await service.execute({
       run_id: runId,
       session_id: threadId,
+      parent_run_id: parentRunId,
       model_id: modelId,
       tool_name: toolName,
       arguments: input as Record<string, unknown>,
@@ -81,31 +94,36 @@ export async function executeChatCapability({
       auto_approve: policy.getApprovalMode(threadId) === 'skip',
       selected_skill: policy.activeSkills[threadId],
       disabled_tools: useToolAvailable.getState().getDisabledToolsForThread(threadId),
-      ...(['agent_run', 'skill_invoke'].includes(toolName) ? {
-        attachments: conversationAttachments(useChatSessions.getState().sessions[threadId]?.chat.messages ?? []),
+      ...(['agent_run', 'agent_spawn', 'skill_invoke'].includes(toolName) ? {
+        attachments: conversationAttachments(messages),
       } : {}),
     }, (event) => {
       // Stop can precede backend registration; retry when the call starts.
       if (signal.aborted && event.type === 'turn_started') cancel()
       if (!ownsRun() || (signal.aborted && event.type !== 'turn_finished')) return
       if (event.type === 'orchestration_started') markDelegation()
-      useAgentRun.getState().applyEvent(threadId, event)
+      useAgentRun.getState().applyEvent(stateKey, event)
+      if (spawning && event.type === 'turn_finished')
+        signal.removeEventListener('abort', cancel)
     })
     if (signal.aborted) throw new DOMException('Cancelled', 'AbortError')
-    if (result.run) {
+    if (result.run || spawning) {
       markDelegation()
     }
     completed = !result.error
-    const current = useAgentRun.getState().getRun(threadId)
+    const current = useAgentRun.getState().getRun(stateKey)
     if (result.run && ownsRun() && current.finishedAtMs === undefined) {
       // The invoke result may arrive before the final Channel callback.
-      useAgentRun.getState().applyEvent(threadId, {
+      useAgentRun.getState().applyEvent(stateKey, {
         type: 'turn_finished',
         reason: result.run.reason,
         step_count: result.run.stepCount,
       })
     }
-    const run = useAgentRun.getState().getRun(threadId)
+    const run = useAgentRun.getState().getRun(stateKey)
+    const record = ['agent_monitor', 'agent_wait'].includes(toolName)
+      ? (result.content as { record?: AgentRunRecord } | undefined)?.record
+      : undefined
     return {
       ...result,
       error: result.run ? undefined : result.error,
@@ -116,13 +134,21 @@ export async function executeChatCapability({
               ...(result.error !== undefined ? { error: result.error } : {}),
               agent_run: buildAgentRunSummary(run),
             }
-          : result.content,
+          : record
+            ? {
+                ...(result.content as object),
+                agent_run: buildAgentRecordSummary(record),
+              }
+            : result.content,
     }
   } finally {
-    signal.removeEventListener('abort', cancel)
-    const run = useAgentRun.getState().getRun(threadId)
-    if (ownsRun() && run.finishedAtMs === undefined) {
-      useAgentRun.getState().applyEvent(threadId, {
+    const run = useAgentRun.getState().getRun(stateKey)
+    if (!spawning || !completed || run.finishedAtMs !== undefined)
+      signal.removeEventListener('abort', cancel)
+    if (ownsRun() && run.finishedAtMs === undefined &&
+      (!spawning || !completed)
+    ) {
+      useAgentRun.getState().applyEvent(stateKey, {
         type: 'turn_finished',
         reason: signal.aborted ? 'cancelled' : completed ? 'reply' : 'failed',
         step_count: run.trace.stepCount ?? 0,

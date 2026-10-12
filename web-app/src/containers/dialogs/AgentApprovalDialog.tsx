@@ -40,7 +40,7 @@ export default function AgentApprovalDialog({ threadId: owningThreadId, inlineTh
     owningThreadId
       ? state.runs[owningThreadId]?.pendingApproval ? owningThreadId : undefined
       : Object.keys(state.runs).find(
-        (candidate) => candidate !== inlineThreadId && state.runs[candidate].pendingApproval !== undefined
+        (candidate) => candidate !== inlineThreadId && (!inlineThreadId || state.runs[candidate].originSessionId !== inlineThreadId) && state.runs[candidate].pendingApproval !== undefined
       )
   )
   const run = useAgentRun((state) =>

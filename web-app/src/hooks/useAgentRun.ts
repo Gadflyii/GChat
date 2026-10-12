@@ -22,6 +22,10 @@ export function createAgentRunState(): AgentRunState {
   }
 }
 
+export function chatWorkerRunKey(threadId: string, runId: string): string {
+  return `chat-worker:${threadId}:${runId}`
+}
+
 function replaceParsedTool(
   tools: AgentRunToolTrace[],
   event: Extract<AgentEvent, { type: 'tool_call_executed' }>
@@ -62,6 +66,8 @@ export function reduceAgentRunState(
       return {
         ...createAgentRunState(),
         runId: event.run_id,
+        originSessionId: state.originSessionId,
+        parentRunId: state.parentRunId,
         startedAtMs: state.startedAtMs ?? nowMs,
         status: 'running',
         trace: {
@@ -326,7 +332,9 @@ export function reduceAgentRunState(
 type AgentRunStore = {
   runs: Record<string, AgentRunState>
   getRun: (threadId: string) => AgentRunState
-  startRun: (threadId: string, runId: string) => void
+  startRun: (threadId: string, runId: string,
+    attribution?: Pick<AgentRunState, 'originSessionId' | 'parentRunId'>
+  ) => void
   applyEvent: (threadId: string, event: AgentEvent) => void
   setApprovalResolving: (threadId: string, resolving: boolean) => void
   setFolderAccessResolving: (threadId: string, resolving: boolean) => void
@@ -339,12 +347,13 @@ type AgentRunStore = {
 export const useAgentRun = create<AgentRunStore>()((set, get) => ({
   runs: {},
   getRun: (threadId) => get().runs[threadId] ?? createAgentRunState(),
-  startRun: (threadId, runId) => {
+  startRun: (threadId, runId, attribution) => {
     set((state) => ({
       runs: {
         ...state.runs,
         [threadId]: {
           ...createAgentRunState(),
+          ...attribution,
           runId,
           startedAtMs: Date.now(),
           status: 'running',
