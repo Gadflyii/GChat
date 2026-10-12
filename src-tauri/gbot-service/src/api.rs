@@ -1157,10 +1157,12 @@ mod tests {
         let root = std::path::PathBuf::from(root);
         let service = Arc::new(Service::open(root.join("state.json")).await.unwrap());
         let vault = Arc::new(MemoryVault::default());
-        vault.0.lock().unwrap().insert(
-            service.snapshot().await.service_id,
-            b"process-fixture-bearer".to_vec(),
-        );
+        let service_id = service.snapshot().await.service_id;
+        vault
+            .0
+            .lock()
+            .unwrap()
+            .insert(service_id, b"process-fixture-bearer".to_vec());
         let process = crate::executor::ProcessSpec {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), "exit 0".into()],

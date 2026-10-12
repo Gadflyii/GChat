@@ -732,7 +732,7 @@ impl KvmSetup {
         if !matches!(launched, GuestResult::ExecFinished { exit_code: 0, .. }) {
             return Err(SetupIssue::new(
                 "guest_exec_failed",
-                "The guest could not open its own readiness document.",
+                "Readiness exec did not report completion of the guest document launch.",
                 action,
             ));
         }
@@ -780,7 +780,7 @@ impl KvmSetup {
         let window = window.ok_or_else(|| {
             SetupIssue::new(
                 "desktop_not_ready",
-                "The dedicated guest readiness window was not observed.",
+                "Readiness list_windows did not observe the dedicated guest document window.",
                 action,
             )
         })?;
@@ -839,21 +839,26 @@ impl KvmSetup {
                 action,
             ));
         }
-        let reply = runtime
-            .request(GuestRequest {
-                identity: record.identity,
-                operation_id: OperationId::new(),
-                operation: GuestOperationKind::Desktop {
+        let result = self
+            .guest(
+                runtime,
+                record,
+                GuestOperationKind::Desktop {
                     tool: "get_desktop_state".into(),
                     arguments: serde_json::json!({}),
                 },
-            })
+            )
             .await
-            .map_err(|error| SetupIssue::new("desktop_not_ready", error.to_string(), action))?;
-        if !desktop_ready(&reply) {
+            .map_err(|mut issue| {
+                if issue.code == "guest_not_ready" {
+                    issue.code = "desktop_not_ready".into();
+                }
+                issue
+            })?;
+        if !desktop_ready(&result) {
             return Err(SetupIssue::new(
                 "desktop_not_ready",
-                "The guest did not return a real desktop frame after foreground input.",
+                "Readiness get_desktop_state did not return a real frame after foreground input.",
                 action,
             ));
         }
@@ -867,7 +872,13 @@ impl KvmSetup {
                 h264: false,
             })
             .await
-            .map_err(|error| SetupIssue::new("media_not_ready", error.to_string(), action))?;
+            .map_err(|error| {
+                SetupIssue::new(
+                    "media_not_ready",
+                    format!("Readiness open_view failed: {error}"),
+                    action,
+                )
+            })?;
         runtime
             .close_view(crate::media::CloseView {
                 identity: record.identity,
@@ -875,7 +886,13 @@ impl KvmSetup {
                 lease_id: view.lease_id,
             })
             .await
-            .map_err(|error| SetupIssue::new("media_cleanup", error.to_string(), action))?;
+            .map_err(|error| {
+                SetupIssue::new(
+                    "media_cleanup",
+                    format!("Readiness close_view failed: {error}"),
+                    action,
+                )
+            })?;
         Ok(())
     }
     async fn guest(
@@ -893,6 +910,15 @@ impl KvmSetup {
                 "Resume or remove this same setup.",
             ));
         }
+        let label = match &operation {
+            GuestOperationKind::Exec { .. } => "exec",
+            GuestOperationKind::Read { .. } => "read",
+            GuestOperationKind::Write { .. } => "write",
+            GuestOperationKind::Desktop { tool, .. } => tool.as_str(),
+            GuestOperationKind::Status { .. } => "status",
+            GuestOperationKind::Cancel { .. } => "cancel",
+        }
+        .to_owned();
         let reply = runtime
             .request(GuestRequest {
                 identity: record.identity,
@@ -903,14 +929,11 @@ impl KvmSetup {
             .map_err(|error| {
                 SetupIssue::new(
                     "guest_not_ready",
-                    error.to_string(),
+                    format!("Readiness {label} failed: {error}"),
                     "Repair the guest services and retry this same setup.",
                 )
             })?;
-        match reply.outcome {
-            GuestOutcome::Success { result } if !matches!(&result, GuestResult::Desktop { result } if result["isError"] == true) => Ok(result),
-            _ => Err(SetupIssue::new("guest_not_ready", "The guest readiness operation was refused or failed.", "Inspect the guest operation result, repair its services and retry this same setup.")),
-        }
+        readiness_result(&label, reply.outcome)
     }
     async fn console_key(&self, vm: &PreparedVm) -> Result<SshHostPublicKey, SetupIssue> {
         let inspect = async {
@@ -1023,8 +1046,50 @@ impl KvmSetup {
         }).await.map_err(persistence)?
     }
 }
-fn desktop_ready(reply: &GuestReply) -> bool {
-    matches!(&reply.outcome, GuestOutcome::Success { result: GuestResult::Desktop { result } }
+fn readiness_result(operation: &str, outcome: GuestOutcome) -> Result<GuestResult, SetupIssue> {
+    let mut code = "guest_not_ready";
+    let reason = match outcome {
+        GuestOutcome::Error { error } => format!("{:?}: {}", error.code, error.message),
+        GuestOutcome::Success {
+            result: GuestResult::Desktop { result },
+        } if result["isError"] == true => {
+            let text = result["content"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|part| part["type"] == "text")
+                .filter_map(|part| part["text"].as_str())
+                .filter(|text| !text.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if text.is_empty() {
+                "The desktop tool returned an error without a text reason.".into()
+            } else {
+                text
+            }
+        }
+        GuestOutcome::Success {
+            result: GuestResult::ExecFinished {
+                exit_code, stderr, ..
+            },
+        } if exit_code != 0 => {
+            code = "guest_exec_failed";
+            format!(
+                "exit code {exit_code}: {}",
+                String::from_utf8_lossy(&stderr).trim()
+            )
+        }
+        GuestOutcome::Success { result } => return Ok(result),
+    };
+    Err(SetupIssue::new(
+        code,
+        format!("Readiness {operation} failed: {reason}"),
+        "Inspect the guest operation result, repair its services and retry this same setup.",
+    ))
+}
+
+fn desktop_ready(result: &GuestResult) -> bool {
+    matches!(result, GuestResult::Desktop { result }
         if result["isError"] != true && ["screenshot_width", "screenshot_height", "screen_width", "screen_height"].iter().all(|field| result["structuredContent"][field].as_u64().is_some_and(|n| n > 0))
         && result["content"].as_array().is_some_and(|content| content.iter().any(|part| part["type"] == "image" && part["data"].as_str().is_some_and(|data| !data.is_empty()))))
 }
@@ -1064,6 +1129,98 @@ mod tests {
         })
         .await
         .unwrap();
+    }
+    #[tokio::test]
+    async fn readiness_failure_details_survive_setup_restart() {
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let mut setup = KvmSetup::open(
+            root.path().to_owned(),
+            service.clone(),
+            vault.clone(),
+            Weak::new(),
+        )
+        .await
+        .unwrap();
+        let id = WorkspaceId::new();
+        let mut record = SetupRecord {
+            id,
+            name: "Readiness".into(),
+            service_id: service.snapshot().await.service_id,
+            credential_ref: VaultCredentialRef::new(),
+            identity: SessionIdentity {
+                workspace_id: id,
+                session_id: SessionId::new(),
+            },
+            stage: SetupStage::TestingDesktop,
+            issue: None,
+            spec: None,
+            pinned_host_key: None,
+        };
+        let failures = [
+            ("list_windows", GuestOutcome::Error { error: GuestError {
+                code: GuestErrorCode::PermissionDenied,
+                message: "Session access refused".into(),
+            }}, "Readiness list_windows failed: PermissionDenied: Session access refused"),
+            ("press_key", GuestOutcome::Success { result: GuestResult::Desktop {
+                result: serde_json::json!({"isError":true,"content":[
+                    {"type":"text","text":"Target is not foreground"},
+                    {"type":"image","data":"excluded image bytes"}
+                ],"structuredContent":{"private":"excluded raw reply"}}),
+            }}, "Readiness press_key failed: Target is not foreground"),
+            ("get_desktop_state", GuestOutcome::Success { result: GuestResult::Desktop {
+                result: serde_json::json!({"isError":true,"content":[]}),
+            }}, "Readiness get_desktop_state failed: The desktop tool returned an error without a text reason."),
+            ("exec", GuestOutcome::Success { result: GuestResult::ExecFinished {
+                exit_code: 1,
+                stdout: b"excluded stdout".to_vec(),
+                stderr: b"Failed to connect to user bus\n".to_vec(),
+            }}, "Readiness exec failed: exit code 1: Failed to connect to user bus"),
+        ];
+        for (operation, outcome, message) in failures {
+            let issue = readiness_result(operation, outcome).unwrap_err();
+            assert_eq!(issue.message, message);
+            assert_eq!(
+                issue.code,
+                if operation == "exec" {
+                    "guest_exec_failed"
+                } else {
+                    "guest_not_ready"
+                }
+            );
+            record.issue = Some(issue.clone());
+            setup.save(record.clone()).await.unwrap();
+            drop(setup);
+            setup = KvmSetup::open(
+                root.path().to_owned(),
+                service.clone(),
+                vault.clone(),
+                Weak::new(),
+            )
+            .await
+            .unwrap();
+            let saved = setup.status().await;
+            assert_eq!(saved[0].stage, SetupStage::TestingDesktop);
+            assert_eq!(saved[0].issue, Some(issue));
+        }
+        let runtime = WorkspaceRuntime::new(service, vault);
+        let issue = setup
+            .guest(
+                &runtime,
+                &record,
+                GuestOperationKind::Desktop {
+                    tool: "list_windows".into(),
+                    arguments: serde_json::json!({}),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(issue.message.starts_with("Readiness list_windows failed: "));
+        assert_eq!(issue.code, "guest_not_ready");
+        assert!(matches!(readiness_result("read", GuestOutcome::Success {
+            result: GuestResult::Read { data: b"ready".to_vec() },
+        }).unwrap(), GuestResult::Read { data } if data == b"ready"));
     }
     #[tokio::test]
     async fn missing_assets_refuse_without_credentials_and_resume_same_owned_id() {
