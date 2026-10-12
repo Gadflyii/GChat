@@ -31,9 +31,10 @@ KVM onboarding. The wizard checks prerequisites and exact pinned guest assets,
 persists resumable setup identity, and admits a bot only after SSH, desktop-file
 and view-only media readiness. Two setup recovery cases, eight adapter cases,
 five wizard cases and the combined native route fixture pass. Combined frontend
-types, native check and strict native/service Clippy also pass. These are source
-gates: packaged guest-asset delivery and one actual VM created through the wizard
-remain unfinished. Hyper-V/cloud/M365 creation, remote service selection and
+types, native check and strict native/service Clippy also pass. Candidate `ec21a1874` delivers all three pinned guest assets through the existing
+bundle/data setup path; its focused interrupted/retry/digest fixture, native
+check and strict Clippy pass. These are source gates: one actual VM created
+through the current setup owner remains untested. Hyper-V/cloud/M365 creation, remote service selection and
 independent background lifetime remain unfinished. Schedules explicitly run only
 while GChat is open. The
 [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
@@ -101,7 +102,7 @@ settings; more than one bot is allowed. A new bot starts with **no connector
 accounts**. Its mail/calendar/drive and other existing accounts are explicitly
 linked by account ID; credentials stay with the shared native account vault.
 It never automatically inherits the user's GChat connector selection. Agent,
-skill and tool definitions remain shared. The candidate account picker and
+skill and tool definitions remain shared. The merged account picker and
 scoped executor boundary are implemented; live OAuth still needs app registration.
 
 Gbot appears in the left menu **above Work**, only when Gbot integration is
