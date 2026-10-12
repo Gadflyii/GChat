@@ -1,4 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { ConnectorAccount } from './workspace-connectors'
+
+export type BotConnectors = {
+  account_ids: string[]
+  accounts: Omit<ConnectorAccount, 'subject'>[]
+}
 
 export type Identity = { workspace_id: string; session_id: string }
 export type ViewTicket = {

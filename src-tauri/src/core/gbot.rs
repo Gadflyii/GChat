@@ -128,9 +128,14 @@ impl GbotState {
                         .await
                         .map_err(|error| error.to_string())?,
                 );
-                let mut api = Api::bind(service, Arc::new(NativeVault), 0)
-                    .await
-                    .map_err(|error| error.to_string())?;
+                let mut api = Api::bind_with_connectors(
+                    service,
+                    Arc::new(NativeVault),
+                    0,
+                    Arc::new(super::connectors::BotConnectorHost::new(app.clone())),
+                )
+                .await
+                .map_err(|error| error.to_string())?;
                 if let Some(processes) = executor_processes(&app)? {
                     api = api
                         .with_executor(root.join("tasks"), processes)

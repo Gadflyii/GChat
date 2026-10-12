@@ -11,6 +11,9 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::{
+    connectors::{
+        BotConnectorAccounts, BotConnectors, ConnectorHost, ConnectorRequest, PreparedConnector,
+    },
     contract::{
         BotPc, ContractError, GuestHello, GuestOperationKind, GuestOutcome, GuestReply,
         GuestRequest, GuestResult, OperationId, ServicePc, SessionIdentity, SshConnection,
@@ -40,6 +43,7 @@ pub enum WorkspaceError {
     ShuttingDown,
     Vault(VaultError),
     CredentialCleanup(VaultError),
+    Connector(String),
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -61,6 +65,7 @@ impl std::fmt::Display for WorkspaceError {
                 f,
                 "Model assignment was saved, but the old credential could not be removed: {error}"
             ),
+            Self::Connector(error) => f.write_str(error),
         }
     }
 }
@@ -104,6 +109,7 @@ pub struct WorkspaceRuntime {
     lifecycle: Mutex<BTreeMap<WorkspaceId, Arc<Mutex<()>>>>,
     resume_observations: Mutex<BTreeMap<WorkspaceId, GuestReply>>,
     stopping: AtomicBool,
+    connectors: Option<Arc<dyn ConnectorHost>>,
 }
 
 #[derive(Serialize)]
@@ -122,7 +128,124 @@ impl WorkspaceRuntime {
             lifecycle: Mutex::new(BTreeMap::new()),
             resume_observations: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
+            connectors: None,
         }
+    }
+
+    pub fn with_connectors(mut self, connectors: Arc<dyn ConnectorHost>) -> Self {
+        self.connectors = Some(connectors);
+        self
+    }
+
+    pub async fn bot_connectors(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<BotConnectors, WorkspaceError> {
+        self.accepting()?;
+        let account_ids = self.service.connector_accounts(workspace_id).await?;
+        let accounts = match &self.connectors {
+            Some(host) => host.accounts().await.map_err(WorkspaceError::Connector)?,
+            None => Vec::new(),
+        };
+        Ok(BotConnectors {
+            account_ids,
+            accounts,
+        })
+    }
+
+    pub async fn save_bot_connectors(
+        &self,
+        links: BotConnectorAccounts,
+    ) -> Result<BotConnectors, WorkspaceError> {
+        let current = self.bot_connectors(links.workspace_id).await?;
+        // Disconnected references may be removed; only currently owned accounts may be linked.
+        if links.account_ids.iter().any(|id| {
+            !current.accounts.iter().any(|account| account.id == *id)
+                && !current.account_ids.contains(id)
+        }) {
+            return Err(WorkspaceError::Connector(
+                "Choose an existing Workspace account".into(),
+            ));
+        }
+        let workspace_id = links.workspace_id;
+        self.service.save_connector_accounts(links).await?;
+        self.bot_connectors(workspace_id).await
+    }
+
+    pub async fn connector_tools(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<crate::executor::FunctionTool>, WorkspaceError> {
+        self.accepting()?;
+        let links = self.service.connector_accounts(workspace_id).await?;
+        let Some(host) = &self.connectors else {
+            return Ok(Vec::new());
+        };
+        Ok(host
+            .catalog(&links)
+            .await
+            .map_err(WorkspaceError::Connector)?
+            .into_iter()
+            .map(|tool| crate::executor::FunctionTool {
+                binding: crate::executor::ToolBinding::Connector {
+                    name: tool.name.clone(),
+                },
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.input_schema,
+            })
+            .collect())
+    }
+
+    pub async fn prepare_connector(
+        &self,
+        identity: SessionIdentity,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<ConnectorRequest, WorkspaceError> {
+        self.accepting()?;
+        let links = self
+            .service
+            .connector_accounts(identity.workspace_id)
+            .await?;
+        let host = self.connectors.as_ref().ok_or_else(|| {
+            WorkspaceError::Connector("Workspace connectors are unavailable".into())
+        })?;
+        let operation: PreparedConnector = host
+            .prepare(&links, name, arguments)
+            .await
+            .map_err(WorkspaceError::Connector)?;
+        if !links.contains(&operation.account_id)
+            || operation
+                .arguments
+                .get("account_id")
+                .and_then(serde_json::Value::as_str)
+                != Some(operation.account_id.as_str())
+        {
+            return Err(WorkspaceError::Connector(
+                "Connector account was not explicitly linked to this bot".into(),
+            ));
+        }
+        Ok(ConnectorRequest {
+            identity,
+            operation,
+        })
+    }
+
+    pub async fn execute_connector(
+        &self,
+        request: &ConnectorRequest,
+    ) -> Result<serde_json::Value, WorkspaceError> {
+        self.accepting()?;
+        self.service.admit_connector(request).await?;
+        self.connectors
+            .as_ref()
+            .ok_or_else(|| {
+                WorkspaceError::Connector("Workspace connectors are unavailable".into())
+            })?
+            .execute(&request.operation)
+            .await
+            .map_err(WorkspaceError::Connector)
     }
 
     fn accepting(&self) -> Result<(), WorkspaceError> {
