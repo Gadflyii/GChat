@@ -34,7 +34,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-066 | Guard diagnosis is closed; fit-message source/landing needs confirmation. | Locate the owning source/result before claiming the presentation fix landed. Profile qualification is OI-072. |
 | OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; 19 offline cases are unrun and the live feed is not published. | Run only the existing offline cases; signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
-| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | Startup probes report unavailable ANN while embeddings are disabled. | Determine whether disabled features should probe; one startup diagnostic check. |
+| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Candidate removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
 | OI-074 / GCHAT-BROWSER-BASELINE-DATA | Large frontend chunk and stale browser-data advisories remain. | One affected bundle/tooling check after a source change; no unrelated upgrades. |
 | GCHAT-WEB-TEST-DIAGNOSTICS | Reviewed warning-reduction candidate has no run of its focused cases. | Run the existing affected cases, not the full web suite. |
@@ -71,9 +71,12 @@ Acceptance: focused settings/sidebar/setup/route cases, affected lint and types;
 no native build, dependency change, model run, provisioning or release publication.
 Verification: 39 focused cases in four files, affected ESLint and frontend types
 PASS. Evidence: `/ai/gchat/out/gchat-open-items-20261012/`. No installed UI or
-VM qualification is claimed. Next: normal source review/merge, then fix the
-credential-orphan failure before extending computer provisioning. General agent
-dispatch is the next feature; per-bot connectors and scheduling remain explicit.
+VM qualification is claimed. Next: two isolated implementation branches address the credential-orphan failure
+and shared general-agent dispatch in parallel. Root integrates their actual results
+and corrects the disabled-RAG startup probe. Per-bot connectors, provisioning and
+scheduling remain explicit subsequent work. The startup correction has one focused
+case and frontend types PASS; evidence is `ann-test.log` / `ann-types.log` in the
+existing result folder. No installed startup or embedding qualification is claimed.
 
 ## Accepted Ubuntu Desktop packages — OI-057
 

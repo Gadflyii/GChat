@@ -27,9 +27,7 @@ export default class RagExtension extends RAGExtension {
   }
 
   async onLoad(): Promise<void> {
-    this.configure()
-    // Check ANN availability on load
-    this.checkANNAvailability()
+    await this.configure()
   }
 
   onUnload(): void {}
@@ -69,28 +67,6 @@ export default class RagExtension extends RAGExtension {
       'auto_inline_context_ratio',
       this.config.autoInlineContextRatio
     )
-  }
-
-  async checkANNAvailability() {
-    try {
-      const vec = window.core?.extensionManager.get(
-        ExtensionTypeEnum.VectorDB
-      ) as unknown as VectorDBExtension
-      if (vec?.getStatus) {
-        const status = await vec.getStatus()
-        console.log(
-          '[RAG] Vector DB ANN support:',
-          status.ann_available ? '✓ AVAILABLE' : '✗ NOT AVAILABLE'
-        )
-        if (!status.ann_available) {
-          console.warn(
-            '[RAG] Warning: sqlite-vec not loaded. Collections will use slower linear search.'
-          )
-        }
-      }
-    } catch (e) {
-      console.error('[RAG] Failed to check ANN status:', e)
-    }
   }
 
   async getTools(): Promise<MCPTool[]> {
