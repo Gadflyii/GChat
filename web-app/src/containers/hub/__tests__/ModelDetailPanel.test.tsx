@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CatalogModel } from '@/services/models/types'
 
@@ -83,12 +83,14 @@ describe('ModelDetailPanel', () => {
     expect(screen.getByText('hub:selectModel')).toBeInTheDocument()
   })
 
-  it('renders the header, stats and details grid', () => {
-    render(
-      <ModelDetailPanel
-        model={model({ last_modified: '2026-08-01T00:00:00Z' })}
-      />
-    )
+  it('renders the header, stats and details grid', async () => {
+    await act(async () => {
+      render(
+        <ModelDetailPanel
+          model={model({ last_modified: '2026-08-01T00:00:00Z' })}
+        />
+      )
+    })
 
     expect(
       screen.getByRole('heading', { name: 'Qwen3.5-4B-GGUF' })
@@ -117,17 +119,19 @@ describe('ModelDetailPanel', () => {
     )
   })
 
-  it('uses a staff pick title without its badge or summary', () => {
-    render(
-      <ModelDetailPanel
-        model={model()}
-        pick={{
-          model_name: 'Qwen/Qwen3.5-4B-GGUF',
-          title: 'Qwen3.5 4B',
-          summary: 'Compact all-rounder.',
-        }}
-      />
-    )
+  it('uses a staff pick title without its badge or summary', async () => {
+    await act(async () => {
+      render(
+        <ModelDetailPanel
+          model={model()}
+          pick={{
+            model_name: 'Qwen/Qwen3.5-4B-GGUF',
+            title: 'Qwen3.5 4B',
+            summary: 'Compact all-rounder.',
+          }}
+        />
+      )
+    })
 
     expect(
       screen.getByRole('heading', { name: 'Qwen3.5 4B' })
@@ -136,8 +140,10 @@ describe('ModelDetailPanel', () => {
     expect(screen.queryByText('Compact all-rounder.')).not.toBeInTheDocument()
   })
 
-  it('says so when the repo ships no README', () => {
-    render(<ModelDetailPanel model={model()} />)
+  it('says so when the repo ships no README', async () => {
+    await act(async () => {
+      render(<ModelDetailPanel model={model()} />)
+    })
 
     expect(screen.getByText('hub:readmeUnavailable')).toBeInTheDocument()
   })

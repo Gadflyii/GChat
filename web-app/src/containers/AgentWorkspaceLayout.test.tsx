@@ -1,12 +1,14 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { forwardRef, useImperativeHandle, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mockIPC } from '@tauri-apps/api/mocks'
 import { AgentWorkspaceLayout } from './AgentWorkspaceLayout'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useWorkspacePreviewStore } from '@/stores/workspace-preview-store'
 
 const media = vi.hoisted(() => ({ desktop: true }))
 const panelLayouts = vi.hoisted(() => ({ values: [] as number[][] }))
+const artifactPreview = vi.hoisted(() => ({ command: vi.fn() }))
 const workspace = vi.hoisted(() => ({
   entries: [{ name: 'output.txt', path: 'output.txt', kind: 'file' }],
 }))
@@ -27,6 +29,14 @@ vi.mock('@/hooks/useMediaQuery', () => ({
 
 vi.mock('@/services/agent/tauri', () => ({
   listAgentWorkspace: vi.fn(async () => workspace.entries),
+}))
+
+vi.mock('@/lib/codeHighlighter', () => ({
+  codeToHtml: async (code: string) => {
+    const content = document.createElement('code')
+    content.textContent = code
+    return `<pre>${content.outerHTML}</pre>`
+  },
 }))
 
 vi.mock('react-resizable-panels', () => ({
@@ -71,6 +81,13 @@ vi.mock('./ArtifactPanel', () => ({
 
 describe('AgentWorkspaceLayout', () => {
   beforeEach(() => {
+    artifactPreview.command.mockReset().mockImplementation((command: string) => {
+      if (command === 'set_artifact_html' || command === 'clear_artifact_html') {
+        return
+      }
+      throw new Error(`Unexpected artifact preview command: ${command}`)
+    })
+    mockIPC(artifactPreview.command)
     media.desktop = true
     panelLayouts.values = []
     workspace.entries = [
@@ -149,6 +166,16 @@ describe('AgentWorkspaceLayout', () => {
       expect(useWorkspacePreviewStore.getState().tabs).toEqual([
         { id: 'artifact', kind: 'artifact', name: 'HTML' },
       ])
+      expect(artifactPreview.command).toHaveBeenCalledWith('set_artifact_html', {
+        id: expect.any(String),
+        html: expect.stringContaining('<h1>Artifact</h1>'),
+      })
+      expect(screen.getByTitle('HTML preview')).toHaveAttribute(
+        'src',
+        expect.stringMatching(
+          /^(artifact:\/\/localhost|http:\/\/artifact\.localhost)\/[^?]+\?v=1$/
+        )
+      )
     })
   })
 

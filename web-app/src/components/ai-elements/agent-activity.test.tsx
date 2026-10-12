@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -7,6 +7,22 @@ import {
 } from '@/components/ai-elements/agent-activity'
 import { Tool } from '@/components/ai-elements/tools/tool'
 import { ToolRenderer } from '@/components/ai-elements/tools/tool-renderer'
+
+// Disclosure behavior uses the highlighter boundary without fetching Vite assets.
+vi.mock('@/components/ai-elements/code-block', () => ({
+  CodeBlock: ({ code }: { code: string }) => (
+    <pre>
+      <code data-test-highlight="ready">{code}</code>
+    </pre>
+  ),
+  highlightCode: async (source: string) => {
+    const content = document.createElement('code')
+    content.dataset.testHighlight = 'ready'
+    content.textContent = source
+    const html = `<pre>${content.outerHTML}</pre>`
+    return [html, html]
+  },
+}))
 
 describe('AgentActivity', () => {
   it('shows a failed run error even when activity details are collapsed', () => {
@@ -129,6 +145,17 @@ describe('AgentActivity', () => {
     await user.click(screen.getByRole('button', { name: /called 1 tool/i }))
     await user.click(screen.getByRole('button', { name: /wrote file/i }))
 
-    expect(container).toHaveTextContent('export const first = 1')
+    await waitFor(() => {
+      const highlighted = [
+        ...container.querySelectorAll('pre code[data-test-highlight="ready"]'),
+      ]
+      expect(
+        highlighted.some((code) =>
+          code.textContent?.includes(
+            'export const first = 1\nexport const second = 2'
+          )
+        )
+      ).toBe(true)
+    })
   })
 })
