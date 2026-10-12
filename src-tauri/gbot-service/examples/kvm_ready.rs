@@ -204,6 +204,8 @@ mod linux {
         let _ = child.wait().await;
         result
     }
+    const DESKTOP_LINE: &str = "Hello from Gbot.";
+
     async fn model_task(
         runtime: &WorkspaceRuntime,
         identity: SessionIdentity,
@@ -281,7 +283,7 @@ mod linux {
             .collect();
         tools.push(FunctionTool {name:"open_editor".into(),description:"Open Mousepad on the dedicated bot desktop. Use this once, then foreground input tools to type and save.".into(),parameters:json!({"type":"object","properties":{},"additionalProperties":false}),binding:ToolBinding::Fixed {operation:GuestOperationKind::Exec {program:"/usr/local/bin/gbot-in-session".into(),args:vec!["systemd-run".into(),"--user".into(),"--quiet".into(),"--collect".into(),"--unit=gbot-editor".into(),"/usr/local/bin/gbot-in-session".into(),"mousepad".into()],cwd:GuestPath("/home/gbot".into()),env:Default::default()}}});
         run_task(runtime,identity,&assignment,&processes,evidence.join("desktop-task.json"),vec![
-            json!({"role":"system","content":"You operate a dedicated Linux bot computer through accessibility observations and real foreground input. Open Mousepad, type exactly one line: Hello from Gbot. Save it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop foreground input, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving."}),
+            json!({"role":"system","content":format!("You operate a dedicated Linux bot computer through accessibility observations and real foreground input. Open Mousepad, type exactly the following line:\n```\n{}\n```\nSave it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop foreground input, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving.", DESKTOP_LINE)}),
             json!({"role":"user","content":"Please create the text file now."}),
         ],tools).await?;
         match operation(
@@ -296,7 +298,8 @@ mod linux {
         .await?
         {
             GuestResult::Read { data }
-                if data == b"Hello from Gbot." || data == b"Hello from Gbot.\n" =>
+                if data == DESKTOP_LINE.as_bytes()
+                    || data.strip_suffix(b"\n") == Some(DESKTOP_LINE.as_bytes()) =>
             {
                 tokio::fs::write(evidence.join("hello.txt"), data).await?;
                 println!("PASS: ComputerAgent saved hello.txt; independent SSH readback matched");

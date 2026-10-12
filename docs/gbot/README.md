@@ -24,10 +24,12 @@ sudo or disk surgery. Its archive SHA-256 is
 
 Guest provisioning now uses a 1920×1080 screen: GTK's natural Save dialog was
 taller than the earlier 1280×800 screen. A fresh dedicated guest completed native
-Save and independent SSH readback. Exact desktop-task acceptance still fails:
-the model typed `Hello from Gbot`, omitting the final period required by the
-unchanged check. The saved bytes match its tool arguments; no typing or file
-transfer loss is established. Both actual Cua `hello_file_env` variants passed
+Save and independent SSH readback. The original SMOL and dense INT tasks both
+omitted the period in the unquoted instruction. One authorized SMOL retry with
+the unchanged literal in a code block typed `Hello from Gbot.` correctly, but
+could not save: Cua's text-only observation omitted the nested overwrite
+confirmation visible on the actual desktop. The file retains its old content;
+exact desktop acceptance remains open. Both actual Cua `hello_file_env` variants passed
 their setup/model/evaluation gates with reward 1.0 on Ada Qwen SMOL, 262144
 context. No agent-side geometry workaround or relaxed content check is applied.
 
@@ -584,19 +586,58 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
 supersedes the initial draft's unassigned-cloud scope. The approved Cua map is
-merged in main `aa60f9015`. Current candidate is `feat/gbot-cua-executor-aa60`
-at `/ai/gchat-worktrees/gbot-cua-executor-aa60`; executor base is `b4dea80e6`
-and the guest geometry correction is on this candidate branch.
-Deliverable: replace the prototype model loop with pinned Cua `ComputerAgent`
-and its GInfer function-tool provider, retaining the approved guest and transport.
-Acceptance: focused provider/IPC/receipt/compaction cases, the desktop hello.txt
-task with independent SSH readback, and both actual Cua `hello_file_env` variants
-through that same SSH session. No Windows, human desktop, new VM stack, model
-conversion, sampling changes or broad benchmark campaign.
-Next action: review the merge-ready source and the desktop exact-content failure.
-Both actual Cua tasks are complete. Do not retry the desktop unchanged or relax
-its expected bytes; its unquoted task sentence does not establish why the model
-omitted the period.
+merged in main `aa60f9015`. Executor and geometry correction are merged in
+main `7672fb060`. Current candidate is `feat/gbot-cua-adoption-7672`
+at `/ai/gchat-worktrees/gbot-cua-executor-aa60`.
+Deliverable: settle desktop executor acceptance after the dense Qwen INT control,
+then adopt the pinned Cua skill and compact output, review guest settings, browser,
+human handoff and viewer in the approved queue.
+Acceptance: the unchanged exact-byte oracle on the same Ada4090 and guest.
+The dense INT control also omitted the period; Ron then authorized one SMOL
+retry after delimiting that literal. Reuse both completed Cua hello_file_env
+evaluations. Establish and correct the owning cause of an executor failure;
+the ambiguous original instruction cannot establish a model-quality gap. Each adoption gets its
+focused supported-behavior gate and one result. No Windows, human desktop,
+new dependency closure, sampling changes or broad benchmark campaign.
+Next action: diagnose Cua's nested-dialog observation in the owning fork.
+The one corrected-literal SMOL gate is over; no second model retry is authorized
+by that gate. Preserve its blocked result and both original failures.
+
+**Corrected-literal SMOL gate (2026-10-12 08:37Z).** The task and unchanged byte
+oracle now share `DESKTOP_LINE`, delimited in a code block. Focused example build
+and strict Clippy pass. Raw `type_text` requested `Hello from Gbot.` and the
+editor observation contained that value. Saving the existing `hello.txt` opened
+an overwrite confirmation with Cancel/Replace, visible in the actual Xvnc
+frame. Neither the raw Save As MCP reply nor its model projection exposed this
+confirmation: Save As window `23069163` had no `dialogs`/`follow_up` and reported
+Save enabled, while the screenshot showed it blocked by the confirmation. The
+model repeated Save clicks at the correct on-screen point `(1464,999)`.
+The underlying window/tree-selection cause remains unresolved; this is not an
+off-screen input failure or evidence that SMOL omitted the period again.
+After 73 replies/calls the finite run was deliberately stopped, so the runner's
+`ChildFailed` is its interrupted outcome, not the cause. Independent SSH read
+still returned the old 15 bytes `Hello from Gbot`. Exact file acceptance is NOT
+PASS. Ada engine PID 1766192 exited normally at 08:37:06Z, the private guest is
+shut off, both guards were reacquired, and extension bookings were cancelled.
+No second attempt or input to a human desktop occurred. Evidence: S1
+`cua-geometry-fixed-20261012/literal-smol-evidence/{result,desktop-task}.json`
+and `save-loop-xvnc.png`; local
+`out/gbot-cua-executor-20261012/guest-geometry/literal-smol-result.json`;
+Ada `gate-cua-literal-smol-20261012/model-stop.json`.
+
+**Dense INT control (2026-10-12 08:12Z).** The unchanged control also failed
+exact content: its raw `type_text` requested `Hello from Gbot`, and independent
+SSH readback matched those 15 bytes. It completed 28 model replies and 27
+receipts, including responsive Save As and overwrite confirmation. The gate
+instruction puts the required period in an unquoted sentence; ambiguity is the
+leading explanation, not yet a demonstrated cause. The service and driver did
+not drop any requested input. Engine PID 1760993 exited normally at 08:12:23Z,
+the guest is stopped, and both bookings were returned. Cua evaluations are
+reused, not rerun. Evidence: S1
+`/ai/gbot-vms/cua-geometry-fixed-20261012/int-control-evidence/{desktop-task,gate-result}.json`
+and Ada `gate-cua-int-control-20261012/model-stop.json`. The corrected gate
+delimits the literal from the same value its oracle compares, without changing
+expected bytes, sampler, desktop route or production executor behavior.
 
 **Off-screen Save cause and correction (2026-10-12 07:25Z).** Xvnc supplied
 1280×800; XFWM's usable work area was `(0,27,1280,773)`. With GTK chooser
@@ -705,7 +746,7 @@ External pages, runtime and physical acceptance were not exercised by this gate.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | Candidate b4dea80e6; focused gates passed, off-screen Save fixed and measured; exact desktop content failed; no live model. |
+| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | `feat/gbot-cua-adoption-7672` from main7672fb060; literal-only gate correction built/Clippy PASS. Corrected period typed; nested overwrite observation blocks exact file acceptance. No live model. |
 | GChat coordinator / local | `/ai/gchat-worktrees/cua-gbot-pin-0c69` | Fork199e92644 on0c69d9a2c8; provider and owned-popup fixtures passed, compatible driver built; keep until reviewed integration. |
 | GChat coordinator / local | `/ai/gchat/out/gbot-cua-executor-20261012/` | Isolated Python closure and focused integration evidence; dependency import/pip-check gate passed. |
 | GChat coordinator / S1 | `/ai/gbot-vms/cua-first-20261012/` | Approved isolated Python closure and actual benchmark modules reused by the fresh gate; old VM/keyring retired, evidence retained. |
@@ -713,6 +754,7 @@ External pages, runtime and physical acceptance were not exercised by this gate.
 | GChat coordinator / S1 | `/ai/gbot-vms/cua-geometry-fixed-20261012/evidence/` and `/ai/gbot-vms/c92c0bcc-fd51-48a4-8d22-758570d42474/` | Fresh fullHD candidate saved file; exact-content failure retained. Guest stopped. Native-vault controller 43755 holds the credential pending the task decision or retirement. No CPU booking or human desktop. |
 | GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-geometry-20261012/` | Qwen SMOL262144/C1/INT8/DFlashK7/greedy/no-thinking, acceptedec166 runtime. Desktop task ended; engine stopped07:37:17Z, guards/booking released. Retain exact-content and resolved-sampler evidence. |
 | GChat coordinator / S1 and Ada4090 | S1 `cua-geometry-fixed-20261012/bench-evidence/`; Ada `/ai/gbot-models/gate-cua-env-20261012/` | Both actual Cua variants PASS, reward 1.0. Same fullHD guest, fresh session and pinned workspace key. Engine stopped 07:53:44Z, PID absent, guards and bookings released. Retain task/evaluator/sampler receipts; desktop failure is not overwritten. |
+| GChat coordinator / S1 and Ada4090 | S1 `cua-geometry-fixed-20261012/literal-smol-evidence/`; Ada `/ai/gbot-models/gate-cua-literal-smol-20261012/` | One corrected-literal gate stopped08:37:06Z; guest shut off, model PID absent/normal exit0, guards and bookings returned. Keep raw MCP, actual Xvnc screenshot and independent file read for nested-confirmation defect. Both Cua evaluation results reused, not rerun. |
 | GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-patched-20261012/` | Functional ec166 runtime/model/profile gate; engine stopped06:07:35Z, PID absent, locks/booking released. Retain launch/stop evidence; no performance claim. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-cua-adoption-20261012/cua-source` | Read-only fork checkout at exact pin `0c69d9a2c8`; retained source inspection, no build or guest. |
 | GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-cua-service-be226`, branch `park/gbot-popup-binding-66093`, pushed `391667372` | Merged native-input source `66093dd03`; unverified popup patch committed separately, retained until adoption decision. Not a merge candidate. |
