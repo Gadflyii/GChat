@@ -10,10 +10,6 @@ on:
         description: "Version number (e.g. 1.1.37)"
         required: true
         default: "0.0.0-test"
-      build_macos:
-        description: "Build macOS"
-        type: boolean
-        default: false
       build_windows:
         description: "Build Windows (temporarily disabled)"
         type: boolean
@@ -24,7 +20,10 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  RELEASE_REPOSITORY: SectileLabs/gchat
 
 jobs:
   create-draft-release:
@@ -33,6 +32,21 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
+      - name: Require development source repository
+        if: github.repository != 'Gadflyii/GChat'
+        run: |
+          echo "::error::Build releases from Gadflyii/GChat; SectileLabs/gchat stores release artifacts only."
+          exit 1
+
+      - name: Require destination release credential
+        env:
+          RELEASE_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
+        run: |
+          if [[ ! "$RELEASE_TOKEN" =~ [^[:space:]] ]]; then
+            echo "::error::Configure SECTILE_RELEASE_TOKEN with Contents write access only to SectileLabs/gchat before an approved release."
+            exit 1
+          fi
+
       - name: Extract version from tag
         id: get_version
         run: |
@@ -50,13 +64,14 @@ jobs:
           name: "GChat v${{ steps.get_version.outputs.version }}"
           draft: true
           prerelease: ${{ github.event_name == 'workflow_dispatch' }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ env.RELEASE_REPOSITORY }}
+          token: ${{ secrets.SECTILE_RELEASE_TOKEN }}
+          generate_release_notes: false
+          body: "Built from [Gadflyii/GChat source commit ${{ github.sha }}](https://github.com/Gadflyii/GChat/commit/${{ github.sha }})."
 
   # ──────────────────────────────────────────────────────────────
   # Polished release notes (LLM-generated from git log between tags)
-  # On failure: warning only — default GitHub-generated notes remain.
+  # On failure: warning only — source-commit provenance remains.
   # ──────────────────────────────────────────────────────────────
   enrich-release-notes:
     needs: create-draft-release
@@ -76,11 +91,11 @@ jobs:
       - name: Resolve previous published release tag
         id: prev
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
           CURR_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
         run: |
           set +e
-          PREV_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null)
+          PREV_TAG=$(gh api "repos/${RELEASE_REPOSITORY}/releases/latest" --jq .tag_name 2>/dev/null)
           set -e
           if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "null" ] || [ "$PREV_TAG" = "$CURR_TAG" ]; then
             echo "No previous published release found (or equals current tag); will fall back to git history"
@@ -99,16 +114,19 @@ jobs:
           PREV_TAG: ${{ steps.prev.outputs.prev_tag }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_REPO: ${{ env.RELEASE_REPOSITORY }}
+          RELEASE_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         run: |
           set +e
           python3 scripts/release-notes/generate.py > /tmp/release-notes.md
           rc=$?
           set -e
           if [ "$rc" -ne 0 ] || [ ! -s /tmp/release-notes.md ]; then
-            echo "::warning::LLM release notes generation failed (rc=$rc); keeping default GitHub-generated notes"
+            echo "::warning::LLM release notes generation failed (rc=$rc); keeping source-commit provenance"
             echo "ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          printf '\nBuilt from [Gadflyii/GChat source commit %s](https://github.com/Gadflyii/GChat/commit/%s).\n' "$GITHUB_SHA" "$GITHUB_SHA" >> /tmp/release-notes.md
           echo "===== Generated notes ====="
           cat /tmp/release-notes.md
           echo "==========================="
@@ -117,197 +135,19 @@ jobs:
       - name: Update draft release body
         if: steps.gen.outputs.ok == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
           TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
         run: |
-          # The GitHub API occasionally returns a transient 401 for
-          # GITHUB_TOKEN requests, so retry a few times. Applying the polished
-          # notes is best-effort: the default GitHub-generated notes already
-          # exist, so a persistent failure is a warning, never a job failure
-          # (per this job's "on failure: warning only" contract).
+          # Keep source provenance if optional note enrichment fails.
           for attempt in 1 2 3 4 5; do
-            if gh release edit "$TAG" --notes-file /tmp/release-notes.md; then
+            if gh release edit "$TAG" --repo "$RELEASE_REPOSITORY" --notes-file /tmp/release-notes.md; then
               echo "Release notes applied (attempt ${attempt})."
               exit 0
             fi
             echo "::warning::gh release edit failed (attempt ${attempt}); retrying in $((attempt * 5))s"
             sleep $((attempt * 5))
           done
-          echo "::warning::Could not update the release body after retries; keeping default GitHub-generated notes"
-
-  # ──────────────────────────────────────────────────────────────
-  # macOS  (universal binary — arm64 + x86_64)
-  # ──────────────────────────────────────────────────────────────
-  build-macos:
-    if: github.event_name == 'push' || inputs.build_macos
-    runs-on: macos-latest-xlarge
-    needs: create-draft-release
-    outputs:
-      mac_sig: ${{ steps.metadata.outputs.mac_sig }}
-      tar_name: ${{ steps.metadata.outputs.tar_name }}
-      dmg_name: ${{ steps.metadata.outputs.dmg_name }}
-      zip_name: ${{ steps.metadata.outputs.zip_name }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin,aarch64-apple-darwin
-
-      - name: Cache Yarn
-        uses: actions/cache@v4
-        with:
-          path: .yarn/cache
-          key: yarn-macos-${{ hashFiles('yarn.lock') }}
-          restore-keys: yarn-macos-
-
-      - name: Install jq
-        run: brew install jq
-
-      - name: Install Python dependencies
-        run: pip3 install --break-system-packages Pillow
-
-      - name: Set Xcode version
-        run: |
-          if [ -d "/Applications/Xcode_26.2.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
-          elif [ -d "/Applications/Xcode_26.1.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_26.1.app/Contents/Developer
-          else
-            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          fi
-          swift --version
-
-      - name: Update version in project files
-        env:
-          NEW_VERSION: ${{ needs.create-draft-release.outputs.version }}
-        run: |
-          jq --arg v "$NEW_VERSION" \
-            '.version = $v | .bundle.createUpdaterArtifacts = true' \
-            src-tauri/tauri.conf.json > /tmp/tauri.conf.json
-          mv /tmp/tauri.conf.json src-tauri/tauri.conf.json
-
-          jq --arg v "$NEW_VERSION" '.version = $v' web-app/package.json > /tmp/package.json
-          mv /tmp/package.json web-app/package.json
-
-          cargo install ctoml || true
-          ctoml src-tauri/Cargo.toml package.version "$NEW_VERSION"
-
-      - name: Import code signing certificate
-        uses: apple-actions/import-codesign-certs@v2
-        continue-on-error: true
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Configure Yarn
-        run: |
-          corepack enable
-          corepack prepare yarn@4.5.3 --activate
-          yarn config set -H enableImmutableInstalls false
-
-      - name: Install dependencies and build core
-        run: |
-          make install-and-build
-          make install-rust-targets
-
-      - name: Build web app and generate icons
-        env:
-          NODE_OPTIONS: "--max-old-space-size=8192"
-        run: |
-          yarn build:web
-          yarn build:icon
-
-      - name: Restore DMG background after icon generation
-        run: |
-          mkdir -p src-tauri/icons/dmg
-          git checkout -- src-tauri/icons/dmg/background.png
-          echo "=== DMG background restored ==="
-          file src-tauri/icons/dmg/background.png
-          ls -la src-tauri/icons/dmg/background.png
-
-      - name: Build app (universal binary)
-        env:
-          TAURI_BUNDLER_DMG_IGNORE_CI: "true"
-          NODE_OPTIONS: "--max-old-space-size=4196"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          yarn copy:assets:tauri
-
-          echo "=== Pre-build DMG verification ==="
-          file src-tauri/icons/dmg/background.png
-          grep -A2 '"background"' src-tauri/tauri.macos.conf.json
-          echo "=== Building ==="
-
-          yarn download:bin
-          yarn build:cli
-          # Универсальная macOS-сборка + переименование VOLNAME с версией + ресигн/нотаризация DMG
-          make build-mac
-
-      - name: Collect artifact metadata
-        id: metadata
-        env:
-          VERSION: ${{ needs.create-draft-release.outputs.version }}
-        run: |
-          cd src-tauri/target/universal-apple-darwin/release/bundle/macos
-
-          zip -r "gchat-mac-universal-${VERSION}.zip" "GChat.app"
-
-          MAC_SIG=$(cat "GChat.app.tar.gz.sig")
-          TAR_NAME="GChat.app.tar.gz"
-          ZIP_NAME="gchat-mac-universal-${VERSION}.zip"
-
-          echo "mac_sig=${MAC_SIG}" >> "$GITHUB_OUTPUT"
-          echo "tar_name=${TAR_NAME}" >> "$GITHUB_OUTPUT"
-          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
-
-          cd ../../bundle/dmg
-          DMG_NAME=$(ls *.dmg | head -1)
-          echo "dmg_name=${DMG_NAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload .zip to release
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
-          asset_path: ./src-tauri/target/universal-apple-darwin/release/bundle/macos/${{ steps.metadata.outputs.zip_name }}
-          asset_name: ${{ steps.metadata.outputs.zip_name }}
-          asset_content_type: application/zip
-
-      - name: Upload .dmg to release
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
-          asset_path: ./src-tauri/target/universal-apple-darwin/release/bundle/dmg/${{ steps.metadata.outputs.dmg_name }}
-          asset_name: ${{ steps.metadata.outputs.dmg_name }}
-          asset_content_type: application/octet-stream
-
-      - name: Upload .tar.gz (for updater) to release
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
-          asset_path: ./src-tauri/target/universal-apple-darwin/release/bundle/macos/${{ steps.metadata.outputs.tar_name }}
-          asset_name: ${{ steps.metadata.outputs.tar_name }}
-          asset_content_type: application/gzip
+          echo "::warning::Could not update the release body after retries; keeping source-commit provenance"
 
   # ──────────────────────────────────────────────────────────────
   # Windows  (x86_64 — NSIS + MSI, DigiCert KeyLocker code signing)
@@ -550,8 +390,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          for exe in src-tauri/target/release/bundle/nsis/*-setup.exe; do
-            [ -f "$exe" ] || continue
+          shopt -s nullglob
+          installers=(src-tauri/target/release/bundle/nsis/*-setup.exe)
+          if [ "${#installers[@]}" -ne 1 ] || [ ! -f "${installers[0]}" ] || [ ! -s "${installers[0]}" ]; then
+            echo "::error::Expected one nonempty final NSIS updater payload."
+            exit 1
+          fi
+          for exe in "${installers[@]}"; do
             sigfile="${exe}.sig"
             if [ -f "$sigfile" ]; then
               rm "$sigfile"
@@ -570,8 +415,22 @@ jobs:
           cd src-tauri/target/release/bundle
 
           cd nsis
-          EXE_NAME=$(ls *.exe | head -1)
-          WIN_SIG=$(cat "${EXE_NAME}.sig" 2>/dev/null || echo "")
+          shopt -s nullglob
+          installers=(*-setup.exe)
+          if [ "${#installers[@]}" -ne 1 ] || [ ! -f "${installers[0]}" ] || [ ! -s "${installers[0]}" ]; then
+            echo "::error::Expected one nonempty final NSIS updater payload."
+            exit 1
+          fi
+          EXE_NAME="${installers[0]}"
+          if [ ! -f "${EXE_NAME}.sig" ] || [ ! -s "${EXE_NAME}.sig" ]; then
+            echo "::error::Missing or empty updater signature for ${EXE_NAME}."
+            exit 1
+          fi
+          WIN_SIG=$(cat "${EXE_NAME}.sig")
+          if [[ ! "$WIN_SIG" =~ [^[:space:]] ]]; then
+            echo "::error::Blank updater signature for ${EXE_NAME}."
+            exit 1
+          fi
           echo "exe_name=${EXE_NAME}" >> "$GITHUB_OUTPUT"
           echo "win_sig=${WIN_SIG}" >> "$GITHUB_OUTPUT"
 
@@ -582,7 +441,7 @@ jobs:
       - name: Upload NSIS installer to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/nsis/${{ steps.metadata.outputs.exe_name }}
@@ -592,7 +451,7 @@ jobs:
       - name: Upload MSI installer to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/msi/${{ steps.metadata.outputs.msi_name }}
@@ -600,10 +459,9 @@ jobs:
           asset_content_type: application/octet-stream
 
       - name: Upload NSIS updater signature to release
-        if: steps.metadata.outputs.win_sig != ''
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/nsis/${{ steps.metadata.outputs.exe_name }}.sig
@@ -675,7 +533,7 @@ jobs:
 
       - name: Install Python dependencies
         # `yarn build:icon` calls scripts/build-macos-app-icon.py which
-        # imports PIL — same as macOS / Windows jobs. On ubuntu-22.04 the
+        # imports PIL — same as the Windows job. On ubuntu-22.04 the
         # system `pip` writes to /usr/lib/python3/dist-packages (root-only),
         # so we install into the runner user's ~/.local site via --user.
         # Pip 22.0.2 doesn't know `--break-system-packages` (added in 23),
@@ -771,8 +629,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          for app in src-tauri/target/release/bundle/appimage/*.AppImage; do
-            [ -f "$app" ] || continue
+          shopt -s nullglob
+          appimages=(src-tauri/target/release/bundle/appimage/*.AppImage)
+          if [ "${#appimages[@]}" -ne 1 ] || [ ! -f "${appimages[0]}" ] || [ ! -s "${appimages[0]}" ]; then
+            echo "::error::Expected one nonempty final AppImage updater payload."
+            exit 1
+          fi
+          for app in "${appimages[@]}"; do
             sigfile="${app}.sig"
             if [ -f "$sigfile" ]; then
               rm "$sigfile"
@@ -792,16 +655,21 @@ jobs:
           cd src-tauri/target/release/bundle/appimage
           echo "=== bundle/appimage/ contents ==="
           ls -la
-          APPIMAGE_NAME=$(ls *.AppImage | head -1)
-          if [ -z "$APPIMAGE_NAME" ]; then
-            echo "ERROR: no .AppImage produced"
+          shopt -s nullglob
+          appimages=(*.AppImage)
+          if [ "${#appimages[@]}" -ne 1 ] || [ ! -f "${appimages[0]}" ] || [ ! -s "${appimages[0]}" ]; then
+            echo "::error::Expected one nonempty final AppImage updater payload."
             exit 1
           fi
-          LINUX_SIG=""
-          if [ -f "${APPIMAGE_NAME}.sig" ]; then
-            LINUX_SIG=$(cat "${APPIMAGE_NAME}.sig")
-          else
-            echo "Warning: no ${APPIMAGE_NAME}.sig (Tauri updater signature missing)"
+          APPIMAGE_NAME="${appimages[0]}"
+          if [ ! -f "${APPIMAGE_NAME}.sig" ] || [ ! -s "${APPIMAGE_NAME}.sig" ]; then
+            echo "::error::Missing or empty updater signature for ${APPIMAGE_NAME}."
+            exit 1
+          fi
+          LINUX_SIG=$(cat "${APPIMAGE_NAME}.sig")
+          if [[ ! "$LINUX_SIG" =~ [^[:space:]] ]]; then
+            echo "::error::Blank updater signature for ${APPIMAGE_NAME}."
+            exit 1
           fi
           echo "appimage_name=${APPIMAGE_NAME}" >> "$GITHUB_OUTPUT"
           echo "linux_sig=${LINUX_SIG}" >> "$GITHUB_OUTPUT"
@@ -809,7 +677,7 @@ jobs:
       - name: Upload .AppImage to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/appimage/${{ steps.metadata.outputs.appimage_name }}
@@ -817,10 +685,9 @@ jobs:
           asset_content_type: application/octet-stream
 
       - name: Upload .AppImage updater signature to release
-        if: steps.metadata.outputs.linux_sig != ''
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./src-tauri/target/release/bundle/appimage/${{ steps.metadata.outputs.appimage_name }}.sig
@@ -828,24 +695,24 @@ jobs:
           asset_content_type: text/plain
 
   # ──────────────────────────────────────────────────────────────
-  # Tauri updater manifest  (macOS + Windows + Linux; tolerant of any being skipped)
+  # Tauri updater manifest  (Windows + Linux; tolerant of either being skipped)
   # ──────────────────────────────────────────────────────────────
   publish-latest-json:
     if: |
       always() && needs.create-draft-release.result == 'success' &&
-      (needs.build-macos.result == 'success' || needs.build-windows.result == 'success' || needs.build-linux-x64.result == 'success')
+      (needs.build-windows.result == 'success' || needs.build-linux-x64.result == 'success')
     runs-on: ubuntu-latest
-    needs: [create-draft-release, build-macos, build-windows, build-linux-x64]
+    needs: [create-draft-release, build-windows, build-linux-x64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Gate updater manifest admission
+        run: python3 -m unittest discover -s tests -p test_updater_manifest.py
+
       - name: Generate latest.json for Tauri updater
         env:
           VERSION: ${{ needs.create-draft-release.outputs.version }}
-          MAC_SIG: ${{ needs.build-macos.outputs.mac_sig }}
-          TAR_NAME: ${{ needs.build-macos.outputs.tar_name }}
-          MAC_RESULT: ${{ needs.build-macos.result }}
           WIN_SIG: ${{ needs.build-windows.outputs.win_sig }}
           EXE_NAME: ${{ needs.build-windows.outputs.exe_name }}
           WIN_RESULT: ${{ needs.build-windows.result }}
@@ -854,7 +721,6 @@ jobs:
           LINUX_RESULT: ${{ needs.build-linux-x64.result }}
         run: |
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-          DARWIN_URL="https://github.com/SectileLabs/gchat/releases/download/v${VERSION}/${TAR_NAME// /.}"
           WIN_URL="https://github.com/SectileLabs/gchat/releases/download/v${VERSION}/${EXE_NAME// /.}"
           LINUX_URL="https://github.com/SectileLabs/gchat/releases/download/v${VERSION}/${APPIMAGE_NAME// /.}"
 
@@ -863,38 +729,15 @@ jobs:
           # half-populated entry and try to fetch an empty URL.
           jq --arg version "$VERSION" \
              --arg pub_date "$PUB_DATE" \
-             --arg darwin_sig "$MAC_SIG" \
-             --arg darwin_url "$DARWIN_URL" \
              --arg win_sig "$WIN_SIG" \
              --arg win_url "$WIN_URL" \
              --arg linux_sig "$LINUX_SIG" \
              --arg linux_url "$LINUX_URL" \
-             --arg mac_result "$MAC_RESULT" \
              --arg win_result "$WIN_RESULT" \
              --arg linux_result "$LINUX_RESULT" \
-             '.version = $version
-              | .pub_date = $pub_date
-              | (if $mac_result == "success" then
-                  .platforms["darwin-aarch64"].signature = $darwin_sig
-                  | .platforms["darwin-aarch64"].url = $darwin_url
-                  | .platforms["darwin-x86_64"].signature = $darwin_sig
-                  | .platforms["darwin-x86_64"].url = $darwin_url
-                else
-                  del(.platforms["darwin-aarch64"])
-                  | del(.platforms["darwin-x86_64"])
-                end)
-              | (if $win_result == "success" then
-                  .platforms["windows-x86_64"].signature = $win_sig
-                  | .platforms["windows-x86_64"].url = $win_url
-                else
-                  del(.platforms["windows-x86_64"])
-                end)
-              | (if $linux_result == "success" then
-                  .platforms["linux-x86_64"].signature = $linux_sig
-                  | .platforms["linux-x86_64"].url = $linux_url
-                else
-                  del(.platforms["linux-x86_64"])
-                end)' \
+             --arg exe_name "$EXE_NAME" \
+             --arg appimage_name "$APPIMAGE_NAME" \
+             -f scripts/updater-manifest.jq \
              src-tauri/latest.json.template > latest.json
 
           cat latest.json
@@ -902,7 +745,7 @@ jobs:
       - name: Upload latest.json to release
         uses: actions/upload-release-asset@v1.0.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SECTILE_RELEASE_TOKEN }}
         with:
           upload_url: ${{ needs.create-draft-release.outputs.upload_url }}
           asset_path: ./latest.json
