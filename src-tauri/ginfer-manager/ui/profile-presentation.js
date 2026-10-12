@@ -3,6 +3,12 @@ export function profileEvidenceLabel(tier) {
     : tier === 'calculated-startup-smoke' ? 'Estimated' : 'Untested'
 }
 
+export function profileOptionLabel(profile, recommended) {
+  const context = profile.max_context % 1024 === 0
+    ? `${profile.max_context / 1024}K` : profile.max_context.toLocaleString()
+  return `${recommended ? 'Recommended · ' : ''}${profileEvidenceLabel(profile.qualification.tier)} · C${profile.concurrency} · ${context} context · ${profile.options.vision ? 'Vision + text' : 'Text only'}`
+}
+
 export function profilePresentation(profiles, selectedIndex, showAll) {
   let recommendedIndex = -1
   profiles.forEach((profile, index) => {

@@ -4,6 +4,8 @@ import { EngineProfilePicker } from '../EngineProfilePicker'
 import type { EngineSnapshot } from '@/services/engines'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
+const visibleProfileIds = () => Array.from((screen.getByLabelText('Hardware profile') as HTMLSelectElement).options)
+  .filter(option => option.value).map(option => JSON.parse(option.value)[1])
 const snapshot = (): EngineSnapshot => ({
   host_id: 'host', display_name: 'Host', revision: 1,
   gpus: [{ uuid: 'GPU-one', name: 'Fixture GPU', memory_mib: 32607, compute_capability: '12.0' }],
@@ -22,7 +24,7 @@ it('reserves other instances GPUs and requires confirmation before switching the
   fireEvent.change(screen.getByLabelText('Server Host'), { target: { value: 'existing' } })
   expect(screen.getByLabelText('Hardware profile')).toBeEnabled()
   expect(screen.getByLabelText('GPU / GPU group')).toBeDisabled()
-  const option = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
+  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
@@ -56,7 +58,7 @@ it('preserves saved structured-output OFF when applying a qualified profile', as
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
   const structured = screen.getByRole('checkbox', { name: 'Structured outputs' })
   expect(structured).not.toBeChecked()
-  const option = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
+  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: false })))
@@ -98,7 +100,7 @@ it('identifies the Engine recorded by full-context evidence without claiming a n
   const data = snapshot()
   data.instances = []
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  const option = screen.getByRole('option', { name: /Tested .*Engine 922e5a87/ }) as HTMLOptionElement
+  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   expect(screen.getByText(/Evidence applies to the recorded options and Engine 922e5a87/)).toBeInTheDocument()
   expect(screen.getByText(/A changed option or Engine needs separate validation/)).toBeInTheDocument()
@@ -113,7 +115,7 @@ it('defaults new instances to an available Vision profile without starting it', 
   data.launch_profiles!.push(vision)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const selected = screen.getByRole('option', { name: /Vision \+ text \(default\)/ }) as HTMLOptionElement
+  const selected = screen.getByRole('option', { name: /Vision \+ text$/ }) as HTMLOptionElement
   expect(screen.getByLabelText('Hardware profile')).toHaveValue(selected.value)
   expect(launch).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
@@ -145,9 +147,9 @@ it('keeps the existing untested Vision default alongside a tested text recommend
   data.launch_profiles!.push(vision)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const selected = screen.getByRole('option', { name: /^Untested · Pending Vision/ }) as HTMLOptionElement
+  const selected = screen.getByRole('option', { name: 'Untested · C4 · 32K context · Vision + text' }) as HTMLOptionElement
   expect(screen.getByLabelText('Hardware profile')).toHaveValue(selected.value)
-  expect(screen.getByRole('option', { name: /^Recommended · Tested · Fixture C4/ })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' })).toBeInTheDocument()
   expect(launch).not.toHaveBeenCalled()
 })
 
@@ -175,15 +177,15 @@ it('shows one tested recommendation and preserves an alternate selection when co
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
   expect(screen.getAllByRole('option', { name: /Recommended/ })).toHaveLength(1)
-  expect(screen.queryByRole('option', { name: /Tested C4|Estimated C2|Untested C8/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: /^(Tested · C4|Estimated · C2|Untested · C8)/ })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
-  expect(screen.getByRole('option', { name: /^Tested · Tested C4/ })).toBeInTheDocument()
-  expect(screen.getByRole('option', { name: /^Estimated · Estimated C2/ })).toBeInTheDocument()
-  const alternate = screen.getByRole('option', { name: /^Untested · Untested C8/ }) as HTMLOptionElement
+  expect(screen.getByRole('option', { name: 'Tested · C4 · 32K context · Vision + text' })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: 'Estimated · C2 · 32K context · Vision + text' })).toBeInTheDocument()
+  const alternate = screen.getByRole('option', { name: 'Untested · C8 · 32K context · Vision + text' }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: alternate.value } })
   fireEvent.click(screen.getByRole('button', { name: 'Show less' }))
   expect(screen.getByLabelText('Hardware profile')).toHaveValue(alternate.value)
-  expect(screen.queryByRole('option', { name: /Tested C4|Estimated C2/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: /^(Tested · C4|Estimated · C2)/ })).not.toBeInTheDocument()
   expect(screen.getByText(/Startup, memory margin and inference are unverified/)).toBeInTheDocument()
   expect(launch).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
@@ -211,14 +213,12 @@ it('filters profiles by model and assigned hardware and clears a previous model 
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
   const profile = screen.getByLabelText('Hardware profile')
-  const initial = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
+  const initial = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
   fireEvent.change(profile, { target: { value: initial.value } })
-  expect(screen.queryByRole('option', { name: /Qwen C4/ })).not.toBeInTheDocument()
+  expect(visibleProfileIds()).toEqual(['fixture-c4'])
   fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'qwen' } })
   expect(profile).toHaveValue('')
-  expect(screen.queryByRole('option', { name: /Fixture C4/ })).not.toBeInTheDocument()
-  expect(screen.getByRole('option', { name: /Qwen C4/ })).toBeInTheDocument()
-  expect(screen.queryByRole('option', { name: /Other GPU profile|Unsupported hardware/ })).not.toBeInTheDocument()
+  expect(visibleProfileIds()).toEqual(['qwen-c4'])
   expect(screen.getByRole('button', { name: 'Apply profile and restart' })).toBeDisabled()
   expect(launch).not.toHaveBeenCalled()
 })
@@ -237,13 +237,13 @@ it('selects physical GPUs separately and filters profiles before launching', asy
   const gpu = screen.getByLabelText('GPU / GPU group')
   expect(gpu).toHaveValue(JSON.stringify(['GPU-one']))
   expect(screen.getByRole('option', { name: 'GPU 2: NVIDIA CMP 170HX · 64 GB' })).toHaveValue(JSON.stringify(['GPU-two']))
-  expect(screen.queryByRole('option', { name: /Second GPU profile/ })).not.toBeInTheDocument()
-  const first = screen.getByRole('option', { name: /Fixture C4/ }) as HTMLOptionElement
+  expect(visibleProfileIds()).toEqual(['fixture-c4'])
+  const first = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: first.value } })
   fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-two']) } })
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
-  expect(screen.queryByRole('option', { name: /Fixture C4/ })).not.toBeInTheDocument()
-  const option = screen.getByRole('option', { name: /Second GPU profile/ }) as HTMLOptionElement
+  expect(visibleProfileIds()).toEqual(['second'])
+  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ gpu_uuids: ['GPU-two'], profile_id: 'second' })))
