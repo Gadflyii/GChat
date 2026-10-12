@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { invoke } from '@tauri-apps/api/core'
 import { isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart'
 import { route } from '@/constants/routes'
@@ -44,6 +44,7 @@ export const Route = createFileRoute(route.settings.general as any)({
 
 function General() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const {
     spellCheckChatInput,
     setSpellCheckChatInput,
@@ -351,7 +352,10 @@ function General() {
                   <Switch
                     aria-label="Enable Gbot"
                     checked={gbotEnabled}
-                    onCheckedChange={setGbotEnabled}
+                    onCheckedChange={(enabled) => {
+                      setGbotEnabled(enabled)
+                      if (enabled) void navigate({ to: route.gbot.index })
+                    }}
                   />
                 }
               />
