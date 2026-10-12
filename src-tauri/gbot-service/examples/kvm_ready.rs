@@ -254,9 +254,49 @@ mod linux {
         };
         if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {
             for variant in 0..2 {
-                bench_task(runtime, identity, &assignment, &processes, evidence, variant).await?;
+                bench_task(
+                    runtime,
+                    identity,
+                    &assignment,
+                    &processes,
+                    evidence,
+                    variant,
+                )
+                .await?;
             }
             return Ok(());
+        }
+        if std::env::var_os("GBOT_CUA_OVERWRITE_FIXTURE").is_some() {
+            let previous = b"Hello from Gbot";
+            let written = operation(
+                runtime,
+                identity,
+                GuestOperationKind::Write {
+                    path: GuestPath("/home/gbot/hello.txt".into()),
+                    offset: 0,
+                    data: previous.to_vec(),
+                    truncate: true,
+                },
+            )
+            .await?;
+            let read = operation(
+                runtime,
+                identity,
+                GuestOperationKind::Read {
+                    path: GuestPath("/home/gbot/hello.txt".into()),
+                    offset: 0,
+                    length: 4096,
+                },
+            )
+            .await?;
+            tokio::fs::write(
+                evidence.join("overwrite-precondition.json"),
+                serde_json::to_vec_pretty(&json!({"written":written,"read":read}))?,
+            )
+            .await?;
+            if !matches!(read, GuestResult::Read { data } if data == previous) {
+                return Err("overwrite precondition did not match".into());
+            }
         }
         let names = [
             "list_windows",
@@ -309,6 +349,9 @@ mod linux {
                     format!("saved file did not match the requested line: {other:?}").into(),
                 )
             }
+        }
+        if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {
+            return Ok(());
         }
         for variant in 0..2 {
             bench_task(
@@ -443,7 +486,9 @@ mod linux {
                 )
                 .await?;
                 if !matches!(reply, GuestResult::ExecFinished { exit_code: 0, .. }) {
-                    return Err("guest diagnostic did not exit successfully; see its receipt".into());
+                    return Err(
+                        "guest diagnostic did not exit successfully; see its receipt".into(),
+                    );
                 }
                 println!("GUEST_DIAGNOSTIC_RECORDED");
                 return Ok(());
@@ -570,13 +615,14 @@ mod linux {
         let passed = matches!(result, Ok(Ok(())));
         let retained = !passed
             || std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some()
-            || std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some();
+            || std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some()
+            || std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some();
         let cleanup = if !retained {
             NativeVault.delete(record.credential_ref).await
         } else {
             Ok(())
         };
-        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
+        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
         stop?;
         cleanup?;
         result??;

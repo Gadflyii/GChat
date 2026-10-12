@@ -9,7 +9,7 @@ use tokio::{fs, process::Command};
 use uuid::Uuid;
 
 pub const CUA_REVISION: &str = "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc";
-pub const CUA_DRIVER_REVISION: &str = "199e92644bdfd7d76066b3c2964fe43e9e84a67e";
+pub const CUA_DRIVER_REVISION: &str = "c549ab4d7f31a08c339da1732700b6664af438a6";
 const CLOUD_INIT: &str = include_str!("../guest/cloud-init.json");
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
