@@ -77,6 +77,7 @@ pub enum ToolBinding {
     Shell { cwd: GuestPath },
     ReadFile,
     WriteFile,
+    CuaGuide,
 }
 
 impl FunctionTool {
@@ -116,6 +117,7 @@ impl FunctionTool {
                     .and_then(Value::as_u64)
                     .ok_or(ExecutorError::InvalidMessage)?,
             },
+            ToolBinding::CuaGuide => return Err(ExecutorError::InvalidMessage),
             ToolBinding::WriteFile => GuestOperationKind::Write {
                 path: GuestPath(text("path")?),
                 offset: 0,
@@ -204,8 +206,8 @@ impl CuaTask {
     pub async fn create(
         path: PathBuf,
         identity: SessionIdentity,
-        messages: Vec<Value>,
-        tools: Vec<FunctionTool>,
+        mut messages: Vec<Value>,
+        mut tools: Vec<FunctionTool>,
     ) -> Result<Self> {
         identity
             .validate()
@@ -214,6 +216,7 @@ impl CuaTask {
         if store.load::<TaskRecord>().await?.is_some() {
             return Err(ExecutorError::InvalidMessage);
         }
+        crate::cua_skill::install(&mut messages, &mut tools)?;
         let record = TaskRecord {
             id: Uuid::new_v4(),
             identity,
@@ -422,6 +425,12 @@ impl CuaTask {
             .iter()
             .find(|tool| tool.name == name)
             .ok_or(ExecutorError::InvalidMessage)?;
+        if matches!(tool.binding, ToolBinding::CuaGuide) {
+            let result = crate::cua_skill::read(&args)?;
+            self.record_tool_message(&call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
         let request = GuestRequest {
             identity: self.record.identity,
             operation_id: OperationId::new(),
@@ -626,9 +635,9 @@ mod tests {
         task.recover_tools(&runtime, &Deny).await.unwrap();
         task.recover_tools(&runtime, &Deny).await.unwrap();
         assert_eq!(task.snapshot().calls.len(), 1);
-        assert_eq!(task.snapshot().messages.len(), 2);
+        assert_eq!(task.snapshot().messages.len(), 3);
         let output: Value =
-            serde_json::from_str(task.snapshot().messages[1]["content"].as_str().unwrap()).unwrap();
+            serde_json::from_str(task.snapshot().messages[2]["content"].as_str().unwrap()).unwrap();
         assert_eq!(output["stdout"], "done");
     }
     #[tokio::test]
@@ -647,7 +656,7 @@ mod tests {
             task.recover_tools(&runtime, &Deny).await,
             Err(ExecutorError::NeedsReview)
         ));
-        assert_eq!(task.snapshot().messages.len(), 1);
+        assert_eq!(task.snapshot().messages.len(), 2);
     }
     #[tokio::test]
     async fn recovered_unstarted_call_still_requires_approval() {
@@ -658,6 +667,35 @@ mod tests {
             Err(ExecutorError::Denied)
         ));
         assert!(task.snapshot().calls.is_empty());
+    }
+    #[tokio::test]
+    async fn guide_read_survives_restart_without_guest_access_or_approval() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        task.record
+            .messages
+            .retain(|message| message["role"] == "system");
+        task.record.messages.push(json!({"role":"assistant","tool_calls":[{"id":"guide-1","type":"function","function":{"name":"read_cua_guide","arguments":"{\"file\":\"LINUX.md\"}"}}]}));
+        task.save().await.unwrap();
+        drop(task);
+        let mut task = CuaTask::open(dir.path().join("task.json")).await.unwrap();
+        task.recover_tools(&runtime, &Deny).await.unwrap();
+        assert!(task.snapshot().calls.is_empty());
+        drop(task);
+        let mut task = CuaTask::open(dir.path().join("task.json")).await.unwrap();
+        task.recover_tools(&runtime, &Deny).await.unwrap();
+        let messages = &task.snapshot().messages;
+        assert_eq!(messages.len(), 3);
+        let guide: Value = serde_json::from_str(messages[2]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(guide["file"], "LINUX.md");
+        assert!(guide["content"]
+            .as_str()
+            .unwrap()
+            .contains("dedicated guest transport and real foreground input"));
+        assert!(messages[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Never use\nAT-SPI DoAction"));
     }
     #[tokio::test]
     async fn cancellation_during_approval_leaves_no_effect_and_can_resume() {

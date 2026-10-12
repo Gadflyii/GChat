@@ -5,8 +5,8 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Current item: complete the approved [Cua integration plan](cua-map.md), replacing
-the prototype executor with `ComputerAgent`.
+Current item: import the pinned Cua Driver skill through the shared skill catalog
+and the accepted ComputerAgent executor, following the [Cua adoption plan](cua-map.md).
 Ron selected Cua for the agent framework while retaining our VM provisioning,
 Hyper-V and M365 Cloud PC connection. GChat retains durable state, vault,
 approvals, sessions and inference assignment. The service boundary retains approvals and saved effect receipts; Cua owns task
@@ -577,28 +577,38 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 ## Current record and inventory
 
-Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
-older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
-supersedes the initial draft's unassigned-cloud scope. The approved Cua map is
-merged in main `aa60f9015`. Executor and geometry correction are merged in
-main `7672fb060`. Current candidate is `feat/gbot-cua-adoption-7672`
-at `/ai/gchat-worktrees/gbot-cua-executor-aa60`.
-Deliverable: correct nested overwrite observation in the fork Driver, protect it
-with a focused fixture, and settle exact desktop executor acceptance with one
-SMOL task. The approved adoption queue follows this result.
-Acceptance: the unchanged exact-byte oracle on Ada4090 and a fresh private guest
-using the same approved image, transport and model settings.
-The dense INT control also omitted the period; Ron then authorized one SMOL
-retry after delimiting that literal. Reuse both completed Cua hello_file_env
-evaluations. Establish and correct the owning cause of an executor failure;
-the ambiguous original instruction cannot establish a model-quality gap. Each adoption gets its
-focused supported-behavior gate and one result. No Windows, human desktop,
-new dependency closure, sampling changes or broad benchmark campaign.
-Outcome: nested overwrite observation and exact desktop executor acceptance
-pass. Source is pushed for the normal GChat merge; the fork fix stays on
-`Gadflyii/cua`, with no upstream posting. Next action after landing: the approved
-Cua adoption queue, starting with driver skill import. Previous failures remain
-as concise evidence; the two passing Cua evaluations were not rerun.
+Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
+is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
+and two Cua evaluator receipts below. The skill-import candidate is
+`feat/gbot-cua-skill-918c` at `/ai/gchat-worktrees/gbot-cua-skill-918c`.
+Deliverable: seed the pinned MIT Cua skill and linked guides through GChat's
+existing catalog, and use that same bundle in Gbot's accepted executor.
+Acceptance is complete: catalog seeding/platform policy (4 cases), skill
+loading (1), executor recovery (5), strict service Clippy and example build
+pass. The local guide tool needs neither guest access nor approval and resumes
+safely after restart. All relative bundle links resolve.
+
+One fresh dedicated Debian guest ran the skill-enabled ComputerAgent with the
+unchanged accepted Qwen SMOL 262144/C1/INT8/DFlash K7/greedy configuration.
+The model read `LINUX.md` through `read_cua_guide`, used foreground input,
+confirmed replacement, and saved exactly 16 bytes, `Hello from Gbot.`.
+Independent SSH readback passed: 21 model replies and 20 guest receipts.
+Full raw MCP/task evidence remains on S1 at
+`/ai/gbot-vms/cua-skill-20261012/evidence/desktop-task.json`; concise local
+receipts are `out/gbot-cua-skill-20261012/{source-result,skill-task-result,gate-result}.json`.
+This is text-only functional acceptance, not performance or Vision qualification.
+No dependencies, sampling settings or Windows execution changed.
+
+Ada engine PID 1831779 exited normally at 11:28:10Z; both lifetime guards were
+returned. The product adapter stopped/unregistered guest
+`871dcb50-60b1-4307-a671-d0dacddef274` and deleted its vault key. Its disposable
+root was removed, freeing 3.745 GiB; controller and bookings ended. Retain
+`{model-stop,retirement,cleanup}.json`, not the retired disk or private fixture.
+The initial root-fixture feature selection and private-keyring reconnect
+failures occurred before any model task. The fixture now enables `test-tauri,cli`
+and keeps one mode-600 password per private keyring; corrected gates pass.
+Next unresolved action: reviewed merge of the skill import, then the driver's
+compact model-facing output contract in the adoption queue.
 
 **Nested modal candidate (2026-10-12).** Fork `c549ab4d7f31a08c339da1732700b6664af438a6`
 removes the empty-title exclusion from X11 enumeration, includes every visible
@@ -782,7 +792,10 @@ External pages, runtime and physical acceptance were not exercised by this gate.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | `feat/gbot-cua-adoption-7672`, source pushed `8adfc6727`; driver pin, seeded overwrite and boot-session example built, strict Clippy PASS. One exact-content SMOL gate PASS, independent SSH readback exactly 16 bytes. Retain source pending normal merge. |
+| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-skill-918c` | Skill import candidate from main `918c7940b`; focused cases, strict Clippy and example build PASS. No local compile/model active; local booking544 returned11:05Z. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-skill-20261012/` | Skill-enabled overwrite task PASS; guest retired by product adapter and disk removed (3.745 GiB). Controller/private fixtures and CPU112–113 bookings ended. Keep raw task/MCP and concise evidence. |
+| GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-skill-smol-20261012/` | Unchanged accepted Qwen SMOL262144 functional task PASS; engine exited normally11:28:10Z, both guards and booking440 returned, private API key removed. Keep launch/stop receipt and request log; no performance claim. |
+| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | Source `3d214b772` merged in main `918c7940b`; exact-content gate PASS. Retire this clean merged tree after skill handoff; reuse accepted evidence. |
 | GChat coordinator / local | `/ai/gchat-worktrees/cua-gbot-pin-0c69` | Fork `c549ab4d7` on `0c69d9a2c8`, pushed; eight visibility cases and compatible driver build PASS. Retain source for reviewed integration. |
 | GChat coordinator / S1 | `/ai/gbot-vms/cua-nested-modal-20261012/evidence/` | Fresh 1920×1080 guest, pinned c549 Driver, fresh session handshake and one seeded overwrite task PASS. Product retirement deleted its vault key and unregistered it; disposable guest root `9347208f-1e59-485d-a66c-fc472c4c984f` removed (5.47 GiB). Controller/keyring/QEMU exited, private API key removed, booking 1274 released. Keep raw task/MCP and concise result/cleanup receipts. |
 | GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-nested-smol-20261012/` | Accepted ec166 runtime, Qwen SMOL 262144/C1/INT8/DFlash K7/greedy/no-thinking. Single exact overwrite task PASS. Model exited normally 10:39:11Z, owned engine/launcher absent, private API key deleted, GPU/build guards returned, booking 437 released. Retain request/launch/stop evidence; model/profile/shared runtime unchanged. |
