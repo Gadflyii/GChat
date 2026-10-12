@@ -13,32 +13,26 @@ approvals, sessions and inference assignment. The service boundary retains appro
 iteration.
 
 The local-first service, vault-backed SSH/Cua transport and dedicated Debian
-guest are implemented. The Cua executor implementation is `b4dea80e6`, with
-fork `199e92644` including the provider fixes and owned-popup foreground fix.
-Focused executor, provider and child-process gates pass. The fork's narrow
-owned-popup fixture and compatible Ubuntu 24 driver build pass at
-`199e92644bdfd7d76066b3c2964fe43e9e84a67e`. The patched driver was installed
-through cloud-init into one fresh guest with a new native-vault key; no guest
-sudo or disk surgery. Its archive SHA-256 is
-`0a12206990d2e72a77f7ef8f0b6c56c5a71b498984851878caefc6ffef6497b9`.
+guest are implemented. The production Cua executor is merged in `7672fb060`.
+The SDK base remains `0c69d9a2c8`; the reviewed Driver fork is now
+`c549ab4d7`, which preserves visible untitled transient/modal windows and marks
+the active modal. Eight focused visibility cases, the compatible Ubuntu 24
+Driver build, the example build and strict Clippy pass.
 
-Guest provisioning now uses a 1920×1080 screen: GTK's natural Save dialog was
-taller than the earlier 1280×800 screen. A fresh dedicated guest completed native
-Save and independent SSH readback. The original SMOL and dense INT tasks both
-omitted the period in the unquoted instruction. One authorized SMOL retry with
-the unchanged literal in a code block typed `Hello from Gbot.` correctly, but
-could not save: Cua's text-only observation omitted the nested overwrite
-confirmation visible on the actual desktop. The file retains its old content;
-exact desktop acceptance remains open. Both actual Cua `hello_file_env` variants passed
-their setup/model/evaluation gates with reward 1.0 on Ada Qwen SMOL, 262144
-context. No agent-side geometry workaround or relaxed content check is applied.
+Exact desktop executor acceptance passes: the single seeded overwrite task
+observed the nested Replace confirmation, clicked Replace and saved exactly
+16 bytes, `Hello from Gbot.`, verified independently by SSH. The owning Driver
+fix is pushed; model settings, input guards and the exact-byte oracle are
+unchanged. Both actual Cua `hello_file_env` variants already passed with reward
+1.0 on Ada Qwen SMOL, 262144 context; their evidence is reused.
 
-The provider omits sampler overrides; all 19 resolved requests used Qwen's
-non-thinking defaults, including presence penalty 1.5, with only temperature
-changed to 0 by the approved greedy launch. The engine and guest are stopped,
-and GPU/CPU bookings are released. The private vault controller retains the
-stopped guest's credential pending the exact-content decision. No human desktop
-input, native Windows execution, or new Python sandbox/dataset closure is used.
+The provider leaves Qwen sampler defaults intact, including presence penalty
+1.5; the approved greedy launch changes temperature to 0. The test guest used
+only reserved S1 cores 112–113. Its domain, disk and native-vault key are now
+retired; the model stopped normally and both bookings were released. No human
+desktop input, native Windows execution or new Python sandbox/dataset closure
+was used. This acceptance covers the tested text-only desktop task, not Vision
+or performance.
 
 ## Decided product scope
 
@@ -589,19 +583,60 @@ supersedes the initial draft's unassigned-cloud scope. The approved Cua map is
 merged in main `aa60f9015`. Executor and geometry correction are merged in
 main `7672fb060`. Current candidate is `feat/gbot-cua-adoption-7672`
 at `/ai/gchat-worktrees/gbot-cua-executor-aa60`.
-Deliverable: settle desktop executor acceptance after the dense Qwen INT control,
-then adopt the pinned Cua skill and compact output, review guest settings, browser,
-human handoff and viewer in the approved queue.
-Acceptance: the unchanged exact-byte oracle on the same Ada4090 and guest.
+Deliverable: correct nested overwrite observation in the fork Driver, protect it
+with a focused fixture, and settle exact desktop executor acceptance with one
+SMOL task. The approved adoption queue follows this result.
+Acceptance: the unchanged exact-byte oracle on Ada4090 and a fresh private guest
+using the same approved image, transport and model settings.
 The dense INT control also omitted the period; Ron then authorized one SMOL
 retry after delimiting that literal. Reuse both completed Cua hello_file_env
 evaluations. Establish and correct the owning cause of an executor failure;
 the ambiguous original instruction cannot establish a model-quality gap. Each adoption gets its
 focused supported-behavior gate and one result. No Windows, human desktop,
 new dependency closure, sampling changes or broad benchmark campaign.
-Next action: diagnose Cua's nested-dialog observation in the owning fork.
-The one corrected-literal SMOL gate is over; no second model retry is authorized
-by that gate. Preserve its blocked result and both original failures.
+Outcome: nested overwrite observation and exact desktop executor acceptance
+pass. Source is pushed for the normal GChat merge; the fork fix stays on
+`Gadflyii/cua`, with no upstream posting. Next action after landing: the approved
+Cua adoption queue, starting with driver skill import. Previous failures remain
+as concise evidence; the two passing Cua evaluations were not rerun.
+
+**Nested modal candidate (2026-10-12).** Fork `c549ab4d7f31a08c339da1732700b6664af438a6`
+removes the empty-title exclusion from X11 enumeration, includes every visible
+app window and owned transient descendant in observation, and marks the focused
+modal. Follow-up targets that modal rather than its blocked parent. Eight focused
+visibility cases pass, including main → Save As → untitled confirmation; the
+Ubuntu 24 driver build passes. X11-specific metadata is not claimed for Wayland
+or other platforms. The new driver archive SHA-256 is
+`2532c8bb8c6bef4f179285c58241a2f46c8fd2e1f6228c65bb65a1e6176261c6`.
+One fresh guest was provisioned through the unchanged product adapter with a
+new native-vault key. The fixture seeded the earlier 15-byte file before the
+model task so saving had to confirm replacement; this setup was not a model
+tool. Only the exact desktop gate ran; the two passing Cua evaluations were
+reused. Model, sampler, foreground-input guard and exact-byte oracle stayed
+unchanged.
+Evidence: `out/gbot-cua-executor-20261012/nested-modal/{test,build,harness-clippy}.log`.
+The initial inventory request returned 401 before any model task: the test
+launcher reused a redacted evidence argument instead of the private key. The
+launcher now reads a separate mode-600 credential and rejects placeholder values.
+The same guest resumes; `auth-preflight-result.json` preserves this harness failure.
+A restarted desktop rejected the harness's old session as required by the guest
+contract (`session-preflight-result.json`); example `8adfc6727` now creates a new
+session when starting a stopped guest and retains it for live reconnects. The
+session guard remains unchanged. The same guest reached Ready with its fresh
+boot session at 10:32Z. Authenticated model inventory returned 200, and the one
+authorized SMOL task started at 10:32:59Z. It completed 50 model replies and
+49 tool receipts. Observation included main `23068675`, Save As `23069151`
+(transient for main), and untitled confirmation `23089878` (transient for
+Save As), marked `active_modal: true`. Follow-up targeted that modal; the model
+clicked Replace. Independent SSH readback matched exactly 16 bytes,
+`Hello from Gbot.`. The gate passed and stopped the guest normally.
+Ada engine PID `1811180` exited normally at 10:39:11Z; its launcher is absent,
+guards were returned, and bookings 437/1274 were cancelled at actual end.
+The product adapter stopped/unregistered the guest and deleted its vault key;
+the disposable disk/seed root was removed, freeing 5.47 GiB. Raw MCP/task logs
+remain on S1. Concise local evidence:
+`out/gbot-cua-executor-20261012/nested-modal/{nested-modal-result,gate-result,model-stop,retirement,cleanup}.json`
+and `hello.txt`. Executor acceptance is closed for this text-only desktop scope.
 
 **Corrected-literal SMOL gate (2026-10-12 08:37Z).** The task and unchanged byte
 oracle now share `DESKTOP_LINE`, delimited in a code block. Focused example build
@@ -612,8 +647,9 @@ frame. Neither the raw Save As MCP reply nor its model projection exposed this
 confirmation: Save As window `23069163` had no `dialogs`/`follow_up` and reported
 Save enabled, while the screenshot showed it blocked by the confirmation. The
 model repeated Save clicks at the correct on-screen point `(1464,999)`.
-The underlying window/tree-selection cause remains unresolved; this is not an
-off-screen input failure or evidence that SMOL omitted the period again.
+The driver excluded untitled X11 windows and followed the blocked parent
+instead of its nested modal. Fork `c549ab4d7` corrects these observation owners;
+this was not an off-screen input failure or another omitted period.
 After 73 replies/calls the finite run was deliberately stopped, so the runner's
 `ChildFailed` is its interrupted outcome, not the cause. Independent SSH read
 still returned the old 15 bytes `Hello from Gbot`. Exact file acceptance is NOT
@@ -723,7 +759,7 @@ uses the same Debian image and transport with the patched archive installed
 by cloud-init; no guest sudo or disk surgery.
 
 The approved fork is `Gadflyii/cua`, branch `gbot/pin-0c69d9a`, at
-`/ai/gchat-worktrees/cua-gbot-pin-0c69`, committed and pushed as `199e92644`.
+`/ai/gchat-worktrees/cua-gbot-pin-0c69`, committed and pushed as `c549ab4d7`.
 Base SDK pin is `0c69d9a2c8`; custom-loop config and awaited asynchronous tool
 fixes at `896c68871` have three focused ComputerAgent cases passing. Python
 3.12.3 and the approved closure are isolated on S1. Actual cua-bench setup and
@@ -735,8 +771,8 @@ pass. The actual Python child + loopback HTTP provider/compaction/async-tool IPC
 case passes (2.294 s). Evidence: `executor-tests.log`, `clippy.log`, `build.log`,
 `bridge-test.log` in `/ai/gchat/out/gbot-cua-executor-20261012/`. The runner now
 retains its stopped guest and vault reference on a blocked task; it reopens the
-same guest/session/task instead of provisioning a duplicate. Physical acceptance
-is pending. S1 already has Python 3.12.3, so the approved isolated venv can run
+same guest/session/task instead of provisioning a duplicate. The subsequent
+physical executor acceptance is recorded above. S1 already has Python 3.12.3, so the approved isolated venv can run
 there without host packages or copying a Docker image.
 
 Docs gate passes: 347 local file links and 15 fixed-pin source paths resolve;
@@ -746,12 +782,14 @@ External pages, runtime and physical acceptance were not exercised by this gate.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | `feat/gbot-cua-adoption-7672` from main7672fb060; literal-only gate correction built/Clippy PASS. Corrected period typed; nested overwrite observation blocks exact file acceptance. No live model. |
-| GChat coordinator / local | `/ai/gchat-worktrees/cua-gbot-pin-0c69` | Fork199e92644 on0c69d9a2c8; provider and owned-popup fixtures passed, compatible driver built; keep until reviewed integration. |
+| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | `feat/gbot-cua-adoption-7672`, source pushed `8adfc6727`; driver pin, seeded overwrite and boot-session example built, strict Clippy PASS. One exact-content SMOL gate PASS, independent SSH readback exactly 16 bytes. Retain source pending normal merge. |
+| GChat coordinator / local | `/ai/gchat-worktrees/cua-gbot-pin-0c69` | Fork `c549ab4d7` on `0c69d9a2c8`, pushed; eight visibility cases and compatible driver build PASS. Retain source for reviewed integration. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-nested-modal-20261012/evidence/` | Fresh 1920×1080 guest, pinned c549 Driver, fresh session handshake and one seeded overwrite task PASS. Product retirement deleted its vault key and unregistered it; disposable guest root `9347208f-1e59-485d-a66c-fc472c4c984f` removed (5.47 GiB). Controller/keyring/QEMU exited, private API key removed, booking 1274 released. Keep raw task/MCP and concise result/cleanup receipts. |
+| GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-nested-smol-20261012/` | Accepted ec166 runtime, Qwen SMOL 262144/C1/INT8/DFlash K7/greedy/no-thinking. Single exact overwrite task PASS. Model exited normally 10:39:11Z, owned engine/launcher absent, private API key deleted, GPU/build guards returned, booking 437 released. Retain request/launch/stop evidence; model/profile/shared runtime unchanged. |
 | GChat coordinator / local | `/ai/gchat/out/gbot-cua-executor-20261012/` | Isolated Python closure and focused integration evidence; dependency import/pip-check gate passed. |
 | GChat coordinator / S1 | `/ai/gbot-vms/cua-first-20261012/` | Approved isolated Python closure and actual benchmark modules reused by the fresh gate; old VM/keyring retired, evidence retained. |
-| GChat coordinator / S1 | `/ai/gbot-vms/cua-patched-20261012/` | Superseded1280×800 guest992b4eff stopped/unregistered, native-vault credential deleted and disk removed; retirement receipt retained,2.61GiB freed. Controller43755 remains for the fullHD candidate. |
-| GChat coordinator / S1 | `/ai/gbot-vms/cua-geometry-fixed-20261012/evidence/` and `/ai/gbot-vms/c92c0bcc-fd51-48a4-8d22-758570d42474/` | Fresh fullHD candidate saved file; exact-content failure retained. Guest stopped. Native-vault controller 43755 holds the credential pending the task decision or retirement. No CPU booking or human desktop. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-patched-20261012/` | Superseded1280×800 guest992b4eff stopped/unregistered, native-vault credential deleted and disk removed; retirement receipt retained,2.61GiB freed. Controller43755 later exited after fullHD retirement. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-geometry-fixed-20261012/evidence/` and `/ai/gbot-vms/c92c0bcc-fd51-48a4-8d22-758570d42474/` | Earlier fullHD candidate and native-vault credential retired through the product adapter; controller 43755 exited and the disk was removed (2.61 GiB freed). Exact-content and retirement evidence retained. No human desktop. |
 | GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-geometry-20261012/` | Qwen SMOL262144/C1/INT8/DFlashK7/greedy/no-thinking, acceptedec166 runtime. Desktop task ended; engine stopped07:37:17Z, guards/booking released. Retain exact-content and resolved-sampler evidence. |
 | GChat coordinator / S1 and Ada4090 | S1 `cua-geometry-fixed-20261012/bench-evidence/`; Ada `/ai/gbot-models/gate-cua-env-20261012/` | Both actual Cua variants PASS, reward 1.0. Same fullHD guest, fresh session and pinned workspace key. Engine stopped 07:53:44Z, PID absent, guards and bookings released. Retain task/evaluator/sampler receipts; desktop failure is not overwritten. |
 | GChat coordinator / S1 and Ada4090 | S1 `cua-geometry-fixed-20261012/literal-smol-evidence/`; Ada `/ai/gbot-models/gate-cua-literal-smol-20261012/` | One corrected-literal gate stopped08:37:06Z; guest shut off, model PID absent/normal exit0, guards and bookings returned. Keep raw MCP, actual Xvnc screenshot and independent file read for nested-confirmation defect. Both Cua evaluation results reused, not rerun. |
