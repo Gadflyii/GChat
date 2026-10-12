@@ -376,11 +376,33 @@ impl SshSession {
                 return Err(uncertain());
             } else {
                 match mcp.input.prepare(tool, &arguments) {
-                    Ok(native) => {
-                        let result = mcp
+                    Ok(mut native) => {
+                        let binding = if tool == "click" {
+                            let window = native["window_id"].as_u64().ok_or(SshError::Protocol)?;
+                            let query = format!("/usr/local/bin/gbot-in-session /usr/bin/python3 - {window}");
+                            Some(match collect(&client, &query, include_bytes!("x11_binding.py")).await {
+                                Ok((0, bytes)) => serde_json::from_slice::<super::native::WindowBinding>(&bytes)
+                                    .map_err(|_| SshError::Protocol),
+                                _ => Err(SshError::Protocol),
+                            })
+                        } else { None };
+                        let routed = match &binding {
+                            Some(Ok(binding)) => super::native::bind_popup(&mut native, binding),
+                            Some(Err(_)) => Err(super::native::refused("popup_owner_unverified",
+                                "Window ownership could not be read; no foreground input was sent.")),
+                            None => Ok(()),
+                        };
+                        let mut result = match routed {
+                            Ok(()) => mcp
                             .rpc("tools/call", json!({"name":tool,"arguments":native}))
                             .await
-                            .map_err(|_| uncertain())?;
+                            .map_err(|_| uncertain())?,
+                            Err(refusal) => refusal,
+                        };
+                        if let Some(Ok(binding)) = binding {
+                            result["gbot_input_binding"] = serde_json::to_value(binding)
+                                .map_err(|_| uncertain())?;
+                        }
                         mcp.input.observe(tool, &result);
                         result
                     }

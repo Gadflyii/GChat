@@ -104,6 +104,7 @@ struct Guest {
     cua_active: std::sync::atomic::AtomicBool,
     reject_start: std::sync::atomic::AtomicBool,
     desktop_calls: Mutex<Vec<serde_json::Value>>,
+    window_binding: Mutex<serde_json::Value>,
 }
 
 fn failure(message: impl Into<String>) -> GuestError {
@@ -433,6 +434,7 @@ impl server::Handler for Peer {
         let input = match args.first().map(String::as_str) {
             Some("/usr/local/bin/gbot-cua") => Input::Mcp(vec![]),
             Some("/usr/local/bin/gbot-operation") => Input::Helper { args, data: vec![] },
+            Some("/usr/local/bin/gbot-in-session") => Input::Helper { args, data: vec![] },
             _ => return session.channel_failure(channel),
         };
         self.buffers.insert(channel, input);
@@ -530,6 +532,15 @@ impl server::Handler for Peer {
         };
         let handle = session.handle();
         let guest = self.guest.clone();
+        if args[0] == "/usr/local/bin/gbot-in-session" {
+            assert_eq!(args[1..], ["/usr/bin/python3", "-", "7"]);
+            let bytes = serde_json::to_vec(&*guest.window_binding.lock().unwrap()).unwrap();
+            handle.data(channel, bytes).await.map_err(|_| russh::Error::Disconnect)?;
+            handle.exit_status_request(channel, 0).await.map_err(|_| russh::Error::Disconnect)?;
+            handle.eof(channel).await.map_err(|_| russh::Error::Disconnect)?;
+            handle.close(channel).await.map_err(|_| russh::Error::Disconnect)?;
+            return Ok(());
+        }
         if args[1] == "hello" {
             if guest.stale.load(std::sync::atomic::Ordering::Acquire) {
                 handle
@@ -785,6 +796,9 @@ impl Fixture {
             cua_active: std::sync::atomic::AtomicBool::new(false),
             reject_start: std::sync::atomic::AtomicBool::new(false),
             desktop_calls: Mutex::default(),
+            window_binding: Mutex::new(serde_json::json!({"target_window":7,"active_window":7,
+                "target_pid":42,"active_pid":42,"override_redirect":false,"mapped":true,
+                "transient_for":null,"same_client":true})),
         });
         let handles = Arc::new(Mutex::new(Vec::new()));
         let config = Arc::new(server::Config {
@@ -1467,4 +1481,43 @@ async fn foreground_input_never_dispatches_accessibility_actions() {
         runtime.close().await.unwrap();
         fixture.shutdown().await;
     }).await.expect("bounded native input test timed out");
+}
+
+#[tokio::test]
+async fn popup_input_routes_to_its_active_owner_and_refuses_foreign_windows() {
+    timeout(WAIT, async {
+        let fixture = Fixture::new().await;
+        let identity = fixture.guest.hello.identity;
+        let service = Arc::new(Service::open(&fixture.directory.path().join("service.json")).await.unwrap());
+        let runtime = fixture.runtime(service).await;
+        runtime.connect(identity).await.unwrap();
+        for owned in [true, false] {
+            *fixture.guest.window_binding.lock().unwrap() = serde_json::json!({
+                "target_window":7,"active_window":8,"target_pid":42,
+                "active_pid":if owned {42} else {99},"override_redirect":true,
+                "mapped":true,"transient_for":null,"same_client":owned});
+            let read = fixture.request(GuestOperationKind::Desktop {tool:"get_window_state".into(),
+                arguments:serde_json::json!({"pid":42,"window_id":7})});
+            runtime.request(read).await.unwrap();
+            let count = fixture.guest.desktop_calls.lock().unwrap().len();
+            let click = fixture.request(GuestOperationKind::Desktop {tool:"click".into(),
+                arguments:serde_json::json!({"pid":42,"window_id":7,"element_token":"fresh"})});
+            let reply = success(runtime.request(click.clone()).await.unwrap());
+            let GuestResult::Desktop {result} = reply else {panic!("desktop result expected")};
+            assert_eq!(result["isError"], !owned);
+            if owned {
+                let calls = fixture.guest.desktop_calls.lock().unwrap();
+                assert_eq!(calls.last().unwrap()["arguments"]["window_id"], 8);
+                assert_eq!(calls.last().unwrap()["arguments"]["x"], 140.0);
+                assert_eq!(calls.last().unwrap()["arguments"]["delivery_mode"], "foreground");
+            } else {
+                assert_eq!(result["structuredContent"]["code"], "popup_owner_unverified");
+                assert_eq!(fixture.guest.desktop_calls.lock().unwrap().len(), count);
+                assert!(matches!(success(runtime.reconcile(click.operation_id).await.unwrap()),
+                    GuestResult::Desktop {result} if result["structuredContent"]["effect"] == "none"));
+            }
+        }
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    }).await.expect("bounded popup ownership test timed out");
 }

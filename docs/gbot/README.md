@@ -5,22 +5,16 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Status: Ron approved the design; it is merged into GChat main. October 11 step 1
-implements the local-first service skeleton, vault-held SSH sessions, guest-tools
-contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparation below replaces earlier S1/S2
-acceptance-host proposals; the Debian image and Host tools are staged, with
-first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
-on `feat/gbot-cua-service-be226`; the parser-fixed model task exposed an idle
-Cua session-lifecycle gap, now fixed. Canonical model-facing elements and the shared Chat compactor are implemented.
-The released Qwen SMOL task on Ada RTX4090 opens Mousepad but is blocked at
-Save As: the window belongs to Mousepad, whose AT-SPI endpoint stops answering.
-The image dependencies are corrected; that correction did not resolve the hang.
-The model and dedicated guest are stopped. No saved-file PASS exists.
-Later Engine revision `96082415c` admits SMOL on Blackwell; this Ada retry did
-not change host or settings.
-The focused contracts and actual loopback SSH fixture pass.
-No user desktop input or native Windows execution is authorized. Ron separately
-approved the isolated S1 Debian guest and its harmless accessibility gate below.
+Status: **parked, unverified popup-binding work**, not a merge candidate.
+Native-input source `66093dd03` is merged; its S1 model retry typed the line and
+opened File, then Cua refused the menu popup's foreground target. No file was
+saved. Model stop completed at 03:43:45Z, private guest/key removed and all
+bookings/guards returned. The popup ownership source/fixture additions in this
+branch have not been compiled or run.
+
+The current adoption authority is `docs/gbot/cua-map.md` on branch
+`docs/gbot-cua-map-0c69`; this branch preserves the unfinished prototype only.
+No further custom Gbot executor or popup retry is authorized before that review.
 
 ## Decided product scope
 
@@ -751,7 +745,7 @@ compaction policy. The unchanged desktop prompt remains the acceptance task.
 
 Default recommended Gbot brain: released Qwen or Muse SMOL, with at least128K
 context and full native context where VRAM permits. Qwen SMOL is the first gate
-at262144 context/C2 on S1 PRO GPU0; Muse SMOL is checked only after Qwen passes. Earlier dense
+at262144 context/C1 on S1 PRO GPU0 (October12 retry decision); Muse SMOL is checked only after Qwen passes. Earlier dense
 INT/16384 and intermediate32768/131072 gate sizing are superseded. The Qwen
 artifact is copied once to S1 SSD and verified against the release SHA256SUMS;
 a rejected hardware profile is reported rather than bypassed.
@@ -792,15 +786,34 @@ fixture build PASS. Logs: local `out/gbot-cua-service-20261011/native-activation
 The first integration compile caught a fixture JSON-macro expression error;
 parenthesizing that expression corrected it before any guest/model ran.
 
-**Next acceptance:** ONE unchanged `hello.txt` task through the production service. Use released
-SHA-verified Qwen SMOL on S1 PRO GPU0, an accepted Engine at or after `96082415c`,
-context262144/C2/INT8/DFlashK7/greedy/no-thinking. The guest remains private and
-pinned to112–113; no human desktop, prompt workaround, calibration or timeout
-change. Acceptance is model-created `/home/gbot/hello.txt` with exact SSH readback
-`Hello from Gbot.` (with optional final newline), followed by guest/model stop and vault-key deletion.
-The exact runtime and matching-device profile are pending the runtime owner's
-path. Muse remains unstarted until Qwen passes. This is functional acceptance,
-not a GBench or performance claim.
+**Latest result (2026-10-12 03:43:45Z): blocked on popup foreground binding.**
+The native-input task typed text and opened File; AT-SPI remained responsive.
+Cua refused the Save As popup because its override-redirect window never becomes
+`_NET_ACTIVE_WINDOW`. No saved-file PASS exists. Engine PID80514 exited normally;
+private guest1481bf25 is stopped and undefined, its vault key is deleted, and
+CPU/GPU bookings and guards are returned. Evidence on S1:
+`/ai/gbot-vms/cua-service-20261011/gate-native-activation/`, particularly
+`tool-8-call_9e1fdde4c618d887.json`,
+`tool-9-call_c1c4df8d3465a799.json` and `model-stop.json`.
+
+**Current direction: Cua-first component map.** The follow-up popup ownership
+patch is written but unverified and is not accepted. Ron's Cua-first decision
+supersedes another retry until the component audit establishes whether Cua's
+own agent/driver path makes that patch unnecessary. Do not post externally.
+Deliver `docs/gbot/cua-map.md`: each component marked ADOPT/WRAP/KEEP against
+fork `Gadflyii/cua` at `0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc`, plus the smallest
+integration for hello.txt and a small Cua evaluation subset. Verify component
+ownership, actual endpoint/tool support and license boundaries from pinned
+source. No build, provisioning, desktop input or new runtime dependency is
+part of this documentation task. Keep GChat UI/sessions, durable state, vault,
+approvals, GInfer assignment and Arbitor extension boundaries. The authoritative
+queue is `/ai/coordination/gbot-cua-adoption-queue.md`, its 04:30Z section.
+
+The most recent functional runtime was the named4228 S1 PRO GPU0 build with
+released Qwen SMOL262144/C1/INT8/DFlashK7/greedy/no-thinking and the approved saved
+profile. Its delivered version metadata is unknown; coordinator revision
+binding is4228fec4d. This is functional evidence, not a GBench/performance claim.
+Muse remains unstarted.
 
 **Prior result (2026-10-12 01:07:51Z): blocked.** The image-dependency retry
 reached Ready and opened Save As but did not save the file. Native focus and

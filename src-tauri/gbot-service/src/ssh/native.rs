@@ -2,6 +2,43 @@
 use super::guest::DesktopTool;
 use serde_json::{json, Map, Value};
 
+#[derive(serde::Deserialize, serde::Serialize)]
+pub(super) struct WindowBinding {
+    target_window: u64,
+    active_window: u64,
+    target_pid: Option<u64>,
+    active_pid: Option<u64>,
+    override_redirect: bool,
+    mapped: bool,
+    transient_for: Option<u64>,
+    same_client: bool,
+}
+
+pub(super) fn bind_popup(native: &mut Value, binding: &WindowBinding) -> Result<(), Value> {
+    let target = native["window_id"].as_u64();
+    if target != Some(binding.target_window) {
+        return Err(refused("window_changed", "The observed window no longer matches the input target."));
+    }
+    if !binding.override_redirect && binding.transient_for.is_none()
+        || binding.active_window == binding.target_window
+    {
+        return Ok(());
+    }
+    let owner = binding.active_pid.filter(|pid| *pid > 0);
+    let requested_pid = native["pid"].as_u64();
+    let observed_owner = binding.target_pid.or(owner);
+    let owned = owner.is_some() && requested_pid == observed_owner
+        && (binding.same_client
+            || binding.target_pid == owner
+            || binding.transient_for == Some(binding.active_window));
+    if !binding.mapped || binding.active_window == 0 || !owned {
+        return Err(refused("popup_owner_unverified", "The popup is not owned by the active window; no foreground input was sent."));
+    }
+    native["window_id"] = binding.active_window.into();
+    native["pid"] = owner.unwrap().into();
+    Ok(())
+}
+
 const READS: &[&str] = &[
     "list_windows",
     "get_window_state",
@@ -59,7 +96,7 @@ pub(super) struct Input {
     snapshot: Option<Value>,
 }
 
-fn refused(code: &str, text: &str) -> Value {
+pub(super) fn refused(code: &str, text: &str) -> Value {
     json!({"isError":true,"structuredContent":{"code":code,"effect":"none"},"content":[{"type":"text","text":text}]})
 }
 
@@ -169,6 +206,38 @@ impl Input {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn popup_routing_requires_active_owner_and_preserves_screen_geometry() {
+        let mut binding = WindowBinding { target_window: 7, active_window: 8,
+            target_pid: None, active_pid: Some(42), override_redirect: true,
+            mapped: true, transient_for: None, same_client: true };
+        let original = json!({"window_id":7,"pid":42,"x":140.0,"y":240.0,
+            "coordinate_frame":"desktop","delivery_mode":"foreground"});
+        let mut input = original.clone();
+        bind_popup(&mut input, &binding).unwrap();
+        assert_eq!(input["window_id"], 8);
+        assert_eq!(input["x"], original["x"]);
+        assert_eq!(input["y"], original["y"]);
+        assert_eq!(input["delivery_mode"], "foreground");
+        binding.same_client = false;
+        assert!(bind_popup(&mut original.clone(), &binding).is_err());
+        binding.target_pid = Some(42);
+        assert!(bind_popup(&mut original.clone(), &binding).is_ok());
+        binding.active_pid = Some(84);
+        assert!(bind_popup(&mut original.clone(), &binding).is_err());
+        binding.transient_for = Some(8);
+        input = original.clone();
+        bind_popup(&mut input, &binding).unwrap();
+        assert_eq!(input["pid"], 84);
+        binding.mapped = false;
+        assert!(bind_popup(&mut original.clone(), &binding).is_err());
+        binding.mapped = true;
+        binding.active_pid = None;
+        assert!(bind_popup(&mut original.clone(), &binding).is_err());
+        binding.target_window = 99;
+        assert!(bind_popup(&mut original.clone(), &binding).is_err());
+    }
 
     fn observed() -> Input {
         let mut input = Input::default();
