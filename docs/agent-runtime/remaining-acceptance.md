@@ -32,12 +32,38 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-072-RUNTIME | Muse runtime memory loss has no demonstrated allocation owner/fix. | Reuse capture evidence; one admitted candidate and an ownership timeline only when authorized. |
 | OI-076 | Continued-chat context/format warning's original cause remains unknown. | Diagnostics merged in `36ac89441`; collect exact trigger on the next occurrence. No speculative fix. |
 | OI-066 | Guard diagnosis is closed; fit-message source/landing needs confirmation. | Locate the owning source/result before claiming the presentation fix landed. Profile qualification is OI-072. |
-| OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; 19 offline cases are unrun and the live feed is not published. | Run only the existing offline cases; signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
+| OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; all 19 existing offline metadata cases PASS on S1. The live feed is not published. | Exact final-payload signature and signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
 | GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Candidate removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
 | OI-074 / GCHAT-BROWSER-BASELINE-DATA | Large frontend chunk and stale browser-data advisories remain. | One affected bundle/tooling check after a source change; no unrelated upgrades. |
 | GCHAT-WEB-TEST-DIAGNOSTICS | Reviewed warning-reduction candidate has no run of its focused cases. | Run the existing affected cases, not the full web suite. |
+
+### Updater offline metadata gate — October 12
+
+The retained accepted source `874cbc98d31532e92b43ff7d60072b474153236e`
+in `/ai/gchat-worktrees/oi110-sectile-feed-bd4` passes its unchanged production
+filter gate: `python3 -m unittest discover -s tests -p test_updater_manifest.py`.
+S1, verified as `AIS-2-8592-L01` at `192.168.1.109`, provides existing
+Python 3.12.3 and jq 1.7. Four test methods contain 19 cases/subcases and
+finish `OK`, exit 0, in 0.077 seconds. Valid Windows/Linux/combined metadata,
+failed/skipped omission, signature/asset-name rejection and version rejection
+are covered. Sentinel signatures establish metadata admission only.
+
+Local `jq` and the three admitted cached container images lack the executable;
+the established SSH host supplied it without installation. Only the retained
+test, shared filter and template were copied to an owned temporary folder;
+that folder is retired after receipt retention. No build, GPU, full suite,
+key change, signing, CI, release/feed access or publication ran. No source
+change was needed. Actual cryptographic verification of the exact final
+NSIS/AppImage bytes against the unchanged configured key and release/feed
+acceptance remain separate pending gates; the recorded live 404 is unchanged.
+
+Evidence: `/ai/gchat/out/gchat-open-items-20261012/updater-offline-note.md`.
+The documentation-only tree `/ai/gchat-worktrees/updater-offline-8440`, branch
+`fix/gchat-updater-offline-8440`, is based on `8440b5f7a` and retained for
+coordinator review. Accepted updater source remains on the existing OI-110
+branch; this result does not establish that it landed in current main.
 
 ### Untested or only partly tested
 

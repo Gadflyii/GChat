@@ -3,6 +3,11 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+The [updater offline metadata gate](remaining-acceptance.md#updater-offline-metadata-gate--october-12)
+passes all 19 existing cases against accepted source `874cbc98d` using existing
+S1 jq/Python. Cryptographic final-payload verification and signed release/feed
+acceptance remain pending; no source or publication change was needed.
+
 The [installed Ubuntu Desktop acceptance](remaining-acceptance.md#accepted-ubuntu-desktop-packages--oi-057)
 passes for retained GChat 2.0.42 DEB/AppImage on native GNOME Wayland and Xorg:
 visible rendering, ordinary Chat through the accepted Host, saved-answer reopen
