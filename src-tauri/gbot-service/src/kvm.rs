@@ -1,3 +1,4 @@
+use russh::keys::ssh_encoding::base64::{Base64, Encoding};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -8,38 +9,60 @@ use tokio::{fs, process::Command};
 use uuid::Uuid;
 
 pub const CUA_REVISION: &str = "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc";
+pub const CUA_DRIVER_REVISION: &str = "199e92644bdfd7d76066b3c2964fe43e9e84a67e";
 const CLOUD_INIT: &str = include_str!("../guest/cloud-init.json");
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct GuestBinary {
-    pub url: String,
-    pub sha256: String,
+#[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
+pub enum GuestBinary {
+    Download { url: String, sha256: String },
+    CloudInitArchive { path: PathBuf, sha256: String },
 }
 
 impl GuestBinary {
     fn validate(&self) -> io::Result<()> {
-        let uri: hyper::Uri = self
-            .url
-            .parse()
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid guest binary URL"))?;
-        if uri.scheme_str() != Some("https")
-            || uri.host().is_none()
-            || uri.query().is_some()
-            || self.url.contains(['@', '#'])
-            || self
-                .url
-                .bytes()
-                .any(|b| b.is_ascii_control() || b == b'\'' || b == b' ')
-            || self.sha256.len() != 64
-            || !self.sha256.bytes().all(|b| b.is_ascii_hexdigit())
-        {
+        let digest = self.sha256();
+        if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "guest binaries need HTTPS URLs and SHA-256 digests",
+                "guest binaries need SHA-256 digests",
             ));
         }
+        match self {
+            Self::Download { url, .. } => {
+                let uri: hyper::Uri = url.parse().map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "invalid guest binary URL")
+                })?;
+                if uri.scheme_str() != Some("https")
+                    || uri.host().is_none()
+                    || uri.query().is_some()
+                    || url.contains(['@', '#'])
+                    || url
+                        .bytes()
+                        .any(|b| b.is_ascii_control() || b == b'\'' || b == b' ')
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "guest binaries need HTTPS URLs",
+                    ));
+                }
+            }
+            Self::CloudInitArchive { path, .. } => {
+                if !path.is_absolute() || !path.is_file() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "guest archive must be an existing absolute file",
+                    ));
+                }
+            }
+        }
         Ok(())
+    }
+
+    fn sha256(&self) -> &str {
+        match self {
+            Self::Download { sha256, .. } | Self::CloudInitArchive { sha256, .. } => sha256,
+        }
     }
 }
 
@@ -84,7 +107,7 @@ impl KvmSpec {
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b"+.-".contains(&b))
             || self.browser_package.starts_with('-')
-            || self.driver_revision != CUA_REVISION
+            || self.driver_revision != CUA_DRIVER_REVISION
             || key.comment().to_string().contains(['\r', '\n'])
         {
             return Err(io::Error::new(
@@ -112,6 +135,13 @@ impl KvmSpec {
         }));
         value["hostname"] = format!("gbot-{}", self.id.simple()).into();
         value["users"][0]["ssh_authorized_keys"] = serde_json::json!([self.ssh_public_key]);
+        if let GuestBinary::CloudInitArchive { path, .. } = &self.driver {
+            let bytes = std::fs::read(path)?;
+            value["write_files"].as_array_mut().ok_or_else(|| io::Error::other("guest setup is invalid"))?.push(serde_json::json!({
+                "path": "/opt/gbot/cua-driver.tar.gz", "owner": "root:root", "permissions": "0644",
+                "encoding": "b64", "content": Base64::encode_string(&bytes)
+            }));
+        }
         let installer = value["write_files"]
             .as_array_mut()
             .ok_or_else(|| io::Error::other("guest setup is invalid"))?
@@ -127,7 +157,11 @@ impl KvmSpec {
 }
 
 fn install_driver(binary: &GuestBinary) -> String {
-    format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{}' -o /opt/gbot/cua-driver.tar.gz\nprintf '%s  %s\\n' '{}' /opt/gbot/cua-driver.tar.gz | sha256sum --check --status\ntar -xzf /opt/gbot/cua-driver.tar.gz -C /opt/gbot/bin cua-driver cua-cursor-theme\nchmod 755 /opt/gbot/bin/cua-driver /opt/gbot/bin/cua-cursor-theme\nrm /opt/gbot/cua-driver.tar.gz\n", binary.url, binary.sha256)
+    let download = match binary {
+        GuestBinary::Download { url, .. } => format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{url}' -o /opt/gbot/cua-driver.tar.gz\n"),
+        GuestBinary::CloudInitArchive { .. } => String::new(),
+    };
+    format!("{download}printf '%s  %s\\n' '{}' /opt/gbot/cua-driver.tar.gz | sha256sum --check --status\ntar -xzf /opt/gbot/cua-driver.tar.gz -C /opt/gbot/bin cua-driver cua-cursor-theme\nchmod 755 /opt/gbot/bin/cua-driver /opt/gbot/bin/cua-cursor-theme\nrm /opt/gbot/cua-driver.tar.gz\n", binary.sha256())
 }
 
 #[derive(Clone, Debug)]
@@ -429,7 +463,7 @@ mod tests {
             russh::keys::Algorithm::Ed25519,
         )
         .unwrap();
-        let binary = GuestBinary {
+        let binary = GuestBinary::Download {
             url: "https://example.test/reviewed-binary".into(),
             sha256: "a".repeat(64),
         };
@@ -443,7 +477,7 @@ mod tests {
             ssh_public_key: key.public_key().to_openssh().unwrap(),
             browser_package: "firefox-esr".into(),
             driver: binary,
-            driver_revision: CUA_REVISION.into(),
+            driver_revision: CUA_DRIVER_REVISION.into(),
         }
     }
 
@@ -483,6 +517,7 @@ mod tests {
             .unwrap()["content"]
             .as_str()
             .unwrap();
+        assert!(session.contains("-geometry 1920x1080"));
         assert!(session.contains("dbus-update-activation-environment"));
         assert!(
             session.find("desktop.env").unwrap() < session.find("systemd-notify --ready").unwrap()
@@ -523,10 +558,87 @@ mod tests {
         unpinned.driver_revision = "latest".into();
         assert!(unpinned.cloud_init().is_err());
         let mut bad = settings;
-        bad.driver.url = "http://example.test/key'".into();
+        bad.driver = GuestBinary::Download {
+            url: "http://example.test/key'".into(),
+            sha256: "a".repeat(64),
+        };
         assert!(bad.cloud_init().is_err());
-        bad.driver.url = "https://example.test/worker?token=private".into();
+        bad.driver = GuestBinary::Download {
+            url: "https://example.test/worker?token=private".into(),
+            sha256: "a".repeat(64),
+        };
         assert!(bad.cloud_init().is_err());
+    }
+
+    #[test]
+    fn embedded_driver_installs_only_after_digest_verification() {
+        let root = tempfile::tempdir().unwrap();
+        for name in ["cua-driver", "cua-cursor-theme"] {
+            std::fs::write(root.path().join(name), format!("fixture-{name}\n")).unwrap();
+        }
+        let archive = root.path().join("driver.tar.gz");
+        assert!(std::process::Command::new("tar")
+            .args(["-czf"])
+            .arg(&archive)
+            .arg("-C")
+            .arg(root.path())
+            .args(["cua-driver", "cua-cursor-theme"])
+            .status()
+            .unwrap()
+            .success());
+        let digest = std::process::Command::new("sha256sum")
+            .arg(&archive)
+            .output()
+            .unwrap();
+        assert!(digest.status.success());
+        let digest = String::from_utf8(digest.stdout)
+            .unwrap()
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string();
+        let mut settings = spec();
+        settings.driver = GuestBinary::CloudInitArchive {
+            path: archive.clone(),
+            sha256: digest,
+        };
+        let cloud = settings.cloud_init().unwrap();
+        let data: serde_json::Value =
+            serde_json::from_str(cloud.strip_prefix("#cloud-config\n").unwrap()).unwrap();
+        let files = data["write_files"].as_array().unwrap();
+        let embedded = files
+            .iter()
+            .find(|f| f["path"] == "/opt/gbot/cua-driver.tar.gz")
+            .unwrap();
+        let decoded = Base64::decode_vec(embedded["content"].as_str().unwrap()).unwrap();
+        assert_eq!(decoded, std::fs::read(archive).unwrap());
+        let destination = root.path().join("installed");
+        std::fs::create_dir_all(destination.join("bin")).unwrap();
+        let run = |binary: &GuestBinary| {
+            std::fs::write(destination.join("cua-driver.tar.gz"), &decoded).unwrap();
+            let script = format!("set -eu\n{}", install_driver(binary))
+                .replace("/opt/gbot", destination.to_str().unwrap());
+            std::process::Command::new("sh")
+                .args(["-c", &script])
+                .output()
+                .unwrap()
+        };
+        let mut corrupt = settings.driver.clone();
+        if let GuestBinary::CloudInitArchive { sha256, .. } = &mut corrupt {
+            *sha256 = "0".repeat(64);
+        }
+        assert!(!run(&corrupt).status.success());
+        assert!(!destination.join("bin/cua-driver").exists());
+        assert!(run(&settings.driver).status.success());
+        assert_eq!(
+            std::fs::read_to_string(destination.join("bin/cua-driver")).unwrap(),
+            "fixture-cua-driver\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(destination.join("bin/cua-cursor-theme")).unwrap(),
+            "fixture-cua-cursor-theme\n"
+        );
+        assert!(!destination.join("cua-driver.tar.gz").exists());
     }
 
     #[tokio::test]
