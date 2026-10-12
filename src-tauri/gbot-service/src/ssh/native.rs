@@ -214,6 +214,26 @@ mod tests {
     }
 
     #[test]
+    fn setup_readiness_edits_use_the_foreground_input_contract() {
+        let text = "Gbot desktop input readiness confirmed\n";
+        let mut input = Input::default();
+        let actions = crate::kvm_setup::readiness_input(&json!({"pid":42,"window_id":7}), text);
+        let delivered: Vec<_> = actions
+            .iter()
+            .map(|(tool, arguments)| input.prepare(tool, arguments).unwrap())
+            .collect();
+        assert_eq!(delivered[0]["key"], "a");
+        assert_eq!(delivered[1]["text"], text);
+        assert_eq!(delivered[2]["key"], "s");
+        for arguments in delivered {
+            assert_eq!(arguments["pid"], 42);
+            assert_eq!(arguments["window_id"], 7);
+            assert_eq!(arguments["delivery_mode"], "foreground");
+            assert!(arguments.get("target").is_none());
+        }
+    }
+
+    #[test]
     fn visible_click_uses_native_coordinates_and_consumes_tokens() {
         let mut input = observed();
         let args = json!({"pid":42,"window_id":7,"element_token":"fresh","count":2});

@@ -26,27 +26,28 @@ shared Chat workers and explicit per-bot Google/Microsoft accounts are merged
 in main `8440b5f7a`. Bots inherit no accounts. Their focused service/native/UI,
 lint, types, check and strict Clippy evidence is retained.
 
-Main `04cc8f58c` includes service-owned once/interval schedules, Linux
-KVM onboarding and Settings enablement that opens guided setup. The wizard checks prerequisites and exact pinned guest assets,
-persists resumable setup identity, and admits a bot only after SSH, desktop-file
-and view-only media readiness. Two setup recovery cases, eight adapter cases,
-five wizard cases and the combined native route fixture pass. Combined frontend
-types, native check and strict native/service Clippy also pass. Main `ca4346ba2` includes `ec21a1874`, delivering all three pinned guest assets through the existing
-bundle/data setup path; its focused interrupted/retry/digest fixture, native
-check and strict Clippy pass. These are source gates. The dedicated VM gate reached first boot and found that
-seed creation preserved host archive symlinks rather than embedding their bytes.
-The canonical-source fix `eac5e6688` embeds the exact pinned bytes and passes its
-focused fixture and replacement ISO digest check. The replacement completed first
-boot but failed desktop readiness; the owner discards the failed operation detail.
-Both owned guests are retired. Ready, browser effects and installed wizard
-presentation are unqualified. Independent service candidate `a2b0053a9` passes one
-separate-process lifecycle fixture, eleven UI cases and owning checks; packaged
-bootstrap, native vault, client-exit/sleep and live dispatch remain unrun.
-Hyper-V/cloud/M365 creation and remote service selection remain unfinished.
-Accepted main schedules still run only while GChat is open until that candidate lands. The
-[implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
-separates source gaps, accepted evidence and unrun gates. The physical browser
-form gate remains unrun.
+Main `13f88c042` includes resumable Linux KVM onboarding, pinned guest delivery,
+independent service ownership and schedules. Settings enablement opens guided
+setup. The wizard checks prerequisites and pinned assets, persists setup identity,
+and admits a bot only after SSH, desktop-file and view-only media readiness.
+Focused service, adapter, wizard and native-route cases, frontend types, native
+check and strict Clippy pass. These establish source behavior; packaged
+bootstrap, native vault, client-exit/sleep and live scheduled dispatch still need
+installed checks.
+
+The dedicated VM gate found an archive-symlink seed defect; the merged repair
+embeds the exact pinned bytes. Readiness diagnostics then identified obsolete
+keyboard arguments in the setup owner. The correction uses the Cua adapter's
+current foreground-input contract and passes one focused case, check and strict
+Clippy. The same persisted S1 guest reached Ready after service restart/resume:
+editor input/save, independent file readback and view-only media passed. A real
+isolated Chromium form also passed navigate/type/submit with exact independent
+SSH readback. The temporary guest and private roots are retired. Evidence:
+`out/gchat-open-items-20261012/readiness-input/` and `readiness-physical/`.
+These qualify the Linux API owner; installed wizard presentation, packaged
+bootstrap, Hyper-V/cloud/M365 creation and remote service selection remain
+unfinished. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
+separates source gaps, accepted evidence and remaining gates.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
