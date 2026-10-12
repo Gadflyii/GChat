@@ -49,6 +49,7 @@
       "resources/bin/sqlite-vec.so",
       "resources/bin/bun",
       "resources/bin/uv",
+      "resources/gbot/**/*",
       "resources/ginfer/linux/**/*",
       "resources/ginfer/docs/**/*"
     ],

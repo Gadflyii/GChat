@@ -9,9 +9,11 @@ Current item: connect the accepted Cua executor to GChat bot channels, approvals
 browser tools and takeover controls in the [Cua adoption plan](cua-map.md).
 Acceptance: focused actor/browser/control/guest fixtures, native type check and
 changed frontend checks; reuse the accepted desktop task instead of repeating it.
-Next question: package the accepted Cua runtime and connect its media/view endpoint. The embedded
-viewer needs a Cua media endpoint, and the accepted Python executor closure
-still needs installer packaging. No new dependency, VM or model gate.
+The accepted Linux Cua runtime is now packaged for native resource discovery.
+Next action: select the viewer route. Its concrete stack changes and recommendation
+are in [the Cua map](cua-map.md#viewer-options-for-ron).
+Cua native media requires the Spaces server closure; Fleet's VNC route requires
+noVNC/websockify. Neither added closure is selected. No VM or model gate.
 The candidate passes its six focused cases, strict service Clippy, native type
 check and frontend types/lint. Evidence: `out/gbot-cua-guest-20261012/result.json`.
 Compact output is merged in `9ab394244`.
@@ -590,8 +592,9 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
 and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
-`7bf139610`. Compact output is merged as `9ab394244`. The current guest-image candidate is
-`feat/gbot-cua-guest-9ab` at `/ai/gchat-worktrees/gbot-cua-skill-918c`.
+`7bf139610`. Compact output is merged as `9ab394244`. The current integration candidate is
+`feat/gbot-cua-guest-9ab` at `/ai/gchat-worktrees/gbot-cua-skill-918c`, with the
+channel/browser/control change pushed at `323bfb07a` for reviewed merge.
 Current deliverable: connect the existing Cua executor to native GChat channels,
 persist per-bot model assignments with vault-held API keys, preserve browser
 schemas and approvals, and implement exclusive takeover/hand-back.
@@ -608,17 +611,40 @@ service lifetime: exiting GChat currently stops its child tasks; the independent
 background-service lifetime remains future integration.
 
 The current UI supports a manually configured dedicated SSH bot computer. It
-is not the novice setup walkthrough. Task execution currently needs the approved
-Python environment and shared context-preparer path configured with
-`GBOT_CUA_PYTHON` and `GBOT_CONTEXT_PREPARER`; no Python runtime is bundled yet.
-The viewer is not exposed because the guest has VNC, not Cua's media endpoint.
-Do not advertise these pending packaging/view paths as ready for end users.
+is not the novice setup walkthrough. Linux x86-64 release packaging now includes the accepted Ubuntu 24.04
+CPython 3.12.3 interpreter, its unchanged 61-package Cua closure, native libraries
+and license notices. Native GChat discovers that resource automatically and
+uses its existing bundled Bun for the shared context preparer. The explicit
+`GBOT_CUA_PYTHON` / `GBOT_CONTEXT_PREPARER` pair remains a development override.
+Windows has no qualified bundled Cua runtime yet; unavailable task execution
+returns the existing typed `executor_unavailable` error while workspace/key
+operations remain usable.
+
+Stage the Linux release with `scripts/build-linux-release.sh --gbot-cua-runtime
+<accepted-closure>` alongside its required GInfer runtime/catalog/docs inputs.
+`scripts/package-gbot-runtime.py` verifies the accepted wheel inventory and
+retains notices; `--check` verifies staged file hashes. The AppImage adds this
+private interpreter after linuxdeploy, preserving its native libraries. No new
+dependency versions are resolved by packaging.
+
+The relocated launcher imports Cua and its native Python modules, bundled
+Bun runs the context JSON protocol, and one native fixture verifies resource
+discovery and rejection of an incomplete package. Native compilation passes.
+Evidence is in
+`out/gbot-cua-runtime-20261012/result.json`. This is focused packaging evidence;
+a complete DEB/AppImage installation remains a release gate. The viewer is not
+exposed because the guest's raw VNC still needs the selected browser bridge.
+Do not advertise the pending viewer or Windows runtime as ready.
 
 Owned candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch
 `feat/gbot-cua-guest-9ab`. Retain source and concise evidence in
 `/ai/gchat/out/gbot-cua-guest-20261012/` until review/merge. The existing shared
 `/ai/gchat/src-tauri/target` cache is reused, not owned by this item. No live guest,
-model, calibration or Windows job belongs to this change.
+model, calibration or Windows job belongs to this change. The accepted release
+input at this tree's `src-tauri/resources/gbot/` is 204 MiB and is retained for
+packaging; its source closure at
+`/ai/gchat/out/gbot-cua-executor-20261012/python-runtime/` is read-only. The
+packaging step reused the shared build cache and booked local CPUs only.
 One fresh dedicated Debian guest ran the skill-enabled ComputerAgent with the
 unchanged accepted Qwen SMOL 262144/C1/INT8/DFlash K7/greedy configuration.
 The model read `LINUX.md` through `read_cua_guide`, used foreground input,
