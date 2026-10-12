@@ -3,11 +3,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::service::{DurableState, ServiceError};
+use crate::service::ServiceError;
 
 pub(crate) struct Store {
     path: PathBuf,
     _lock: fs::File,
+    writes: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Store {
@@ -31,13 +32,19 @@ impl Store {
                 fs::TryLockError::WouldBlock => ServiceError::AlreadyRunning,
                 fs::TryLockError::Error(_) => ServiceError::Persistence,
             })?;
-            Ok(Self { path, _lock: lock })
+            Ok(Self {
+                path,
+                _lock: lock,
+                writes: Arc::new(tokio::sync::Mutex::new(())),
+            })
         })
         .await
         .map_err(|_| ServiceError::Persistence)?
     }
 
-    pub(crate) async fn load(&self) -> Result<Option<DurableState>, ServiceError> {
+    pub(crate) async fn load<T: serde::de::DeserializeOwned + Send + 'static>(
+        &self,
+    ) -> Result<Option<T>, ServiceError> {
         let path = self.path.clone();
         tokio::task::spawn_blocking(move || match fs::read(path) {
             Ok(bytes) => serde_json::from_slice(&bytes)
@@ -50,12 +57,19 @@ impl Store {
         .map_err(|_| ServiceError::Persistence)?
     }
 
-    pub(crate) async fn save(self: &Arc<Self>, state: &DurableState) -> Result<(), ServiceError> {
+    pub(crate) async fn save<T: serde::Serialize>(
+        self: &Arc<Self>,
+        state: &T,
+    ) -> Result<(), ServiceError> {
         let bytes = serde_json::to_vec_pretty(state).map_err(|_| ServiceError::InvalidState)?;
+        let guard = self.writes.clone().lock_owned().await;
         let store = self.clone();
-        tokio::task::spawn_blocking(move || write_atomic(&store.path, &bytes))
-            .await
-            .map_err(|_| ServiceError::Persistence)?
+        tokio::task::spawn_blocking(move || {
+            let _guard = guard;
+            write_atomic(&store.path, &bytes)
+        })
+        .await
+        .map_err(|_| ServiceError::Persistence)?
     }
 }
 

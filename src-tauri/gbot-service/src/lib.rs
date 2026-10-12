@@ -1,5 +1,6 @@
 pub mod api;
 pub mod contract;
+pub mod executor;
 #[cfg(target_os = "linux")]
 pub mod kvm;
 pub mod service;

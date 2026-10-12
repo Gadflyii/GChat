@@ -5,11 +5,12 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Current item: [Cua component map and integration plan](cua-map.md), docs only.
+Current item: implement the approved [Cua integration plan](cua-map.md), replacing
+the prototype executor with `ComputerAgent`.
 Ron selected Cua for the agent framework while retaining our VM provisioning,
 Hyper-V and M365 Cloud PC connection. GChat retains durable state, vault,
-approvals, sessions and inference assignment. No further custom Gbot executor
-work precedes that integration decision.
+approvals, sessions and inference assignment. The service boundary retains approvals and saved effect receipts; Cua owns task
+iteration.
 
 The local-first service, vault-backed SSH/Cua transport and dedicated Debian
 guest are implemented. Source `66093dd03`, merged in main `c6a42ad77`, uses
@@ -557,14 +558,35 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
 supersedes the initial draft's unassigned-cloud scope without changing runtime
-code. Current docs baseline is main `c6a42ad77`; candidate is
-`docs/gbot-cua-map-0c69` at `/ai/gchat-worktrees/gbot-cua-map-0c69`.
-Deliverable: the Cua component map, retained ownership and smallest working-task
-integration proposal. Acceptance: fixed-pin source bindings, consistent current
-design and affected links, and `git diff --check`. No builds, model runs, desktop
-input or dependency installation. Next unresolved action: review the GInfer/Cua
-provider, guest-session and service-to-Python binding with its exact dependency
-closure.
+code. The approved Cua map is merged in main `aa60f9015`. Current candidate is
+`feat/gbot-cua-executor-aa60` at `/ai/gchat-worktrees/gbot-cua-executor-aa60`.
+Deliverable: replace the prototype model loop with pinned Cua `ComputerAgent`
+and its GInfer function-tool provider, retaining the approved guest and transport.
+Acceptance: focused provider/IPC/receipt/compaction cases, the desktop hello.txt
+task with independent SSH readback, and both Cua `hello_file_env` variants through
+that same SSH session. No Windows, human desktop, new VM stack, model conversion,
+sampling changes or broad benchmark campaign. Next action: stage the tested provider/service and approved Python closure on S1,
+then run the three tasks on one dedicated guest after GPU0 is released.
+
+The October 12 04:35Z guest decision permits one fresh disk and vault credential
+through the existing libvirt-session adapter. The image, cloud-init and transport
+remain fixed. Keep that guest for all steps; retire the stopped old disk
+`1481bf25-2910-41dc-8b3a-803800e7c8c9` after preserving its cited evidence.
+Python 3.12.3 is isolated in the existing build image; the base Cua closure is
+hash-locked, with no host installation. The executor/provider candidate is in
+the approved fork's `gbot/pin-0c69d9a` branch at
+`/ai/gchat-worktrees/cua-gbot-pin-0c69`, committed and pushed as `896c68871`.
+The custom-loop config and awaited asynchronous tool call fixes have three focused
+ComputerAgent cases passing. Upstream is not a publication target.
+
+Focused service gate: four durable-recovery cases, strict Clippy and example build
+pass. The actual Python child + loopback HTTP provider/compaction/async-tool IPC
+case passes (2.294 s). Evidence: `executor-tests.log`, `clippy.log`, `build.log`,
+`bridge-test.log` in `/ai/gchat/out/gbot-cua-executor-20261012/`. The runner now
+retains its stopped guest and vault reference on a blocked task; it reopens the
+same guest/session/task instead of provisioning a duplicate. Physical acceptance
+is pending. S1 already has Python 3.12.3, so the approved isolated venv can run
+there without host packages or copying a Docker image.
 
 Docs gate passes: 347 local file links and 15 fixed-pin source paths resolve;
 `git diff --check` is clean. Evidence:
@@ -573,7 +595,10 @@ External pages, runtime and physical acceptance were not exercised by this gate.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-cua-map-0c69`, branch `docs/gbot-cua-map-0c69` | Current docs-only candidate; retire after reviewed merge. |
+| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | Current service executor candidate on aa60f9015; no live guest or model yet. |
+| GChat coordinator / local | `/ai/gchat-worktrees/cua-gbot-pin-0c69` | Fork provider/fixes 896c68871 on 0c69d9a2c8, focused tests passed; keep until reviewed integration. |
+| GChat coordinator / local | `/ai/gchat/out/gbot-cua-executor-20261012/` | Isolated Python closure and focused integration evidence; dependency import/pip-check gate passed. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-first-20261012/` | Owned executor/venv/actual benchmark module staging; one guest planned, no model live. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-cua-adoption-20261012/cua-source` | Read-only fork checkout at exact pin `0c69d9a2c8`; retained source inspection, no build or guest. |
 | GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-cua-service-be226`, branch `park/gbot-popup-binding-66093`, pushed `391667372` | Merged native-input source `66093dd03`; unverified popup patch committed separately, retained until adoption decision. Not a merge candidate. |
 | GChat coordinator / S1 | `/ai/gbot-vms/cua-service-20261011/gate-native-activation/` | Latest model retry: typed line/File menu, popup guard refusal, normal model stop 03:43:45Z. Evidence retained; no live model/guest. |
