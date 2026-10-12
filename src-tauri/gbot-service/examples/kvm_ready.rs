@@ -250,6 +250,12 @@ mod linux {
                 args: vec![std::env::var("GBOT_CONTEXT_PREPARER")?],
             },
         };
+        if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {
+            for variant in 0..2 {
+                bench_task(runtime, identity, &assignment, &processes, evidence, variant).await?;
+            }
+            return Ok(());
+        }
         let names = [
             "list_windows",
             "get_window_state",
@@ -415,6 +421,30 @@ mod linux {
                 serde_json::to_vec_pretty(&frame)?,
             )
             .await?;
+            if let Some(script) = std::env::var_os("GBOT_GUEST_DIAGNOSTIC") {
+                let script = tokio::fs::read_to_string(script).await?;
+                let reply = operation(
+                    &runtime,
+                    identity,
+                    GuestOperationKind::Exec {
+                        program: "/usr/local/bin/gbot-in-session".into(),
+                        args: vec!["sh".into(), "-c".into(), script],
+                        cwd: GuestPath("/home/gbot".into()),
+                        env: Default::default(),
+                    },
+                )
+                .await?;
+                tokio::fs::write(
+                    evidence.join("guest-diagnostic.json"),
+                    serde_json::to_vec_pretty(&reply)?,
+                )
+                .await?;
+                if !matches!(reply, GuestResult::ExecFinished { exit_code: 0, .. }) {
+                    return Err("guest diagnostic did not exit successfully; see its receipt".into());
+                }
+                println!("GUEST_DIAGNOSTIC_RECORDED");
+                return Ok(());
+            }
             let socket = evidence.join("model-start.sock");
             if socket.try_exists()? {
                 tokio::fs::remove_file(&socket).await?;
@@ -513,16 +543,37 @@ mod linux {
             tokio::fs::write(&record_path, serde_json::to_vec_pretty(&record)?).await?;
             record
         };
+        if std::env::var_os("GBOT_RETIRE_ONLY").is_some() {
+            record.vm.force_stop(&KvmTools::default()).await?;
+            record.vm.unregister(&KvmTools::default()).await?;
+            NativeVault.delete(record.credential_ref).await?;
+            tokio::fs::write(
+                evidence.join("retirement.json"),
+                serde_json::to_vec_pretty(&json!({
+                    "vm_id": record.vm.spec.id,
+                    "directory": record.vm.directory,
+                    "stopped": true,
+                    "unregistered": true,
+                    "credential_deleted": true,
+                }))?,
+            )
+            .await?;
+            println!("OWNED_GUEST_RETIRED");
+            return Ok(());
+        }
         let result =
             tokio::time::timeout(Duration::from_secs(1800), gate(&record, &evidence)).await;
         let stop = record.vm.force_stop(&KvmTools::default()).await;
         let passed = matches!(result, Ok(Ok(())));
-        let cleanup = if passed {
+        let retained = !passed
+            || std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some()
+            || std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some();
+        let cleanup = if !retained {
             NativeVault.delete(record.credential_ref).await
         } else {
             Ok(())
         };
-        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":!passed,"vm_id":record.vm.spec.id,"scope":"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}))?).await?;
+        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
         stop?;
         cleanup?;
         result??;

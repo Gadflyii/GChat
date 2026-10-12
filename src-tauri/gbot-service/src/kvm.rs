@@ -517,6 +517,7 @@ mod tests {
             .unwrap()["content"]
             .as_str()
             .unwrap();
+        assert!(session.contains("-geometry 1920x1080"));
         assert!(session.contains("dbus-update-activation-environment"));
         assert!(
             session.find("desktop.env").unwrap() < session.find("systemd-notify --ready").unwrap()

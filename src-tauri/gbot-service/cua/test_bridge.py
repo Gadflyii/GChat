@@ -69,6 +69,10 @@ class BridgeTest(unittest.TestCase):
             self.assertEqual([event["method"] for event in events],
                              ["prepare", "model", "tool", "prepare", "model", "done"])
             self.assertEqual(len(requests), 2)
+            for body, _ in requests:
+                for field in ("temperature", "top_p", "top_k", "min_p",
+                              "presence_penalty", "frequency_penalty"):
+                    self.assertNotIn(field, body)
             self.assertEqual(requests[0][1], "Bearer fixture-key")
             self.assertEqual(requests[0][0]["messages"][0]["content"], "Prepared by shared context")
             tool = requests[1][0]["messages"][-1]
