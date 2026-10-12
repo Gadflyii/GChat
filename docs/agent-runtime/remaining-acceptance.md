@@ -6,7 +6,7 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-This reconciliation uses reviewed main `500a5f2cb`, including background ownership and seed repair, plus `ec21a1874`
+This reconciliation uses reviewed main `13f88c042`, including background ownership and seed repair, plus `ec21a1874`
 (guest delivery) and `e49219967` (native reports), the master rows and saved
 receipts. A source fix, a focused fixture and an installed acceptance gate are
 separate claims. Passing evidence is reused; no broad suite or repeat GPU run
@@ -18,10 +18,10 @@ is part of this plan. The master list remains the sole issue-status authority.
 | --- | --- | --- |
 | General agent delegation from Chat | Main `8440b5f7a` supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
 | Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed presentation is still untested. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
-| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding. Accepted `ec21a1874` adds verified pinned bundle/data delivery; its fixture, check and strict Clippy pass. Seed repair `eac5e6688` passes a focused case and actual replacement ISO digest check. The replacement completed first boot but failed desktop readiness; The readiness diagnostic candidate now preserves the operation and safe reason; its focused restart-persistence case and owning checks pass. Both guests are retired. Ready and installed wizard presentation remain unqualified. Hyper-V, cloud provider creation/live cost review and M365 connection are unfinished. Remote service selection is also unwired. | One dedicated KVM VM through the current setup owner; qualify actual UI separately if unavailable to the private test display. Windows/M365 at the release window. No person's desktop. |
+| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Installed wizard/bootstrap, Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
 | Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
 | Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; installed/native/AppImage lifetime, client-exit/sleep and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
-| Browser tools | Typed browser catalog/schema is covered. A real guest browser form task is unrun, blocked by failed dedicated-guest desktop readiness. | One dedicated-guest form submit and independent SSH readback; no model needed. |
+| Browser tools | Typed browser catalog/schema and one real isolated Chromium form pass: exact native window binding, navigation, typing and trusted input submission, independently verified over pinned-host system SSH. | Broader browser tasks and installed presentation remain separate; no model or performance claim. |
 
 ### Bugs, decisions and incomplete diagnostics
 
@@ -81,24 +81,38 @@ unchanged from the source used for this gate.
 | Google / Microsoft connectors | 36 focused auth/provider/runtime/UI cases. | App registration, real OAuth consent/refresh/revocation and read operations. |
 | Gbot Linux executor | Exact desktop overwrite + two actual Cua file evaluators passed. | Broader task set and Vision; new cua-bench dependency closure is not approved. |
 | Gbot runtime/media | Linux packaged runtime; physical frame, 440 Hz audio, view-only/takeover/revocation passed. | Browser playback/audio permission behavior; Windows/M365 runtime and media. |
-| Gbot guest persistence | Fresh dedicated guest setup and key retirement passed. | Product-managed reboot/reconnect and independent background lifetime. |
+| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed. | Guest reboot/reconnect and installed independent background lifetime. |
 | OI-073 public board | One disposable publish/read/delete and app delete path passed. | Broader retry/replay/concurrent/fault cases remain parked; never use official series as tests. |
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |
 
-Order: schedules/KVM/updater source, pinned guest delivery and native-v2 consumption
-are accepted in main `500a5f2cb`. Background owner `a2b0053a9` and seed repair
-`427a2bc29` are merged with focused evidence. Current diagnostic source preserves the
-failed readiness operation/reason before another dedicated-guest Ready/browser
-gate. One focused failure/restart fixture, owning Rust check and strict all-target
-Clippy PASS at 21:18:43 UTC in the CPU-only booking. Receipts are in
-`/ai/gchat/out/gchat-open-items-20261012/readiness-detail/`. No physical retry or
-desktop-cause diagnosis is claimed.
-All agents and owned guests have stopped. Platform/release checks and the
-public v2 contract remain explicit.
+Schedules/KVM/updater source, pinned guest delivery and native-v2 consumption
+are accepted in main `500a5f2cb`. Background ownership and seed repair are merged.
+Main `13f88c042` preserves failed readiness operation/reason across restart;
+its focused fixture, check and strict Clippy pass. That evidence identified the
+setup owner's obsolete nested `target` keyboard arguments. The correction sends
+flat `pid`/`window_id` through the existing foreground-input adapter, without
+changing its guards. One owning regression, check, strict all-target Clippy and
+incremental example build passed in 17 seconds at 21:42:02 UTC.
+
+The same persisted S1 guest `4ed37849-6aa4-492d-aeb7-1cc6a63b07b4`, confined to
+CPUs 80–81, reached Ready after service restart/resume. Keyboard edits were saved
+and independently read back; desktop frame and view-only media readiness passed.
+At 21:45:25 UTC, an isolated Chromium form passed exact native window binding,
+navigation, typing and trusted input submission. The driver reported background
+delivery; acceptance relies on independent pinned-host system SSH readback of
+the exact saved content, including punctuation and newline, rather than its
+acknowledgement. No model/GPU or person's desktop was used.
+
+Product removal retired the guest, disk and vault key; the service exited
+normally. Owned private S1 roots `gd20261012`, `gdctl`, `gdcfg` and `gdrun` are
+removed and the CPU booking released. Source assets, other guests and retained
+evidence remain. Receipts: `out/gchat-open-items-20261012/readiness-input/` and
+`readiness-physical/`. Next: installed wizard/bootstrap and background lifetime;
+Hyper-V/cloud/M365 and remote service selection remain explicit source gaps.
 
 Coordinator tree: `fix/gbot-readiness-detail-500a` in
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `500a5f2cb`, which includes background ownership, seed repair and `ec21a1874` / `e49219967`.
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `13f88c042`, which includes background ownership, seed repair and `ec21a1874` / `e49219967`.
 The first wave (opt-in/LAN setup, transactional credential creation, Chat workers,
 per-bot connectors and disabled-embedding startup) is merged there. The second wave
 integrates schedules (`f769d1ead`), KVM onboarding (`89e4a22f4`) and the complete
@@ -116,8 +130,9 @@ PASS (`ann-test.log` / `ann-types.log`). Explicit VectorDB diagnostics remain.
 The PTY geometry fixture passes (`pty-geometry-test.log`), without a native mouse
 or blank-TUI cause claim. First-wave agent worktrees are retired after main merge;
 second-wave source is merged and its owned trees can retire after live-use checks.
-User-authorized cleanup retired five clean merged trees and freed 73.60 GB
-allocated Cargo cache plus 1.35 GB apparent source size; the target is 25.74 GB.
+User-authorized cleanup retired seven clean merged trees and freed 73.60 GB
+allocated Cargo cache; the target is 26.81 GB. Source cleanup freed 1.35 GB apparent
+size from the first five trees and 0.55 GB allocated from the final two.
 Current closures, accepted packages and evidence remain. Inventory:
 `/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`.
 

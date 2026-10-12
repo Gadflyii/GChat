@@ -784,24 +784,9 @@ impl KvmSetup {
                 action,
             )
         })?;
-        // Delivery acknowledgement alone is insufficient. Edit only this setup's
-        // disposable guest document and independently read back the saved effect.
-        let target = serde_json::json!({"kind":"window","pid":window["pid"],"window_id":window["window_id"]});
+        // Verify the saved effect in this setup's disposable document.
         let input_expected = "Gbot desktop input readiness confirmed\n";
-        for (tool, arguments) in [
-            (
-                "press_key",
-                serde_json::json!({"target":target,"key":"a","modifiers":["ctrl"]}),
-            ),
-            (
-                "type_text",
-                serde_json::json!({"target":target,"text":input_expected}),
-            ),
-            (
-                "press_key",
-                serde_json::json!({"target":target,"key":"s","modifiers":["ctrl"]}),
-            ),
-        ] {
+        for (tool, arguments) in readiness_input(&window, input_expected) {
             self.guest(
                 runtime,
                 record,
@@ -1045,6 +1030,18 @@ impl KvmSetup {
             Ok(record)
         }).await.map_err(persistence)?
     }
+}
+pub(crate) fn readiness_input(
+    window: &serde_json::Value,
+    text: &str,
+) -> [(&'static str, serde_json::Value); 3] {
+    let pid = &window["pid"];
+    let window_id = &window["window_id"];
+    [
+        ("press_key", serde_json::json!({"pid":pid,"window_id":window_id,"key":"a","modifiers":["ctrl"]})),
+        ("type_text", serde_json::json!({"pid":pid,"window_id":window_id,"text":text})),
+        ("press_key", serde_json::json!({"pid":pid,"window_id":window_id,"key":"s","modifiers":["ctrl"]})),
+    ]
 }
 fn readiness_result(operation: &str, outcome: GuestOutcome) -> Result<GuestResult, SetupIssue> {
     let mut code = "guest_not_ready";
