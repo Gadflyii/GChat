@@ -462,6 +462,44 @@ impl TaskRunner {
         Ok(())
     }
 
+    pub async fn answer_help(
+        &self,
+        id: Uuid,
+        request_id: Uuid,
+        response: Option<String>,
+    ) -> Result<TaskRecord> {
+        let mut state = self.state.lock().await;
+        if state.closed {
+            return Err(TaskRunnerError::Closed);
+        }
+        let record = state
+            .actors
+            .get(&id)
+            .map(|actor| actor.record.borrow().clone())
+            .or_else(|| state.records.get(&id).cloned())
+            .ok_or(TaskRunnerError::NotFound)?;
+        if record.state != crate::executor::TaskState::WaitingForHuman {
+            return Err(ExecutorError::InvalidMessage.into());
+        }
+        self.reap(&mut state, id).await?;
+        let mut task = CuaTask::open(self.path(id)).await?;
+        task.answer_help(request_id, response).await?;
+        state.records.insert(id, task.snapshot().clone());
+        self.approvals.touch();
+        // Save the answer before resolving a connection; a failed reconnect cannot lose it.
+        let assignment = self
+            .runtime
+            .resolve_model_assignment(task.snapshot().identity.workspace_id)
+            .await?;
+        if !valid_assignment(&assignment) {
+            return Err(TaskRunnerError::InvalidPrompt);
+        }
+        self.runtime.desktop_tools(task.snapshot().identity).await?;
+        let record = task.snapshot().clone();
+        self.launch(&mut state, task, assignment);
+        Ok(record)
+    }
+
     pub async fn close(&self) -> Result<()> {
         let mut state = self.state.lock().await;
         state.closed = true;
@@ -495,6 +533,7 @@ impl TaskRunner {
             Ok(())
             | Err(
                 ExecutorError::Cancelled
+                | ExecutorError::AwaitingHuman
                 | ExecutorError::Denied
                 | ExecutorError::NeedsReview
                 | ExecutorError::ChildFailed
@@ -549,6 +588,97 @@ mod tests {
         })
         .await
         .expect("actor did not publish approval")
+    }
+
+    #[tokio::test]
+    async fn human_help_releases_children_and_retains_reply_when_reconnect_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("tasks");
+        let service = Arc::new(
+            Service::open(dir.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = Arc::new(WorkspaceRuntime::new(service, Arc::new(NativeVault)));
+        let model = json!({"method":"model","payload":{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"help-1","type":"function","function":{"name":"ask_human","arguments":"{\"question\":\"Which folder?\"}"}}]}}]}});
+        let tool = json!({"method":"tool","payload":{"call_id":"help-1","name":"ask_human","arguments":{"question":"Which folder?"}}});
+        let python_pid = dir.path().join("python.pid");
+        let context_pid = dir.path().join("context.pid");
+        let processes = ExecutorProcesses {
+            python: ProcessSpec { program: "/bin/sh".into(), args: vec!["-c".into(), format!("printf '%s\n' $$ > \"$1\"\nIFS= read -r start\nprintf '%s\n' '{model}'\nIFS= read -r reply\nprintf '%s\n' '{tool}'\nIFS= read -r reply\n"), "fixture".into(), python_pid.display().to_string()] },
+            context: ProcessSpec { program: "/bin/sh".into(), args: vec!["-c".into(), "printf '%s\n' $$ > \"$1\"\nwhile IFS= read -r line; do :; done".into(), "fixture".into(), context_pid.display().to_string()] },
+        };
+        let identity = SessionIdentity {
+            workspace_id: WorkspaceId::new(),
+            session_id: SessionId::new(),
+        };
+        let id = Uuid::new_v4();
+        let runner = TaskRunner::new(root.clone(), runtime.clone(), processes.clone())
+            .await
+            .unwrap();
+        let mut changes = runner.subscribe();
+        let task = CuaTask::create_with_id(
+            runner.path(id),
+            id,
+            identity,
+            vec![json!({"role":"user","content":"fixture"})],
+            vec![],
+        )
+        .await
+        .unwrap();
+        runner.launch(&mut *runner.state.lock().await, task, assignment());
+        let request = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let record = runner.snapshot(id).await.unwrap();
+                if record.state == TaskState::WaitingForHuman {
+                    break record.help_requests[0].clone();
+                }
+                changes.changed().await.unwrap();
+            }
+        })
+        .await
+        .unwrap();
+        runner.close().await.unwrap();
+        for path in [python_pid, context_pid] {
+            let pid = tokio::fs::read_to_string(path).await.unwrap();
+            assert!(
+                !std::path::Path::new(&format!("/proc/{}", pid.trim())).exists(),
+                "child outlived human hand-off"
+            );
+        }
+        drop(runner);
+        let runner = TaskRunner::new(root, runtime, processes).await.unwrap();
+        assert_eq!(
+            runner.snapshot(id).await.unwrap().state,
+            TaskState::WaitingForHuman
+        );
+        assert!(runner
+            .answer_help(id, request.id, Some("Documents".into()))
+            .await
+            .is_err());
+        let record = runner.snapshot(id).await.unwrap();
+        assert_eq!(record.state, TaskState::Interrupted);
+        assert_eq!(
+            record.help_requests[0].response.as_deref(),
+            Some("Documents")
+        );
+        assert!(matches!(
+            runner
+                .answer_help(id, request.id, Some("Desktop".into()))
+                .await,
+            Err(TaskRunnerError::Executor(ExecutorError::InvalidMessage))
+        ));
+        assert_eq!(
+            CuaTask::open(runner.path(id))
+                .await
+                .unwrap()
+                .snapshot()
+                .help_requests[0]
+                .response
+                .as_deref(),
+            Some("Documents")
+        );
+        runner.close().await.unwrap();
     }
 
     #[tokio::test]

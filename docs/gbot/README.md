@@ -5,17 +5,28 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Current item: connect the accepted Cua executor to GChat bot channels, approvals,
-browser tools and takeover controls in the [Cua adoption plan](cua-map.md).
-Acceptance: focused actor/browser/control/guest fixtures, native type check and
-changed frontend checks; reuse the accepted desktop task instead of repeating it.
-The accepted Linux Cua runtime is now packaged for native resource discovery.
-Next action: select the viewer route. Its concrete stack changes and recommendation
-are in [the Cua map](cua-map.md#viewer-options-for-ron).
-Cua native media requires the Spaces server closure; Fleet's VNC route requires
-noVNC/websockify. Neither added closure is selected. No VM or model gate.
-The candidate passes its six focused cases, strict service Clippy, native type
-check and frontend types/lint. Evidence: `out/gbot-cua-guest-20261012/result.json`.
+Durable human assistance is merge-ready. An `ask_human` tool saves a question
+with its task and waits for a reply or decline. Three focused lifecycle cases,
+one channel case, strict service Clippy, native compilation, frontend types
+and product-file lint pass. No dependency or model run was added.
+Evidence: `out/gbot-human-handoff-20261012/result.json`.
+Current next item: pin and package Cua's Spaces/media closure and integrate its
+endpoint, SSH channel and embedded viewer. Acceptance is one focused
+view-only / takeover / hand-back gate, with FSL notices retained for GChat only.
+
+Ron selected **Cua native media for the first release** on October 12, after
+reviewing the viewer trade-offs. Adopt the pinned Spaces guest media endpoint
+and wrap Cua's browser media core through SSH; retain GChat's task, vault and
+control owners. The [Cua map](cua-map.md#viewer-options-for-ron) records the
+stack and remaining platform checks. No noVNC/websockify closure is selected.
+The existing Xvnc/XFCE guest remains the desktop backend; it is not the selected
+browser viewing transport. The media endpoint and embedded panel are next.
+
+Bot channels, browser/control bindings and the accepted Linux Cua runtime are
+merged in `45ac4ae7e`. Their six focused cases, strict service Clippy, native
+type check and frontend types/lint pass. Evidence:
+`out/gbot-cua-guest-20261012/result.json` and
+`out/gbot-cua-runtime-20261012/result.json`.
 Compact output is merged in `9ab394244`.
 Ron selected Cua for the agent framework while retaining our VM provisioning,
 Hyper-V and M365 Cloud PC connection. GChat retains durable state, vault,
@@ -53,7 +64,7 @@ or performance.
 | Local VM | Hyper-V on Windows; KVM on Linux. The bot never operates the user's own desktop through this option. |
 | Cloud setup | Hetzner is the low-cost recommendation; DigitalOcean is the familiar US option. Both use provider API creation and the same cloud-init setup. Azure, AWS and GCP use guided setup. |
 | Cloud guest | Debian 13, lightweight desktop environment (XFCE on TigerVNC Xvnc), session units, Cua MCP over SSH and SSH-only inbound access. No exposed VNC/RDP port. |
-| Desktop view | Localhost VNC through SSH for local VMs and LAN/cloud computers; view-only by default, explicit Take over / Hand back. M365 uses its supported connection. |
+| Desktop view | Cua native media over SSH for local VMs and LAN/cloud computers; view-only by default, explicit Take over / Hand back, with desktop audio from Cua. M365 uses its separately qualified connection. |
 | Sizing and price | Linux default 2 vCPU / 4 GB; 2 GB minimum. Read live regional prices and show monthly cost before creation. No fixed price or stale plan alias. Windows follows its OS requirements. |
 | Persistence | Tasks, history and results survive service restart, PC sleep and client reconnect. Resume only after reconciling actual state. |
 | M365 Cloud PC | Required first-release scope, not a later extension. Ron's existing Cloud PC is a development target. |
@@ -69,13 +80,18 @@ the user's GChat connector accounts. Agent, skill and tool definitions remain
 shared, with one executor. These are decided requirements, not claims that
 the per-bot connector UI is implemented.
 
-Each bot gets its own sidebar channel next to Chat, Studio and Code. The bot
-channel owns its conversation history, tasks, approvals and desktop view,
-separate from ordinary model chats and Code sessions. Multiple bots retain
-separate channels and assignments. The candidate now supplies bot channels,
-SSH key import, connection controls, saved brain settings, task history,
-approvals and takeover controls. Its embedded desktop viewer, guided VM/cloud
-setup and per-bot connector picker are not delivered yet.
+Gbot appears in the left menu **above Work**, only when Gbot integration is
+enabled in GChat. Ron wants a ChatGPT DOT/Grok-style bot experience, adapted to
+GChat's dark theme. Each bot has a small animated avatar; its design awaits
+Ron's draft. Detailed layout, animation and interaction design will be discussed
+before that UI work.
+
+Each bot retains a separate channel for conversation history, tasks, approvals
+and desktop view; multiple bots keep separate channels and assignments. The
+current functional channel supplies SSH key import, connection controls, saved
+brain settings, task history, approvals and takeover controls. The embedded
+media panel, guided VM/cloud setup, per-bot connector picker and final bot UI
+are not delivered yet.
 
 GChat remains the open base: front end, lightweight infrastructure management,
 LAN host management, agent builder/support, prebuilt skills and integrations.
@@ -323,10 +339,10 @@ setup's resources, leaving existing machines and retained user data alone.
 ## View the desktop and take over
 
 **View bot's desktop** opens an embedded GChat panel. For local VMs, LAN and
-cloud computers, a VNC server in the bot session listens on localhost only.
-SSH carries it to a loopback endpoint on the GChat viewer PC. A GChat-owned
-local bridge adapts that stream to its embedded viewer; no cloud relay or
-internet-facing browser/VNC endpoint is introduced. When the service is on a
+cloud computers, the pinned Cua Spaces media endpoint listens on guest
+loopback. SSH carries its session-scoped media to the GChat viewer PC. GChat
+wraps Cua's browser media core; no cloud relay or internet-facing media endpoint
+is introduced. When the service is on a
 separate LAN PC, the client opens its own authorized guest tunnel or a paired
 service-forwarded channel; setup checks that route explicitly.
 
@@ -541,7 +557,7 @@ slices; an attached computer does not establish either capability.
 | Connection record | Store the workspace ID, service location, transport endpoint, verified peer identity, selected desktop session and actual capabilities. Keep only vault references for credentials. Do not reuse an inference grant as desktop-control permission. |
 | Workspace worker | Own guest command processes, guest paths and the selected graphical session. Use the pinned Driver for its qualified capture/input operations; report unavailable capabilities explicitly. A live SSH shell is not desktop readiness. |
 | Shared runtime | Bind its file/command/computer tools to the selected workspace. Guest paths stay guest paths; a failed remote operation cannot fall back to a client-machine tool. Agent definitions and skills retain their existing shared ownership. |
-| Desktop panel | Bind the displayed frame and input to the same session and geometry. Local/LAN/cloud use localhost VNC over SSH. Opening the panel is read-only; Take over waits for bot-input revocation before enabling human input. |
+| Desktop panel | Bind the displayed frame and input to the same session and geometry. Local/LAN/cloud use Cua native media over SSH. Opening the panel is read-only; Take over waits for bot-input revocation before enabling human input. |
 
 Connect in observable stages: verify the selected PC's identity and reachability
 from the service PC; authenticate with vault-backed credentials; inspect the
@@ -572,16 +588,16 @@ desktop windows. These gates establish connection behavior, not cloud setup,
 unattended task persistence, model quality or release coverage.
 
 The source-only SSH connection and initial operation-recovery contract are implemented
-below. Next unresolved implementation choices are the viewer component/license
-and M365's actual permitted route. Resolve them against the pinned component contracts before
-adopting dependencies; no second agent executor or paid Arbitor layer is needed
+below. The Cua viewer route is selected; its guest endpoint and embedded panel
+still need implementation. M365's actual permitted route remains unresolved.
+Use the pinned component contracts; no second agent executor or paid Arbitor layer is needed
 for this slice.
 
 ## Remaining engineering choices
 
 - M365's actual permitted route, client integration and embedded viewing surface.
 - Dedicated-guest worker integration and the authenticated desktop viewer bridge.
-- Exact local VM images, owned session boot policy and viewer components/licenses.
+- Exact local VM images and owned session boot policy; Cua media licensing for paid Arbitor remains separate.
 - Guest application packaging and reasonable OS-disk defaults for the first tasks.
 
 Service default, first-release M365 scope, the four computer options, provider
@@ -592,16 +608,15 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
 and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
-`7bf139610`. Compact output is merged as `9ab394244`. The current integration candidate is
-`feat/gbot-cua-guest-9ab` at `/ai/gchat-worktrees/gbot-cua-skill-918c`, with the
-channel/browser/control change pushed at `323bfb07a` for reviewed merge.
-Current deliverable: connect the existing Cua executor to native GChat channels,
-persist per-bot model assignments with vault-held API keys, preserve browser
-schemas and approvals, and implement exclusive takeover/hand-back.
-Acceptance: the four focused guest/browser/control/task cases, one assignment
-persistence/vault case, strict service Clippy, native type check, and one frontend
-case covering bot isolation, approvals, saved settings and takeover. Accepted
-desktop execution is reused.
+`7bf139610`. Compact output is merged as `9ab394244`. The channel/browser/control and runtime integration is merged in `45ac4ae7e`.
+Current candidate: `feat/gbot-human-handoff-45ac` at
+`/ai/gchat-worktrees/gbot-cua-skill-918c`. Deliverable: durable assistance
+requests/replies in the service API and bot channel, without changing action
+approval or desktop control. Acceptance: focused human-help lifecycle/child
+cleanup and channel checks, service Clippy, native type check, frontend types
+and product-file lint. These gates pass. Evidence is retained under
+`/ai/gchat/out/gbot-human-handoff-20261012/`; accepted desktop evidence is reused.
+Next: Cua native media endpoint/transport/panel integration, selected by Ron.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -633,7 +648,7 @@ discovery and rejection of an incomplete package. Native compilation passes.
 Evidence is in
 `out/gbot-cua-runtime-20261012/result.json`. This is focused packaging evidence;
 a complete DEB/AppImage installation remains a release gate. The viewer is not
-exposed because the guest's raw VNC still needs the selected browser bridge.
+exposed; the Cua guest media endpoint and embedded panel still need integration.
 Do not advertise the pending viewer or Windows runtime as ready.
 
 Owned candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch

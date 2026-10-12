@@ -36,8 +36,8 @@ Current prototype evidence and retained paths are in the [design record](README.
 | Driver skills | **ADOPT** | Import the pinned skill bundle (`SKILL.md`, `LINUX`, `WINDOWS`, `MACOS`, `BROWSER`, `WORKFLOW`, `VISUAL`, `RUNTIME`) through shared skill discovery, with notices, platform selection and source/version metadata. Keep session/target semantics; adapt modal activation to native input. No independently evolving computer-use skill. |
 | Computer tool schemas and dispatch | **WRAP** | Expose Driver MCP tools as Cua function tools through the existing vault/session transport. Tool calls go through GChat approvals and operation receipts before execution. Preserve raw MCP replies in the task log; model-facing accessibility output has one elements representation. |
 | Browser tools | **ADOPT** Driver, **WRAP** exposure | Gbot exposes the pinned Driver's typed browser catalog and preserves its schemas and arguments through the existing approval/session/receipt path. Cua owns exact page binding, navigation, refs, dialogs and files/downloads; no GChat browser engine. `PythonBrowserTool`'s legacy Playwright endpoint is excluded. Source fixture and remaining Chromium guest gate are described below. |
-| Human requests | **KEEP** GChat requests, borrow Cua's request/completion shape | `human_tool` is a human model-completion provider, not desktop takeover or approval. Borrow request IDs, pending/completed/failed outcomes and separate text/tool-call replies. Bind any future assistance request to the existing bot/task journal and channel; do not import its in-memory FastAPI/Gradio server. |
-| Desktop viewer and media | **WRAP** Cua media core when its guest endpoint is available; **KEEP** SSH/VNC now | Cua's `MediaSession` canvas core is the narrow integration candidate. The full HTML5 viewer requires Spaces RPC/media services and additional JS dependencies, permits input by default and forbids iframe embedding. No source or latency evidence establishes a better replacement for our current VNC transport. Native `cua-viewer` lacks Linux support and supplies no M365 broker connection. |
+| Human requests | **KEEP** GChat requests, borrow Cua's request/completion shape | `human_tool` is a human model-completion provider, not desktop takeover or approval. Borrow request IDs, pending/completed/failed outcomes and separate text/tool-call replies. Persist assistance requests and replies in the existing bot/task journal and channel; do not import its in-memory FastAPI/Gradio server. |
+| Desktop viewer and media | **WRAP** Cua native media, selected for v1 | Ron selected the pinned Spaces media endpoint and `MediaSession` browser core on October 12. Keep SSH transport and the dedicated XFCE desktop, wrap view/input/audio in GChat's session and control owner. The full HTML5 viewer is not embedded as-is. Windows/M365 and latency remain unqualified. |
 | Take over / Hand back | **KEEP** authority, **WRAP** Cua media input | GChat must own a durable exclusive input grant for the selected session, drain/cancel bot input, and revoke human media access before hand-back. Cua `VIEW_ONLY`, scoped tickets and `CloseMedia` provide mechanisms to wrap; neither `human_tool`, presence cursors nor an interactive viewer session supplies that authority. |
 | Evaluation | **ADOPT** tasks/verifiers, **WRAP** guest session | Use `cua-bench` task definitions, rewards and ATIF trajectories. Bind its session operations to our existing dedicated guest; stock `cb run` defaults to container/managed infrastructure and is not a libvirt/SSH adapter. No new benchmark framework. |
 | Terminal recording | **ADOPT** `tools/cli-cast` for development | Real PTY → asciinema v2 casts for Code input/render evidence and guest CLI traces. Its transcript-parser goldens are currently Claude Code-oriented; OpenCode semantic parsing is unqualified. Recording is not permission to replay commands or use a user's history. |
@@ -152,9 +152,10 @@ return usage, messages and tool outcomes to the existing journal/UI. The child
 owns no vault, scheduler or recovery database. On child loss, the service keeps
 the task and unresolved operation receipts. This is a host-side binding, not a
 new guest worker or network service. Its private IPC, event-driven task/approval API and GChat native bridge are
-implemented and pass focused checks. Runtime packaging is still pending: the
-accepted Python closure and shared context preparer currently require explicit
-paths, rather than an installer-owned runtime.
+implemented and pass focused checks. Linux runtime packaging is merged in
+`45ac4ae7e`: native GChat discovers the accepted bundled Python closure and
+uses bundled Bun for the shared context preparer. Windows packaging remains
+owed to its release gate.
 
 ### Durable actions and approval
 
@@ -229,8 +230,11 @@ journal owners must persist an assistance request with its bot/task/session
 identity and record its resolution. A human-suggested function call enters the
 same approval and operation-receipt route as a model-suggested call. Completing
 an assistance request cannot authorize Take over or resume a paused desktop.
-The assistance-request UI remains a GChat task/channel boundary; no separate
-human-completion server is added.
+The candidate exposes `ask_human`, durable pending/completed/declined/cancelled
+requests and task-bound replies in the bot channel. Waiting releases executor
+children; replies survive reconnect failure without granting action approval or
+desktop control. Stop/takeover cancel pending requests. No separate human
+completion server is added.
 
 #### Implemented service ownership
 
@@ -281,9 +285,9 @@ The current `/v1/view/open` in `src-tauri/gbot-service/src/api.rs` and
 session-bound bidirectional VNC bytes. They cannot mint media tickets or mediate
 human input. The service control owner above is available to GChat's task/UI
 binding; a browser-renderable desktop stream still needs an approved guest
-media endpoint/packaging closure. No decoder is copied without a working
-endpoint. Keep SSH/VNC until that boundary exists and demonstrates the
-same session/control behavior. M365 retains its selected Windows connection.
+media endpoint/packaging closure. Ron selected that Cua closure for the first
+release. Replace the VNC view transport when the media endpoint and panel
+demonstrate the same session/control behavior; retain the Xvnc desktop backend. M365 retains its selected Windows connection.
 
 #### Guest endpoint dependency decision
 
@@ -309,7 +313,8 @@ The new closure includes tonic/prost `0.14`, axum `0.8`, QUIC/TLS and vendored
 OpenSSL; the [codec manifest][media-codec] enables OpenH264 `0.9.8`/
 `openh264-sys2` `0.9` and `audiopus_sys` `0.2.2`. Disabling QUIC or audio at
 runtime does not remove these compile-time dependencies. FSL permission for
-GChat does not approve this additional runtime/guest closure.
+GChat is separate from approving its runtime/guest closure; Ron selected the
+Cua native route and this closure on October 12.
 
 The other pinned browser viewer, Fleet's [`DesktopPane`][fleet-desktop], imports
 external `@novnc/novnc` (`^1.7.0` in its package manifest) and sets
@@ -319,39 +324,35 @@ SSH listener forwards raw TCP. Adopting this route therefore needs named
 noVNC/websockify dependencies plus enforced guest view/input policy. Changing
 the React flag alone would leave bidirectional input available.
 
-No media route, ticket placeholder, decoder or new guest daemon is selected by
-this inspection. The missing approval is the exact `cua-spacesd` guest binary
-closure above (or separately the noVNC/websockify route), with packaging into
-the existing dedicated guest. A selected Cua endpoint must bind guest loopback,
-retain root RPC authority in the service and expose only the selected session's
-ticketed media socket over SSH. Forwarding an unauthenticated daemon port to
-the panel would let it mint an interactive session despite a view-only ticket.
+Ron selected the exact `cua-spacesd` guest binary closure above for GChat's
+first release. Package it into the existing dedicated guest; no noVNC/websockify
+route is selected. Bind the endpoint to guest loopback, retain root RPC
+authority in the service and expose only the selected session's ticketed media
+socket over SSH. Forwarding an unauthenticated daemon port to the panel would
+let it mint an interactive session despite a view-only ticket.
 Open must verify the exact Driver display and effective `VIEW_ONLY` policy;
 interactive open requires the current Human owner. Close must revoke the
-media session before hand-back can resume bot input. Until that dependency
-decision is made, the usable implementation remains the existing SSH/Driver
-control boundary and the desktop panel remains unavailable. No build, install
-or live guest/model test was run for this source-level decision.
+media session before hand-back resumes bot input. The current implementation
+still supplies the SSH/Driver control boundary; the media endpoint and panel
+are not built yet. No platform or latency qualification is implied by selection.
 
 #### Viewer options for Ron
 
-The recommendation is the pinned Fleet **noVNC route** for the first embedded
-viewer. It preserves the accepted Debian/Xvnc/XFCE guest and SSH transport.
-This is a recommendation, not approval to add its dependencies. Both options
-leave ComputerAgent, the MCP Driver, GInfer assignments, the native vault,
-durable tasks and GChat bot channels in place.
+**Decision: Cua native media for the first release (Ron, October 12).** The
+comparison below explains the selected stack. The earlier noVNC recommendation
+is superseded. Both routes retain ComputerAgent, MCP Driver, GInfer assignments,
+the native vault, durable tasks and GChat bot channels.
 
 | Route | Benefits | Costs and limitations | Stack change |
 | --- | --- | --- | --- |
 | Cua native media | Reuses Cua's HTML5 media client and ticketed view/input policy; H.264 video and Opus audio are already designed into the stack. | Requires the full Spaces guest server closure above; more binary/native-library packaging. FSL components require a separate decision for paid Arbitor. No measured latency advantage or M365 compatibility is established. | Add pinned `cua-spacesd` to the guest, its native codec/RPC dependencies and the Cua HTML5 client; wrap its control and media sessions through SSH. Replace the panel's proposed VNC path, retaining the dedicated desktop and VM provisioning. |
 | Cua Fleet VNC | Reuses the current Xvnc desktop and SSH boundary; standard browser VNC client, smaller added stack; no adoption of FSL media components. | Adds separately pinned noVNC/websockify. The copied Fleet `viewOnly=false` setting is unsuitable; enforce read-only versus interactive access in the service/guest, close the interactive tunnel on hand-back. Audio is not supplied by this path; M365 retains its separate connection. | Add noVNC to GChat and loopback-only websockify to the guest, reached over the existing SSH session; bind viewer access to the current bot/control owner. |
 
-Neither route needs a new hypervisor, cloud relay, agent loop or model. The
-native route is preferable if integrated video/audio and Cua media-session
-features justify its larger guest stack. The VNC route reaches the decided
-view/take-over/hand-back feature with fewer changes to the accepted deployment.
-Dependency pins/notices and one focused view-only/takeover/hand-back gate are
-required after Ron selects a route; no benchmark campaign is proposed.
+The selected route needs no new hypervisor, cloud relay, agent loop or model.
+Pin its dependencies, retain notices and verify the view-only/takeover/hand-back
+boundary with a focused gate. Desktop audio capture/playback comes from Cua;
+microphone uplink remains disabled. Windows and M365 require their own checks;
+no benchmark campaign or performance claim is part of this integration.
 
 Ron permits FSL in **GChat**, not Arbitor. Inspected candidates are
 `cua-spacesd-html5` (including its media core), `cua-media-protocol`,
