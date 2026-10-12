@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-12** — [Deliver pinned Gbot guest resources through the installer](2026-10-12-deliver-pinned-gbot-guest-resources.md)
+
 - **2026-10-12** — [Own SSH workspace creation in the Gbot service](2026-10-12-own-ssh-workspace-creation-in-the-gbot-service.md)
 - **2026-10-12** — [Own Gbot schedule occurrences in the service](2026-10-12-own-gbot-schedule-occurrences-in-service.md)
 - **2026-10-12** — [Own guided KVM setup in the Gbot service](2026-10-12-own-guided-kvm-setup-in-gbot-service.md)
@@ -451,3 +453,5 @@ decision is reversed, add a new one that says which record it supersedes.
 
 - **2026-10-12** — [Own SSH workspace creation in the Gbot service](2026-10-12-own-ssh-workspace-creation-in-the-gbot-service.md)
 - **2026-10-12** — [Share Chat workers and scope Gbot connector accounts](2026-10-12-share-chat-workers-and-scope-gbot-connectors.md)
+
+- **2026-10-12** — [Consume native v2 benchmark phases with their measured scope](2026-10-12-consume-native-v2-benchmark-phases.md)

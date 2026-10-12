@@ -26,14 +26,15 @@ shared Chat workers and explicit per-bot Google/Microsoft accounts are merged
 in main `8440b5f7a`. Bots inherit no accounts. Their focused service/native/UI,
 lint, types, check and strict Clippy evidence is retained.
 
-The current candidate integrates service-owned once/interval schedules and Linux
+Main `b1502528b` integrates service-owned once/interval schedules and Linux
 KVM onboarding. The wizard checks prerequisites and exact pinned guest assets,
 persists resumable setup identity, and admits a bot only after SSH, desktop-file
 and view-only media readiness. Two setup recovery cases, eight adapter cases,
 five wizard cases and the combined native route fixture pass. Combined frontend
-types, native check and strict native/service Clippy also pass. These are source
-gates: packaged guest-asset delivery and one actual VM created through the wizard
-remain unfinished. Hyper-V/cloud/M365 creation, remote service selection and
+types, native check and strict native/service Clippy also pass. Candidate `ec21a1874` delivers all three pinned guest assets through the existing
+bundle/data setup path; its focused interrupted/retry/digest fixture, native
+check and strict Clippy pass. These are source gates: one actual VM created
+through the current setup owner remains untested. Hyper-V/cloud/M365 creation, remote service selection and
 independent background lifetime remain unfinished. Schedules explicitly run only
 while GChat is open. The
 [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
@@ -101,7 +102,7 @@ settings; more than one bot is allowed. A new bot starts with **no connector
 accounts**. Its mail/calendar/drive and other existing accounts are explicitly
 linked by account ID; credentials stay with the shared native account vault.
 It never automatically inherits the user's GChat connector selection. Agent,
-skill and tool definitions remain shared. The candidate account picker and
+skill and tool definitions remain shared. The merged account picker and
 scoped executor boundary are implemented; live OAuth still needs app registration.
 
 Gbot appears in the left menu **above Work**, only when Gbot integration is
@@ -684,14 +685,15 @@ and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
 `7bf139610`. Compact output is merged as `9ab394244`. The channel/browser/control and runtime integration is merged in `45ac4ae7e`.
 Human assistance `32231c6ba` is incorporated in current main, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
-Current candidate: `feat/gchat-open-items-setup-bfd` at
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `8440b5f7a` after the first implementation wave merged.
+Coordinator tree: `feat/gchat-open-items-setup-bfd` at
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on reviewed main
+`b1502528b` with guest delivery `ec21a1874` and native report `e49219967`.
 Deliverable: reconcile GChat/Manager/Gbot open work and implement guided setup,
 shared Chat workers, explicit per-bot account/tool wiring, schedules and KVM
 onboarding. Acceptance: focused
 observable-behavior fixtures, affected lint/types and Rust checks, current master
-rows and reviewable source. No new dependency, native Windows build, model/GPU,
-physical provisioning, person's desktop or release change. Scheduling does not
+rows and reviewable source, plus one dedicated-VM setup/browser gate. No new
+dependency, native Windows build, model/GPU, person's desktop or release change. Scheduling does not
 claim independent background operation; KVM setup does not install host tools.
 Verification: reuse the first-wave focused receipts accepted in main `8440b5f7a`.
 Scheduling adds six initial service cases, three changed retry/API/publication-fault
@@ -700,25 +702,34 @@ cases, eight adapter cases and five wizard cases. The combined source passes its
 seven-route native admission case, frontend types, native check and strict native
 and service Clippy. Logs `wave2-*` record the combined gate; component handoffs are
 `scheduling-note.md` and `kvm-onboarding-note.md`. No actual new VM or installed
-wizard qualification is claimed.
+wizard qualification is claimed. Pinned guest resource/data delivery is implemented
+in `ec21a1874`; its one focused fixture, native check and strict Clippy pass.
+See [asset delivery](asset-delivery.md). Native v2 report consumption in
+`e49219967` passes eight owning Rust and 34 frontend cases plus owning checks;
+its public submission refusal awaits the site's approved contract. See
+[benchmark authority](../benchmark/README.md).
 Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 
 | Owner / path | Revision and purpose | Live work / retention |
 | --- | --- | --- |
-| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `feat/gchat-open-items-setup-bfd`, accepted base `8440b5f7a`; schedules `f769d1ead`, KVM `89e4a22f4` plus native `b1367ae49`, updater `c36e3862c`, web fixtures `2c1bb9c41` | Combined gates passed; retain source for reviewed merge. |
+| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `feat/gchat-open-items-setup-bfd`, reviewed main `b1502528b`; new delivery `ec21a1874` and reports `e49219967` | Owning focused gates pass; candidates integrated for review. |
 | First-wave setup/worker/connector trees | Source incorporated in main `8440b5f7a`; branches and evidence retained | Owned worktrees retired; at least 0.77 GiB freed, `first-wave-retirement.json`. |
 | Scheduler agent: `/ai/gchat-worktrees/gbot-scheduled-tasks-3259` | `d78d8dcd1`, integrated as `f769d1ead` | No live job; retain until reviewed main merge. |
 | KVM agent: `/ai/gchat-worktrees/gbot-kvm-onboarding-ce826` | `312152b2f`, integrated as `89e4a22f4` | No live job or guest; retain until reviewed main merge. |
 | Updater: `/ai/gchat-worktrees/updater-offline-8440` | Evidence docs `73eb666c8`, integrated as `a2f908594` | Offline metadata 19 cases PASS; retain until reviewed merge, no signing/publication. |
 | Web fixtures: `/ai/gchat-worktrees/web-warning-8440` | `e0e8ac49d` and docs `3d7ded0db`, integrated as `2c1bb9c41` / `03139b2bd` | All 26 selected cases have passing evidence; retain through reviewed merge, no full suite. |
 | Shared cache: `/ai/gchat/src-tauri/target` | Existing Rust cache, not owned by this item | Canonical local build lock released; no cleanup of shared cache. |
+| Asset/report agents: `/ai/gchat-worktrees/gbot-asset-delivery-89e4`, `/ai/gchat-worktrees/gbench-native-v2-report-89e4` | Pushed `58747bb28` / `c6b18cc69`, integrated as `ec21a1874` / `e49219967` | Complete and clean; retain through reviewed merge, no live jobs. |
+| Background owner: `/ai/gchat-worktrees/gbot-background-ec21` | `feat/gbot-background-ec21`, baseline `ec21a1874` | Independent service ownership implementation; no CPU/GPU grant or job yet. |
+| Setup gate: `/ai/gchat-worktrees/gbot-wizard-e492` | `test/gbot-wizard-e492`, baseline `e49219967` | Preparing one dedicated S1 VM setup/browser check; record exact guest before allocation. |
 
-Next unresolved action: reviewed main merge of the integrated source. Two bounded
-implementation agents now own pinned guest-asset delivery and the native GBench
-v2 reader, using separate candidate trees; no physical gate is underway. Then run
-one dedicated VM wizard check once its product assets are available. Background service and
-the other computer adapters remain open. No guest, engine, GPU or build container
-is owned by this source change.
+Next unresolved action: reviewed merge of the completed delivery/report candidates.
+Two bounded agents implement independent service lifetime and check dedicated-VM
+setup plus a real guest browser effect. Neither has launched a guest/build at this
+handoff. Background lifetime and the other computer adapters remain open; no
+engine or GPU is owned by this item. Product setup does not default its brain to
+GChat's UI-owned port1337 facade: its explicit assignment must select a persistent
+Host or other inference endpoint for client-exit continuity.
 
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
 Physical gate **PASS at 17:55:38 UTC on October 12**. The production native-vault

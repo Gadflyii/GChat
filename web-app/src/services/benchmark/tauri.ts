@@ -39,13 +39,7 @@ export type BenchmarkRequest = {
 }
 
 export type BenchmarkPoint = {
-  evidence: {
-    schema: string
-    corpus: string
-    configuration: BenchmarkConfiguration
-    warmup: BenchmarkWave[]
-    measured: BenchmarkWave[]
-  }
+  evidence: BenchmarkV1Report | BenchmarkV2Report
   concurrency: number
   requested_prompt_tokens: number
   requested_output_tokens: number
@@ -55,6 +49,8 @@ export type BenchmarkPoint = {
   cached_prompt_tokens: number
   cold_prompt_tokens_per_second: number | null
   prompt_tokens_per_second: number | null
+  warm_prefill_tokens_per_second_per_request?: number | null
+  warm_cached_ttft_seconds?: number | null
   generation_tokens_per_second: number | null
   per_request_generation_tokens_per_second: number | null
   wave_output_tokens_per_second: number
@@ -80,10 +76,43 @@ export type BenchmarkWave = {
   wall_seconds: number
 }
 
+export type BenchmarkV1Report = {
+  schema: 'ginfer-resident-benchmark-v1'
+  corpus: string
+  configuration: BenchmarkConfiguration
+  warmup: BenchmarkWave[]
+  measured: BenchmarkWave[]
+}
+
+export type BenchmarkV2Wave = BenchmarkWave & {
+  logical_prompt_tokens: number; observed_compute_tokens: number
+  prefix_reuse: boolean; warm_cached_prompt: boolean
+  prefill_seconds_sum: number; decode_seconds_sum: number; request_seconds_sum: number
+  warm_prefill_status: 'cached' | 'prefix_reuse_disabled' | 'prefix_incomplete' | 'prefill_timer_unavailable'
+  warm_prefill_seconds_mean: number | null
+  warm_pp_effective_per_request: number | null
+  warm_cached_ttft_seconds: number | null
+}
+
+export type BenchmarkV2Phase = {
+  prefix_reuse: boolean
+  warmup: BenchmarkV2Wave[]
+  measured: BenchmarkV2Wave[]
+}
+
+export type BenchmarkV2Report = {
+  schema: 'ginfer-resident-benchmark-v2'
+  corpus: string
+  configuration: BenchmarkConfiguration
+  workload: { prompt_tokens: number; output_tokens: number; concurrency: number; warmup_rounds: number; measured_rounds: number }
+  cold_prefill: BenchmarkV2Phase
+  warm_generation: BenchmarkV2Phase
+}
+
 export type BenchmarkResult = {
   benchmark_id: BenchmarkRequest['benchmark_id']
   hardware: BenchmarkHardware | null
-  methodology: 'ginfer-resident-max-perf-v1'
+  methodology: 'ginfer-resident-max-perf-v1' | 'ginfer-resident-max-perf-v2'
   run_id: string
   started_at_ms: number
   completed_at_ms: number

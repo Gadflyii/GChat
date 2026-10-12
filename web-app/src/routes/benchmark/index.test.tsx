@@ -54,6 +54,16 @@ it('plots Cold PP on the prompt scale and leaves missing measurements unplotted'
   expect(container.querySelector('svg')?.innerHTML).not.toContain('NaN')
 })
 
+it('labels native cached prefill per request without plotting the historical PP field', () => {
+  const { container } = render(<ThroughputChart nativeV2 points={[
+    { concurrency: 4, cold_prompt_tokens_per_second: 1000, prompt_tokens_per_second: 99999,
+      warm_prefill_tokens_per_second_per_request: 2000, generation_tokens_per_second: 200 },
+  ]} />)
+  expect(screen.getByText('Warm PP / request · left axis')).toBeInTheDocument()
+  expect(screen.getByText('C4 Warm PP / request: 2,000 t/s')).toBeInTheDocument()
+  expect(container.querySelector('svg')?.innerHTML).not.toContain('99,999')
+})
+
 beforeEach(() => {
   useBenchmarkStore.setState({ runs: [], selectedRunId: null })
   vi.mocked(onBenchmarkProgress).mockResolvedValue(() => {})
@@ -86,6 +96,21 @@ it('keeps saved results visible without an online server', async () => {
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
+
+it('renders saved native v2 scope and explains the public contract boundary offline', async () => {
+  mocks.list.mockResolvedValue([])
+  useBenchmarkStore.setState({ runs: [{ benchmark_id: 'standard', hardware: null, methodology: 'ginfer-resident-max-perf-v2', run_id: 'saved-v2', started_at_ms: 1, completed_at_ms: 1001, points: [],
+    session: { display_name: 'Saved v2 run', pid: null, target_id: 'ginfer/local/instance', session_id: 'session',
+      model_id: 'model', model_path: '/model.ginfer', max_context: 8181, max_concurrency: 8, vision: true,
+      spec: 'dflash', draft_tokens: 7, draft_tp: 1, kv_dtype: 'int8', prefill_chunk: 0, cuda_graph: true },
+  }], selectedRunId: 'saved-v2' })
+  render(<Page />)
+  expect(await screen.findByText('Native v2 · measured cold prefill and warm generation')).toBeInTheDocument()
+  expect(screen.getByRole('columnheader', { name: 'Warm PP / request t/s' })).toBeInTheDocument()
+  expect(screen.getByRole('columnheader', { name: 'Cached TTFT' })).toBeInTheDocument()
+  expect(screen.getByText(/Native v2 results are saved locally/)).toBeInTheDocument()
+  expect(screen.queryByLabelText('Public nickname')).not.toBeInTheDocument()
+})
 
 it('keeps receipt-owned public removal available after deleting the last local result', async () => {
   const id = 'owned-local-history'
@@ -143,7 +168,7 @@ it('blocks benchmarking for pending changes and confirms before restarting the s
   render(<Page />)
   await screen.findByRole('option', { name: /Current settings · C1/ })
   fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
-  const option = screen.getByRole('option', { name: /C4 profile/ }) as HTMLOptionElement
+  const option = screen.getByRole('option', { name: /Tested · C4 · 4K context/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   expect(screen.getByRole('alert')).toHaveTextContent('unloads the current model')
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
