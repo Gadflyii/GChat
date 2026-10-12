@@ -5,8 +5,8 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Current item: import the pinned Cua Driver skill through the shared skill catalog
-and the accepted ComputerAgent executor, following the [Cua adoption plan](cua-map.md).
+Current item: compact-output contract audit complete; next is the XFCE guest
+image comparison in the [Cua adoption plan](cua-map.md).
 Ron selected Cua for the agent framework while retaining our VM provisioning,
 Hyper-V and M365 Cloud PC connection. GChat retains durable state, vault,
 approvals, sessions and inference assignment. The service boundary retains approvals and saved effect receipts; Cua owns task
@@ -579,8 +579,9 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
-and two Cua evaluator receipts below. The skill-import candidate is
-`feat/gbot-cua-skill-918c` at `/ai/gchat-worktrees/gbot-cua-skill-918c`.
+and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
+`7bf139610`. The compact-output candidate is `feat/gbot-cua-output-45b` at
+`/ai/gchat-worktrees/gbot-cua-skill-918c`.
 Deliverable: seed the pinned MIT Cua skill and linked guides through GChat's
 existing catalog, and use that same bundle in Gbot's accepted executor.
 Acceptance is complete: catalog seeding/platform policy (4 cases), skill
@@ -607,8 +608,28 @@ root was removed, freeing 3.745 GiB; controller and bookings ended. Retain
 The initial root-fixture feature selection and private-keyring reconnect
 failures occurred before any model task. The fixture now enables `test-tauri,cli`
 and keeps one mode-600 password per private keyring; corrected gates pass.
-Next unresolved action: reviewed merge of the skill import, then the driver's
-compact model-facing output contract in the adoption queue.
+The skill import is merged in main `7bf139610`.
+
+**Compact-output item.** Candidate `feat/gbot-cua-output-45b` retains the accepted
+projection: structured action/verification facts unchanged, one elements list
+for accessibility observations, no duplicate markdown or image in text-only
+model messages. Full raw MCP replies remain saved effect receipts. Deliverable:
+verify this boundary against pinned Driver `tool-output-format.md` and
+`action-result-contract.md`, without replacing working behavior. Gate: one
+focused action/verification preservation fixture plus an audit of the saved
+accepted skill desktop task; no repeated model task. No new dependencies,
+Vision changes or guest image changes. The saved task audit passes for all
+19 desktop replies: 9 observation payloads, 8 action payloads and 1 tool error.
+Every typed action/verification fact, modal/popup metadata and element state
+is preserved. Model payload is 104,531 bytes versus the 208,517-byte raw MCP
+envelope; this is serialized payload size, not a token or latency measurement.
+The raw receipt remains intact. Evidence: `out/gbot-cua-output-20261012/receipt-audit.json`.
+The focused fixture covers confirmed/partial/unverifiable/refused action facts
+and satisfied/unsatisfied/unknown postconditions without promoting delivery to
+task success. The focused fixture (1 case) and strict service Clippy pass.
+The shared build cache is container-owned, so checks use the existing build
+container rather than changing ownership or creating a second cache.
+Next unresolved action: reviewed handoff, then the XFCE guest image comparison.
 
 **Nested modal candidate (2026-10-12).** Fork `c549ab4d7f31a08c339da1732700b6664af438a6`
 removes the empty-title exclusion from X11 enumeration, includes every visible
@@ -792,7 +813,7 @@ External pages, runtime and physical acceptance were not exercised by this gate.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-skill-918c` | Skill import candidate from main `918c7940b`; focused cases, strict Clippy and example build PASS. No local compile/model active; local booking544 returned11:05Z. |
+| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-skill-918c` | Skill import merged `7bf139610`; compact-output contract candidate `feat/gbot-cua-output-45b` adds only a focused preservation fixture/documentation. Focused fixture and strict Clippy PASS using the existing container/cache; canonical build guard released. No model or guest active. |
 | GChat coordinator / S1 | `/ai/gbot-vms/cua-skill-20261012/` | Skill-enabled overwrite task PASS; guest retired by product adapter and disk removed (3.745 GiB). Controller/private fixtures and CPU112–113 bookings ended. Keep raw task/MCP and concise evidence. |
 | GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-skill-smol-20261012/` | Unchanged accepted Qwen SMOL262144 functional task PASS; engine exited normally11:28:10Z, both guards and booking440 returned, private API key removed. Keep launch/stop receipt and request log; no performance claim. |
 | GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | Source `3d214b772` merged in main `918c7940b`; exact-content gate PASS. Retire this clean merged tree after skill handoff; reuse accepted evidence. |

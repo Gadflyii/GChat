@@ -49,6 +49,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn compact_results_preserve_action_facts_and_verification_status() {
+        let results = [
+            json!({"effect":"confirmed","route":"global_input","delivery":{"mode":"foreground"},"evidence":[{"kind":"window_change","detail":"Replace dialog opened"}],"summary":"Clicked Save; Replace dialog opened"}),
+            json!({"effect":"partial","route":"synthetic_events","delivery":{"mode":"foreground","delivered_count":2},"escalation":{"target":"foreground","reason":"delivery_failed"}}),
+            json!({"effect":"unverifiable","route":"global_input","delivery":{"mode":"foreground"},"escalation":{"target":"page","reason":"effect_unconfirmed"}}),
+            json!({"effect":"refused","route":"global_input","error":{"code":"permission_required","hint":"Approve input first"}}),
+            json!({"status":"satisfied","checks":[{"kind":"value","actual":"Hello from Gbot."}]}),
+            json!({"status":"unsatisfied","checks":[{"kind":"value","actual":"old contents"}]}),
+            json!({"status":"unknown","reason":"elements_incomplete"}),
+        ];
+        for structured in results {
+            let raw = json!({"isError":false,"structuredContent":structured,"content":[{"type":"text","text":"diagnostic duplicate"},{"type":"image","data":"raw-frame"}]});
+            let saved = raw.clone();
+            let mut expected = structured;
+            expected["isError"] = json!(false);
+            assert_eq!(desktop_model_result(&raw), expected);
+            assert_eq!(raw, saved);
+        }
+    }
+
+    #[test]
     fn one_tree_preserves_action_state_and_raw_reply() {
         let raw = json!({"content":[{"type":"text","text":"duplicate tree"},{"type":"image","data":"raw-frame"}],"structuredContent":{"tree_markdown":"duplicate tree","_note":"prefer elements","snapshot_id":"s1","truncated":true,"elements_complete":false,"elements":[{"role":"entry","label":"Filename","element_token":"s1:4","enabled":true,"focused":true,"value":"hello.txt","actions":["set_value"],"element_index":4,"frame":{"x":10}}]}});
         let saved = raw.clone();
