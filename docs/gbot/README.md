@@ -265,7 +265,8 @@ viewer and media components have FSL terms. Ron permits FSL viewer/media for
 GChat; they remain excluded from paid Arbitor pending his review. Optional
 AGPL perception assets are excluded. Check each selected component's LICENSE
 and dependency closure before shipping. Cua native media is the selected viewer;
-physical frames/audio and platform qualification remain owed.
+Linux capture/audio and control pass on the dedicated guest; Windows/M365 and
+browser playback remain release gates.
 [Pinned component licensing](https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/LICENSING.md).
 
 ## Local and LAN computers
@@ -598,7 +599,8 @@ unattended task persistence, model quality or release coverage.
 
 The source-only SSH connection and initial operation-recovery contract are implemented
 below. The Cua guest endpoint and embedded panel are implemented in the current
-media candidate; physical capture/audio qualification remains owed. M365's actual
+media implementation; Linux capture/audio and control pass on the dedicated
+guest. Windows/M365 and browser playback remain release gates. M365's actual
 permitted route remains unresolved.
 Use the pinned component contracts; no second agent executor or paid Arbitor layer is needed
 for this slice.
@@ -606,7 +608,7 @@ for this slice.
 ## Remaining engineering choices
 
 - M365's actual permitted route, client integration and embedded viewing surface.
-- Physical media/audio qualification of the authenticated desktop viewer bridge.
+- Windows/M365 capture/audio and installed browser playback qualification.
 - Exact local VM images and owned session boot policy; Cua media licensing for paid Arbitor remains separate.
 - Guest application packaging and reasonable OS-disk defaults for the first tasks.
 
@@ -629,26 +631,30 @@ through PCM, view-only input refusal, harmless takeover input and interactive
 stream revocation on hand-back. Existing source and package receipts are reused.
 No model/GPU, person's desktop, browser playback, Windows or M365 claim.
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
-Next unresolved action: remove binary payloads from cloud-init metadata, then
-provision a fresh dedicated guest through the same adapter/vault path and finish
-audio/control. The retained guest's cloud-init log proves ENOSPC while writing
-`/run/cloud-init/instance-data-sensitive.json`. Our 238,888,669-byte user-data embeds
-the driver/media archives as base64; cloud-init duplicates it into metadata and
-its 477,780,941-byte cache. NoCloud then falls back to DataSourceNone, leaving an
-empty network configuration and host public key. The prior stopped-disk pin match
-was not evidence of a healthy live SSH identity. No pin bypass, offline repair or
-RAM/tmpfs workaround. Archives belong beside configuration on the read-only seed,
-with the existing digest verification. The probe must stop through ACPI first.
-The earlier gate received a real 1920×1080 BGRA desktop frame, converted to PNG
-and inspected. Its PCM packets were zero because the probe killed its background
-tone child; the independent transient tone unit is implemented. Physical audio
-and control remain owed. Guest `802d41b1-2e19-4413-af1a-1c2119f77973` is stopped and unregistered;
-its vault key is deleted through the product path. Retain its diagnosis logs.
-The seed correction passes seven focused KVM cases, strict Clippy and example
-build; receipts are `physical/seed-{focused,clippy,build}.log`.
-Focused codec/envelope/tone receipts remain valid. No GPU/model/Windows changes.
-Evidence: S1 `/ai/gbot-vms/cua-media-20261012/wire-evidence/latest-cloud-init.log`
-(ENOSPC at lines 1324–1357).
+Physical gate **PASS at 17:55:38 UTC on October 12**. The production native-vault
+SSH route captured a 1920×1080 BGRA desktop frame, converted to PNG and visually
+inspected. Three seconds of stereo 48 kHz S16LE audio contained the 440 Hz tone
+(576,000 bytes, RMS 8,484.83, tone energy fraction >0.99999999). View-only input
+was refused with `view_only`; takeover delivered harmless pointer input;
+hand-back restored Bot ownership and revoked the interactive socket.
+Receipts: `physical/seed/{summary,physical-media,retirement,disk-retirement}.json`
+and `physical/seed/capture.png`. No browser playback or platform performance claim.
+
+Source `411bacc33` also fixes the provisioning defect: driver/media archives now
+sit beside the small configuration on the read-only seed, with pinned digest
+checks before extraction. The dedicated guest booted with 12,368-byte user-data
+instead of 238,888,669 bytes and completed SSH/media provisioning. Seven focused
+KVM cases, strict Clippy and example build pass; reuse
+`physical/seed-{focused,clippy,build}.log`. The failed guest's log establishes
+ENOSPC writing `/run/cloud-init/instance-data-sensitive.json`, followed by
+NoCloud fallback and broken SSH. No pin bypass, RAM workaround or offline repair.
+
+Guest `bd5614ed-e14a-40b5-b566-aaef3ee9d847` is stopped and unregistered, its
+native-vault key deleted, and its disposable root removed (2.688 GiB freed).
+The CPU booking is returned; no live guest, model, GPU job or owned build
+container remains. Keep evidence and accepted archives. Next unresolved action:
+review/merge this physical-gate branch; Windows/M365 and browser playback wait
+for Ron's release window.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -680,8 +686,9 @@ discovery and rejection of an incomplete package. Native compilation passes.
 Evidence is in
 `out/gbot-cua-runtime-20261012/result.json`. This is focused packaging evidence;
 a complete DEB/AppImage installation remains a release gate. The current viewer
-candidate adds the guest media endpoint and embedded panel; physical media and
-Windows runtime qualification remain owed.
+implementation adds the guest media endpoint and embedded panel; dedicated
+Linux capture/audio and control pass. Windows runtime and browser playback
+qualification remain owed.
 
 Historical guest/runtime candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch
 `feat/gbot-cua-guest-9ab` (merged in `45ac4ae7e`). Retain source and concise evidence in
@@ -1298,105 +1305,48 @@ October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/p
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-skill-918c`, `test/gbot-media-physical-e3ff` | Physical media probe on merged source `e3ff85e8a`; retain until reviewed merge. |
-| GChat / local | `/ai/gchat/out/gbot-cua-media-20261012` | Focused source-gate evidence and disposable container recipe. |
-| GChat / S1 | `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012` | Pinned daemon source/build/cache and package; retire build after the accepted package is retained. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-skill-918c`, `test/gbot-media-physical-e3ff` | Source `411bacc33`, physical gate PASS; retain until reviewed merge. |
+| GChat / local | `/ai/gchat/out/gbot-cua-media-20261012` | Focused source checks, capture/PCM and compact receipts. Shared Cargo cache is not owned by this task. |
+| GChat / S1 | `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012` | Accepted pinned daemon package and notices; build/cache can retire after review. |
+| GChat / S1 | `/ai/gbot-vms/cua-media-20261012/seed-evidence` | Physical frame/audio/control, packaging and retirement evidence; no live job. |
+| GChat / S1 | `/ai/gbot-vms/bd5614ed-e14a-40b5-b566-aaef3ee9d847` | Removed after product stop/unregister/vault deletion, 2.688 GiB freed. |
 
 The pinned daemon release build and native/audio package passed. Accepted archive:
 `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012/results/cua-spacesd-native-20261012.tar.gz`
 (SHA-256 `f7d2d547ad4d94759aba93a5eb37ad1b5b93d5272074273a5ed4a130ee0b0ed7`).
-`results/package-terminal.json` records the launcher/version/help, recursive loader
-and audio-library checks. The build ended at 14:56:22Z and packaging at 15:00:56Z;
-the container exited and the S1 CPU/build grant was returned. Keep the accepted
-archive and notices; build/cache retirement follows review. Shared local Cargo
-cache is reused, not owned by this item.
+`results/package-terminal.json` records launcher/version/help, recursive loader
+and audio-library checks. Build and packaging containers exited; keep the
+accepted archive and notices. Build prerequisites existed only in disposable
+containers; their closure is in the [Cua map](cua-map.md#pinned-media-packaging).
 
-The service retains guest-token confidentiality and revokes scoped streams.
-Viewers start view-only. Media closure/reconnection preserves Human ownership;
-only explicit hand-back closes input, takes a fresh observation and resumes the
-bot. A late close from an older viewer cannot revoke its replacement. Physical
-frames/audio and platform qualification remain unclaimed. Build prerequisites
-exist only in disposable containers; their closure is in the
-[Cua map](cua-map.md#pinned-media-packaging).
+Physical Linux acceptance passes over production SSH/Cua: one real 1920×1080
+frame, 440 Hz PCM audio, view-only refusal, Human takeover input and Bot hand-back
+with socket revocation. It ran on one dedicated Debian/Xvnc guest on S1 CPUs
+112–113 from 17:52:44 to 17:55:38 UTC, without a GPU or model. The PNG was visually
+inspected; browser playback, Windows and M365 remain release gates. See
+`physical/seed/summary.json` and its raw receipt links.
 
-The final SSH/Cua fixture passes in 0.37 seconds: it closes and reopens an
-interactive viewer, preserves Human ownership, rejects a different owner and
-ignores an old lease's delayed close. The audio-toggle UI fixture also passes;
-strict all-target service Clippy remains clean. Evidence is in
-`out/gbot-cua-media-20261012/{reconnect-control,reconnect-ui,reconnect-clippy}.log`.
-No owned build container or GPU/model job remains.
+The earlier focused SSH/Cua reconnection fixture passed in 0.37 seconds:
+Human ownership survives close/reopen, a different owner is rejected and an old
+lease's delayed close cannot revoke its replacement. Audio-toggle UI and strict
+all-target Clippy also pass. Reuse the `reconnect-{control,ui,clippy}.log` receipts.
 
-Current physical-gate inventory: branch `test/gbot-media-physical-e3ff`,
-accepted daemon archive listed in [cua-map.md](cua-map.md), private controller
-at S1 `/ai/gbot-vms/cua-media-20261012/controller`; current results are in
-`wire-evidence`. Guest `802d41b1-2e19-4413-af1a-1c2119f77973` uses CPUs
-112–113 and retains its disk/domain/native-vault credential for reconnect
-diagnosis. Guests `4c75…`, `3cc2…` and `c49b…` are retired; their deleted disks
-freed 13.91 GiB. Local evidence is `out/gbot-cua-media-20261012/physical`;
-no person's desktop is accessed.
+Resolved physical-gate failures and preventive changes:
 
-Two attempts failed before boot because the private libvirt monitor path exceeded
-the Unix-socket limit. Both guests were retired. A separate `XDG_RUNTIME_DIR`
-prevents reuse of the daemon holding the old configuration; the short config
-path is `/ai/gbot-vms/cua2config`. Vault and results remain private.
+- Linux native capture offers BGRA/H.264; PNG-only negotiation returned
+  "no acceptable codec". Typed codec preferences now admit BGRA fallback. The
+  probe follows Cua's video envelope; the production browser already did.
+- Returning from a background `paplay` shell killed its tone via transient-unit
+  cleanup. The tone uses its own transient unit; production capture is unchanged.
+- Binary-filled user-data exhausted cloud-init's runtime metadata filesystem.
+  Local pinned archives now sit outside configuration on the read-only seed.
+  The large-archive fixture bounds metadata size and verifies archive integrity.
+- Private libvirt paths must fit the Unix-socket limit. The accepted controller
+  uses `/ai/gbot-vms/cua2config` and its own short runtime directory. The probe
+  waits for boot SSH readiness and attempts ACPI shutdown before forced fallback.
 
-The first physical guest completed provisioning and SSH/Cua checks, then failed
-in `open_view` before capture. Its domain and key are retired; its disposable disk
-awaits cleanup. The previous wrapper retired the credential before collecting
-daemon logs. The probe now collects bounded guest diagnostics before retirement,
-and production media errors retain their failing operation and underlying cause.
-The diagnostic guest `3cc29715-e9ba-4928-b5af-e3b9bbf15606` established the cause:
-`open media` rejected the PNG-only offer with "no acceptable codec". Cua's Linux
-provider offers BGRA/H.264; its browser media core already renders both. Guest
-service logs show the Xvnc desktop and PulseAudio monitor running. Its controller
-ended with failure, and its domain and vault key are retired. Results are in S1
-`/ai/gbot-vms/cua-media-20261012/diagnostic-evidence` and the local physical folder.
-No frame/audio result is claimed. The candidate negotiates typed codec preferences
-with BGRA fallback and records actual PNG or BGRA frame bytes and dimensions.
-Guest `c49b2df4-1300-4638-af19-2d419930c22a` opened the media session but
-failed in the probe, which expected a bare descriptor instead of Cua's
-`{direction: "video", message: descriptor}` envelope. The production browser
-already parses this correctly. Its domain and vault key are retired. Results
-are in S1 `/ai/gbot-vms/cua-media-20261012/codec-evidence`; no frame/audio/control
-PASS is claimed. The probe now follows that wire format and saves the descriptor
-before codec validation. The next wrapper retains a failed, stopped guest and
-its encrypted fixture vault for diagnosis; retirement follows PASS or parking.
-The accepted package is unchanged. Media cases 2/2, strict Clippy and example
-build pass for `189d05507` (local `codec-*.log` receipts); they are reused.
-The two retired physical guest disks are removed after shutdown, unregister and
-credential-deletion receipts, freeing 9.25 GiB; diagnostics remain retained in
-the evidence folders and `retired-physical-guests.json`.
-Future launches stop on booking errors. Local archives now belong on the
-read-only NoCloud seed beside a small configuration, with digest verification
-before extraction. The 239 MB embedded configuration exhausted cloud-init's
-runtime metadata filesystem and is removed. Focused KVM cases, strict Clippy
-and the example build gate this correction; physical audio/control remain owed.
-
-The retired codec guest disk is removed after its retirement receipt, freeing
-4.66 GiB (`codec-evidence/disk-retirement.json`). The current guest is
-`802d41b1-2e19-4413-af1a-1c2119f77973`.
-
-The corrected probe `dcdd251e8` passes its one Cua-envelope fixture, strict
-example Clippy and build (`wire-{focused,clippy,build}.log`). The dedicated gate
-started at 16:40:56Z on S1 CPUs 112–113, booking through 17:10Z, tracked session
-96176. Its private state/results are in
-`/ai/gbot-vms/cua-media-20261012/wire-evidence`. Fixture vault unlock material is
-private to that test root; SSH keys stay in the encrypted native vault. The
-wrapper stops the guest on failure and retains it for a bounded correction;
-PASS or timeout retires its domain and key. No model/GPU or person’s desktop.
-
-The silent-audio cause was the probe's background `paplay` child. The guest
-command contract uses a transient unit with `KillMode=control-group`, so returning
-from `sh ... &` stops playback immediately. The tone now has its own transient
-user unit, as the existing editor-launch gate does; the production capture path
-is unchanged. The retained guest resumes for this correction; no fresh provision
-or calibration. S1 CPUs 112–113 are extended to 17:50Z for the reconnect diagnosis and remaining finite check.
-
-The 17:06Z resume stopped at the production SSH connect deadline before media
-opened: the probe skipped first-boot readiness for a registered workspace and
-connected while the guest was booting. Waiting on a single early forwarded TCP
-connection also failed before the banner: QEMU closed it while the guest was
-booting. The probe now reads the console once until systemd reports SSH started,
-bounded to three minutes, preserving resumed-boot output for diagnosis.
-Production connection deadlines are unchanged. The stopped guest and encrypted
-vault are retained for the remaining gate.
+Concise failed-attempt evidence remains in S1 `diagnostic-evidence`,
+`codec-evidence` and `wire-evidence`. Their domains and native-vault keys are
+retired. Disks `4c75…`, `3cc2…` and `c49b…` freed 13.91 GiB; `802d…` freed
+5.15 GiB. The final guest freed another 2.688 GiB. Booking 1362 is cancelled;
+no person's desktop or Windows installation was accessed.
