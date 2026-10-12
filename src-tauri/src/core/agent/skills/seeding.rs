@@ -161,6 +161,30 @@ mod tests {
     }
 
     #[test]
+    fn bundled_computer_skill_seeds_its_platform_guides_and_license() {
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/agent-skills");
+        let destination = TempDir::new().unwrap();
+        let result = seed_starter_skills(&source, destination.path()).unwrap();
+        assert!(result.installed.iter().any(|name| name == "cua-driver"));
+        let skill = destination.path().join("cua-driver");
+        let parsed =
+            parse_skill_file(&fs::read_to_string(skill.join("SKILL.md")).unwrap()).unwrap();
+        assert_eq!(
+            parsed.manifest.platforms,
+            Some(vec![SkillPlatform::Linux, SkillPlatform::Win32])
+        );
+        assert!(fs::read_to_string(skill.join("LINUX.md"))
+            .unwrap()
+            .contains("dedicated guest transport and real foreground input"));
+        assert!(fs::read_to_string(skill.join("WINDOWS.md"))
+            .unwrap()
+            .contains("dedicated guest transport and real foreground input"));
+        assert!(fs::read_to_string(skill.join("LICENSE.md"))
+            .unwrap()
+            .contains("MIT License"));
+    }
+
+    #[test]
     fn bundled_skills_follow_explicit_platform_metadata_policy() {
         use SkillPlatform::{Darwin, Linux, Win32};
 
@@ -172,6 +196,7 @@ mod tests {
             ("apple-reminders", vec![Darwin]),
             ("audio-transcribe", vec![Darwin, Linux]),
             ("currency", vec![Darwin, Linux, Win32]),
+            ("cua-driver", vec![Linux, Win32]),
             ("docker", vec![Darwin, Linux, Win32]),
             ("ffmpeg", vec![Darwin, Linux, Win32]),
             ("github", vec![Darwin, Linux, Win32]),
