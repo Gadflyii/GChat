@@ -62,3 +62,5 @@ Retain the owned source worktree/branch for integration and concise gate
 receipts in `/ai/gchat/out/gchat-open-items-20261012/background-service-note.md`.
 Reuse the coordinator-owned accepted Cargo/frontend caches; no owned build
 copy, downloaded artifact, VM, model or running service is allocated by this work.
+
+Ordinary Chat/Code connector requests carry a native GUI client identity. GChat Exit awaits a bounded disconnect cancellation sweep and closes that identity before dropping its client; late registrations are rejected. Bot tasks and their approval ownership are independent of this client identity.

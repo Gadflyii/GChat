@@ -197,14 +197,21 @@ fn prepare_linked(
 
 /// One native account/provider owner shared by Gbot and GChat clients.
 struct NativeOperation {
+    client_id: uuid::Uuid,
     cancellation: CancellationToken,
     started: bool,
+}
+
+#[derive(Default)]
+struct NativeOperations {
+    requests: std::collections::BTreeMap<uuid::Uuid, NativeOperation>,
+    disconnected_clients: std::collections::BTreeSet<uuid::Uuid>,
 }
 
 pub struct BotConnectorHost {
     state: Arc<AccountsState>,
     stopping: std::sync::atomic::AtomicBool,
-    operations: std::sync::Mutex<std::collections::BTreeMap<uuid::Uuid, NativeOperation>>,
+    operations: std::sync::Mutex<NativeOperations>,
 }
 
 impl BotConnectorHost {
@@ -214,7 +221,7 @@ impl BotConnectorHost {
         Ok(Self {
             state,
             stopping: std::sync::atomic::AtomicBool::new(false),
-            operations: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+            operations: std::sync::Mutex::new(NativeOperations::default()),
         })
     }
 }
@@ -228,7 +235,8 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                 &mut *self
                     .operations
                     .lock()
-                    .map_err(|_| "Connector operations unavailable")?,
+                    .map_err(|_| "Connector operations unavailable")?
+                    .requests,
             );
             for operation in operations.into_values() {
                 operation.cancellation.cancel();
@@ -306,12 +314,18 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                         .operations
                         .lock()
                         .map_err(|_| "Connector operations unavailable")?;
-                    if operations.contains_key(&id) {
+                    let client_id = uuid::Uuid::parse_str(text(&arguments, "client_id")?)
+                        .map_err(|_| "Invalid connector client identity")?;
+                    if operations.disconnected_clients.contains(&client_id) {
+                        return Err("Connector client disconnected".into());
+                    }
+                    if operations.requests.contains_key(&id) {
                         return Err("Connector request is already registered".into());
                     }
-                    operations.insert(
+                    operations.requests.insert(
                         id,
                         NativeOperation {
+                            client_id,
                             cancellation: CancellationToken::new(),
                             started: false,
                         },
@@ -327,7 +341,7 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                             .operations
                             .lock()
                             .map_err(|_| "Connector operations unavailable")?;
-                        let operation = operations
+                        let operation = operations.requests
                             .get_mut(&id)
                             .ok_or("Register the connector request before executing")?;
                         if operation.started {
@@ -350,8 +364,21 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                     self.operations
                         .lock()
                         .map_err(|_| "Connector operations unavailable")?
-                        .remove(&id);
+                        .requests.remove(&id);
                     result
+                }
+                "client_disconnected" => {
+                    let client_id = uuid::Uuid::parse_str(text(&arguments, "client_id")?)
+                        .map_err(|_| "Invalid connector client identity")?;
+                    let mut operations = self.operations.lock()
+                        .map_err(|_| "Connector operations unavailable")?;
+                    operations.disconnected_clients.insert(client_id);
+                    for operation in operations.requests.values() {
+                        if operation.client_id == client_id {
+                            operation.cancellation.cancel();
+                        }
+                    }
+                    Ok(Value::Null)
                 }
                 "cancel" => {
                     let id = uuid::Uuid::parse_str(text(&arguments, "request_id")?)
@@ -360,7 +387,7 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                         .operations
                         .lock()
                         .map_err(|_| "Connector operations unavailable")?
-                        .get(&id)
+                        .requests.get(&id)
                     {
                         operation.cancellation.cancel();
                     }
@@ -518,7 +545,7 @@ pub async fn execute<R: Runtime>(
     client
         .call(
             "/v1/native/connectors/register",
-            serde_json::json!({"request_id":id}),
+            serde_json::json!({"request_id":id,"client_id": app.state::<crate::core::gbot::GbotState>().connector_client_id()}),
         )
         .await?;
     // Registration before dispatch makes cancellation safe even when it precedes execute.

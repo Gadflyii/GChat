@@ -15,12 +15,25 @@ struct Connection {
     stopped: bool,
 }
 
-#[derive(Default)]
 pub struct GbotState {
     connection: Mutex<Connection>,
+    connector_client_id: uuid::Uuid,
+}
+
+impl Default for GbotState {
+    fn default() -> Self {
+        Self {
+            connection: Mutex::new(Connection::default()),
+            connector_client_id: uuid::Uuid::new_v4(),
+        }
+    }
 }
 
 impl GbotState {
+    pub(crate) fn connector_client_id(&self) -> uuid::Uuid {
+        self.connector_client_id
+    }
+
     pub(crate) async fn is_stopped(&self) -> bool {
         self.connection.lock().await.stopped
     }
@@ -98,13 +111,24 @@ impl GbotState {
         result
     }
 
-    /// Client exit releases only its update subscription. The service owns its own lifetime.
+    /// Client exit cancels its ordinary connector effects, leaving bot tasks service-owned.
     pub async fn disconnect(&self) {
-        let mut connection = self.connection.lock().await;
-        if let Some(updates) = connection.updates.take() {
-            updates.abort();
+        let client = {
+            let mut connection = self.connection.lock().await;
+            if let Some(updates) = connection.updates.take() {
+                updates.abort();
+            }
+            connection.client.take()
+        };
+        if let Some(client) = client {
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                client.call(
+                    "/v1/native/connectors/client_disconnected",
+                    serde_json::json!({"client_id": self.connector_client_id}),
+                ),
+            ).await;
         }
-        connection.client = None;
     }
 
     async fn quit<R: Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
