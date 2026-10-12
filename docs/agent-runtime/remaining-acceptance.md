@@ -20,7 +20,11 @@ The historical base Engine/Host/CLI were outside this GUI-only gate. No model,
 GPU, Windows, nested VM, completed wizard creation/resume, sleep/restart or
 release/performance qualification ran. First launch rendered after synchronous
 asset installation; its debug timing is recorded as a separate startup finding.
-Next: fix that source-proven blocking owner while preserving launch admission.
+The `fix/gchat-linux-resource-startup-ba46` candidate now runs that installer on
+one blocking worker and retains its result for Host, model and Gbot admission.
+Three focused readiness cases, production check/strict Clippy and the incremental
+desktop build pass. One installed startup observation remains; evidence is under
+`out/gchat-open-items-20261012/resource-startup/`.
 Evidence, screenshots, guest-only closure and cleanup:
 `out/gchat-open-items-20261012/installed-wizard/desktop-guest/receipt.json`.
 Earlier guest/disks are retired and their saved evidence remains valid.

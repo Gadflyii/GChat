@@ -23,7 +23,11 @@ impl IpcTestHarness {
         configure: impl FnOnce(Builder<MockRuntime>) -> Builder<MockRuntime>,
     ) -> Self {
         let temp_dir = tempdir().expect("failed to create IPC test data directory");
-        let builder = mock_builder().manage(TestDataRoot(temp_dir.path().to_path_buf()));
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        completion.send_replace(Some(Ok(())));
+        let builder = mock_builder()
+            .manage(TestDataRoot(temp_dir.path().to_path_buf()))
+            .manage(resources);
         let app = configure(builder)
             .build(mock_context(noop_assets()))
             .expect("failed to build IPC test app");

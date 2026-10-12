@@ -28,7 +28,9 @@ use tokio::sync::Mutex;
     tauri::mobile_entry_point
 )]
 pub fn run() {
-    let mut builder = tauri::Builder::default();
+    let (bundled_resources, resource_completion) = setup::BundledResources::pending();
+    let model_resources = bundled_resources.clone();
+    let mut builder = tauri::Builder::default().manage(bundled_resources);
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|_app, argv, _cwd| {
@@ -66,7 +68,10 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_ginfer::init())
+        .plugin(tauri_plugin_ginfer::init(move || {
+            let resources = model_resources.clone();
+            async move { resources.wait().await }
+        }))
         .plugin(tauri_plugin_vector_db::init())
         .plugin(tauri_plugin_rag::init());
 
@@ -453,7 +458,7 @@ pub fn run() {
             #[cfg(desktop)]
             tray_handles: Arc::new(std::sync::Mutex::new(None)),
         })
-        .setup(|app| {
+        .setup(move |app| {
             let log_dir = get_jan_data_folder_path(app.handle().clone()).join("logs");
             // The plugin's defaults are 40 KB per file with
             // `RotationStrategy::KeepOne`, and `KeepOne` does not archive
@@ -504,16 +509,16 @@ pub fn run() {
                 } else {
                     log::info!("Bundled GInfer Windows runtime is already current");
                 }
+                resource_completion.send_replace(Some(Ok(())));
             }
 
             #[cfg(target_os = "linux")]
             {
-                if setup::install_bundled_ginfer_linux(app.handle().clone())? {
-                    log::info!("Installed the bundled GInfer Linux runtimes");
-                } else {
-                    log::info!("Bundled GInfer Linux runtimes are already current");
-                }
+                setup::start_bundled_ginfer_linux(app.handle().clone(), resource_completion);
             }
+
+            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+            resource_completion.send_replace(Some(Ok(())));
 
             #[cfg(target_os = "windows")]
             {

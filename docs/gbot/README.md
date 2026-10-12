@@ -775,9 +775,25 @@ guest/service/key roots are retired and bookings 576/1415 canceled. Evidence:
 `out/gchat-open-items-20261012/installed-wizard/desktop-guest/receipt.json`.
 No model/GPU, person's desktop, host installation, new dependency, Windows build,
 release or publication ran. Remaining setup/platform/sleep gates stay explicit.
-Next unresolved action: fix the source-proven synchronous Linux resource-install
-startup block without racing Host/Gbot admission; inspect its existing readiness
-owners before changing execution. Release performance is not measured here.
+Current item: `GCHAT-LINUX-RESOURCE-INSTALL-UI-BLOCK`, branch
+`fix/gchat-linux-resource-startup-ba46`, based on merged main `ba46c7923`.
+Move the existing Linux resource installation to one blocking worker and publish
+its retained result through a shared readiness gate. Desktop Host initialization,
+hardware preparation, plugin model loading and Gbot connection wait for that
+result before discovering or executing installed files. Keep payload validation,
+atomic replacement, optional Gbot preflight and the headless installer unchanged.
+Acceptance: focused worker/admission success, failure and canceled-waiter cases,
+owning Rust check/Clippy, then one installed startup observation. No new dependency,
+Engine change, calibration, GPU, Windows build, release or performance claim.
+Source implements the worker and retained gate. Three focused readiness cases,
+production library check, strict Clippy and incremental desktop build pass;
+actual END was 23:39:41 UTC and CPU booking 580 is canceled. The CLI-feature
+fixture build reports two unused desktop-entry warnings; production checks and
+build report none. One disposable S1 Debian 13 desktop is running the installed
+startup observation against that accepted executable and retained package
+resources. Next unresolved action: verify render/input while installation is
+pending, then successful resource installation and guest retirement.
+Evidence and disposable outputs: `out/gchat-open-items-20261012/resource-startup/`.
 Owned disk cleanup reclaimed 69.77 GB net and left the target at 29.57 GB
 before this build; seven merged source trees were removed. Inventory and
 receipts: `/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`. Product setup does not default its brain to

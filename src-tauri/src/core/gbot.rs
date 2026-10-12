@@ -42,6 +42,7 @@ impl GbotState {
         &self,
         app: &AppHandle<R>,
     ) -> Result<background::Client, String> {
+        crate::core::setup::wait_for_bundled_resources(app).await?;
         let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
         let mut connection = self.connection.lock().await;
         if connection.stopped {
