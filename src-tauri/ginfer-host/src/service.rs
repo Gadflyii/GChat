@@ -993,6 +993,15 @@ impl Host {
         if request.max_context > limit {
             return Err(format!("context exceeds model maximum of {limit}"));
         }
+        let mut options = request.options.clone();
+        options.wait_for_residency_fill |= self.gpus.iter().any(|gpu| {
+            request.gpu_uuids.contains(&gpu.uuid)
+                && (gpu.name.eq_ignore_ascii_case("NVIDIA CMP 170HX")
+                    || gpu
+                        .display_name
+                        .as_deref()
+                        .is_some_and(|name| name.eq_ignore_ascii_case("NVIDIA CMP 170HX")))
+        });
         let socket = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let port = socket.local_addr().map_err(|e| e.to_string())?.port();
         drop(socket);
@@ -1011,7 +1020,7 @@ impl Host {
             max_context: request.max_context,
             concurrency: request.concurrency,
             benchmark_profile: request.benchmark_profile.clone(),
-            options: request.options.clone(),
+            options,
         })
     }
     pub async fn launch(&self, request: LaunchRequest) -> Result<Uuid, String> {
@@ -2137,6 +2146,62 @@ mod target_launch_tests {
             .map(|model| (model.path.clone(), model.id))
             .collect();
         assert_eq!(restored_ids, failed_ids);
+    }
+
+    #[tokio::test]
+    async fn cmp_serving_profile_waits_for_residency_only_for_selected_cmp() {
+        let (_dir, mut host, request) = installed_flash("groupwise-int", false).await;
+        assert!(!request.options.wait_for_residency_fill);
+        assert!(
+            !serde_json::from_value::<LaunchOptions>(serde_json::json!({}))
+                .unwrap()
+                .wait_for_residency_fill
+        );
+        Arc::get_mut(&mut host).unwrap().gpus.push(Gpu {
+            uuid: "GPU-unselected-cmp".into(),
+            name: "NVIDIA CMP 170HX".into(),
+            display_name: None,
+            memory_mib: 65536,
+            compute_capability: Some("8.0".into()),
+        });
+        for (name, display_name, waits) in [
+            ("NVIDIA A100", None, false),
+            ("NVIDIA CMP 170HX", None, true),
+            ("NVIDIA Graphics Device", Some("NVIDIA CMP 170HX"), true),
+            ("NVIDIA Graphics Device", None, false),
+            ("NVIDIA GeForce RTX 3090", None, false),
+        ] {
+            let gpu = &mut Arc::get_mut(&mut host).unwrap().gpus[0];
+            gpu.name = name.into();
+            gpu.display_name = display_name.map(String::from);
+            let launch = host.prepare_launch(&request).await.unwrap();
+            assert_eq!(launch.options.wait_for_residency_fill, waits, "{name}");
+            assert_eq!(
+                launch
+                    .options
+                    .args()
+                    .iter()
+                    .filter(|arg| arg.as_str() == "--wait-for-residency-fill")
+                    .count(),
+                usize::from(waits),
+                "{name}"
+            );
+            assert_eq!(
+                serde_json::to_value(&launch).unwrap()["wait_for_residency_fill"],
+                waits
+            );
+        }
+        let gpu = &mut Arc::get_mut(&mut host).unwrap().gpus[0];
+        gpu.name = "NVIDIA CMP 170HX".into();
+        let saved: LaunchRequest =
+            serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+        assert!(
+            host.prepare_launch(&saved)
+                .await
+                .unwrap()
+                .options
+                .wait_for_residency_fill
+        );
     }
 
     #[tokio::test]
