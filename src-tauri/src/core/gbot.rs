@@ -208,6 +208,9 @@ fn supported_route(path: &str) -> bool {
             | "/v1/tasks/cancel"
             | "/v1/tasks/approvals"
             | "/v1/tasks/approval"
+            | "/v1/schedules"
+            | "/v1/schedules/create"
+            | "/v1/schedules/enabled"
             | "/v1/control/take-over"
             | "/v1/control/hand-back"
     )

@@ -1,6 +1,7 @@
 # Engineering Decisions (ADR)
 
 - **2026-10-12** — [Own SSH workspace creation in the Gbot service](2026-10-12-own-ssh-workspace-creation-in-the-gbot-service.md)
+- **2026-10-12** — [Own Gbot schedule occurrences in the service](2026-10-12-own-gbot-schedule-occurrences-in-service.md)
 
 - **2026-10-12** — [Wrap Cua media in Gbot control leases](2026-10-12-wrap-cua-media-in-gbot-control-leases.md)
 
