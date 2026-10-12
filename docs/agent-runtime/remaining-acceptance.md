@@ -6,7 +6,7 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-This reconciliation uses reviewed main `ca4346ba2`, which includes `ec21a1874`
+This reconciliation uses reviewed main `04cc8f58c`, which includes `ec21a1874`
 (guest delivery) and `e49219967` (native reports), the master rows and saved
 receipts. A source fix, a focused fixture and an installed acceptance gate are
 separate claims. Passing evidence is reused; no broad suite or repeat GPU run
@@ -18,10 +18,10 @@ is part of this plan. The master list remains the sole issue-status authority.
 | --- | --- | --- |
 | General agent delegation from Chat | Main `8440b5f7a` supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
 | Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed presentation is still untested. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
-| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding. Accepted `ec21a1874` adds verified pinned bundle/data delivery; its fixture, check and strict Clippy pass. The current private API gate reached first boot and found host-only archive symlinks in the seed. Canonical-source repair/replacement guest is in progress; Ready remains unqualified. Hyper-V, cloud provider creation/live cost review and M365 connection are unfinished. Remote service selection is also unwired. | One dedicated KVM VM through the current setup owner; qualify actual UI separately if unavailable to the private test display. Windows/M365 at the release window. No person's desktop. |
+| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding. Accepted `ec21a1874` adds verified pinned bundle/data delivery; its fixture, check and strict Clippy pass. Seed repair `eac5e6688` passes a focused case and actual replacement ISO digest check. The replacement completed first boot but failed desktop readiness; the generic error loses the failed operation/reason. Both guests are retired. Ready and installed wizard presentation remain unqualified. Hyper-V, cloud provider creation/live cost review and M365 connection are unfinished. Remote service selection is also unwired. | One dedicated KVM VM through the current setup owner; qualify actual UI separately if unavailable to the private test display. Windows/M365 at the release window. No person's desktop. |
 | Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
-| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Exiting GChat still stops the in-process service; independent lifetime/client-exit and sleep continuity remain unfinished. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
-| Browser tools | Typed browser catalog/schema is covered. A real guest browser form task is unrun. | One dedicated-guest form submit and independent SSH readback; no model needed. |
+| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Accepted main still stops its service on exit. Separate-owner candidate `a2b0053a9` passes one process and eleven UI cases plus owning checks; installed/native/AppImage lifetime, client-exit/sleep and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
+| Browser tools | Typed browser catalog/schema is covered. A real guest browser form task is unrun, blocked by failed dedicated-guest desktop readiness. | One dedicated-guest form submit and independent SSH readback; no model needed. |
 
 ### Bugs, decisions and incomplete diagnostics
 
@@ -43,7 +43,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 ### Updater offline metadata gate — October 12
 
 The retained accepted source `874cbc98d31532e92b43ff7d60072b474153236e`
-in `/ai/gchat-worktrees/oi110-sectile-feed-bd4` passes its unchanged production
+integrated in main `b1502528b` passes its unchanged production
 filter gate: `python3 -m unittest discover -s tests -p test_updater_manifest.py`.
 S1, verified as `AIS-2-8592-L01` at `192.168.1.109`, provides existing
 Python 3.12.3 and jq 1.7. Four test methods contain 19 cases/subcases and
@@ -86,13 +86,15 @@ unchanged from the source used for this gate.
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |
 
-Order: schedules/KVM/updater source is merged; pinned guest delivery and native
-v2 consumption are accepted in main `ca4346ba2`. Two implementation agents now own
-independent background lifetime and one dedicated-VM setup/browser gate.
-Platform/release checks and the public v2 contract remain explicit.
+Order: schedules/KVM/updater source, pinned guest delivery and native-v2 consumption
+are accepted in main `04cc8f58c`. Background owner `a2b0053a9` and seed repair
+`427a2bc29` are clean/pushed candidates with focused evidence. Next, preserve the
+failed readiness operation/reason before another dedicated-guest Ready/browser
+gate. All agents and owned guests have stopped. Platform/release checks and the
+public v2 contract remain explicit.
 
 Coordinator tree: `fix/gbot-enable-opens-setup-e61` in
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `ca4346ba2`, which includes `ec21a1874` / `e49219967`.
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `04cc8f58c`, which includes `ec21a1874` / `e49219967`.
 The first wave (opt-in/LAN setup, transactional credential creation, Chat workers,
 per-bot connectors and disabled-embedding startup) is merged there. The second wave
 integrates schedules (`f769d1ead`), KVM onboarding (`89e4a22f4`) and the complete
@@ -109,6 +111,10 @@ PASS (`ann-test.log` / `ann-types.log`). Explicit VectorDB diagnostics remain.
 The PTY geometry fixture passes (`pty-geometry-test.log`), without a native mouse
 or blank-TUI cause claim. First-wave agent worktrees are retired after main merge;
 second-wave source is merged and its owned trees can retire after live-use checks.
+User-authorized cleanup retired five clean merged trees and freed 73.60 GB
+allocated Cargo cache plus 1.35 GB apparent source size; the target is 25.74 GB.
+Current closures, accepted packages and evidence remain. Inventory:
+`/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`.
 
 ## Accepted Ubuntu Desktop packages — OI-057
 
