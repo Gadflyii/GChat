@@ -457,3 +457,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-12** — [Share Chat workers and scope Gbot connector accounts](2026-10-12-share-chat-workers-and-scope-gbot-connectors.md)
 
 - **2026-10-12** — [Consume native v2 benchmark phases with their measured scope](2026-10-12-consume-native-v2-benchmark-phases.md)
+- **2026-10-12** — [Install Linux resources asynchronously before local admission](2026-10-12-install-linux-resources-before-local-admission.md)

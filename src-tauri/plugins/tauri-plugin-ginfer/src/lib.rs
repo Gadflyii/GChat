@@ -2,6 +2,7 @@ use tauri::{
     plugin::{Builder, TauriPlugin},
     Manager, Runtime,
 };
+use std::{future::Future, pin::Pin};
 
 pub mod benchmark;
 mod cli_endpoint;
@@ -16,8 +17,16 @@ pub use commands::{
 pub use process::cleanup_ginfer_processes;
 pub use state::GinferState;
 
-/// Initializes the plugin.
-pub fn init<R: Runtime>() -> TauriPlugin<R> {
+type LoadFuture = Pin<Box<dyn Future<Output = Result<(), String>> + Send>>;
+struct LoadPreparation(Box<dyn Fn() -> LoadFuture + Send + Sync>);
+
+pub fn init<R, F, Fut>(prepare_load: F) -> TauriPlugin<R>
+where
+    R: Runtime,
+    F: Fn() -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<(), String>> + Send + 'static,
+{
+    let preparation = LoadPreparation(Box::new(move || Box::pin(prepare_load())));
     Builder::new("ginfer")
         .invoke_handler(tauri::generate_handler![
             // Cleanup command
@@ -32,8 +41,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             benchmark::run_ginfer_benchmark,
             benchmark::cancel_ginfer_benchmark,
         ])
-        .setup(|app, _api| {
-            // Initialize and manage the plugin state
+        .setup(move |app, _api| {
+            app.manage(preparation);
             app.manage(GinferState::default());
             Ok(())
         })

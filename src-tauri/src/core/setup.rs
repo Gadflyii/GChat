@@ -31,6 +31,57 @@ const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
 mod gbot_assets;
 
 const BUNDLED_EXTENSIONS_FINGERPRINT: &str = ".bundled-extensions.sha256";
+type InstallationResult = Option<Result<(), String>>;
+
+#[derive(Clone)]
+pub(crate) struct BundledResources {
+    result: tokio::sync::watch::Receiver<InstallationResult>,
+}
+
+impl BundledResources {
+    pub(crate) fn pending() -> (
+        Self,
+        tokio::sync::watch::Sender<InstallationResult>,
+    ) {
+        let (completion, result) = tokio::sync::watch::channel(None);
+        (Self { result }, completion)
+    }
+
+    pub(crate) async fn wait(&self) -> Result<(), String> {
+        let mut result = self.result.clone();
+        loop {
+            if let Some(completed) = result.borrow_and_update().clone() {
+                return completed;
+            }
+            result.changed().await.map_err(|_| {
+                "Bundled resource installation ended without a result".to_string()
+            })?;
+        }
+    }
+}
+
+pub(crate) async fn wait_for_bundled_resources<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<(), String> {
+    app.try_state::<BundledResources>()
+        .ok_or("Bundled resource installation was not initialized")?
+        .inner()
+        .wait()
+        .await
+}
+
+#[cfg(any(target_os = "linux", test))]
+async fn install_bundled_resources(
+    completion: tokio::sync::watch::Sender<InstallationResult>,
+    install: impl FnOnce() -> Result<bool, String> + Send + 'static,
+) -> Result<bool, String> {
+    let result = tokio::task::spawn_blocking(install)
+        .await
+        .map_err(|error| format!("Bundled resource installer failed: {error}"))
+        .and_then(|result| result);
+    completion.send_replace(Some(result.as_ref().map(|_| ()).map_err(Clone::clone)));
+    result
+}
 
 #[cfg(target_os = "linux")]
 const LINUX_RUNTIME_ARCHITECTURES: [(&str, &str, &str); 4] = [
@@ -142,14 +193,26 @@ fn install_linux_runtimes_from(source: &Path, data_folder: &Path) -> std::io::Re
 }
 
 #[cfg(target_os = "linux")]
-pub fn install_bundled_ginfer_linux<R: Runtime>(app: tauri::AppHandle<R>) -> Result<bool, Box<dyn std::error::Error>> {
-    let resource_directory = app.path().resource_dir()?;
-    let data_folder = get_jan_data_folder_path(app.clone());
-    let changed = install_linux_resources_from(&resource_directory, &data_folder)?;
-    if changed {
-        prepare_hardware_after_runtime_install(app);
-    }
-    Ok(changed)
+pub(crate) fn start_bundled_ginfer_linux<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    completion: tokio::sync::watch::Sender<InstallationResult>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let installer_app = app.clone();
+        let result = install_bundled_resources(completion, move || {
+            let resource_directory = installer_app.path().resource_dir().map_err(|e| e.to_string())?;
+            let data_folder = get_jan_data_folder_path(installer_app);
+            install_linux_resources_from(&resource_directory, &data_folder).map_err(|e| e.to_string())
+        }).await;
+        match result {
+            Ok(true) => {
+                log::info!("Installed the bundled GInfer Linux runtimes");
+                prepare_hardware_after_runtime_install(app);
+            }
+            Ok(false) => log::info!("Bundled GInfer Linux runtimes are already current"),
+            Err(error) => log::error!("Bundled Linux resource installation failed: {error}"),
+        }
+    });
 }
 
 #[cfg(target_os = "linux")]
@@ -1084,6 +1147,56 @@ fn setup_window_theme_listener<R: Runtime>(
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn bundled_resources_wait_without_blocking_or_canceling_installation() {
+        let (resources, completion) = BundledResources::pending();
+        let (started, started_rx) = tokio::sync::oneshot::channel();
+        let (release, release_rx) = tokio::sync::oneshot::channel();
+        let installer = tokio::spawn(install_bundled_resources(completion, move || {
+            started.send(()).unwrap();
+            release_rx.blocking_recv().unwrap();
+            Ok(true)
+        }));
+        started_rx.await.unwrap();
+        let first = resources.clone();
+        let mut waiter = tokio::spawn(async move { first.wait().await });
+        tokio::select! {
+            biased;
+            result = &mut waiter => panic!("admitted before installation: {result:?}"),
+            _ = tokio::task::yield_now() => {}
+        }
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        assert!(!installer.is_finished());
+        release.send(()).unwrap();
+        assert_eq!(resources.wait().await, Ok(()));
+        assert_eq!(installer.await.unwrap(), Ok(true));
+        assert_eq!(resources.wait().await, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn bundled_resources_retain_installation_failure_for_every_waiter() {
+        let (resources, completion) = BundledResources::pending();
+        let installer = tokio::spawn(install_bundled_resources(completion, || {
+            Err("runtime digest mismatch".into())
+        }));
+        let expected = "runtime digest mismatch";
+        assert_eq!(resources.wait().await.unwrap_err(), expected);
+        assert_eq!(installer.await.unwrap().unwrap_err(), expected);
+        assert_eq!(resources.wait().await.unwrap_err(), expected);
+    }
+
+    #[tokio::test]
+    async fn bundled_resources_reject_worker_loss_instead_of_admitting_launches() {
+        let (resources, completion) = BundledResources::pending();
+        let result = install_bundled_resources(completion, || panic!("installer panic")).await;
+        assert!(result.unwrap_err().contains("installer panic"));
+        assert!(resources.wait().await.unwrap_err().contains("installer panic"));
+        let (resources, completion) = BundledResources::pending();
+        drop(completion);
+        assert!(resources.wait().await.unwrap_err().contains("without a result"));
+    }
 
     fn write_runtime(root: &Path, manifest: &str, server: &str) {
         fs::create_dir_all(root.join("bin")).unwrap();

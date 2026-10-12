@@ -62,6 +62,7 @@ pub async fn shared_client() -> Result<Arc<Client>, String> {
     Ok(client().clone())
 }
 pub async fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
+    crate::core::setup::wait_for_bundled_resources(app).await?;
     let data_folder = crate::core::app::commands::get_jan_data_folder_path(app.clone());
     #[cfg(test)]
     let _ = client_slot().set(Arc::new(Client::new(
@@ -151,6 +152,7 @@ async fn ensure_desktop_host<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<ginfer_host::launcher::LocalControl, String> {
     use tauri::Manager;
+    crate::core::setup::wait_for_bundled_resources(app).await?;
     installed_desktop_host(
         &crate::core::app::commands::get_jan_data_folder_path(app.clone()),
         &app.path().resource_dir().map_err(|e| e.to_string())?,
@@ -164,6 +166,7 @@ pub async fn prepare_installed_hardware<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
     use tauri::Manager;
+    crate::core::setup::wait_for_bundled_resources(&app).await?;
     prepare_installed_hardware_from_paths(
         crate::core::app::commands::get_jan_data_folder_path(app.clone()),
         app.path().resource_dir().map_err(|e| e.to_string())?,

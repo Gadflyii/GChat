@@ -107,6 +107,7 @@ pub async fn load_ginfer_model<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
     request: GinferLoadRequest,
 ) -> Result<SessionInfo, String> {
+    (app_handle.state::<crate::LoadPreparation>().0)().await?;
     let state: State<GinferState> = app_handle.state();
     let bundled_host = app_handle
         .path()
