@@ -7,7 +7,7 @@ mod linux {
             ApprovalFuture, Assignment, CuaTask, ExecutorProcesses, FunctionTool, ProcessSpec,
             ToolApproval, ToolBinding,
         },
-        kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, CUA_DRIVER_REVISION},
+        kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, VmState, CUA_DRIVER_REVISION},
         service::Service,
         vault::{NativeVault, Secret, Vault},
         workspace::WorkspaceRuntime,
@@ -527,7 +527,7 @@ mod linux {
             .map_err(|_| "driver digest must be UTF-8")?;
         tokio::fs::create_dir_all(&evidence).await?;
         let record_path = evidence.join("controller.json");
-        let record: GateRecord = if record_path.try_exists()? {
+        let mut record: GateRecord = if record_path.try_exists()? {
             let record: GateRecord = serde_json::from_slice(&tokio::fs::read(&record_path).await?)?;
             let vm = PreparedVm::open(&record.vm.directory).await?;
             if vm.spec.id != record.identity.workspace_id.0 {
@@ -608,6 +608,11 @@ mod linux {
             .await?;
             println!("OWNED_GUEST_RETIRED");
             return Ok(());
+        }
+        // A boot starts a new desktop lifetime; keep its session on live reconnects.
+        if record.vm.state(&KvmTools::default()).await? == VmState::Stopped {
+            record.identity.session_id = SessionId::new();
+            tokio::fs::write(&record_path, serde_json::to_vec_pretty(&record)?).await?;
         }
         let result =
             tokio::time::timeout(Duration::from_secs(1800), gate(&record, &evidence)).await;
