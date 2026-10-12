@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    connectors::{BotConnectorAccounts, ConnectorHost},
     contract::{GuestRequest, SessionIdentity, WorkspaceConfig, WorkspaceId},
     executor::{Assignment, ExecutorProcesses},
     media::{CloseView, OpenView},
@@ -187,6 +188,24 @@ impl Api {
         vault: Arc<dyn Vault>,
         port: u16,
     ) -> Result<Self, ApiError> {
+        Self::bind_with_connector_host(service, vault, port, None).await
+    }
+
+    pub async fn bind_with_connectors(
+        service: Arc<Service>,
+        vault: Arc<dyn Vault>,
+        port: u16,
+        connectors: Arc<dyn ConnectorHost>,
+    ) -> Result<Self, ApiError> {
+        Self::bind_with_connector_host(service, vault, port, Some(connectors)).await
+    }
+
+    async fn bind_with_connector_host(
+        service: Arc<Service>,
+        vault: Arc<dyn Vault>,
+        port: u16,
+        connectors: Option<Arc<dyn ConnectorHost>>,
+    ) -> Result<Self, ApiError> {
         let reference = service.snapshot().await.service_id;
         let token = match vault.get(reference).await.map_err(ApiError::Vault)? {
             Some(secret) => secret,
@@ -213,8 +232,12 @@ impl Api {
             .map_err(ApiError::Listener)?;
         listener.set_nonblocking(true).map_err(ApiError::Listener)?;
         let endpoint = listener.local_addr().map_err(ApiError::Listener)?;
+        let mut runtime = WorkspaceRuntime::new(service.clone(), vault);
+        if let Some(connectors) = connectors {
+            runtime = runtime.with_connectors(connectors);
+        }
         Ok(Self {
-            runtime: Arc::new(WorkspaceRuntime::new(service.clone(), vault)),
+            runtime: Arc::new(runtime),
             service,
             token: Arc::new(token),
             listener,
@@ -374,6 +397,22 @@ async fn route(
         return Ok(response);
     }
     let response = match (request.method(), request.uri().path()) {
+        (&Method::POST, "/v1/connectors/get") => match parse_body::<GetAssignment>(request).await {
+            Some(input) => match runtime.bot_connectors(input.workspace_id).await {
+                Ok(settings) => json_response(StatusCode::OK, &settings),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/connectors/save") => {
+            match parse_body::<BotConnectorAccounts>(request).await {
+                Some(input) => match runtime.save_bot_connectors(input).await {
+                    Ok(settings) => json_response(StatusCode::OK, &settings),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/assignments/save") => {
             match parse_body::<SaveAssignment>(request).await {
                 Some(input) => match runtime
@@ -675,6 +714,7 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
             (StatusCode::NOT_IMPLEMENTED, "adapter_unavailable")
         }
         WorkspaceError::ShuttingDown => (StatusCode::SERVICE_UNAVAILABLE, "service_stopping"),
+        WorkspaceError::Connector(_) => (StatusCode::BAD_REQUEST, "connector_unavailable"),
         _ => (StatusCode::CONFLICT, "guest_state_conflict"),
     };
     error_response(status, code, &error.to_string())

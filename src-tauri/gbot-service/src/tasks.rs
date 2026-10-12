@@ -9,7 +9,7 @@ use std::{
 };
 
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use tokio::{
     sync::{oneshot, watch, Mutex},
     task::JoinHandle,
@@ -17,6 +17,7 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
+    connectors::ConnectorRequest,
     contract::{GuestRequest, SessionIdentity},
     executor::{
         ApprovalFuture, Assignment, CuaTask, ExecutorError, ExecutorProcesses, FunctionTool,
@@ -75,7 +76,7 @@ impl From<std::io::Error> for TaskRunnerError {
 pub struct PendingApproval {
     pub id: Uuid,
     pub task_id: Uuid,
-    pub request: GuestRequest,
+    pub request: Value,
 }
 
 struct Decision {
@@ -117,8 +118,8 @@ impl Drop for PendingDecision<'_> {
         }
     }
 }
-impl ToolApproval for ApprovalQueue {
-    fn approve<'a>(&'a self, task_id: Uuid, request: &'a GuestRequest) -> ApprovalFuture<'a> {
+impl ApprovalQueue {
+    fn decide(&self, task_id: Uuid, request: Value) -> ApprovalFuture<'_> {
         Box::pin(async move {
             let id = Uuid::new_v4();
             let (reply, answer) = oneshot::channel();
@@ -133,7 +134,7 @@ impl ToolApproval for ApprovalQueue {
                         pending: PendingApproval {
                             id,
                             task_id,
-                            request: request.clone(),
+                            request,
                         },
                         reply,
                     },
@@ -143,6 +144,18 @@ impl ToolApproval for ApprovalQueue {
             self.touch();
             answer.await.unwrap_or(false)
         })
+    }
+}
+impl ToolApproval for ApprovalQueue {
+    fn approve<'a>(&'a self, task_id: Uuid, request: &'a GuestRequest) -> ApprovalFuture<'a> {
+        self.decide(task_id, json!(request))
+    }
+    fn approve_connector<'a>(
+        &'a self,
+        task_id: Uuid,
+        request: &'a ConnectorRequest,
+    ) -> ApprovalFuture<'a> {
+        self.decide(task_id, json!(request))
     }
 }
 
@@ -246,7 +259,7 @@ impl TaskRunner {
         if state.closed {
             return Err(TaskRunnerError::Closed);
         }
-        let tools = self
+        let mut tools: Vec<_> = self
             .runtime
             .desktop_tools(identity)
             .await?
@@ -260,6 +273,7 @@ impl TaskRunner {
                 parameters: tool.input_schema,
             })
             .collect();
+        tools.extend(self.runtime.connector_tools(identity.workspace_id).await?);
         let id = Uuid::new_v4();
         let task = CuaTask::create_with_id(
             self.path(id),
@@ -288,7 +302,7 @@ impl TaskRunner {
             }
         }
         self.reap(&mut state, id).await?;
-        let task = CuaTask::open(self.path(id)).await?;
+        let mut task = CuaTask::open(self.path(id)).await?;
         if task.snapshot().state == crate::executor::TaskState::NeedsReview {
             return Err(ExecutorError::NeedsReview.into());
         }
@@ -305,6 +319,12 @@ impl TaskRunner {
         }
         // Resolve the exact live session before launching a model process.
         self.runtime.desktop_tools(task.snapshot().identity).await?;
+        task.replace_connector_tools(
+            self.runtime
+                .connector_tools(task.snapshot().identity.workspace_id)
+                .await?,
+        )
+        .await?;
         let record = task.snapshot().clone();
         self.launch(&mut state, task, assignment);
         Ok(record)
@@ -739,7 +759,9 @@ mod tests {
         runner.launch(&mut *runner.state.lock().await, task, assignment());
         let pending = next_approval(&runner, &mut changes).await;
         assert!(matches!(
-            pending.request.operation,
+            serde_json::from_value::<GuestRequest>(pending.request.clone())
+                .unwrap()
+                .operation,
             GuestOperationKind::Exec { .. }
         ));
         runner.pause(identity).await.unwrap();
@@ -769,9 +791,7 @@ mod tests {
         let task = CuaTask::open(runner.path(id)).await.unwrap();
         runner.launch(&mut *runner.state.lock().await, task, assignment());
         let refresh = next_approval(&runner, &mut changes).await;
-        assert!(
-            matches!(&refresh.request.operation, GuestOperationKind::Desktop { tool, .. } if tool == "get_desktop_state")
-        );
+        assert!(refresh.request["operation"]["tool"] == "get_desktop_state");
         let record = runner.snapshot(id).await.unwrap();
         let skipped = record
             .messages

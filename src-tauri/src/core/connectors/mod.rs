@@ -79,6 +79,13 @@ pub fn owner<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<AccountsState>, Strin
 
 pub fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool>, String> {
     let state = owner(app)?;
+    catalog_for_accounts(&state, None)
+}
+
+fn catalog_for_accounts(
+    state: &AccountsState,
+    linked: Option<&[String]>,
+) -> Result<Vec<ConnectedTool>, String> {
     let view = state.view()?;
     let mut catalog = Vec::new();
     for tool in tools() {
@@ -87,6 +94,9 @@ pub fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool>, Str
             .accounts
             .iter()
             .filter(|account| {
+                if linked.is_some_and(|ids| !ids.contains(&account.id)) {
+                    return false;
+                }
                 state
                     .resolve_account_id(provider, &account.id, tool.service, tool.write)
                     .is_ok()
@@ -115,10 +125,160 @@ pub fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool>, Str
             })
             .collect::<Vec<_>>()
             .join("; ");
-        connected.description.push_str(&format!(" Connected accounts: {grants}. Selected account: {}. Omitting account_id uses that explicit selection; account and access are checked before approval.", view.selected_accounts.get(&provider).map(String::as_str).unwrap_or("none")));
+        if linked.is_some() {
+            connected.description.push_str(&format!(" This bot's linked accounts: {grants}. Omitting account_id selects the sole eligible linked account; choose account_id explicitly when several are linked. Account and access are checked before approval."));
+        } else {
+            connected.description.push_str(&format!(" Connected accounts: {grants}. Selected account: {}. Omitting account_id uses that explicit selection; account and access are checked before approval.", view.selected_accounts.get(&provider).map(String::as_str).unwrap_or("none")));
+        }
         catalog.push(connected);
     }
     Ok(catalog)
+}
+
+fn prepare_linked(
+    state: &AccountsState,
+    linked: &[String],
+    name: &str,
+    mut args: Value,
+) -> Result<Value, String> {
+    let descriptor = tool(name).ok_or("Unknown Workspace connector tool")?;
+    let provider = provider_for(name)?;
+    let object = args
+        .as_object_mut()
+        .ok_or("Connector arguments must be an object")?;
+    let requested = match object.get("account_id") {
+        Some(value) => Some(
+            value
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .ok_or("Choose a linked account_id")?
+                .to_owned(),
+        ),
+        None => None,
+    };
+    let account_id = if let Some(id) = requested {
+        if !linked.contains(&id) {
+            return Err("This Workspace account is not linked to this bot".into());
+        }
+        state.resolve_account_id(provider, &id, descriptor.service, descriptor.write)?
+    } else {
+        let eligible = linked
+            .iter()
+            .filter_map(|id| {
+                state
+                    .resolve_account_id(provider, id, descriptor.service, descriptor.write)
+                    .ok()
+            })
+            .collect::<Vec<_>>();
+        match eligible.as_slice() {
+            [id] => id.clone(),
+            [] => return Err("Link an eligible Workspace account to this bot first".into()),
+            _ => return Err("Choose account_id from this bot's linked accounts".into()),
+        }
+    };
+    object.insert("account_id".into(), Value::String(account_id));
+    state.prepare(name, args)
+}
+
+/// Bot service callback into the same native account and provider owners as Chat/Code.
+pub struct BotConnectorHost<R: Runtime> {
+    app: AppHandle<R>,
+}
+
+impl<R: Runtime> BotConnectorHost<R> {
+    pub fn new(app: AppHandle<R>) -> Self {
+        Self { app }
+    }
+}
+
+impl<R: Runtime> gbot_service::connectors::ConnectorHost for BotConnectorHost<R> {
+    fn accounts(
+        &self,
+    ) -> gbot_service::connectors::ConnectorFuture<
+        '_,
+        Vec<gbot_service::connectors::ConnectorAccount>,
+    > {
+        Box::pin(async {
+            Ok(owner(&self.app)?
+                .view()?
+                .accounts
+                .into_iter()
+                .map(|account| gbot_service::connectors::ConnectorAccount {
+                    id: account.id,
+                    provider: account.provider.as_str().into(),
+                    display_name: account.display_name,
+                    email: account.email,
+                    services: account.services,
+                    access: if account.access == Access::ReadOnly {
+                        "read_only"
+                    } else {
+                        "read_write"
+                    }
+                    .into(),
+                    granted_scopes: account.granted_scopes,
+                    needs_reconnect: account.needs_reconnect,
+                })
+                .collect())
+        })
+    }
+
+    fn catalog<'a>(
+        &'a self,
+        linked: &'a [String],
+    ) -> gbot_service::connectors::ConnectorFuture<'a, Vec<gbot_service::connectors::ConnectorTool>>
+    {
+        Box::pin(async move {
+            let state = owner(&self.app)?;
+            Ok(catalog_for_accounts(&state, Some(linked))?
+                .into_iter()
+                .map(|tool| gbot_service::connectors::ConnectorTool {
+                    name: tool.name.into(),
+                    description: tool.description,
+                    input_schema: tool.input_schema,
+                    write: tool.write,
+                })
+                .collect())
+        })
+    }
+
+    fn prepare<'a>(
+        &'a self,
+        linked: &'a [String],
+        name: &'a str,
+        arguments: Value,
+    ) -> gbot_service::connectors::ConnectorFuture<'a, gbot_service::connectors::PreparedConnector>
+    {
+        Box::pin(async move {
+            let state = owner(&self.app)?;
+            let arguments = prepare_linked(&state, linked, name, arguments)?;
+            Ok(gbot_service::connectors::PreparedConnector {
+                name: name.into(),
+                account_id: arguments["account_id"]
+                    .as_str()
+                    .ok_or("Missing connector account")?
+                    .into(),
+                arguments,
+                write: tool(name).ok_or("Unknown Workspace connector tool")?.write,
+            })
+        })
+    }
+
+    fn execute<'a>(
+        &'a self,
+        request: &'a gbot_service::connectors::PreparedConnector,
+    ) -> gbot_service::connectors::ConnectorFuture<'a, Value> {
+        Box::pin(async move {
+            let cancellation = CancellationToken::new();
+            let _cancel_on_drop = cancellation.clone().drop_guard();
+            execute(
+                &self.app,
+                &request.name,
+                request.arguments.clone(),
+                &cancellation,
+            )
+            .await
+        })
+    }
 }
 
 pub fn prepare<R: Runtime>(app: &AppHandle<R>, name: &str, args: Value) -> Result<Value, String> {

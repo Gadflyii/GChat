@@ -76,6 +76,7 @@ it('creates an SSH workspace in one request and preserves setup identity on retr
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
+      if (path === 'connectors/get') return { account_ids: [], accounts: [] }
       if (path === 'state')
         return { workspaces, live_sessions: [], assignments: [], controls: [] }
       if (path === 'workspaces/ssh') {
@@ -144,6 +145,7 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
+      if (path === 'connectors/get') return { account_ids: [], accounts: [] }
       if (path === 'state')
         return {
           workspaces: [
@@ -286,6 +288,7 @@ it('sends task-bound human replies and declines, retaining them after reload', a
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
+      if (path === 'connectors/get') return { account_ids: [], accounts: [] }
       if (path === 'state')
         return {
           workspaces: [{ id: 'one', name: 'Writer' }],
@@ -349,6 +352,7 @@ it('opens view-only and closes interactive input before handing back to the bot'
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(
     async (path: string, body: Record<string, unknown>) => {
+      if (path === 'connectors/get') return { account_ids: [], accounts: [] }
       if (path === 'state')
         return {
           workspaces: [{ id: 'one', name: 'Writer' }],
@@ -434,4 +438,97 @@ it('opens view-only and closes interactive input before handing back to the bot'
     'view/close',
     expect.objectContaining({ lease_id: 'lease-3' })
   )
+})
+
+it('links existing accounts per bot without inherited selection', async () => {
+  const linked: Record<string, string[]> = { one: [], two: [] }
+  const accounts = [
+    {
+      id: 'google-a',
+      provider: 'google',
+      display_name: 'Google work',
+      email: null,
+      services: ['calendar'],
+      access: 'read_write',
+      granted_scopes: [],
+      needs_reconnect: false,
+    },
+    {
+      id: 'microsoft-b',
+      provider: 'microsoft',
+      display_name: 'Microsoft work',
+      email: null,
+      services: ['mail'],
+      access: 'read_only',
+      granted_scopes: [],
+      needs_reconnect: false,
+    },
+  ]
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(
+    async (
+      path: string,
+      body: { workspace_id: string; account_ids: string[] }
+    ) => {
+      if (path === 'state')
+        return {
+          workspaces: [
+            { id: 'one', name: 'Writer' },
+            { id: 'two', name: 'Researcher' },
+          ],
+          live_sessions: [],
+          assignments: [],
+          controls: [],
+        }
+      if (path === 'connectors/get')
+        return { accounts, account_ids: linked[body.workspace_id] }
+      if (path === 'connectors/save') {
+        linked[body.workspace_id] = [...body.account_ids]
+        return { accounts, account_ids: linked[body.workspace_id] }
+      }
+      return []
+    }
+  )
+  render(<Page />)
+  fireEvent.click(await screen.findByText('Linked accounts'))
+  const google = await screen.findByRole('checkbox', { name: /Google work/ })
+  expect(google).not.toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: /Microsoft work/ })
+  ).not.toBeChecked()
+  fireEvent.click(google)
+  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+  await waitFor(() => expect(linked.one).toEqual(['google-a']))
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  fireEvent.click(await screen.findByText('Linked accounts'))
+  const microsoft = await screen.findByRole('checkbox', {
+    name: /Microsoft work/,
+  })
+  expect(microsoft).not.toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: /Google work/ })
+  ).not.toBeChecked()
+  fireEvent.click(microsoft)
+  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+  await waitFor(() => expect(linked.two).toEqual(['microsoft-b']))
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  fireEvent.click(await screen.findByText('Linked accounts'))
+  expect(
+    await screen.findByRole('checkbox', { name: /Google work/ })
+  ).toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: /Microsoft work/ })
+  ).not.toBeChecked()
+  fireEvent.click(screen.getByRole('checkbox', { name: /Google work/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+  await waitFor(() => expect(linked.one).toEqual([]))
+  expect(linked.two).toEqual(['microsoft-b'])
+  expect(mocks.call).toHaveBeenCalledWith('connectors/save', {
+    workspace_id: 'one',
+    account_ids: ['google-a'],
+  })
+  expect(mocks.call).toHaveBeenCalledWith('connectors/save', {
+    workspace_id: 'two',
+    account_ids: ['microsoft-b'],
+  })
 })

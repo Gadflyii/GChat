@@ -1,4 +1,5 @@
 pub mod api;
+pub mod connectors;
 pub mod contract;
 mod cua_skill;
 pub mod executor;

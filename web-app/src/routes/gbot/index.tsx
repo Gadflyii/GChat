@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
+import GbotConnectors from '@/components/GbotConnectors'
 import GbotSetup, { type BotConnection } from '@/components/GbotSetup'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
@@ -383,6 +384,7 @@ function GbotPage() {
                   {executorError}
                 </p>
               )}
+              <GbotConnectors key={bot.id} workspaceId={bot.id} />
               <details className="rounded-lg border p-3">
                 <summary className="cursor-pointer text-sm">Bot brain</summary>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
