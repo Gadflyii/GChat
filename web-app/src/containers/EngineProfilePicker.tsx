@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { hardwareProfileBusy, type EngineSnapshot } from '@/services/engines'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
+import { profileEvidenceLabel, profilePresentation } from '../../../src-tauri/ginfer-manager/ui/profile-presentation.js'
 
 const selectStyle: CSSProperties = {
   appearance: 'none',
@@ -33,6 +34,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
     : instance?.profile?.model_id ?? snapshot.models[0]?.id ?? ''
   const controlsDisabled = disabled || hardwareProfileBusy(snapshot.hardware_profile)
   const [choice, setChoice] = useState('')
+  const [showAllProfiles, setShowAllProfiles] = useState(false)
   const [gpuChoice, setGpuChoice] = useState<{ instanceId: string; key: string } | null>(null)
   const occupied = new Set(snapshot.instances
     .filter(i => i.instance_id !== instanceId && ['starting', 'ready', 'stopping'].includes(i.status))
@@ -59,6 +61,8 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
   const choices = compatible.filter(item => groupKey(item.group) === gpuKey)
   const selected = choices.find(item => item.key === choice)
     ?? (!currentSettings && !choice && !instanceId ? choices.find(item => item.entry.profile.options.vision) : undefined)
+  const { recommendedIndex, visibleIndices } = profilePresentation(
+    choices.map(item => item.entry.profile), selected ? choices.indexOf(selected) : -1, showAllProfiles)
   const [structuredChoice, setStructuredChoice] = useState<{ instanceId: string; value: boolean } | null>(null)
   const structuredOutputs = structuredChoice?.instanceId === instanceId ? structuredChoice.value
     : instance?.profile?.structured_outputs ?? instance?.configuration.structured_outputs
@@ -74,21 +78,21 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
     {hostSelector}
     {controlledInstanceId === undefined && <label className="min-w-0 text-sm">Server Host
       <select style={selectStyle} className="mt-1 w-full rounded border bg-background p-2" disabled={controlsDisabled} value={instanceId}
-        onChange={e => { setInstanceId(e.target.value); setModelChoice(null); setGpuChoice(null); setChoice('') }}>
+        onChange={e => { setInstanceId(e.target.value); setModelChoice(null); setGpuChoice(null); setChoice(''); setShowAllProfiles(false) }}>
         <option value="">{snapshot.display_name} · New instance</option>
         {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{snapshot.display_name} · {hostInstanceLabel(i, snapshot)} · {i.status}</option>)}
       </select>
     </label>}
     <label className="min-w-0 text-sm">Model
       <select style={selectStyle} aria-label={labelPrefix ? `${labelPrefix} model` : undefined} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled} value={modelId}
-        onChange={e => { setModelChoice({ instanceId, modelId: e.target.value }); setChoice('') }}>
+        onChange={e => { setModelChoice({ instanceId, modelId: e.target.value }); setChoice(''); setShowAllProfiles(false) }}>
         {!snapshot.models.some(model => model.id === modelId) && <option value={modelId}>{modelId ? 'Saved model unavailable' : 'Choose an installed model'}</option>}
         {snapshot.models.map(model => <option key={model.id} value={model.id}>{hostModelLabel(model)}</option>)}
       </select>
     </label>
     <label className="min-w-0 text-sm">GPU / GPU group
       <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !!instance || !groups.length} value={gpuKey ?? ''}
-        onChange={e => { setGpuChoice({ instanceId, key: e.target.value }); setChoice('') }}>
+        onChange={e => { setGpuChoice({ instanceId, key: e.target.value }); setChoice(''); setShowAllProfiles(false) }}>
         {!gpuKey && <option value="">No available GPUs</option>}
         {groups.map(group => <option key={groupKey(group)} value={groupKey(group)} disabled={group.some(gpu => occupied.has(gpu))}>
           {group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `GPU ${index + 1}: ${gpu.display_name ?? gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GB` : 'Unavailable GPU' }).join(' + ')}
@@ -96,14 +100,18 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
         </option>)}
       </select>
     </label>
-    <label className="min-w-0 text-sm">Hardware profile
+    <div className="min-w-0 text-sm"><label>Hardware profile
       <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !choices.length} value={selected?.key ?? ''} onChange={e => setChoice(e.target.value)}>
         <option value="">{currentSettings && !pending ? `Current settings · C${instance?.configuration.concurrency ?? 1} · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} context` : 'Choose a profile'}</option>
-        {choices.map(({ entry, key }) => <option key={key} value={key}>
-          {entry.profile.name} · {entry.profile.options.vision ? 'Vision + text (default)' : 'Text only'} · TP{entry.profile.tp} · C{entry.profile.concurrency} · {entry.profile.max_context.toLocaleString()} context · {entry.profile.qualification.tier === 'full-context-tested' ? 'Full-context tested' : entry.profile.qualification.tier === 'calculated-startup-smoke' ? 'Calculated + startup/smoke checked' : 'Calculated — pending validation'} · Engine {entry.profile.qualification.engine_revision.slice(0, 8)}
-        </option>)}
+        {visibleIndices.map(index => { const { entry, key } = choices[index]; return <option key={key} value={key}>
+          {index === recommendedIndex ? 'Recommended · ' : ''}{profileEvidenceLabel(entry.profile.qualification.tier)} · {entry.profile.name} · {entry.profile.options.vision ? 'Vision + text (default)' : 'Text only'} · TP{entry.profile.tp} · C{entry.profile.concurrency} · {entry.profile.max_context.toLocaleString()} context · Engine {entry.profile.qualification.engine_revision.slice(0, 8)}
+        </option> })}
       </select>
     </label>
+    {(choices.length > visibleIndices.length || showAllProfiles) && <button type="button" className="mt-1 text-muted-foreground underline" disabled={controlsDisabled}
+      aria-expanded={showAllProfiles} onClick={() => setShowAllProfiles(value => !value)}>{showAllProfiles ? 'Show less' : 'Show all'}</button>}
+    {!!choices.length && recommendedIndex < 0 && <p className="mt-1 text-muted-foreground">No tested profile is available for this GPU group.</p>}
+    </div>
     </div>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox"
       aria-label={labelPrefix ? `${labelPrefix} structured outputs` : undefined}

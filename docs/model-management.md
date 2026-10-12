@@ -99,10 +99,17 @@ Prebuilt profiles are reusable model/hardware settings, not server instances or
 launch history. The host retains one server identity per exact GPU group. Ordinary
 loads reuse that identity even when changing model, context or concurrency;
 attempting to launch over a live instance still requires an explicit restart.
-Each host card presents Model (left) and Hardware profile (right). Multiple GPU
-groups have separate instance controls; additional servers require selecting
-another GPU group. Stopped instances retain their last settings, not every prior
-configuration.
+GChat and Server Manager present Model, GPU / GPU group, then Hardware profile.
+Each selected model and GPU group shows one **Recommended** profile with recorded
+full-context testing; **Show all** reveals the other choices. **Tested** means
+full-context tested, **Estimated** means calculated capacity with startup/short
+request checks, and **Untested** means calculation only. The recorded Engine and
+workload still bound that evidence. Expanding or collapsing keeps the current
+selection, including an existing automatic choice outside the recommendation.
+When none has full-context evidence, no profile is recommended.
+Multiple GPU groups have separate instance controls; additional servers require
+selecting another GPU group. Stopped instances retain their last settings, not
+every prior configuration.
 
 On service startup, duplicate records from older builds are consolidated, keeping
 the lowest UUID per GPU group. Retired settings are backed up privately in

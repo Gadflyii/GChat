@@ -86,7 +86,9 @@ it('distinguishes calculated smoke evidence from full-context testing', () => {
   data.instances = []
   data.launch_profiles![0].profile.qualification.tier = 'calculated-startup-smoke'
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  const option = screen.getByRole('option', { name: /Calculated \+ startup\/smoke checked/ }) as HTMLOptionElement
+  expect(screen.getByText('No tested profile is available for this GPU group.')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
+  const option = screen.getByRole('option', { name: /Estimated/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   expect(screen.getByText(/Full-length requests have not been tested/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeEnabled()
@@ -96,7 +98,7 @@ it('identifies the Engine recorded by full-context evidence without claiming a n
   const data = snapshot()
   data.instances = []
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  const option = screen.getByRole('option', { name: /Full-context tested · Engine 922e5a87/ }) as HTMLOptionElement
+  const option = screen.getByRole('option', { name: /Tested .*Engine 922e5a87/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   expect(screen.getByText(/Evidence applies to the recorded options and Engine 922e5a87/)).toBeInTheDocument()
   expect(screen.getByText(/A changed option or Engine needs separate validation/)).toBeInTheDocument()
@@ -114,6 +116,7 @@ it('defaults new instances to an available Vision profile without starting it', 
   const selected = screen.getByRole('option', { name: /Vision \+ text \(default\)/ }) as HTMLOptionElement
   expect(screen.getByLabelText('Hardware profile')).toHaveValue(selected.value)
   expect(launch).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
   const text = screen.getByRole('option', { name: /Text only/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: text.value } })
   expect(screen.getByLabelText('Hardware profile')).toHaveValue(text.value)
@@ -127,6 +130,65 @@ it('keeps pending Vision profiles selectable and warns about unverified startup'
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
   expect(screen.getByText(/Startup, memory margin and inference are unverified/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeEnabled()
+  expect(screen.getByRole('option', { name: /Untested/ })).toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: /Recommended/ })).not.toBeInTheDocument()
+})
+
+it('keeps the existing untested Vision default alongside a tested text recommendation', () => {
+  const data = snapshot()
+  data.instances = []
+  const vision = structuredClone(data.launch_profiles![0])
+  vision.profile.id = 'pending-vision'
+  vision.profile.name = 'Pending Vision'
+  vision.profile.options.vision = true
+  vision.profile.qualification.tier = 'calculated-pending-validation'
+  data.launch_profiles!.push(vision)
+  const launch = vi.fn()
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+  const selected = screen.getByRole('option', { name: /^Untested · Pending Vision/ }) as HTMLOptionElement
+  expect(screen.getByLabelText('Hardware profile')).toHaveValue(selected.value)
+  expect(screen.getByRole('option', { name: /^Recommended · Tested · Fixture C4/ })).toBeInTheDocument()
+  expect(launch).not.toHaveBeenCalled()
+})
+
+it('shows one tested recommendation and preserves an alternate selection when collapsing', async () => {
+  const data = snapshot()
+  data.instances = []
+  const template = data.launch_profiles![0]
+  template.profile.options.vision = true
+  template.profile.concurrency = 1
+  const otherTested = structuredClone(template)
+  otherTested.profile.id = 'tested-c4'
+  otherTested.profile.name = 'Tested C4'
+  otherTested.profile.concurrency = 4
+  const estimated = structuredClone(template)
+  estimated.profile.id = 'estimated'
+  estimated.profile.name = 'Estimated C2'
+  estimated.profile.concurrency = 2
+  estimated.profile.qualification.tier = 'calculated-startup-smoke'
+  const untested = structuredClone(template)
+  untested.profile.id = 'untested'
+  untested.profile.name = 'Untested C8'
+  untested.profile.concurrency = 8
+  untested.profile.qualification.tier = 'calculated-pending-validation'
+  data.launch_profiles!.push(otherTested, estimated, untested)
+  const launch = vi.fn().mockResolvedValue(undefined)
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+  expect(screen.getAllByRole('option', { name: /Recommended/ })).toHaveLength(1)
+  expect(screen.queryByRole('option', { name: /Tested C4|Estimated C2|Untested C8/ })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
+  expect(screen.getByRole('option', { name: /^Tested · Tested C4/ })).toBeInTheDocument()
+  expect(screen.getByRole('option', { name: /^Estimated · Estimated C2/ })).toBeInTheDocument()
+  const alternate = screen.getByRole('option', { name: /^Untested · Untested C8/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: alternate.value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Show less' }))
+  expect(screen.getByLabelText('Hardware profile')).toHaveValue(alternate.value)
+  expect(screen.queryByRole('option', { name: /Tested C4|Estimated C2/ })).not.toBeInTheDocument()
+  expect(screen.getByText(/Startup, memory margin and inference are unverified/)).toBeInTheDocument()
+  expect(launch).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  await waitFor(() => expect(launch).toHaveBeenCalledWith({ profile_id: 'untested', model_id: 'model', gpu_uuids: ['GPU-one'],
+    instance_id: null, force: false, structured_outputs: true }))
 })
 
 it('filters profiles by model and assigned hardware and clears a previous model choice', () => {
