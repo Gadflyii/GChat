@@ -1,4 +1,5 @@
-use serde::Serialize;
+use russh::keys::PublicKey;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     sync::{
@@ -11,23 +12,25 @@ use uuid::Uuid;
 
 use crate::{
     contract::{
-        GuestHello, GuestOperationKind, GuestOutcome, GuestReply, GuestRequest, GuestResult,
-        OperationId, ServicePc, SessionIdentity, VaultCredentialRef, WorkspaceConfig,
-        WorkspaceConnection, WorkspaceId,
+        BotPc, ContractError, GuestHello, GuestOperationKind, GuestOutcome, GuestReply,
+        GuestRequest, GuestResult, OperationId, ServicePc, SessionIdentity, SshConnection,
+        SshEndpoint, SshHostPublicKey, VaultCredentialRef, WorkspaceConfig, WorkspaceConnection,
+        WorkspaceId,
     },
     executor::Assignment,
     media::{CloseView, MediaError, MediaLease, OpenView, ViewTicket},
     service::{
         ModelAssignment, OperationCompletion, Service, ServiceError, SessionControl,
-        SessionControlState,
+        SessionControlState, SshWorkspaceCreationError,
     },
-    ssh::{import_ssh_key, ImportedSshKey, SshError, SshPolicy, SshSession},
+    ssh::{import_ssh_key, prepare_ssh_key, ImportedSshKey, SshError, SshPolicy, SshSession},
     vault::{Secret, Vault, VaultError},
 };
 
 #[derive(Debug)]
 pub enum WorkspaceError {
     State(ServiceError),
+    Creation(SshWorkspaceCreationError),
     Transport(SshError),
     Media(MediaError),
     NotFound,
@@ -43,6 +46,7 @@ impl std::fmt::Display for WorkspaceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::State(error) => error.fmt(f),
+            Self::Creation(error) => error.fmt(f),
             Self::Transport(error) => error.fmt(f),
             Self::Media(error) => error.fmt(f),
             Self::NotFound => f.write_str("workspace is not registered"),
@@ -76,6 +80,20 @@ impl From<MediaError> for WorkspaceError {
     fn from(value: MediaError) -> Self {
         Self::Media(value)
     }
+}
+
+/// Secrets are input-only and are never serialized into workspace state or responses.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateSshWorkspace {
+    pub id: WorkspaceId,
+    pub name: String,
+    pub service_pc: ServicePc,
+    pub bot_pc: BotPc,
+    pub endpoint: SshEndpoint,
+    pub pinned_host_key: SshHostPublicKey,
+    pub private_key: String,
+    pub passphrase: Option<String>,
 }
 
 pub struct WorkspaceRuntime {
@@ -122,6 +140,46 @@ impl WorkspaceRuntime {
             .entry(workspace)
             .or_default()
             .clone()
+    }
+
+    pub async fn create_ssh_workspace(
+        &self,
+        input: CreateSshWorkspace,
+    ) -> Result<WorkspaceConfig, WorkspaceError> {
+        self.accepting()?;
+        let config = WorkspaceConfig {
+            id: input.id,
+            name: input.name,
+            service_pc: input.service_pc,
+            bot_pc: input.bot_pc,
+            connection: WorkspaceConnection::Ssh(SshConnection {
+                endpoint: input.endpoint,
+                pinned_host_key: input.pinned_host_key,
+                // This setup owns the same slot across failures, retries and restarts.
+                credential_ref: VaultCredentialRef(input.id.as_uuid()),
+            }),
+        };
+        config.validate().map_err(ServiceError::Contract)?;
+        let WorkspaceConnection::Ssh(connection) = &config.connection else {
+            unreachable!()
+        };
+        PublicKey::from_openssh(&format!(
+            "{} {}",
+            connection.pinned_host_key.algorithm, connection.pinned_host_key.public_key
+        ))
+        .map_err(|_| ServiceError::Contract(ContractError::InvalidHostKey))?;
+        let (_, key) = prepare_ssh_key(
+            Secret::new(input.private_key.into_bytes()),
+            input
+                .passphrase
+                .map(|value| Secret::new(value.into_bytes())),
+        )
+        .await?;
+        self.accepting()?;
+        self.service
+            .create_ssh_workspace(config, key, self.vault.clone())
+            .await
+            .map_err(WorkspaceError::Creation)
     }
 
     pub async fn import_ssh_key(

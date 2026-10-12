@@ -54,16 +54,87 @@ afterEach(() => {
 it('opens first-bot setup after opt-in and makes no service calls while disabled', async () => {
   useGeneralSetting.setState({ gbotEnabled: false })
   mocks.listen.mockResolvedValue(() => {})
-  mocks.call.mockImplementation(async (path: string) => path === 'state'
-    ? { workspaces: [], live_sessions: [], assignments: [], controls: [] }
-    : [])
+  mocks.call.mockImplementation(async (path: string) =>
+    path === 'state'
+      ? { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      : []
+  )
   render(<Page />)
   expect(mocks.call).not.toHaveBeenCalled()
   expect(mocks.listen).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Enable Gbot' }))
   await screen.findByRole('form', { name: 'Set up Gbot' })
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-  expect(screen.queryByRole('form', { name: 'Set up Gbot' })).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('form', { name: 'Set up Gbot' })
+  ).not.toBeInTheDocument()
+})
+
+it('creates an SSH workspace in one request and preserves setup identity on retry', async () => {
+  const workspaces: { id: string; name: string }[] = []
+  let attempt = 0
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) => {
+      if (path === 'state')
+        return { workspaces, live_sessions: [], assignments: [], controls: [] }
+      if (path === 'workspaces/ssh') {
+        if (++attempt === 1) throw new Error('Workspace could not be saved')
+        workspaces.push({ id: body.id as string, name: body.name as string })
+        return workspaces[0]
+      }
+      return []
+    }
+  )
+  render(<Page />)
+  await screen.findByRole('form', { name: 'Set up Gbot' })
+  fireEvent.change(screen.getByLabelText('Bot name'), {
+    target: { value: 'Writer' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByLabelText(/Another computer on the LAN/))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  for (const [label, value] of [
+    ['SSH host', 'bot.local'],
+    ['SSH user', 'bot'],
+    ['SSH host public key', 'ssh-ed25519 pinned-key'],
+    ['SSH private key', 'private-key'],
+    ['Key passphrase', 'key-passphrase'],
+  ])
+    fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Workspace could not be saved'
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+  )
+  const creates = mocks.call.mock.calls.filter(
+    ([path]) => path === 'workspaces/ssh'
+  )
+  expect(creates).toHaveLength(2)
+  expect(creates[1][1]).toEqual(creates[0][1])
+  expect(creates[0][1]).toEqual({
+    id: expect.any(String),
+    name: 'Writer',
+    service_pc: { kind: 'local' },
+    bot_pc: { kind: 'lan', computer_id: expect.any(String) },
+    endpoint: { hostname: 'bot.local', port: 22, user: 'bot' },
+    pinned_host_key: { algorithm: 'ssh-ed25519', public_key: 'pinned-key' },
+    private_key: 'private-key',
+    passphrase: 'key-passphrase',
+  })
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'credentials/ssh',
+    expect.anything()
+  )
+  expect(mocks.call).not.toHaveBeenCalledWith('workspaces', expect.anything())
+  expect(screen.getByRole('button', { name: 'Writer' })).toBeInTheDocument()
+  expect(JSON.stringify(sessionStorage)).not.toContain('private-key')
 })
 
 it('isolates bot assignments and approvals, and holds new tasks during takeover', async () => {

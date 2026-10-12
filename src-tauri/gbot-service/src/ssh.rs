@@ -139,7 +139,24 @@ pub async fn import_ssh_key(
     key: Secret,
     passphrase: Option<Secret>,
 ) -> Result<ImportedSshKey, SshError> {
-    let (public_key, normalized) = tokio::task::spawn_blocking(move || {
+    let (public_key, normalized) = prepare_ssh_key(key, passphrase).await?;
+    let credential_ref = VaultCredentialRef::new();
+    vault
+        .put(credential_ref.as_uuid(), normalized)
+        .await
+        .map_err(SshError::Vault)?;
+    Ok(ImportedSshKey {
+        credential_ref,
+        public_key,
+    })
+}
+
+/// Validate and normalize before the owning workspace transaction writes the vault.
+pub(crate) async fn prepare_ssh_key(
+    key: Secret,
+    passphrase: Option<Secret>,
+) -> Result<(SshHostPublicKey, Secret), SshError> {
+    tokio::task::spawn_blocking(move || {
         // Parse the OpenSSH envelope before distinguishing missing/wrong passwords.
         let mut private = PrivateKey::from_openssh(key.expose_secret())
             .map_err(|_| SshError::InvalidCredential)?;
@@ -171,16 +188,7 @@ pub async fn import_ssh_key(
         Ok::<_, SshError>((public_key, Secret::new(normalized.as_bytes().to_vec())))
     })
     .await
-    .map_err(|_| SshError::ImportFailed)??;
-    let credential_ref = VaultCredentialRef::new();
-    vault
-        .put(credential_ref.as_uuid(), normalized)
-        .await
-        .map_err(SshError::Vault)?;
-    Ok(ImportedSshKey {
-        credential_ref,
-        public_key,
-    })
+    .map_err(|_| SshError::ImportFailed)?
 }
 
 struct Peer {

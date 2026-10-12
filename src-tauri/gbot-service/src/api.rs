@@ -12,11 +12,11 @@ use crate::{
     contract::{GuestRequest, SessionIdentity, WorkspaceConfig, WorkspaceId},
     executor::{Assignment, ExecutorProcesses},
     media::{CloseView, OpenView},
-    service::{Service, ServiceError},
+    service::{Service, ServiceError, SshWorkspaceCreationError},
     ssh::SshError,
     tasks::{TaskRunner, TaskRunnerError},
     vault::{Secret, Vault, VaultError},
-    workspace::{WorkspaceError, WorkspaceRuntime},
+    workspace::{CreateSshWorkspace, WorkspaceError, WorkspaceRuntime},
 };
 
 #[derive(Debug)]
@@ -462,6 +462,15 @@ async fn route(
                 .expect("session identities are serializable");
             json_response(StatusCode::OK, &state)
         }
+        (&Method::POST, "/v1/workspaces/ssh") => {
+            match parse_body::<CreateSshWorkspace>(request).await {
+                Some(input) => match runtime.create_ssh_workspace(input).await {
+                    Ok(config) => json_response(StatusCode::CREATED, &config),
+                    Err(error) => ssh_workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/credentials/ssh") => {
             match parse_body::<SshKeyImportRequest>(request).await {
                 Some(import) => match runtime
@@ -671,6 +680,37 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
     error_response(status, code, &error.to_string())
 }
 
+fn ssh_workspace_error(error: WorkspaceError) -> Response<Body> {
+    let (status, code) = match &error {
+        WorkspaceError::State(ServiceError::Contract(_)) => {
+            (StatusCode::BAD_REQUEST, "invalid_workspace")
+        }
+        WorkspaceError::Creation(SshWorkspaceCreationError::State(
+            ServiceError::WorkspaceConflict,
+        )) => (StatusCode::CONFLICT, "workspace_creation_conflict"),
+        WorkspaceError::Creation(SshWorkspaceCreationError::State(_)) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "workspace_not_saved")
+        }
+        WorkspaceError::Creation(SshWorkspaceCreationError::Vault(_)) => {
+            (StatusCode::SERVICE_UNAVAILABLE, "ssh_vault_unavailable")
+        }
+        WorkspaceError::Creation(SshWorkspaceCreationError::Cleanup(_)) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ssh_credential_cleanup_pending",
+        ),
+        WorkspaceError::Creation(SshWorkspaceCreationError::SavedDurabilityUnconfirmed) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "workspace_saved_durability_unconfirmed",
+        ),
+        WorkspaceError::Creation(SshWorkspaceCreationError::PersistenceUncertain) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "workspace_save_unconfirmed",
+        ),
+        _ => return key_import_error(error),
+    };
+    error_response(status, code, &error.to_string())
+}
+
 fn key_import_error(error: WorkspaceError) -> Response<Body> {
     let (status, code) = match &error {
         WorkspaceError::Transport(SshError::PassphraseRequired) => {
@@ -713,7 +753,7 @@ mod tests {
     };
 
     #[derive(Default)]
-    struct MemoryVault(Mutex<BTreeMap<Uuid, Vec<u8>>>, AtomicBool);
+    struct MemoryVault(Mutex<BTreeMap<Uuid, Vec<u8>>>, AtomicBool, AtomicBool);
 
     impl Vault for MemoryVault {
         fn get(&self, reference: Uuid) -> VaultFuture<'_, Option<Secret>> {
@@ -743,6 +783,9 @@ mod tests {
 
         fn delete(&self, reference: Uuid) -> VaultFuture<'_, ()> {
             Box::pin(async move {
+                if self.2.load(Ordering::Acquire) {
+                    return Err(VaultError::AccessDenied);
+                }
                 self.0.lock().unwrap().remove(&reference);
                 Ok(())
             })
@@ -769,6 +812,259 @@ mod tests {
         fn delete(&self, _: Uuid) -> VaultFuture<'_, ()> {
             Box::pin(async { Err(VaultError::AccessDenied) })
         }
+    }
+
+    fn ssh_workspace_request() -> serde_json::Value {
+        use russh::keys::{ssh_key::LineEnding, Algorithm, PrivateKey};
+        let private =
+            PrivateKey::random(&mut russh::keys::key::safe_rng(), Algorithm::Ed25519).unwrap();
+        let public = private.public_key().to_openssh().unwrap();
+        let (algorithm, public_key) = public.split_once(' ').unwrap();
+        serde_json::json!({
+            "id": WorkspaceId::new(), "name": "Dedicated bot",
+            "service_pc": {"kind": "local"},
+            "bot_pc": {"kind": "lan", "computer_id": Uuid::new_v4()},
+            "endpoint": {"hostname": "bot.local", "port": 22, "user": "bot"},
+            "pinned_host_key": {"algorithm": algorithm, "public_key": public_key},
+            "private_key": private.to_openssh(LineEnding::LF).unwrap().as_str(),
+            "passphrase": null,
+        })
+    }
+
+    #[tokio::test]
+    async fn ssh_workspace_save_failure_cleans_key_and_retry_persists_once() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let retained = directory.path().join("retained.json");
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        let input = ssh_workspace_request();
+        let before = service.snapshot().await;
+        let prior_bytes = std::fs::read(&path).unwrap();
+        std::fs::rename(&path, &retained).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        assert!(client
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap_err()
+            .contains("could not persist"));
+        assert_eq!(
+            vault.0.lock().unwrap().len(),
+            1,
+            "only service authentication remains"
+        );
+        assert_eq!(service.snapshot().await, before);
+        assert_eq!(std::fs::read(&retained).unwrap(), prior_bytes);
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::rename(&retained, &path).unwrap();
+        let saved = client
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap();
+        assert_eq!(saved["id"], input["id"]);
+        assert_eq!(saved["connection"]["credential_ref"], input["id"]);
+        assert!(saved.get("private_key").is_none());
+        assert!(saved.get("passphrase").is_none());
+        let entries = vault.0.lock().unwrap().clone();
+        let retry = client
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap();
+        assert_eq!(retry, saved);
+        assert_eq!(*vault.0.lock().unwrap(), entries);
+        assert_eq!(service.snapshot().await.workspaces.len(), 1);
+        let persisted = std::fs::read_to_string(&path).unwrap();
+        assert!(!persisted.contains("PRIVATE KEY"));
+        assert!(!persisted.contains("passphrase"));
+        drop(client);
+        drop(api);
+        drop(service);
+        let reopened = Service::open(&path).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&reopened.snapshot().await.workspaces[0]).unwrap(),
+            saved
+        );
+    }
+
+    #[tokio::test]
+    async fn ssh_workspace_validates_before_vault_and_rejects_conflicting_retries() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = Arc::new(
+            Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap(),
+        );
+        let vault = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        let input = ssh_workspace_request();
+        for (field, value) in [
+            ("name", serde_json::json!("")),
+            (
+                "endpoint",
+                serde_json::json!({"hostname":"bot.local", "port":0,"user":"bot"}),
+            ),
+            (
+                "pinned_host_key",
+                serde_json::json!({"algorithm":"ssh-ed25519","public_key":"AAAA"}),
+            ),
+            ("private_key", serde_json::json!("invalid-private-key")),
+        ] {
+            let mut invalid = input.clone();
+            invalid[field] = value;
+            assert!(client.call("/v1/workspaces/ssh", invalid).await.is_err());
+            assert_eq!(vault.0.lock().unwrap().len(), 1);
+            assert!(service.snapshot().await.workspaces.is_empty());
+        }
+        vault.1.store(true, Ordering::Release);
+        assert!(client
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap_err()
+            .contains("locked"));
+        assert_eq!(vault.0.lock().unwrap().len(), 1);
+        vault.1.store(false, Ordering::Release);
+        let (first, second) = tokio::join!(
+            client.call("/v1/workspaces/ssh", input.clone()),
+            client.call("/v1/workspaces/ssh", input.clone()),
+        );
+        let saved = first.unwrap();
+        assert_eq!(second.unwrap(), saved);
+        let entries = vault.0.lock().unwrap().clone();
+        let mut conflict = input.clone();
+        conflict["name"] = serde_json::json!("Different bot");
+        assert!(client
+            .call("/v1/workspaces/ssh", conflict)
+            .await
+            .unwrap_err()
+            .contains("different workspace or SSH key"));
+        let mut conflict = input;
+        conflict["private_key"] = ssh_workspace_request()["private_key"].clone();
+        assert!(client
+            .call("/v1/workspaces/ssh", conflict)
+            .await
+            .unwrap_err()
+            .contains("different workspace or SSH key"));
+        assert_eq!(*vault.0.lock().unwrap(), entries);
+        assert_eq!(service.snapshot().await.workspaces.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn ssh_workspace_failed_cleanup_reuses_the_same_owned_vault_slot() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let retained = directory.path().join("retained.json");
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        let input = ssh_workspace_request();
+        std::fs::rename(&path, &retained).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        vault.2.store(true, Ordering::Release);
+        for _ in 0..2 {
+            assert!(client
+                .call("/v1/workspaces/ssh", input.clone())
+                .await
+                .unwrap_err()
+                .contains("SSH key could not be removed"));
+            assert_eq!(vault.0.lock().unwrap().len(), 2);
+            assert!(service.snapshot().await.workspaces.is_empty());
+        }
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::rename(&retained, &path).unwrap();
+        vault.2.store(false, Ordering::Release);
+        client.call("/v1/workspaces/ssh", input).await.unwrap();
+        assert_eq!(vault.0.lock().unwrap().len(), 2);
+        assert_eq!(service.snapshot().await.workspaces.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn ssh_workspace_post_publish_failure_retains_key_and_reconciles_retry() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        let input = ssh_workspace_request();
+        service.fail_next_save_after_publish();
+        assert!(client
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap_err()
+            .contains("Workspace was saved"));
+        let state = service.snapshot().await;
+        assert_eq!(state.workspaces.len(), 1);
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            serde_json::to_vec_pretty(&state).unwrap()
+        );
+        let entries = vault.0.lock().unwrap().clone();
+        assert_eq!(entries.len(), 2);
+        client.call("/v1/workspaces/ssh", input).await.unwrap();
+        assert_eq!(*vault.0.lock().unwrap(), entries);
+        assert_eq!(service.snapshot().await, state);
+    }
+
+    #[tokio::test]
+    async fn ssh_workspace_client_cancellation_finishes_transaction_without_duplicates() {
+        #[derive(Default)]
+        struct PausedVault {
+            memory: MemoryVault,
+            entered: tokio::sync::Notify,
+            release: tokio::sync::Notify,
+        }
+        impl Vault for PausedVault {
+            fn get(&self, reference: Uuid) -> VaultFuture<'_, Option<Secret>> {
+                self.memory.get(reference)
+            }
+            fn delete(&self, reference: Uuid) -> VaultFuture<'_, ()> {
+                self.memory.delete(reference)
+            }
+            fn put(&self, reference: Uuid, secret: Secret) -> VaultFuture<'_, ()> {
+                Box::pin(async move {
+                    self.entered.notify_one();
+                    self.release.notified().await;
+                    self.memory.put(reference, secret).await
+                })
+            }
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let service = Arc::new(
+            Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap(),
+        );
+        let vault = Arc::new(PausedVault::default());
+        let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
+        let input = ssh_workspace_request();
+        let caller = tokio::spawn({
+            let runtime = runtime.clone();
+            let input = input.clone();
+            async move {
+                runtime
+                    .create_ssh_workspace(serde_json::from_value(input).unwrap())
+                    .await
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(2), vault.entered.notified())
+            .await
+            .unwrap();
+        caller.abort();
+        assert!(caller.await.unwrap_err().is_cancelled());
+        vault.release.notify_one();
+        let saved = tokio::time::timeout(
+            Duration::from_secs(2),
+            runtime.create_ssh_workspace(serde_json::from_value(input).unwrap()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(service.snapshot().await.workspaces, vec![saved]);
+        assert_eq!(vault.memory.0.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

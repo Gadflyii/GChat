@@ -10,9 +10,10 @@ use uuid::Uuid;
 use crate::contract::{
     ContractError, GuestCapability, GuestHello, GuestOperationKind, GuestOperationState,
     GuestOutcome, GuestReply, GuestRequest, GuestResult, OperationId, ServicePc, SessionIdentity,
-    VaultCredentialRef, WorkspaceConfig, WorkspaceId,
+    VaultCredentialRef, WorkspaceConfig, WorkspaceConnection, WorkspaceId,
 };
-use crate::store::Store;
+use crate::store::{SaveError, Store};
+use crate::vault::{Secret, Vault, VaultError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -219,6 +220,7 @@ pub enum ServiceError {
     Contract(ContractError),
     WorkspaceNotFound,
     WorkspaceInUse,
+    WorkspaceConflict,
     SessionUnavailable,
     SessionMismatch,
     OperationNotFound,
@@ -240,6 +242,9 @@ impl fmt::Display for ServiceError {
                 Self::InvalidState => "invalid Gbot state",
                 Self::WorkspaceNotFound => "workspace is not registered",
                 Self::WorkspaceInUse => "workspace has a live session or unresolved operation",
+                Self::WorkspaceConflict => {
+                    "This setup identity already belongs to a different workspace or SSH key"
+                }
                 Self::SessionUnavailable => "verified guest session is unavailable",
                 Self::SessionMismatch => "guest session does not match",
                 Self::OperationNotFound => "operation is not recorded; its outcome is unknown",
@@ -260,6 +265,34 @@ impl fmt::Display for ServiceError {
 }
 
 impl std::error::Error for ServiceError {}
+
+/// Creation owns the key until persistence confirms that the workspace references it.
+#[derive(Debug)]
+pub enum SshWorkspaceCreationError {
+    State(ServiceError),
+    Vault(VaultError),
+    Cleanup(VaultError),
+    PersistenceUncertain,
+    SavedDurabilityUnconfirmed,
+}
+
+impl From<ServiceError> for SshWorkspaceCreationError {
+    fn from(error: ServiceError) -> Self {
+        Self::State(error)
+    }
+}
+
+impl fmt::Display for SshWorkspaceCreationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::State(error) => error.fmt(f),
+            Self::Vault(error) => error.fmt(f),
+            Self::Cleanup(error) => write!(f, "Workspace was not saved and its SSH key could not be removed; retry this setup: {error}"),
+            Self::SavedDurabilityUnconfirmed => f.write_str("Workspace was saved, but storage durability could not be confirmed; retry this setup"),
+            Self::PersistenceUncertain => f.write_str("Workspace save could not be confirmed; retry this setup to reconcile its SSH key"),
+        }
+    }
+}
 
 struct RuntimeState {
     durable: DurableState,
@@ -303,6 +336,13 @@ impl Service {
                 sessions: BTreeMap::new(),
             })),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_save_after_publish(&self) {
+        self.store
+            .fail_after_publish
+            .store(true, std::sync::atomic::Ordering::Release);
     }
 
     pub async fn snapshot(&self) -> DurableState {
@@ -391,6 +431,94 @@ impl Service {
         })
         .await
         .map_err(|_| ServiceError::Persistence)?
+    }
+
+    /// A stable setup ID owns one vault slot. Retrying never allocates another key.
+    pub(crate) async fn create_ssh_workspace(
+        &self,
+        config: WorkspaceConfig,
+        key: Secret,
+        vault: Arc<dyn Vault>,
+    ) -> Result<WorkspaceConfig, SshWorkspaceCreationError> {
+        config.validate().map_err(ServiceError::Contract)?;
+        let WorkspaceConnection::Ssh(connection) = &config.connection else {
+            return Err(ServiceError::InvalidState.into());
+        };
+        let reference = connection.credential_ref.as_uuid();
+        let state = self.state.clone();
+        let store = self.store.clone();
+        // The vault/save/rollback transaction outlives an interrupted HTTP client.
+        tokio::spawn(async move {
+            let mut state = state.lock_owned().await;
+            if let Some(existing) = state
+                .durable
+                .workspaces
+                .iter()
+                .find(|entry| entry.id == config.id)
+            {
+                if existing != &config {
+                    return Err(ServiceError::WorkspaceConflict.into());
+                }
+                let stored = vault
+                    .get(reference)
+                    .await
+                    .map_err(SshWorkspaceCreationError::Vault)?;
+                if !stored.is_some_and(|stored| stored.expose_secret() == key.expose_secret()) {
+                    return Err(ServiceError::WorkspaceConflict.into());
+                }
+                // Also confirms durability after a save whose rename succeeded but sync failed.
+                store
+                    .save_with_outcome(&state.durable)
+                    .await
+                    .map_err(|_| SshWorkspaceCreationError::SavedDurabilityUnconfirmed)?;
+                return Ok(config);
+            }
+            if state.durable.service_id == reference
+                || state.durable.workspaces.iter().any(|entry| {
+                    matches!(&entry.connection,
+                    WorkspaceConnection::Ssh(ssh) if ssh.credential_ref.as_uuid() == reference)
+                })
+                || state.durable.assignments.iter().any(|entry| {
+                    entry
+                        .credential_ref
+                        .is_some_and(|key| key.as_uuid() == reference)
+                })
+            {
+                return Err(ServiceError::WorkspaceConflict.into());
+            }
+            let mut next = state.durable.clone();
+            next.workspaces.push(config.clone());
+            next.validate()?;
+            if let Err(error) = vault.put(reference, key).await {
+                vault
+                    .delete(reference)
+                    .await
+                    .map_err(SshWorkspaceCreationError::Cleanup)?;
+                return Err(SshWorkspaceCreationError::Vault(error));
+            }
+            if let Err(error) = store.save_with_outcome(&next).await {
+                match error {
+                    SaveError::NotPublished(error) => {
+                        vault
+                            .delete(reference)
+                            .await
+                            .map_err(SshWorkspaceCreationError::Cleanup)?;
+                        return Err(SshWorkspaceCreationError::State(error));
+                    }
+                    SaveError::Published => {
+                        state.durable = next;
+                        return Err(SshWorkspaceCreationError::SavedDurabilityUnconfirmed);
+                    }
+                    SaveError::Unconfirmed => {
+                        return Err(SshWorkspaceCreationError::PersistenceUncertain)
+                    }
+                }
+            }
+            state.durable = next;
+            Ok(config)
+        })
+        .await
+        .map_err(|_| SshWorkspaceCreationError::PersistenceUncertain)?
     }
 
     pub async fn register_workspace(&self, config: WorkspaceConfig) -> Result<(), ServiceError> {
