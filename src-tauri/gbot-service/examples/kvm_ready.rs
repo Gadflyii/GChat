@@ -180,6 +180,22 @@ mod linux {
         }
     }
 
+    fn video_frame(bytes: &[u8]) -> Result<(Value, &[u8])> {
+        if bytes.len() < 8 {
+            return Err("short video packet".into());
+        }
+        let header = usize::try_from(u32::from_be_bytes(bytes[..4].try_into()?))?;
+        let payload = usize::try_from(u32::from_be_bytes(bytes[4..8].try_into()?))?;
+        if 8 + header + payload != bytes.len() {
+            return Err("video frame lengths differ".into());
+        }
+        let envelope: Value = serde_json::from_slice(&bytes[8..8 + header])?;
+        if envelope["direction"] != "video" || !envelope["message"].is_object() {
+            return Err(format!("unexpected video envelope: {envelope}").into());
+        }
+        Ok((envelope["message"].clone(), &bytes[8 + header..]))
+    }
+
     async fn physical_media(
         runtime: &Arc<WorkspaceRuntime>,
         identity: SessionIdentity,
@@ -245,13 +261,12 @@ mod linux {
                     }
                     audio.extend_from_slice(&bytes[24..]);
                 } else if kind == 2 && bytes.len() >= 8 {
-                    let header = usize::try_from(u32::from_be_bytes(bytes[..4].try_into()?))?;
-                    let payload = usize::try_from(u32::from_be_bytes(bytes[4..8].try_into()?))?;
-                    if 8 + header + payload != bytes.len() {
-                        return Err("video frame lengths differ".into());
-                    }
-                    let descriptor: Value = serde_json::from_slice(&bytes[8..8 + header])?;
-                    let pixels = &bytes[8 + header..];
+                    let (descriptor, pixels) = video_frame(&bytes)?;
+                    tokio::fs::write(
+                        evidence.join("capture-frame.json"),
+                        serde_json::to_vec_pretty(&descriptor)?,
+                    )
+                    .await?;
                     let filename = match descriptor["codec"].as_str() {
                         Some("png") if pixels.starts_with(b"\x89PNG\r\n\x1a\n") => "capture.png",
                         Some("bgra") => {
@@ -272,11 +287,6 @@ mod linux {
                         _ => return Err("unexpected capture codec".into()),
                     };
                     tokio::fs::write(evidence.join(filename), pixels).await?;
-                    tokio::fs::write(
-                        evidence.join("capture-frame.json"),
-                        serde_json::to_vec_pretty(&descriptor)?,
-                    )
-                    .await?;
                     frame = Some(descriptor);
                 } else if kind == 8 {
                     return Err("capture socket closed".into());
@@ -978,6 +988,24 @@ mod linux {
         cleanup?;
         result??;
         Ok(())
+    }
+
+    #[test]
+    fn cua_video_envelope_exposes_descriptor_and_pixels() {
+        let descriptor = json!({"codec":"bgra","width_px":2,"height_px":1});
+        let header =
+            serde_json::to_vec(&json!({"direction":"video","message":descriptor})).unwrap();
+        let pixels = [0, 40, 80, 255, 80, 40, 0, 255];
+        let mut packet = Vec::new();
+        packet.extend_from_slice(&(header.len() as u32).to_be_bytes());
+        packet.extend_from_slice(&(pixels.len() as u32).to_be_bytes());
+        packet.extend_from_slice(&header);
+        packet.extend_from_slice(&pixels);
+        let (actual, payload) = video_frame(&packet).unwrap();
+        assert_eq!(actual, descriptor);
+        assert_eq!(payload, pixels);
+        packet.pop();
+        assert!(video_frame(&packet).is_err());
     }
 
     #[tokio::test]

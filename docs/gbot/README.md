@@ -629,9 +629,12 @@ through PCM, view-only input refusal, harmless takeover input and interactive
 stream revocation on hand-back. Existing source and package receipts are reused.
 No model/GPU, person's desktop, browser playback, Windows or M365 claim.
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
-Next unresolved action: verify the BGRA negotiation fix and repeat the physical
-frame/audio/control check on one fresh dedicated guest. Raw BGRA is saved with
-its dimensions and converted to PNG only for inspecting the evidence.
+Next unresolved action: run the physical frame/audio/control check with the
+corrected probe. Negotiation now opens; the previous probe incorrectly read
+Cua’s video envelope as the descriptor. The focused case pins its actual
+`direction`/`message` wire format. Raw BGRA is saved with dimensions and converted
+to PNG for inspection. A failed retry retains its stopped guest and encrypted
+test vault so a probe correction does not require another full provision.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -1335,8 +1338,19 @@ ended with failure, and its domain and vault key are retired. Results are in S1
 `/ai/gbot-vms/cua-media-20261012/diagnostic-evidence` and the local physical folder.
 No frame/audio result is claimed. The candidate negotiates typed codec preferences
 with BGRA fallback and records actual PNG or BGRA frame bytes and dimensions.
-A fresh guest will run the same capture/audio/control check with the unchanged
-accepted package; no guest package, dependency, or browser renderer change.
+Guest `c49b2df4-1300-4638-af19-2d419930c22a` opened the media session but
+failed in the probe, which expected a bare descriptor instead of Cua's
+`{direction: "video", message: descriptor}` envelope. The production browser
+already parses this correctly. Its domain and vault key are retired. Results
+are in S1 `/ai/gbot-vms/cua-media-20261012/codec-evidence`; no frame/audio/control
+PASS is claimed. The probe now follows that wire format and saves the descriptor
+before codec validation. The next wrapper retains a failed, stopped guest and
+its encrypted fixture vault for diagnosis; retirement follows PASS or parking.
+The accepted package is unchanged. Media cases 2/2, strict Clippy and example
+build pass for `189d05507` (local `codec-*.log` receipts); they are reused.
+The two retired physical guest disks are removed after shutdown, unregister and
+credential-deletion receipts, freeing 9.25 GiB; diagnostics remain retained in
+the evidence folders and `retired-physical-guests.json`.
 Future launches stop on booking errors. The 239 MB embedded seed needs its
 observed first-boot duration inside the CPU booking. Focused media policy and
 error cases, strict Clippy and the example build are the source gates.
