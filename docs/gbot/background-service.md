@@ -33,7 +33,10 @@ variables. No packaged runtime manifest means task execution is unavailable;
 an invalid/incomplete declared runtime fails service startup rather than silently
 running a disconnected executor. Unsupported platform setup remains unsupported.
 
-GChat Exit drops its native update subscription, leaving the service alive.
+GChat Exit cancels ordinary Chat/Code connector operations for its native client
+identity and drops its update subscription, leaving bot tasks and the service
+alive. The identity is closed before cancellation so late operation registration
+cannot escape the sweep.
 `Quit Gbot service` sends authenticated shutdown, cancels/joins tasks, closes
 connector OAuth/operations and workspace/setup jobs, then waits for ownership
 release. Saved state is retained and the current GUI will not implicitly restart
@@ -49,18 +52,33 @@ endpoints continue unchanged; no saved assignment is silently rewritten.
 
 ## Verification and retained inventory
 
-Source is frozen before the coordinator-booked focused CPU gate. The new
-process fixture starts only a test API with a memory vault and inert executor;
-it checks client disconnect/reconnect, durable workspace/schedule retention,
-unauthenticated shutdown rejection and authenticated shutdown with a pending
-update poll. Existing affected schedule UI cases plus one explicit stop/start
-case, native compile/strict owning Clippy, frontend types and affected lint are
-the intended gates. Results are pending; no physical guest/model or packaged
-AppImage lifetime claim is made from this fixture.
+The focused gate passed on source `77c6cab04` in the coordinator-booked
+CPU-only window, ending 2026-10-12 20:46:51Z. The process fixture selects one
+case and starts a separate test API process with a memory vault and inert
+executor. It checks client disconnect/reconnect, durable workspace/schedule
+retention, unauthenticated shutdown rejection and authenticated shutdown with a
+pending update poll. Native `test-tauri,cli` library check and strict owning
+Clippy, `gbot-service` library/binary strict Clippy, all 11 affected UI cases,
+frontend types and changed production-file lint passed. All Cargo commands used
+locked/offline dependencies in the accepted container, CPUs 0–31, jobs 6.
+
+The desktop `gchat` binary cannot be checked with `cli`, which disables the
+existing desktop startup function. A separate `test-tauri` binary check reached
+the existing build script and stopped on missing `resources/pre-install/**/*`
+bundle resources; no fake resource or product configuration override was added.
+Installed/AppImage parent-close, native-vault, sleep/resume, live OAuth, KVM and
+model-backed scheduled dispatch lifetime remain unrun by this gate. No physical
+Windows qualification is claimed. The fixture establishes API process lifetime
+and retained state, not packaged provider/desktop execution.
+
+Shared cache handoff initially selected the physical owner's test binary and
+ran zero cases. That receipt was rejected; touching this candidate's changed
+Rust source timestamps before retry forced the correct shared-path Cargo
+fingerprint to rebuild, and the observed one-case result passed. The initial
+fixture expected schedule creation status 201; existing API returns 200 and the
+fixture expectation was corrected without changing production behavior.
 
 Retain the owned source worktree/branch for integration and concise gate
 receipts in `/ai/gchat/out/gchat-open-items-20261012/background-service-note.md`.
 Reuse the coordinator-owned accepted Cargo/frontend caches; no owned build
 copy, downloaded artifact, VM, model or running service is allocated by this work.
-
-Ordinary Chat/Code connector requests carry a native GUI client identity. GChat Exit awaits a bounded disconnect cancellation sweep and closes that identity before dropping its client; late registrations are rejected. Bot tasks and their approval ownership are independent of this client identity.
