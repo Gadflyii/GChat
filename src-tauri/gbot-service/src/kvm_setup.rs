@@ -247,6 +247,21 @@ impl KvmSetup {
     pub async fn status(&self) -> Vec<SetupRecord> {
         self.records.lock().await.values().cloned().collect()
     }
+    pub(crate) async fn ensure_ready(
+        &self,
+        id: WorkspaceId,
+    ) -> Result<(), crate::workspace::WorkspaceError> {
+        if self
+            .records
+            .lock()
+            .await
+            .get(&id)
+            .is_some_and(|record| record.stage != SetupStage::Ready)
+        {
+            return Err(crate::workspace::WorkspaceError::SetupIncomplete);
+        }
+        Ok(())
+    }
     async fn save(&self, record: SetupRecord) -> Result<(), SetupIssue> {
         let mut records = self.records.lock().await;
         let mut next = records.clone();
@@ -647,7 +662,7 @@ impl KvmSetup {
                 .await
                 .map_err(persistence)?,
         }
-        let hello = runtime.connect(record.identity).await.map_err(|error| SetupIssue::new("guest_not_ready", error.to_string(), "Wait for guest cloud-init and the desktop session to complete, then retry this same setup."))?;
+        let hello = runtime.connect_for_setup(record.identity).await.map_err(|error| SetupIssue::new("guest_not_ready", error.to_string(), "Wait for guest cloud-init and the desktop session to complete, then retry this same setup."))?;
         if ![
             GuestCapability::Exec,
             GuestCapability::Read,
@@ -849,7 +864,7 @@ impl KvmSetup {
         }
         let owner = Uuid::new_v4();
         let view = runtime
-            .open_view(crate::media::OpenView {
+            .open_view_for_setup(crate::media::OpenView {
                 identity: record.identity,
                 owner,
                 interactive: false,
@@ -905,7 +920,7 @@ impl KvmSetup {
         }
         .to_owned();
         let reply = runtime
-            .request(GuestRequest {
+            .request_for_setup(GuestRequest {
                 identity: record.identity,
                 operation_id: OperationId::new(),
                 operation,
@@ -1038,9 +1053,18 @@ pub(crate) fn readiness_input(
     let pid = &window["pid"];
     let window_id = &window["window_id"];
     [
-        ("press_key", serde_json::json!({"pid":pid,"window_id":window_id,"key":"a","modifiers":["ctrl"]})),
-        ("type_text", serde_json::json!({"pid":pid,"window_id":window_id,"text":text})),
-        ("press_key", serde_json::json!({"pid":pid,"window_id":window_id,"key":"s","modifiers":["ctrl"]})),
+        (
+            "press_key",
+            serde_json::json!({"pid":pid,"window_id":window_id,"key":"a","modifiers":["ctrl"]}),
+        ),
+        (
+            "type_text",
+            serde_json::json!({"pid":pid,"window_id":window_id,"text":text}),
+        ),
+        (
+            "press_key",
+            serde_json::json!({"pid":pid,"window_id":window_id,"key":"s","modifiers":["ctrl"]}),
+        ),
     ]
 }
 fn readiness_result(operation: &str, outcome: GuestOutcome) -> Result<GuestResult, SetupIssue> {
@@ -1126,6 +1150,118 @@ mod tests {
         })
         .await
         .unwrap();
+    }
+    #[tokio::test]
+    async fn unfinished_and_restarted_setups_hold_user_admission_until_ready() {
+        use crate::{media::OpenView, workspace::WorkspaceError};
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
+        runtime
+            .configure_kvm_setup(root.path().to_owned())
+            .await
+            .unwrap();
+        let setup = runtime.kvm_setup().unwrap();
+        let id = WorkspaceId::new();
+        let identity = SessionIdentity {
+            workspace_id: id,
+            session_id: SessionId::new(),
+        };
+        let mut record = SetupRecord {
+            id,
+            name: "Unfinished computer".into(),
+            service_id: service.snapshot().await.service_id,
+            credential_ref: VaultCredentialRef::new(),
+            identity,
+            stage: SetupStage::TestingDesktop,
+            issue: None,
+            spec: None,
+            pinned_host_key: None,
+        };
+        setup.save(record.clone()).await.unwrap();
+        let request = GuestRequest {
+            identity,
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Desktop {
+                tool: "list_windows".into(),
+                arguments: serde_json::json!({}),
+            },
+        };
+        let view = || OpenView {
+            identity,
+            owner: Uuid::new_v4(),
+            interactive: false,
+            audio: false,
+            h264: false,
+        };
+        assert!(matches!(
+            runtime.connect(identity).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        assert!(matches!(
+            runtime.desktop_tools(identity).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        assert!(matches!(
+            runtime.request(request.clone()).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        assert!(matches!(
+            runtime.open_view(view()).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        assert!(matches!(
+            runtime.take_over(identity, Uuid::new_v4()).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        // The setup owner can verify the guest through the same transport and journal.
+        assert!(matches!(
+            runtime.connect_for_setup(identity).await,
+            Err(WorkspaceError::NotFound)
+        ));
+        assert!(matches!(
+            runtime.request_for_setup(request).await,
+            Err(WorkspaceError::NotConnected)
+        ));
+        assert!(matches!(
+            runtime.open_view_for_setup(view()).await,
+            Err(WorkspaceError::NotConnected)
+        ));
+        record.stage = SetupStage::Ready;
+        setup.save(record).await.unwrap();
+        assert!(matches!(
+            runtime.connect(identity).await,
+            Err(WorkspaceError::NotFound)
+        ));
+        assert!(matches!(
+            runtime.desktop_tools(identity).await,
+            Err(WorkspaceError::NotConnected)
+        ));
+        assert!(matches!(
+            runtime
+                .connect(SessionIdentity {
+                    workspace_id: WorkspaceId::new(),
+                    ..identity
+                })
+                .await,
+            Err(WorkspaceError::NotFound)
+        ));
+        drop(setup);
+        drop(runtime);
+        let resumed = Arc::new(WorkspaceRuntime::new(service, vault));
+        resumed
+            .configure_kvm_setup(root.path().to_owned())
+            .await
+            .unwrap();
+        assert_eq!(
+            resumed.kvm_setup().unwrap().status().await[0].stage,
+            SetupStage::CheckingPc
+        );
+        assert!(matches!(
+            resumed.connect(identity).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
     }
     #[tokio::test]
     async fn readiness_failure_details_survive_setup_restart() {

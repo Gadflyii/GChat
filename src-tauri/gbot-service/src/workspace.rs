@@ -38,6 +38,7 @@ pub enum WorkspaceError {
     Media(MediaError),
     NotFound,
     NotConnected,
+    SetupIncomplete,
     AdapterUnavailable,
     ServiceLocationUnavailable,
     ShuttingDown,
@@ -55,6 +56,9 @@ impl std::fmt::Display for WorkspaceError {
             Self::Media(error) => error.fmt(f),
             Self::NotFound => f.write_str("workspace is not registered"),
             Self::NotConnected => f.write_str("connect the selected guest session first"),
+            Self::SetupIncomplete => {
+                f.write_str("resume computer setup and complete its readiness checks first")
+            }
             Self::AdapterUnavailable => f.write_str("this workspace adapter is not installed"),
             Self::ServiceLocationUnavailable => {
                 f.write_str("this service cannot run on the selected PC")
@@ -468,6 +472,32 @@ impl WorkspaceRuntime {
     }
 
     pub async fn connect(&self, identity: SessionIdentity) -> Result<GuestHello, WorkspaceError> {
+        self.ensure_workspace_ready(identity.workspace_id).await?;
+        self.connect_session(identity).await
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn connect_for_setup(
+        &self,
+        identity: SessionIdentity,
+    ) -> Result<GuestHello, WorkspaceError> {
+        self.connect_session(identity).await
+    }
+
+    async fn ensure_workspace_ready(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
+        #[cfg(target_os = "linux")]
+        if let Some(setup) = self.kvm_setup.get() {
+            setup.ensure_ready(workspace).await?;
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = workspace;
+        Ok(())
+    }
+
+    async fn connect_session(
+        &self,
+        identity: SessionIdentity,
+    ) -> Result<GuestHello, WorkspaceError> {
         self.accepting()?;
         let lock = self.lifecycle_lock(identity.workspace_id).await;
         let _guard = lock.lock().await;
@@ -542,6 +572,7 @@ impl WorkspaceRuntime {
         &self,
         identity: SessionIdentity,
     ) -> Result<Vec<crate::ssh::DesktopTool>, WorkspaceError> {
+        self.ensure_workspace_ready(identity.workspace_id).await?;
         let session = self.session(identity).await?;
         Ok(session.desktop_tools().to_vec())
     }
@@ -551,6 +582,24 @@ impl WorkspaceRuntime {
     }
 
     async fn request_owned(
+        &self,
+        request: GuestRequest,
+        owner: Option<Uuid>,
+    ) -> Result<GuestReply, WorkspaceError> {
+        self.ensure_workspace_ready(request.identity.workspace_id)
+            .await?;
+        self.execute_request(request, owner).await
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn request_for_setup(
+        &self,
+        request: GuestRequest,
+    ) -> Result<GuestReply, WorkspaceError> {
+        self.execute_request(request, None).await
+    }
+
+    async fn execute_request(
         &self,
         request: GuestRequest,
         owner: Option<Uuid>,
@@ -624,6 +673,7 @@ impl WorkspaceRuntime {
         identity: SessionIdentity,
         owner: Uuid,
     ) -> Result<SessionControl, WorkspaceError> {
+        self.ensure_workspace_ready(identity.workspace_id).await?;
         let lock = self.lifecycle_lock(identity.workspace_id).await;
         let _guard = lock.lock().await;
         self.session(identity).await?;
@@ -723,6 +773,23 @@ impl WorkspaceRuntime {
     }
 
     pub async fn open_view(
+        self: &Arc<Self>,
+        request: OpenView,
+    ) -> Result<ViewTicket, WorkspaceError> {
+        self.ensure_workspace_ready(request.identity.workspace_id)
+            .await?;
+        self.open_session_view(request).await
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn open_view_for_setup(
+        self: &Arc<Self>,
+        request: OpenView,
+    ) -> Result<ViewTicket, WorkspaceError> {
+        self.open_session_view(request).await
+    }
+
+    async fn open_session_view(
         self: &Arc<Self>,
         request: OpenView,
     ) -> Result<ViewTicket, WorkspaceError> {

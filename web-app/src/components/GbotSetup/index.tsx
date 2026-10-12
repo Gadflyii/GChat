@@ -37,17 +37,19 @@ export default function GbotSetup({
   save,
   cancel,
   localReady,
+  resume,
 }: {
   save: (connection: BotConnection) => Promise<void>
   cancel: () => void
   localReady: (id: string) => Promise<void>
+  resume?: { id: string; name: string }
 }) {
-  const [step, setStep] = useState(0)
-  const [computer, setComputer] = useState('')
+  const [step, setStep] = useState(resume ? 2 : 0)
+  const [computer, setComputer] = useState(resume ? 'local' : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [connection, setConnection] = useState<BotConnection>({
-    name: '',
+    name: resume?.name ?? '',
     hostname: '',
     port: '22',
     user: '',
@@ -181,7 +183,11 @@ export default function GbotSetup({
         </>
       )}
       {step === 2 && computer === 'local' && (
-        <KvmSetup name={connection.name} connected={localReady} />
+        <KvmSetup
+          name={connection.name}
+          initialId={resume?.id}
+          connected={localReady}
+        />
       )}
       {step === 2 && computer === 'lan' && (
         <>
@@ -264,7 +270,7 @@ export default function GbotSetup({
             {saving ? 'Saving…' : step === 3 ? 'Save bot' : 'Continue'}
           </Button>
         )}
-        {step > 0 && (
+        {step > 0 && !resume && (
           <Button
             type="button"
             variant="outline"

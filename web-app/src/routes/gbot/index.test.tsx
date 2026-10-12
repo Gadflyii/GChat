@@ -4,9 +4,11 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
+import type { KvmSetupRecord } from '@/services/gbot'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
@@ -560,4 +562,161 @@ it('explicitly stops the service without refreshing and starts it before reconne
   await waitFor(() => expect(mocks.startService).toHaveBeenCalledTimes(1))
   await screen.findByRole('button', { name: 'Quit Gbot service' })
   expect(mocks.call.mock.calls.length).toBeGreaterThan(calls)
+})
+
+it('holds an unfinished KVM with live SSH, resumes its same setup and admits actions on Ready update', async () => {
+  const identity = { workspace_id: 'owned-kvm', session_id: 'session' }
+  let record: KvmSetupRecord = {
+    id: identity.workspace_id,
+    name: 'Writer',
+    stage: 'checking_pc',
+    issue: {
+      code: 'desktop_not_ready',
+      message: 'Desktop readiness is unfinished.',
+      next_action: 'Resume the saved setup.',
+    },
+  }
+  let resolveStatus!: (records: KvmSetupRecord[]) => void
+  const pendingStatus = new Promise<KvmSetupRecord[]>((resolve) => {
+    resolveStatus = resolve
+  })
+  let firstStatus = true
+  const updates = new Set<() => void>()
+  mocks.listen.mockImplementation(
+    async (event: string, callback: () => void) => {
+      if (event === 'gbot-setup-update') updates.add(callback)
+      return () => updates.delete(callback)
+    }
+  )
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) => {
+      if (path === 'state')
+        return {
+          workspaces: [
+            {
+              id: identity.workspace_id,
+              name: 'Writer',
+              bot_pc: { kind: 'local_vm', hypervisor: 'kvm' },
+            },
+          ],
+          live_sessions: [{ identity }],
+          controls: [],
+          assignments: [
+            {
+              workspace_id: identity.workspace_id,
+              api_base: 'http://host/v1',
+              model: 'qwen',
+              context_tokens: 262144,
+              credential_ref: null,
+            },
+          ],
+        }
+      if (path === 'setup/kvm/status') {
+        if (firstStatus) {
+          firstStatus = false
+          return pendingStatus
+        }
+        return [record]
+      }
+      if (path === 'setup/kvm/preflight') return { ready: true, issues: [] }
+      if (path === 'setup/kvm/start') {
+        record = { ...record, stage: 'testing_desktop', issue: null }
+        return record
+      }
+      if (path === 'tasks')
+        return [{ id: 'task', identity, state: 'paused', messages: [] }]
+      if (path === 'schedules') return { schedules: [], stopped: null }
+      if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'tasks/start') return { identity: body.identity }
+      return []
+    }
+  )
+  render(<Page />)
+  await screen.findByText('Checking setup status…')
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Write a note' },
+  })
+  expect(
+    screen.getByRole('button', { name: 'Run', exact: true })
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeDisabled()
+  expect(
+    screen.queryByText('Connected', { exact: true })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'View bot’s desktop' })
+  ).not.toBeInTheDocument()
+
+  resolveStatus([record])
+  await screen.findByText('Desktop readiness is unfinished.')
+  expect(
+    await screen.findByRole('button', { name: 'Resume', exact: true })
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Take over' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Resume setup' }))
+  const wizard = await screen.findByRole('form', { name: 'Set up Gbot' })
+  expect(
+    within(wizard).queryByLabelText('Bot name')
+  ).not.toBeInTheDocument()
+  expect(
+    within(wizard).queryByRole('button', { name: /Create .*computer/ })
+  ).not.toBeInTheDocument()
+  await waitFor(() =>
+    expect(
+      within(wizard).getByRole('button', { name: 'Resume setup' })
+    ).toBeEnabled()
+  )
+  fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+      id: identity.workspace_id,
+      name: 'Writer',
+    })
+  )
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/kvm/start')
+  ).toHaveLength(1)
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+  expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
+
+  record = { ...record, stage: 'ready', issue: null }
+  updates.forEach((update) => update())
+  await waitFor(() =>
+    expect(screen.queryByText('Setup incomplete')).not.toBeInTheDocument()
+  )
+  fireEvent.click(await screen.findByRole('button', { name: 'Use this computer' }))
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+  )
+  expect(await screen.findByText('Connected', { exact: true })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'View bot’s desktop' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Run', exact: true })
+  ).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('tasks/start', {
+      identity,
+      prompt: 'Write a note',
+    })
+  )
+
+  record = { ...record, id: 'another-kvm', stage: 'checking_pc' }
+  const statusCalls = mocks.call.mock.calls.filter(
+    ([path]) => path === 'setup/kvm/status'
+  ).length
+  updates.forEach((update) => update())
+  await waitFor(() =>
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'setup/kvm/status')
+        .length
+    ).toBeGreaterThan(statusCalls)
+  )
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled()
+  )
+  expect(screen.queryByText('Setup incomplete')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'View bot’s desktop' })).toBeEnabled()
 })

@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Button } from '@/components/ui/button'
-import { gbot } from '@/services/gbot'
+import { gbot, type KvmSetupRecord, type SetupIssue } from '@/services/gbot'
 
-type Issue = { code: string; message: string; next_action: string }
 type Preflight = {
   ready: boolean
-  issues: Issue[]
+  issues: SetupIssue[]
   cpus: number
   memory_mib: number
   disk_gib: number
 }
-type Setup = { id: string; name: string; stage: string; issue: Issue | null }
 const stages: Record<string, string> = {
   checking_pc: 'Checking this PC',
   preparing_computer: 'Preparing the guest disk and secure connection',
@@ -25,18 +23,20 @@ const stages: Record<string, string> = {
 export default function KvmSetup({
   name,
   connected,
+  initialId,
 }: {
   name: string
+  initialId?: string
   connected: (id: string) => Promise<void>
 }) {
   const [preflight, setPreflight] = useState<Preflight | null>(null)
-  const [records, setRecords] = useState<Setup[]>([])
-  const [current, setCurrent] = useState<string | null>(null)
+  const [records, setRecords] = useState<KvmSetupRecord[]>([])
+  const [current, setCurrent] = useState<string | null>(initialId ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const newId = useRef(crypto.randomUUID())
   const refresh = useCallback(async () => {
-    const saved = await gbot<Setup[]>('setup/kvm/status', {})
+    const saved = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
     setRecords(saved.filter((record) => record.stage !== 'removed'))
   }, [])
   const check = useCallback(async () => {
@@ -57,14 +57,17 @@ export default function KvmSetup({
       void subscription.then((unlisten) => unlisten())
     }
   }, [check, refresh])
+  const visibleRecords = initialId
+    ? records.filter((saved) => saved.id === initialId)
+    : records
   const record = records.find((saved) => saved.id === current)
-  const act = async (path: 'start' | 'remove', saved?: Setup) => {
+  const act = async (path: 'start' | 'remove', saved?: KvmSetupRecord) => {
     setBusy(true)
     setError('')
     try {
       const id = saved?.id ?? newId.current
       setCurrent(id)
-      const result = await gbot<Setup>(
+      const result = await gbot<KvmSetupRecord>(
         `setup/kvm/${path}`,
         path === 'start' ? { id, name: saved?.name ?? name.trim() } : { id }
       )
@@ -87,7 +90,10 @@ export default function KvmSetup({
   return (
     <div className="space-y-3" aria-label="Local VM setup">
       <p className="text-sm">
-        Review the separate Linux computer before creating it: 2 CPU threads, 4
+        {initialId
+          ? 'Resume the saved separate Linux computer: '
+          : 'Review the separate Linux computer before creating it: '}
+        2 CPU threads, 4
         GiB memory and a 40 GiB guest disk. GChat keeps its generated connection
         key in the secure vault.
       </p>
@@ -117,7 +123,7 @@ export default function KvmSetup({
       >
         Check prerequisites again
       </Button>
-      {!record && (
+      {!initialId && !current && (
         <Button
           type="button"
           disabled={busy || !preflight?.ready}
@@ -126,10 +132,10 @@ export default function KvmSetup({
           {busy ? 'Starting setup…' : `Create ${name.trim()}’s computer`}
         </Button>
       )}
-      {records.length > 0 && (
+      {visibleRecords.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium">Saved local computer setups</p>
-          {records.map((saved) => (
+          {visibleRecords.map((saved) => (
             <div
               key={saved.id}
               className="space-y-2 rounded-md border p-3 text-sm"
