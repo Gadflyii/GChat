@@ -8,7 +8,23 @@ import {
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
 
-const mocks = vi.hoisted(() => ({ call: vi.fn(), listen: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  call: vi.fn(),
+  listen: vi.fn(),
+  mediaStart: vi.fn(),
+  mediaStop: vi.fn(),
+}))
+vi.mock('@/vendor/cua-media/mediaSession', () => ({
+  MediaSession: class {
+    constructor(readonly options: { interactive: boolean }) {}
+    start() {
+      mocks.mediaStart(this.options)
+    }
+    stop() {
+      mocks.mediaStop()
+    }
+  },
+}))
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (options: unknown) => ({ options }),
 }))
@@ -234,4 +250,98 @@ it('sends task-bound human replies and declines, retaining them after reload', a
   await screen.findByText('Your reply: Documents')
   expect(screen.getByText('Request declined')).toBeInTheDocument()
   expect(screen.queryByLabelText('Your reply')).not.toBeInTheDocument()
+})
+
+it('opens view-only and closes interactive input before handing back to the bot', async () => {
+  const identity = { workspace_id: 'one', session_id: 'session' }
+  let human = false
+  let lease = 0
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) => {
+      if (path === 'state')
+        return {
+          workspaces: [{ id: 'one', name: 'Writer' }],
+          live_sessions: [{ identity }],
+          assignments: [],
+          controls: [
+            {
+              identity,
+              state: human ? 'human' : 'bot',
+              owner: human
+                ? sessionStorage.getItem('gbot-control-owner')
+                : null,
+            },
+          ],
+        }
+      if (path === 'tasks' || path === 'tasks/approvals') return []
+      if (path === 'view/open')
+        return {
+          lease_id: `lease-${++lease}`,
+          ws_url: 'ws://127.0.0.1:3000/media?ticket=scoped',
+          media_session_id: 'media',
+          interactive: body.interactive,
+        }
+      if (path === 'control/take-over') human = true
+      if (path === 'control/hand-back') {
+        expect(mocks.mediaStop).toHaveBeenCalled()
+        human = false
+      }
+      return {}
+    }
+  )
+  render(<Page />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'View bot’s desktop' })
+  )
+  await waitFor(() =>
+    expect(mocks.mediaStart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ interactive: false })
+    )
+  )
+  expect(screen.getByLabelText('Bot computer desktop')).toHaveAttribute(
+    'tabindex',
+    '-1'
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Take over' }))
+  await waitFor(() =>
+    expect(mocks.mediaStart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ interactive: true })
+    )
+  )
+  expect(mocks.call).toHaveBeenCalledWith(
+    'view/close',
+    expect.objectContaining({ lease_id: 'lease-1' })
+  )
+  expect(screen.getByLabelText('Bot computer desktop')).toHaveAttribute(
+    'tabindex',
+    '0'
+  )
+  fireEvent.click(screen.getByLabelText('Desktop audio'))
+  await waitFor(() =>
+    expect(mocks.mediaStart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ interactive: true, audio: true })
+    )
+  )
+  expect(mocks.call).toHaveBeenCalledWith(
+    'view/close',
+    expect.objectContaining({ lease_id: 'lease-2' })
+  )
+  mocks.mediaStop.mockClear()
+  fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith(
+      'control/hand-back',
+      expect.objectContaining({ identity })
+    )
+  )
+  await waitFor(() =>
+    expect(mocks.mediaStart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ interactive: false })
+    )
+  )
+  expect(mocks.call).toHaveBeenCalledWith(
+    'view/close',
+    expect.objectContaining({ lease_id: 'lease-3' })
+  )
 })

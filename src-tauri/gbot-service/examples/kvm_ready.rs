@@ -8,6 +8,7 @@ mod linux {
             ToolApproval, ToolBinding,
         },
         kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, VmState, CUA_DRIVER_REVISION},
+        media::{CloseView, OpenView},
         service::Service,
         vault::{NativeVault, Secret, Vault},
         workspace::WorkspaceRuntime,
@@ -23,8 +24,8 @@ mod linux {
         time::Duration,
     };
     use tokio::{
-        io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-        net::{TcpStream, UnixListener},
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::UnixListener,
         process::Command,
     };
     use uuid::Uuid;
@@ -446,14 +447,33 @@ mod linux {
                 serde_json::to_vec_pretty(&tools)?,
             )
             .await?;
-            let view = runtime.open_view(identity).await?;
-            let mut stream = TcpStream::connect(view).await?;
-            let mut version = [0u8; 12];
-            stream.read_exact(&mut version).await?;
-            if !version.starts_with(b"RFB ") {
-                return Err("view channel is not RFB".into());
+            let owner = Uuid::new_v4();
+            let view = runtime
+                .open_view(OpenView {
+                    identity,
+                    owner,
+                    interactive: false,
+                    audio: false,
+                    h264: false,
+                })
+                .await?;
+            let request = Request::get(view.ws_url.replacen("ws://", "http://", 1))
+                .header("Connection", "Upgrade")
+                .header("Upgrade", "websocket")
+                .header("Sec-WebSocket-Version", "13")
+                .header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+                .body(Body::empty())?;
+            let response = Client::new().request(request).await?;
+            if response.status() != hyper::StatusCode::SWITCHING_PROTOCOLS {
+                return Err("media socket upgrade failed".into());
             }
-            runtime.close_view(identity).await?;
+            runtime
+                .close_view(CloseView {
+                    identity,
+                    owner,
+                    lease_id: view.lease_id,
+                })
+                .await?;
             let frame = desktop(&runtime, identity, "get_desktop_state", json!({})).await?;
             if frame["isError"] == true
                 || !frame["content"]
@@ -525,6 +545,12 @@ mod linux {
             .ok_or("driver archive SHA-256 required")?
             .into_string()
             .map_err(|_| "driver digest must be UTF-8")?;
+        let media_archive = PathBuf::from(args.next().ok_or("pinned media archive required")?);
+        let media_digest = args
+            .next()
+            .ok_or("media archive SHA-256 required")?
+            .into_string()
+            .map_err(|_| "media digest must be UTF-8")?;
         tokio::fs::create_dir_all(&evidence).await?;
         let record_path = evidence.join("controller.json");
         let mut record: GateRecord = if record_path.try_exists()? {
@@ -570,6 +596,11 @@ mod linux {
                     sha256: digest,
                 },
                 driver_revision: CUA_DRIVER_REVISION.into(),
+                media: GuestBinary::CloudInitArchive {
+                    path: media_archive,
+                    sha256: media_digest,
+                },
+                media_revision: gbot_service::kvm::CUA_REVISION.into(),
             };
             drop(private);
             let vm = match PreparedVm::prepare(&root, &image, spec, &KvmTools::default()).await {

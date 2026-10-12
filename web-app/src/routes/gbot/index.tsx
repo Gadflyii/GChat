@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
+import GbotAvatar from '@/components/GbotAvatar'
+import GbotDesktopView, {
+  type DesktopViewHandle,
+} from '@/components/GbotDesktopView'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -88,6 +92,7 @@ function GbotPage() {
     sessionStorage.setItem('gbot-control-owner', id)
     return id
   })
+  const desktop = useRef<DesktopViewHandle>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [executorError, setExecutorError] = useState('')
@@ -221,6 +226,23 @@ function GbotPage() {
               className="w-full justify-start truncate"
               onClick={() => setSelected(workspace.id)}
             >
+              <GbotAvatar
+                size={24}
+                decorative
+                state={
+                  !state.live_sessions.some(
+                    (session) => session.identity.workspace_id === workspace.id
+                  )
+                    ? 'sleeping'
+                    : tasks.some(
+                          (task) =>
+                            task.identity.workspace_id === workspace.id &&
+                            task.state === 'running'
+                        )
+                      ? 'thinking'
+                      : 'idle'
+                }
+              />
               {workspace.name}
             </Button>
           ))}
@@ -234,7 +256,28 @@ function GbotPage() {
         </aside>
         <main className="min-w-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">{bot?.name || 'Your bots'}</h2>
+            <div className="flex items-center gap-3">
+              <GbotAvatar
+                state={
+                  !identity
+                    ? 'sleeping'
+                    : history.some(
+                          (task) => task.state === 'waiting_for_human'
+                        ) ||
+                        approvals.some((approval) =>
+                          history.some((task) => task.id === approval.task_id)
+                        ) ||
+                        prompt.trim()
+                      ? 'listening'
+                      : history.some((task) => task.state === 'running')
+                        ? 'thinking'
+                        : 'idle'
+                }
+              />
+              <h2 className="text-lg font-medium">
+                {bot?.name || 'Your bots'}
+              </h2>
+            </div>
             <Button
               variant="ghost"
               disabled={busy}
@@ -354,15 +397,16 @@ function GbotPage() {
                       busy || (!!control?.owner && control.owner !== owner)
                     }
                     onClick={() =>
-                      void perform(() =>
-                        gbot(
+                      void perform(() => {
+                        const returning =
                           control?.state === 'human' ||
-                            control?.state === 'paused'
-                            ? 'control/hand-back'
-                            : 'control/take-over',
+                          control?.state === 'paused'
+                        if (returning) desktop.current?.stopInput()
+                        return gbot(
+                          returning ? 'control/hand-back' : 'control/take-over',
                           { identity, owner }
                         )
-                      )
+                      })
                     }
                   >
                     {control?.state === 'human' || control?.state === 'paused'
@@ -371,10 +415,18 @@ function GbotPage() {
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Take over pauses bot input. The embedded desktop viewer is
-                pending its Cua media adapter.
-              </p>
+              {identity && (
+                <GbotDesktopView
+                  key={`${identity.workspace_id}:${identity.session_id}`}
+                  ref={desktop}
+                  identity={identity}
+                  owner={owner}
+                  interactive={
+                    control?.state === 'human' && control.owner === owner
+                  }
+                />
+              )}
+
               {executorError && (
                 <p role="status" className="rounded-md border p-3 text-sm">
                   {executorError}

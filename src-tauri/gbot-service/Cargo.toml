@@ -2,11 +2,12 @@
 name = "gbot-service"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.89"
+rust-version = "1.97"
 license = "Apache-2.0"
 description = "GChat's local-first bot workspace service"
 
 [dependencies]
+cua-spacesd-client = { path = "../vendor/cua-media/crates/cua-spacesd-client" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -17,4 +18,5 @@ clap = { version = "4", features = ["derive"] }
 russh = { version = "=0.63.1", default-features = false, features = ["ring", "rsa"] }
 
 [dev-dependencies]
+cua-spacesd-client = { path = "../vendor/cua-media/crates/cua-spacesd-client", features = ["testing"] }
 tempfile = "3"

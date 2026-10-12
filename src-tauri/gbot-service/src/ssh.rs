@@ -435,7 +435,17 @@ impl SshSession {
         Ok(())
     }
 
-    pub async fn open_view(&self) -> Result<SocketAddr, SshError> {
+    pub(crate) async fn media_token(&self) -> Result<String, SshError> {
+        let client = self.client()?;
+        tokio::time::timeout(
+            self.policy.connect_timeout,
+            guest::media_token(&client, self.hello.identity),
+        )
+        .await
+        .map_err(|_| SshError::TimedOut)?
+    }
+
+    pub(crate) async fn open_view(&self) -> Result<SocketAddr, SshError> {
         let mut view = self.shared.view.lock().await;
         if view.is_some() {
             return Err(SshError::Protocol);

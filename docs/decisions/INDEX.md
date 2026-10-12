@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-12** — [Wrap Cua media in Gbot control leases](2026-10-12-wrap-cua-media-in-gbot-control-leases.md)
+
 - **2026-10-12** — [Adopt Cua above Gbot workspace lifecycle](2026-10-12-adopt-cua-above-gbot-workspace-lifecycle.md)
 
 - **2026-10-12** — [Activate Gbot controls through foreground input](2026-10-12-activate-gbot-controls-through-foreground-input.md)

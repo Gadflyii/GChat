@@ -31,7 +31,9 @@
     "ufw",
     "x11-xserver-utils",
     "util-linux",
-    "tar"
+    "tar",
+    "pulseaudio",
+    "pulseaudio-utils"
   ],
   "write_files": [
     {
@@ -93,6 +95,18 @@
       "owner": "root:root",
       "permissions": "0755",
       "content": "#!/bin/sh\nset -eu\nexport XDG_RUNTIME_DIR=/run/user/$(id -u)\nwhile IFS='=' read -r name value; do\n  case \"$name\" in\n    DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|XDG_CURRENT_DESKTOP|XDG_SESSION_DESKTOP|XDG_SESSION_TYPE) export \"$name=$value\" ;;\n    *) exit 1 ;;\n  esac\ndone < \"$XDG_RUNTIME_DIR/gbot/desktop.env\"\nexport GTK_MODULES=atk-bridge QT_ACCESSIBILITY=1 NO_AT_BRIDGE=0\nexec \"$@\"\n"
+    },
+    {
+      "path": "/etc/systemd/user/gbot-media.service",
+      "owner": "root:root",
+      "permissions": "0644",
+      "content": "[Unit]\nDescription=Gbot Cua desktop media\nRequires=gbot-desktop.service\nAfter=gbot-desktop.service\nBindsTo=gbot-desktop.service\n[Service]\nExecStart=/usr/local/bin/gbot-media\nRestart=on-failure\n[Install]\nWantedBy=default.target\n"
+    },
+    {
+      "path": "/usr/local/bin/gbot-media",
+      "owner": "root:root",
+      "permissions": "0755",
+      "content": "#!/bin/sh\nset -eu\numask 077\nmedia_state=\"$HOME/.local/state/gbot/media\"\ninstall -d -m 700 \"$media_state\"\nif [ ! -s \"$media_state/token\" ]; then\n  { mcookie; mcookie; } | tr -d \"\\n\" > \"$media_state/token\"\nfi\nchmod 600 \"$media_state/token\"\nexec /usr/local/bin/gbot-in-session /opt/gbot/bin/cua-spacesd serve --listen 127.0.0.1:3211 --quic-port 0 --cursor-probe false --no-mcp --no-driver --token-file \"$media_state/token\" --data-dir \"$media_state\"\n"
     }
   ],
   "runcmd": [
@@ -142,7 +156,7 @@
     [
       "sh",
       "-ec",
-      "uid=$(id -u gbot); systemctl start user@$uid.service; runuser -u gbot -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus systemctl --user enable --now gbot-desktop.service; runuser -u gbot -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus systemctl --user is-active --quiet gbot-desktop.service; printf \"GBOT_READY_KEY %s\\n\" \"$(cat /etc/ssh/ssh_host_ed25519_key.pub)\" > /dev/ttyS0"
+      "uid=$(id -u gbot); systemctl start user@$uid.service; runuser -u gbot -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus systemctl --user enable --now gbot-desktop.service gbot-media.service; runuser -u gbot -- env XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus systemctl --user is-active --quiet gbot-desktop.service gbot-media.service; printf \"GBOT_READY_KEY %s\\n\" \"$(cat /etc/ssh/ssh_host_ed25519_key.pub)\" > /dev/ttyS0"
     ]
   ],
   "final_message": "Gbot first-boot setup finished. Verify cloud-init, SSH, worker and the same-session desktop before Ready.",
