@@ -90,6 +90,9 @@ export function maxPerfSessionMismatch(session: BenchmarkSessionInfo | Benchmark
 }
 
 export function buildSubmission(run: BenchmarkResult, nickname: string) {
+  if (run.methodology === 'ginfer-resident-max-perf-v2' || run.points.some(point => point.evidence.schema === 'ginfer-resident-benchmark-v2')) {
+    throw new Error('Native v2 results require an approved public report and scoring contract before leaderboard submission.')
+  }
   if (run.benchmark_id !== 'standard' || run.methodology !== 'ginfer-resident-max-perf-v1') throw new Error('Only Standard Benchmark results can be submitted.')
   const name = nickname.trim()
   const normalizedName = name.toLowerCase().replace(/[ ._-]/g, '')

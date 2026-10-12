@@ -2,12 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
 import { buildSubmission, submitStandardBenchmark, ownedLeaderboardResults, deleteLeaderboardResult, GBENCH_PUBLISHING_ENABLED, maxPerfSessionMismatch } from './leaderboard'
-import type { BenchmarkResult } from './tauri'
+import type { BenchmarkResult, BenchmarkPoint, BenchmarkV1Report } from './tauri'
 import type { BenchmarkModelClass } from '@/services/engines'
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 afterEach(() => { vi.mocked(invoke).mockReset(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
 
-function fixture(modelClass: BenchmarkModelClass = 'qwen27-int-dflash-q4'): BenchmarkResult {
+function fixture(modelClass: BenchmarkModelClass = 'qwen27-int-dflash-q4'): BenchmarkResult & { points: (BenchmarkPoint & { evidence: BenchmarkV1Report })[] } {
   const policies = {
     'qwen27-int-dflash-q4': { model: 'qwen3.8-27b', weights: 'groupwise-int-dflash2-q4', kv: 'int8', spec: 'dflash', tokens: 7, draftTp: 1 },
     'qwen27-nvfp4-dflash-q4': { model: 'qwen3.8-27b', weights: 'nvfp4-dflash2-q4', kv: 'nvfp4', spec: 'dflash', tokens: 7, draftTp: 1 },
@@ -34,7 +34,7 @@ function fixture(modelClass: BenchmarkModelClass = 'qwen27-int-dflash-q4'): Benc
       cold_prompt_tokens_per_second: 2048, prompt_tokens_per_second: 2048, generation_tokens_per_second: 240,
       per_request_generation_tokens_per_second: 240, wave_output_tokens_per_second: 125,
       average_prefill_seconds: 1, average_decode_seconds: 2, average_request_seconds: 4, wave_seconds: 4, finish_reasons: ['length'],
-      evidence: { schema: 'ginfer-resident-benchmark-v1', corpus: 'fixture-max-perf-tail2048-v1', configuration: { ...configuration },
+      evidence: { schema: 'ginfer-resident-benchmark-v1' as const, corpus: 'fixture-max-perf-tail2048-v1', configuration: { ...configuration },
         warmup: [{ ...wave, computed_tokens: 2048 * concurrency, output_tokens: 500 * concurrency, decode_tokens: 480 * concurrency, decode_rounds: 120 * concurrency }],
         measured: [{ ...wave, computed_tokens: 2048 * concurrency, output_tokens: 500 * concurrency, decode_tokens: 480 * concurrency, decode_rounds: 120 * concurrency }] } })),
   }
@@ -52,6 +52,12 @@ describe('G.bench public submission', () => {
     expect(Object.keys(payload.points[0].measured)).toEqual(['full_cold_prompt', 'computed_tokens', 'compute_seconds', 'cached_tokens', 'output_tokens', 'mean_ttft_seconds', 'decode_tokens', 'decode_rounds', 'decode_seconds', 'wall_seconds'])
     expect(JSON.stringify(payload)).not.toContain('benchmark_profile')
     expect(JSON.stringify(payload)).not.toContain('private-')
+  })
+  it('refuses native v2 methodology before projecting or sending public v1 evidence', () => {
+    const run: BenchmarkResult = fixture()
+    run.methodology = 'ginfer-resident-max-perf-v2'
+    expect(() => buildSubmission(run, 'Player')).toThrow('public report and scoring contract')
+    expect(invoke).not.toHaveBeenCalled()
   })
   it('rejects missing or unknown profile metadata, historical drafter classes and unspecified Muse', () => {
     for (const change of [
@@ -102,8 +108,8 @@ describe('G.bench public submission', () => {
       Object.assign(run.points[1].evidence.configuration, change)
       expect(() => buildSubmission(run, 'Player')).toThrow('contract')
     }
-    const v2 = fixture(); v2.points[0].evidence.schema = 'ginfer-resident-benchmark-v2'
-    expect(() => buildSubmission(v2, 'Player')).toThrow('contract')
+    const v2 = fixture(); Object.assign(v2.points[0].evidence, { schema: 'ginfer-resident-benchmark-v2' })
+    expect(() => buildSubmission(v2, 'Player')).toThrow('public report and scoring contract')
     for (const build of ['', '   ']) {
       const noBuild = fixture(); noBuild.points.forEach(point => { point.evidence.configuration.engine_build = build })
       expect(() => buildSubmission(noBuild, 'Player')).toThrow('Engine build')

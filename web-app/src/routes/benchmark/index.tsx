@@ -133,9 +133,11 @@ function runLabel(run: BenchmarkResult): string {
   })}`
 }
 
-type ThroughputPoint = Pick<BenchmarkPoint, 'concurrency' | 'cold_prompt_tokens_per_second' | 'prompt_tokens_per_second' | 'generation_tokens_per_second'>
+type ThroughputPoint = Pick<BenchmarkPoint, 'concurrency' | 'cold_prompt_tokens_per_second' | 'prompt_tokens_per_second' | 'generation_tokens_per_second' | 'warm_prefill_tokens_per_second_per_request'>
 
-export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
+export function ThroughputChart({ points: inputPoints, nativeV2 = false }: { points: ThroughputPoint[]; nativeV2?: boolean }) {
+  const points = nativeV2 ? inputPoints.map(point => ({ ...point, prompt_tokens_per_second: point.warm_prefill_tokens_per_second_per_request ?? null })) : inputPoints
+  const promptLabel = nativeV2 ? 'Warm PP / request' : 'PP'
   const width = 760
   const height = 280
   const margin = { left: 82, right: 82, top: 24, bottom: 44 }
@@ -203,7 +205,7 @@ export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
         {points.map((point, index) => (
           <g key={point.concurrency}>
             {point.prompt_tokens_per_second != null && <circle cx={x(index)} cy={y(point.prompt_tokens_per_second, promptMaximum)} r="5" fill="#20b8a6">
-              <title>{`C${point.concurrency} prompt: ${formatRate(point.prompt_tokens_per_second)} t/s`}</title>
+              <title>{`C${point.concurrency} ${promptLabel}: ${formatRate(point.prompt_tokens_per_second)} t/s`}</title>
             </circle>}
             {point.generation_tokens_per_second != null && <circle cx={x(index)} cy={y(point.generation_tokens_per_second, generationMaximum)} r="4" fill="#7dd3fc">
               <title>{`C${point.concurrency} generation: ${formatRate(point.generation_tokens_per_second)} t/s`}</title>
@@ -240,14 +242,14 @@ export function ThroughputChart({ points }: { points: ThroughputPoint[] }) {
       </svg>
       <div className="flex justify-center gap-5 text-xs text-muted-foreground">
         <span className="flex items-center gap-2 text-primary">Cold PP · left axis (dotted)</span>
-        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#20b8a6]" />PP · left axis</span>
+        <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#20b8a6]" />{promptLabel} · left axis</span>
         <span className="flex items-center gap-2"><span className="size-2.5 rounded-full bg-[#7dd3fc]" />Generation · right axis (dashed)</span>
       </div>
     </div>
   )
 }
 
-function ResultsTable({ points }: { points: BenchmarkPoint[] }) {
+function ResultsTable({ points, nativeV2 = false }: { points: BenchmarkPoint[]; nativeV2?: boolean }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border/70">
       <table className="w-full min-w-[1040px] text-sm">
@@ -257,7 +259,8 @@ function ResultsTable({ points }: { points: BenchmarkPoint[] }) {
             <th className="px-3 py-2.5 font-medium">Prompt / request</th>
             <th className="px-3 py-2.5 font-medium">Output / request</th>
             <th className="px-3 py-2.5 font-medium">Cold PP t/s</th>
-            <th className="px-3 py-2.5 font-medium">PP t/s</th>
+            <th className="px-3 py-2.5 font-medium">{nativeV2 ? 'Warm PP / request t/s' : 'PP t/s'}</th>
+            {nativeV2 && <th className="px-3 py-2.5 font-medium">Cached TTFT</th>}
             <th className="px-3 py-2.5 font-medium">Generation t/s</th>
             <th className="px-3 py-2.5 font-medium">Per-request t/s</th>
             <th className="px-3 py-2.5 font-medium">Prefill</th>
@@ -272,8 +275,9 @@ function ResultsTable({ points }: { points: BenchmarkPoint[] }) {
               <td className="px-3 py-3 font-medium text-foreground">C{point.concurrency}</td>
               <td className="px-3 py-3">{formatTokens(point.average_prompt_tokens)}</td>
               <td className="px-3 py-3">{formatTokens(point.average_completion_tokens)}</td>
-              <td className="px-3 py-3 font-mono text-foreground" title="Actual prefill compute rate from the first warmup. Unavailable when a full cold prompt was not computed.">{formatRate(point.cold_prompt_tokens_per_second)}</td>
-              <td className="px-3 py-3 font-mono text-foreground">{formatRate(point.prompt_tokens_per_second)}</td>
+              <td className="px-3 py-3 font-mono text-foreground" title={nativeV2 ? "Actual compute rate across measured cold-prefill waves." : "Actual prefill compute rate from the first warmup. Unavailable when a full cold prompt was not computed."}>{formatRate(point.cold_prompt_tokens_per_second)}</td>
+              <td className="px-3 py-3 font-mono text-foreground">{formatRate(nativeV2 ? point.warm_prefill_tokens_per_second_per_request : point.prompt_tokens_per_second)}</td>
+              {nativeV2 && <td className="px-3 py-3">{point.warm_cached_ttft_seconds == null ? '—' : formatSeconds(point.warm_cached_ttft_seconds)}</td>}
               <td className="px-3 py-3 font-mono text-foreground">{formatRate(point.generation_tokens_per_second)}</td>
               <td className="px-3 py-3 font-mono">{formatRate(point.per_request_generation_tokens_per_second)}</td>
               <td className="px-3 py-3">{formatSeconds(point.average_prefill_seconds)}</td>
@@ -533,11 +537,11 @@ function BenchmarkPage() {
                   <dl className="mt-2 grid gap-x-6 gap-y-3 text-sm md:grid-cols-2">
                     <div>
                       <dt className="font-medium">Cold PP · prompt processing</dt>
-                      <dd className="mt-1 leading-relaxed text-muted-foreground">The rate at which the engine actually computes prompt tokens during the first warmup, in tokens per second (t/s). If the prompt was already cached and no complete cold measurement is available, the score shows —.</dd>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">The rate at which the engine actually computes prompt tokens across measured cold-prefill waves, in tokens per second (t/s). If the prompt was already cached and no complete cold measurement is available, the score shows —.</dd>
                     </div>
                     <div>
-                      <dt className="font-medium">PP · effective prompt processing</dt>
-                      <dd className="mt-1 leading-relaxed text-muted-foreground">Total prompt tokens across concurrent requests divided by their average time to first token in the measured run. Prefix-cache reuse avoids repeated computation, so this effective rate can be much higher than Cold PP.</dd>
+                      <dt className="font-medium">Warm PP / request · effective prompt processing</dt>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">Warm PP / request divides logical prompt tokens by summed native prefill durations for fully cached measured waves. Cached TTFT separately reports time to first token. Missing cache or timer observations show —. Saved v1 results retain their historical input/TTFT PP definition.</dd>
                     </div>
                     <div>
                       <dt className="font-medium">C1–C8 · concurrent requests</dt>
@@ -650,10 +654,11 @@ function BenchmarkPage() {
                       <div className="rounded-lg bg-muted/45 p-3"><div className="text-xs text-muted-foreground">KV / speculative</div><div className="mt-1 text-sm font-medium">{selectedRun.session.kv_dtype} · {selectedRun.session.spec}{selectedRun.session.draft_tp ? ` DTP${selectedRun.session.draft_tp}` : ''}</div></div>
                       <div className="rounded-lg bg-muted/45 p-3"><div className="text-xs text-muted-foreground">Runtime</div><div className="mt-1 text-sm font-medium">CUDA Graph {selectedRun.session.cuda_graph ? 'on' : 'off'} · {formatSeconds((selectedRun.completed_at_ms - selectedRun.started_at_ms) / 1000)}</div></div>
                     </div>
-                    <ThroughputChart points={selectedRun.points} />
-                    <ResultsTable points={selectedRun.points} />
+                    <p className="text-xs text-muted-foreground">{selectedRun.methodology === 'ginfer-resident-max-perf-v2' ? 'Native v2 · measured cold prefill and warm generation' : 'Saved v1 · historical scoring'}</p>
+                    <ThroughputChart points={selectedRun.points} nativeV2={selectedRun.methodology === 'ginfer-resident-max-perf-v2'} />
+                    <ResultsTable points={selectedRun.points} nativeV2={selectedRun.methodology === 'ginfer-resident-max-perf-v2'} />
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      Cold PP measures actual prefill computation in the first warmup; — means a complete cold prompt was not observed. PP divides logical input tokens by mean time to first token and includes work avoided by caching. TG uses committed decode tokens and time at the requested concurrency. This repeated-text workload measures synthetic best-case performance, not typical agent workloads.
+                      {selectedRun.methodology === 'ginfer-resident-max-perf-v2' ? 'Cold PP uses measured cold computation. Warm PP / request uses logical input divided by summed cached native prefill durations; cached TTFT is separate. — means the required observations are unavailable.' : 'Cold PP uses the first warmup. Historical v1 PP divides logical input by mean time to first token.'} TG uses committed decode tokens and time at the requested concurrency. This repeated-text workload measures synthetic best-case performance, not typical agent workloads.
                     </p>
                   </div>
                 ) : (
