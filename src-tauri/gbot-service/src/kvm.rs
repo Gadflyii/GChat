@@ -367,7 +367,10 @@ impl PreparedVm {
             ("cua-media.tar.gz", &vm.spec.media),
         ] {
             if let GuestBinary::SeedArchive { path, .. } = binary {
-                seed.arg(seed_graft(name, path)?);
+                // The seed carries archive bytes, never a host-only symlink.
+                // Asset validation and digest checks also read the resolved file.
+                let archive = fs::canonicalize(path).await?;
+                seed.arg(seed_graft(name, &archive)?);
             }
         }
         run_checked(&mut seed).await?;
@@ -939,6 +942,48 @@ mod tests {
         vm.unregister(&tools).await.unwrap();
         assert!(!root.path().join("prepared").exists());
     }
+    #[tokio::test]
+    async fn seed_archive_symlinks_graft_regular_file_bytes() {
+        let root = tempfile::tempdir().unwrap();
+        let image = root.path().join("base.qcow2");
+        fs::write(&image, "fixture").await.unwrap();
+        let archive = root.path().join("archive.tar.gz");
+        fs::write(&archive, b"validated archive bytes")
+            .await
+            .unwrap();
+        let link = root.path().join("asset-link.tar.gz");
+        std::os::unix::fs::symlink(&archive, &link).unwrap();
+        let tool = root.path().join("tool");
+        fs::write(&tool, "#!/bin/sh\nexit 0\n").await.unwrap();
+        let seed = root.path().join("seed");
+        fs::write(&seed, format!(
+            "#!/bin/sh\nset -eu\nn=0\nfor arg do\n case \"$arg\" in\n cua-driver.tar.gz=*|cua-media.tar.gz=*) p=${{arg#*=}}; test ! -L \"$p\"; cmp \"$p\" '{}'; n=$((n+1));;\n esac\ndone\ntest \"$n\" = 2\n",
+            archive.display()
+        )).await.unwrap();
+        for path in [&tool, &seed] {
+            fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+                .await
+                .unwrap();
+        }
+        let mut settings = spec();
+        settings.driver = GuestBinary::SeedArchive {
+            path: link.clone(),
+            sha256: "a".repeat(64),
+        };
+        settings.media = GuestBinary::SeedArchive {
+            path: link,
+            sha256: "b".repeat(64),
+        };
+        let tools = KvmTools {
+            virsh: tool.clone(),
+            image: tool,
+            seed_iso: seed,
+        };
+        PreparedVm::prepare(root.path(), &image, settings, &tools)
+            .await
+            .unwrap();
+    }
+
     #[tokio::test]
     async fn prepare_records_selected_loopback_port_and_reuses_it() {
         let root = tempfile::tempdir().unwrap();
