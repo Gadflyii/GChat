@@ -71,12 +71,12 @@ it('shows a stopped scheduler outside the collapsed panel and prevents creating 
   expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
 })
 
-it('lists this bot schedules, states the lifetime limit and disables future dispatch', async () => {
+it('lists this bot schedules, states the background lifetime requirement and disables future dispatch', async () => {
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
   fireEvent.click(screen.getByText('Scheduled tasks'))
   expect(
     screen.getByText(
-      'Scheduled tasks run while GChat is open. Background service setup is not available yet.'
+      'Scheduled tasks keep running after GChat closes while Gbot service and the assigned inference endpoint are running.'
     )
   ).toBeInTheDocument()
   await screen.findByText('Check the calendar')

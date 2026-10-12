@@ -168,6 +168,18 @@ impl WorkspaceRuntime {
         self
     }
 
+    pub async fn native_connector_operation(
+        &self,
+        operation: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        self.connectors
+            .as_ref()
+            .ok_or("Native Workspace connector owner unavailable")?
+            .native_operation(operation, arguments)
+            .await
+    }
+
     pub async fn bot_connectors(
         &self,
         workspace_id: WorkspaceId,
@@ -844,6 +856,9 @@ impl WorkspaceRuntime {
 
     pub async fn close(self: &Arc<Self>) -> Result<(), WorkspaceError> {
         self.stopping.store(true, Ordering::Release);
+        if let Some(connectors) = &self.connectors {
+            let _ = connectors.close().await;
+        }
         #[cfg(target_os = "linux")]
         if let Some(setup) = self.kvm_setup() {
             setup.close().await;

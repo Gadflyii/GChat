@@ -1,214 +1,190 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-
-use gbot_service::{
-    api::{Api, ApiClient},
-    executor::{ExecutorProcesses, ProcessSpec},
-    service::Service,
-    vault::NativeVault,
-};
 use serde_json::Value;
+use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
-use tokio::sync::{oneshot, Mutex, OnceCell};
+use tokio::sync::Mutex;
 
-async fn forward_updates<R: Runtime>(
-    app: AppHandle<R>,
-    event: &'static str,
-    updates: Option<tokio::sync::watch::Receiver<u64>>,
-) {
-    let Some(mut updates) = updates else {
-        std::future::pending::<()>().await;
-        return;
-    };
-    while updates.changed().await.is_ok() {
-        let _ = app.emit(event, ());
-    }
-}
-
-struct RunningService {
-    client: ApiClient,
-    stop: Mutex<Option<oneshot::Sender<()>>>,
-    job: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
-}
+mod background;
+pub use background::run_service_mode;
+pub(crate) use background::Client;
 
 #[derive(Default)]
+struct Connection {
+    root: Option<PathBuf>,
+    client: Option<background::Client>,
+    updates: Option<tauri::async_runtime::JoinHandle<()>>,
+    stopped: bool,
+}
+
 pub struct GbotState {
-    service: OnceCell<RunningService>,
+    connection: Mutex<Connection>,
+    connector_client_id: uuid::Uuid,
 }
 
-fn packaged_executor(resource_dir: &Path) -> Result<Option<ExecutorProcesses>, String> {
-    // Only the accepted Ubuntu 24.04 x86-64 closure is packaged today.
-    if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        return Ok(None);
-    }
-    let root = resource_dir.join("resources/gbot");
-    let manifest = match std::fs::read(root.join("runtime.json")) {
-        Ok(manifest) => manifest,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(format!("Read packaged Gbot runtime: {error}")),
-    };
-    let manifest: Value = serde_json::from_slice(&manifest)
-        .map_err(|error| format!("Read packaged Gbot runtime manifest: {error}"))?;
-    if manifest["schema"] != "gbot-cua-runtime-v1"
-        || manifest["platform"] != "linux-x64"
-        || manifest["python_version"] != "3.12.3"
-        || manifest["sdk_revision"] != "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc"
-        || manifest["agent_revision"] != "896c68871da6f3a659c58f341781a977ada20459"
-        || manifest["package_count"] != 61
-    {
-        return Err("Unsupported packaged Gbot runtime".into());
-    }
-    let python = root.join("python/bin/python");
-    let bun = resource_dir.join("resources/bin/bun");
-    let context = root.join("context-preparer.ts");
-    for path in [
-        python.clone(),
-        root.join("python/bin/python3.12"),
-        root.join("python/lib/python3.12/os.py"),
-        root.join("python/lib/python3.12/dist-packages/cua_agent/loops/ginfer.py"),
-        bun.clone(),
-        context.clone(),
-        root.join("smart-context.ts"),
-    ] {
-        if !path
-            .metadata()
-            .is_ok_and(|file| file.is_file() && file.len() > 0)
-        {
-            return Err(format!(
-                "Missing packaged Gbot runtime file: {}",
-                path.display()
-            ));
+impl Default for GbotState {
+    fn default() -> Self {
+        Self {
+            connection: Mutex::new(Connection::default()),
+            connector_client_id: uuid::Uuid::new_v4(),
         }
-    }
-    Ok(Some(ExecutorProcesses {
-        python: ProcessSpec {
-            program: python,
-            args: Vec::new(),
-        },
-        context: ProcessSpec {
-            program: bun,
-            args: vec![context.to_string_lossy().into_owned()],
-        },
-    }))
-}
-
-fn executor_processes<R: Runtime>(app: &AppHandle<R>) -> Result<Option<ExecutorProcesses>, String> {
-    match (
-        std::env::var_os("GBOT_CUA_PYTHON"),
-        std::env::var("GBOT_CONTEXT_PREPARER"),
-    ) {
-        (Some(python), Ok(context)) => Ok(Some(ExecutorProcesses {
-            python: ProcessSpec {
-                program: python.into(),
-                args: Vec::new(),
-            },
-            context: ProcessSpec {
-                program: "node".into(),
-                args: vec![context],
-            },
-        })),
-        (None, Err(_)) => {
-            let packaged = app
-                .path()
-                .resource_dir()
-                .map_err(|error| error.to_string())
-                .and_then(|root| packaged_executor(&root));
-            match packaged {
-                Ok(processes) => Ok(processes),
-                Err(error) => {
-                    log::warn!("Gbot tasks unavailable: {error}");
-                    Ok(None)
-                }
-            }
-        }
-        _ => Err("Set both GBOT_CUA_PYTHON and GBOT_CONTEXT_PREPARER for bot tasks".into()),
     }
 }
 
 impl GbotState {
-    async fn client<R: Runtime>(
-        &self,
-        app: AppHandle<R>,
-        root: PathBuf,
-    ) -> Result<&ApiClient, String> {
-        let running = self
-            .service
-            .get_or_try_init(|| async {
-                let root = root.join("gbot");
-                let service = Arc::new(
-                    Service::open(root.join("state.json"))
-                        .await
-                        .map_err(|error| error.to_string())?,
-                );
-                let mut api = Api::bind_with_connectors(
-                    service,
-                    Arc::new(NativeVault),
-                    0,
-                    Arc::new(super::connectors::BotConnectorHost::new(app.clone())),
-                )
-                .await
-                .map_err(|error| error.to_string())?;
-                #[cfg(target_os = "linux")]
-                {
-                    api = api
-                        .with_kvm_setup(root.clone())
-                        .await
-                        .map_err(|error| error.to_string())?;
-                }
-                if let Some(processes) = executor_processes(&app)? {
-                    api = api
-                        .with_executor(root.join("tasks"), processes)
-                        .await
-                        .map_err(|error| error.to_string())?;
-                }
-                let client = api.client();
-                let task_updates = client.subscribe_tasks();
-                #[cfg(target_os = "linux")]
-                let setup_updates = client.subscribe_setup();
-                #[cfg(not(target_os = "linux"))]
-                let setup_updates = None;
-                let (stop, shutdown) = oneshot::channel();
-                let job = tauri::async_runtime::spawn(async move {
-                    let listener = async move {
-                        tokio::join!(
-                            forward_updates(app.clone(), "gbot-task-update", task_updates),
-                            forward_updates(app, "gbot-setup-update", setup_updates)
-                        );
-                    };
-                    let server = api.serve(async {
-                        let _ = shutdown.await;
-                    });
-                    tokio::pin!(server, listener);
-                    let result = tokio::select! {
-                        result = &mut server => result,
-                        () = &mut listener => server.await,
-                    };
-                    if let Err(error) = result {
-                        log::error!("Gbot service stopped: {error}");
-                    }
-                });
-                Ok::<_, String>(RunningService {
-                    client,
-                    stop: Mutex::new(Some(stop)),
-                    job: Mutex::new(Some(job)),
-                })
-            })
-            .await?;
-        Ok(&running.client)
+    pub(crate) fn connector_client_id(&self) -> uuid::Uuid {
+        self.connector_client_id
     }
 
-    pub async fn shutdown(&self) {
-        if let Some(service) = self.service.get() {
-            if let Some(stop) = service.stop.lock().await.take() {
-                let _ = stop.send(());
+    pub(crate) async fn is_stopped(&self) -> bool {
+        self.connection.lock().await.stopped
+    }
+
+    pub(crate) async fn client<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+    ) -> Result<background::Client, String> {
+        let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
+        let mut connection = self.connection.lock().await;
+        if connection.stopped {
+            return Err(
+                "Gbot service was explicitly stopped. Start Gbot service to reconnect.".into(),
+            );
+        }
+        if connection.root.as_ref().is_some_and(|known| known != &root) {
+            return Err("GChat data folder changed; restart GChat before Gbot operations".into());
+        }
+        if let Some(client) = &connection.client {
+            return Ok(client.clone());
+        }
+        let resources = app
+            .path()
+            .resource_dir()
+            .map_err(|error| error.to_string())?;
+        let client = background::ensure_running(&root, &resources).await?;
+        connection.root = Some(root.clone());
+        connection.client = Some(client.clone());
+        if let Some(updates) = connection.updates.take() {
+            updates.abort();
+        }
+        let app = app.clone();
+        let mut listener = client.clone();
+        connection.updates = Some(tauri::async_runtime::spawn(async move {
+            let mut revision = serde_json::json!({"tasks":0,"setup":0});
+            loop {
+                match listener.call("/v1/updates", revision.clone()).await {
+                    Ok(next) => {
+                        if next["stopping"] == true {
+                            break;
+                        }
+                        if next["tasks"] != revision["tasks"] {
+                            let _ = app.emit("gbot-task-update", ());
+                        }
+                        if next["setup"] != revision["setup"] {
+                            let _ = app.emit("gbot-setup-update", ());
+                        }
+                        revision = next;
+                    }
+                    Err(_) => {
+                        let _ = app.emit("gbot-task-update", ());
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        if let Ok(next) = background::connect(&root).await {
+                            listener = next;
+                        }
+                    }
+                }
             }
-            if let Some(job) = service.job.lock().await.take() {
-                let _ = job.await;
+        }));
+        Ok(client)
+    }
+
+    pub async fn call<R: Runtime>(
+        &self,
+        app: &AppHandle<R>,
+        path: &str,
+        body: Value,
+    ) -> Result<Value, String> {
+        let client = self.client(app).await?;
+        let result = client.call(path, body).await;
+        // Never retry an operation whose effect may have reached the service.
+        if result.is_err() {
+            self.connection.lock().await.client = None;
+        }
+        result
+    }
+
+    /// Client exit cancels its ordinary connector effects, leaving bot tasks service-owned.
+    pub async fn disconnect(&self) {
+        let (client, root) = {
+            let mut connection = self.connection.lock().await;
+            if let Some(updates) = connection.updates.take() {
+                updates.abort();
             }
+            (connection.client.take(), connection.root.clone())
+        };
+        // An earlier request error may have invalidated the cached client while
+        // another registered connector request is still running in the service.
+        let client = match (client, root) {
+            (Some(client), _) => Some(client),
+            (None, Some(root)) => background::connect(&root).await.ok(),
+            (None, None) => None,
+        };
+        if let Some(client) = client {
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                client.call(
+                    "/v1/native/connectors/client_disconnected",
+                    serde_json::json!({"client_id": self.connector_client_id}),
+                ),
+            )
+            .await;
         }
     }
+
+    async fn quit<R: Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+        let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
+        let mut connection = self.connection.lock().await;
+        let client = match &connection.client {
+            Some(client) => client.clone(),
+            None => background::connect(&root).await?,
+        };
+        let _ = client.call("/v1/service/shutdown", Value::Null).await?;
+        connection.stopped = true;
+        connection.client = None;
+        if let Some(updates) = connection.updates.take() {
+            updates.abort();
+        }
+        // A stop is complete only after the process has drained tasks and released ownership.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            if let Ok(owner) = ginfer_host::service_owner::ServiceOwner::acquire(&root.join("gbot"))
+            {
+                drop(owner);
+                return Ok(());
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(
+                    "Gbot is still stopping; wait before starting the service again".into(),
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn gbot_service_quit<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, GbotState>,
+) -> Result<(), String> {
+    state.quit(&app).await
+}
+
+#[tauri::command]
+pub async fn gbot_service_start<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, GbotState>,
+) -> Result<(), String> {
+    state.connection.lock().await.stopped = false;
+    state.client(&app).await.map(|_| ())
 }
 
 fn supported_route(path: &str) -> bool {
@@ -252,17 +228,12 @@ pub async fn gbot_command<R: Runtime>(
     if !supported_route(&path) {
         return Err("Unsupported Gbot operation".into());
     }
-    let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
-    state
-        .client(app, root)
-        .await?
-        .call(&path, body.unwrap_or(Value::Null))
-        .await
+    state.call(&app, &path, body.unwrap_or(Value::Null)).await
 }
 
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod tests {
-    use super::{packaged_executor, supported_route};
+    use super::{background::packaged_executor, supported_route};
 
     #[test]
     fn native_bridge_admits_transactional_setup_and_rejects_unknown_operations() {

@@ -58,6 +58,14 @@ export function gbot<T>(path: string, body?: unknown): Promise<T> {
   return invoke<T>('gbot_command', { path: `/v1/${path}`, body })
 }
 
+export function quitGbotService(): Promise<void> {
+  return invoke('gbot_service_quit')
+}
+
+export function startGbotService(): Promise<void> {
+  return invoke('gbot_service_start')
+}
+
 export function messageText(content: unknown): string {
   if (typeof content === 'string') return content
   if (Array.isArray(content))
