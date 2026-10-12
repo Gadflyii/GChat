@@ -1,6 +1,6 @@
 # GInfer host UI
 
-## Profile presentation — OI-077, merge-ready
+## Profile presentation — OI-077
 
 Ron approved model then card grouping, one recommended measured profile per card,
 remaining profiles behind **Show all**, and **Tested / Estimated / Untested**
@@ -11,18 +11,28 @@ The recorded Engine revision and detailed qualification limits stay visible.
 Existing automatic/saved selections stay selected even when outside the compact
 recommendation; expanding or collapsing the list never changes launch settings.
 
-Acceptance: focused rendered model/GPU filtering, compact/expanded evidence and
-unchanged selected-profile payload cases for both interfaces; affected lint and
-frontend type check. No model run, Engine/catalog changes, Windows build, release
-or publication. Both selectors are implemented. Fourteen GChat picker cases and
-five Manager cases pass, including model/GPU filtering, evidence labels, alternate
-selection across collapse and unchanged launch payloads. Frontend types and affected
-React/Manager lint pass. Evidence labels precede long names to remain visible.
+The original presentation landed in main as `a665f666e`. The approved follow-up
+uses one shared option label: evidence, concurrency, context and mode, each once.
+Model and GPU remain in their own selectors; Engine evidence remains below the
+profile selector. Manager radios use fixed 16-pixel controls and one-line labels.
 
-The [WebKitGTK preview](/ai/gchat/out/oi077-profile-presentation-20261011/profile-list.png)
-renders the production Manager UI with development data; it is not model
-qualification. The focused receipts and preview scope are in the results folder.
-Next unresolved action: coordinator review and merge; no installed app update.
+Acceptance: focused rendered filtering, compact/expanded evidence, exact labels
+and unchanged launch payload cases; affected lint and frontend types; one
+WebKitGTK screenshot checking radio dimensions and single-line labels. No model
+run, Engine/catalog changes, Windows build, installed update or publication.
+Follow-up verification passes: 14 GChat picker cases, five Manager cases,
+frontend types and affected lint. Exact option labels and Engine evidence updates
+are covered alongside unchanged filtering and launch payloads. The
+[follow-up preview](/ai/gchat/out/oi077-profile-presentation-20261011/follow-up/profile-list.png)
+shows 16×16-pixel radio controls and 22-pixel single-line labels in WebKitGTK.
+Only its fixture's incorrect C1 assertion required a harness correction; passing
+source checks were not repeated. Next unresolved action: coordinator review and
+merge; no installed update.
+
+The [accepted original preview](/ai/gchat/out/oi077-profile-presentation-20261011/profile-list.png)
+and focused receipts remain retained. Follow-up evidence goes in the same results
+folder's `follow-up/` directory. Preview data is a development fixture, not model
+qualification.
 
 | Owner / host | Exact path | Purpose / status |
 | --- | --- | --- |

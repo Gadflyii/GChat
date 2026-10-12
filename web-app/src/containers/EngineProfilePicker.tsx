@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { hardwareProfileBusy, type EngineSnapshot } from '@/services/engines'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
-import { profileEvidenceLabel, profilePresentation } from '../../../src-tauri/ginfer-manager/ui/profile-presentation.js'
+import { profileOptionLabel, profilePresentation } from '../../../src-tauri/ginfer-manager/ui/profile-presentation.js'
 
 const selectStyle: CSSProperties = {
   appearance: 'none',
@@ -104,7 +104,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
       <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !choices.length} value={selected?.key ?? ''} onChange={e => setChoice(e.target.value)}>
         <option value="">{currentSettings && !pending ? `Current settings · C${instance?.configuration.concurrency ?? 1} · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} context` : 'Choose a profile'}</option>
         {visibleIndices.map(index => { const { entry, key } = choices[index]; return <option key={key} value={key}>
-          {index === recommendedIndex ? 'Recommended · ' : ''}{profileEvidenceLabel(entry.profile.qualification.tier)} · {entry.profile.name} · {entry.profile.options.vision ? 'Vision + text (default)' : 'Text only'} · TP{entry.profile.tp} · C{entry.profile.concurrency} · {entry.profile.max_context.toLocaleString()} context · Engine {entry.profile.qualification.engine_revision.slice(0, 8)}
+          {profileOptionLabel(entry.profile, index === recommendedIndex)}
         </option> })}
       </select>
     </label>

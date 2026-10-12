@@ -1,4 +1,4 @@
-import { profileEvidenceLabel, profilePresentation } from './profile-presentation.js'
+import { profileOptionLabel, profilePresentation } from './profile-presentation.js'
 
 const array = (value) => Array.isArray(value) ? value : []
 const text = (value, fallback = '—') => value == null || value === '' ? fallback : String(value)
@@ -329,12 +329,15 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         })
         const profileField = select('Hardware profile', 'profile_choice', visibleIndices.map(index => {
           const { entry, index: originalIndex } = grouped[index]
-          return [String(originalIndex), `${index === recommendedIndex ? 'Recommended · ' : ''}${profileEvidenceLabel(entry.profile.qualification.tier)} · ${entry.profile.name} · ${entry.profile.options.vision ? 'Vision + text' : 'Text only'} · TP${entry.profile.tp} · C${entry.profile.concurrency} · ${entry.profile.max_context.toLocaleString()} context · Engine ${entry.profile.qualification.engine_revision.slice(0, 8)}`]
+          return [String(originalIndex), profileOptionLabel(entry.profile, index === recommendedIndex)]
         }), String(profileChoice))
         const changedNote = note('Changing the recorded structured output setting makes this launch custom and unqualified.')
+        const evidenceNote = h('p', { class: 'muted' })
         updateStructuredEvidence = () => {
-          const recorded = profiles[Number(profileField.querySelector('select').value)]?.entry.profile.options.structured_outputs ?? false
+          const profile = profiles[Number(profileField.querySelector('select').value)].entry.profile
+          const recorded = profile.options.structured_outputs ?? false
           changedNote.hidden = structuredInput.checked === recorded
+          evidenceNote.textContent = `Profile evidence applies to its recorded options, Engine ${profile.qualification.engine_revision.slice(0, 8)} and workload. A changed option or Engine needs separate validation.`
         }
         profileField.addEventListener('change', () => {
           profileChoice = Number(profileField.querySelector('select').value)
@@ -345,7 +348,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
           ? h('button', { type: 'button', 'aria-expanded': showAllProfiles, onclick: () => { showAllProfiles = !showAllProfiles; fill() } }, showAllProfiles ? 'Show less' : 'Show all') : null
         content.replaceChildren(...[modelField, gpuField, profileField, expand,
         recommendedIndex < 0 ? note('No tested profile is available for this GPU group.') : null, changedNote,
-        h('p', { class: 'muted' }, 'Profile evidence applies to its recorded options, Engine and workload. A changed option or Engine needs separate validation.')].filter(Boolean))
+        evidenceNote].filter(Boolean))
         return
       }
       updateStructuredEvidence = () => {}
