@@ -27,6 +27,9 @@ use super::{
 const GINFER_RUNTIME_RESOURCE_DIR: &str = "resources/ginfer";
 #[cfg(any(target_os = "windows", test))]
 const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
+#[cfg(target_os = "linux")]
+mod gbot_assets;
+
 const BUNDLED_EXTENSIONS_FINGERPRINT: &str = ".bundled-extensions.sha256";
 
 #[cfg(target_os = "linux")]
@@ -151,6 +154,11 @@ pub fn install_bundled_ginfer_linux<R: Runtime>(app: tauri::AppHandle<R>) -> Res
 
 #[cfg(target_os = "linux")]
 fn install_linux_resources_from(resource_directory: &Path, data_folder: &Path) -> std::io::Result<bool> {
+    if let Err(error) = gbot_assets::install(resource_directory, data_folder) {
+        // Gbot is opt-in. Preserve ordinary GChat startup; its setup preflight
+        // still refuses absent/mismatched data payloads with an actionable issue.
+        log::warn!("Pinned Gbot guest resource delivery failed: {error}");
+    }
     let source = resource_directory.join("resources/ginfer/linux");
     let changed = install_linux_runtimes_from(&source, data_folder)?;
     let host_source = resource_directory.join("resources/bin/ginfer-host");

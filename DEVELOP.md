@@ -165,7 +165,9 @@ and the Yarn distribution at `/opt/yarn`. Inside that environment run:
 ./scripts/build-linux-release.sh \
   --runtime-set /path/to/ginfer-runtime-set \
   --profile-catalog-directory /path/to/ginfer/config/launch-profiles \
-  --operator-docs-directory /path/to/version-matched/ginfer-operator-docs
+  --operator-docs-directory /path/to/version-matched/ginfer-operator-docs \
+  --gbot-cua-runtime /path/to/accepted/python-runtime \
+  --gbot-guest-assets /path/to/accepted/guest-assets
 ```
 
 The runtime set must contain the four verified Ubuntu 24.04 images produced by
@@ -176,6 +178,15 @@ builds the CLI, host, extensions and desktop, then writes `.deb`, AppImage and
 SHA256 files under `out/linux`. Existing signing configuration applies to the
 release build. Bun, uv and sqlite-vec must be staged with the repository's normal
 binary download commands before assembly.
+
+The guest-assets directory must contain the three exact accepted image/Driver/media
+payloads in `src-tauri/gbot-service/guest-assets.json`. Release assembly stages them
+under `resources/gbot/assets/` and verifies their pins; it never downloads them.
+Linux first launch delivers them to `<data>/gbot/vms/assets/`, including a custom
+data folder, with verified atomic per-file publication and interrupted-copy retry.
+Ordinary GChat can run without these optional resources; Gbot KVM setup then
+reports the exact missing path and requires the accepted release resources.
+See [the asset delivery decision](docs/decisions/2026-10-12-deliver-pinned-gbot-guest-resources.md).
 
 Linux first launch installs engines into `<data>/ginfer/linux/{sm80,sm86,sm89,sm120a}`
 and the host into `<data>/ginfer/bin`. Model storage remains `<data>/ginfer/models`.

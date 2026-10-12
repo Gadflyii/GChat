@@ -25,12 +25,6 @@ use tokio::{
 };
 use uuid::Uuid;
 
-// Existing accepted artifact pins; provenance is recorded in the guided KVM setup ADR.
-const IMAGE: &str = "debian-13-genericcloud-amd64-20261001-2618.qcow2";
-const IMAGE_SHA512: &str = "f46f0671a6e5bdec5291ab8972bae2f10e5408c2f64a74078f11efc2f06a436a9d0313ed50e0472542eeabf780e9f7c792ac0a314c6c20507fcd9fd81b468c3d";
-const DRIVER_SHA256: &str = "2532c8bb8c6bef4f179285c58241a2f46c8fd2e1f6228c65bb65a1e6176261c6";
-const MEDIA_SHA256: &str = "f7d2d547ad4d94759aba93a5eb37ad1b5b93d5272074273a5ed4a130ee0b0ed7";
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct SetupIssue {
@@ -118,13 +112,14 @@ struct Assets {
 impl Assets {
     fn at(root: &Path) -> Self {
         let root = root.join("assets");
+        let assets = crate::guest_assets::accepted();
         Self {
-            image: root.join(IMAGE),
-            driver: root.join("cua-driver-c549ab4d7.tar.gz"),
-            media: root.join("cua-spacesd-native-20261012.tar.gz"),
-            image_pin: IMAGE_SHA512.into(),
-            driver_pin: DRIVER_SHA256.into(),
-            media_pin: MEDIA_SHA256.into(),
+            image: root.join(&assets[0].filename),
+            driver: root.join(&assets[1].filename),
+            media: root.join(&assets[2].filename),
+            image_pin: assets[0].digest.clone(),
+            driver_pin: assets[1].digest.clone(),
+            media_pin: assets[2].digest.clone(),
         }
     }
     async fn check(&self) -> Vec<SetupIssue> {
@@ -135,7 +130,7 @@ impl Assets {
             (&self.media, "sha256sum", &self.media_pin),
         ] {
             if !path.is_file() {
-                issues.push(SetupIssue::new("asset_missing", format!("The approved guest asset {} is missing.", path.display()), format!("Stage the accepted pinned release asset at {} and retry. This setup does not download assets.", path.display())));
+                issues.push(SetupIssue::new("asset_missing", format!("The approved guest asset {} is missing.", path.display()), format!("Stage the accepted pinned release asset at {} and retry. Install the GChat release containing its pinned guest resources, or stage these accepted assets locally. This setup does not download assets.", path.display())));
                 continue;
             }
             match Command::new(tool).arg(path).output().await {

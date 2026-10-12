@@ -3,6 +3,7 @@ pub mod connectors;
 pub mod contract;
 mod cua_skill;
 pub mod executor;
+pub mod guest_assets;
 #[cfg(target_os = "linux")]
 pub mod kvm;
 #[cfg(target_os = "linux")]
