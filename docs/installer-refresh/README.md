@@ -53,16 +53,17 @@ unchanged. The manifest job now gates the production filter through
 combined metadata, failed/skipped omission, blank signatures/names and version.
 Sentinel signatures establish metadata admission only, never cryptographic validity.
 
-YAML/Python syntax and shell syntax checks pass; behavioral execution is deferred
-until the CPU quiet period ends at22:20Z. Local `jq` is absent and must be supplied
-by an already admitted environment, without dependency installation. Focused next
-check: `python3 -m unittest discover -s tests -p test_updater_manifest.py` with jq
-available. This tests the changed production filter; reuse passing routing/syntax
-evidence and run no full suite. The older prepared
-aggregate fixture must stage the new shared filter before running its copied
-workflow step; no fixture PASS or release qualification is claimed yet. This
-source-only follow-up passes coordinator and independent diff review; behavioral
-acceptance remains pending.
+YAML/Python and shell syntax checks pass. The production filter's behavioral gate
+also passes: four existing test methods cover all 19 cases/subcases, finishing
+`OK`, exit 0, in 0.077 seconds on S1 with its existing Python 3.12.3 and jq 1.7.
+Command: `python3 -m unittest discover -s tests -p test_updater_manifest.py`.
+The shared filter, test and template are unchanged from accepted `874cbc98d`;
+the complete accepted updater branch is integrated as `c36e3862c` in the current
+GChat implementation candidate. No new dependency, full suite, key access,
+signing, CI, feed access or publication ran. Reuse the existing routing/syntax
+checks. Evidence: `/ai/gchat/out/gchat-open-items-20261012/updater-offline-note.md`.
+The owned S1 temporary source copies were retired; release qualification remains
+pending.
 
 Actual cryptographic acceptance against the unchanged public key and downloaded
 payload remains a scheduled-release gate. The recorded live 404 remains open.
