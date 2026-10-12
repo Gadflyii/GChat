@@ -30,7 +30,7 @@ async fn scoped_media_policies_and_revocation() {
             available: true,
             ..Default::default()
         });
-    for interactive in [false, true] {
+    for (interactive, h264) in [(false, false), (true, false), (false, true), (true, true)] {
         let request = OpenView {
             identity: SessionIdentity {
                 workspace_id: WorkspaceId::new(),
@@ -39,7 +39,7 @@ async fn scoped_media_policies_and_revocation() {
             owner: Uuid::new_v4(),
             interactive,
             audio: interactive,
-            h264: false,
+            h264,
         };
         let mut lease = MediaLease::open(server.addr, root_token.into(), &request)
             .await
@@ -63,7 +63,21 @@ async fn scoped_media_policies_and_revocation() {
                 negotiated.geometry_control,
                 pb::GeometryControl::ObserveOnly as i32
             );
-            assert_eq!(negotiated.codecs, vec![pb::MediaCodec::Png as i32]);
+            assert_eq!(
+                negotiated.codecs,
+                if h264 {
+                    vec![
+                        pb::MediaCodec::H264,
+                        pb::MediaCodec::Png,
+                        pb::MediaCodec::Bgra,
+                    ]
+                } else {
+                    vec![pb::MediaCodec::Png, pb::MediaCodec::Bgra]
+                }
+                .into_iter()
+                .map(|codec| codec as i32)
+                .collect::<Vec<_>>()
+            );
             assert_eq!(negotiated.audio.as_ref().unwrap().enabled, interactive);
         }
         let url = lease.ticket.ws_url.replacen("ws://", "http://", 1);
@@ -82,7 +96,7 @@ async fn scoped_media_policies_and_revocation() {
         lease.close().await.unwrap();
         assert!(Client::new().get(url.parse().unwrap()).await.is_err());
     }
-    assert_eq!(server.state.observed.media_close.lock().unwrap().len(), 2);
+    assert_eq!(server.state.observed.media_close.lock().unwrap().len(), 4);
 }
 
 #[tokio::test]

@@ -251,11 +251,32 @@ mod linux {
                         return Err("video frame lengths differ".into());
                     }
                     let descriptor: Value = serde_json::from_slice(&bytes[8..8 + header])?;
-                    let png = &bytes[8 + header..];
-                    if !png.starts_with(b"\x89PNG\r\n\x1a\n") {
-                        return Err("expected real PNG capture".into());
-                    }
-                    tokio::fs::write(evidence.join("capture.png"), png).await?;
+                    let pixels = &bytes[8 + header..];
+                    let filename = match descriptor["codec"].as_str() {
+                        Some("png") if pixels.starts_with(b"\x89PNG\r\n\x1a\n") => "capture.png",
+                        Some("bgra") => {
+                            let width = descriptor["width_px"]
+                                .as_u64()
+                                .ok_or("capture width missing")?;
+                            let height = descriptor["height_px"]
+                                .as_u64()
+                                .ok_or("capture height missing")?;
+                            let expected = width
+                                .checked_mul(height)
+                                .and_then(|size| size.checked_mul(4));
+                            if width == 0 || height == 0 || expected != Some(pixels.len() as u64) {
+                                return Err("BGRA capture dimensions differ".into());
+                            }
+                            "capture.bgra"
+                        }
+                        _ => return Err("unexpected capture codec".into()),
+                    };
+                    tokio::fs::write(evidence.join(filename), pixels).await?;
+                    tokio::fs::write(
+                        evidence.join("capture-frame.json"),
+                        serde_json::to_vec_pretty(&descriptor)?,
+                    )
+                    .await?;
                     frame = Some(descriptor);
                 } else if kind == 8 {
                     return Err("capture socket closed".into());
@@ -363,7 +384,7 @@ mod linux {
         tokio::fs::write(evidence.join("physical-media.json"), serde_json::to_vec_pretty(&json!({
             "frame":frame,"audio_bytes":audio.len(),"audio_rms":power.sqrt(),"tone_energy_fraction":tone_power/power,
             "view_only":refusal,"take_over":taken,"input":delivered,"hand_back":returned,"interactive_socket_revoked":closed,
-            "scope":"dedicated Debian/Xvnc guest, PNG capture + PCM desktop tone + control ownership; no Windows/M365 or browser playback claim"
+            "scope":"dedicated Debian/Xvnc guest, PNG/BGRA capture + PCM desktop tone + control ownership; no Windows/M365 or browser playback claim"
         }))?).await?;
         println!("PHYSICAL_MEDIA_PASS");
         Ok(())
@@ -952,7 +973,7 @@ mod linux {
         } else {
             Ok(())
         };
-        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {"dedicated Debian/Xvnc guest, PNG capture + PCM desktop tone + control ownership; no model, Windows/M365 or browser playback claim"} else if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
+        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {"dedicated Debian/Xvnc guest, PNG/BGRA capture + PCM desktop tone + control ownership; no model, Windows/M365 or browser playback claim"} else if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
         stop?;
         cleanup?;
         result??;

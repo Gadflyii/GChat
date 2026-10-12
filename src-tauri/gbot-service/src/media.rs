@@ -127,7 +127,18 @@ impl MediaLease {
                 target: Some(pb::MediaTarget {
                     target: Some(pb::media_target::Target::DisplayId(display.id.clone())),
                 }),
-                codecs: if request.h264 { vec![1, 3] } else { vec![3] },
+                codecs: if request.h264 {
+                    vec![
+                        pb::MediaCodec::H264,
+                        pb::MediaCodec::Png,
+                        pb::MediaCodec::Bgra,
+                    ]
+                } else {
+                    vec![pb::MediaCodec::Png, pb::MediaCodec::Bgra]
+                }
+                .into_iter()
+                .map(|codec| codec as i32)
+                .collect(),
                 policy: policy(request.interactive),
                 geometry_control: pb::GeometryControl::ObserveOnly as i32,
                 audio: Some(pb::AudioOptions {

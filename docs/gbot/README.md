@@ -15,14 +15,15 @@ pass, together with frontend types and strict Rust Clippy. The pinned guest
 daemon's cached container build and native/audio package passed. The audio-toggle
 UI case and SSH reconnect/ownership regression also pass.
 Acceptance is the focused view-only / takeover / hand-back gate and a packaged
-daemon/native-library closure. The source is merged in `e3ff85e8a`. The physical gate used dedicated Debian guest `4c75f540`: SSH and Cua readiness passed,
-but production `open_view` returned `MediaError` before any frame or PCM arrived.
-The guest was stopped, unregistered and its vault key deleted. The next unresolved
-question is the precise media operation that failed. The current candidate now
-retains its operation and cause and saves guest diagnostics before retirement. Acceptance remains a real PNG and known 440 Hz PCM tone,
-view-only input refusal, harmless pointer input after takeover and revocation
-on hand-back. No model or GPU is required. Windows/M365 and browser playback
-remain separate release checks. Rust 1.97 is required on Windows release hosts.
+daemon/native-library closure. The source is merged in `e3ff85e8a`. The dedicated
+Linux physical check identified a codec negotiation defect: GChat requested PNG
+only, but Cua's Linux provider offers BGRA and H.264. The desktop and audio service
+were running; no capture session opened. The candidate adds Cua's existing BGRA
+fallback, already supported by its browser renderer, while retaining H.264 first
+when enabled. Acceptance remains a real desktop frame (saved as PNG), known
+440 Hz PCM tone, view-only input refusal, harmless takeover input and revocation
+on hand-back. No model/GPU is required. Windows/M365 and browser playback remain
+release checks. Rust 1.97 is required on Windows release hosts.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -628,8 +629,9 @@ through PCM, view-only input refusal, harmless takeover input and interactive
 stream revocation on hand-back. Existing source and package receipts are reused.
 No model/GPU, person's desktop, browser playback, Windows or M365 claim.
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
-Next unresolved action: observe the fresh guest's actual media operation and
-capture/audio/control result; fix an identified owning-code defect if needed.
+Next unresolved action: verify the BGRA negotiation fix and repeat the physical
+frame/audio/control check on one fresh dedicated guest. Raw BGRA is saved with
+its dimensions and converted to PNG only for inspecting the evidence.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -1325,13 +1327,16 @@ in `open_view` before capture. Its domain and key are retired; its disposable di
 awaits cleanup. The previous wrapper retired the credential before collecting
 daemon logs. The probe now collects bounded guest diagnostics before retirement,
 and production media errors retain their failing operation and underlying cause.
-The next dedicated guest `3cc29715-e9ba-4928-b5af-e3b9bbf15606` uses the same
-pinned package and acceptance criteria. Its tracked controller is exec session
-29288; S1 results are `/ai/gbot-vms/cua-media-20261012/diagnostic-evidence`.
-CPU112–113 booking runs 15:53–16:23Z; there is no GPU/model job. The first minute
-started ahead of the old 16:00 reservation on otherwise free cores; the booking
-was corrected to the actual interval. Future launches must stop on booking errors.
-Focused media diagnostics cases (2), strict all-target Clippy and the example
-build pass; their receipts are in the local physical evidence folder.
-The embedded driver/media seed is 239 MB; allow its observed first-boot duration
-within the CPU booking. No frame/audio result is claimed yet.
+The diagnostic guest `3cc29715-e9ba-4928-b5af-e3b9bbf15606` established the cause:
+`open media` rejected the PNG-only offer with "no acceptable codec". Cua's Linux
+provider offers BGRA/H.264; its browser media core already renders both. Guest
+service logs show the Xvnc desktop and PulseAudio monitor running. Its controller
+ended with failure, and its domain and vault key are retired. Results are in S1
+`/ai/gbot-vms/cua-media-20261012/diagnostic-evidence` and the local physical folder.
+No frame/audio result is claimed. The candidate negotiates typed codec preferences
+with BGRA fallback and records actual PNG or BGRA frame bytes and dimensions.
+A fresh guest will run the same capture/audio/control check with the unchanged
+accepted package; no guest package, dependency, or browser renderer change.
+Future launches stop on booking errors. The 239 MB embedded seed needs its
+observed first-boot duration inside the CPU booking. Focused media policy and
+error cases, strict Clippy and the example build are the source gates.
