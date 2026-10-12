@@ -5,22 +5,21 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Status: Ron approved the design; it is merged into GChat main. October 11 step 1
-implements the local-first service skeleton, vault-held SSH sessions, guest-tools
-contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparation below replaces earlier S1/S2
-acceptance-host proposals; the Debian image and Host tools are staged, with
-first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
-on `feat/gbot-cua-service-be226`; the parser-fixed model task exposed an idle
-Cua session-lifecycle gap, now fixed. Canonical model-facing elements and the shared Chat compactor are implemented.
-The released Qwen SMOL task on Ada RTX4090 opens Mousepad but is blocked at
-Save As: the window belongs to Mousepad, whose AT-SPI endpoint stops answering.
-The image dependencies are corrected; that correction did not resolve the hang.
-The model and dedicated guest are stopped. No saved-file PASS exists.
-Later Engine revision `96082415c` admits SMOL on Blackwell; this Ada retry did
-not change host or settings.
-The focused contracts and actual loopback SSH fixture pass.
-No user desktop input or native Windows execution is authorized. Ron separately
-approved the isolated S1 Debian guest and its harmless accessibility gate below.
+Current item: [Cua component map and integration plan](cua-map.md), docs only.
+Ron selected Cua for the agent framework while retaining our VM provisioning,
+Hyper-V and M365 Cloud PC connection. GChat retains durable state, vault,
+approvals, sessions and inference assignment. No further custom Gbot executor
+work precedes that integration decision.
+
+The local-first service, vault-backed SSH/Cua transport and dedicated Debian
+guest are implemented. Source `66093dd03`, merged in main `c6a42ad77`, uses
+native input instead of AT-SPI DoAction for modal controls. The October 12 S1
+retry typed the line and opened File with responsive AT-SPI, then hit Cua's
+popup foreground guard. No saved-file PASS exists. The unverified popup patch
+is parked; changing the agent loop has not been shown to resolve that driver
+gap. Engine stop completed at 03:43:45Z; guest, key, guards and bookings are
+released. No model or guest is active. No human desktop input or native Windows
+execution is authorized by this docs step.
 
 ## Decided product scope
 
@@ -118,17 +117,19 @@ explain it before creating a guest and offer moving the service or computer.
 
 ```mermaid
 flowchart LR
-    Chat["GChat: sessions, setup, approvals, desktop view"] <--> Bot["Gbot service: durable tasks and shared runtime"]
-    Bot --> Inference["Assigned GInfer instance / work pool"]
-    Bot --> Shared["Agent definitions, skills, tools, connectors"]
+    Chat["GChat: sessions, setup, approvals, desktop view"] <--> Bot["Gbot service: durable task host"]
+    Bot --> Cua["Cua ComputerAgent: task loop and tool dispatch"]
+    Cua --> Inference["Assigned GInfer endpoint / provider adapter"]
+    Cua --> Shared["GChat permission and shared capability adapters"]
     Bot --> Workspace["Selected computer adapter"]
     Workspace --> Lifecycle["Hypervisor / provider lifecycle"]
     Workspace <--> Worker["Guest worker: commands, files, Cua Driver"]
     Chat <-->|"SSH desktop stream; M365 connection separately"| Worker
 ```
 
-The Gbot service owns bot identity, task execution, history, schedules, working
-memory, pending approvals and results. GChat is its client. Close/hide leaves
+The Gbot service owns bot identity, execution lifetime, history, schedules,
+working memory, pending approvals and results; Cua owns task iteration and
+tool dispatch. GChat is its client. Close/hide leaves
 service-owned work active; **Quit Gbot service** is a separate action. A
 per-user Windows service/agent or Linux user service is the proposed mechanism;
 privileged installation helpers are separate from ordinary task execution.
@@ -137,9 +138,11 @@ No machine-level service is assumed able to capture a signed-in user's desktop.
 The [existing agent runtime](../agent-runtime/README.md) and
 [architecture](../../src-tauri/src/core/agent/ARCHITECTURE.md) share capabilities
 across Chat, Studio and Code, but app exit currently cancels their execution.
-Moving this ownership into the service is required implementation work, not a
-capability obtained by connecting a VM. Use one definition/capability executor,
-not a second set of Gbot skills or a separate provider-specific agent loop.
+Gbot will host Cua through the same definition/capability and permission owners;
+this does not move or replace ordinary Chat/Studio/Code execution. Service
+durability is required integration work, not a capability obtained by connecting
+a VM or recording a Cua trajectory. The [component map](cua-map.md) replaces
+the earlier custom Gbot-loop plan.
 
 A computer adapter owns provisioning/attachment, lifecycle observations, commands,
 files, desktop session identity and control. Cua handles qualified computer
@@ -181,8 +184,8 @@ The Linux guest selects the official binary-only release archive, SHA256
 Only the MIT Driver and cursor helper are extracted; no optional Wayland
 helpers or enterprise components are installed. This does not qualify Vision.
 [Driver release](https://github.com/trycua/cua/releases/tag/cua-driver-rs-v0.34.1),
-[pinned Driver](https://github.com/trycua/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-driver/README.md),
-[pinned SDK](https://github.com/trycua/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/README.md).
+[pinned Driver](https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-driver/README.md),
+[pinned SDK](https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/README.md).
 
 Driver documents native capture/input and stdio MCP over SSH. The LAN route is
 a direct SSH connection to the guest worker/desktop account, carrying its Driver
@@ -190,20 +193,21 @@ MCP process, with separate SSH command/file channels. The worker supplies the
 selected session's X11 authorization, session D-Bus and accessibility environment;
 an arbitrary SSH shell does not establish them. Reconnect verifies the same
 workspace and live display before further input.
-[Pinned Linux setup](https://github.com/trycua/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-driver/rust/Skills/cua-driver/LINUX.md).
+[Pinned Linux setup](https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-driver/rust/Skills/cua-driver/LINUX.md).
 
-Use SDK lifecycle operations only for backends and components the pin actually
-provides. Hyper-V/KVM and Hetzner/DigitalOcean provisioning adapters, Gbot's
-session contract, durable tasks and Microsoft connection are GChat work; do not
-label them existing Cua integrations. Neither a managed Cua account nor relay
-is needed for direct LAN SSH.
+Keep our libvirt-session/KVM and Hyper-V lifecycle, Debian cloud-init,
+Hetzner/DigitalOcean adapters and M365 connection. Cua SDK sandboxes are not
+adopted as a second lifecycle owner. Borrow guest packages/settings where useful;
+adopt Cua's agent, Driver and tools above that layer. Neither a managed Cua
+account nor relay is needed for direct LAN SSH.
 
-SDK and Driver use MIT licensing at this pin; Spaces, relay and associated
-viewer/streaming components have separate FSL terms. Select the MIT components
-without silently pulling in Spaces or optional AGPL perception assets. The
-GChat-owned SSH/VNC viewer's component licenses and exact versions must be
-reviewed before dependency adoption; no viewer package is approved here.
-[Pinned component licensing](https://github.com/trycua/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/LICENSING.md).
+SDK, Driver and agent core use MIT licensing at this pin; selected Spaces,
+viewer and media components have FSL terms. Ron permits FSL viewer/media for
+GChat; they remain excluded from paid Arbitor pending his review. Optional
+AGPL perception assets are excluded. Check each selected component's LICENSE
+and dependency closure before shipping. Keep SSH/VNC viewing until the Cua
+embedded viewer is qualified on our platforms and direct transport.
+[Pinned component licensing](https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/LICENSING.md).
 
 ## Local and LAN computers
 
@@ -376,10 +380,11 @@ not delete the user's conversation or pending work.
 2. Probe Ron's running M365 Cloud PC and select a viable supported route. Make
    its embedded view, capture/input, sign-in/disconnect and takeover work before
    claiming first-release coverage; do not postpone it behind cloud integrations.
-3. Move shared agent execution into the local-first durable service, connect
-   GChat, and verify one useful task survives client close, service restart and
-   sleep/reconnect without duplicate external effects. Preserve shared definitions,
-   capabilities, permissions, history and inference assignments.
+3. Host Cua task execution in the local-first durable service through the
+   [component map](cua-map.md), preserving shared capability/permission adapters,
+   receipts and compaction. Complete the editor/file task and small Cua task
+   subset before replacing the prototype executor. Release acceptance still
+   requires recovery across close, restart and sleep without duplicated effects.
 4. Implement the novice walkthrough, Hyper-V/KVM adapters and LAN attachment;
    validate incomplete setup recovery and explicit VM ownership/removal.
 5. Implement Hetzner and DigitalOcean using the shared Debian/cloud-init contract,
@@ -393,9 +398,9 @@ durable recovery, vault-only GChat secrets, and cost/resource cleanup. Platform
 builds, actual cloud spend and Windows installation remain governed by Ron's
 separate authorization and release schedule.
 
-### Current SSH key import follow-up
+### SSH key import evidence
 
-Repository: GChat; subject: `docs/gbot/`. Current item is
+Repository: GChat; subject: `docs/gbot/`. Completed item is
 `GBOT-SSH-KEY-IMPORT`, authorized October 11 at 18:15 UTC. Baseline is
 main `c21ea4258`; candidate is branch `fix/gbot-ssh-key-import-c21` at
 `/ai/gchat-worktrees/gbot-ssh-key-import-c21`.
@@ -440,10 +445,10 @@ release; do not change these pins during this source gate. See the
 
 The CPU booking ended at 18:26:19 UTC; the owned container is absent, generated
 key files never existed, and the canonical build guard is returned. Shared
-caches remain. Next action: reviewed main integration. Native vault providers
+caches remain; the source is merged in main `0705f31a6`. Native vault providers
 and physical guest/Windows/M365 behavior remain owed to their existing gates.
 
-### Step 1: GChat workspace connection
+### Step 1 workspace connection evidence
 
 October 11 implementation is **source-only until the development VMs exist**.
 Ron approved the design and authorized a service skeleton, vault-held SSH
@@ -455,7 +460,9 @@ installation or desktop input is included.
 The service owns persisted workspace records and operation reconciliation. It
 does not introduce another agent executor. A service restart discards transport
 handles; operations without a known outcome need reconciliation, not replay.
-The existing shared agent runtime remains the execution owner.
+That slice deferred execution to the shared runtime. The current Cua ownership
+decision above supersedes its proposed Gbot executor without replacing ordinary
+Chat/Studio/Code execution.
 
 Focused acceptance for this slice:
 
@@ -550,18 +557,33 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
 supersedes the initial draft's unassigned-cloud scope without changing runtime
-code. Approved design `9c8c3b8ca` is merged; current main baseline is `0705f31a6`; initial step-1 tested source is
-`1a5771def`, and the dedicated-guest candidate below is `fa63cb8df`.
+code. Current docs baseline is main `c6a42ad77`; candidate is
+`docs/gbot-cua-map-0c69` at `/ai/gchat-worktrees/gbot-cua-map-0c69`.
+Deliverable: the Cua component map, retained ownership and smallest working-task
+integration proposal. Acceptance: fixed-pin source bindings, consistent current
+design and affected links, and `git diff --check`. No builds, model runs, desktop
+input or dependency installation. Next unresolved action: review the GInfer/Cua
+provider, guest-session and service-to-Python binding with its exact dependency
+closure.
+
+Docs gate passes: 347 local file links and 15 fixed-pin source paths resolve;
+`git diff --check` is clean. Evidence:
+`/ai/gchat/out/gbot-cua-adoption-20261012/doc-check-result.json`.
+External pages, runtime and physical acceptance were not exercised by this gate.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
+| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-cua-map-0c69`, branch `docs/gbot-cua-map-0c69` | Current docs-only candidate; retire after reviewed merge. |
+| GChat coordinator / local workstation | `/ai/gchat/out/gbot-cua-adoption-20261012/cua-source` | Read-only fork checkout at exact pin `0c69d9a2c8`; retained source inspection, no build or guest. |
+| GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-cua-service-be226`, branch `park/gbot-popup-binding-66093`, pushed `391667372` | Merged native-input source `66093dd03`; unverified popup patch committed separately, retained until adoption decision. Not a merge candidate. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-service-20261011/gate-native-activation/` | Latest model retry: typed line/File menu, popup guard refusal, normal model stop 03:43:45Z. Evidence retained; no live model/guest. |
 | GChat coordinator / local workstation | Branch `feat/gbot-workspace-connection-42d`, merged in main `254c0f8fd` | Clean, pushed source tree retired after ancestry verification; no live guest or service. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-workspace-20261011/` | Focused gate and merged-tree retirement evidence; shared build cache retained. |
 | GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-ssh-key-import-c21`, branch `fix/gbot-ssh-key-import-c21` | Merged in main 0705; source tree may be retired after clean/ancestry verification. No live service or guest. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-ssh-key-import-20261011/` | Two focused gate results, logs and dependency decision; no keys or model/VM copies. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-design-20261011/` | Concise input/research and document-check evidence; no binary, model or VM copy. |
 
-Deliverable: the local-first service skeleton, vault-backed SSH transport,
+Completed step-1 deliverable: the local-first service skeleton, vault-backed SSH transport,
 session-bound guest-tools contract and tunnelled view transport. Acceptance is
 the focused step-1 cases above. Physical desktop readiness and unattended agent
 execution are not established by this skeleton. The approved design's completed
@@ -682,7 +704,7 @@ private fixture-keyring folders are removed after confirming provider exit.
 Only this task's local/S1 paths were cleaned; no fleet-wide cleanliness claim.
 
 
-### Current service integration
+### Service integration evidence
 
 Repository GChat, candidate `feat/gbot-cua-service-be226` from merged main
 `be2267586`, owned tree `/ai/gchat-worktrees/gbot-cua-service-be226`.
@@ -792,15 +814,21 @@ fixture build PASS. Logs: local `out/gbot-cua-service-20261011/native-activation
 The first integration compile caught a fixture JSON-macro expression error;
 parenthesizing that expression corrected it before any guest/model ran.
 
-**Next acceptance:** ONE unchanged `hello.txt` task through the production service. Use released
-SHA-verified Qwen SMOL on S1 PRO GPU0, an accepted Engine at or after `96082415c`,
-context262144/C2/INT8/DFlashK7/greedy/no-thinking. The guest remains private and
-pinned to112–113; no human desktop, prompt workaround, calibration or timeout
-change. Acceptance is model-created `/home/gbot/hello.txt` with exact SSH readback
-`Hello from Gbot.` (with optional final newline), followed by guest/model stop and vault-key deletion.
-The exact runtime and matching-device profile are pending the runtime owner's
-path. Muse remains unstarted until Qwen passes. This is functional acceptance,
-not a GBench or performance claim.
+**Latest acceptance (2026-10-12): partial, blocked.** The approved S1 PRO GPU0
+Qwen SMOL retry used runtime `4228fec4d`, context262144/C1/INT8/DFlashK7/
+greedy/no-thinking. It typed the line and clicked File without an AT-SPI hang.
+Cua refused native input to popup23069012 because active top-level23068675
+remained active; no `hello.txt` was saved. Engine PID80514 ended normally at
+03:43:45Z and is absent; the private guest was stopped/undefined, its vault key
+deleted and guards/bookings returned. Evidence is under S1
+`/ai/gbot-vms/cua-service-20261011/gate-native-activation/`.
+
+The popup ownership patch is unverified and parked. The next step is the
+[Cua-first integration decision](cua-map.md), not another prototype retry.
+The eventual acceptance remains a model-created file with independent exact
+SSH readback; no shell-write substitute, prompt workaround or timeout change.
+Muse is unstarted. These are functional observations, not GBench/performance
+claims.
 
 **Prior result (2026-10-12 01:07:51Z): blocked.** The image-dependency retry
 reached Ready and opened Save As but did not save the file. Native focus and
