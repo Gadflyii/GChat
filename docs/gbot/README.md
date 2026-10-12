@@ -629,13 +629,20 @@ through PCM, view-only input refusal, harmless takeover input and interactive
 stream revocation on hand-back. Existing source and package receipts are reused.
 No model/GPU, person's desktop, browser playback, Windows or M365 claim.
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
-Next unresolved action: finish the physical check with playback owned by its
-own transient unit, using the retained dedicated guest after SSH readiness. The 17:00:41Z gate received a real
-1920×1080 BGRA desktop frame, converted to PNG and inspected; the configured
-48 kHz stereo PCM packets were all zero. View-only/takeover/hand-back were not
-reached. Guest `802d41b1-2e19-4413-af1a-1c2119f77973` is stopped with its
-native-vault credential retained, so diagnosis does not require reprovisioning.
-Focused codec and Cua-envelope receipts remain valid.
+Next unresolved action: identify the key actually offered on the retained guest's
+SSH reconnect, then finish audio/control. The stopped-disk Ed25519 public key
+matches the saved pin; unreplayed journal data prevents treating that as proof
+of the live key. The resumed connection returned PeerRejected after cloud-init
+reported a NoCloud datasource failure. A four-minute diagnostic reached its own
+deadline and destroyed the guest; the QEMU log proves cleanup, not a crash.
+One bounded console/public-key check records every terminal path; no pin bypass,
+re-key or reprovision. The earlier gate received a real 1920×1080 BGRA desktop
+frame, converted to PNG and inspected. Its configured 48 kHz stereo PCM packets
+were all zero because the probe killed its background tone child; the tone now
+runs in an independent transient user unit. Physical audio/control remain owed.
+Guest `802d41b1-2e19-4413-af1a-1c2119f77973` is stopped with its native-vault
+credential retained. Focused codec, Cua-envelope and tone/readiness receipts
+remain valid. S1 CPUs 112–113 are booked through 17:50Z; no GPU or model.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -1313,13 +1320,14 @@ strict all-target service Clippy remains clean. Evidence is in
 `out/gbot-cua-media-20261012/{reconnect-control,reconnect-ui,reconnect-clippy}.log`.
 No owned build container or GPU/model job remains.
 
-Current physical-gate inventory: source branch `test/gbot-media-physical-e3ff`,
+Current physical-gate inventory: branch `test/gbot-media-physical-e3ff`,
 accepted daemon archive listed in [cua-map.md](cua-map.md), private controller
-at S1 `/ai/gbot-vms/cua-media-20261012/controller`; results are in the adjacent
-`evidence` folder. The adapter created guest
-`4c75f540-5134-4189-8f4a-b7dada071671` on CPUs 112–113. Its domain and
-vault key are retired; disk cleanup follows retained diagnostics. Local evidence is
-`out/gbot-cua-media-20261012/physical`; no person's desktop is accessed.
+at S1 `/ai/gbot-vms/cua-media-20261012/controller`; current results are in
+`wire-evidence`. Guest `802d41b1-2e19-4413-af1a-1c2119f77973` uses CPUs
+112–113 and retains its disk/domain/native-vault credential for reconnect
+diagnosis. Guests `4c75…`, `3cc2…` and `c49b…` are retired; their deleted disks
+freed 13.91 GiB. Local evidence is `out/gbot-cua-media-20261012/physical`;
+no person's desktop is accessed.
 
 Two attempts failed before boot because the private libvirt monitor path exceeded
 the Unix-socket limit. Both guests were retired. A separate `XDG_RUNTIME_DIR`
@@ -1374,7 +1382,7 @@ command contract uses a transient unit with `KillMode=control-group`, so returni
 from `sh ... &` stops playback immediately. The tone now has its own transient
 user unit, as the existing editor-launch gate does; the production capture path
 is unchanged. The retained guest resumes for this correction; no fresh provision
-or calibration. S1 CPUs 112–113 are extended to 17:30Z for this finite check.
+or calibration. S1 CPUs 112–113 are extended to 17:50Z for the reconnect diagnosis and remaining finite check.
 
 The 17:06Z resume stopped at the production SSH connect deadline before media
 opened: the probe skipped first-boot readiness for a registered workspace and
