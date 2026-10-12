@@ -4,6 +4,8 @@ import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
+import GbotSetup, { type BotConnection } from '@/components/GbotSetup'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
   type DesktopViewHandle,
 } from '@/components/GbotDesktopView'
@@ -99,19 +101,17 @@ function GbotPage() {
   const [adding, setAdding] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
-  const [connection, setConnection] = useState({
-    name: '',
-    hostname: '',
-    port: '22',
-    user: '',
-    hostKey: '',
-    key: '',
-    passphrase: '',
-  })
+  const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
+  const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
+  const setupOffered = useRef(false)
   const refresh = useCallback(async () => {
     try {
       const value = await gbot<BotState>('state')
       setState(value)
+      if (!setupOffered.current) {
+        setupOffered.current = true
+        if (!value.workspaces.length) setAdding(true)
+      }
       setError('')
       try {
         const [history, pending] = await Promise.all([
@@ -129,12 +129,13 @@ function GbotPage() {
     }
   }, [])
   useEffect(() => {
+    if (!gbotEnabled) return
     void refresh()
     const subscription = listen('gbot-task-update', () => void refresh())
     return () => {
       void subscription.then((stop) => stop())
     }
-  }, [refresh])
+  }, [refresh, gbotEnabled])
   const perform = async (action: () => Promise<unknown>) => {
     if (busy) return
     setBusy(true)
@@ -183,7 +184,7 @@ function GbotPage() {
       savedAssignment.model.trim() &&
       savedAssignment.context_tokens > 0
   )
-  const add = async () => {
+  const add = async (connection: BotConnection) => {
     const [algorithm, publicKey] = connection.hostKey.trim().split(/\s+/)
     if (!algorithm || !publicKey)
       throw new Error('Enter the dedicated computer’s SSH host public key')
@@ -191,7 +192,6 @@ function GbotPage() {
       private_key: connection.key,
       passphrase: connection.passphrase || null,
     })
-    setConnection((previous) => ({ ...previous, key: '', passphrase: '' }))
     const id = crypto.randomUUID()
     await gbot('workspaces', {
       id,
@@ -211,7 +211,17 @@ function GbotPage() {
     })
     setSelected(id)
     setAdding(false)
+    await refresh()
   }
+  if (!gbotEnabled) return (
+    <div className="flex h-full flex-col">
+      <HeaderPage>Gbot</HeaderPage>
+      <div className="space-y-3 p-5">
+        <p>Enable Gbot to set up your bot's separate computer workspace.</p>
+        <Button onClick={() => setGbotEnabled(true)}>Enable Gbot</Button>
+      </div>
+    </div>
+  )
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <HeaderPage>
@@ -291,78 +301,7 @@ function GbotPage() {
               {error}
             </p>
           )}
-          {adding && (
-            <form
-              className="space-y-3 rounded-lg border p-4"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void perform(add)
-              }}
-            >
-              <p className="text-sm text-muted-foreground">
-                Connect a dedicated bot computer with the pinned Cua guest
-                tools. Use a separate VM or bot desktop.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {(['name', 'hostname', 'port', 'user', 'hostKey'] as const).map(
-                  (field) => (
-                    <label key={field} className="space-y-1 text-sm">
-                      {
-                        {
-                          name: 'Bot name',
-                          hostname: 'SSH host',
-                          port: 'SSH port',
-                          user: 'SSH user',
-                          hostKey: 'SSH host public key',
-                        }[field]
-                      }
-                      <Input
-                        required
-                        value={connection[field]}
-                        onChange={(event) =>
-                          setConnection({
-                            ...connection,
-                            [field]: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                  )
-                )}
-              </div>
-              <label className="block space-y-1 text-sm">
-                SSH private key
-                <textarea
-                  required
-                  className="min-h-24 w-full rounded-md border bg-background p-2 font-mono"
-                  value={connection.key}
-                  onChange={(event) =>
-                    setConnection({ ...connection, key: event.target.value })
-                  }
-                  autoComplete="off"
-                />
-              </label>
-              <label className="block space-y-1 text-sm">
-                Key passphrase
-                <Input
-                  type="password"
-                  autoComplete="off"
-                  value={connection.passphrase}
-                  onChange={(event) =>
-                    setConnection({
-                      ...connection,
-                      passphrase: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <p className="text-xs text-muted-foreground">
-                The key is imported into GChat’s vault. Bot accounts and
-                connector settings are independent.
-              </p>
-              <Button disabled={busy}>Save bot</Button>
-            </form>
-          )}
+          {adding && <GbotSetup save={add} cancel={() => setAdding(false)} />}
           {bot && (
             <>
               <div className="flex flex-wrap items-center gap-2">

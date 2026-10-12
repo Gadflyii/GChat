@@ -61,6 +61,7 @@ describe('useGeneralSetting', () => {
     expect(result.current.disableReasoning).toBe(false)
     expect(result.current.reasoningBudget).toBe('high')
     expect(result.current.preloadModelOnStartup).toBe(false)
+    expect(result.current.gbotEnabled).toBe(false)
     expect(result.current.huggingfaceToken).toBeUndefined()
     expect(typeof result.current.setCurrentLanguage).toBe('function')
     expect(typeof result.current.setSpellCheckChatInput).toBe('function')
@@ -73,6 +74,13 @@ describe('useGeneralSetting', () => {
       expect(migrateGeneralSettings({}, version).preloadModelOnStartup).toBe(false)
     }
   )
+
+  it.each([0, 1, 2])('migrates Gbot as opt-in in schema %i', (version) => {
+    expect(migrateGeneralSettings({}, version).gbotEnabled).toBe(false)
+    for (const gbotEnabled of [true, false]) {
+      expect(migrateGeneralSettings({ gbotEnabled }, version).gbotEnabled).toBe(gbotEnabled)
+    }
+  })
 
   it.each([0, 1, 2])(
     'preserves explicit model startup choices in schema %i',

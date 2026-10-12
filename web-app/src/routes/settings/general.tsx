@@ -51,6 +51,8 @@ function General() {
     setHuggingfaceToken,
     preloadModelOnStartup,
     setPreloadModelOnStartup,
+    gbotEnabled,
+    setGbotEnabled,
   } = useGeneralSetting()
   const defaultApprovalMode = useConversationPolicy(
     (state) => state.defaultApprovalMode
@@ -339,6 +341,17 @@ function General() {
                   <Switch
                     checked={preloadModelOnStartup}
                     onCheckedChange={setPreloadModelOnStartup}
+                  />
+                }
+              />
+              <CardItem
+                title="Gbot"
+                description="Enable your bot's separate computer workspace."
+                actions={
+                  <Switch
+                    aria-label="Enable Gbot"
+                    checked={gbotEnabled}
+                    onCheckedChange={setGbotEnabled}
                   />
                 }
               />

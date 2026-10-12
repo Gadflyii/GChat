@@ -28,6 +28,7 @@ type GeneralSettingState = {
    * while the app is starting. Off by default; loading at startup is opt-in.
    */
   preloadModelOnStartup: boolean
+  gbotEnabled: boolean
   maxImageSizePx: number
   huggingfaceToken?: string
   scanLocalModels: boolean
@@ -41,6 +42,7 @@ type GeneralSettingState = {
   setDisableReasoning: (value: boolean) => void
   setReasoningBudget: (value: ReasoningBudgetLevel) => void
   setPreloadModelOnStartup: (value: boolean) => void
+  setGbotEnabled: (value: boolean) => void
   setMaxImageSizePx: (value: number) => void
   setCurrentLanguage: (value: Language) => void
   setScanLocalModels: (value: boolean) => void
@@ -61,6 +63,7 @@ export function migrateGeneralSettings(
     ...(version < 2
       ? { preloadModelOnStartup: state.preloadModelOnStartup ?? false }
       : {}),
+    ...(version < 3 ? { gbotEnabled: state.gbotEnabled ?? false } : {}),
   } as GeneralSettingState
 }
 
@@ -73,6 +76,7 @@ export const useGeneralSetting = create<GeneralSettingState>()(
       disableReasoning: false,
       reasoningBudget: 'high',
       preloadModelOnStartup: false,
+      gbotEnabled: false,
       maxImageSizePx: DEFAULT_MAX_IMAGE_SIZE_PX,
       huggingfaceToken: undefined,
       scanLocalModels: true,
@@ -87,6 +91,7 @@ export const useGeneralSetting = create<GeneralSettingState>()(
       setDisableReasoning: (value) => set({ disableReasoning: value }),
       setReasoningBudget: (value) => set({ reasoningBudget: value }),
       setPreloadModelOnStartup: (value) => set({ preloadModelOnStartup: value }),
+      setGbotEnabled: (value) => set({ gbotEnabled: value }),
       setMaxImageSizePx: (value) =>
         set({ maxImageSizePx: Number.isFinite(value) && value > 0 ? value : 0 }),
       setCurrentLanguage: (value) => set({ currentLanguage: value }),
@@ -124,7 +129,7 @@ export const useGeneralSetting = create<GeneralSettingState>()(
     {
       name: localStorageKey.settingGeneral,
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       migrate: migrateGeneralSettings,
     }
   )

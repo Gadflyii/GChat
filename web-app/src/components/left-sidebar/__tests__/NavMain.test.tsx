@@ -8,6 +8,7 @@ import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 
 const codeState = vi.hoisted(() => ({ enabled: true }))
 const hermesState = vi.hoisted(() => ({ enabled: true }))
+const generalState = vi.hoisted(() => ({ integrationsBadgeSeen: true, gbotEnabled: false }))
 const actions = vi.hoisted(() => ({ navigate: vi.fn(), resetAgentSession: vi.fn() }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -58,7 +59,7 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 }))
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
-  useGeneralSetting: () => true,
+  useGeneralSetting: (selector: (state: typeof generalState) => unknown) => selector(generalState),
 }))
 
 vi.mock('@/hooks/useSearchDialog', () => ({
@@ -89,6 +90,7 @@ describe('NavMain', () => {
   beforeEach(() => {
     codeState.enabled = true
     hermesState.enabled = true
+    generalState.gbotEnabled = false
     useConversationPolicy.getState().clearAll()
     useAgentRun.getState().clearAll()
     actions.navigate.mockReset()
@@ -124,6 +126,17 @@ describe('NavMain', () => {
     codeState.enabled = false
     render(<NavMain />)
     expect(screen.queryByText('common:code')).not.toBeInTheDocument()
+  })
+
+  it('shows Gbot only while its integration is enabled', () => {
+    const { rerender } = render(<NavMain />)
+    expect(screen.queryByText('Gbot')).not.toBeInTheDocument()
+    generalState.gbotEnabled = true
+    rerender(<NavMain />)
+    expect(screen.getByText('Gbot')).toBeInTheDocument()
+    generalState.gbotEnabled = false
+    rerender(<NavMain />)
+    expect(screen.queryByText('Gbot')).not.toBeInTheDocument()
   })
 
   it('highlights Code on the code route', () => {

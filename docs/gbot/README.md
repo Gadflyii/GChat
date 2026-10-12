@@ -5,7 +5,7 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-The current change integrates Cua native media and Ron's supplied avatar. The
+The accepted integration includes Cua native media and Ron's supplied avatar. The
 service opens scoped view-only or human-controlled media sessions over the
 existing vault-backed SSH connection. The browser receives a session ticket,
 never the guest's root RPC token. Hand-back revokes the interactive stream
@@ -14,16 +14,19 @@ complete: UI 3/3, media policy/revocation 1/1 and guest installation 6/6
 pass, together with frontend types and strict Rust Clippy. The pinned guest
 daemon's cached container build and native/audio package passed. The audio-toggle
 UI case and SSH reconnect/ownership regression also pass.
-Acceptance is the focused view-only / takeover / hand-back gate and a packaged
-daemon/native-library closure. The source is merged in `e3ff85e8a`. The dedicated
-Linux physical check identified a codec negotiation defect: GChat requested PNG
-only, but Cua's Linux provider offers BGRA and H.264. The desktop and audio service
-were running; no capture session opened. The candidate adds Cua's existing BGRA
-fallback, already supported by its browser renderer, while retaining H.264 first
-when enabled. Acceptance remains a real desktop frame (saved as PNG), known
-440 Hz PCM tone, view-only input refusal, harmless takeover input and revocation
-on hand-back. No model/GPU is required. Windows/M365 and browser playback remain
+The physical Linux viewer gate passed: a real desktop frame, 440 Hz PCM tone,
+view-only input refusal, takeover input and revocation on hand-back. The accepted
+BGRA negotiation and seed provisioning fixes are merged in `2e735624f`; evidence
+is linked in the current record below. Windows/M365 and browser playback remain
 release checks. Rust 1.97 is required on Windows release hosts.
+
+Current work is open-item reconciliation and the first guided setup correction.
+The candidate adds opt-in visibility and reviews an existing dedicated LAN SSH
+connection before vault import. Automatic VM/cloud/M365 creation, remote-service
+selection, per-bot connectors and scheduling remain implementation work. The
+[implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
+separates source gaps, accepted evidence and unrun gates. The physical browser
+form gate is still unrun; no browser qualification is claimed.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -621,15 +624,19 @@ Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
 and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
 `7bf139610`. Compact output is merged as `9ab394244`. The channel/browser/control and runtime integration is merged in `45ac4ae7e`.
-Human assistance is implemented and pushed in `32231c6ba`, with its focused
+Human assistance `32231c6ba` is incorporated in current main, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
-Current candidate: `test/gbot-media-physical-e3ff` at
-`/ai/gchat-worktrees/gbot-cua-skill-918c`, based on merged `e3ff85e8a`.
-Deliverable: physically qualify the production SSH-backed Cua viewer on a
-separate Linux guest. Acceptance: one real PNG, a known 440 Hz desktop tone
-through PCM, view-only input refusal, harmless takeover input and interactive
-stream revocation on hand-back. Existing source and package receipts are reused.
-No model/GPU, person's desktop, browser playback, Windows or M365 claim.
+Current candidate: `feat/gchat-open-items-setup-bfd` at
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `bfd42e530`.
+Deliverable: reconcile GChat/Manager/Gbot open work and implement opt-in plus a
+reviewable existing-LAN setup flow. Acceptance: migration/sidebar/setup/route
+focused cases, affected lint/types and the updated master list. No dependency,
+native build, model/GPU, provisioning, person's desktop or release change.
+Verification: 39 focused settings/sidebar/setup/route cases, affected ESLint and
+frontend types PASS. Next: normal source review/merge, then close the
+credential-orphan failure path before extending provisioning.
+Evidence for this candidate: `/ai/gchat/out/gchat-open-items-20261012/`.
+
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
 Physical gate **PASS at 17:55:38 UTC on October 12**. The production native-vault
 SSH route captured a 1920×1080 BGRA desktop frame, converted to PNG and visually
@@ -652,9 +659,11 @@ NoCloud fallback and broken SSH. No pin bypass, RAM workaround or offline repair
 Guest `bd5614ed-e14a-40b5-b566-aaef3ee9d847` is stopped and unregistered, its
 native-vault key deleted, and its disposable root removed (2.688 GiB freed).
 The CPU booking is returned; no live guest, model, GPU job or owned build
-container remains. Keep evidence and accepted archives. Next unresolved action:
-review/merge this physical-gate branch; Windows/M365 and browser playback wait
-for Ron's release window.
+container remains. Keep evidence and accepted archives. Viewer source and
+physical acceptance are merged as `2e735624f`. Its worktree was deregistered;
+remaining generated files await safe cleanup. The bounded browser form gate is
+still owed on a dedicated guest. Windows/M365 and browser playback wait for
+Ron's release window; neither requires repeating accepted Linux capture evidence.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -663,8 +672,14 @@ and require a fresh observation before resumed input. The native bridge owns
 service lifetime: exiting GChat currently stops its child tasks; the independent
 background-service lifetime remains future integration.
 
-The current UI supports a manually configured dedicated SSH bot computer. It
-is not the novice setup walkthrough. Linux x86-64 release packaging now includes the accepted Ubuntu 24.04
+The baseline UI supports a manually configured dedicated SSH bot computer.
+The current candidate wraps that path in a four-step name/computer/connection/review
+flow, opens setup for the first bot after opt-in and hides the sidebar entry
+while disabled. Unimplemented computer routes remain visibly unavailable. This
+is the existing-LAN setup slice, not completed novice VM provisioning. The
+existing two-request import/save path can leave an orphan vault key on workspace
+save failure; `GBOT-SETUP-CREDENTIAL-ORPHAN` tracks the owning transactional fix.
+Linux x86-64 release packaging now includes the accepted Ubuntu 24.04
 CPython 3.12.3 interpreter, its unchanged 61-package Cua closure, native libraries
 and license notices. Native GChat discovers that resource automatically and
 uses its existing bundled Bun for the shared context preparer. The explicit
@@ -1220,12 +1235,11 @@ remained active; no `hello.txt` was saved. Engine PID80514 ended normally at
 deleted and guards/bookings returned. Evidence is under S1
 `/ai/gbot-vms/cua-service-20261011/gate-native-activation/`.
 
-The popup ownership patch is unverified and parked. The next step is the
-[Cua-first integration decision](cua-map.md), not another prototype retry.
-The eventual acceptance remains a model-created file with independent exact
-SSH readback; no shell-write substitute, prompt workaround or timeout change.
-Muse is unstarted. These are functional observations, not GBench/performance
-claims.
+This prototype result is superseded by the [Cua-first integration](cua-map.md)
+and accepted executor `3d214b772` / main `918c7940b`: exact desktop-file
+readback and both actual Cua file evaluators passed. Retain this failed receipt
+as cause evidence; it is not a current blocker. Muse was unstarted in this
+prototype. These are functional observations, not GBench/performance claims.
 
 **Prior result (2026-10-12 01:07:51Z): blocked.** The image-dependency retry
 reached Ready and opened Save As but did not save the file. Native focus and
