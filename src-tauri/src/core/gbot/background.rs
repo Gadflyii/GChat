@@ -252,6 +252,7 @@ pub(super) async fn ensure_running(root: &Path, resources: &Path) -> Result<Clie
             .kill_on_drop(false);
         #[cfg(unix)]
         {
+            use std::os::unix::process::CommandExt;
             command.as_std_mut().process_group(0);
         }
         #[cfg(windows)]
