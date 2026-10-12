@@ -1,33 +1,15 @@
-use std::{path::PathBuf, process::ExitCode, sync::Arc};
+use std::{path::PathBuf, process::ExitCode};
 
 use clap::Parser;
 #[cfg(target_os = "linux")]
 use clap::Subcommand;
-use gbot_service::{
-    api::Api,
-    executor::{ExecutorProcesses, ProcessSpec},
-    service::Service,
-    vault::NativeVault,
-};
 
 #[derive(Parser)]
 #[command(
     name = "gbot-service",
-    about = "GChat's local-first bot workspace service"
+    about = "Gbot KVM maintenance tools; launch the authenticated service through GChat"
 )]
 struct Args {
-    #[arg(long)]
-    data_folder: Option<PathBuf>,
-    #[arg(long, default_value_t = 0)]
-    port: u16,
-    /// Python from the configured Cua environment.
-    #[arg(long, requires = "context_program")]
-    cua_python: Option<PathBuf>,
-    /// GChat's existing context/compaction helper.
-    #[arg(long, requires = "cua_python")]
-    context_program: Option<PathBuf>,
-    #[arg(long, requires = "context_program", allow_hyphen_values = true)]
-    context_arg: Vec<String>,
     #[cfg(target_os = "linux")]
     #[command(subcommand)]
     command: Option<Mode>,
@@ -131,46 +113,10 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             Mode::Kvm { command } => return kvm(command).await,
         }
     }
-    let data_folder = args
-        .data_folder
-        .ok_or("Gbot requires an explicit data folder")?;
-    if data_folder.as_os_str().is_empty() {
-        return Err("Gbot requires an explicit data folder".into());
-    }
-    let service = Arc::new(Service::open(data_folder.join("gbot/state.json")).await?);
-    let service_id = service.snapshot().await.service_id;
-    let mut api = Api::bind(service, Arc::new(NativeVault), args.port).await?;
-    if let (Some(python), Some(context)) = (args.cua_python, args.context_program) {
-        api = api
-            .with_executor(
-                data_folder.join("gbot/tasks"),
-                ExecutorProcesses {
-                    python: ProcessSpec {
-                        program: python,
-                        args: vec![],
-                    },
-                    context: ProcessSpec {
-                        program: context,
-                        args: args.context_arg,
-                    },
-                },
-            )
-            .await?;
-    }
-    println!(
-        "{}",
-        serde_json::json!({
-            "service_id": service_id,
-            "endpoint": format!("http://{}", api.endpoint())
-        })
-    );
-    api.serve(async {
-        if tokio::signal::ctrl_c().await.is_err() {
-            eprintln!("Gbot shutdown signal is unavailable");
-        }
-    })
-    .await?;
-    Ok(())
+    Err(
+        "Start Gbot service through GChat so native connectors and packaged Cua share its lifetime"
+            .into(),
+    )
 }
 
 #[tokio::main]

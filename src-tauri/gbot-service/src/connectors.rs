@@ -1,4 +1,4 @@
-//! Bot account references and the in-process native Workspace connector boundary.
+//! Bot account references and the native Workspace connector boundary.
 //! OAuth credentials and provider implementation remain with the native account owner.
 use std::{future::Future, pin::Pin};
 
@@ -58,6 +58,18 @@ pub struct BotConnectors {
 
 /// Dropping execute's future cancels provider work through its native cancellation owner.
 pub trait ConnectorHost: Send + Sync {
+    fn close(&self) -> ConnectorFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
+    /// Authenticated native Chat/Settings callers share the service account owner.
+    /// Bot execution continues to use the scoped methods below.
+    fn native_operation<'a>(
+        &'a self,
+        _operation: &'a str,
+        _arguments: Value,
+    ) -> ConnectorFuture<'a, Value> {
+        Box::pin(async { Err("Native Workspace connector operation unavailable".into()) })
+    }
     fn accounts(&self) -> ConnectorFuture<'_, Vec<ConnectorAccount>>;
     fn catalog<'a>(&'a self, account_ids: &'a [String]) -> ConnectorFuture<'a, Vec<ConnectorTool>>;
     fn prepare<'a>(

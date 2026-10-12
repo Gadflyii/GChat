@@ -329,7 +329,7 @@ pub fn catalog_from_mcp(response: McpToolsResponse) -> Result<CapabilityCatalog,
 pub async fn load_catalog<R: Runtime>(app: AppHandle<R>) -> Result<CapabilityCatalog, String> {
     let response = mcp::get_tools(app.clone(), app.state()).await?;
     let mut catalog = catalog_from_mcp(response)?;
-    catalog.insert_connectors(crate::core::connectors::catalog(&app)?)?;
+    catalog.insert_connectors(crate::core::connectors::catalog(&app).await?)?;
     Ok(catalog)
 }
 
