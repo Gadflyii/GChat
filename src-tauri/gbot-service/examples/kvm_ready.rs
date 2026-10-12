@@ -965,12 +965,12 @@ mod linux {
                 ssh_port: 0,
                 ssh_public_key: private.public_key().to_openssh()?,
                 browser_package: "chromium".into(),
-                driver: GuestBinary::CloudInitArchive {
+                driver: GuestBinary::SeedArchive {
                     path: archive,
                     sha256: digest,
                 },
                 driver_revision: CUA_DRIVER_REVISION.into(),
-                media: GuestBinary::CloudInitArchive {
+                media: GuestBinary::SeedArchive {
                     path: media_archive,
                     sha256: media_digest,
                 },
@@ -1021,7 +1021,23 @@ mod linux {
         }
         let result =
             tokio::time::timeout(Duration::from_secs(1800), gate(&record, &evidence)).await;
-        let stop = record.vm.force_stop(&KvmTools::default()).await;
+        let tools = KvmTools::default();
+        let stop = async {
+            record.vm.shutdown(&tools).await?;
+            tokio::time::timeout(Duration::from_secs(60), async {
+                while record.vm.state(&tools).await? != VmState::Stopped {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                }
+                Ok::<_, std::io::Error>(VmState::Stopped)
+            })
+            .await
+            .map_err(std::io::Error::other)?
+        }
+        .await;
+        let stop = match stop {
+            Ok(state) => Ok(state),
+            Err(_) => record.vm.force_stop(&tools).await,
+        };
         let passed = matches!(result, Ok(Ok(())));
         let retained = !passed
             || std::env::var_os("GBOT_MEDIA_ONLY").is_some()

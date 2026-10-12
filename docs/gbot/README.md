@@ -629,20 +629,26 @@ through PCM, view-only input refusal, harmless takeover input and interactive
 stream revocation on hand-back. Existing source and package receipts are reused.
 No model/GPU, person's desktop, browser playback, Windows or M365 claim.
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
-Next unresolved action: identify the key actually offered on the retained guest's
-SSH reconnect, then finish audio/control. The stopped-disk Ed25519 public key
-matches the saved pin; unreplayed journal data prevents treating that as proof
-of the live key. The resumed connection returned PeerRejected after cloud-init
-reported a NoCloud datasource failure. A four-minute diagnostic reached its own
-deadline and destroyed the guest; the QEMU log proves cleanup, not a crash.
-One bounded console/public-key check records every terminal path; no pin bypass,
-re-key or reprovision. The earlier gate received a real 1920×1080 BGRA desktop
-frame, converted to PNG and inspected. Its configured 48 kHz stereo PCM packets
-were all zero because the probe killed its background tone child; the tone now
-runs in an independent transient user unit. Physical audio/control remain owed.
-Guest `802d41b1-2e19-4413-af1a-1c2119f77973` is stopped with its native-vault
-credential retained. Focused codec, Cua-envelope and tone/readiness receipts
-remain valid. S1 CPUs 112–113 are booked through 17:50Z; no GPU or model.
+Next unresolved action: remove binary payloads from cloud-init metadata, then
+provision a fresh dedicated guest through the same adapter/vault path and finish
+audio/control. The retained guest's cloud-init log proves ENOSPC while writing
+`/run/cloud-init/instance-data-sensitive.json`. Our 238,888,669-byte user-data embeds
+the driver/media archives as base64; cloud-init duplicates it into metadata and
+its 477,780,941-byte cache. NoCloud then falls back to DataSourceNone, leaving an
+empty network configuration and host public key. The prior stopped-disk pin match
+was not evidence of a healthy live SSH identity. No pin bypass, offline repair or
+RAM/tmpfs workaround. Archives belong beside configuration on the read-only seed,
+with the existing digest verification. The probe must stop through ACPI first.
+The earlier gate received a real 1920×1080 BGRA desktop frame, converted to PNG
+and inspected. Its PCM packets were zero because the probe killed its background
+tone child; the independent transient tone unit is implemented. Physical audio
+and control remain owed. Guest `802d41b1-2e19-4413-af1a-1c2119f77973` is stopped and unregistered;
+its vault key is deleted through the product path. Retain its diagnosis logs.
+The seed correction passes seven focused KVM cases, strict Clippy and example
+build; receipts are `physical/seed-{focused,clippy,build}.log`.
+Focused codec/envelope/tone receipts remain valid. No GPU/model/Windows changes.
+Evidence: S1 `/ai/gbot-vms/cua-media-20261012/wire-evidence/latest-cloud-init.log`
+(ENOSPC at lines 1324–1357).
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -1360,9 +1366,11 @@ build pass for `189d05507` (local `codec-*.log` receipts); they are reused.
 The two retired physical guest disks are removed after shutdown, unregister and
 credential-deletion receipts, freeing 9.25 GiB; diagnostics remain retained in
 the evidence folders and `retired-physical-guests.json`.
-Future launches stop on booking errors. The 239 MB embedded seed needs its
-observed first-boot duration inside the CPU booking. Focused media policy and
-error cases, strict Clippy and the example build are the source gates.
+Future launches stop on booking errors. Local archives now belong on the
+read-only NoCloud seed beside a small configuration, with digest verification
+before extraction. The 239 MB embedded configuration exhausted cloud-init's
+runtime metadata filesystem and is removed. Focused KVM cases, strict Clippy
+and the example build gate this correction; physical audio/control remain owed.
 
 The retired codec guest disk is removed after its retirement receipt, freeing
 4.66 GiB (`codec-evidence/disk-retirement.json`). The current guest is
