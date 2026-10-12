@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectsService } from '@/services/projects/types'
 
@@ -44,7 +44,7 @@ describe('useThreadManagement', () => {
       renderHook(() => useThreadManagement()),
       renderHook(() => useThreadManagement()),
     ]
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(hooks[0].result.current.folders).toEqual(projects)
     )
 

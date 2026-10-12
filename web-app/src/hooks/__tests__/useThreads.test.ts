@@ -247,13 +247,14 @@ describe('useThreads', () => {
     expect(true).toBe(true)
   })
 
-  it('should filter threads by search term', () => {
+  it('returns no matches when searching empty history', () => {
     const { result } = renderHook(() => useThreads())
 
-    // Just test that the function exists
-    expect(typeof result.current.getFilteredThreads).toBe('function')
-    const filtered = result.current.getFilteredThreads('test')
-    expect(Array.isArray(filtered)).toBe(true)
+    let filtered: Thread[] = []
+    act(() => {
+      filtered = result.current.getFilteredThreads('test')
+    })
+    expect(filtered).toEqual([])
   })
 
   it('should return all threads when no search term', () => {

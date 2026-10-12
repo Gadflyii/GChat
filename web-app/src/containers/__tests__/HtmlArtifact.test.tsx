@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
@@ -20,6 +20,21 @@ vi.mock('@/components/ai-elements/code-block', () => ({
 }))
 
 import { HtmlArtifact } from '../HtmlArtifact'
+
+// jsdom publishes the initial about:blank iframe load asynchronously.
+async function renderArtifact(code: string, streaming = false) {
+  const view = render(<HtmlArtifact code={code} streaming={streaming} />)
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      view.container.querySelector('iframe')!.addEventListener(
+        'load',
+        () => resolve(),
+        { once: true }
+      )
+    })
+  })
+  return view
+}
 
 const SCROLL_HEIGHT = 1200
 
@@ -53,8 +68,8 @@ describe('HtmlArtifact', () => {
       .scrollHeight
   })
 
-  it('shows the streaming code instead of an unrenderable preview', () => {
-    render(<HtmlArtifact code="<div>partial" streaming />)
+  it('shows the streaming code instead of an unrenderable preview', async () => {
+    await renderArtifact('<div>partial', true)
 
     expect(codePane().className).not.toContain('hidden')
     expect(previewPane().className).toContain('hidden')
@@ -62,8 +77,8 @@ describe('HtmlArtifact', () => {
     expect(document.querySelector('iframe')).not.toHaveAttribute('src')
   })
 
-  it('follows the tail of the code while it streams in', () => {
-    const { rerender } = render(<HtmlArtifact code="<div>" streaming />)
+  it('follows the tail of the code while it streams in', async () => {
+    const { rerender } = await renderArtifact('<div>', true)
     scrollTops.length = 0
 
     rerender(<HtmlArtifact code="<div>more markup" streaming />)
@@ -71,12 +86,12 @@ describe('HtmlArtifact', () => {
     expect(scrollTops).toContain(SCROLL_HEIGHT)
   })
 
-  it('stops following once the reader scrolls away from the tail', () => {
+  it('stops following once the reader scrolls away from the tail', async () => {
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
       configurable: true,
       get: () => 400,
     })
-    const { rerender } = render(<HtmlArtifact code="<div>" streaming />)
+    const { rerender } = await renderArtifact('<div>', true)
 
     // scrollTop reads as 0, so the gap to the tail is larger than the threshold.
     codePane()
@@ -90,8 +105,8 @@ describe('HtmlArtifact', () => {
       .clientHeight
   })
 
-  it('hands the viewer back to the preview once generation settles', () => {
-    const { rerender } = render(<HtmlArtifact code="<div>done</div>" streaming />)
+  it('hands the viewer back to the preview once generation settles', async () => {
+    const { rerender } = await renderArtifact('<div>done</div>', true)
 
     rerender(<HtmlArtifact code="<div>done</div>" />)
 
@@ -100,8 +115,8 @@ describe('HtmlArtifact', () => {
     expect(codePane().textContent).not.toContain('workspacePreview.generating')
   })
 
-  it('keeps the preview visible for a settled artifact', () => {
-    render(<HtmlArtifact code="<div>done</div>" />)
+  it('keeps the preview visible for a settled artifact', async () => {
+    await renderArtifact('<div>done</div>')
 
     expect(previewPane().className).not.toContain('hidden')
     expect(codePane().className).toContain('hidden')
