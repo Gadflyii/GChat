@@ -113,12 +113,19 @@ impl GbotState {
 
     /// Client exit cancels its ordinary connector effects, leaving bot tasks service-owned.
     pub async fn disconnect(&self) {
-        let client = {
+        let (client, root) = {
             let mut connection = self.connection.lock().await;
             if let Some(updates) = connection.updates.take() {
                 updates.abort();
             }
-            connection.client.take()
+            (connection.client.take(), connection.root.clone())
+        };
+        // An earlier request error may have invalidated the cached client while
+        // another registered connector request is still running in the service.
+        let client = match (client, root) {
+            (Some(client), _) => Some(client),
+            (None, Some(root)) => background::connect(&root).await.ok(),
+            (None, None) => None,
         };
         if let Some(client) = client {
             let _ = tokio::time::timeout(
