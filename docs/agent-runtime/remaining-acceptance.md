@@ -37,7 +37,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Main `8440b5f7a` removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
 | OI-074 / GCHAT-BROWSER-BASELINE-DATA | Large frontend chunk and stale browser-data advisories remain. | One affected bundle/tooling check after a source change; no unrelated upgrades. |
-| GCHAT-WEB-TEST-DIAGNOSTICS | Reviewed warning-reduction candidate has no run of its focused cases. | Run the existing affected cases, not the full web suite. |
+| GCHAT-WEB-TEST-DIAGNOSTICS | Candidate `2c1bb9c41` fixes fixture ownership and asynchronous settling; all 26 selected cases have passing evidence, with zero diagnostics in the final affected cases. Product code is unchanged. | Focused evidence `web-warning-note.md`; no full-suite or real Shiki/browser qualification claim. Reviewed main integration is pending. |
 
 ### Updater offline metadata gate — October 12
 

@@ -705,15 +705,18 @@ Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 
 | Owner / path | Revision and purpose | Live work / retention |
 | --- | --- | --- |
-| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `feat/gchat-open-items-setup-bfd`, accepted base `8440b5f7a`; schedules `f769d1ead`, KVM `89e4a22f4`, updater `c36e3862c` | Combined gates passed; retain source for reviewed merge. |
+| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `feat/gchat-open-items-setup-bfd`, accepted base `8440b5f7a`; schedules `f769d1ead`, KVM `89e4a22f4` plus native `b1367ae49`, updater `c36e3862c`, web fixtures `2c1bb9c41` | Combined gates passed; retain source for reviewed merge. |
 | First-wave setup/worker/connector trees | Source incorporated in main `8440b5f7a`; branches and evidence retained | Owned worktrees retired; at least 0.77 GiB freed, `first-wave-retirement.json`. |
 | Scheduler agent: `/ai/gchat-worktrees/gbot-scheduled-tasks-3259` | `d78d8dcd1`, integrated as `f769d1ead` | No live job; retain until reviewed main merge. |
 | KVM agent: `/ai/gchat-worktrees/gbot-kvm-onboarding-ce826` | `312152b2f`, integrated as `89e4a22f4` | No live job or guest; retain until reviewed main merge. |
 | Updater: `/ai/gchat-worktrees/updater-offline-8440` | Evidence docs `73eb666c8`, integrated as `a2f908594` | Offline metadata 19 cases PASS; retain until reviewed merge, no signing/publication. |
+| Web fixtures: `/ai/gchat-worktrees/web-warning-8440` | `e0e8ac49d` and docs `3d7ded0db`, integrated as `2c1bb9c41` / `03139b2bd` | All 26 selected cases have passing evidence; retain through reviewed merge, no full suite. |
 | Shared cache: `/ai/gchat/src-tauri/target` | Existing Rust cache, not owned by this item | Canonical local build lock released; no cleanup of shared cache. |
 
-Next unresolved action: reviewed main merge of the integrated source, then deliver
-pinned guest assets and run one dedicated VM wizard check. Background service and
+Next unresolved action: reviewed main merge of the integrated source. Two bounded
+implementation agents now own pinned guest-asset delivery and the native GBench
+v2 reader, using separate candidate trees; no physical gate is underway. Then run
+one dedicated VM wizard check once its product assets are available. Background service and
 the other computer adapters remain open. No guest, engine, GPU or build container
 is owned by this source change.
 
