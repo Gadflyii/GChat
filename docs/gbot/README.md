@@ -12,8 +12,12 @@ acceptance-host proposals; the Debian image and Host tools are staged, with
 first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
 on `feat/gbot-cua-service-be226`; the parser-fixed model task exposed an idle
 Cua session-lifecycle gap, now fixed. Canonical model-facing elements and the shared Chat compactor are implemented.
-The first released Qwen SMOL attempt was rejected by the Engine SM120 admission
-rule; the approved next gate moves only the model to the Ada RTX4090.
+The released Qwen SMOL task on Ada RTX4090 opens Mousepad but is blocked at
+Save As: the window belongs to Mousepad, whose AT-SPI endpoint stops answering.
+The image dependencies are corrected; that correction did not resolve the hang.
+The model and dedicated guest are stopped. No saved-file PASS exists.
+Later Engine revision `96082415c` admits SMOL on Blackwell; this Ada retry did
+not change host or settings.
 The focused contracts and actual loopback SSH fixture pass.
 No user desktop input or native Windows execution is authorized. Ron separately
 approved the isolated S1 Debian guest and its harmless accessibility gate below.
@@ -776,38 +780,55 @@ a successful booking before secret transfer or Engine launch. Receipt:
 Ada `gate-ada-smol-98fd8622f/aborted-after-booking-refusal/`.
 Muse SMOL remains second, only after Qwen PASS.
 
-**Current result (2026-10-12 00:42Z):** the authenticated Ada SMOL task opened
-Mousepad and reached Save As. Cua then reported `atspi_app_unresponsive` on
-GetChildren: zero descendants after its existing five-second timeout. The
-bounded fixture expired without a verified file; guest stop and vault cleanup
-passed. The Engine stopped normally at00:42:36Z, PID1588606 absent.
+**Current result (2026-10-12 01:07:51Z): BLOCKED.** The one image-dependency
+retry reached Ready and opened Mousepad's Save As dialog, but the dialog's
+accessibility tree stopped answering. No `/home/gbot/hello.txt` was verified.
+The requested outcome remains the model-created file with exact SSH readback;
+opening the editor or dialog does not qualify it. Muse remains unstarted.
 
-The live guest capture confirms `gvfs` and `xdg-user-dirs` were not installed,
-with no `org.gtk.vfs` owner on the desktop bus. Mousepad's main thread was waiting
-in `futex_wait_queue`; the D-Bus sample does not establish the exact blocked call.
-These observations support a missing guest-desktop dependency diagnosis, not a
-proven Cua timeout defect. The shared cloud-init now installs both packages,
-including GVfs's required daemon dependencies. The focused first-boot case passes
-(1 case), strict all-target Clippy passes, and the changed fixture builds. Logs:
-`out/gbot-cua-service-20261011/guest-dependencies-{focused,clippy,build}.log`.
-The first fresh-guest harness stopped before Ready because its UTF-8 line reader
-rejected a binary serial byte; no model ran, guest stop and vault cleanup passed.
-The harness now retains raw console bytes and decodes only the public-key marker,
-with a passing focused regression case; strict example Clippy and the changed
-fixture build pass. Evidence: `console-byte-{focused,clippy,build}.log`.
-No Cua, prompt or model-setting change.
-Next action: resume the planned save-task retry with the same
-prompt, accepted runtime/profile,262144/C1 and existing Cua timeouts. Only SSH
-readback of the saved file qualifies the task. Diagnostic evidence: S1
-`gate-ada-smol-98fd8622f/save-dialog-diagnostics.log` and raw `tool-*.json`.
-Evidence: S1 `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/`,
-including `model-1..7.json`, `tool-*.json` and `model-stop.json` (PID4048678 absent,
-normal exit0, 17.8s, end23:41:05Z). Dedicated guest95ce015c is stopped and its vault
-credential deleted. Both own S1 and local bookings/guards are returned.
-The preceding idle-failure evidence remains at `gate-parser-19cc62bc5/`.
-Pinned lifecycle authority is retained under local
-`out/gbot-cua-service-20261011/cua-pin-lifecycle/`. Only independent SSH readback
-of the actual saved bytes qualifies the task; no `hello.txt` PASS exists yet.
+The retained native focus report identifies Save As window `23068952` as
+Mousepad PID `5054` (`focus_outcome=same_app_dialog`). The pinned Cua focus guard
+reads the native X11 owner and requires both window owners to match the target
+PID before reporting that outcome. This is ownership evidence, not a PID echoed
+from the tool request. The independent AT-SPI bus lookup also resolves the
+application to PID `5054`; root Introspect and GetChildren return
+`org.freedesktop.DBus.Error.NoReply` outside Cua. A separate portal owner is not
+supported by this run. No fresh `xprop` was taken after the guest stopped.
+
+`gvfs`, `gvfs-daemons` and `xdg-user-dirs` are installed in the corrected guest,
+and the GVfs bus service is owned. Missing dependencies therefore do not explain
+the remaining hang. The retry's Mousepad main thread was in `do_sys_poll`; the
+exact blocked call or internal deadlock is not established. No timeout, prompt
+or targeting workaround was applied. Next action: resolve the recorded
+`GBOT-GUEST-AT-SPI-SAVE-DEADLOCK` in the owning guest/application path before
+another model retry; the coordinator's decision is to stop this item here.
+
+The Engine exited normally at `2026-10-12T01:07:51Z`, PID `1600086` absent.
+The fixture's later `fetch failed` followed the explicit Engine stop and is a
+cleanup error, not the cause of Save As failure. Guest stop and vault-key
+deletion passed; its definition is removed. GPU/build guards and both bookings
+are returned. Evidence on S1, under
+`/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps-r1/`:
+`save-dialog-owner-result.json`, `save-dialog-deps-r1-atspi.log`,
+`save-dialog-deps-r1-diagnostics.log`, `tool-7-call_d3d990922363beb5.json`,
+`tool-8-call_72e73344f0adcd71.json` and `gate-result.json`. Ada's exact terminal
+receipt is `/ai/gbot-models/gate-ada-smol-guest-deps-r1/model-stop.json`.
+
+The guest dependency omission is corrected by `4a0eb0050`: focused first-boot
+case (1), strict all-target Clippy and fixture build pass. A pre-Ready fixture
+failure on a binary serial byte is corrected by `faa0e8918`: raw console bytes
+are retained and only the public-key marker is decoded; focused regression (1),
+strict example Clippy and build pass. The fresh guest then reached Ready.
+Focused logs are retained locally under `out/gbot-cua-service-20261011/` as
+`guest-dependencies-{focused,clippy,build}.log` and
+`console-byte-{focused,clippy,build}.log`. Private controller roots and a fresh
+isolated keyring prevent retry password mismatch without touching user config.
+
+Earlier lifecycle/context failures remain concise evidence at S1
+`gate-parser-19cc62bc5/` and `gate-lifecycle-19cc62bc5/`; their models and guests
+are stopped and credentials deleted. The original missing-dependency capture
+remains at `gate-ada-smol-98fd8622f/`. Pinned native ownership/lifecycle source is
+retained locally under `out/gbot-cua-service-20261011/cua-pin-lifecycle/`.
 
 Approved model gate on Ada GPU0, at most 20 minutes while a model runs:
 `ec1666210` SM89 Engine, retained at Ada
@@ -831,12 +852,13 @@ Evidence and owned inventory:
 | --- | --- | --- |
 | GChat / Ada | `/ai/gbot-models/qwen38_27b_smol_df2.ginfer` | Release SHA verified after one S1-to-Ada copy;9576802560 bytes. |
 | GChat / Ada | `/ai/gbot-models/gate-ada-smol-98fd8622f/` | Failed save-task evidence; Engine stopped normally, temporary key removed. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-98fd8622f/` | Save As hang and live diagnostics; dedicated guest5d49b52f stopped, vault credential deleted. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps/` | Pre-Ready console-reader failure; guest7873f825 stopped, vault credential deleted, no model ran. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps-r1/` | Resumed save-task candidate with byte-safe console; no task request yet. |
-| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps-r1/` | Unchanged runtime/artifact/profile, model starts after guest Ready. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-gate-guest-deps` | Changed focused fixture; ready for one image-dependency retry. |
-| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps/` | New model receipts; unchanged accepted runtime/artifact/profile. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-98fd8622f/` | Save As hang and diagnostics retained; superseded guest5d49b52f retired after saving guest metadata here. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps/` | Pre-Ready console failure evidence retained; guest7873f825 retired after saving metadata; no model ran. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps-r1/` | Failed retry/native ownership/independent NoReply evidence retained; guest stopped, definition removed, vault key deleted. |
+| GChat / S1 | `/ai/gbot-vms/26f614f7-a986-4b57-9dd1-c92fe851a1d4` | Stopped latest failing guest overlay retained for the open AT-SPI bug; no live domain or credential. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps-r1/` | Engine normal exit0/END01:07:51Z/PID1600086 absent; key removed, guards and booking returned. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate-guest-deps` | Current source-tested fixture retained for the unresolved task; no active job. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps/` | Pre-launch staging retained; the pre-Ready guest failure launched no model. |
 | GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle/projection checks retained; guest-dependency fixture, strict Clippy and build passed. |
 | GChat / local | `/ai/gchat/out/gbot-cua-service-20261011/` | Focused check logs, supervisor scripts and raw tool-call response retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/evidence/` | First integrated connection and API-ID failure evidence retained. |
@@ -848,6 +870,7 @@ Evidence and owned inventory:
 | GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Superseded binary retired in October12 cleanup; integration evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-smol-projection-19cc62bc5/` | Profile accepted; Engine SM120 identity refusal before model load. Model/guest stopped, vault cleared; evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/disposable-cleanup-20261012.json` | Five stopped failed-task guests undefined then removed,7.393GiB freed; accepted baseline, Ubuntu guest, raw evidence/runtime/models retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/save-retry-disposable-cleanup.json` | Two superseded stopped guest directories retired after preserving metadata and task evidence;1.489GiB freed. Latest failing candidate retained. |
 
 Prior model PID4054261 exited with code1 before load and was absent at
 2026-10-11T23:54:08Z; the guest is stopped and its credential deleted. That failed attempt holds no model or GPU lock. The new isolated Ada gate
@@ -855,4 +878,4 @@ has one dedicated S1 guest; it never uses a human desktop. Initial fixture root/
 before VM creation; separate evidence roots and fresh private keyrings prevent
 them without touching Ron's configuration.
 
-October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/package bulk. Task evidence, the active bot guest, image bases and open candidates remain. All five hosts checked; approximately 60.3 GB recovered. Report and per-path receipts: `/ai/coordination/disk-hygiene-20261012/GChat.md` and `GChat.json`. Earlier failed-guest recovery is excluded from that total.
+October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/package bulk. Task evidence, image bases and stopped open candidates remain. All five hosts checked; approximately 60.3 GB recovered. Report and per-path receipts: `/ai/coordination/disk-hygiene-20261012/GChat.md` and `GChat.json`. Earlier failed-guest recovery and the additional1.489GiB save-retry cleanup are excluded from that total.
