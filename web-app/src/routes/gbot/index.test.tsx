@@ -99,6 +99,7 @@ it('creates an SSH workspace in one request and preserves setup identity on retr
     target: { value: 'Writer' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByLabelText(/Another computer on the LAN/))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   for (const [label, value] of [
