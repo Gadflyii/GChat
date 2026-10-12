@@ -6,7 +6,7 @@ Ron authorized adding these connectors to the master TODO list and implementing
 both through parallel agents on October 10, 2026: “lets get those added to the to
 do list and your agents can do it.” Deliver bundled Windows/Linux
 account connections and typed service tools in the existing shared Chat, Agent
-and Code runtime. The October 12 Gbot candidate uses the same native provider
+and Code runtime. The October 12 Gbot integration uses the same native provider
 and vault through explicit per-bot account links; it never reads global account
 selection. Scoped catalog/admission, write approvals, cancellation and durable
 effect receipts have focused service/native evidence. Live OAuth remains pending
@@ -63,11 +63,11 @@ connection/reconnect and disconnect with accurate account/service availability.
 | review_master_findings | Settings connections route, service client and focused UI fixtures | Implemented; twelve connection UI fixtures pass |
 | fix_oi111 | Independent account, provider, dispatch and UI source review | Accepted initial implementation and focused corrections |
 
-All source lives in `/ai/gchat-worktrees/workspace-connectors-f111`, branch
-`feat/gchat-workspace-connectors`, baseline `f111810ec`, owned by GChat/root.
-Reviewed implementation `a7ab93e63` and focused corrections are committed on the
-source branch. Accepted main `ab4c047fe` is an ancestor; merge-ready delivery does
-not install or release the feature. Native check/tests and frontend checks reused
+The original connector implementation and focused corrections merged to GChat
+main in `72cd661bf`. Per-bot account isolation merged in `8440b5f7a`; its native
+provider owner and credential vault are shared with Chat, Agent and Code.
+These source merges do not constitute installed or live OAuth acceptance.
+Native check/tests and frontend checks reused
 `/ai/gchat/src-tauri/target` and the aligned dependency graph at
 `/ai/gchat-worktrees/oi074-frontend-packages`; these shared caches are retained.
 Owned evidence and small test caches are under
@@ -144,8 +144,7 @@ read/write acceptance require real registered client IDs and a user-approved tes
 account; these prerequisites are not available yet. Source fixtures cannot be
 reported as live sign-in or provider qualification.
 
-Next: reviewed GChat main merge from `feat/gchat-workspace-connectors`, then
-register approved desktop clients and test accounts for native/live acceptance
+Next: register approved desktop clients and test accounts for native/live acceptance
 when available. No feature is installed or live-qualified. No publication,
 signing, production account mutation, new dependency or paid Arbitor
 implementation is authorized by this task. The named gates are complete; do not
