@@ -695,7 +695,7 @@ Human assistance `32231c6ba` is incorporated in current main, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
 Coordinator tree: `fix/gbot-readiness-detail-500a` at
 `/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on reviewed main
-`500a5f2cb`, which includes background ownership, the seed repair and Settings enablement, guest delivery `ec21a1874` and native report `e49219967`.
+`13f88c042`, which includes background ownership, the seed repair and Settings enablement, guest delivery `ec21a1874` and native report `e49219967`.
 Deliverable: reconcile GChat/Manager/Gbot open work and implement guided setup,
 shared Chat workers, explicit per-bot account/tool wiring, schedules and KVM
 onboarding. Acceptance: focused
@@ -720,7 +720,7 @@ Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 
 | Owner / path | Revision and purpose | Live work / retention |
 | --- | --- | --- |
-| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `fix/gbot-readiness-detail-500a`, reviewed main `500a5f2cb` | Settings enable gates PASS; readiness diagnostic/restart case, owning check and strict Clippy PASS at 21:18:43Z. |
+| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `fix/gbot-readiness-detail-500a`, reviewed main `500a5f2cb` | Readiness fix accepted main `13f88c042`; focused restart/check/Clippy PASS. Current tree retained for next setup gate. |
 | First-wave setup/worker/connector trees | Source incorporated in main `8440b5f7a`; branches and evidence retained | Owned worktrees retired; at least 0.77 GiB freed, `first-wave-retirement.json`. |
 | Scheduler agent: `/ai/gchat-worktrees/gbot-scheduled-tasks-3259` | `d78d8dcd1`, integrated as `f769d1ead` | Accepted in main `b1502528b`; no live job, eligible for verified retirement. |
 | KVM agent: `/ai/gchat-worktrees/gbot-kvm-onboarding-ce826` | `312152b2f`, integrated as `89e4a22f4` | Accepted in main `b1502528b`; no live job or guest, eligible for verified retirement. |
@@ -729,11 +729,11 @@ Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 | Shared cache: `/ai/gchat/src-tauri/target` | User-authorized pruning completed 20:56:45Z | 99.34 → 25.74 GB allocated; 73.60 GB freed. Current closure/product outputs retained, no live job. Receipt `disk-cleanup.md`. |
 | Asset/report agents: `/ai/gchat-worktrees/gbot-asset-delivery-89e4`, `/ai/gchat-worktrees/gbench-native-v2-report-89e4` | Pushed `58747bb28` / `c6b18cc69`, integrated as `ec21a1874` / `e49219967` | Accepted in main `ca4346ba2`; clean, no live jobs, eligible for verified retirement. |
 | Background owner: `/ai/gchat-worktrees/gbot-background-ec21` | `feat/gbot-background-ec21`, tested source `77c6cab04`, final `a2b0053a9` | Accepted in main `500a5f2cb`, gate END 20:46:51Z. One process and eleven UI cases plus checks PASS; installed/native/live lifetime owed. No live job. |
-| Setup gate: `/ai/gchat-worktrees/gbot-wizard-e492` | `test/gbot-wizard-e492`, seed source `eac5e6688`, final `427a2bc29` | Accepted in main `a5490907d`; fixture and physical ISO digest PASS, desktop readiness failed. Both owned guests/private roots retired at 20:51Z; evidence retained, no live job. |
-| Merged tree retirement | Five verified clean/pushed ancestors of main | 1.35 GB apparent source size freed; paths and preservation in `disk-cleanup.md`. Dirty/unmerged/unpushed sources retained. |
+| Setup gate: `/ai/gchat-worktrees/gbot-wizard-e492` | `test/gbot-wizard-e492`, seed source `eac5e6688`, final `427a2bc29` | Accepted in main `a5490907d`; fixture and physical ISO digest PASS, desktop readiness failed. Both owned guests/private roots retired at 20:51Z; source tree now retired after clean/pushed merge, evidence retained. |
+| Merged tree retirement | Seven verified clean/pushed ancestors of main | First five: 1.35 GB apparent; final two: 0.55 GB allocated freed; paths and preservation in `disk-cleanup.md`. Dirty/unmerged/unpushed sources retained. |
 
 Current item: `GBOT-KVM-READINESS-FAILURE-DETAIL`, branch
-`fix/gbot-readiness-detail-500a`, based on accepted main `500a5f2cb`. Preserve
+`fix/gbot-readiness-detail-500a`, accepted in reviewed main `13f88c042`. Preserve
 the failed operation and safe reason in the existing durable setup issue; frame
 checks use the same result projection. Acceptance is one focused typed/MCP/exec
 failure and restart-persistence case, owning Rust check and strict Clippy. CPU-only
@@ -743,7 +743,7 @@ Result: one focused typed/MCP/exec failure/restart case, owning Rust check and
 strict all-target Clippy PASS at 21:18:43 UTC. Evidence: `readiness-detail/` under
 the existing evidence root. The process fixture now obtains its service snapshot
 before acquiring the synchronous vault lock. No passing gate was repeated.
-Next unresolved action: reviewed merge, then qualify dedicated-guest Ready and
+Accepted in main `13f88c042`. Next unresolved action: qualify dedicated-guest Ready and
 browser effects with useful failure details if another error occurs. The replacement first boot completed but `testing_desktop` failed;
 a diagnostic harness tag error ended its disposable keyring, so no speculative
 cause or retry is claimed. All agents/jobs/guests are stopped. The first QEMU
@@ -751,7 +751,9 @@ bootstrap's CPU escape and replacement's verified exact-UUID pinning are retaine
 in the gate receipt. Installed wizard, browser effects, live background lifetime
 and other computer adapters remain open; no engine or GPU is owned by this item.
 Owned disk cleanup finished at 20:56:45Z: Cargo target 25.74 GB, 73.60 GB allocated
-freed, plus 1.35 GB apparent source size from five merged trees. Inventory and
+freed, plus 1.35 GB apparent source size from five merged trees. Two newly merged trees
+were subsequently retired (0.55 GB allocated). After focused verification, the
+current Cargo target is 26.81 GB and filesystem availability is 102.22 GB. Inventory and
 receipts: `/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`. Product setup does not default its brain to
 GChat's UI-owned port1337 facade: its explicit assignment must select a persistent
 Host or other inference endpoint for client-exit continuity.
