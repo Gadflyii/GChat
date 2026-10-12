@@ -7,7 +7,7 @@ mod linux {
             ApprovalFuture, Assignment, CuaTask, ExecutorProcesses, FunctionTool, ProcessSpec,
             ToolApproval, ToolBinding,
         },
-        kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, CUA_DRIVER_REVISION},
+        kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, VmState, CUA_DRIVER_REVISION},
         service::Service,
         vault::{NativeVault, Secret, Vault},
         workspace::WorkspaceRuntime,
@@ -204,6 +204,8 @@ mod linux {
         let _ = child.wait().await;
         result
     }
+    const DESKTOP_LINE: &str = "Hello from Gbot.";
+
     async fn model_task(
         runtime: &WorkspaceRuntime,
         identity: SessionIdentity,
@@ -252,9 +254,49 @@ mod linux {
         };
         if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {
             for variant in 0..2 {
-                bench_task(runtime, identity, &assignment, &processes, evidence, variant).await?;
+                bench_task(
+                    runtime,
+                    identity,
+                    &assignment,
+                    &processes,
+                    evidence,
+                    variant,
+                )
+                .await?;
             }
             return Ok(());
+        }
+        if std::env::var_os("GBOT_CUA_OVERWRITE_FIXTURE").is_some() {
+            let previous = b"Hello from Gbot";
+            let written = operation(
+                runtime,
+                identity,
+                GuestOperationKind::Write {
+                    path: GuestPath("/home/gbot/hello.txt".into()),
+                    offset: 0,
+                    data: previous.to_vec(),
+                    truncate: true,
+                },
+            )
+            .await?;
+            let read = operation(
+                runtime,
+                identity,
+                GuestOperationKind::Read {
+                    path: GuestPath("/home/gbot/hello.txt".into()),
+                    offset: 0,
+                    length: 4096,
+                },
+            )
+            .await?;
+            tokio::fs::write(
+                evidence.join("overwrite-precondition.json"),
+                serde_json::to_vec_pretty(&json!({"written":written,"read":read}))?,
+            )
+            .await?;
+            if !matches!(read, GuestResult::Read { data } if data == previous) {
+                return Err("overwrite precondition did not match".into());
+            }
         }
         let names = [
             "list_windows",
@@ -281,7 +323,7 @@ mod linux {
             .collect();
         tools.push(FunctionTool {name:"open_editor".into(),description:"Open Mousepad on the dedicated bot desktop. Use this once, then foreground input tools to type and save.".into(),parameters:json!({"type":"object","properties":{},"additionalProperties":false}),binding:ToolBinding::Fixed {operation:GuestOperationKind::Exec {program:"/usr/local/bin/gbot-in-session".into(),args:vec!["systemd-run".into(),"--user".into(),"--quiet".into(),"--collect".into(),"--unit=gbot-editor".into(),"/usr/local/bin/gbot-in-session".into(),"mousepad".into()],cwd:GuestPath("/home/gbot".into()),env:Default::default()}}});
         run_task(runtime,identity,&assignment,&processes,evidence.join("desktop-task.json"),vec![
-            json!({"role":"system","content":"You operate a dedicated Linux bot computer through accessibility observations and real foreground input. Open Mousepad, type exactly one line: Hello from Gbot. Save it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop foreground input, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving."}),
+            json!({"role":"system","content":format!("You operate a dedicated Linux bot computer through accessibility observations and real foreground input. Open Mousepad, type exactly the following line:\n```\n{}\n```\nSave it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop foreground input, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving.", DESKTOP_LINE)}),
             json!({"role":"user","content":"Please create the text file now."}),
         ],tools).await?;
         match operation(
@@ -296,7 +338,8 @@ mod linux {
         .await?
         {
             GuestResult::Read { data }
-                if data == b"Hello from Gbot." || data == b"Hello from Gbot.\n" =>
+                if data == DESKTOP_LINE.as_bytes()
+                    || data.strip_suffix(b"\n") == Some(DESKTOP_LINE.as_bytes()) =>
             {
                 tokio::fs::write(evidence.join("hello.txt"), data).await?;
                 println!("PASS: ComputerAgent saved hello.txt; independent SSH readback matched");
@@ -306,6 +349,9 @@ mod linux {
                     format!("saved file did not match the requested line: {other:?}").into(),
                 )
             }
+        }
+        if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {
+            return Ok(());
         }
         for variant in 0..2 {
             bench_task(
@@ -440,7 +486,9 @@ mod linux {
                 )
                 .await?;
                 if !matches!(reply, GuestResult::ExecFinished { exit_code: 0, .. }) {
-                    return Err("guest diagnostic did not exit successfully; see its receipt".into());
+                    return Err(
+                        "guest diagnostic did not exit successfully; see its receipt".into(),
+                    );
                 }
                 println!("GUEST_DIAGNOSTIC_RECORDED");
                 return Ok(());
@@ -479,7 +527,7 @@ mod linux {
             .map_err(|_| "driver digest must be UTF-8")?;
         tokio::fs::create_dir_all(&evidence).await?;
         let record_path = evidence.join("controller.json");
-        let record: GateRecord = if record_path.try_exists()? {
+        let mut record: GateRecord = if record_path.try_exists()? {
             let record: GateRecord = serde_json::from_slice(&tokio::fs::read(&record_path).await?)?;
             let vm = PreparedVm::open(&record.vm.directory).await?;
             if vm.spec.id != record.identity.workspace_id.0 {
@@ -561,19 +609,25 @@ mod linux {
             println!("OWNED_GUEST_RETIRED");
             return Ok(());
         }
+        // A boot starts a new desktop lifetime; keep its session on live reconnects.
+        if record.vm.state(&KvmTools::default()).await? == VmState::Stopped {
+            record.identity.session_id = SessionId::new();
+            tokio::fs::write(&record_path, serde_json::to_vec_pretty(&record)?).await?;
+        }
         let result =
             tokio::time::timeout(Duration::from_secs(1800), gate(&record, &evidence)).await;
         let stop = record.vm.force_stop(&KvmTools::default()).await;
         let passed = matches!(result, Ok(Ok(())));
         let retained = !passed
             || std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some()
-            || std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some();
+            || std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some()
+            || std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some();
         let cleanup = if !retained {
             NativeVault.delete(record.credential_ref).await
         } else {
             Ok(())
         };
-        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
+        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
         stop?;
         cleanup?;
         result??;
