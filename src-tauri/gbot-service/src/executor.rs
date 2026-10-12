@@ -1209,12 +1209,15 @@ mod tests {
                 .await
                 .unwrap();
             service
-                .register_session(GuestHello {
-                    protocol_version: GUEST_PROTOCOL_VERSION,
+                .register_session(
                     identity,
-                    capabilities: [GuestCapability::Exec].into(),
-                    view: None,
-                })
+                    GuestHello {
+                        protocol_version: GUEST_PROTOCOL_VERSION,
+                        identity,
+                        capabilities: [GuestCapability::Exec].into(),
+                        view: None,
+                    },
+                )
                 .await
                 .unwrap();
             assert!(runtime

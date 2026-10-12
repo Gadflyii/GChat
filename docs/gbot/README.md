@@ -23,7 +23,7 @@ release checks. Rust 1.97 is required on Windows release hosts.
 Current work is open-item reconciliation and the first guided setup correction.
 The candidate adds opt-in visibility and reviews an existing dedicated LAN SSH
 connection before vault import. Automatic VM/cloud/M365 creation, remote-service
-selection, per-bot connectors and scheduling remain implementation work. The
+selection, per-bot connectors and independent background service lifetime remain implementation work. The
 [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates source gaps, accepted evidence and unrun gates. The physical browser
 form gate is still unrun; no browser qualification is claimed.
@@ -619,6 +619,51 @@ Service default, first-release M365 scope, the four computer options, provider
 ordering and the no-relay LAN route are decided; they are not open questions.
 
 ## Current record and inventory
+
+**Scheduled-work candidate — October 12.** Owner: scheduling agent. Repository
+`/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at
+`/ai/gchat-worktrees/gbot-scheduled-tasks-3259`, based on `325998951` with the
+accepted per-bot connector source. Deliverable: service-owned once/interval
+schedules using existing Cua TaskRunner, explicit bot inference snapshots,
+enable/disable controls, stable persisted occurrence IDs and conservative restart
+recovery. Acceptance: injected-time due/disabled/missed-run/ambiguous-recovery
+fixtures, the existing fake executor, affected UI cases, types, Rust check and
+strict Clippy. No VM/model/desktop/release/OS service install or new dependency.
+The initial six focused service cases pass. Source review added a durable
+30-second retry deadline for transient connection/readiness failures and a stopped
+state in schedule listing/UI. The new retry case and affected API/publication-fault
+cases pass, as do service Rust check/strict Clippy and ten affected frontend cases
+with lint/types. The final service gate finished at 19:47:50 UTC; the cache is
+released. Next action: integrate the source candidate; independent service ownership
+remains separate. The fake executor receipt has one effect after
+task-journal recovery; this is a hermetic recovery check, not a live guest scheduling
+qualification. Evidence and owned small
+logs: `/ai/gchat/out/gchat-open-items-20261012/scheduling-note.md` and
+`scheduling-*`; shared native target cache is borrowed and released. The retained
+candidate is 268 MiB; no new build directory, live job or guest belongs to this item.
+
+Schedules persist UTC Unix seconds, prompt and the bot's saved model assignment;
+credentials resolve from the vault at execution. Each interval has at most one
+unfinished occurrence. `run_latest` coalesces a missed backlog into one latest
+occurrence; `skip_missed` discards pre-restart/pre-enable and multi-interval
+backlogs. Queued work with no attempted dispatch can continue after restart;
+dispatching/dispatched work attaches to its saved task. Missing or interrupted
+tasks require review and hold future occurrences. A dispatch with unknown effects
+is never automatically retried. Disabling cancels queued occurrences, while a
+running task keeps its ordinary Stop/approval controls. Completed tasks release
+the next interval. Changing the saved inference assignment holds the old schedule
+for review; create a schedule for the new assignment.
+Connection/readiness failures keep the queued occurrence and persist a 30-second
+retry deadline, so the one-second service wake does not repeatedly attempt SSH.
+Schedule listing includes a stopped reason after a scheduler error or uncertain
+journal publication; the UI keeps that reason visible and requests service restart.
+
+This is service-running scheduling and durable restart recovery. The native
+bridge still owns the in-process service lifetime; closing GChat stops it. The UI
+persistently states: “Scheduled tasks run while GChat is open. Background service
+setup is not available yet.” Independent service ownership and client-exit/sleep
+continuity remain separate unfinished acceptance. The master scheduled/background
+row remains PARTIAL.
 
 Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
