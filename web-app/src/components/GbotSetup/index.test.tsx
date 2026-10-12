@@ -33,17 +33,13 @@ function fillConnection() {
 it('requires a supported computer choice and cancels without importing credentials', () => {
   const save = vi.fn()
   const cancel = vi.fn()
-  render(<GbotSetup save={save} cancel={cancel} />)
+  render(<GbotSetup save={save} localReady={vi.fn()} cancel={cancel} />)
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   fireEvent.change(screen.getByLabelText('Bot name'), {
     target: { value: 'Writer' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  for (const choice of [
-    /A separate local VM/,
-    /Cloud hosted/,
-    /M365 Cloud PC/,
-  ]) {
+  for (const choice of [/Cloud hosted/, /M365 Cloud PC/]) {
     fireEvent.click(screen.getByLabelText(choice))
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   }
@@ -54,7 +50,7 @@ it('requires a supported computer choice and cancels without importing credentia
 
 it('reviews a valid LAN connection without showing secrets and saves only on confirmation', async () => {
   const save = vi.fn().mockResolvedValue(undefined)
-  render(<GbotSetup save={save} cancel={vi.fn()} />)
+  render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
   chooseLan()
   fillConnection()
   fireEvent.change(screen.getByLabelText('SSH port'), {
@@ -89,7 +85,7 @@ it('keeps a failed save reviewable and allows retry', async () => {
     .fn()
     .mockRejectedValueOnce(new Error('Vault unavailable'))
     .mockResolvedValueOnce(undefined)
-  render(<GbotSetup save={save} cancel={vi.fn()} />)
+  render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
   chooseLan()
   fillConnection()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))

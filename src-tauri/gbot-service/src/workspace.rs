@@ -110,6 +110,8 @@ pub struct WorkspaceRuntime {
     resume_observations: Mutex<BTreeMap<WorkspaceId, GuestReply>>,
     stopping: AtomicBool,
     connectors: Option<Arc<dyn ConnectorHost>>,
+    #[cfg(target_os = "linux")]
+    kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
 }
 
 #[derive(Serialize)]
@@ -129,7 +131,36 @@ impl WorkspaceRuntime {
             resume_observations: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
             connectors: None,
+            #[cfg(target_os = "linux")]
+            kvm_setup: std::sync::OnceLock::new(),
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn configure_kvm_setup(
+        self: &Arc<Self>,
+        root: std::path::PathBuf,
+    ) -> Result<(), crate::kvm_setup::SetupIssue> {
+        let owner = Arc::new(
+            crate::kvm_setup::KvmSetup::open(
+                root,
+                self.service.clone(),
+                self.vault.clone(),
+                Arc::downgrade(self),
+            )
+            .await?,
+        );
+        self.kvm_setup.set(owner).map_err(|_| {
+            crate::kvm_setup::SetupIssue::new(
+                "setup_configured",
+                "The local setup owner already exists.",
+                "Reuse the service's existing setup owner.",
+            )
+        })
+    }
+    #[cfg(target_os = "linux")]
+    pub fn kvm_setup(&self) -> Option<Arc<crate::kvm_setup::KvmSetup>> {
+        self.kvm_setup.get().cloned()
     }
 
     pub fn with_connectors(mut self, connectors: Arc<dyn ConnectorHost>) -> Self {
@@ -813,6 +844,10 @@ impl WorkspaceRuntime {
 
     pub async fn close(self: &Arc<Self>) -> Result<(), WorkspaceError> {
         self.stopping.store(true, Ordering::Release);
+        #[cfg(target_os = "linux")]
+        if let Some(setup) = self.kvm_setup() {
+            setup.close().await;
+        }
         let workspaces: Vec<_> = self.lifecycle.lock().await.keys().copied().collect();
         let mut jobs = tokio::task::JoinSet::new();
         for workspace in workspaces {

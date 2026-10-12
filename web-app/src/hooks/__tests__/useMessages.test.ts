@@ -202,10 +202,10 @@ describe('useMessages', () => {
         })
       )
 
-      // Verify persistence was attempted
-      await vi.waitFor(() => {
-        expect(mockCreateMessage).toHaveBeenCalled()
+      await act(async () => {
+        await mockCreateMessage.mock.results[0].value
       })
+      expect(result.current.messages['thread1']).toContainEqual(mockCreatedMessage)
     })
 
     it('should handle message without created_at', async () => {
@@ -229,8 +229,9 @@ describe('useMessages', () => {
         // no created_at provided
       } as ThreadMessage
 
-      act(() => {
+      await act(async () => {
         result.current.addMessage(messageToAdd)
+        await mockCreateMessage.mock.results[0].value
       })
 
       expect(mockCreateMessage).toHaveBeenCalledWith(
@@ -267,8 +268,9 @@ describe('useMessages', () => {
         },
       }
 
-      act(() => {
+      await act(async () => {
         result.current.addMessage(messageToAdd)
+        await mockCreateMessage.mock.results[0].value
       })
 
       expect(mockCreateMessage).toHaveBeenCalledWith(

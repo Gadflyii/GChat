@@ -27,6 +27,8 @@ pub enum ApiError {
     Http(hyper::Error),
     Workspace(WorkspaceError),
     Tasks(TaskRunnerError),
+    #[cfg(target_os = "linux")]
+    Setup(crate::kvm_setup::SetupIssue),
 }
 
 impl std::fmt::Display for ApiError {
@@ -37,6 +39,8 @@ impl std::fmt::Display for ApiError {
             Self::Http(_) => formatter.write_str("Gbot HTTP service could not complete"),
             Self::Workspace(error) => error.fmt(formatter),
             Self::Tasks(error) => error.fmt(formatter),
+            #[cfg(target_os = "linux")]
+            Self::Setup(error) => error.fmt(formatter),
         }
     }
 }
@@ -61,6 +65,11 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
+    #[cfg(target_os = "linux")]
+    pub fn subscribe_setup(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        self.runtime.kvm_setup().map(|setup| setup.subscribe())
+    }
+
     pub fn subscribe_tasks(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
         self.tasks.as_ref().map(|tasks| tasks.subscribe())
     }
@@ -75,7 +84,10 @@ impl ApiClient {
         {
             return Err("Bot tasks use this bot's saved model assignment".into());
         }
-        let method = if matches!(path, "/v1/state" | "/v1/tasks" | "/v1/tasks/approvals") {
+        let method = if matches!(
+            path,
+            "/v1/state" | "/v1/tasks" | "/v1/tasks/approvals" | "/v1/schedules"
+        ) {
             Method::GET
         } else {
             Method::POST
@@ -108,10 +120,11 @@ impl ApiClient {
         if status.is_success() {
             Ok(value)
         } else {
-            Err(value["error"]["message"]
+            let message = value["error"]["message"]
                 .as_str()
-                .unwrap_or("Gbot request failed")
-                .to_string())
+                .unwrap_or("Gbot request failed");
+            let action = value["error"]["next_action"].as_str().unwrap_or("");
+            Err(format!("{message} {action}").trim().to_string())
         }
     }
 }
@@ -246,6 +259,15 @@ impl Api {
         })
     }
 
+    #[cfg(target_os = "linux")]
+    pub async fn with_kvm_setup(self, root: std::path::PathBuf) -> Result<Self, ApiError> {
+        self.runtime
+            .configure_kvm_setup(root)
+            .await
+            .map_err(ApiError::Setup)?;
+        Ok(self)
+    }
+
     pub async fn with_executor(
         mut self,
         root: std::path::PathBuf,
@@ -284,6 +306,36 @@ impl Api {
         let stopping_tasks = tasks.clone();
         let routing_runtime = runtime.clone();
         let stopping_runtime = runtime.clone();
+        let (stop_schedules, mut schedules_stopped) = tokio::sync::watch::channel(false);
+        let schedule_tasks = tasks.clone();
+        let schedule_service = service.clone();
+        let schedule_runtime = runtime.clone();
+        let scheduler = tokio::spawn(async move {
+            if let Some(tasks) = schedule_tasks {
+                let mut wake = tokio::time::interval(std::time::Duration::from_secs(1));
+                wake.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                loop {
+                    tokio::select! {
+                        biased;
+                        _ = schedules_stopped.changed() => break,
+                        _ = wake.tick() => {
+                            let result = tokio::select! {
+                                biased;
+                                _ = schedules_stopped.changed() => break,
+                                result = tasks.schedules.tick(crate::schedules::now(), &tasks, &schedule_service, &schedule_runtime) => result,
+                            };
+                            if let Err(error) = result {
+                                eprintln!("Gbot scheduler stopped: {error}");
+                                tasks.schedules.mark_stopped(error.to_string()).await;
+                                tasks.notify();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let stopping_scheduler = stop_schedules.clone();
         let (stopped, mut stop_result) = tokio::sync::oneshot::channel();
         let serving = hyper::Server::from_tcp(self.listener)
             .map_err(ApiError::Http)?
@@ -306,6 +358,7 @@ impl Api {
             }))
             .with_graceful_shutdown(async move {
                 shutdown.await;
+                stopping_scheduler.send_replace(true);
                 let task_result = match stopping_tasks {
                     Some(tasks) => tasks.close().await,
                     None => Ok(()),
@@ -314,6 +367,8 @@ impl Api {
                 let _ = stopped.send((task_result, workspace_result));
             })
             .await;
+        stop_schedules.send_replace(true);
+        let _ = scheduler.await;
         let cleanup = match stop_result.try_recv() {
             Ok(result) => result,
             Err(_) => {
@@ -377,6 +432,51 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response<Bod
     )
 }
 
+async fn setup_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> Response<Body> {
+    #[cfg(target_os = "linux")]
+    {
+        let Some(setup) = runtime.kvm_setup() else {
+            return error_response(StatusCode::SERVICE_UNAVAILABLE, "setup_unavailable", "Local VM setup is not enabled in this service. Reopen GChat with its local service enabled.");
+        };
+        match request.uri().path() {
+            "/v1/setup/kvm/preflight" => json_response(StatusCode::OK, &setup.preflight().await),
+            "/v1/setup/kvm/status" => json_response(StatusCode::OK, &setup.status().await),
+            "/v1/setup/kvm/start" => {
+                match parse_body::<crate::kvm_setup::StartSetup>(request).await {
+                    Some(input) => match setup.start(input).await {
+                        Ok(record) => json_response(StatusCode::OK, &record),
+                        Err(issue) => {
+                            json_response(StatusCode::CONFLICT, &serde_json::json!({"error":issue}))
+                        }
+                    },
+                    None => invalid_request(),
+                }
+            }
+            "/v1/setup/kvm/remove" => {
+                match parse_body::<crate::kvm_setup::SetupId>(request).await {
+                    Some(input) => match setup.remove(input.id).await {
+                        Ok(record) => json_response(StatusCode::OK, &record),
+                        Err(issue) => {
+                            json_response(StatusCode::CONFLICT, &serde_json::json!({"error":issue}))
+                        }
+                    },
+                    None => invalid_request(),
+                }
+            }
+            _ => invalid_request(),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (runtime, request);
+        error_response(
+            StatusCode::NOT_IMPLEMENTED,
+            "unsupported_host",
+            "Local KVM setup requires Linux x86-64. Hyper-V setup is unfinished.",
+        )
+    }
+}
+
 async fn route(
     service: Arc<Service>,
     runtime: Arc<WorkspaceRuntime>,
@@ -397,6 +497,52 @@ async fn route(
         return Ok(response);
     }
     let response = match (request.method(), request.uri().path()) {
+        (&Method::GET, "/v1/schedules") => match tasks {
+            Some(tasks) => json_response(StatusCode::OK, &tasks.schedules.list_for_client().await),
+            None => executor_unavailable(),
+        },
+        (&Method::POST, "/v1/schedules/create") => match (
+            tasks,
+            parse_body::<crate::schedules::CreateSchedule>(request).await,
+        ) {
+            (Some(tasks), Some(input)) => {
+                match service.model_assignment(input.workspace_id).await {
+                    Ok(Some(assignment)) => match tasks.schedules.create(input, assignment).await {
+                        Ok(schedule) => {
+                            tasks.notify();
+                            json_response(StatusCode::OK, &schedule)
+                        }
+                        Err(error) => schedule_error(error),
+                    },
+                    Ok(None) => workspace_error(ServiceError::AssignmentNotFound.into()),
+                    Err(error) => workspace_error(error.into()),
+                }
+            }
+            (None, _) => executor_unavailable(),
+            _ => invalid_request(),
+        },
+        (&Method::POST, "/v1/schedules/enabled") => match (
+            tasks,
+            parse_body::<crate::schedules::SetEnabled>(request).await,
+        ) {
+            (Some(tasks), Some(input)) => match tasks.schedules.set_enabled(input).await {
+                Ok(schedule) => {
+                    tasks.notify();
+                    json_response(StatusCode::OK, &schedule)
+                }
+                Err(error) => schedule_error(error),
+            },
+            (None, _) => executor_unavailable(),
+            _ => invalid_request(),
+        },
+        (
+            &Method::POST,
+            "/v1/setup/kvm/preflight"
+            | "/v1/setup/kvm/status"
+            | "/v1/setup/kvm/start"
+            | "/v1/setup/kvm/remove",
+        ) => setup_route(runtime, request).await,
+
         (&Method::POST, "/v1/connectors/get") => match parse_body::<GetAssignment>(request).await {
             Some(input) => match runtime.bot_connectors(input.workspace_id).await {
                 Ok(settings) => json_response(StatusCode::OK, &settings),
@@ -682,6 +828,22 @@ fn task_result<T: Serialize>(result: Result<T, TaskRunnerError>) -> Response<Bod
     }
 }
 
+fn schedule_error(error: WorkspaceError) -> Response<Body> {
+    match error {
+        WorkspaceError::NotFound => error_response(
+            StatusCode::NOT_FOUND,
+            "schedule_not_found",
+            "Schedule not found",
+        ),
+        WorkspaceError::State(ServiceError::InvalidState) => error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_schedule",
+            "Enter a nonempty prompt, a UTC start time and a positive interval",
+        ),
+        _ => workspace_error(error),
+    }
+}
+
 fn workspace_error(error: WorkspaceError) -> Response<Body> {
     let (status, code) = match &error {
         WorkspaceError::NotFound | WorkspaceError::State(ServiceError::WorkspaceNotFound) => {
@@ -869,6 +1031,95 @@ mod tests {
             "private_key": private.to_openssh(LineEnding::LF).unwrap().as_str(),
             "passphrase": null,
         })
+    }
+
+    #[tokio::test]
+    async fn schedule_api_requires_assignment_and_creates_lists_disables() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = Arc::new(
+            Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap(),
+        );
+        let vault = Arc::new(MemoryVault::default());
+        let process = crate::executor::ProcessSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "exit 0".into()],
+        };
+        let api = Api::bind(service.clone(), vault, 0)
+            .await
+            .unwrap()
+            .with_executor(
+                directory.path().join("tasks"),
+                ExecutorProcesses {
+                    python: process.clone(),
+                    context: process,
+                },
+            )
+            .await
+            .unwrap();
+        let client = api.client();
+        let workspace = client
+            .call("/v1/workspaces/ssh", ssh_workspace_request())
+            .await
+            .unwrap();
+        let id = workspace["id"].clone();
+        let input = serde_json::json!({"workspace_id": id, "prompt": "Scheduled prompt", "timing": {"kind":"interval","first_at":2000000000u64,"every_seconds":60}, "missed_run_policy":"run_latest"});
+        assert!(client
+            .call("/v1/schedules/create", input.clone())
+            .await
+            .unwrap_err()
+            .contains("model assignment"));
+        client.call("/v1/assignments/save", serde_json::json!({"workspace_id":id,"api_base":"http://localhost:1337/v1","model":"scheduled-model","context_tokens":131072})).await.unwrap();
+        let mut injected = input.clone();
+        injected["assignment"] = serde_json::json!({"model":"other-model"});
+        assert!(client.call("/v1/schedules/create", injected).await.is_err());
+        let mut invalid = input.clone();
+        invalid["timing"]["every_seconds"] = serde_json::json!(0);
+        assert!(client
+            .call("/v1/schedules/create", invalid)
+            .await
+            .unwrap_err()
+            .contains("positive interval"));
+        let schedule = client.call("/v1/schedules/create", input).await.unwrap();
+        assert_eq!(schedule["assignment"]["model"], "scheduled-model");
+        assert_eq!(schedule["workspace_id"], id);
+        assert_eq!(schedule["enabled"], true);
+        assert_eq!(
+            client
+                .call("/v1/schedules", serde_json::json!({}))
+                .await
+                .unwrap()["schedules"][0],
+            schedule
+        );
+        assert!(client
+            .call("/v1/schedules", serde_json::json!({}))
+            .await
+            .unwrap()["stopped"]
+            .is_null());
+        let disabled = client
+            .call(
+                "/v1/schedules/enabled",
+                serde_json::json!({"id": schedule["id"],"enabled":false}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(disabled["enabled"], false);
+        assert!(disabled["occurrences"].as_array().unwrap().is_empty());
+        api.tasks
+            .as_ref()
+            .unwrap()
+            .schedules
+            .mark_stopped("Fixture scheduler error".into())
+            .await;
+        assert_eq!(
+            client
+                .call("/v1/schedules", serde_json::json!({}))
+                .await
+                .unwrap()["stopped"],
+            "Fixture scheduler error"
+        );
+        api.tasks.as_ref().unwrap().close().await.unwrap();
     }
 
     #[tokio::test]

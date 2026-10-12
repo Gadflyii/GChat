@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotConnectors from '@/components/GbotConnectors'
+import GbotSchedules from '@/components/GbotSchedules'
 import GbotSetup, { type BotConnection } from '@/components/GbotSetup'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
@@ -309,6 +310,11 @@ function GbotPage() {
           {adding && (
             <GbotSetup
               save={add}
+              localReady={async (id) => {
+                setSelected(id)
+                setAdding(false)
+                await refresh()
+              }}
               cancel={() => {
                 setupIdentity.current = null
                 setAdding(false)
@@ -385,6 +391,7 @@ function GbotPage() {
                 </p>
               )}
               <GbotConnectors key={bot.id} workspaceId={bot.id} />
+              <GbotSchedules key={`schedules-${bot.id}`} workspaceId={bot.id} assignment={savedAssignment} />
               <details className="rounded-lg border p-3">
                 <summary className="cursor-pointer text-sm">Bot brain</summary>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -542,7 +549,7 @@ function GbotPage() {
                         Stop
                       </Button>
                     ) : (
-                      ['paused', 'interrupted', 'cancelled'].includes(
+                      ['ready', 'paused', 'interrupted', 'cancelled'].includes(
                         task.state
                       ) && (
                         <Button

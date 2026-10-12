@@ -6,7 +6,7 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-This reconciliation uses current main `bfd42e530`, the master rows and saved
+This reconciliation uses current main `8440b5f7a`, the master rows and saved
 receipts. A source fix, a focused fixture and an installed acceptance gate are
 separate claims. Passing evidence is reused; no broad suite or repeat GPU run
 is part of this plan. The master list remains the sole issue-status authority.
@@ -15,29 +15,56 @@ is part of this plan. The master list remains the sole issue-status authority.
 
 | Item | Current behavior / remaining work | Smallest useful gate |
 | --- | --- | --- |
-| General agent delegation from Chat | Candidate supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
-| Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. This candidate adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Installed presentation is still untested. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
-| Automatic bot computer setup | KVM adapter has dedicated-guest evidence, but product onboarding does not create a VM. Hyper-V, cloud provider creation/live cost review and M365 connection are unfinished. Remote service selection is also unwired. | One dedicated KVM VM through the actual UI first; Windows/M365 at the release window. No person's desktop. |
-| Per-bot connectors and research | Candidate links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
-| Scheduled/background Gbot work | Tasks are durable, but exiting GChat stops its service child. A service-running scheduler is being implemented with a persistent limitation notice; independent service lifetime/sleep recovery remains open. | Due/disabled/recovery/missed-run cases with fake clock and no duplicate ambiguous effects. |
+| General agent delegation from Chat | Main `8440b5f7a` supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
+| Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Installed presentation is still untested. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
+| Automatic bot computer setup | Candidate now wires the KVM adapter to resumable product onboarding with prerequisite, asset and readiness checks. Packaged asset delivery and the actual wizard-created VM remain untested. Hyper-V, cloud provider creation/live cost review and M365 connection are unfinished. Remote service selection is also unwired. | One dedicated KVM VM through the actual UI first; Windows/M365 at the release window. No person's desktop. |
+| Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
+| Scheduled/background Gbot work | Candidate service-owned once/interval scheduling persists occurrence IDs and explicit bot assignments, with create/list/disable UI and conservative restart recovery. Exiting GChat still stops the in-process service; independent lifetime/client-exit and sleep continuity remain unfinished. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls; independent service acceptance remains separate. |
 | Browser tools | Typed browser catalog/schema is covered. A real guest browser form task is unrun. | One dedicated-guest form submit and independent SSH readback; no model needed. |
 
 ### Bugs, decisions and incomplete diagnostics
 
 | Master item | What remains | Next evidence / dependency |
 | --- | --- | --- |
-| GBOT-SETUP-CREDENTIAL-ORPHAN | Candidate replaces the two requests with a service-owned transaction and stable vault slot. | Five service failure/retry cases and five route cases PASS, with service check/strict Clippy. Native endpoint admission PASS. Cross-store power-loss/reload recovery is not qualified. |
+| GBOT-SETUP-CREDENTIAL-ORPHAN | Main `8440b5f7a` replaces the two requests with a service-owned transaction and stable vault slot. | Five service failure/retry cases and five route cases PASS, with service check/strict Clippy. Native endpoint admission PASS. Cross-store power-loss/reload recovery is not qualified. |
 | GCHAT-GBENCH-NATIVE-V2-REPORT | Native report v2 does not match GChat's v1 report reader. | Agree the owning field/scoring contract; one captured real report fixture. |
 | OI-069 | Pair/restart/grant restore passed; shared-pool queue, cancellation and recovery across two Ready hosts did not. | Resolve the worker startup/RAM blocker, then one two-host job lifecycle. |
 | OI-072-RUNTIME | Muse runtime memory loss has no demonstrated allocation owner/fix. | Reuse capture evidence; one admitted candidate and an ownership timeline only when authorized. |
 | OI-076 | Continued-chat context/format warning's original cause remains unknown. | Diagnostics merged in `36ac89441`; collect exact trigger on the next occurrence. No speculative fix. |
-| OI-066 | Guard diagnosis is closed; fit-message source/landing needs confirmation. | Locate the owning source/result before claiming the presentation fix landed. Profile qualification is OI-072. |
-| OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; 19 offline cases are unrun and the live feed is not published. | Run only the existing offline cases; signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
+| OI-066 | Guard diagnosis is closed; fit-message correction `85bc3d087` is not in origin/dev/next. | Owning CPU/syntax fixtures pass; reviewed engine landing remains pending. Profile qualification is OI-072. |
+| OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; all 19 existing offline metadata cases PASS on S1. The live feed is not published. | Exact final-payload signature and signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
-| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Candidate removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
+| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Main `8440b5f7a` removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
 | OI-074 / GCHAT-BROWSER-BASELINE-DATA | Large frontend chunk and stale browser-data advisories remain. | One affected bundle/tooling check after a source change; no unrelated upgrades. |
-| GCHAT-WEB-TEST-DIAGNOSTICS | Reviewed warning-reduction candidate has no run of its focused cases. | Run the existing affected cases, not the full web suite. |
+| GCHAT-WEB-TEST-DIAGNOSTICS | Candidate `2c1bb9c41` fixes fixture ownership and asynchronous settling; all 26 selected cases have passing evidence, with zero diagnostics in the final affected cases. Product code is unchanged. | Focused evidence `web-warning-note.md`; no full-suite or real Shiki/browser qualification claim. Reviewed main integration is pending. |
+
+### Updater offline metadata gate — October 12
+
+The retained accepted source `874cbc98d31532e92b43ff7d60072b474153236e`
+in `/ai/gchat-worktrees/oi110-sectile-feed-bd4` passes its unchanged production
+filter gate: `python3 -m unittest discover -s tests -p test_updater_manifest.py`.
+S1, verified as `AIS-2-8592-L01` at `192.168.1.109`, provides existing
+Python 3.12.3 and jq 1.7. Four test methods contain 19 cases/subcases and
+finish `OK`, exit 0, in 0.077 seconds. Valid Windows/Linux/combined metadata,
+failed/skipped omission, signature/asset-name rejection and version rejection
+are covered. Sentinel signatures establish metadata admission only.
+
+Local `jq` and the three admitted cached container images lack the executable;
+the established SSH host supplied it without installation. Only the retained
+test, shared filter and template were copied to an owned temporary folder;
+that folder is retired after receipt retention. No build, GPU, full suite,
+key change, signing, CI, release/feed access or publication ran. No source
+change was needed. Actual cryptographic verification of the exact final
+NSIS/AppImage bytes against the unchanged configured key and release/feed
+acceptance remain separate pending gates; the recorded live 404 is unchanged.
+
+Evidence: `/ai/gchat/out/gchat-open-items-20261012/updater-offline-note.md`.
+The documentation-only tree `/ai/gchat-worktrees/updater-offline-8440`, branch
+`fix/gchat-updater-offline-8440`, is based on `8440b5f7a` and retained for
+coordinator review. The complete accepted updater branch is integrated in the current candidate as
+`c36e3862c`; source has not yet landed in main. The test/filter/template are
+unchanged from the source used for this gate.
 
 ### Untested or only partly tested
 
@@ -58,31 +85,30 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |
 
-Order: land completed opt-in/LAN setup, shared general-agent dispatch and bot
-account/tool wiring; complete automatic KVM onboarding before the other computer
-adapters. Service-running scheduling is explicit; independent background operation
-still needs its owning service lifetime. Fix report-contract and reproduced
-functional blockers as their owning decisions become available. Platform/release
-checks stay explicit; they do not block unrelated source implementation.
+Order: reviewed merge of schedules/KVM/updater source; deliver pinned KVM assets
+and check one wizard-created dedicated VM before the other computer adapters.
+Independent background operation needs its owning service lifetime. Fix report
+contract and reproduced functional blockers as their owning decisions become
+available. Platform/release checks remain explicit.
 
 Current candidate: `feat/gchat-open-items-setup-bfd` in
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on `bfd42e530`.
-Outcome: an accurate list/test plan, opt-in guided LAN setup, shared Chat workers
-and isolated per-bot connector access. Focused native/service lifecycle cases,
-frontend cases, affected lint/types, native check and strict Clippy pass.
-Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `8440b5f7a`.
+The first wave (opt-in/LAN setup, transactional credential creation, Chat workers,
+per-bot connectors and disabled-embedding startup) is merged there. The second wave
+integrates schedules (`f769d1ead`), KVM onboarding (`89e4a22f4`) and the complete
+updater source (`c36e3862c`). Focused component cases and the combined native route
+fixture, frontend types, native check and strict native/service Clippy pass.
+Component receipts and `wave2-*` logs are in
+`/ai/gchat/out/gchat-open-items-20261012/`. Reuse passing first-wave evidence;
+no installed UI, new VM, live OAuth or active-worker recovery qualification is
+claimed for these changes. Schedules run while GChat is open. KVM refuses missing
+host prerequisites/assets and does not install tools or substitute another PC.
 
-Transactional setup is integrated as `7b53ea942`; shared workers as `325998951`
-and per-bot connectors as `ce8261bfe`. The combined connector service/native
-cases and native endpoint admission pass. One fixture initially omitted the
-required guest identity argument; correcting that test invocation allowed the
-owning gates to run. This was a test compilation defect, not a product failure.
-Scheduling and KVM onboarding remain on isolated implementation branches.
-No installed UI, VM, live OAuth or active-worker recovery qualification is claimed.
-The startup correction `3afd4ea8a` has one focused case and frontend types PASS;
-evidence is `ann-test.log` / `ann-types.log`. Explicit VectorDB diagnostics remain
-available. The PTY geometry fixture passes; reuse `pty-geometry-test.log`, without
-a native mouse or blank-TUI cause claim.
+The disabled-embedding startup correction has one focused case and frontend types
+PASS (`ann-test.log` / `ann-types.log`). Explicit VectorDB diagnostics remain.
+The PTY geometry fixture passes (`pty-geometry-test.log`), without a native mouse
+or blank-TUI cause claim. First-wave agent worktrees are retired after main merge;
+second-wave source is retained until reviewed merge.
 
 ## Accepted Ubuntu Desktop packages — OI-057
 

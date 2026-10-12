@@ -233,6 +233,12 @@ impl PreparedVm {
         mut spec: KvmSpec,
         tools: &KvmTools,
     ) -> io::Result<Self> {
+        if spec.ssh_port == 0 && root.join(spec.id.to_string()).join("setup.json").is_file() {
+            let saved: Self = serde_json::from_slice(
+                &fs::read(root.join(spec.id.to_string()).join("setup.json")).await?,
+            )?;
+            spec.ssh_port = saved.spec.ssh_port;
+        }
         if spec.ssh_port == 0 {
             spec.ssh_port = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?
                 .local_addr()?
@@ -248,20 +254,100 @@ impl PreparedVm {
             ));
         }
         let directory = root.join(spec.id.to_string());
-        // Failed creation stays discoverable; never create a duplicate guest on retry.
-        fs::create_dir(&directory).await?;
-        let vm = Self { directory, spec };
-        fs::write(
-            vm.directory.join("setup.json"),
-            serde_json::to_vec_pretty(&vm)?,
-        )
-        .await?;
+        // Reconcile the exact saved identity before retrying an interrupted preparation.
+        // A different request must never adopt an existing directory or registered guest.
+        let vm = match fs::create_dir(&directory).await {
+            Ok(()) => Self { directory, spec },
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                let saved: Self = match fs::read(directory.join("setup.json")).await {
+                    Ok(bytes) => serde_json::from_slice(&bytes)?,
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                        // A crash before publishing the claim can leave only its lock/temp files.
+                        let mut entries = fs::read_dir(&directory).await?;
+                        while let Some(entry) = entries.next_entry().await? {
+                            let name = entry.file_name();
+                            let name = name.to_string_lossy();
+                            if name != "setup.lock"
+                                && !(name.starts_with("setup.json.") && name.ends_with(".tmp"))
+                            {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::AlreadyExists,
+                                    "VM directory has no owned setup claim",
+                                ));
+                            }
+                        }
+                        Self {
+                            directory: directory.clone(),
+                            spec: spec.clone(),
+                        }
+                    }
+                    Err(error) => return Err(error),
+                };
+                if saved.directory != directory
+                    || serde_json::to_value(&saved.spec)? != serde_json::to_value(&spec)?
+                {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        "owned VM preparation differs from the saved request",
+                    ));
+                }
+                if directory.join("prepared").is_file() {
+                    return Self::open(&directory).await;
+                }
+                saved
+            }
+            Err(error) => return Err(error),
+        };
+        let claim = std::sync::Arc::new(
+            crate::store::Store::open(vm.directory.join("setup.json"))
+                .await
+                .map_err(io::Error::other)?,
+        );
+        claim.save(&vm).await.map_err(io::Error::other)?;
+        drop(claim);
         fs::write(vm.directory.join("user-data"), vm.spec.cloud_init()?).await?;
         fs::write(
             vm.directory.join("meta-data"),
             format!("instance-id: {}\n", vm.spec.id),
         )
         .await?;
+        let registered = session_command(tools, "list")
+            .args(["--all", "--uuid"])
+            .output()
+            .await?;
+        if !registered.status.success() {
+            return Err(io::Error::other(
+                "cannot inspect the user's libvirt session",
+            ));
+        }
+        if String::from_utf8_lossy(&registered.stdout)
+            .lines()
+            .any(|id| id.trim() == vm.spec.id.to_string())
+        {
+            let identity = session_command(tools, "domuuid")
+                .arg(format!("gbot-{}", vm.spec.id))
+                .output()
+                .await?;
+            if !identity.status.success()
+                || String::from_utf8_lossy(&identity.stdout).trim() != vm.spec.id.to_string()
+                || fs::read_to_string(vm.directory.join("domain.xml")).await? != vm.domain_xml()?
+            {
+                return Err(io::Error::other(
+                    "registered VM does not match the owned preparation",
+                ));
+            }
+            fs::write(vm.directory.join("prepared"), b"1\n").await?;
+            return Ok(vm);
+        }
+        // No domain is registered: these files belong only to this unfinished request.
+        // Regenerate a possibly interrupted disk/seed instead of adopting partial output.
+        for name in ["disk.qcow2", "seed.img"] {
+            match fs::remove_file(vm.directory.join(name)).await {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+        }
         run_checked(
             Command::new(&tools.image)
                 .args(["create", "-f", "qcow2", "-F", "qcow2", "-b"])
@@ -287,24 +373,6 @@ impl PreparedVm {
         run_checked(&mut seed).await?;
         let domain = vm.directory.join("domain.xml");
         fs::write(&domain, vm.domain_xml()?).await?;
-        let registered = session_command(tools, "list")
-            .args(["--all", "--uuid"])
-            .output()
-            .await?;
-        if !registered.status.success() {
-            return Err(io::Error::other(
-                "cannot inspect the user's libvirt session",
-            ));
-        }
-        if String::from_utf8_lossy(&registered.stdout)
-            .lines()
-            .any(|id| id.trim() == vm.spec.id.to_string())
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                "VM identity is already registered; reconcile it before retrying",
-            ));
-        }
         run_checked(session_command(tools, "define").arg(domain)).await?;
         fs::write(vm.directory.join("prepared"), b"1\n").await?;
         Ok(vm)
@@ -353,7 +421,7 @@ impl PreparedVm {
         };
         // Queue the NIC after libvirt's JSON PCI controllers.
         let nic = xml(r#"{"driver":"virtio-net-pci","netdev":"gbot-ssh","id":"gbot-net"}"#);
-        Ok(format!("<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu>{pinning}<os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><video><model type='vga'/></video><serial type='pty'><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console></devices><qemu:commandline><qemu:arg value='-netdev'/><qemu:arg value='user,id=gbot-ssh,hostfwd=tcp:127.0.0.1:{port}-:22'/><qemu:arg value='-device'/><qemu:arg value='{nic}'/></qemu:commandline></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, port=self.spec.ssh_port))
+        Ok(format!("<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'><name>gbot-{id}</name><uuid>{id}</uuid><memory unit='MiB'>{memory}</memory><vcpu>{cpus}</vcpu>{pinning}<os><type arch='x86_64' machine='q35'>hvm</type></os><cpu mode='host-passthrough'/><features><acpi/></features><on_poweroff>destroy</on_poweroff><on_reboot>restart</on_reboot><on_crash>preserve</on_crash><devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='{disk}'/><target dev='vda' bus='virtio'/></disk><disk type='file' device='disk'><driver name='qemu' type='raw'/><source file='{seed}'/><target dev='vdb' bus='virtio'/><readonly/></disk><video><model type='vga'/></video><serial type='pty'><log file='{serial}' append='on'/><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console></devices><qemu:commandline><qemu:arg value='-netdev'/><qemu:arg value='user,id=gbot-ssh,hostfwd=tcp:127.0.0.1:{port}-:22'/><qemu:arg value='-device'/><qemu:arg value='{nic}'/></qemu:commandline></domain>\n", id=self.spec.id, memory=self.spec.memory_mib, cpus=self.spec.cpus, disk=path("disk.qcow2")?, seed=path("seed.img")?, serial=path("serial.log")?, port=self.spec.ssh_port))
     }
 
     async fn lease(&self) -> io::Result<File> {
@@ -898,5 +966,63 @@ mod tests {
             .domain_xml()
             .unwrap()
             .contains(&format!("hostfwd=tcp:127.0.0.1:{}-:22", vm.spec.ssh_port)));
+    }
+    #[tokio::test]
+    async fn interrupted_prepare_resumes_same_identity_and_refuses_changed_spec() {
+        let root = tempfile::tempdir().unwrap();
+        let image = root.path().join("base.qcow2");
+        fs::write(&image, "fixture").await.unwrap();
+        let tool = root.path().join("tool");
+        let broken = root.path().join("broken");
+        fs::write(&tool, "#!/bin/sh\nexit 0\n").await.unwrap();
+        fs::write(&broken, "#!/bin/sh\nexit 1\n").await.unwrap();
+        for path in [&tool, &broken] {
+            fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+                .await
+                .unwrap();
+        }
+        let tools = KvmTools {
+            virsh: tool.clone(),
+            image: broken,
+            seed_iso: tool.clone(),
+        };
+        let mut settings = spec();
+        settings.ssh_port = 0;
+        assert!(
+            PreparedVm::prepare(root.path(), &image, settings.clone(), &tools)
+                .await
+                .is_err()
+        );
+        let directory = root.path().join(settings.id.to_string());
+        let saved: PreparedVm =
+            serde_json::from_slice(&fs::read(directory.join("setup.json")).await.unwrap()).unwrap();
+        assert!(!directory.join("prepared").exists());
+        let tools = KvmTools {
+            virsh: tool.clone(),
+            image: tool.clone(),
+            seed_iso: tool,
+        };
+        let resumed = PreparedVm::prepare(root.path(), &image, settings.clone(), &tools)
+            .await
+            .unwrap();
+        assert_eq!(resumed.spec.id, settings.id);
+        assert_eq!(resumed.spec.ssh_port, saved.spec.ssh_port);
+        assert_eq!(
+            PreparedVm::prepare(root.path(), &image, settings.clone(), &tools)
+                .await
+                .unwrap()
+                .spec
+                .ssh_port,
+            saved.spec.ssh_port
+        );
+        settings.memory_mib += 1024;
+        assert_eq!(
+            PreparedVm::prepare(root.path(), &image, settings, &tools)
+                .await
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::AlreadyExists
+        );
+        assert!(directory.join("prepared").exists());
     }
 }

@@ -177,6 +177,7 @@ pub struct TaskRunner {
     processes: ExecutorProcesses,
     state: Mutex<State>,
     approvals: Arc<ApprovalQueue>,
+    pub schedules: Arc<crate::schedules::Schedules>,
 }
 
 impl TaskRunner {
@@ -186,6 +187,11 @@ impl TaskRunner {
         processes: ExecutorProcesses,
     ) -> Result<Self> {
         tokio::fs::create_dir_all(&root).await?;
+        let schedules = Arc::new(
+            crate::schedules::Schedules::open(root.join("schedules.json"))
+                .await
+                .map_err(TaskRunnerError::Workspace)?,
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -216,6 +222,7 @@ impl TaskRunner {
             root,
             runtime,
             processes,
+            schedules,
             state: Mutex::new(State {
                 closed: false,
                 records,
@@ -235,8 +242,24 @@ impl TaskRunner {
         self.approvals.revision.subscribe()
     }
 
+    pub(crate) fn notify(&self) {
+        self.approvals.touch();
+    }
+
     pub async fn start(
         &self,
+        identity: SessionIdentity,
+        prompt: String,
+        assignment: Option<Assignment>,
+    ) -> Result<TaskRecord> {
+        self.start_with_id(Uuid::new_v4(), identity, prompt, assignment)
+            .await
+    }
+
+    /// A scheduler reserves and persists this identity before any execution.
+    pub(crate) async fn start_with_id(
+        &self,
+        id: Uuid,
         identity: SessionIdentity,
         prompt: String,
         assignment: Option<Assignment>,
@@ -259,6 +282,12 @@ impl TaskRunner {
         if state.closed {
             return Err(TaskRunnerError::Closed);
         }
+        if let Some(record) = state.records.get(&id) {
+            return Ok(state
+                .actors
+                .get(&id)
+                .map_or_else(|| record.clone(), |actor| actor.record.borrow().clone()));
+        }
         let mut tools: Vec<_> = self
             .runtime
             .desktop_tools(identity)
@@ -274,7 +303,6 @@ impl TaskRunner {
             })
             .collect();
         tools.extend(self.runtime.connector_tools(identity.workspace_id).await?);
-        let id = Uuid::new_v4();
         let task = CuaTask::create_with_id(
             self.path(id),
             id,

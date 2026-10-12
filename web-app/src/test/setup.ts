@@ -50,7 +50,8 @@ Object.defineProperty(window, 'matchMedia', {
 
 // runs a cleanup after each test case (e.g. clearing jsdom)
 afterEach(() => {
+  // Unmount subscribers and native previews before resetting their dependencies.
+  cleanup()
   clearMocks()
   useServiceStore.setState({ serviceHub: null })
-  cleanup()
 })

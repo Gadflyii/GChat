@@ -3,6 +3,11 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+The [updater offline metadata gate](remaining-acceptance.md#updater-offline-metadata-gate--october-12)
+passes all 19 existing cases against accepted source `874cbc98d` using existing
+S1 jq/Python. Cryptographic final-payload verification and signed release/feed
+acceptance remain pending; no source or publication change was needed.
+
 The [installed Ubuntu Desktop acceptance](remaining-acceptance.md#accepted-ubuntu-desktop-packages--oi-057)
 passes for retained GChat 2.0.42 DEB/AppImage on native GNOME Wayland and Xorg:
 visible rendering, ordinary Chat through the accepted Host, saved-answer reopen
@@ -13,8 +18,8 @@ keyring-fixture limitation are recorded in that section.
 
 Current source-only terminal work is [whole-window Unix PTY geometry](remaining-acceptance.md#current-unix-pty-window-geometry-correction).
 The frontend now sends full container pixels and reports pixel-only changes at
-unchanged rows/columns. Its focused fixture is unrun; coordinator review and the
-named CPU gate are next. This is separate from the accepted Linux Code TUI fix.
+unchanged rows/columns. The named pixel-only resize fixture passes in retained
+`pty-geometry-test.log`; native mouse/geometry acceptance remains unqualified. This is separate from the accepted Linux Code TUI fix.
 
 The accepted [Linux Code TUI correction](remaining-acceptance.md#current-linux-code-tui-correction):
 the reproduced esbuild lowering defect is corrected in tested source `f2de958f3`.

@@ -13,6 +13,20 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::{oneshot, Mutex, OnceCell};
 
+async fn forward_updates<R: Runtime>(
+    app: AppHandle<R>,
+    event: &'static str,
+    updates: Option<tokio::sync::watch::Receiver<u64>>,
+) {
+    let Some(mut updates) = updates else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    while updates.changed().await.is_ok() {
+        let _ = app.emit(event, ());
+    }
+}
+
 struct RunningService {
     client: ApiClient,
     stop: Mutex<Option<oneshot::Sender<()>>>,
@@ -136,6 +150,13 @@ impl GbotState {
                 )
                 .await
                 .map_err(|error| error.to_string())?;
+                #[cfg(target_os = "linux")]
+                {
+                    api = api
+                        .with_kvm_setup(root.clone())
+                        .await
+                        .map_err(|error| error.to_string())?;
+                }
                 if let Some(processes) = executor_processes(&app)? {
                     api = api
                         .with_executor(root.join("tasks"), processes)
@@ -143,17 +164,18 @@ impl GbotState {
                         .map_err(|error| error.to_string())?;
                 }
                 let client = api.client();
-                let mut updates = client.subscribe_tasks();
+                let task_updates = client.subscribe_tasks();
+                #[cfg(target_os = "linux")]
+                let setup_updates = client.subscribe_setup();
+                #[cfg(not(target_os = "linux"))]
+                let setup_updates = None;
                 let (stop, shutdown) = oneshot::channel();
                 let job = tauri::async_runtime::spawn(async move {
                     let listener = async move {
-                        if let Some(updates) = &mut updates {
-                            while updates.changed().await.is_ok() {
-                                let _ = app.emit("gbot-task-update", ());
-                            }
-                        } else {
-                            std::future::pending::<()>().await;
-                        }
+                        tokio::join!(
+                            forward_updates(app.clone(), "gbot-task-update", task_updates),
+                            forward_updates(app, "gbot-setup-update", setup_updates)
+                        );
                     };
                     let server = api.serve(async {
                         let _ = shutdown.await;
@@ -208,6 +230,13 @@ fn supported_route(path: &str) -> bool {
             | "/v1/tasks/cancel"
             | "/v1/tasks/approvals"
             | "/v1/tasks/approval"
+            | "/v1/schedules"
+            | "/v1/schedules/create"
+            | "/v1/schedules/enabled"
+            | "/v1/setup/kvm/preflight"
+            | "/v1/setup/kvm/start"
+            | "/v1/setup/kvm/status"
+            | "/v1/setup/kvm/remove"
             | "/v1/control/take-over"
             | "/v1/control/hand-back"
     )
@@ -242,6 +271,23 @@ mod tests {
         assert!(supported_route("/v1/connectors/save"));
         assert!(!supported_route("/v1/workspaces/ssh/delete-all"));
         assert!(!supported_route("/v1/connectors/global-accounts"));
+    }
+
+    #[test]
+    fn native_bridge_admits_guided_vm_setup_and_schedule_controls() {
+        for path in [
+            "/v1/setup/kvm/preflight",
+            "/v1/setup/kvm/start",
+            "/v1/setup/kvm/status",
+            "/v1/setup/kvm/remove",
+            "/v1/schedules",
+            "/v1/schedules/create",
+            "/v1/schedules/enabled",
+        ] {
+            assert!(supported_route(path), "{path}");
+        }
+        assert!(!supported_route("/v1/setup/kvm/exec"));
+        assert!(!supported_route("/v1/schedules/dispatch"));
     }
 
     #[test]

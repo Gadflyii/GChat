@@ -20,18 +20,22 @@ BGRA negotiation and seed provisioning fixes are merged in `2e735624f`; evidence
 is linked in the current record below. Windows/M365 and browser playback remain
 release checks. Rust 1.97 is required on Windows release hosts.
 
-Current work is open-item implementation on the reconciled October 12 list.
-Opt-in visibility and the guided dedicated-LAN SSH connection are implemented
-in the candidate. The service now owns credential import, workspace persistence,
-cleanup and idempotent retry as one operation; five injected-failure service
-cases and five route cases pass; the native admission fixture also passes.
-Chat can dispatch independent workers through its shared agent runner and
-collect or cancel them by run ID. Bots can link their own existing Google or
-Microsoft accounts; new bots inherit none. The combined focused connector,
-native admission, types, check and strict Clippy gates pass. Automatic KVM
-onboarding and service-running schedules are being implemented on isolated
-branches. Hyper-V/cloud/M365 creation, remote service selection and independent
-background lifetime remain unfinished. The
+Current work implements the reconciled October 12 list. Opt-in visibility,
+guided dedicated-LAN connection, transactional credential/workspace creation,
+shared Chat workers and explicit per-bot Google/Microsoft accounts are merged
+in main `8440b5f7a`. Bots inherit no accounts. Their focused service/native/UI,
+lint, types, check and strict Clippy evidence is retained.
+
+The current candidate integrates service-owned once/interval schedules and Linux
+KVM onboarding. The wizard checks prerequisites and exact pinned guest assets,
+persists resumable setup identity, and admits a bot only after SSH, desktop-file
+and view-only media readiness. Two setup recovery cases, eight adapter cases,
+five wizard cases and the combined native route fixture pass. Combined frontend
+types, native check and strict native/service Clippy also pass. These are source
+gates: packaged guest-asset delivery and one actual VM created through the wizard
+remain unfinished. Hyper-V/cloud/M365 creation, remote service selection and
+independent background lifetime remain unfinished. Schedules explicitly run only
+while GChat is open. The
 [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates source gaps, accepted evidence and unrun gates. The physical browser
 form gate remains unrun.
@@ -629,6 +633,51 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 ## Current record and inventory
 
+**Scheduled-work candidate — October 12.** Owner: scheduling agent. Repository
+`/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at
+`/ai/gchat-worktrees/gbot-scheduled-tasks-3259`, based on `325998951` with the
+accepted per-bot connector source. Deliverable: service-owned once/interval
+schedules using existing Cua TaskRunner, explicit bot inference snapshots,
+enable/disable controls, stable persisted occurrence IDs and conservative restart
+recovery. Acceptance: injected-time due/disabled/missed-run/ambiguous-recovery
+fixtures, the existing fake executor, affected UI cases, types, Rust check and
+strict Clippy. No VM/model/desktop/release/OS service install or new dependency.
+The initial six focused service cases pass. Source review added a durable
+30-second retry deadline for transient connection/readiness failures and a stopped
+state in schedule listing/UI. The new retry case and affected API/publication-fault
+cases pass, as do service Rust check/strict Clippy and ten affected frontend cases
+with lint/types. The final service gate finished at 19:47:50 UTC; the cache is
+released. Source is integrated in `f769d1ead`; independent service ownership
+remains separate. The fake executor receipt has one effect after
+task-journal recovery; this is a hermetic recovery check, not a live guest scheduling
+qualification. Evidence and owned small
+logs: `/ai/gchat/out/gchat-open-items-20261012/scheduling-note.md` and
+`scheduling-*`; shared native target cache is borrowed and released. The retained
+candidate is 268 MiB; no new build directory, live job or guest belongs to this item.
+
+Schedules persist UTC Unix seconds, prompt and the bot's saved model assignment;
+credentials resolve from the vault at execution. Each interval has at most one
+unfinished occurrence. `run_latest` coalesces a missed backlog into one latest
+occurrence; `skip_missed` discards pre-restart/pre-enable and multi-interval
+backlogs. Queued work with no attempted dispatch can continue after restart;
+dispatching/dispatched work attaches to its saved task. Missing or interrupted
+tasks require review and hold future occurrences. A dispatch with unknown effects
+is never automatically retried. Disabling cancels queued occurrences, while a
+running task keeps its ordinary Stop/approval controls. Completed tasks release
+the next interval. Changing the saved inference assignment holds the old schedule
+for review; create a schedule for the new assignment.
+Connection/readiness failures keep the queued occurrence and persist a 30-second
+retry deadline, so the one-second service wake does not repeatedly attempt SSH.
+Schedule listing includes a stopped reason after a scheduler error or uncertain
+journal publication; the UI keeps that reason visible and requests service restart.
+
+This is service-running scheduling and durable restart recovery. The native
+bridge still owns the in-process service lifetime; closing GChat stops it. The UI
+persistently states: “Scheduled tasks run while GChat is open. Background service
+setup is not available yet.” Independent service ownership and client-exit/sleep
+continuity remain separate unfinished acceptance. The master scheduled/background
+row remains PARTIAL.
+
 Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
 and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
@@ -636,7 +685,7 @@ and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
 Human assistance `32231c6ba` is incorporated in current main, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
 Current candidate: `feat/gchat-open-items-setup-bfd` at
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `bfd42e530`.
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `8440b5f7a` after the first implementation wave merged.
 Deliverable: reconcile GChat/Manager/Gbot open work and implement guided setup,
 shared Chat workers, explicit per-bot account/tool wiring, schedules and KVM
 onboarding. Acceptance: focused
@@ -644,27 +693,32 @@ observable-behavior fixtures, affected lint/types and Rust checks, current maste
 rows and reviewable source. No new dependency, native Windows build, model/GPU,
 physical provisioning, person's desktop or release change. Scheduling does not
 claim independent background operation; KVM setup does not install host tools.
-Verification: opt-in/setup 39 cases plus affected lint/types PASS; transactional
-setup five service and five route cases, service all-target check and strict
-Clippy PASS. General worker dispatch: one native lifecycle case plus nine
-frontend cases and affected lint/check/Clippy PASS. Per-bot connectors: two
-focused native/service cases, six frontend cases and affected lint PASS.
-Combined native admission, frontend types, native check and strict Clippy PASS.
+Verification: reuse the first-wave focused receipts accepted in main `8440b5f7a`.
+Scheduling adds six initial service cases, three changed retry/API/publication-fault
+cases and ten frontend cases with affected lint/types. KVM adds two durable setup
+cases, eight adapter cases and five wizard cases. The combined source passes its
+seven-route native admission case, frontend types, native check and strict native
+and service Clippy. Logs `wave2-*` record the combined gate; component handoffs are
+`scheduling-note.md` and `kvm-onboarding-note.md`. No actual new VM or installed
+wizard qualification is claimed.
 Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 
 | Owner / path | Revision and purpose | Live work / retention |
 | --- | --- | --- |
-| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `feat/gchat-open-items-setup-bfd`, base `bfd42e530`; setup `08ab24223`, transaction `7b53ea942`, startup `3afd4ea8a`, workers `325998951`, connectors `ce8261bfe` | Combined gates passed; retain source for reviewed merge. |
-| Chat worker agent: `/ai/gchat-worktrees/chat-general-workers-08ab` | `84e799cc2`, integrated as `325998951` | No live job; retain source and `dispatch-*.log` until merge. |
-| Bot connector agent: `/ai/gchat-worktrees/gbot-per-bot-connectors-7b53` | `d8649fa0`, integrated as `ce8261bfe` | No live job; retain source and connector/integration evidence until merge. |
-| Scheduler agent: `/ai/gchat-worktrees/gbot-scheduled-tasks-3259` | `feat/gbot-scheduled-tasks-3259`, base `325998951` plus connectors | Source implementation; one persisted occurrence per dispatch, explicit missed-run policy. |
-| KVM agent: `/ai/gchat-worktrees/gbot-kvm-onboarding-ce826` | `feat/gbot-kvm-onboarding-ce826`, base `ce8261bfe` | Source implementation; prerequisite/pinned-asset checks and owned resumable provisioning. No physical guest. |
-| Completed setup agent: `/ai/gchat-worktrees/gbot-atomic-setup-08ab` | `77b3e48ab`, integrated as `7b53ea942` | No live job; retain for review, then retire after merge. |
-| Shared cache: `/ai/gchat/src-tauri/target` | Existing Rust cache, not owned by this item | Serialize Cargo with the canonical local build lock; no cleanup of shared cache. |
+| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `feat/gchat-open-items-setup-bfd`, accepted base `8440b5f7a`; schedules `f769d1ead`, KVM `89e4a22f4` plus native `b1367ae49`, updater `c36e3862c`, web fixtures `2c1bb9c41` | Combined gates passed; retain source for reviewed merge. |
+| First-wave setup/worker/connector trees | Source incorporated in main `8440b5f7a`; branches and evidence retained | Owned worktrees retired; at least 0.77 GiB freed, `first-wave-retirement.json`. |
+| Scheduler agent: `/ai/gchat-worktrees/gbot-scheduled-tasks-3259` | `d78d8dcd1`, integrated as `f769d1ead` | No live job; retain until reviewed main merge. |
+| KVM agent: `/ai/gchat-worktrees/gbot-kvm-onboarding-ce826` | `312152b2f`, integrated as `89e4a22f4` | No live job or guest; retain until reviewed main merge. |
+| Updater: `/ai/gchat-worktrees/updater-offline-8440` | Evidence docs `73eb666c8`, integrated as `a2f908594` | Offline metadata 19 cases PASS; retain until reviewed merge, no signing/publication. |
+| Web fixtures: `/ai/gchat-worktrees/web-warning-8440` | `e0e8ac49d` and docs `3d7ded0db`, integrated as `2c1bb9c41` / `03139b2bd` | All 26 selected cases have passing evidence; retain through reviewed merge, no full suite. |
+| Shared cache: `/ai/gchat/src-tauri/target` | Existing Rust cache, not owned by this item | Canonical local build lock released; no cleanup of shared cache. |
 
-Next unresolved action: send the completed setup/worker/connector source for
-merge; integrate scheduler and KVM source when their focused gates are ready.
-No guest, engine or GPU job is owned by this source change.
+Next unresolved action: reviewed main merge of the integrated source. Two bounded
+implementation agents now own pinned guest-asset delivery and the native GBench
+v2 reader, using separate candidate trees; no physical gate is underway. Then run
+one dedicated VM wizard check once its product assets are available. Background service and
+the other computer adapters remain open. No guest, engine, GPU or build container
+is owned by this source change.
 
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
 Physical gate **PASS at 17:55:38 UTC on October 12**. The production native-vault

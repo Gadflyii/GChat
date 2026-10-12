@@ -1,5 +1,86 @@
 # GChat installer refresh
 
+## SectileLabs updater feed — OI-110
+
+All GChat check/download paths and release asset URLs use the configured feed:
+`https://github.com/SectileLabs/gchat/releases/latest/download/latest.json`.
+Ron explicitly designates the private, empty `SectileLabs/gchat` repository
+for release artifacts only when ready. Development source and the build/tag
+workflow remain in `Gadflyii/GChat`; do not push source code to the destination.
+The source-only routing correction is implemented and independently reviewed in
+this owned candidate. It is not release-qualified.
+
+`.github/workflows/release.yml` requires execution in `Gadflyii/GChat`, with
+source `GITHUB_TOKEN` Contents-read permissions. Draft creation explicitly targets
+`SectileLabs/gchat`; all six payload/signature/manifest uploads use that draft's
+upload URL and separate `SECTILE_RELEASE_TOKEN`. Previous published-release queries
+and draft-body edits also explicitly target the destination. Release-note git
+history, contributors and commit links remain in the development repository;
+published style examples are read separately from the artifact repository.
+Destination-generated git notes are disabled so artifact-repository history is
+not presented as development history. Draft-only behavior and exact final
+payload/signature gates remain unchanged; no source mirror or forced tag is added.
+
+The release owner must configure `SECTILE_RELEASE_TOKEN` in the development
+repository with Contents-write access scoped only to `SectileLabs/gchat`; the
+workflow fails before draft creation when absent. Configuration/access is
+unverified: no credential was read, provisioned or used. Check the destination's
+default branch and release-tag readiness without copying development source.
+Destination readiness and anonymous access to the configured updater feed must be established for the next
+approved release without placing credentials in the app. Signing/publication
+remain separately gated; this correction does not resolve the live404 itself.
+
+Ron authorized local unsigned preparation; signing/publication await his next
+release. The release workflow and `src-tauri/latest.json.template` cover only
+the supported Windows/Linux products; macOS jobs and manifest branches are removed.
+Its unsigned copy is `/ai/gchat/out/remaining-acceptance-20261009/oi110-latest.unsigned.json`.
+Version, date/notes, selected platforms, final asset names and signatures remain
+pending; this empty preparation artifact is not an installable manifest. Each
+published entry needs a nonempty signature verified against the unchanged key
+and exact payload. CI now requires one nonempty final updater payload and its
+nonblank freshly generated signature; metadata uses the exact re-signed path,
+and manifest generation rejects successful platforms with blank signatures.
+
+GCHAT-UPDATER-SIGNATURE's original blank-signature rejection is already inherited
+from `f7b2f43fe`. The independently reviewed follow-up also rejects an absent or
+whitespace-only final asset name for a successful platform and incomplete version,
+using the shared production `scripts/updater-manifest.jq` filter. Skipped/failed
+platform entries remain omitted; valid signatures, URLs, notes and supported
+platform structure are preserved. Exact post-signing NSIS/AppImage selection,
+required regular nonempty signature files, credentials and existing key are
+unchanged. The manifest job now gates the production filter through
+`tests/test_updater_manifest.py`: 19 offline cases cover complete Windows/Linux/
+combined metadata, failed/skipped omission, blank signatures/names and version.
+Sentinel signatures establish metadata admission only, never cryptographic validity.
+
+YAML/Python and shell syntax checks pass. The production filter's behavioral gate
+also passes: four existing test methods cover all 19 cases/subcases, finishing
+`OK`, exit 0, in 0.077 seconds on S1 with its existing Python 3.12.3 and jq 1.7.
+Command: `python3 -m unittest discover -s tests -p test_updater_manifest.py`.
+The shared filter, test and template are unchanged from accepted `874cbc98d`;
+the complete accepted updater branch is integrated as `c36e3862c` in the current
+GChat implementation candidate. No new dependency, full suite, key access,
+signing, CI, feed access or publication ran. Reuse the existing routing/syntax
+checks. Evidence: `/ai/gchat/out/gchat-open-items-20261012/updater-offline-note.md`.
+The owned S1 temporary source copies were retired; release qualification remains
+pending.
+
+Actual cryptographic acceptance against the unchanged public key and downloaded
+payload remains a scheduled-release gate. The recorded live 404 remains open.
+
+Retain `/ai/gchat-worktrees/oi110-sectile-feed-bd4` on
+`fix/oi110-sectile-feed-bd4` (baseline `bd4dba841`) for coordinator review and the
+unsigned copy for release preparation. Prior endpoint/repository evidence is in
+`out/remaining-acceptance-20261009/`: `oi110-endpoint-20261010T0433Z.json` and
+`oi110-release-location-20261010T0436Z.json`. Focused local checks pass: YAML 1.2
+parsing, `bash -n` on all 25 Linux/explicit Bash run blocks, Python syntax and
+offline source/destination routing assertions
+including all six uploads and unchanged signature/metadata/manifest gate blocks.
+`git diff --check` passes. These are local syntax/source checks, not CI execution
+or credential/publication acceptance; no build, native execution, signing or
+publication ran. Later metadata/JQ release admission checks are prepared in
+`/ai/gchat/out/remaining-acceptance-20261009/oi110-release-gate-checks.txt`.
+
 ## Current engine acceptance — OI-056/OI-083, October 9, 2026
 
 Repository: GChat; subject: `docs/installer-refresh/`. Owner: GChat coordinator.

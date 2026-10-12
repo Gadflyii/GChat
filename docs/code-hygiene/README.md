@@ -700,6 +700,61 @@ Canonical build guards are released; all owned check processes ended before
 new defect fixes and measured performance changes use separate master-list
 items and branches.
 
+## Web-test diagnostic fixtures
+
+Current item: `GCHAT-WEB-TEST-DIAGNOSTICS` in the sole GInfer master list.
+The owned `fix/gchat-web-warning-8440` candidate at
+`/ai/gchat-worktrees/web-warning-8440` starts from main `8440b5f7a` and ports
+the accepted test-only changes from `418d6d07d`. The current Engines fixture
+keeps its newer structured-output and Host-KV cases. Outcome: settle actual
+asynchronous publications, unmount before resetting subscriber dependencies,
+and supply accessible dialog and file-local highlighter/native-preview
+boundaries. Acceptance is the existing smallest changed-case selector with
+observable assertions and captured diagnostics; no full-suite warning-free
+claim follows from this focused check.
+
+Historical baseline and source-review evidence remain in
+`out/remaining-acceptance-20261009/oi068-windows-20261010/`, particularly
+`web-test-hygiene-source-399b.json` and
+`build-369-terminal-2684-r3/output/make-verify.log`. The retained gate passed
+while emitting 118 React act, one dialog-description, one native-preview and
+four Shiki URL diagnostics. The existing focused selector includes the five
+formerly unattributed HtmlArtifact warnings and an unchanged deferred-highlight
+cancellation control. Their current result is recorded below; historical
+full-suite source-only Shiki attribution remains outside this focused evidence.
+
+The first existing selector ran 26 cases (88 filtered) in 13 files: 24 passed,
+two highlighter completion assertions failed. Its retained log is
+`out/gchat-open-items-20261012/web-warning-focused.log`. The only diagnostics
+were one Shiki invalid asset URL and five HtmlArtifact act warnings. A
+pre-resolution attempt did not repair the lazy mock boundary; the disclosure
+fixtures now mock the owning CodeBlock/highlightCode boundary directly, preserving
+escaped source and asynchronous multiline publication. The independent real
+CodeBlock cancellation case passed in the first selector. HtmlArtifact's real
+initial about:blank iframe load publishes state asynchronously; its owning cases
+now render with RTL's synchronous act and await that actual event inside async
+act. An initial nested render deferred DOM commit and failed before the iframe
+existed; the corrected fixture registers its listener after RTL's committed render.
+Both failed logs remain retained; no failed attempt counts as acceptance.
+
+The final affected-case rerun passes all seven cases in three files (four
+filtered) in 1.24 seconds, with no stderr, act, dialog, IPC or Shiki diagnostics.
+It ended October 12 at 20:06:31 UTC. Combined with the first run's unchanged
+passing cases, all 26 assigned cases have passing evidence; the five HTML cases
+were rerun because their fixture changed. Log:
+`out/gchat-open-items-20261012/web-warning-focused-final.log`.
+Both runs used Vitest 3.2.4/jsdom on Ron-9950X3D2, assigned CPUs 0–31,
+`--maxWorkers=2 --minWorkers=1`, within coordinator booking 563. CPU and
+shared-cache use are released. No build or live job exists. Shared dependencies
+are symlinked from `/ai/gchat`; no installation or dependency change was needed.
+No production changes, warning suppression, full-suite run, Windows/GPU/native
+app actions or release occurred. This establishes focused fixture cleanup,
+not a warning-free full suite or real Shiki WASM/browser qualification.
+Next action: review the pushed branch for main integration. Handoff:
+`out/gchat-open-items-20261012/web-warning-note.md`.
+Candidate source (270 MiB) and new concise evidence remain retained through
+reviewed merge; the earlier candidate and evidence are preserved.
+
 ## Implementation and verification
 
 The [quality review](gchat-quality.md) records the accepted source changes and
@@ -754,6 +809,7 @@ Process visibility and bounded path scope are recorded in
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
+| Web warning fixtures / Ron-9950X3D2 Linux | `/ai/gchat-worktrees/web-warning-8440`, `fix/gchat-web-warning-8440` | Test-only port from `418d6d07d` onto `8440b5f7a`; focused check pending; shared node_modules symlinks, no build/live job; retain source and `out/gchat-open-items-20261012/web-warning-*` evidence through reviewed merge |
 | Review coordinator / local Linux | `/ai/gchat-worktrees/review-host-manager-a7003488` | Retired after accepted main0dd5d45ce publication and fresh zero-reference checks; branch/build/evidence retained |
 | Remediation coordinator / local Linux | `/ai/gchat-worktrees/fix-host-review-bugs-0dd5d45c` | Accepted OI-111–114/120–122 source candidate; local/remote branch and external logs stay. Filesystem retirement and protected paths are tracked in the existing `out/manager-kv-startup-20261008/drain-hygiene-not-deleted.md` |
 | Coordinator / local Linux | `/ai/gchat-worktrees/remediation-integration` | Retired after committed/pushed ancestry and live-use checks; two unique coverage summaries retained externally |
