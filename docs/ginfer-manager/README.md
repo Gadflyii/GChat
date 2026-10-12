@@ -13,6 +13,29 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## CMP 170HX settled startup
+
+Current item: `GCHAT-CMP-SETTLED-READY`, baseline main `2e735624f`, candidate
+`/ai/gchat-worktrees/cmp-residency-fill-2e735`, branch
+`fix/cmp-residency-fill-2e735`. The shared Host generates
+`--wait-for-residency-fill` when the selected GPU group includes a CMP 170HX,
+including the Host's PCI alias for `NVIDIA Graphics Device`. GChat, Manager,
+the CLI and restored deployments use this same preparation path. Other GPUs
+retain progressive Ready by default. Effective launch options report the wait;
+saved requests are resolved against the selected GPUs on every launch.
+
+Engine authority: GInfer `018e7b565`,
+`docs/cli.md#settled-residency-before-ready`. Its existing warmup timeout bounds
+the wait; model settings, memory limits and the universal Engine default stay
+unchanged. Acceptance: one focused Host preparation/argv case covers named and
+aliased CMP, another selected card with an unselected CMP, and restored requests.
+The focused Host preparation/argv fixture passed on Linux (1/1, 0.06 s), including
+serialized effective options and the default for omitted saved fields. Evidence:
+`out/cmp-residency-fill-20261012/profile.log`. This is source verification; no
+physical startup or throughput claim is made. Next action: reviewed merge to main.
+No GPU, native Windows build, release or publication. The candidate reuses the
+existing Host build cache; no model/artifact copies or disposable guest are needed.
+
 ## Current credential cleanup warning fix
 
 `GCHAT-MANAGER-FORGET-CREDENTIAL-WARNING` uses baseline main `254c0f8fd`,

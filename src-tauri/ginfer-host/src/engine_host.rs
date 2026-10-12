@@ -119,6 +119,7 @@ fn capture_output(
 pub struct LaunchOptions {
     pub vision: bool,
     pub structured_outputs: bool,
+    pub wait_for_residency_fill: bool,
     pub spec: String,
     pub draft_policy: String,
     pub draft_tokens: u32,
@@ -136,6 +137,7 @@ impl Default for LaunchOptions {
         Self {
             vision: true,
             structured_outputs: true,
+            wait_for_residency_fill: false,
             spec: "auto".into(),
             draft_policy: "auto".into(),
             draft_tokens: 0,
@@ -244,7 +246,7 @@ impl LaunchOptions {
         };
         Ok(maximum)
     }
-    fn args(&self) -> Vec<String> {
+    pub(crate) fn args(&self) -> Vec<String> {
         let mut args = vec![
             "--spec".into(),
             self.spec.clone(),
@@ -258,6 +260,9 @@ impl LaunchOptions {
         }
         if self.structured_outputs {
             args.push("--structured-outputs".into());
+        }
+        if self.wait_for_residency_fill {
+            args.push("--wait-for-residency-fill".into());
         }
         if self.kv_dtype != "auto" {
             args.extend(["--kv-dtype".into(), self.kv_dtype.clone()]);
