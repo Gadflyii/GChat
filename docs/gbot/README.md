@@ -750,7 +750,8 @@ Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 
 | Owner / path | Revision and purpose | Live work / retention |
 | --- | --- | --- |
-| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `test/gbot-installed-wizard-e7d`, reviewed main `e7d761c2f`, candidate `f39961b6c` | Two-question wizard; five focused UI cases/types/lint and desktop build pass. Installed presentation/prerequisite hold and native service continuity after ordinary GUI close PASS; source/docs retained for merge. |
+| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `fix/gchat-linux-resource-startup-ba46`, reviewed main `ba46c7923`, source `0e2160b54` | Three readiness cases, production check/strict Clippy/build and installed responsive startup/resource verification PASS; source and tested executable retained for reviewed merge. The earlier wizard is accepted in main. |
+| S1 startup guest: `/ai/gbot-vms/resource-startup-20261012`, domain `77d0895f-e0f9-4f4f-90e5-af7afa425d1a` | Pinned Debian 13 desktop with refreshed accepted executable, CPU booking 1433, cores 48–51 | Retired at 23:49:00 UTC: domain/disk/keys/private daemons absent, SSH closed, booking canceled; 13.33 GB freed. Retain `resource-startup/desktop-guest/` evidence, base image and prior DEB. |
 | S1 desktop guest: `/ai/gbot-vms/iwdesktop`, domain `fd8f57dd-8e85-4d4d-a14a-08492345dd68` | Pinned Debian 13 desktop, isolated XFCE/Xvnc and native vault; CPU booking 1415, cores 48–51 | Retired at 23:11:08 UTC: domain/disk/private keys/daemons absent, SSH port closed, booking canceled; 9.93 GB freed. Retain `installed-wizard/desktop-guest/` evidence. |
 | S1 package staging: `/ai/gbot-vms/iwpackage` | Current `f39961b6c` desktop and accepted Cua runtime/assets; historical accepted OI-057 engine resources remain outside this GUI gate | One unsigned developer DEB; no Engine build or qualification. Extracted staging and copied inputs retired; retain tested DEB and provenance through review. |
 | First-wave setup/worker/connector trees | Source incorporated in main `8440b5f7a`; branches and evidence retained | Owned worktrees retired; at least 0.77 GiB freed, `first-wave-retirement.json`. |
@@ -777,7 +778,7 @@ No model/GPU, person's desktop, host installation, new dependency, Windows build
 release or publication ran. Remaining setup/platform/sleep gates stay explicit.
 Current item: `GCHAT-LINUX-RESOURCE-INSTALL-UI-BLOCK`, branch
 `fix/gchat-linux-resource-startup-ba46`, based on merged main `ba46c7923`.
-Move the existing Linux resource installation to one blocking worker and publish
+The candidate moves Linux resource installation to one blocking worker and publishes
 its retained result through a shared readiness gate. Desktop Host initialization,
 hardware preparation, plugin model loading and Gbot connection wait for that
 result before discovering or executing installed files. Keep payload validation,
@@ -785,14 +786,25 @@ atomic replacement, optional Gbot preflight and the headless installer unchanged
 Acceptance: focused worker/admission success, failure and canceled-waiter cases,
 owning Rust check/Clippy, then one installed startup observation. No new dependency,
 Engine change, calibration, GPU, Windows build, release or performance claim.
-Source implements the worker and retained gate. Three focused readiness cases,
+Source `0e2160b54` implements the worker and retained gate. Three focused readiness cases,
 production library check, strict Clippy and incremental desktop build pass;
 actual END was 23:39:41 UTC and CPU booking 580 is canceled. The CLI-feature
 fixture build reports two unused desktop-entry warnings; production checks and
-build report none. One disposable S1 Debian 13 desktop is running the installed
-startup observation against that accepted executable and retained package
-resources. Next unresolved action: verify render/input while installation is
-pending, then successful resource installation and guest retirement.
+build report none. One disposable S1 Debian 13 desktop launched the installed
+accepted executable at 23:43:42 UTC. Home was observed at 23:43:52; Settings
+responded at 23:44:16 while its main thread polled and a blocking worker processed
+the bundled qcow2. Installation reported successful completion at 23:46:30.
+The screenshot and thread/file-descriptor evidence support responsiveness during
+installation; these developer timings are not release performance measurements.
+All 668 runtime payloads matched manifest hashes and lengths; runtime-set,
+manifests, Host and three Gbot assets matched the packaged bytes. No staging
+paths remained. Guest/domain/disk/keys/private daemons were retired at 23:49:00
+UTC, booking 1433 canceled and 13.33 GB reclaimed.
+Automatic hardware preparation subsequently reported Host exit 1 with no local
+owner ready in this CPU-only guest. Its cause is unverified: the Host log was
+not retained. This is a separate master-list finding, outside startup/resource
+acceptance. Future failed Host gates must retain that log before fixture cleanup.
+Next unresolved action: reviewed merge; no second launch or model test is required.
 Evidence and disposable outputs: `out/gchat-open-items-20261012/resource-startup/`.
 Owned disk cleanup reclaimed 69.77 GB net and left the target at 29.57 GB
 before this build; seven merged source trees were removed. Inventory and

@@ -22,9 +22,20 @@ release/performance qualification ran. First launch rendered after synchronous
 asset installation; its debug timing is recorded as a separate startup finding.
 The `fix/gchat-linux-resource-startup-ba46` candidate now runs that installer on
 one blocking worker and retains its result for Host, model and Gbot admission.
-Three focused readiness cases, production check/strict Clippy and the incremental
-desktop build pass. One installed startup observation remains; evidence is under
-`out/gchat-open-items-20261012/resource-startup/`.
+Source `0e2160b54` passes three focused readiness cases, production check/strict
+Clippy and the incremental desktop build. One fresh installed Debian 13 launch
+rendered and responded to Settings while its worker installed the bundled
+resources; successful installation settled at 23:46:30 UTC. All 668 runtime
+payloads matched their manifest hashes and lengths, with packaged manifests,
+runtime-set, Host and Gbot assets also verified; no staging paths remained.
+Guest/domain/disk/keys/private daemons were retired at 23:49:00 UTC, booking
+1433 canceled and 13.33 GB freed. Source and documentation await reviewed merge.
+Automatic hardware preparation later failed with Host exit 1/no local owner
+ready in the CPU-only guest. Its cause remains unverified because the Host log
+was not retained; `GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE` tracks diagnosis.
+Evidence is under
+`out/gchat-open-items-20261012/resource-startup/`; this is functional startup
+acceptance, with no Engine or performance qualification claim.
 Evidence, screenshots, guest-only closure and cleanup:
 `out/gchat-open-items-20261012/installed-wizard/desktop-guest/receipt.json`.
 Earlier guest/disks are retired and their saved evidence remains valid.
@@ -55,6 +66,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-069 | Pair/restart/grant restore passed; shared-pool queue, cancellation and recovery across two Ready hosts did not. | Resolve the worker startup/RAM blocker, then one two-host job lifecycle. |
 | OI-072-RUNTIME | Muse runtime memory loss has no demonstrated allocation owner/fix. | Reuse capture evidence; one admitted candidate and an ownership timeline only when authorized. |
 | OI-076 | Continued-chat context/format warning's original cause remains unknown. | Diagnostics merged in `36ac89441`; collect exact trigger on the next occurrence. No speculative fix. |
+| GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE | Automatic post-install hardware preparation reported Host exit 1/no local owner ready in a disposable CPU-only guest; the exit cause is unverified. | Preserve the failed Host log before cleanup at the next applicable gate. No speculative no-GPU attribution or repeat startup test. |
 | OI-066 | Guard diagnosis is closed; fit-message correction `85bc3d087` is not in origin/dev/next. | Owning CPU/syntax fixtures pass; reviewed engine landing remains pending. Profile qualification is OI-072. |
 | OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; all 19 existing offline metadata cases PASS on S1. The live feed is not published. | Exact final-payload signature and signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
