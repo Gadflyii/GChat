@@ -246,7 +246,7 @@ admitted effects must finish or be reconciled before `pausing` becomes `human`;
 status/cancel probes remain available. A second owner cannot take the grant.
 
 `POST /v1/control/hand-back` accepts the same identity/owner. The workspace owner
-pauses input, closes the VNC tunnel, requests fresh Driver `get_desktop_state`
+stops browser input, revokes the scoped Cua media session, requests fresh Driver `get_desktop_state`
 and requires a frame with valid screen/screenshot geometry before restoring
 `bot`. Its response includes `{control, observation}` so the task runner can
 replan from that observation instead of replaying a pre-takeover tool call.
@@ -255,20 +255,20 @@ bot operation, takeover or disconnect invalidates it, and restart requires a
 fresh capture.
 Unknown effects, failed close/capture, explicit view close, disconnect and
 service restart keep the bot paused. `GET /v1/state` exposes controls and live
-session identities. These service transitions do not enforce read-only VNC.
+session identities. Cua enforces the session’s view-only or interactive input policy.
 
 #### The selected viewer seam
 
 | Existing Cua mechanism | GChat integration decision |
 | --- | --- |
 | [`StreamService`][stream-proto] target discovery, `OpenMedia` and `CloseMedia` | Use these contracts when the guest provides them. Match the selected Driver session/display and reported geometry; reject an unavailable selected display instead of the full viewer's fallback to the first display. |
-| [`CreateViewerTicket`][system-proto] policy, clipboard, files and microphone scope | Service retains the guest authority. View uses explicit `VIEW_ONLY`, no clipboard, empty `files_root` and no audio uplink. Unset ticket policy means interactive, so a URL's `view_only=1` is insufficient authority. |
+| [`CreateViewerTicket`][system-proto] policy, clipboard, files and microphone scope | Keep the guest authority inside the service. GChat does not expose this reusable viewer ticket; it uses one `OpenMedia` session with explicit `VIEW_ONLY` or the current Human grant, no clipboard/files service and no audio uplink. |
 | [`MediaSession`][media-session] canvas, wire v2, H.264/PNG and WebSocket | Wrap this core in GChat's desktop panel. It has browser-native imports, so the core itself does not require the full viewer's ConnectRPC/protobuf packages. Service supplies the session's media ticket; view sets `interactive=false`. Its counters do not establish a latency advantage over VNC. |
-| Same-origin gRPC-Web and `/media` WebSocket | A guest-local TCP endpoint can use the existing SSH forwarding mechanism. The current guest advertises VNC, not a Spaces/media endpoint; changing its port alone would not supply these services. Direct QUIC requires UDP and cannot use the current TCP tunnel. |
+| Same-origin gRPC-Web and `/media` WebSocket | A guest-local TCP endpoint can use the existing SSH forwarding mechanism. The candidate provisions Spaces/media on guest loopback port 3211 alongside the dedicated desktop. Direct QUIC requires UDP and cannot use the current TCP tunnel. |
 | Full [`HTML5 viewer`][html5] / `web/src/viewer.ts` | Do not embed as-is: its CSP has `frame-ancestors 'none'`, the app defaults to `ALLOW_ACTIVATION`, and it exposes clipboard/files/microphone and automatic interactive reconnect. Keep GChat's channel, controls and lifecycle owner. |
 | Native `cua-viewer` and presence | Native surface is Windows/macOS only. Presence displays participant cursors; it does not establish GChat's exclusive input grant. Neither supplies Hyper-V provisioning or Windows 365 brokered access. |
 
-When the media endpoint is adopted, Take over opens one human media session
+The media implementation opens one human media session
 only after the service reports `human`. Give the panel that session's media
 ticket, rather than a reusable interactive viewer ticket that can mint more
 sessions. On Hand back,
@@ -278,16 +278,15 @@ reconnect must recheck the service's current grant instead of using the core's
 automatic `reopen` callback. Hand back obtains a fresh frame/geometry and
 reconciles unresolved effects before the bot resumes. These are the existing
 product requirements mapped to Cua media mechanisms; the current service
-implements the pause/drain/hand-back boundary through SSH/Driver/VNC instead.
+implements the pause/drain/hand-back boundary through SSH/Driver and scoped Cua media.
 
-The current `/v1/view/open` in `src-tauri/gbot-service/src/api.rs` and
-`SshSession::open_view` in `src-tauri/gbot-service/src/ssh.rs` expose only
-session-bound bidirectional VNC bytes. They cannot mint media tickets or mediate
-human input. The service control owner above is available to GChat's task/UI
-binding; a browser-renderable desktop stream still needs an approved guest
-media endpoint/packaging closure. Ron selected that Cua closure for the first
-release. Replace the VNC view transport when the media endpoint and panel
-demonstrate the same session/control behavior; retain the Xvnc desktop backend. M365 retains its selected Windows connection.
+`/v1/view/open` retains guest RPC authority inside the service and returns only
+an exact media-session WebSocket ticket through a loopback proxy. It requires
+the current Human owner for interactive access. The proxy forwards only that
+socket path, exposes no general guest RPC endpoint, and closes all active
+streams before `CloseMedia` and hand-back. Reconnect opens a new lease after
+checking the current grant; stale lease cleanup cannot close its replacement.
+Keep the Xvnc desktop backend. M365 retains its selected Windows connection.
 
 #### Guest endpoint dependency decision
 
@@ -332,9 +331,53 @@ socket over SSH. Forwarding an unauthenticated daemon port to the panel would
 let it mint an interactive session despite a view-only ticket.
 Open must verify the exact Driver display and effective `VIEW_ONLY` policy;
 interactive open requires the current Human owner. Close must revoke the
-media session before hand-back resumes bot input. The current implementation
-still supplies the SSH/Driver control boundary; the media endpoint and panel
-are not built yet. No platform or latency qualification is implied by selection.
+media session before hand-back resumes bot input. The candidate now supplies this service boundary and embedded panel. Its
+focused policy/revocation gate does not qualify physical capture, audio,
+platform compatibility or latency.
+
+#### Pinned media packaging
+
+SDK/media revision: `0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc`.
+The browser core contains `mediaSession.ts`, `mediaWire.ts`, `h264.ts`,
+`audio.ts` and its worklet, plus the original FSL-1.1-MIT notice. A local DOM
+ambient declaration supplies WebCodecs audio types. No npm dependency is added.
+The MIT Rust client/proto slice retains its license and provenance; its test
+mock records open/close policy for the focused fixture. Production SDK
+protocols are unchanged. Its approved tonic/prost `0.14` closure is recorded in
+`src-tauri/Cargo.lock` after the gate; the SDK requires Rust 1.97 or later.
+
+The guest archive contains a `bin/cua-spacesd` launcher, the real daemon, its
+matching ELF loader, `lib/` and `licenses/`. Only the launcher selects the bundled
+native-library path; the desktop shell keeps its system libraries. The
+provisioner verifies its SHA-256 before extraction. The daemon runs as the bot
+user, binds `127.0.0.1:3211`, and keeps its RPC token in a private state file.
+SSH reads that token only inside the service. The media session uses the
+existing desktop's environment, with microphone uplink disabled and optional
+PCM desktop audio. Guest packages add PulseAudio and `pulseaudio-utils` for that endpoint. Browser
+video negotiates H.264 where WebCodecs exists, otherwise PNG.
+
+Container build base is pinned at
+`sha256:03f87bfa218cd8785b605b113a6de9475775dff122c16f4b357593312d18d8af`.
+Build-only additions: `protobuf-compiler`, `libprotobuf-dev`, `libx11-dev`,
+`libxrandr-dev`, `libxfixes-dev`, `libxext-dev`, `libxi-dev`, `libpulse-dev`,
+`libasound2-dev`, `libfuse3-dev` and `libxtst-dev`. Their transitive apt closure
+is saved with the build result. No package is installed on S1 or another host.
+The complete upstream embedded image catalog is staged at the same SDK pin;
+omitting it caused the first compile failure and the build recipe now includes
+it. The finite build removes its container when it ends.
+
+The locked release build and package passed on October 12. Retained package:
+`/media/ron/SSD_RAID/ai/gbot-cua-media-20261012/results/cua-spacesd-native-20261012.tar.gz`,
+SHA-256 `f7d2d547ad4d94759aba93a5eb37ad1b5b93d5272074273a5ed4a130ee0b0ed7`.
+Build image: `sha256:c0502af17ee96fdade90094a8e21063e529be7e98131f0afe6506cea73a39df3`.
+The retained `package-terminal.json`, `native-closure.json` and
+`container-packages.tsv` record launcher checks, native and apt closures. The
+bundle carries upstream FSL notices, native notices and registry license
+material. Seventeen locked registry packages have no standalone license file;
+the inventory identifies them and retains their manifests and available
+README/AUTHORS files. This source/package gate does not qualify physical
+capture, audio delivery or M365. No build container remains running.
+
 
 #### Viewer options for Ron
 
@@ -357,9 +400,9 @@ no benchmark campaign or performance claim is part of this integration.
 Ron permits FSL in **GChat**, not Arbitor. Inspected candidates are
 `cua-spacesd-html5` (including its media core), `cua-media-protocol`,
 `cua-media-transport`, `cua-media-codec` and `cua-viewer`; each component's
-`LICENSE` is **FSL-1.1-MIT** at the pin. None was copied, linked or installed by
-this review. Any adoption retains its notices and records the selected closure
-here before distribution. The independent MIT-compatible Arbitor route remains;
+`LICENSE` is **FSL-1.1-MIT** at the pin. The current candidate vendors the HTML5 media core and links the daemon
+closure below; each original notice is retained. The MIT Rust client and proto
+source are vendored separately. This approval is for GChat only. The independent MIT-compatible Arbitor route remains;
 AGPL `cua-som` and optional perception assets remain excluded.
 
 ## Smallest integration to a working Gbot

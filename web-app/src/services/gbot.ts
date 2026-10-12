@@ -1,6 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 
 export type Identity = { workspace_id: string; session_id: string }
+export type ViewTicket = {
+  lease_id: string
+  ws_url: string
+  media_session_id: string
+  interactive: boolean
+}
 export type Workspace = { id: string; name: string }
 export type Control = {
   identity: Identity

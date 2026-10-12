@@ -140,7 +140,7 @@ pub(super) async fn open(
         .into(),
         view: Some(GuestViewEndpoint {
             host: IpAddr::V4(Ipv4Addr::LOCALHOST),
-            port: 5900,
+            port: 3211,
             session_id: expected.session_id,
         }),
     };
@@ -149,6 +149,30 @@ pub(super) async fn open(
 
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+pub(super) async fn media_token(
+    client: &Client,
+    identity: SessionIdentity,
+) -> Result<String, SshError> {
+    check_session(client, identity).await?;
+    let (code, bytes) = collect(
+        client,
+        "head -c 257 \"$HOME/.local/state/gbot/media/token\"",
+        &[],
+    )
+    .await?;
+    let token = String::from_utf8(bytes).map_err(|_| SshError::Protocol)?;
+    let token = token.trim();
+    if code != 0
+        || !(32..=256).contains(&token.len())
+        || !token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+    {
+        return Err(SshError::Protocol);
+    }
+    Ok(token.into())
 }
 fn command(
     mode: &str,

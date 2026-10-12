@@ -5,22 +5,24 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Durable human assistance is merge-ready. An `ask_human` tool saves a question
-with its task and waits for a reply or decline. Three focused lifecycle cases,
-one channel case, strict service Clippy, native compilation, frontend types
-and product-file lint pass. No dependency or model run was added.
-Evidence: `out/gbot-human-handoff-20261012/result.json`.
-Current next item: pin and package Cua's Spaces/media closure and integrate its
-endpoint, SSH channel and embedded viewer. Acceptance is one focused
-view-only / takeover / hand-back gate, with FSL notices retained for GChat only.
+The current change integrates Cua native media and Ron's supplied avatar. The
+service opens scoped view-only or human-controlled media sessions over the
+existing vault-backed SSH connection. The browser receives a session ticket,
+never the guest's root RPC token. Hand-back revokes the interactive stream
+before resuming the bot. Focused UI, media lease and guest-install checks are
+complete: UI 3/3, media policy/revocation 1/1 and guest installation 6/6
+pass, together with frontend types and strict Rust Clippy. The pinned guest
+daemon's cached container build and native/audio package passed. The audio-toggle
+UI case and SSH reconnect/ownership regression also pass.
+Acceptance is the focused view-only / takeover / hand-back gate and a packaged
+daemon/native-library closure. Physical desktop frames, audio and Windows/M365
+qualification remain release work, not claims of this source gate.
 
-Ron selected **Cua native media for the first release** on October 12, after
-reviewing the viewer trade-offs. Adopt the pinned Spaces guest media endpoint
-and wrap Cua's browser media core through SSH; retain GChat's task, vault and
-control owners. The [Cua map](cua-map.md#viewer-options-for-ron) records the
-stack and remaining platform checks. No noVNC/websockify closure is selected.
-The existing Xvnc/XFCE guest remains the desktop backend; it is not the selected
-browser viewing transport. The media endpoint and embedded panel are next.
+Ron selected **Cua native media for the first release** on October 12. Adopt
+its Spaces guest media endpoint and browser media core through SSH; retain
+GChat's task, vault and control owners. The [Cua map](cua-map.md#viewer-options-for-ron)
+records the closure, notices and remaining checks. The existing Xvnc/XFCE guest
+remains the desktop backend. No noVNC/websockify viewing transport is selected.
 
 Bot channels, browser/control bindings and the accepted Linux Cua runtime are
 merged in `45ac4ae7e`. Their six focused cases, strict service Clippy, native
@@ -82,16 +84,15 @@ the per-bot connector UI is implemented.
 
 Gbot appears in the left menu **above Work**, only when Gbot integration is
 enabled in GChat. Ron wants a ChatGPT DOT/Grok-style bot experience, adapted to
-GChat's dark theme. Each bot has a small animated avatar; its design awaits
-Ron's draft. Detailed layout, animation and interaction design will be discussed
-before that UI work.
+GChat's dark theme. Each bot uses the animated avatar supplied in `/ai/gchat/avatar`, with
+light/dark styling and reduced-motion support. Detailed channel layout and the
+guided setup remain separate UI work.
 
 Each bot retains a separate channel for conversation history, tasks, approvals
 and desktop view; multiple bots keep separate channels and assignments. The
 current functional channel supplies SSH key import, connection controls, saved
-brain settings, task history, approvals and takeover controls. The embedded
-media panel, guided VM/cloud setup, per-bot connector picker and final bot UI
-are not delivered yet.
+brain settings, task history, approvals and takeover controls. The embedded media panel is implemented in the current candidate. Guided
+VM/cloud setup, per-bot connector picker and the final bot UI remain open.
 
 GChat remains the open base: front end, lightweight infrastructure management,
 LAN host management, agent builder/support, prebuilt skills and integrations.
@@ -256,8 +257,8 @@ SDK, Driver and agent core use MIT licensing at this pin; selected Spaces,
 viewer and media components have FSL terms. Ron permits FSL viewer/media for
 GChat; they remain excluded from paid Arbitor pending his review. Optional
 AGPL perception assets are excluded. Check each selected component's LICENSE
-and dependency closure before shipping. Keep SSH/VNC viewing until the Cua
-embedded viewer is qualified on our platforms and direct transport.
+and dependency closure before shipping. Cua native media is the selected viewer;
+physical frames/audio and platform qualification remain owed.
 [Pinned component licensing](https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/LICENSING.md).
 
 ## Local and LAN computers
@@ -425,7 +426,7 @@ not delete the user's conversation or pending work.
 ## Implementation plan once separately authorized
 
 1. Qualify pinned Driver capture/input, SSH command/file access and session-bound
-   VNC viewing on a small Linux VM and a small Windows VM. Use this desktop and
+   Cua native media viewing on a small Linux VM and a small Windows VM. Use this desktop and
    S1 according to actual hypervisor support; preserve existing host/model work.
    Test one harmless interaction, reconnect and takeover, not a broad benchmark.
 2. Probe Ron's running M365 Cloud PC and select a viable supported route. Make
@@ -533,8 +534,9 @@ Focused acceptance for this slice:
 The workstation has an SSH client but no SSH server. Ron approved `russh` 0.63.1
 on October 11 at approximately 16:30 UTC for in-memory client authentication and
 a hermetic server fixture. The service pins that exact version with its `ring`
-backend. The library requires Rust 1.85; the service requires 1.89 for the shared
-OS file lock that prevents two processes from owning its state. The selected
+backend. The library requires Rust 1.85; the media-enabled service requires 1.97
+for its pinned Cua client. The shared OS file lock prevents two processes from
+owning its state. The selected
 toolchain is 1.98. Fixtures must
 demonstrate key authentication, exec/file transfer, cancellation, keepalive and
 forwarding before this dependency is accepted for the slice. Credential import
@@ -588,15 +590,16 @@ desktop windows. These gates establish connection behavior, not cloud setup,
 unattended task persistence, model quality or release coverage.
 
 The source-only SSH connection and initial operation-recovery contract are implemented
-below. The Cua viewer route is selected; its guest endpoint and embedded panel
-still need implementation. M365's actual permitted route remains unresolved.
+below. The Cua guest endpoint and embedded panel are implemented in the current
+media candidate; physical capture/audio qualification remains owed. M365's actual
+permitted route remains unresolved.
 Use the pinned component contracts; no second agent executor or paid Arbitor layer is needed
 for this slice.
 
 ## Remaining engineering choices
 
 - M365's actual permitted route, client integration and embedded viewing surface.
-- Dedicated-guest worker integration and the authenticated desktop viewer bridge.
+- Physical media/audio qualification of the authenticated desktop viewer bridge.
 - Exact local VM images and owned session boot policy; Cua media licensing for paid Arbitor remains separate.
 - Guest application packaging and reasonable OS-disk defaults for the first tasks.
 
@@ -609,14 +612,18 @@ Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
 and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
 `7bf139610`. Compact output is merged as `9ab394244`. The channel/browser/control and runtime integration is merged in `45ac4ae7e`.
+Human assistance is implemented and pushed in `32231c6ba`, with its focused
+receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
 Current candidate: `feat/gbot-human-handoff-45ac` at
-`/ai/gchat-worktrees/gbot-cua-skill-918c`. Deliverable: durable assistance
-requests/replies in the service API and bot channel, without changing action
-approval or desktop control. Acceptance: focused human-help lifecycle/child
-cleanup and channel checks, service Clippy, native type check, frontend types
-and product-file lint. These gates pass. Evidence is retained under
-`/ai/gchat/out/gbot-human-handoff-20261012/`; accepted desktop evidence is reused.
-Next: Cua native media endpoint/transport/panel integration, selected by Ron.
+`/ai/gchat-worktrees/gbot-cua-skill-918c`. Deliverable: pinned Cua native media,
+authenticated SSH transport, an embedded view-only desktop panel, takeover and
+hand-back, and Ron's animated avatar. Acceptance: daemon/native/audio packaging,
+focused session-policy, revocation, reconnect-ownership, guest and UI checks,
+frontend types and strict service Clippy. Physical media/audio and Windows/M365
+qualification are excluded from this source gate and remain owed. Evidence:
+`/ai/gchat/out/gbot-cua-media-20261012/result.json`. Next unresolved action:
+review and merge the media candidate, then qualify capture and audio on a
+dedicated guest. No human desktop or model task is used by these source gates.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -647,12 +654,12 @@ Bun runs the context JSON protocol, and one native fixture verifies resource
 discovery and rejection of an incomplete package. Native compilation passes.
 Evidence is in
 `out/gbot-cua-runtime-20261012/result.json`. This is focused packaging evidence;
-a complete DEB/AppImage installation remains a release gate. The viewer is not
-exposed; the Cua guest media endpoint and embedded panel still need integration.
-Do not advertise the pending viewer or Windows runtime as ready.
+a complete DEB/AppImage installation remains a release gate. The current viewer
+candidate adds the guest media endpoint and embedded panel; physical media and
+Windows runtime qualification remain owed.
 
-Owned candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch
-`feat/gbot-cua-guest-9ab`. Retain source and concise evidence in
+Historical guest/runtime candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch
+`feat/gbot-cua-guest-9ab` (merged in `45ac4ae7e`). Retain source and concise evidence in
 `/ai/gchat/out/gbot-cua-guest-20261012/` until review/merge. The existing shared
 `/ai/gchat/src-tauri/target` cache is reused, not owned by this item. No live guest,
 model, calibration or Windows job belongs to this change. The accepted release
@@ -726,8 +733,9 @@ the actual private session rather than an inherited or absent value.
 | Desktop identity and no blanking | Adopt in the shared session and SSH environment. |
 | Screen/lock/power-manager autostart | Our explicit autostart disables and X server settings already cover the private guest. |
 | Browser package | The typed browser gate selects Chromium for this Driver pin; Firefox ESR cannot supply its required page binding. |
-| KiCad/Qt apps, ffmpeg, Python agent, supervisor, noVNC/websockify, spacesd and passwordless sudo | Not required by our accepted VM/SSH/Cua path; no package expansion. |
-| Public VNC/HTTP container ports | Retain localhost VNC over vault-backed SSH. |
+| KiCad/Qt apps, ffmpeg, Python agent, supervisor, noVNC/websockify and passwordless sudo | Not required by our accepted VM/SSH/Cua path; no package expansion. |
+| Spaces media endpoint | The viewer candidate adds the pinned daemon and native library package, plus PulseAudio and its utilities. |
+| Public VNC/HTTP container ports | Keep endpoints on guest loopback; tunnel Spaces on port 3211 over vault-backed SSH. Xvnc remains the desktop backend. |
 
 The focused rendered-session fixture passes with inherited KDE/Wayland values:
 it checks that both startup and SSH tools receive XFCE/X11 and AT-SPI. No fresh
@@ -964,10 +972,10 @@ retained. No existing desktop, model, profile or host configuration was a target
 Step 1 is merged. Dedicated-guest desktop capture/input,
 takeover, Windows and M365 connection qualification await their approved guests.
 
-The raw view tunnel is bidirectional transport. It must not be advertised as a
-read-only desktop panel: VNC input/clipboard mediation and takeover exclusivity
-remain part of the later dedicated-guest integration. A worker restart or unknown
-operation ID cannot authorize replay of a possibly completed external effect.
+The initial raw VNC tunnel was bidirectional transport, not a read-only desktop
+panel. The current Cua viewer supersedes it with scoped view-only and interactive
+media leases. A worker restart or unknown operation ID cannot authorize replay
+of a possibly completed external effect.
 
 ### Current KVM and Linux desktop preparation
 
@@ -1260,3 +1268,35 @@ before VM creation; separate evidence roots and fresh private keyrings prevent
 them without touching Ron's configuration.
 
 October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/package bulk. Task evidence, image bases and stopped open candidates remain. All five hosts checked; approximately 60.3 GB recovered. Report and per-path receipts: `/ai/coordination/disk-hygiene-20261012/GChat.md` and `GChat.json`. Earlier failed-guest recovery and the additional1.489GiB save-retry cleanup are excluded from that total.
+
+## Current media work and retained artifacts
+
+| Owner / host | Path | Purpose and retention |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-skill-918c`, `feat/gbot-human-handoff-45ac` | Current source candidate; retain until reviewed merge. |
+| GChat / local | `/ai/gchat/out/gbot-cua-media-20261012` | Focused source-gate evidence and disposable container recipe. |
+| GChat / S1 | `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012` | Pinned daemon source/build/cache and package; retire build after the accepted package is retained. |
+
+The pinned daemon release build and native/audio package passed. Accepted archive:
+`/media/ron/SSD_RAID/ai/gbot-cua-media-20261012/results/cua-spacesd-native-20261012.tar.gz`
+(SHA-256 `f7d2d547ad4d94759aba93a5eb37ad1b5b93d5272074273a5ed4a130ee0b0ed7`).
+`results/package-terminal.json` records the launcher/version/help, recursive loader
+and audio-library checks. The build ended at 14:56:22Z and packaging at 15:00:56Z;
+the container exited and the S1 CPU/build grant was returned. Keep the accepted
+archive and notices; build/cache retirement follows review. Shared local Cargo
+cache is reused, not owned by this item.
+
+The service retains guest-token confidentiality and revokes scoped streams.
+Viewers start view-only. Media closure/reconnection preserves Human ownership;
+only explicit hand-back closes input, takes a fresh observation and resumes the
+bot. A late close from an older viewer cannot revoke its replacement. Physical
+frames/audio and platform qualification remain unclaimed. Build prerequisites
+exist only in disposable containers; their closure is in the
+[Cua map](cua-map.md#pinned-media-packaging).
+
+The final SSH/Cua fixture passes in 0.37 seconds: it closes and reopens an
+interactive viewer, preserves Human ownership, rejects a different owner and
+ignores an old lease's delayed close. The audio-toggle UI fixture also passes;
+strict all-target service Clippy remains clean. Evidence is in
+`out/gbot-cua-media-20261012/{reconnect-control,reconnect-ui,reconnect-clippy}.log`.
+No owned build container or GPU/model job remains.

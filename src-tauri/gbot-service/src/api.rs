@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::{
     contract::{GuestRequest, SessionIdentity, WorkspaceConfig, WorkspaceId},
     executor::{Assignment, ExecutorProcesses},
+    media::{CloseView, OpenView},
     service::{Service, ServiceError},
     ssh::SshError,
     tasks::{TaskRunner, TaskRunnerError},
@@ -555,37 +556,32 @@ async fn route(
                 None => invalid_request(),
             }
         }
-        (&Method::POST, "/v1/connect" | "/v1/disconnect" | "/v1/view/open" | "/v1/view/close") => {
-            let path = request.uri().path().to_string();
+        (&Method::POST, "/v1/view/open") => match parse_body::<OpenView>(request).await {
+            Some(view) => match runtime.open_view(view).await {
+                Ok(ticket) => json_response(StatusCode::OK, &ticket),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/view/close") => match parse_body::<CloseView>(request).await {
+            Some(view) => match runtime.close_view(view).await {
+                Ok(()) => json_response(StatusCode::OK, &serde_json::json!({"closed":true})),
+                Err(error) => workspace_error(error),
+            },
+            None => invalid_request(),
+        },
+        (&Method::POST, "/v1/connect" | "/v1/disconnect") => {
+            let connect = request.uri().path() == "/v1/connect";
             match parse_body::<SessionIdentity>(request).await {
-                Some(identity) => match path.as_str() {
-                    "/v1/connect" => match runtime.connect(identity).await {
-                        Ok(hello) => json_response(StatusCode::OK, &hello),
-                        Err(error) => workspace_error(error),
-                    },
-                    "/v1/view/open" => match runtime.open_view(identity).await {
-                        Ok(endpoint) => json_response(
-                            StatusCode::OK,
-                            &serde_json::json!({
-                                "identity": identity, "endpoint": endpoint.to_string(), "capability": "view_transport"
-                            }),
-                        ),
-                        Err(error) => workspace_error(error),
-                    },
-                    other => {
-                        let result = if other == "/v1/disconnect" {
-                            runtime.disconnect(identity).await
-                        } else {
-                            runtime.close_view(identity).await
-                        };
-                        match result {
-                            Ok(()) => json_response(
-                                StatusCode::OK,
-                                &serde_json::json!({"identity":identity}),
-                            ),
-                            Err(error) => workspace_error(error),
-                        }
+                Some(identity) if connect => match runtime.connect(identity).await {
+                    Ok(hello) => json_response(StatusCode::OK, &hello),
+                    Err(error) => workspace_error(error),
+                },
+                Some(identity) => match runtime.disconnect(identity).await {
+                    Ok(()) => {
+                        json_response(StatusCode::OK, &serde_json::json!({"identity":identity}))
                     }
+                    Err(error) => workspace_error(error),
                 },
                 None => invalid_request(),
             }
@@ -664,6 +660,7 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
         WorkspaceError::State(ServiceError::ControlOwner) => {
             (StatusCode::CONFLICT, "control_owner")
         }
+        WorkspaceError::Media(_) => (StatusCode::BAD_GATEWAY, "desktop_media_unavailable"),
         WorkspaceError::Transport(_) => (StatusCode::BAD_GATEWAY, "guest_connection_failed"),
         WorkspaceError::AdapterUnavailable | WorkspaceError::ServiceLocationUnavailable => {
             (StatusCode::NOT_IMPLEMENTED, "adapter_unavailable")

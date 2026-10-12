@@ -29,6 +29,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 const USER: &str = "gbot-fixture";
+const MEDIA_TOKEN: &str = "private-guest-media-token-for-fixture";
 const WAIT: Duration = Duration::from_secs(5);
 
 #[derive(Default)]
@@ -429,6 +430,13 @@ impl server::Handler for Peer {
         data: &[u8],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        if data == b"head -c 257 \"$HOME/.local/state/gbot/media/token\"" {
+            session.channel_success(channel)?;
+            session.data(channel, MEDIA_TOKEN.as_bytes())?;
+            session.exit_status_request(channel, 0)?;
+            session.eof(channel)?;
+            return session.close(channel);
+        }
         let args = argv(std::str::from_utf8(data).unwrap());
         let input = match args.first().map(String::as_str) {
             Some("/usr/local/bin/gbot-cua") => Input::Mcp(vec![]),
@@ -669,7 +677,7 @@ impl server::Handler for Peer {
         reply: ChannelOpenHandle,
         _: &mut server::Session,
     ) -> Result<(), Self::Error> {
-        if host != "127.0.0.1" || port != 5900 {
+        if host != "127.0.0.1" || port != 3211 {
             reply
                 .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
                 .await;
@@ -714,6 +722,10 @@ impl Fixture {
     }
 
     async fn with_user_key(user_key: PrivateKey) -> Self {
+        Self::with_media(user_key, None).await
+    }
+
+    async fn with_media(user_key: PrivateKey, media: Option<SocketAddr>) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -767,7 +779,7 @@ impl Fixture {
                 .collect(),
                 view: Some(GuestViewEndpoint {
                     host: echo_address.ip(),
-                    port: 5900,
+                    port: 3211,
                     session_id: identity.session_id,
                 }),
             },
@@ -778,7 +790,7 @@ impl Fixture {
             lose_reply: Mutex::new(None),
             authenticated_algorithms: Mutex::default(),
             tasks: tasks.clone(),
-            echo_address,
+            echo_address: media.unwrap_or(echo_address),
             desktop_claim: Mutex::new(None),
             stale: std::sync::atomic::AtomicBool::new(false),
             wrong_version: std::sync::atomic::AtomicBool::new(false),
@@ -1079,6 +1091,112 @@ async fn encrypted_and_rsa_imports_authenticate_and_reconnect_without_passphrase
 }
 
 #[tokio::test]
+async fn interactive_media_reconnect_preserves_human_control() {
+    use cua_spacesd_client::{
+        pb,
+        testing::{MockAuth, MockServer},
+    };
+    use gbot_service::media::{CloseView, OpenView};
+    use gbot_service::service::SessionControlState;
+
+    timeout(Duration::from_secs(30), async {
+        let server = MockServer::start(MockAuth {
+            token: Some(MEDIA_TOKEN.into()),
+            ..Default::default()
+        })
+        .await;
+        server
+            .state
+            .stream_targets
+            .lock()
+            .unwrap()
+            .push(pb::StreamTarget {
+                target: Some(pb::stream_target::Target::Display(pb::Display {
+                    id: "dedicated".into(),
+                    ..Default::default()
+                })),
+                available: true,
+                ..Default::default()
+            });
+        let fixture = Fixture::with_media(key(), Some(server.addr)).await;
+        let service = Arc::new(
+            Service::open(fixture.directory.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = fixture.runtime(service.clone()).await;
+        let identity = fixture.guest.hello.identity;
+        runtime.connect(identity).await.unwrap();
+        let owner = Uuid::new_v4();
+        runtime.take_over(identity, owner).await.unwrap();
+        let open = OpenView {
+            identity,
+            owner,
+            interactive: true,
+            audio: false,
+            h264: false,
+        };
+        let first = runtime.open_view(open.clone()).await.unwrap();
+        runtime
+            .close_view(CloseView {
+                identity,
+                owner,
+                lease_id: first.lease_id,
+            })
+            .await
+            .unwrap();
+        let control = service
+            .snapshot()
+            .await
+            .controls
+            .into_iter()
+            .find(|control| control.identity == identity)
+            .unwrap();
+        assert_eq!(control.state, SessionControlState::Human);
+        assert_eq!(control.owner, Some(owner));
+        let second = runtime
+            .open_view(OpenView {
+                audio: true,
+                ..open.clone()
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            runtime
+                .open_view(OpenView {
+                    owner: Uuid::new_v4(),
+                    ..open
+                })
+                .await,
+            Err(WorkspaceError::State(ServiceError::ControlOwner))
+        ));
+        // A late close from the old viewer must not revoke its replacement.
+        runtime
+            .close_view(CloseView {
+                identity,
+                owner,
+                lease_id: first.lease_id,
+            })
+            .await
+            .unwrap();
+        assert_eq!(server.state.observed.media_close.lock().unwrap().len(), 1);
+        runtime
+            .close_view(CloseView {
+                identity,
+                owner,
+                lease_id: second.lease_id,
+            })
+            .await
+            .unwrap();
+        assert_eq!(server.state.observed.media_close.lock().unwrap().len(), 2);
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .expect("bounded media reconnect case timed out");
+}
+
+#[tokio::test]
 async fn vault_auth_file_command_keepalive_and_view_reconnect() {
     timeout(Duration::from_secs(30), async {
         let fixture = Fixture::new().await;
@@ -1206,42 +1324,11 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
         let desktop = fixture.request(GuestOperationKind::Desktop { tool:"get_window_state".into(),arguments:serde_json::json!({"session":"model-supplied-untrusted"}) });
         assert!(matches!(success(runtime.request(desktop).await.unwrap()),GuestResult::Desktop { result } if result["isError"] == false));
 
-        let view = runtime.open_view(expected).await.unwrap();
-        assert!(view.ip().is_loopback());
-        let mut tcp = TcpStream::connect(view).await.unwrap();
-        tcp.write_all(b"view through ssh").await.unwrap();
-        let mut echo = [0; 16];
-        timeout(WAIT, tcp.read_exact(&mut echo))
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(&echo, b"view through ssh");
-        runtime.close_view(expected).await.unwrap();
-        assert_eq!(
-            timeout(WAIT, tcp.read(&mut echo)).await.unwrap().unwrap(),
-            0
-        );
-        assert!(TcpStream::connect(view).await.is_err());
-        drop(tcp);
         runtime.disconnect(expected).await.unwrap();
         assert!(service.live_sessions().await.is_empty());
         assert_eq!(runtime.connect(expected).await.unwrap().identity, expected);
         runtime.ping(expected).await.unwrap();
-        let view = runtime.open_view(expected).await.unwrap();
-        let mut tcp = TcpStream::connect(view).await.unwrap();
-        tcp.write_all(b"reconnected view").await.unwrap();
-        timeout(WAIT, tcp.read_exact(&mut echo))
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(&echo, b"reconnected view");
         runtime.close().await.unwrap();
-        assert_eq!(
-            timeout(WAIT, tcp.read(&mut echo)).await.unwrap().unwrap(),
-            0
-        );
-        assert!(TcpStream::connect(view).await.is_err());
-        drop(tcp);
 
         // Exercise the authenticated HTTP routes against this same real SSH guest.
         let api = Api::bind(service.clone(), fixture.vault.clone(), 0)

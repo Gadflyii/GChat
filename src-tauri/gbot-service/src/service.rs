@@ -653,19 +653,6 @@ impl Service {
         }
     }
 
-    pub async fn pause_human_control(&self, identity: SessionIdentity) -> Result<(), ServiceError> {
-        let state = self.state.clone().lock_owned().await;
-        let mut next = state.durable.clone();
-        let Some(control) = next.controls.iter_mut().find(|control| {
-            control.identity == identity && control.state != SessionControlState::Bot
-        }) else {
-            return Ok(());
-        };
-        control.state = SessionControlState::Paused;
-        drop(self.commit(state, next).await?);
-        Ok(())
-    }
-
     pub async fn finish_hand_back(
         &self,
         identity: SessionIdentity,

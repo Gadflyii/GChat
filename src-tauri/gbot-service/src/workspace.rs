@@ -1,7 +1,6 @@
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
-    net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -17,6 +16,7 @@ use crate::{
         WorkspaceConnection, WorkspaceId,
     },
     executor::Assignment,
+    media::{CloseView, MediaError, MediaLease, OpenView, ViewTicket},
     service::{
         ModelAssignment, OperationCompletion, Service, ServiceError, SessionControl,
         SessionControlState,
@@ -29,6 +29,7 @@ use crate::{
 pub enum WorkspaceError {
     State(ServiceError),
     Transport(SshError),
+    Media(MediaError),
     NotFound,
     NotConnected,
     AdapterUnavailable,
@@ -43,6 +44,7 @@ impl std::fmt::Display for WorkspaceError {
         match self {
             Self::State(error) => error.fmt(f),
             Self::Transport(error) => error.fmt(f),
+            Self::Media(error) => error.fmt(f),
             Self::NotFound => f.write_str("workspace is not registered"),
             Self::NotConnected => f.write_str("connect the selected guest session first"),
             Self::AdapterUnavailable => f.write_str("this workspace adapter is not installed"),
@@ -70,11 +72,17 @@ impl From<SshError> for WorkspaceError {
         Self::Transport(value)
     }
 }
+impl From<MediaError> for WorkspaceError {
+    fn from(value: MediaError) -> Self {
+        Self::Media(value)
+    }
+}
 
 pub struct WorkspaceRuntime {
     service: Arc<Service>,
     vault: Arc<dyn Vault>,
     sessions: Mutex<BTreeMap<WorkspaceId, Arc<SshSession>>>,
+    media: Mutex<BTreeMap<WorkspaceId, MediaLease>>,
     lifecycle: Mutex<BTreeMap<WorkspaceId, Arc<Mutex<()>>>>,
     resume_observations: Mutex<BTreeMap<WorkspaceId, GuestReply>>,
     stopping: AtomicBool,
@@ -92,6 +100,7 @@ impl WorkspaceRuntime {
             service,
             vault,
             sessions: Mutex::new(BTreeMap::new()),
+            media: Mutex::new(BTreeMap::new()),
             lifecycle: Mutex::new(BTreeMap::new()),
             resume_observations: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
@@ -409,16 +418,16 @@ impl WorkspaceRuntime {
     ) -> Result<HandBack, WorkspaceError> {
         let lock = self.lifecycle_lock(identity.workspace_id).await;
         let _guard = lock.lock().await;
-        let session = self.session(identity).await?;
+        self.session(identity).await?;
         let admitted = self.service.begin_hand_back(identity, owner).await;
         if let Err(error) = admitted {
             if error == ServiceError::OperationState {
-                session.close_view().await?;
+                self.close_media_locked(identity.workspace_id).await?;
             }
             return Err(error.into());
         }
         // Human connections and queued bytes end before the bot may observe/resume.
-        session.close_view().await?;
+        self.close_media_locked(identity.workspace_id).await?;
         let request = GuestRequest {
             identity,
             operation_id: OperationId::new(),
@@ -489,17 +498,95 @@ impl WorkspaceRuntime {
         }
     }
 
-    pub async fn open_view(&self, identity: SessionIdentity) -> Result<SocketAddr, WorkspaceError> {
-        let lock = self.lifecycle_lock(identity.workspace_id).await;
-        let _guard = lock.lock().await;
-        Ok(self.session(identity).await?.open_view().await?)
+    pub async fn open_view(
+        self: &Arc<Self>,
+        request: OpenView,
+    ) -> Result<ViewTicket, WorkspaceError> {
+        let runtime = self.clone();
+        // Retain ownership if the HTTP caller disappears during ticket creation.
+        tokio::spawn(async move {
+            let identity = request.identity;
+            let lock = runtime.lifecycle_lock(identity.workspace_id).await;
+            let _guard = lock.lock_owned().await;
+            runtime.accepting()?;
+            let session = runtime.session(identity).await?;
+            if request.interactive
+                && !runtime
+                    .service
+                    .snapshot()
+                    .await
+                    .controls
+                    .iter()
+                    .any(|control| {
+                        control.identity == identity
+                            && control.owner == Some(request.owner)
+                            && control.state == SessionControlState::Human
+                    })
+            {
+                return Err(ServiceError::ControlOwner.into());
+            }
+            if runtime
+                .media
+                .lock()
+                .await
+                .get(&identity.workspace_id)
+                .is_some_and(|lease| lease.owner != request.owner)
+            {
+                return Err(ServiceError::ControlOwner.into());
+            }
+            runtime.close_media_locked(identity.workspace_id).await?;
+            let token = session.media_token().await?;
+            let endpoint = session.open_view().await?;
+            let lease = match MediaLease::open(endpoint, token, &request).await {
+                Ok(lease) => lease,
+                Err(error) => {
+                    session.close_view().await?;
+                    return Err(error.into());
+                }
+            };
+            let ticket = lease.ticket.clone();
+            runtime
+                .media
+                .lock()
+                .await
+                .insert(identity.workspace_id, lease);
+            Ok(ticket)
+        })
+        .await
+        .map_err(|_| WorkspaceError::ShuttingDown)?
     }
 
-    pub async fn close_view(&self, identity: SessionIdentity) -> Result<(), WorkspaceError> {
+    pub async fn close_view(&self, request: CloseView) -> Result<(), WorkspaceError> {
+        let identity = request.identity;
         let lock = self.lifecycle_lock(identity.workspace_id).await;
         let _guard = lock.lock().await;
-        self.service.pause_human_control(identity).await?;
-        self.session(identity).await?.close_view().await?;
+        self.session(identity).await?;
+        let media = self.media.lock().await;
+        let Some(lease) = media.get(&identity.workspace_id) else {
+            return Ok(());
+        };
+        if lease.ticket.lease_id != request.lease_id {
+            return Ok(());
+        }
+        if lease.owner != request.owner {
+            return Err(ServiceError::ControlOwner.into());
+        }
+        // Transport closure preserves Human ownership until explicit hand-back.
+        drop(media);
+        self.close_media_locked(identity.workspace_id).await?;
+        Ok(())
+    }
+
+    async fn close_media_locked(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
+        let mut media = self.media.lock().await;
+        if let Some(lease) = media.get_mut(&workspace) {
+            lease.close().await?;
+        }
+        media.remove(&workspace);
+        drop(media);
+        if let Some(session) = self.sessions.lock().await.get(&workspace).cloned() {
+            session.close_view().await?;
+        }
         Ok(())
     }
 
@@ -525,6 +612,8 @@ impl WorkspaceRuntime {
     }
 
     async fn disconnect_locked(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
+        // A failed ticket revocation still ends the SSH channel on disconnect.
+        let media_result = self.close_media_locked(workspace).await;
         self.resume_observations.lock().await.remove(&workspace);
         let Some(session) = self.sessions.lock().await.remove(&workspace) else {
             return Ok(());
@@ -536,6 +625,8 @@ impl WorkspaceRuntime {
         let close_result = session.close().await;
         state_result?;
         close_result?;
+        self.media.lock().await.remove(&workspace);
+        media_result?;
         Ok(())
     }
 
