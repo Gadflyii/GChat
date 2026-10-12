@@ -1,3 +1,5 @@
+import { profileEvidenceLabel, profilePresentation } from './profile-presentation.js'
+
 const array = (value) => Array.isArray(value) ? value : []
 const text = (value, fallback = '—') => value == null || value === '' ? fallback : String(value)
 const modelLabel = (model) => {
@@ -286,6 +288,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const previous = instance?.profile || {}
     const model = previous.model_id || models[0]?.id
     let mode = profiles.length ? 'profile' : 'custom'
+    let profileChoice = 0
+    let showAllProfiles = false
     let updateStructuredEvidence = () => {}
     const structuredInput = h('input', { type: 'checkbox', name: 'structured_outputs',
       checked: previous.structured_outputs ?? true, onchange: () => updateStructuredEvidence() })
@@ -301,17 +305,47 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     }).join(' + ')
     function fill() {
       if (mode === 'profile') {
-        const profileField = select('Profile and GPU group', 'profile_choice', profiles.map(({ entry, group }, index) => [String(index),
-          `${entry.profile.name} · ${gpuNames(group)} · ${entry.profile.qualification.tier} · Engine ${entry.profile.qualification.engine_revision.slice(0, 8)}`]), '0')
+        const selected = profiles[profileChoice]
+        const groupKey = (group) => JSON.stringify([...group].sort())
+        const modelProfiles = profiles.map((item, index) => ({ ...item, index }))
+          .filter(({ entry }) => entry.model_id === selected.entry.model_id)
+        const grouped = modelProfiles.filter(({ group }) => groupKey(group) === groupKey(selected.group))
+        const { recommendedIndex, visibleIndices } = profilePresentation(
+          grouped.map(({ entry }) => entry.profile), grouped.findIndex(({ index }) => index === profileChoice), showAllProfiles)
+        const modelField = select('Model', 'profile_model', [...new Set(profiles.map(({ entry }) => entry.model_id))]
+          .map(id => [id, modelLabel(modelById.get(id) || { name: id })]), selected.entry.model_id)
+        const groups = firstMap(modelProfiles, ({ group }) => groupKey(group))
+        const gpuField = select('GPU / GPU group', 'profile_gpu_group', [...groups]
+          .map(([key, { group }]) => [key, gpuNames(group)]), groupKey(selected.group))
+        modelField.addEventListener('change', () => {
+          profileChoice = profiles.findIndex(({ entry }) => entry.model_id === modelField.querySelector('select').value)
+          showAllProfiles = false
+          fill()
+        })
+        gpuField.addEventListener('change', () => {
+          profileChoice = modelProfiles.find(({ group }) => groupKey(group) === gpuField.querySelector('select').value).index
+          showAllProfiles = false
+          fill()
+        })
+        const profileField = select('Hardware profile', 'profile_choice', visibleIndices.map(index => {
+          const { entry, index: originalIndex } = grouped[index]
+          return [String(originalIndex), `${index === recommendedIndex ? 'Recommended · ' : ''}${profileEvidenceLabel(entry.profile.qualification.tier)} · ${entry.profile.name} · ${entry.profile.options.vision ? 'Vision + text' : 'Text only'} · TP${entry.profile.tp} · C${entry.profile.concurrency} · ${entry.profile.max_context.toLocaleString()} context · Engine ${entry.profile.qualification.engine_revision.slice(0, 8)}`]
+        }), String(profileChoice))
         const changedNote = note('Changing the recorded structured output setting makes this launch custom and unqualified.')
         updateStructuredEvidence = () => {
           const recorded = profiles[Number(profileField.querySelector('select').value)]?.entry.profile.options.structured_outputs ?? false
           changedNote.hidden = structuredInput.checked === recorded
         }
-        profileField.addEventListener('change', updateStructuredEvidence)
+        profileField.addEventListener('change', () => {
+          profileChoice = Number(profileField.querySelector('select').value)
+          updateStructuredEvidence()
+        })
         updateStructuredEvidence()
-        content.replaceChildren(profileField, changedNote,
-        h('p', { class: 'muted' }, 'Profile evidence applies to its recorded options, Engine and workload. A changed option or Engine needs separate validation.'))
+        const expand = grouped.length > visibleIndices.length || showAllProfiles
+          ? h('button', { type: 'button', 'aria-expanded': showAllProfiles, onclick: () => { showAllProfiles = !showAllProfiles; fill() } }, showAllProfiles ? 'Show less' : 'Show all') : null
+        content.replaceChildren(...[modelField, gpuField, profileField, expand,
+        recommendedIndex < 0 ? note('No tested profile is available for this GPU group.') : null, changedNote,
+        h('p', { class: 'muted' }, 'Profile evidence applies to its recorded options, Engine and workload. A changed option or Engine needs separate validation.')].filter(Boolean))
         return
       }
       updateStructuredEvidence = () => {}

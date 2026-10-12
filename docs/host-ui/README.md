@@ -1,5 +1,35 @@
 # GInfer host UI
 
+## Profile presentation — OI-077, merge-ready
+
+Ron approved model then card grouping, one recommended measured profile per card,
+remaining profiles behind **Show all**, and **Tested / Estimated / Untested**
+labels on October 11 at 22:15Z. GChat and Server Manager use the same presentation
+rule. Only full-context-tested evidence earns a recommendation; startup/smoke
+capacity remains Estimated, and calculation-only profiles remain Untested.
+The recorded Engine revision and detailed qualification limits stay visible.
+Existing automatic/saved selections stay selected even when outside the compact
+recommendation; expanding or collapsing the list never changes launch settings.
+
+Acceptance: focused rendered model/GPU filtering, compact/expanded evidence and
+unchanged selected-profile payload cases for both interfaces; affected lint and
+frontend type check. No model run, Engine/catalog changes, Windows build, release
+or publication. Both selectors are implemented. Fourteen GChat picker cases and
+five Manager cases pass, including model/GPU filtering, evidence labels, alternate
+selection across collapse and unchanged launch payloads. Frontend types and affected
+React/Manager lint pass. Evidence labels precede long names to remain visible.
+
+The [WebKitGTK preview](/ai/gchat/out/oi077-profile-presentation-20261011/profile-list.png)
+renders the production Manager UI with development data; it is not model
+qualification. The focused receipts and preview scope are in the results folder.
+Next unresolved action: coordinator review and merge; no installed app update.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| GChat / local | `/ai/gchat-worktrees/oi077-profile-presentation`, branch `fix/oi077-profile-presentation` | Source candidate from current `origin/main`; no live job |
+| GChat / local | `/ai/gchat-worktrees/oi074-frontend-packages/node_modules` | Accepted dependency cache reused; no dependency changes |
+| GChat / local | `/ai/gchat/out/oi077-profile-presentation-20261011/` | Passing focused results and one preview retained; no live job or build |
+
 ## Offline status — accepted October 1, 2026
 
 Replace the paired host's raw snapshot connection error and red alert with the

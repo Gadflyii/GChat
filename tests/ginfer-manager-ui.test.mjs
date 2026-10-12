@@ -274,8 +274,8 @@ test('manager renders local and paired status, installed model, GPU, profile and
   assert.match(app.document.querySelector('[data-section="clients"]').textContent, /Local administrator · 1 active/)
   button(app.document, 'Start a model…').click()
   const pane = app.document.querySelector('[role="dialog"]')
-  assert.match(pane.textContent, /Muse TP1 32K.*RTX 5090.*full-context-tested/s)
-  assert.match(pane.textContent, /full-context-tested · Engine 922e5a87/)
+  assert.match(pane.textContent, /RTX 5090.*Recommended · Tested · Muse TP1 32K/s)
+  assert.match(pane.textContent, /Tested .*Engine 922e5a87/)
   assert.match(pane.textContent, /A changed option or Engine needs separate validation/)
   assert.equal(pane.querySelector('input[name="structured_outputs"]').checked, true)
   const changedNote = [...pane.querySelectorAll('p')].find(node => /this launch custom and unqualified/.test(node.textContent))
@@ -288,6 +288,82 @@ test('manager renders local and paired status, installed model, GPU, profile and
   app.document.querySelectorAll('.host-button')[1].click()
   assert.equal(app.document.querySelector('h1').textContent, 'GPU server')
   assert.match(app.document.querySelector('main').textContent, /No instances/)
+})
+
+test('profile presentation keeps the original default and an expanded alternate launch unchanged', async (t) => {
+  const view = fixture()
+  const profiles = view.hosts[0].snapshot.launch_profiles
+  const tested = structuredClone(profiles[0])
+  profiles[0].profile.id = 'estimated'
+  profiles[0].profile.name = 'Estimated C4'
+  profiles[0].profile.qualification.tier = 'calculated-startup-smoke'
+  const untested = structuredClone(tested)
+  untested.profile.id = 'untested'
+  untested.profile.name = 'Untested C8'
+  untested.profile.concurrency = 8
+  untested.profile.qualification.tier = 'calculated-pending-validation'
+  profiles.push(tested, untested)
+  const app = await manager(t, view)
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  const profile = () => pane.querySelector('select[name="profile_choice"]')
+  assert.equal(profile().value, '0', 'presentation preserves the existing initial profile')
+  assert.equal(profile().options.length, 2, 'recommendation and current selection remain visible')
+  assert.match(profile().options[0].text, /^Estimated · Estimated C4/)
+  assert.match(profile().options[1].text, /^Recommended · Tested · Muse TP1 32K/)
+  assert.doesNotMatch(pane.textContent, /Untested C8/)
+  button(pane, 'Show all').click()
+  assert.match(profile().options[2].text, /^Untested · Untested C8/)
+  profile().value = '2'
+  profile().dispatchEvent(new app.window.Event('change', { bubbles: true }))
+  button(pane, 'Show less').click()
+  assert.equal(profile().value, '2')
+  assert.equal(profile().options.length, 2)
+  assert.doesNotMatch(profile().textContent, /Estimated C4/)
+  assert.equal(requests(app).length, 0)
+  submit(app)
+  await completed(app, calls => calls.length === 1)
+  assert.deepEqual(requests(app)[0], { action: 'host', host_id: localId, operation: 'profile_launch', args: {
+    profile_id: 'untested', model_id: 'installed-muse', gpu_uuids: ['GPU-local'], structured_outputs: true,
+  } })
+})
+
+test('saved profiles are grouped by model then GPU with one recommendation per selected card', async (t) => {
+  const view = fixture()
+  const snapshot = view.hosts[0].snapshot
+  snapshot.gpus.push({ ...snapshot.gpus[0], uuid: 'GPU-second', name: 'RTX 4090', display_name: 'RTX 4090' })
+  snapshot.models.push({ ...snapshot.models[0], id: 'installed-qwen', path: '/models/qwen.ginfer' })
+  const qwen = structuredClone(snapshot.launch_profiles[0])
+  qwen.model_id = 'installed-qwen'
+  qwen.profile.id = 'qwen-first'
+  qwen.profile.name = 'Qwen first GPU'
+  const other = structuredClone(qwen)
+  other.profile.id = 'qwen-second'
+  other.profile.name = 'Qwen second GPU'
+  other.gpu_groups = [['GPU-second']]
+  snapshot.launch_profiles.push(qwen, other)
+  const app = await manager(t, view)
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  const change = (name, value) => {
+    const field = pane.querySelector(`select[name="${name}"]`)
+    field.value = value
+    field.dispatchEvent(new app.window.Event('change', { bubbles: true }))
+  }
+  assert.equal(pane.querySelector('select[name="profile_model"]').options.length, 2)
+  assert.doesNotMatch(pane.querySelector('select[name="profile_choice"]').textContent, /Qwen/)
+  change('profile_model', 'installed-qwen')
+  assert.equal(pane.querySelector('select[name="profile_gpu_group"]').options.length, 2)
+  assert.match(pane.querySelector('select[name="profile_choice"]').textContent, /Recommended · Tested · Qwen first GPU/)
+  change('profile_gpu_group', JSON.stringify(['GPU-second']))
+  assert.match(pane.querySelector('select[name="profile_choice"]').textContent, /Recommended · Tested · Qwen second GPU/)
+  assert.doesNotMatch(pane.querySelector('select[name="profile_choice"]').textContent, /first GPU|Muse/)
+  assert.equal(requests(app).length, 0)
+  submit(app)
+  await completed(app, calls => calls.length === 1)
+  assert.equal(requests(app)[0].args.profile_id, 'qwen-second')
+  assert.equal(requests(app)[0].args.model_id, 'installed-qwen')
+  assert.deepEqual(requests(app)[0].args.gpu_uuids, ['GPU-second'])
 })
 
 test('Start, draining Stop and forced Reload use host session guards and exact saved profile', async (t) => {
