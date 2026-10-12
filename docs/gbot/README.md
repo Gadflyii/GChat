@@ -15,8 +15,15 @@ pass, together with frontend types and strict Rust Clippy. The pinned guest
 daemon's cached container build and native/audio package passed. The audio-toggle
 UI case and SSH reconnect/ownership regression also pass.
 Acceptance is the focused view-only / takeover / hand-back gate and a packaged
-daemon/native-library closure. Physical desktop frames, audio and Windows/M365
-qualification remain release work, not claims of this source gate.
+daemon/native-library closure. The source is merged in `e3ff85e8a`. The dedicated
+Linux physical check identified a codec negotiation defect: GChat requested PNG
+only, but Cua's Linux provider offers BGRA and H.264. The desktop and audio service
+were running; no capture session opened. The candidate adds Cua's existing BGRA
+fallback, already supported by its browser renderer, while retaining H.264 first
+when enabled. Acceptance remains a real desktop frame (saved as PNG), known
+440 Hz PCM tone, view-only input refusal, harmless takeover input and revocation
+on hand-back. No model/GPU is required. Windows/M365 and browser playback remain
+release checks. Rust 1.97 is required on Windows release hosts.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -91,7 +98,7 @@ guided setup remain separate UI work.
 Each bot retains a separate channel for conversation history, tasks, approvals
 and desktop view; multiple bots keep separate channels and assignments. The
 current functional channel supplies SSH key import, connection controls, saved
-brain settings, task history, approvals and takeover controls. The embedded media panel is implemented in the current candidate. Guided
+brain settings, task history, approvals and takeover controls. The embedded media panel is merged in `e3ff85e8a`. Guided
 VM/cloud setup, per-bot connector picker and the final bot UI remain open.
 
 GChat remains the open base: front end, lightweight infrastructure management,
@@ -258,7 +265,8 @@ viewer and media components have FSL terms. Ron permits FSL viewer/media for
 GChat; they remain excluded from paid Arbitor pending his review. Optional
 AGPL perception assets are excluded. Check each selected component's LICENSE
 and dependency closure before shipping. Cua native media is the selected viewer;
-physical frames/audio and platform qualification remain owed.
+Linux capture/audio and control pass on the dedicated guest; Windows/M365 and
+browser playback remain release gates.
 [Pinned component licensing](https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/LICENSING.md).
 
 ## Local and LAN computers
@@ -591,7 +599,8 @@ unattended task persistence, model quality or release coverage.
 
 The source-only SSH connection and initial operation-recovery contract are implemented
 below. The Cua guest endpoint and embedded panel are implemented in the current
-media candidate; physical capture/audio qualification remains owed. M365's actual
+media implementation; Linux capture/audio and control pass on the dedicated
+guest. Windows/M365 and browser playback remain release gates. M365's actual
 permitted route remains unresolved.
 Use the pinned component contracts; no second agent executor or paid Arbitor layer is needed
 for this slice.
@@ -599,7 +608,7 @@ for this slice.
 ## Remaining engineering choices
 
 - M365's actual permitted route, client integration and embedded viewing surface.
-- Physical media/audio qualification of the authenticated desktop viewer bridge.
+- Windows/M365 capture/audio and installed browser playback qualification.
 - Exact local VM images and owned session boot policy; Cua media licensing for paid Arbitor remains separate.
 - Guest application packaging and reasonable OS-disk defaults for the first tasks.
 
@@ -614,16 +623,38 @@ and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
 `7bf139610`. Compact output is merged as `9ab394244`. The channel/browser/control and runtime integration is merged in `45ac4ae7e`.
 Human assistance is implemented and pushed in `32231c6ba`, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
-Current candidate: `feat/gbot-human-handoff-45ac` at
-`/ai/gchat-worktrees/gbot-cua-skill-918c`. Deliverable: pinned Cua native media,
-authenticated SSH transport, an embedded view-only desktop panel, takeover and
-hand-back, and Ron's animated avatar. Acceptance: daemon/native/audio packaging,
-focused session-policy, revocation, reconnect-ownership, guest and UI checks,
-frontend types and strict service Clippy. Physical media/audio and Windows/M365
-qualification are excluded from this source gate and remain owed. Evidence:
-`/ai/gchat/out/gbot-cua-media-20261012/result.json`. Next unresolved action:
-review and merge the media candidate, then qualify capture and audio on a
-dedicated guest. No human desktop or model task is used by these source gates.
+Current candidate: `test/gbot-media-physical-e3ff` at
+`/ai/gchat-worktrees/gbot-cua-skill-918c`, based on merged `e3ff85e8a`.
+Deliverable: physically qualify the production SSH-backed Cua viewer on a
+separate Linux guest. Acceptance: one real PNG, a known 440 Hz desktop tone
+through PCM, view-only input refusal, harmless takeover input and interactive
+stream revocation on hand-back. Existing source and package receipts are reused.
+No model/GPU, person's desktop, browser playback, Windows or M365 claim.
+Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
+Physical gate **PASS at 17:55:38 UTC on October 12**. The production native-vault
+SSH route captured a 1920×1080 BGRA desktop frame, converted to PNG and visually
+inspected. Three seconds of stereo 48 kHz S16LE audio contained the 440 Hz tone
+(576,000 bytes, RMS 8,484.83, tone energy fraction >0.99999999). View-only input
+was refused with `view_only`; takeover delivered harmless pointer input;
+hand-back restored Bot ownership and revoked the interactive socket.
+Receipts: `physical/seed/{summary,physical-media,retirement,disk-retirement}.json`
+and `physical/seed/capture.png`. No browser playback or platform performance claim.
+
+Source `411bacc33` also fixes the provisioning defect: driver/media archives now
+sit beside the small configuration on the read-only seed, with pinned digest
+checks before extraction. The dedicated guest booted with 12,368-byte user-data
+instead of 238,888,669 bytes and completed SSH/media provisioning. Seven focused
+KVM cases, strict Clippy and example build pass; reuse
+`physical/seed-{focused,clippy,build}.log`. The failed guest's log establishes
+ENOSPC writing `/run/cloud-init/instance-data-sensitive.json`, followed by
+NoCloud fallback and broken SSH. No pin bypass, RAM workaround or offline repair.
+
+Guest `bd5614ed-e14a-40b5-b566-aaef3ee9d847` is stopped and unregistered, its
+native-vault key deleted, and its disposable root removed (2.688 GiB freed).
+The CPU booking is returned; no live guest, model, GPU job or owned build
+container remains. Keep evidence and accepted archives. Next unresolved action:
+review/merge this physical-gate branch; Windows/M365 and browser playback wait
+for Ron's release window.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -655,8 +686,9 @@ discovery and rejection of an incomplete package. Native compilation passes.
 Evidence is in
 `out/gbot-cua-runtime-20261012/result.json`. This is focused packaging evidence;
 a complete DEB/AppImage installation remains a release gate. The current viewer
-candidate adds the guest media endpoint and embedded panel; physical media and
-Windows runtime qualification remain owed.
+implementation adds the guest media endpoint and embedded panel; dedicated
+Linux capture/audio and control pass. Windows runtime and browser playback
+qualification remain owed.
 
 Historical guest/runtime candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch
 `feat/gbot-cua-guest-9ab` (merged in `45ac4ae7e`). Retain source and concise evidence in
@@ -1273,30 +1305,48 @@ October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/p
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-skill-918c`, `feat/gbot-human-handoff-45ac` | Current source candidate; retain until reviewed merge. |
-| GChat / local | `/ai/gchat/out/gbot-cua-media-20261012` | Focused source-gate evidence and disposable container recipe. |
-| GChat / S1 | `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012` | Pinned daemon source/build/cache and package; retire build after the accepted package is retained. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-skill-918c`, `test/gbot-media-physical-e3ff` | Source `411bacc33`, physical gate PASS; retain until reviewed merge. |
+| GChat / local | `/ai/gchat/out/gbot-cua-media-20261012` | Focused source checks, capture/PCM and compact receipts. Shared Cargo cache is not owned by this task. |
+| GChat / S1 | `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012` | Accepted pinned daemon package and notices; build/cache can retire after review. |
+| GChat / S1 | `/ai/gbot-vms/cua-media-20261012/seed-evidence` | Physical frame/audio/control, packaging and retirement evidence; no live job. |
+| GChat / S1 | `/ai/gbot-vms/bd5614ed-e14a-40b5-b566-aaef3ee9d847` | Removed after product stop/unregister/vault deletion, 2.688 GiB freed. |
 
 The pinned daemon release build and native/audio package passed. Accepted archive:
 `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012/results/cua-spacesd-native-20261012.tar.gz`
 (SHA-256 `f7d2d547ad4d94759aba93a5eb37ad1b5b93d5272074273a5ed4a130ee0b0ed7`).
-`results/package-terminal.json` records the launcher/version/help, recursive loader
-and audio-library checks. The build ended at 14:56:22Z and packaging at 15:00:56Z;
-the container exited and the S1 CPU/build grant was returned. Keep the accepted
-archive and notices; build/cache retirement follows review. Shared local Cargo
-cache is reused, not owned by this item.
+`results/package-terminal.json` records launcher/version/help, recursive loader
+and audio-library checks. Build and packaging containers exited; keep the
+accepted archive and notices. Build prerequisites existed only in disposable
+containers; their closure is in the [Cua map](cua-map.md#pinned-media-packaging).
 
-The service retains guest-token confidentiality and revokes scoped streams.
-Viewers start view-only. Media closure/reconnection preserves Human ownership;
-only explicit hand-back closes input, takes a fresh observation and resumes the
-bot. A late close from an older viewer cannot revoke its replacement. Physical
-frames/audio and platform qualification remain unclaimed. Build prerequisites
-exist only in disposable containers; their closure is in the
-[Cua map](cua-map.md#pinned-media-packaging).
+Physical Linux acceptance passes over production SSH/Cua: one real 1920×1080
+frame, 440 Hz PCM audio, view-only refusal, Human takeover input and Bot hand-back
+with socket revocation. It ran on one dedicated Debian/Xvnc guest on S1 CPUs
+112–113 from 17:52:44 to 17:55:38 UTC, without a GPU or model. The PNG was visually
+inspected; browser playback, Windows and M365 remain release gates. See
+`physical/seed/summary.json` and its raw receipt links.
 
-The final SSH/Cua fixture passes in 0.37 seconds: it closes and reopens an
-interactive viewer, preserves Human ownership, rejects a different owner and
-ignores an old lease's delayed close. The audio-toggle UI fixture also passes;
-strict all-target service Clippy remains clean. Evidence is in
-`out/gbot-cua-media-20261012/{reconnect-control,reconnect-ui,reconnect-clippy}.log`.
-No owned build container or GPU/model job remains.
+The earlier focused SSH/Cua reconnection fixture passed in 0.37 seconds:
+Human ownership survives close/reopen, a different owner is rejected and an old
+lease's delayed close cannot revoke its replacement. Audio-toggle UI and strict
+all-target Clippy also pass. Reuse the `reconnect-{control,ui,clippy}.log` receipts.
+
+Resolved physical-gate failures and preventive changes:
+
+- Linux native capture offers BGRA/H.264; PNG-only negotiation returned
+  "no acceptable codec". Typed codec preferences now admit BGRA fallback. The
+  probe follows Cua's video envelope; the production browser already did.
+- Returning from a background `paplay` shell killed its tone via transient-unit
+  cleanup. The tone uses its own transient unit; production capture is unchanged.
+- Binary-filled user-data exhausted cloud-init's runtime metadata filesystem.
+  Local pinned archives now sit outside configuration on the read-only seed.
+  The large-archive fixture bounds metadata size and verifies archive integrity.
+- Private libvirt paths must fit the Unix-socket limit. The accepted controller
+  uses `/ai/gbot-vms/cua2config` and its own short runtime directory. The probe
+  waits for boot SSH readiness and attempts ACPI shutdown before forced fallback.
+
+Concise failed-attempt evidence remains in S1 `diagnostic-evidence`,
+`codec-evidence` and `wire-evidence`. Their domains and native-vault keys are
+retired. Disks `4c75…`, `3cc2…` and `c49b…` freed 13.91 GiB; `802d…` freed
+5.15 GiB. The final guest freed another 2.688 GiB. Booking 1362 is cancelled;
+no person's desktop or Windows installation was accessed.

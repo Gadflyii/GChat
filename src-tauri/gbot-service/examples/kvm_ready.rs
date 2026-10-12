@@ -24,7 +24,7 @@ mod linux {
         time::Duration,
     };
     use tokio::{
-        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
         net::UnixListener,
         process::Command,
     };
@@ -54,6 +54,27 @@ mod linux {
                 log.flush().await?;
                 let key = std::str::from_utf8(&line[offset + marker.len()..])?;
                 return Ok(PublicKey::from_openssh(key.trim())?);
+            }
+        }
+    }
+
+    async fn ssh_started(
+        mut console: impl tokio::io::AsyncBufRead + Unpin,
+        mut log: impl tokio::io::AsyncWrite + Unpin,
+    ) -> Result<()> {
+        let mut line = Vec::new();
+        loop {
+            line.clear();
+            if console.read_until(b'\n', &mut line).await? == 0 {
+                return Err("guest console closed before SSH started".into());
+            }
+            log.write_all(&line).await?;
+            if [b"Started ".as_slice(), b"ssh.service".as_slice()]
+                .iter()
+                .all(|marker| line.windows(marker.len()).any(|part| part == *marker))
+            {
+                log.flush().await?;
+                return Ok(());
             }
         }
     }
@@ -96,6 +117,328 @@ mod linux {
         }
     }
     struct DedicatedApproval(SessionIdentity);
+
+    // Minimal wire probe for the opt-in physical gate; no second viewer client.
+    struct MediaProbe(hyper::upgrade::Upgraded);
+    impl MediaProbe {
+        async fn open(url: &str) -> Result<Self> {
+            let request = Request::get(url.replacen("ws://", "http://", 1))
+                .header("Connection", "Upgrade")
+                .header("Upgrade", "websocket")
+                .header("Sec-WebSocket-Version", "13")
+                .header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+                .body(Body::empty())?;
+            let response = Client::new().request(request).await?;
+            if response.status() != hyper::StatusCode::SWITCHING_PROTOCOLS {
+                return Err("media socket upgrade failed".into());
+            }
+            Ok(Self(hyper::upgrade::on(response).await?))
+        }
+        async fn send(&mut self, opcode: u8, data: &[u8]) -> Result<()> {
+            let mask = [17, 43, 91, 7];
+            let mut frame = vec![0x80 | opcode];
+            if data.len() < 126 {
+                frame.push(0x80 | data.len() as u8);
+            } else {
+                frame.push(0x80 | 126);
+                frame.extend_from_slice(&u16::try_from(data.len())?.to_be_bytes());
+            }
+            frame.extend_from_slice(&mask);
+            frame.extend(data.iter().enumerate().map(|(i, byte)| byte ^ mask[i % 4]));
+            self.0.write_all(&frame).await?;
+            Ok(())
+        }
+        async fn next(&mut self) -> Result<(u8, Vec<u8>)> {
+            loop {
+                let mut header = [0; 2];
+                self.0.read_exact(&mut header).await?;
+                if header[0] & 0x80 == 0 || header[1] & 0x80 != 0 {
+                    return Err("unexpected fragmented/masked server frame".into());
+                }
+                let size = match header[1] & 127 {
+                    126 => u64::from(self.0.read_u16().await?),
+                    127 => self.0.read_u64().await?,
+                    n => u64::from(n),
+                };
+                if size > 32 * 1024 * 1024 {
+                    return Err("physical probe frame too large".into());
+                }
+                let mut data = vec![0; usize::try_from(size)?];
+                self.0.read_exact(&mut data).await?;
+                let opcode = header[0] & 15;
+                if opcode == 9 {
+                    self.send(10, &data).await?;
+                } else {
+                    return Ok((opcode, data));
+                }
+            }
+        }
+        async fn input(&mut self, session: &str) -> Result<Value> {
+            self.send(
+                1,
+                &serde_json::to_vec(&json!({"type":"interactive_input","payload":{
+                "session_id":session,"first_sequence":1,"events":[{"kind":"pointer","phase":"move",
+                "button":null,"x_normalized":0.5,"y_normalized":0.5,"modifiers":[]}]}}))?,
+            )
+            .await?;
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let (kind, bytes) = self.next().await?;
+                    if kind == 1 {
+                        let value: Value = serde_json::from_slice(&bytes)?;
+                        if value["type"] == "interactive_input_acknowledgement"
+                            || value["type"] == "error"
+                        {
+                            return Ok(value);
+                        }
+                    }
+                    if kind == 8 {
+                        return Err("input socket closed".into());
+                    }
+                }
+            })
+            .await?
+        }
+    }
+
+    fn video_frame(bytes: &[u8]) -> Result<(Value, &[u8])> {
+        if bytes.len() < 8 {
+            return Err("short video packet".into());
+        }
+        let header = usize::try_from(u32::from_be_bytes(bytes[..4].try_into()?))?;
+        let payload = usize::try_from(u32::from_be_bytes(bytes[4..8].try_into()?))?;
+        if 8 + header + payload != bytes.len() {
+            return Err("video frame lengths differ".into());
+        }
+        let envelope: Value = serde_json::from_slice(&bytes[8..8 + header])?;
+        if envelope["direction"] != "video" || !envelope["message"].is_object() {
+            return Err(format!("unexpected video envelope: {envelope}").into());
+        }
+        Ok((envelope["message"].clone(), &bytes[8 + header..]))
+    }
+
+    async fn physical_media(
+        runtime: &Arc<WorkspaceRuntime>,
+        identity: SessionIdentity,
+        evidence: &Path,
+    ) -> Result<()> {
+        // The independent unit keeps playback alive after its launch command exits.
+        let mut pcm = Vec::with_capacity(48000 * 4 * 8);
+        for n in 0..48000 * 8 {
+            let sample =
+                ((n as f64 * std::f64::consts::TAU * 440.0 / 48000.0).sin() * 12000.0) as i16;
+            pcm.extend_from_slice(&sample.to_le_bytes());
+            pcm.extend_from_slice(&sample.to_le_bytes());
+        }
+        operation(
+            runtime,
+            identity,
+            GuestOperationKind::Write {
+                path: GuestPath("/home/gbot/tone.pcm".into()),
+                offset: 0,
+                data: pcm,
+                truncate: true,
+            },
+        )
+        .await?;
+        let owner = Uuid::new_v4();
+        let view = runtime
+            .open_view(OpenView {
+                identity,
+                owner,
+                interactive: false,
+                audio: true,
+                h264: false,
+            })
+            .await?;
+        let mut socket = MediaProbe::open(&view.ws_url).await?;
+        let played = operation(
+            runtime,
+            identity,
+            GuestOperationKind::Exec {
+                program: "/usr/local/bin/gbot-in-session".into(),
+                args: vec![
+                    "systemd-run".into(),
+                    "--user".into(),
+                    "--quiet".into(),
+                    "--collect".into(),
+                    "--unit=gbot-media-tone".into(),
+                    "/usr/local/bin/gbot-in-session".into(),
+                    "paplay".into(),
+                    "--raw".into(),
+                    "--format=s16le".into(),
+                    "--rate=48000".into(),
+                    "--channels=2".into(),
+                    "/home/gbot/tone.pcm".into(),
+                ],
+                cwd: GuestPath("/home/gbot".into()),
+                env: Default::default(),
+            },
+        )
+        .await?;
+        if !matches!(played, GuestResult::ExecFinished { exit_code: 0, .. }) {
+            return Err("tone launch failed".into());
+        }
+        let mut session = String::new();
+        let mut controls = Vec::new();
+        let mut audio = Vec::new();
+        let mut frame = None;
+        tokio::time::timeout(Duration::from_secs(20), async {
+            while frame.is_none() || audio.len() < 48000 * 4 * 3 || session.is_empty() {
+                let (kind, bytes) = socket.next().await?;
+                if kind == 1 {
+                    let value: Value = serde_json::from_slice(&bytes)?;
+                    if value["type"] == "session_opened" {
+                        session = value["payload"]["session_id"]
+                            .as_str()
+                            .ok_or("media session id missing")?
+                            .into();
+                    }
+                    controls.push(value);
+                } else if kind == 2 && bytes.starts_with(b"RAU2") {
+                    if bytes.len() < 24 {
+                        return Err("short audio packet".into());
+                    }
+                    audio.extend_from_slice(&bytes[24..]);
+                } else if kind == 2 && bytes.len() >= 8 {
+                    let (descriptor, pixels) = video_frame(&bytes)?;
+                    tokio::fs::write(
+                        evidence.join("capture-frame.json"),
+                        serde_json::to_vec_pretty(&descriptor)?,
+                    )
+                    .await?;
+                    let filename = match descriptor["codec"].as_str() {
+                        Some("png") if pixels.starts_with(b"\x89PNG\r\n\x1a\n") => "capture.png",
+                        Some("bgra") => {
+                            let width = descriptor["width_px"]
+                                .as_u64()
+                                .ok_or("capture width missing")?;
+                            let height = descriptor["height_px"]
+                                .as_u64()
+                                .ok_or("capture height missing")?;
+                            let expected = width
+                                .checked_mul(height)
+                                .and_then(|size| size.checked_mul(4));
+                            if width == 0 || height == 0 || expected != Some(pixels.len() as u64) {
+                                return Err("BGRA capture dimensions differ".into());
+                            }
+                            "capture.bgra"
+                        }
+                        _ => return Err("unexpected capture codec".into()),
+                    };
+                    tokio::fs::write(evidence.join(filename), pixels).await?;
+                    frame = Some(descriptor);
+                } else if kind == 8 {
+                    return Err("capture socket closed".into());
+                }
+            }
+            Ok::<(), Box<dyn Error + Send + Sync>>(())
+        })
+        .await??;
+        let config = controls
+            .iter()
+            .find(|value| {
+                value["type"] == "audio_config" && value["payload"]["direction"] == "down"
+            })
+            .ok_or("audio configuration missing")?;
+        if config["payload"]["sample_rate_hz"] != 48000 || config["payload"]["channels"] != 2 {
+            return Err("unexpected audio format".into());
+        }
+        let samples: Vec<f64> = audio
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|bytes| f64::from(i16::from_le_bytes([bytes[0], bytes[1]])))
+            .collect();
+        let power = samples.iter().map(|n| n * n).sum::<f64>() / samples.len() as f64;
+        let projection = |quadrature: bool| {
+            samples
+                .iter()
+                .enumerate()
+                .map(|(i, n)| {
+                    let angle = i as f64 * std::f64::consts::TAU * 440.0 / 48000.0;
+                    n * if quadrature { angle.sin() } else { angle.cos() }
+                })
+                .sum::<f64>()
+        };
+        let tone_power = 2.0 * (projection(false).powi(2) + projection(true).powi(2))
+            / (samples.len() as f64).powi(2);
+        tokio::fs::write(evidence.join("capture.s16le"), &audio).await?;
+        tokio::fs::write(
+            evidence.join("capture-controls.json"),
+            serde_json::to_vec_pretty(&controls)?,
+        )
+        .await?;
+        if power < 10000.0 || tone_power / power < 0.5 {
+            return Err(format!(
+                "known audio tone not received: power={power}, fraction={}",
+                tone_power / power
+            )
+            .into());
+        }
+        let refusal = socket.input(&session).await?;
+        if refusal["payload"]["delivered"] == true
+            || refusal["payload"]["error"].is_null() && refusal["type"] != "error"
+        {
+            return Err("view-only input was not rejected".into());
+        }
+        runtime
+            .close_view(CloseView {
+                identity,
+                owner,
+                lease_id: view.lease_id,
+            })
+            .await?;
+        let taken = runtime.take_over(identity, owner).await?;
+        let interactive = runtime
+            .open_view(OpenView {
+                identity,
+                owner,
+                interactive: true,
+                audio: false,
+                h264: false,
+            })
+            .await?;
+        let mut human = MediaProbe::open(&interactive.ws_url).await?;
+        let human_session = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let (kind, bytes) = human.next().await?;
+                if kind == 1 {
+                    let value: Value = serde_json::from_slice(&bytes)?;
+                    if value["type"] == "session_opened" {
+                        return Ok::<String, Box<dyn Error + Send + Sync>>(
+                            value["payload"]["session_id"]
+                                .as_str()
+                                .ok_or("interactive session missing")?
+                                .into(),
+                        );
+                    }
+                }
+            }
+        })
+        .await??;
+        let delivered = human.input(&human_session).await?;
+        if delivered["payload"]["delivered"] != true {
+            return Err(format!("takeover input failed: {delivered}").into());
+        }
+        let returned = runtime.hand_back(identity, owner).await?;
+        let closed = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match human.next().await {
+                    Ok((8, _)) | Err(_) => return true,
+                    _ => {}
+                }
+            }
+        })
+        .await?;
+        tokio::fs::write(evidence.join("physical-media.json"), serde_json::to_vec_pretty(&json!({
+            "frame":frame,"audio_bytes":audio.len(),"audio_rms":power.sqrt(),"tone_energy_fraction":tone_power/power,
+            "view_only":refusal,"take_over":taken,"input":delivered,"hand_back":returned,"interactive_socket_revoked":closed,
+            "scope":"dedicated Debian/Xvnc guest, PNG/BGRA capture + PCM desktop tone + control ownership; no Windows/M365 or browser playback claim"
+        }))?).await?;
+        println!("PHYSICAL_MEDIA_PASS");
+        Ok(())
+    }
     impl ToolApproval for DedicatedApproval {
         fn approve<'a>(&'a self, _: Uuid, request: &'a GuestRequest) -> ApprovalFuture<'a> {
             Box::pin(async move { request.identity == self.0 })
@@ -372,12 +715,12 @@ mod linux {
         vm.start(&KvmTools::default()).await?;
         let service = Arc::new(Service::open(evidence.join("service.json")).await?);
         let identity = record.identity;
-        if !service
+        let registered = service
             .snapshot()
             .await
             .workspaces
             .iter()
-            .any(|w| w.id == identity.workspace_id)
+            .any(|w| w.id == identity.workspace_id);
         {
             let tty = Command::new("virsh")
                 .args([
@@ -401,40 +744,50 @@ mod linux {
                 return Err("cannot read owned console".into());
             }
             let console = BufReader::new(tokio::fs::File::open(tty).await?);
-            let log = tokio::fs::File::create(evidence.join("serial.log")).await?;
-            let key = guest_key(console, log).await?;
-            let key = key.to_openssh()?;
-            let mut fields = key.split_whitespace();
-            service
-                .register_workspace(WorkspaceConfig {
-                    id: identity.workspace_id,
-                    name: "Dedicated Cua gate".into(),
-                    service_pc: ServicePc::Local,
-                    bot_pc: BotPc::LocalVm {
-                        host_id: service.snapshot().await.service_id,
-                        vm_id: vm.spec.id.to_string(),
-                        hypervisor: Hypervisor::Kvm,
-                    },
-                    connection: WorkspaceConnection::Ssh(SshConnection {
-                        endpoint: SshEndpoint {
-                            hostname: "127.0.0.1".into(),
-                            port: vm.spec.ssh_port,
-                            user: "gbot".into(),
+            let log = tokio::fs::File::create(evidence.join(if registered {
+                "resume-serial.log"
+            } else {
+                "serial.log"
+            }))
+            .await?;
+            if registered {
+                tokio::time::timeout(Duration::from_secs(180), ssh_started(console, log)).await??;
+            } else {
+                let key = guest_key(console, log).await?;
+                let key = key.to_openssh()?;
+                let mut fields = key.split_whitespace();
+                service
+                    .register_workspace(WorkspaceConfig {
+                        id: identity.workspace_id,
+                        name: "Dedicated Cua gate".into(),
+                        service_pc: ServicePc::Local,
+                        bot_pc: BotPc::LocalVm {
+                            host_id: service.snapshot().await.service_id,
+                            vm_id: vm.spec.id.to_string(),
+                            hypervisor: Hypervisor::Kvm,
                         },
-                        pinned_host_key: SshHostPublicKey {
-                            algorithm: fields.next().ok_or("host algorithm missing")?.into(),
-                            public_key: fields.next().ok_or("host key missing")?.into(),
-                        },
-                        credential_ref: VaultCredentialRef(record.credential_ref),
-                    }),
-                })
-                .await?;
+                        connection: WorkspaceConnection::Ssh(SshConnection {
+                            endpoint: SshEndpoint {
+                                hostname: "127.0.0.1".into(),
+                                port: vm.spec.ssh_port,
+                                user: "gbot".into(),
+                            },
+                            pinned_host_key: SshHostPublicKey {
+                                algorithm: fields.next().ok_or("host algorithm missing")?.into(),
+                                public_key: fields.next().ok_or("host key missing")?.into(),
+                            },
+                            credential_ref: VaultCredentialRef(record.credential_ref),
+                        }),
+                    })
+                    .await?;
+            }
         }
         let runtime = Arc::new(WorkspaceRuntime::new(
             service.clone(),
             Arc::new(NativeVault),
         ));
         let result = async {
+            println!("GUEST_SSH_READY");
             let hello = runtime.connect(identity).await?;
             tokio::fs::write(
                 evidence.join("hello.json"),
@@ -447,6 +800,9 @@ mod linux {
                 serde_json::to_vec_pretty(&tools)?,
             )
             .await?;
+            if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {
+                return physical_media(&runtime, identity, evidence).await;
+            }
             let owner = Uuid::new_v4();
             let view = runtime
                 .open_view(OpenView {
@@ -528,6 +884,24 @@ mod linux {
             model_task(&runtime, identity, url.trim(), evidence).await
         }
         .await;
+        if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {
+            // Preserve guest evidence while SSH and the native-vault key still exist.
+            let diagnostics = operation(&runtime, identity, GuestOperationKind::Exec {
+                program: "/usr/local/bin/gbot-in-session".into(),
+                args: vec!["sh".into(), "-c".into(),
+                    "systemctl --user status gbot-media --no-pager; journalctl --user -u gbot-media --no-pager -n 80; printf 'DISPLAY=%s\n' \"$DISPLAY\"; xdpyinfo | head -20; timeout 5 pactl info; timeout 5 pactl list short sources; systemctl --user status gbot-media-tone --no-pager; journalctl --user -u gbot-media-tone --no-pager -n 20; true".into()],
+                cwd: GuestPath("/home/gbot".into()), env: Default::default(),
+            });
+            let diagnostics = tokio::time::timeout(Duration::from_secs(15), diagnostics).await;
+            tokio::fs::write(
+                evidence.join("media-diagnostic.json"),
+                serde_json::to_vec_pretty(&match diagnostics {
+                    Ok(Ok(reply)) => serde_json::to_value(reply)?,
+                    other => json!({"diagnostic_error": format!("{other:?}")}),
+                })?,
+            )
+            .await?;
+        }
         let close = runtime.close().await;
         result?;
         close?;
@@ -591,12 +965,12 @@ mod linux {
                 ssh_port: 0,
                 ssh_public_key: private.public_key().to_openssh()?,
                 browser_package: "chromium".into(),
-                driver: GuestBinary::CloudInitArchive {
+                driver: GuestBinary::SeedArchive {
                     path: archive,
                     sha256: digest,
                 },
                 driver_revision: CUA_DRIVER_REVISION.into(),
-                media: GuestBinary::CloudInitArchive {
+                media: GuestBinary::SeedArchive {
                     path: media_archive,
                     sha256: media_digest,
                 },
@@ -647,9 +1021,26 @@ mod linux {
         }
         let result =
             tokio::time::timeout(Duration::from_secs(1800), gate(&record, &evidence)).await;
-        let stop = record.vm.force_stop(&KvmTools::default()).await;
+        let tools = KvmTools::default();
+        let stop = async {
+            record.vm.shutdown(&tools).await?;
+            tokio::time::timeout(Duration::from_secs(60), async {
+                while record.vm.state(&tools).await? != VmState::Stopped {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                }
+                Ok::<_, std::io::Error>(VmState::Stopped)
+            })
+            .await
+            .map_err(std::io::Error::other)?
+        }
+        .await;
+        let stop = match stop {
+            Ok(state) => Ok(state),
+            Err(_) => record.vm.force_stop(&tools).await,
+        };
         let passed = matches!(result, Ok(Ok(())));
         let retained = !passed
+            || std::env::var_os("GBOT_MEDIA_ONLY").is_some()
             || std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some()
             || std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some()
             || std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some();
@@ -658,11 +1049,42 @@ mod linux {
         } else {
             Ok(())
         };
-        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
+        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {"dedicated Debian/Xvnc guest, PNG/BGRA capture + PCM desktop tone + control ownership; no model, Windows/M365 or browser playback claim"} else if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
         stop?;
         cleanup?;
         result??;
         Ok(())
+    }
+
+    #[test]
+    fn cua_video_envelope_exposes_descriptor_and_pixels() {
+        let descriptor = json!({"codec":"bgra","width_px":2,"height_px":1});
+        let header =
+            serde_json::to_vec(&json!({"direction":"video","message":descriptor})).unwrap();
+        let pixels = [0, 40, 80, 255, 80, 40, 0, 255];
+        let mut packet = Vec::new();
+        packet.extend_from_slice(&(header.len() as u32).to_be_bytes());
+        packet.extend_from_slice(&(pixels.len() as u32).to_be_bytes());
+        packet.extend_from_slice(&header);
+        packet.extend_from_slice(&pixels);
+        let (actual, payload) = video_frame(&packet).unwrap();
+        assert_eq!(actual, descriptor);
+        assert_eq!(payload, pixels);
+        packet.pop();
+        assert!(video_frame(&packet).is_err());
+    }
+
+    #[tokio::test]
+    async fn ssh_readiness_waits_for_the_guest_service_start() {
+        let boot = b"Starting ssh.service...\n[\x1b[0;32m OK \x1b[0m] Started \x1b[0;1;39mssh.service\x1b[0m - OpenBSD Secure Shell server.\n";
+        let mut log = Vec::new();
+        ssh_started(BufReader::new(boot.as_slice()), &mut log)
+            .await
+            .unwrap();
+        assert_eq!(log, boot);
+        assert!(ssh_started(BufReader::new(b"".as_slice()), &mut Vec::new())
+            .await
+            .is_err());
     }
 
     #[tokio::test]

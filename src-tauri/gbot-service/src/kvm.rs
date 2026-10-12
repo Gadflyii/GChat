@@ -1,4 +1,3 @@
-use russh::keys::ssh_encoding::base64::{Base64, Encoding};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
@@ -16,7 +15,7 @@ const CLOUD_INIT: &str = include_str!("../guest/cloud-init.json");
 #[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GuestBinary {
     Download { url: String, sha256: String },
-    CloudInitArchive { path: PathBuf, sha256: String },
+    SeedArchive { path: PathBuf, sha256: String },
 }
 
 impl GuestBinary {
@@ -47,7 +46,7 @@ impl GuestBinary {
                     ));
                 }
             }
-            Self::CloudInitArchive { path, .. } => {
+            Self::SeedArchive { path, .. } => {
                 if !path.is_absolute() || !path.is_file() {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -61,7 +60,7 @@ impl GuestBinary {
 
     fn sha256(&self) -> &str {
         match self {
-            Self::Download { sha256, .. } | Self::CloudInitArchive { sha256, .. } => sha256,
+            Self::Download { sha256, .. } | Self::SeedArchive { sha256, .. } => sha256,
         }
     }
 }
@@ -139,27 +138,20 @@ impl KvmSpec {
         }));
         value["hostname"] = format!("gbot-{}", self.id.simple()).into();
         value["users"][0]["ssh_authorized_keys"] = serde_json::json!([self.ssh_public_key]);
-        if let GuestBinary::CloudInitArchive { path, .. } = &self.driver {
-            let bytes = std::fs::read(path)?;
-            value["write_files"].as_array_mut().ok_or_else(|| io::Error::other("guest setup is invalid"))?.push(serde_json::json!({
-                "path": "/opt/gbot/cua-driver.tar.gz", "owner": "root:root", "permissions": "0644",
-                "encoding": "b64", "content": Base64::encode_string(&bytes)
-            }));
-        }
-        if let GuestBinary::CloudInitArchive { path, .. } = &self.media {
-            let bytes = std::fs::read(path)?;
-            value["write_files"].as_array_mut().ok_or_else(|| io::Error::other("guest setup is invalid"))?.push(serde_json::json!({
-                "path": "/opt/gbot/cua-media.tar.gz", "owner": "root:root", "permissions": "0644",
-                "encoding": "b64", "content": Base64::encode_string(&bytes)
-            }));
-        }
         let installer = value["write_files"]
             .as_array_mut()
             .ok_or_else(|| io::Error::other("guest setup is invalid"))?
             .iter_mut()
             .find(|f| f["path"] == "/usr/local/sbin/gbot-install-driver")
             .ok_or_else(|| io::Error::other("guest installer is missing"))?;
-        installer["content"] = format!("#!/bin/sh\nset -eu\ninstall -d -m 755 /opt/gbot/bin\n{}{}touch /var/lib/gbot/installed\n", install_driver(&self.driver), install_media(&self.media)).into();
+        let seed_mount = if matches!(self.driver, GuestBinary::SeedArchive { .. })
+            || matches!(self.media, GuestBinary::SeedArchive { .. })
+        {
+            "gbot_seed=$(mktemp -d /run/gbot-seed.XXXXXX)\ntrap 'umount \"$gbot_seed\"; rmdir \"$gbot_seed\"' EXIT\nmount -o ro /dev/disk/by-label/cidata \"$gbot_seed\"\n"
+        } else {
+            ""
+        };
+        installer["content"] = format!("#!/bin/sh\nset -eu\ninstall -d -m 755 /opt/gbot/bin\n{seed_mount}{}{}touch /var/lib/gbot/installed\n", install_driver(&self.driver), install_media(&self.media)).into();
         Ok(format!(
             "#cloud-config\n{}\n",
             serde_json::to_string_pretty(&value)?
@@ -168,26 +160,36 @@ impl KvmSpec {
 }
 
 fn install_driver(binary: &GuestBinary) -> String {
-    let download = match binary {
-        GuestBinary::Download { url, .. } => format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{url}' -o /opt/gbot/cua-driver.tar.gz\n"),
-        GuestBinary::CloudInitArchive { .. } => String::new(),
+    let (download, archive, cleanup) = match binary {
+        GuestBinary::Download { url, .. } => (format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{url}' -o /opt/gbot/cua-driver.tar.gz\n"), "/opt/gbot/cua-driver.tar.gz", "rm /opt/gbot/cua-driver.tar.gz\n"),
+        GuestBinary::SeedArchive { .. } => (String::new(), "$gbot_seed/cua-driver.tar.gz", ""),
     };
-    format!("{download}printf '%s  %s\\n' '{}' /opt/gbot/cua-driver.tar.gz | sha256sum --check --status\ntar -xzf /opt/gbot/cua-driver.tar.gz -C /opt/gbot/bin cua-driver cua-cursor-theme\nchmod 755 /opt/gbot/bin/cua-driver /opt/gbot/bin/cua-cursor-theme\nrm /opt/gbot/cua-driver.tar.gz\n", binary.sha256())
+    format!("{download}printf '%s  %s\\n' '{}' \"{archive}\" | sha256sum --check --status\ntar -xzf \"{archive}\" -C /opt/gbot/bin cua-driver cua-cursor-theme\nchmod 755 /opt/gbot/bin/cua-driver /opt/gbot/bin/cua-cursor-theme\n{cleanup}", binary.sha256())
 }
 
 fn install_media(binary: &GuestBinary) -> String {
-    let download = match binary {
-        GuestBinary::Download { url, .. } => format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{url}' -o /opt/gbot/cua-media.tar.gz\n"),
-        GuestBinary::CloudInitArchive { .. } => String::new(),
+    let (download, archive, cleanup) = match binary {
+        GuestBinary::Download { url, .. } => (format!("curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 '{url}' -o /opt/gbot/cua-media.tar.gz\n"), "/opt/gbot/cua-media.tar.gz", "rm /opt/gbot/cua-media.tar.gz\n"),
+        GuestBinary::SeedArchive { .. } => (String::new(), "$gbot_seed/cua-media.tar.gz", ""),
     };
-    format!("{download}printf '%s  %s\\n' '{}' /opt/gbot/cua-media.tar.gz | sha256sum --check --status\ntar -xzf /opt/gbot/cua-media.tar.gz -C /opt/gbot\nchmod 755 /opt/gbot/bin/cua-spacesd\nrm /opt/gbot/cua-media.tar.gz\n", binary.sha256())
+    format!("{download}printf '%s  %s\\n' '{}' \"{archive}\" | sha256sum --check --status\ntar -xzf \"{archive}\" -C /opt/gbot\nchmod 755 /opt/gbot/bin/cua-spacesd\n{cleanup}", binary.sha256())
+}
+
+fn seed_graft(name: &str, path: &Path) -> io::Result<String> {
+    let path = path
+        .to_str()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "seed paths must be UTF-8"))?;
+    Ok(format!(
+        "{name}={}",
+        path.replace('\\', "\\\\").replace('=', "\\=")
+    ))
 }
 
 #[derive(Clone, Debug)]
 pub struct KvmTools {
     pub virsh: PathBuf,
     pub image: PathBuf,
-    pub cloud_localds: PathBuf,
+    pub seed_iso: PathBuf,
 }
 
 impl Default for KvmTools {
@@ -195,7 +197,7 @@ impl Default for KvmTools {
         Self {
             virsh: "virsh".into(),
             image: "qemu-img".into(),
-            cloud_localds: "cloud-localds".into(),
+            seed_iso: "genisoimage".into(),
         }
     }
 }
@@ -268,13 +270,21 @@ impl PreparedVm {
                 .arg(format!("{}G", vm.spec.disk_gib)),
         )
         .await?;
-        run_checked(
-            Command::new(&tools.cloud_localds)
-                .arg(vm.directory.join("seed.img"))
-                .arg(vm.directory.join("user-data"))
-                .arg(vm.directory.join("meta-data")),
-        )
-        .await?;
+        let mut seed = Command::new(&tools.seed_iso);
+        seed.args(["-quiet", "-output"])
+            .arg(vm.directory.join("seed.img"))
+            .args(["-volid", "cidata", "-joliet", "-rock", "-graft-points"])
+            .arg(seed_graft("user-data", &vm.directory.join("user-data"))?)
+            .arg(seed_graft("meta-data", &vm.directory.join("meta-data"))?);
+        for (name, binary) in [
+            ("cua-driver.tar.gz", &vm.spec.driver),
+            ("cua-media.tar.gz", &vm.spec.media),
+        ] {
+            if let GuestBinary::SeedArchive { path, .. } = binary {
+                seed.arg(seed_graft(name, path)?);
+            }
+        }
+        run_checked(&mut seed).await?;
         let domain = vm.directory.join("domain.xml");
         fs::write(&domain, vm.domain_xml()?).await?;
         let registered = session_command(tools, "list")
@@ -636,12 +646,12 @@ mod tests {
     }
 
     #[test]
-    fn embedded_driver_installs_only_after_digest_verification() {
+    fn seed_driver_installs_only_after_digest_verification() {
         let root = tempfile::tempdir().unwrap();
         for name in ["cua-driver", "cua-cursor-theme"] {
             std::fs::write(root.path().join(name), format!("fixture-{name}\n")).unwrap();
         }
-        let archive = root.path().join("driver.tar.gz");
+        let archive = root.path().join("cua-driver.tar.gz");
         assert!(std::process::Command::new("tar")
             .args(["-czf"])
             .arg(&archive)
@@ -663,33 +673,34 @@ mod tests {
             .unwrap()
             .to_string();
         let mut settings = spec();
-        settings.driver = GuestBinary::CloudInitArchive {
+        settings.driver = GuestBinary::SeedArchive {
             path: archive.clone(),
             sha256: digest,
         };
         let cloud = settings.cloud_init().unwrap();
         let data: serde_json::Value =
             serde_json::from_str(cloud.strip_prefix("#cloud-config\n").unwrap()).unwrap();
-        let files = data["write_files"].as_array().unwrap();
-        let embedded = files
+        assert!(data["write_files"]
+            .as_array()
+            .unwrap()
             .iter()
-            .find(|f| f["path"] == "/opt/gbot/cua-driver.tar.gz")
-            .unwrap();
-        let decoded = Base64::decode_vec(embedded["content"].as_str().unwrap()).unwrap();
-        assert_eq!(decoded, std::fs::read(archive).unwrap());
+            .all(|file| file["path"] != "/opt/gbot/cua-driver.tar.gz"));
+        let seed_path = root.path().to_str().unwrap();
         let destination = root.path().join("installed");
         std::fs::create_dir_all(destination.join("bin")).unwrap();
         let run = |binary: &GuestBinary| {
-            std::fs::write(destination.join("cua-driver.tar.gz"), &decoded).unwrap();
-            let script = format!("set -eu\n{}", install_driver(binary))
-                .replace("/opt/gbot", destination.to_str().unwrap());
+            let script = format!(
+                "set -eu\ngbot_seed='{seed_path}'\n{}",
+                install_driver(binary)
+            )
+            .replace("/opt/gbot", destination.to_str().unwrap());
             std::process::Command::new("sh")
                 .args(["-c", &script])
                 .output()
                 .unwrap()
         };
         let mut corrupt = settings.driver.clone();
-        if let GuestBinary::CloudInitArchive { sha256, .. } = &mut corrupt {
+        if let GuestBinary::SeedArchive { sha256, .. } = &mut corrupt {
             *sha256 = "0".repeat(64);
         }
         assert!(!run(&corrupt).status.success());
@@ -703,7 +714,7 @@ mod tests {
             std::fs::read_to_string(destination.join("bin/cua-cursor-theme")).unwrap(),
             "fixture-cua-cursor-theme\n"
         );
-        assert!(!destination.join("cua-driver.tar.gz").exists());
+        assert!(archive.exists());
     }
 
     #[test]
@@ -718,7 +729,7 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, content).unwrap();
         }
-        let archive = root.path().join("media.tar.gz");
+        let archive = root.path().join("cua-media.tar.gz");
         assert!(std::process::Command::new("tar")
             .args(["-czf"])
             .arg(&archive)
@@ -734,7 +745,7 @@ mod tests {
             .unwrap();
         assert!(digest.status.success());
         let mut settings = spec();
-        settings.media = GuestBinary::CloudInitArchive {
+        settings.media = GuestBinary::SeedArchive {
             path: archive.clone(),
             sha256: String::from_utf8(digest.stdout)
                 .unwrap()
@@ -746,27 +757,27 @@ mod tests {
         let cloud = settings.cloud_init().unwrap();
         let data: serde_json::Value =
             serde_json::from_str(cloud.strip_prefix("#cloud-config\n").unwrap()).unwrap();
-        let embedded = data["write_files"]
+        assert!(data["write_files"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|file| file["path"] == "/opt/gbot/cua-media.tar.gz")
-            .unwrap();
-        let decoded = Base64::decode_vec(embedded["content"].as_str().unwrap()).unwrap();
-        assert_eq!(decoded, std::fs::read(archive).unwrap());
+            .all(|file| file["path"] != "/opt/gbot/cua-media.tar.gz"));
+        let seed_path = root.path().to_str().unwrap();
         let destination = root.path().join("installed");
         std::fs::create_dir_all(&destination).unwrap();
         let run = |binary: &GuestBinary| {
-            std::fs::write(destination.join("cua-media.tar.gz"), &decoded).unwrap();
-            let script = format!("set -eu\n{}", install_media(binary))
-                .replace("/opt/gbot", destination.to_str().unwrap());
+            let script = format!(
+                "set -eu\ngbot_seed='{seed_path}'\n{}",
+                install_media(binary)
+            )
+            .replace("/opt/gbot", destination.to_str().unwrap());
             std::process::Command::new("sh")
                 .args(["-c", &script])
                 .output()
                 .unwrap()
         };
         let mut corrupt = settings.media.clone();
-        if let GuestBinary::CloudInitArchive { sha256, .. } = &mut corrupt {
+        if let GuestBinary::SeedArchive { sha256, .. } = &mut corrupt {
             *sha256 = "0".repeat(64);
         }
         assert!(!run(&corrupt).status.success());
@@ -782,7 +793,40 @@ mod tests {
                 content
             );
         }
-        assert!(!destination.join("cua-media.tar.gz").exists());
+        assert!(archive.exists());
+    }
+
+    #[test]
+    fn large_archives_stay_out_of_cloud_init_metadata() {
+        let root = tempfile::tempdir().unwrap();
+        let archive = root.path().join("large.tar.gz");
+        File::create(&archive)
+            .unwrap()
+            .set_len(256 * 1024 * 1024)
+            .unwrap();
+        let mut settings = spec();
+        settings.driver = GuestBinary::SeedArchive {
+            path: archive.clone(),
+            sha256: "a".repeat(64),
+        };
+        settings.media = settings.driver.clone();
+        let cloud = settings.cloud_init().unwrap();
+        assert!(cloud.len() < 64 * 1024);
+        let data: serde_json::Value =
+            serde_json::from_str(cloud.strip_prefix("#cloud-config\n").unwrap()).unwrap();
+        let install = data["write_files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["path"] == "/usr/local/sbin/gbot-install-driver")
+            .unwrap()["content"]
+            .as_str()
+            .unwrap();
+        assert!(install.contains("mount -o ro /dev/disk/by-label/cidata"));
+        assert_eq!(
+            seed_graft("cua-driver.tar.gz", Path::new("/tmp/key=archive.tar.gz")).unwrap(),
+            "cua-driver.tar.gz=/tmp/key\\=archive.tar.gz"
+        );
     }
 
     #[tokio::test]
@@ -840,7 +884,7 @@ mod tests {
         let tools = KvmTools {
             virsh: tool.clone(),
             image: tool.clone(),
-            cloud_localds: tool,
+            seed_iso: tool,
         };
         let mut settings = spec();
         settings.ssh_port = 0;

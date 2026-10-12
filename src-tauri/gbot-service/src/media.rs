@@ -39,15 +39,33 @@ pub struct ViewTicket {
 }
 
 #[derive(Debug)]
-pub struct MediaError;
+pub struct MediaError {
+    operation: &'static str,
+    cause: String,
+}
+impl MediaError {
+    fn at(operation: &'static str, cause: impl std::fmt::Display) -> Self {
+        Self {
+            operation,
+            cause: cause.to_string(),
+        }
+    }
+}
 impl std::fmt::Display for MediaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(
-            "The bot's desktop media service is unavailable. Reconnect or repair its guest setup.",
+        write!(
+            f,
+            "The bot's desktop media service could not {}. Reconnect or repair its guest setup.",
+            self.operation
         )
     }
 }
 impl std::error::Error for MediaError {}
+impl MediaError {
+    pub fn diagnostic(&self) -> &str {
+        &self.cause
+    }
+}
 
 pub struct MediaLease {
     pub owner: Uuid,
@@ -73,12 +91,12 @@ impl MediaLease {
     ) -> Result<Self, MediaError> {
         let client = SpacesdClient::connect_url(&format!("http://{endpoint}"), Some(token))
             .await
-            .map_err(|_| MediaError)?;
+            .map_err(|error| MediaError::at("connect", error))?;
         let targets = client
             .stream()
             .list_targets(pb::ListTargetsRequest::default())
             .await
-            .map_err(|_| MediaError)?
+            .map_err(|error| MediaError::at("list displays", error))?
             .into_inner();
         let displays: Vec<_> = targets
             .targets
@@ -92,19 +110,35 @@ impl MediaLease {
             .collect();
         // A dedicated bot guest has one display; never guess another desktop.
         let [display] = displays.as_slice() else {
-            return Err(MediaError);
+            return Err(MediaError::at(
+                "select display",
+                format!("expected one dedicated display, found {}", displays.len()),
+            ));
         };
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .await
-            .map_err(|_| MediaError)?;
-        let address = listener.local_addr().map_err(|_| MediaError)?;
+            .map_err(|error| MediaError::at("bind view gateway", error))?;
+        let address = listener
+            .local_addr()
+            .map_err(|error| MediaError::at("read gateway address", error))?;
         let opened = client
             .stream()
             .open_media(pb::OpenMediaRequest {
                 target: Some(pb::MediaTarget {
                     target: Some(pb::media_target::Target::DisplayId(display.id.clone())),
                 }),
-                codecs: if request.h264 { vec![1, 3] } else { vec![3] },
+                codecs: if request.h264 {
+                    vec![
+                        pb::MediaCodec::H264,
+                        pb::MediaCodec::Png,
+                        pb::MediaCodec::Bgra,
+                    ]
+                } else {
+                    vec![pb::MediaCodec::Png, pb::MediaCodec::Bgra]
+                }
+                .into_iter()
+                .map(|codec| codec as i32)
+                .collect(),
                 policy: policy(request.interactive),
                 geometry_control: pb::GeometryControl::ObserveOnly as i32,
                 audio: Some(pb::AudioOptions {
@@ -118,7 +152,7 @@ impl MediaLease {
                 ..Default::default()
             })
             .await
-            .map_err(|_| MediaError)?
+            .map_err(|error| MediaError::at("open media", error))?
             .into_inner();
         let path = opened.ws_path;
         if !path.starts_with("/media?ticket=")
@@ -133,7 +167,10 @@ impl MediaLease {
                     media_session_id: opened.media_session_id,
                 })
                 .await;
-            return Err(MediaError);
+            return Err(MediaError::at(
+                "validate media ticket",
+                "invalid guest ticket path",
+            ));
         }
         let ticket = ViewTicket {
             lease_id: Uuid::new_v4(),
@@ -155,7 +192,8 @@ impl MediaLease {
     pub async fn close(&mut self) -> Result<(), MediaError> {
         self.stop.send_replace(true);
         if let Some(task) = self.task.as_mut() {
-            task.await.map_err(|_| MediaError)?;
+            task.await
+                .map_err(|error| MediaError::at("stop view gateway", error))?;
         }
         self.task = None;
         self.client
@@ -164,7 +202,7 @@ impl MediaLease {
                 media_session_id: self.ticket.media_session_id.clone(),
             })
             .await
-            .map_err(|_| MediaError)?;
+            .map_err(|error| MediaError::at("close media", error))?;
         Ok(())
     }
 }

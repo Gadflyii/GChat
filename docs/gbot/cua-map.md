@@ -353,8 +353,9 @@ provisioner verifies its SHA-256 before extraction. The daemon runs as the bot
 user, binds `127.0.0.1:3211`, and keeps its RPC token in a private state file.
 SSH reads that token only inside the service. The media session uses the
 existing desktop's environment, with microphone uplink disabled and optional
-PCM desktop audio. Guest packages add PulseAudio and `pulseaudio-utils` for that endpoint. Browser
-video negotiates H.264 where WebCodecs exists, otherwise PNG.
+PCM desktop audio. Guest packages add PulseAudio and `pulseaudio-utils` for that
+endpoint. Typed negotiation admits BGRA fallback for Linux capture; the browser
+core supports H.264, PNG and BGRA.
 
 Container build base is pinned at
 `sha256:03f87bfa218cd8785b605b113a6de9475775dff122c16f4b357593312d18d8af`.
@@ -377,6 +378,14 @@ material. Seventeen locked registry packages have no standalone license file;
 the inventory identifies them and retains their manifests and available
 README/AUTHORS files. This source/package gate does not qualify physical
 capture, audio delivery or M365. No build container remains running.
+
+The subsequent physical Linux gate passes on a dedicated Debian/Xvnc guest:
+1920×1080 BGRA frame converted to PNG and inspected, three seconds of 440 Hz
+stereo PCM, view-only input refusal, takeover input and hand-back revocation.
+Production SSH and the native vault are used. Local archive payloads sit beside
+small cloud-init configuration on a read-only seed and retain digest checks.
+The guest/domain/key are retired; Windows/M365 and browser playback remain
+release gates. Evidence: `out/gbot-cua-media-20261012/physical/seed/summary.json`.
 
 
 #### Viewer options for Ron
