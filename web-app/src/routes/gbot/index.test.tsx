@@ -144,3 +144,94 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   expect(sessionStorage.getItem('gbot-control-owner')).toBeTruthy()
   expect(JSON.stringify(sessionStorage)).not.toContain('bot-secret')
 })
+
+it('sends task-bound human replies and declines, retaining them after reload', async () => {
+  const identity = { workspace_id: 'one', session_id: 'session' }
+  const tasks = [
+    {
+      id: 'task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [
+        {
+          id: 'help',
+          question: 'Which folder?',
+          status: 'pending',
+          response: null as string | null,
+        },
+      ],
+    },
+    {
+      id: 'decline-task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [
+        {
+          id: 'decline-help',
+          question: 'Which date?',
+          status: 'pending',
+          response: null as string | null,
+        },
+      ],
+    },
+  ]
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) => {
+      if (path === 'state')
+        return {
+          workspaces: [{ id: 'one', name: 'Writer' }],
+          live_sessions: [{ identity }],
+          assignments: [],
+          controls: [],
+        }
+      if (path === 'tasks') return tasks
+      if (path === 'tasks/approvals') return []
+      if (path === 'tasks/help') {
+        const task = tasks.find((task) => task.id === body.id)!
+        task.state = 'interrupted'
+        task.help_requests[0].status =
+          body.response === null ? 'declined' : 'completed'
+        task.help_requests[0].response = body.response as string | null
+      }
+      return {}
+    }
+  )
+  render(<Page />)
+  await screen.findByText('Which folder?')
+  expect(
+    screen.getAllByRole('button', { name: 'Send reply' })[0]
+  ).toBeDisabled()
+  fireEvent.change(screen.getAllByLabelText('Your reply')[0], {
+    target: { value: 'Documents' },
+  })
+  fireEvent.click(screen.getAllByRole('button', { name: 'Send reply' })[0])
+  await screen.findByText('Your reply: Documents')
+  expect(mocks.call).toHaveBeenCalledWith('tasks/help', {
+    id: 'task',
+    request_id: 'help',
+    response: 'Documents',
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+  await screen.findByText('Request declined')
+  expect(mocks.call).toHaveBeenCalledWith('tasks/help', {
+    id: 'decline-task',
+    request_id: 'decline-help',
+    response: null,
+  })
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'tasks/approval',
+    expect.anything()
+  )
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'control/hand-back',
+    expect.anything()
+  )
+  cleanup()
+  render(<Page />)
+  await screen.findByText('Your reply: Documents')
+  expect(screen.getByText('Request declined')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Your reply')).not.toBeInTheDocument()
+})

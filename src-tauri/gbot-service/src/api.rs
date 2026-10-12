@@ -160,6 +160,14 @@ struct ApprovalDecision {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct HelpReply {
+    id: Uuid,
+    request_id: Uuid,
+    response: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SshKeyImportRequest {
     private_key: String,
     passphrase: Option<String>,
@@ -435,6 +443,17 @@ async fn route(
                 _ => invalid_request(),
             }
         }
+        (&Method::POST, "/v1/tasks/help") => {
+            match (tasks, parse_body::<HelpReply>(request).await) {
+                (Some(tasks), Some(input)) => task_result(
+                    tasks
+                        .answer_help(input.id, input.request_id, input.response)
+                        .await,
+                ),
+                (None, _) => executor_unavailable(),
+                _ => invalid_request(),
+            }
+        }
         (&Method::GET, "/v1/state") => {
             let mut state =
                 serde_json::to_value(service.snapshot().await).expect("Gbot state is serializable");
@@ -608,6 +627,9 @@ fn task_result<T: Serialize>(result: Result<T, TaskRunnerError>) -> Response<Bod
                 TaskRunnerError::NotFound => StatusCode::NOT_FOUND,
                 TaskRunnerError::InvalidPrompt => StatusCode::BAD_REQUEST,
                 TaskRunnerError::AlreadyRunning => StatusCode::CONFLICT,
+                TaskRunnerError::Executor(crate::executor::ExecutorError::InvalidMessage) => {
+                    StatusCode::CONFLICT
+                }
                 TaskRunnerError::Closed => StatusCode::SERVICE_UNAVAILABLE,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             };

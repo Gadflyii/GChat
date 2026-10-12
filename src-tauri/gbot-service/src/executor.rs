@@ -32,6 +32,7 @@ pub enum ExecutorError {
     State(ServiceError),
     Io(std::io::Error),
     InvalidMessage,
+    AwaitingHuman,
     NeedsReview,
     Denied,
     ChildFailed,
@@ -43,6 +44,7 @@ impl std::fmt::Display for ExecutorError {
             Self::State(e) => e.fmt(f),
             Self::Io(e) => e.fmt(f),
             Self::InvalidMessage => f.write_str("invalid Cua task message"),
+            Self::AwaitingHuman => f.write_str("waiting for your reply"),
             Self::NeedsReview => {
                 f.write_str("task has an unresolved effect; review before resuming")
             }
@@ -81,6 +83,7 @@ pub enum ToolBinding {
     ReadFile,
     WriteFile,
     CuaGuide,
+    AskHuman,
 }
 
 impl FunctionTool {
@@ -120,7 +123,9 @@ impl FunctionTool {
                     .and_then(Value::as_u64)
                     .ok_or(ExecutorError::InvalidMessage)?,
             },
-            ToolBinding::CuaGuide => return Err(ExecutorError::InvalidMessage),
+            ToolBinding::CuaGuide | ToolBinding::AskHuman => {
+                return Err(ExecutorError::InvalidMessage)
+            }
             ToolBinding::WriteFile => GuestOperationKind::Write {
                 path: GuestPath(text("path")?),
                 offset: 0,
@@ -138,6 +143,7 @@ impl FunctionTool {
 pub enum TaskState {
     Ready,
     Running,
+    WaitingForHuman,
     Completed,
     Interrupted,
     Paused,
@@ -164,6 +170,24 @@ pub struct TaskCall {
     pub not_executed: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HelpStatus {
+    Pending,
+    Completed,
+    Declined,
+    Cancelled,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HelpRequest {
+    pub id: Uuid,
+    pub call_id: String,
+    pub question: String,
+    pub status: HelpStatus,
+    pub response: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub id: Uuid,
@@ -172,6 +196,8 @@ pub struct TaskRecord {
     pub messages: Vec<Value>,
     pub tools: Vec<FunctionTool>,
     pub calls: Vec<TaskCall>,
+    #[serde(default)]
+    pub help_requests: Vec<HelpRequest>,
     pub model_replies: Vec<Value>,
     pub context: Vec<Value>,
     #[serde(default)]
@@ -250,6 +276,15 @@ impl CuaTask {
             return Err(ExecutorError::InvalidMessage);
         }
         crate::cua_skill::install(&mut messages, &mut tools)?;
+        if tools.iter().any(|tool| tool.name == "ask_human") {
+            return Err(ExecutorError::InvalidMessage);
+        }
+        tools.push(FunctionTool {
+            name: "ask_human".into(),
+            description: "Ask the user for missing information or a decision needed to complete the task. The task waits until they answer or decline. This does not grant permission to execute actions or take desktop control. Never ask for passwords or other credentials.".into(),
+            parameters: json!({"type":"object","properties":{"question":{"type":"string"}},"required":["question"],"additionalProperties":false}),
+            binding: ToolBinding::AskHuman,
+        });
         let mut record = TaskRecord {
             id,
             identity,
@@ -257,6 +292,7 @@ impl CuaTask {
             messages,
             tools,
             calls: vec![],
+            help_requests: vec![],
             model_replies: vec![],
             context: vec![],
             history: vec![],
@@ -284,6 +320,12 @@ impl CuaTask {
                 .any(|call| call.reply.is_none() || call.reply.as_ref().is_some_and(uncertain))
             {
                 TaskState::NeedsReview
+            } else if record
+                .help_requests
+                .iter()
+                .any(|help| help.status == HelpStatus::Pending)
+            {
+                TaskState::WaitingForHuman
             } else {
                 TaskState::Interrupted
             };
@@ -318,6 +360,7 @@ impl CuaTask {
 
     pub(crate) async fn pause(&mut self) -> Result<()> {
         if self.record.state != TaskState::Completed {
+            self.cancel_help();
             self.record.replan_after_takeover = true;
             let state = if self.unresolved() {
                 TaskState::NeedsReview
@@ -332,6 +375,7 @@ impl CuaTask {
 
     pub(crate) async fn cancel(&mut self) -> Result<()> {
         if self.record.state != TaskState::Completed {
+            self.cancel_help();
             let state = if self.unresolved() {
                 TaskState::NeedsReview
             } else {
@@ -341,6 +385,84 @@ impl CuaTask {
             self.save().await?;
         }
         Ok(())
+    }
+
+    fn cancel_help(&mut self) {
+        for help in &mut self.record.help_requests {
+            if help.status == HelpStatus::Pending {
+                help.status = HelpStatus::Cancelled;
+            }
+        }
+    }
+
+    pub(crate) async fn answer_help(&mut self, id: Uuid, response: Option<String>) -> Result<()> {
+        if self.record.state != TaskState::WaitingForHuman
+            || response
+                .as_ref()
+                .is_some_and(|reply| reply.trim().is_empty())
+        {
+            return Err(ExecutorError::InvalidMessage);
+        }
+        let help = self
+            .record
+            .help_requests
+            .iter_mut()
+            .find(|help| help.id == id && help.status == HelpStatus::Pending)
+            .ok_or(ExecutorError::InvalidMessage)?;
+        help.status = if response.is_some() {
+            HelpStatus::Completed
+        } else {
+            HelpStatus::Declined
+        };
+        help.response = response;
+        let call_id = help.call_id.clone();
+        let result = serde_json::json!({"status": help.status, "response": help.response});
+        self.record_tool_message(&call_id, &result);
+        self.record.transition(
+            TaskState::Interrupted,
+            "human reply saved; ready to continue",
+        );
+        self.save().await
+    }
+
+    async fn ask_human(&mut self, call_id: &str, args: &Value) -> Result<Value> {
+        let object = args.as_object().ok_or(ExecutorError::InvalidMessage)?;
+        let question = object
+            .get("question")
+            .and_then(Value::as_str)
+            .filter(|question| !question.trim().is_empty())
+            .ok_or(ExecutorError::InvalidMessage)?;
+        if object.len() != 1 {
+            return Err(ExecutorError::InvalidMessage);
+        }
+        if let Some(help) = self
+            .record
+            .help_requests
+            .iter()
+            .find(|help| help.call_id == call_id)
+        {
+            if help.question != question {
+                return Err(ExecutorError::InvalidMessage);
+            }
+            if help.status == HelpStatus::Pending {
+                return Err(ExecutorError::AwaitingHuman);
+            }
+            let result = json!({"status":help.status,"response":help.response});
+            self.record_tool_message(call_id, &result);
+            self.save().await?;
+            return Ok(result);
+        }
+        self.record.help_requests.push(HelpRequest {
+            id: Uuid::new_v4(),
+            call_id: call_id.into(),
+            question: question.into(),
+            status: HelpStatus::Pending,
+            response: None,
+        });
+        self.record
+            .transition(TaskState::WaitingForHuman, "human assistance requested");
+        self.save().await?;
+        Err(ExecutorError::AwaitingHuman)
     }
 
     pub async fn run(
@@ -382,6 +504,8 @@ impl CuaTask {
         if let Err(error) = &result {
             let state = if self.unresolved() {
                 TaskState::NeedsReview
+            } else if matches!(error, ExecutorError::AwaitingHuman) {
+                TaskState::WaitingForHuman
             } else if matches!(error, ExecutorError::State(ServiceError::BotPaused)) {
                 TaskState::Paused
             } else if matches!(error, ExecutorError::Cancelled) {
@@ -524,6 +648,9 @@ impl CuaTask {
             self.record_tool_message(&call_id, &result);
             self.save().await?;
             return Ok(result);
+        }
+        if matches!(tool.binding, ToolBinding::AskHuman) {
+            return self.ask_human(&call_id, &args).await;
         }
         let request = GuestRequest {
             identity: self.record.identity,
@@ -803,6 +930,88 @@ mod tests {
             not_executed: false,
         }
     }
+    #[tokio::test]
+    async fn human_help_survives_restart_and_reply_does_not_approve_actions() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut task, runtime) = fixture(dir.path()).await;
+        let call = json!({"call_id":"help-1","name":"ask_human","arguments":{"question":"Which folder should I use?"}});
+        assert!(matches!(
+            task.tool(&runtime, &Deny, &call).await,
+            Err(ExecutorError::AwaitingHuman)
+        ));
+        let request = task.snapshot().help_requests[0].clone();
+        drop(task);
+        let mut task = CuaTask::open(dir.path().join("task.json")).await.unwrap();
+        assert_eq!(task.snapshot().state, TaskState::WaitingForHuman);
+        assert_eq!(task.snapshot().help_requests[0].id, request.id);
+        assert!(matches!(
+            task.answer_help(Uuid::new_v4(), Some("Documents".into()))
+                .await,
+            Err(ExecutorError::InvalidMessage)
+        ));
+        assert!(matches!(
+            task.answer_help(request.id, Some("  ".into())).await,
+            Err(ExecutorError::InvalidMessage)
+        ));
+        task.answer_help(request.id, Some("Documents".into()))
+            .await
+            .unwrap();
+        assert_eq!(
+            task.tool(&runtime, &Deny, &call).await.unwrap()["response"],
+            "Documents"
+        );
+        assert_eq!(
+            task.snapshot()
+                .messages
+                .iter()
+                .filter(|message| message["tool_call_id"] == "help-1")
+                .count(),
+            1
+        );
+        assert!(matches!(
+            task.answer_help(request.id, Some("Desktop".into())).await,
+            Err(ExecutorError::InvalidMessage)
+        ));
+        assert!(matches!(
+            task.recover_tools(&runtime, &Deny).await,
+            Err(ExecutorError::Denied)
+        ));
+        assert!(task.snapshot().calls.is_empty());
+    }
+
+    #[tokio::test]
+    async fn human_help_decline_stop_and_takeover_resolve_the_pending_request() {
+        for action in ["decline", "stop", "takeover"] {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut task, runtime) = fixture(dir.path()).await;
+            let call = json!({"call_id":"help-1","name":"ask_human","arguments":{"question":"Which file?"}});
+            assert!(matches!(
+                task.tool(&runtime, &Deny, &call).await,
+                Err(ExecutorError::AwaitingHuman)
+            ));
+            let id = task.snapshot().help_requests[0].id;
+            let (status, state) = match action {
+                "decline" => {
+                    task.answer_help(id, None).await.unwrap();
+                    (HelpStatus::Declined, TaskState::Interrupted)
+                }
+                "stop" => {
+                    task.cancel().await.unwrap();
+                    (HelpStatus::Cancelled, TaskState::Cancelled)
+                }
+                _ => {
+                    task.pause().await.unwrap();
+                    (HelpStatus::Cancelled, TaskState::Paused)
+                }
+            };
+            drop(task);
+            let task = CuaTask::open(dir.path().join("task.json")).await.unwrap();
+            assert_eq!(task.snapshot().help_requests[0].status, status);
+            assert_eq!(task.snapshot().state, state);
+            assert_eq!(task.snapshot().replan_after_takeover, action == "takeover");
+        }
+    }
+
     #[tokio::test]
     async fn recovered_known_result_is_restored_without_approval_or_execution() {
         let dir = tempfile::tempdir().unwrap();

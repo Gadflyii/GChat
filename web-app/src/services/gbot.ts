@@ -28,6 +28,13 @@ export type Task = {
   identity: Identity
   state: string
   messages: { role: string; content: unknown }[]
+  help_requests: HelpRequest[]
+}
+export type HelpRequest = {
+  id: string
+  question: string
+  status: 'pending' | 'completed' | 'declined' | 'cancelled'
+  response: string | null
 }
 export type Approval = {
   id: string
