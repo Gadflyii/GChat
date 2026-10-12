@@ -41,6 +41,8 @@ install -m755 src-tauri/resources/bin/uv "${RESOURCE_DIR}/bin/uv"
 
 # Keep the accepted Cua interpreter, extension libraries and notices unchanged.
 "${PYTHON:-python3}" scripts/package-gbot-runtime.py \
+  --check-guest-assets --destination src-tauri/resources/gbot
+"${PYTHON:-python3}" scripts/package-gbot-runtime.py \
   --check --destination src-tauri/resources/gbot
 "${PYTHON:-python3}" - "${RESOURCE_DIR}/gbot" <<'PY'
 import shutil,sys
@@ -51,6 +53,9 @@ shutil.copytree('src-tauri/resources/gbot', destination)
 PY
 "${PYTHON:-python3}" scripts/package-gbot-runtime.py \
   --check --destination "${RESOURCE_DIR}/gbot"
+
+"${PYTHON:-python3}" scripts/package-gbot-runtime.py \
+  --check-guest-assets --destination "${RESOURCE_DIR}/gbot"
 
 # Remove the AppImage produced by `tauri build` — we are about to
 # repackage from the unpacked AppDir.

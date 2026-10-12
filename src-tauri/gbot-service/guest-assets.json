@@ -1,0 +1,21 @@
+{
+  "schema": "gbot-guest-assets-v1",
+  "files": [
+    {
+      "filename": "debian-13-genericcloud-amd64-20261001-2618.qcow2",
+      "algorithm": "sha512",
+      "digest": "f46f0671a6e5bdec5291ab8972bae2f10e5408c2f64a74078f11efc2f06a436a9d0313ed50e0472542eeabf780e9f7c792ac0a314c6c20507fcd9fd81b468c3d",
+      "bytes": 341508096
+    },
+    {
+      "filename": "cua-driver-c549ab4d7.tar.gz",
+      "algorithm": "sha256",
+      "digest": "2532c8bb8c6bef4f179285c58241a2f46c8fd2e1f6228c65bb65a1e6176261c6"
+    },
+    {
+      "filename": "cua-spacesd-native-20261012.tar.gz",
+      "algorithm": "sha256",
+      "digest": "f7d2d547ad4d94759aba93a5eb37ad1b5b93d5272074273a5ed4a130ee0b0ed7"
+    }
+  ]
+}

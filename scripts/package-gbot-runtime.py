@@ -25,6 +25,54 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
+def guest_assets():
+    # Immutable product data owned by the same setup service as runtime preflight.
+    contract = Path(__file__).resolve().parent.parent / "src-tauri/gbot-service/guest-assets.json"
+    inventory = json.loads(contract.read_text())
+    if inventory["schema"] != "gbot-guest-assets-v1":
+        raise ValueError("Unsupported compiled guest asset inventory")
+    return inventory["files"]
+
+
+def verify_guest_asset(path, asset):
+    if not path.is_file() or ("bytes" in asset and path.stat().st_size != asset["bytes"]):
+        raise ValueError(f"Missing or size-mismatched accepted guest asset: {path}")
+    with path.open("rb") as source:
+        actual = hashlib.file_digest(source, asset["algorithm"]).hexdigest()
+    if actual != asset["digest"]:
+        raise ValueError(f"Pinned guest asset digest mismatch: {path}")
+
+
+def check_guest_assets(destination):
+    for asset in guest_assets():
+        verify_guest_asset(destination / "assets" / asset["filename"], asset)
+    print(json.dumps({"status": "PASS", "guest_assets": len(guest_assets())}))
+
+
+def stage_guest_assets(source, destination):
+    assets = guest_assets()
+    target = destination / "assets"
+    # All exact accepted local inputs are required before any payload is copied.
+    for asset in assets:
+        verify_guest_asset(source / asset["filename"], asset)
+        existing = target / asset["filename"]
+        if existing.exists():
+            verify_guest_asset(existing, asset)
+    target.mkdir(parents=True, exist_ok=True)
+    for asset in assets:
+        existing = target / asset["filename"]
+        temporary = target / ("." + asset["filename"] + ".installing")
+        if not existing.exists():
+            if temporary.exists():
+                temporary.unlink()
+            shutil.copyfile(source / asset["filename"], temporary)
+            verify_guest_asset(temporary, asset)
+            temporary.replace(existing)
+        elif temporary.exists():
+            temporary.unlink()
+    check_guest_assets(destination)
+
+
 def normalized(name):
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -164,7 +212,8 @@ exec "$gbot_python_root/bin/python3.12" -I -B "$@"
     shutil.copytree(source / "licenses", destination / "licenses")
     os_notices = system_notices(owners, destination / "licenses/ubuntu-python-runtime")
     files = [{"path": p.relative_to(destination).as_posix(), "bytes": p.stat().st_size, "sha256": digest(p)}
-             for p in sorted(destination.rglob("*")) if p.is_file() and p.name != "runtime.json"]
+             for p in sorted(destination.rglob("*")) if p.is_file() and p.name != "runtime.json"
+             and "assets" not in p.relative_to(destination).parts]
     manifest = {"schema": "gbot-cua-runtime-v1", "platform": "linux-x64", "python_version": "3.12.3",
                 "sdk_revision": SDK_REVISION, "agent_revision": AGENT_REVISION, "closure_image": IMAGE,
                 "package_count": 61, "native_libraries": sorted(libraries), "system_notices": os_notices,
@@ -177,11 +226,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, help="Accepted python-runtime closure directory")
     parser.add_argument("--destination", type=Path, required=True, help="Staged resources/gbot directory")
+    parser.add_argument("--guest-assets", type=Path, help="Accepted local guest payload directory; stage without downloads")
+    parser.add_argument("--check-guest-assets", action="store_true", help="Verify the exact bundled guest payload pins")
     parser.add_argument("--check", action="store_true", help="Verify the existing package manifest without staging")
     args = parser.parse_args()
-    if args.check:
+    if args.check_guest_assets:
+        check_guest_assets(args.destination.resolve(strict=True))
+    elif args.guest_assets:
+        stage_guest_assets(args.guest_assets.resolve(strict=True), args.destination.resolve())
+    elif args.check:
         check(args.destination.resolve(strict=True))
     elif args.source:
         package(args.source.resolve(strict=True), args.destination.resolve())
     else:
-        parser.error("--source is required when staging")
+        parser.error("--source or --guest-assets is required when staging")
