@@ -3,7 +3,12 @@ use std::{path::PathBuf, process::ExitCode, sync::Arc};
 use clap::Parser;
 #[cfg(target_os = "linux")]
 use clap::Subcommand;
-use gbot_service::{api::Api, service::Service, vault::NativeVault};
+use gbot_service::{
+    api::Api,
+    executor::{ExecutorProcesses, ProcessSpec},
+    service::Service,
+    vault::NativeVault,
+};
 
 #[derive(Parser)]
 #[command(
@@ -15,6 +20,14 @@ struct Args {
     data_folder: Option<PathBuf>,
     #[arg(long, default_value_t = 0)]
     port: u16,
+    /// Python from the configured Cua environment.
+    #[arg(long, requires = "context_program")]
+    cua_python: Option<PathBuf>,
+    /// GChat's existing context/compaction helper.
+    #[arg(long, requires = "cua_python")]
+    context_program: Option<PathBuf>,
+    #[arg(long, requires = "context_program", allow_hyphen_values = true)]
+    context_arg: Vec<String>,
     #[cfg(target_os = "linux")]
     #[command(subcommand)]
     command: Option<Mode>,
@@ -126,7 +139,24 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     }
     let service = Arc::new(Service::open(data_folder.join("gbot/state.json")).await?);
     let service_id = service.snapshot().await.service_id;
-    let api = Api::bind(service, Arc::new(NativeVault), args.port).await?;
+    let mut api = Api::bind(service, Arc::new(NativeVault), args.port).await?;
+    if let (Some(python), Some(context)) = (args.cua_python, args.context_program) {
+        api = api
+            .with_executor(
+                data_folder.join("gbot/tasks"),
+                ExecutorProcesses {
+                    python: ProcessSpec {
+                        program: python,
+                        args: vec![],
+                    },
+                    context: ProcessSpec {
+                        program: context,
+                        args: args.context_arg,
+                    },
+                },
+            )
+            .await?;
+    }
     println!(
         "{}",
         serde_json::json!({

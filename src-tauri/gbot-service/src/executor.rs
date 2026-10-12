@@ -13,8 +13,11 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
-    contract::*, service::ServiceError, ssh::desktop_model_result, store::Store,
-    workspace::WorkspaceRuntime,
+    contract::*,
+    service::ServiceError,
+    ssh::desktop_model_result,
+    store::Store,
+    workspace::{WorkspaceError, WorkspaceRuntime},
 };
 
 type Result<T> = std::result::Result<T, ExecutorError>;
@@ -137,7 +140,16 @@ pub enum TaskState {
     Running,
     Completed,
     Interrupted,
+    Paused,
+    Cancelled,
     NeedsReview,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TaskEvent {
+    pub state: TaskState,
+    pub reason: String,
+    pub at: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -147,6 +159,9 @@ pub struct TaskCall {
     pub arguments: Value,
     pub request: GuestRequest,
     pub reply: Option<GuestReply>,
+    /// Admission refused the request, so the guest could not have executed it.
+    #[serde(default)]
+    pub not_executed: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -159,13 +174,20 @@ pub struct TaskRecord {
     pub calls: Vec<TaskCall>,
     pub model_replies: Vec<Value>,
     pub context: Vec<Value>,
+    #[serde(default)]
+    pub history: Vec<TaskEvent>,
+    #[serde(default)]
+    pub replan_after_takeover: bool,
 }
 
 pub struct CuaTask {
     store: Arc<Store>,
     record: TaskRecord,
+    updates: watch::Sender<TaskRecord>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Assignment {
     pub api_base: String,
     pub api_key: Option<String>,
@@ -177,6 +199,7 @@ pub struct ProcessSpec {
     pub program: PathBuf,
     pub args: Vec<String>,
 }
+#[derive(Clone)]
 pub struct ExecutorProcesses {
     pub python: ProcessSpec,
     pub context: ProcessSpec,
@@ -206,6 +229,16 @@ impl CuaTask {
     pub async fn create(
         path: PathBuf,
         identity: SessionIdentity,
+        messages: Vec<Value>,
+        tools: Vec<FunctionTool>,
+    ) -> Result<Self> {
+        Self::create_with_id(path, Uuid::new_v4(), identity, messages, tools).await
+    }
+
+    pub(crate) async fn create_with_id(
+        path: PathBuf,
+        id: Uuid,
+        identity: SessionIdentity,
         mut messages: Vec<Value>,
         mut tools: Vec<FunctionTool>,
     ) -> Result<Self> {
@@ -217,8 +250,8 @@ impl CuaTask {
             return Err(ExecutorError::InvalidMessage);
         }
         crate::cua_skill::install(&mut messages, &mut tools)?;
-        let record = TaskRecord {
-            id: Uuid::new_v4(),
+        let mut record = TaskRecord {
+            id,
             identity,
             state: TaskState::Ready,
             messages,
@@ -226,9 +259,17 @@ impl CuaTask {
             calls: vec![],
             model_replies: vec![],
             context: vec![],
+            history: vec![],
+            replan_after_takeover: false,
         };
+        record.transition(TaskState::Ready, "created");
         store.save(&record).await?;
-        Ok(Self { store, record })
+        let (updates, _) = watch::channel(record.clone());
+        Ok(Self {
+            store,
+            record,
+            updates,
+        })
     }
     pub async fn open(path: PathBuf) -> Result<Self> {
         let store = Arc::new(Store::open(path).await?);
@@ -237,7 +278,7 @@ impl CuaTask {
             .await?
             .ok_or(ExecutorError::InvalidMessage)?;
         if record.state == TaskState::Running {
-            record.state = if record
+            let state = if record
                 .calls
                 .iter()
                 .any(|call| call.reply.is_none() || call.reply.as_ref().is_some_and(uncertain))
@@ -246,15 +287,60 @@ impl CuaTask {
             } else {
                 TaskState::Interrupted
             };
+            record.transition(state, "executor restarted");
             store.save(&record).await?;
         }
-        Ok(Self { store, record })
+        let (updates, _) = watch::channel(record.clone());
+        Ok(Self {
+            store,
+            record,
+            updates,
+        })
     }
     pub fn snapshot(&self) -> &TaskRecord {
         &self.record
     }
+    pub(crate) fn subscribe(&self) -> watch::Receiver<TaskRecord> {
+        self.updates.subscribe()
+    }
     async fn save(&self) -> Result<()> {
-        Ok(self.store.save(&self.record).await?)
+        self.store.save(&self.record).await?;
+        self.updates.send_replace(self.record.clone());
+        Ok(())
+    }
+
+    fn unresolved(&self) -> bool {
+        self.record
+            .calls
+            .iter()
+            .any(|call| call.reply.is_none() || call.reply.as_ref().is_some_and(uncertain))
+    }
+
+    pub(crate) async fn pause(&mut self) -> Result<()> {
+        if self.record.state != TaskState::Completed {
+            self.record.replan_after_takeover = true;
+            let state = if self.unresolved() {
+                TaskState::NeedsReview
+            } else {
+                TaskState::Paused
+            };
+            self.record.transition(state, "human take-over");
+            self.save().await?;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn cancel(&mut self) -> Result<()> {
+        if self.record.state != TaskState::Completed {
+            let state = if self.unresolved() {
+                TaskState::NeedsReview
+            } else {
+                TaskState::Cancelled
+            };
+            self.record.transition(state, "cancelled");
+            self.save().await?;
+        }
+        Ok(())
     }
 
     pub async fn run(
@@ -272,11 +358,19 @@ impl CuaTask {
             return Ok(());
         }
         if *cancel.borrow() {
+            self.cancel().await?;
             return Err(ExecutorError::Cancelled);
         }
-        self.record.state = TaskState::Running;
+        let paused = self.record.replan_after_takeover;
+        self.record.transition(TaskState::Running, "started");
         self.save().await?;
         let result = async {
+            if paused {
+                tokio::select! { biased;
+                    _=wait_cancel(&mut cancel)=>return Err(ExecutorError::Cancelled),
+                    result=self.resume_observation(runtime,approval)=>result?,
+                }
+            }
             tokio::select! { biased;
                 _=wait_cancel(&mut cancel)=>return Err(ExecutorError::Cancelled),
                 result=self.recover_tools(runtime,approval)=>result?,
@@ -285,17 +379,17 @@ impl CuaTask {
                 .await
         }
         .await;
-        if result.is_err() {
-            self.record.state = if self
-                .record
-                .calls
-                .iter()
-                .any(|c| c.reply.is_none() || c.reply.as_ref().is_some_and(uncertain))
-            {
+        if let Err(error) = &result {
+            let state = if self.unresolved() {
                 TaskState::NeedsReview
+            } else if matches!(error, ExecutorError::State(ServiceError::BotPaused)) {
+                TaskState::Paused
+            } else if matches!(error, ExecutorError::Cancelled) {
+                TaskState::Cancelled
             } else {
                 TaskState::Interrupted
             };
+            self.record.transition(state, &error.to_string());
             self.save().await?;
         }
         result
@@ -379,7 +473,7 @@ impl CuaTask {
                         status=python.wait()=>status?,
                     };
                     if !status.success() { return Err(ExecutorError::ChildFailed); }
-                    self.record.state=TaskState::Completed;
+                    self.record.transition(TaskState::Completed,"completed");
                     self.save().await?;
                     return Ok(());
                 }
@@ -445,12 +539,38 @@ impl CuaTask {
             arguments: args,
             request: request.clone(),
             reply: None,
+            not_executed: false,
         });
         self.save().await?;
-        let reply = runtime
-            .request(request)
-            .await
-            .map_err(|_| ExecutorError::NeedsReview)?;
+        let reply = match runtime.request(request.clone()).await {
+            Ok(reply) => reply,
+            Err(WorkspaceError::State(ServiceError::BotPaused)) => {
+                self.record.replan_after_takeover = true;
+                let call = self
+                    .record
+                    .calls
+                    .last_mut()
+                    .ok_or(ExecutorError::InvalidMessage)?;
+                call.not_executed = true;
+                call.reply = Some(GuestReply {
+                    identity: request.identity,
+                    operation_id: request.operation_id,
+                    outcome: GuestOutcome::Error {
+                        error: GuestError {
+                            code: GuestErrorCode::Cancelled,
+                            message: "Not executed: bot paused before guest admission".into(),
+                        },
+                    },
+                });
+                self.record_tool_message(
+                    &call_id,
+                    &json!({"status":"skipped","effect":"none","reason":"bot_paused"}),
+                );
+                self.save().await?;
+                return Err(ExecutorError::State(ServiceError::BotPaused));
+            }
+            Err(_) => return Err(ExecutorError::NeedsReview),
+        };
         let result = project(&reply);
         self.record
             .calls
@@ -506,6 +626,68 @@ impl CuaTask {
             self.tool(runtime, approval, &call).await?;
         }
         Ok(())
+    }
+
+    async fn resume_observation(
+        &mut self,
+        runtime: &WorkspaceRuntime,
+        approval: &dyn ToolApproval,
+    ) -> Result<()> {
+        // Proposals made before human control are obsolete. Preserve known receipts,
+        // but never execute an unanswered old proposal while recovering this task.
+        let pending: Vec<String> = self
+            .record
+            .messages
+            .iter()
+            .filter_map(|message| message["tool_calls"].as_array())
+            .flatten()
+            .filter_map(|call| call["id"].as_str().map(str::to_owned))
+            .collect();
+        for id in pending {
+            let result = match self.record.calls.iter().find(|call| call.call_id == id) {
+                Some(call) if !call.not_executed => {
+                    project(call.reply.as_ref().ok_or(ExecutorError::NeedsReview)?)
+                }
+                _ => json!({"status":"skipped","effect":"none","reason":"human_takeover_replan"}),
+            };
+            self.record_tool_message(&id, &result);
+        }
+        self.save().await?;
+        let observation = if let Some(reply) =
+            runtime.resume_observation(self.record.identity).await
+        {
+            project(&reply)
+        } else {
+            let id = format!("resume-observation-{}", Uuid::new_v4());
+            self.record.messages.push(json!({"role":"assistant","tool_calls":[{"id":id,"type":"function","function":{"name":"get_desktop_state","arguments":"{}"}}]}));
+            self.save().await?;
+            self.tool(
+                runtime,
+                approval,
+                &json!({"call_id":id,"name":"get_desktop_state","arguments":{}}),
+            )
+            .await?
+        };
+        if observation["isError"] == true || observation["kind"] == "error" {
+            return Err(ExecutorError::ChildFailed);
+        }
+        self.record.messages.push(json!({"role":"user","content":format!("Human control ended. Fresh desktop observation: {observation}\nReplan from the current desktop. All old unanswered actions were skipped. Read get_window_state before native input and get_browser_state before browser actions; old window tokens and browser refs are stale.")}));
+        self.record.replan_after_takeover = false;
+        self.save().await
+    }
+}
+
+impl TaskRecord {
+    fn transition(&mut self, state: TaskState, reason: &str) {
+        self.state = state;
+        self.history.push(TaskEvent {
+            state,
+            reason: reason.into(),
+            at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        });
     }
 }
 
@@ -618,6 +800,7 @@ mod tests {
             arguments: json!({"command":"true"}),
             request,
             reply,
+            not_executed: false,
         }
     }
     #[tokio::test]
@@ -726,7 +909,7 @@ mod tests {
             cancel
         );
         assert!(matches!(result, Err(ExecutorError::Cancelled)));
-        assert_eq!(task.snapshot().state, TaskState::Interrupted);
+        assert_eq!(task.snapshot().state, TaskState::Cancelled);
         assert!(task.snapshot().calls.is_empty());
         drop(task);
         assert_eq!(
@@ -735,7 +918,7 @@ mod tests {
                 .unwrap()
                 .snapshot()
                 .state,
-            TaskState::Interrupted
+            TaskState::Cancelled
         );
     }
 }

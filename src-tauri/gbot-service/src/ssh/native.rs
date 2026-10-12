@@ -1,4 +1,4 @@
-//! Accessibility observations identify controls; only foreground input activates them.
+//! Native controls use foreground input; typed browser operations stay Driver-owned.
 use super::guest::DesktopTool;
 use serde_json::{json, Map, Value};
 
@@ -7,6 +7,20 @@ const READS: &[&str] = &[
     "get_window_state",
     "get_desktop_state",
     "verify_state",
+];
+
+// The pinned Driver owns page binding, session-scoped refs and browser delivery.
+// Preserve its schemas rather than applying the native window-input adapter.
+const BROWSER_TOOLS: &[&str] = &[
+    "get_browser_state",
+    "browser_prepare",
+    "browser_navigate",
+    "browser_click",
+    "browser_type",
+    "browser_dialog",
+    "browser_set_input_files",
+    "browser_download",
+    "browser_pointer",
 ];
 
 fn fields(tool: &str) -> &'static [&'static str] {
@@ -29,7 +43,7 @@ fn fields(tool: &str) -> &'static [&'static str] {
 
 pub(super) fn catalog(tools: Vec<DesktopTool>) -> Vec<DesktopTool> {
     tools.into_iter().filter_map(|mut tool| {
-        if READS.contains(&tool.name.as_str()) {
+        if READS.contains(&tool.name.as_str()) || BROWSER_TOOLS.contains(&tool.name.as_str()) {
             return Some(tool);
         }
         let allowed = fields(&tool.name);
@@ -57,6 +71,7 @@ pub(super) fn catalog(tools: Vec<DesktopTool>) -> Vec<DesktopTool> {
 #[derive(Default)]
 pub(super) struct Input {
     snapshot: Option<Value>,
+    browser_observation_required: bool,
 }
 
 fn refused(code: &str, text: &str) -> Value {
@@ -65,6 +80,13 @@ fn refused(code: &str, text: &str) -> Value {
 
 impl Input {
     pub(super) fn observe(&mut self, tool: &str, result: &Value) {
+        if tool == "get_desktop_state" && result["isError"] != true {
+            self.snapshot = None;
+            self.browser_observation_required = true;
+        }
+        if tool == "get_browser_state" && result["isError"] != true {
+            self.browser_observation_required = false;
+        }
         if tool == "get_window_state" {
             self.snapshot =
                 (result["isError"] != true).then(|| result["structuredContent"].clone());
@@ -73,6 +95,17 @@ impl Input {
 
     pub(super) fn prepare(&mut self, tool: &str, arguments: &Value) -> Result<Value, Value> {
         if READS.contains(&tool) {
+            return Ok(arguments.clone());
+        }
+        if BROWSER_TOOLS.contains(&tool) {
+            if self.browser_observation_required
+                && !matches!(tool, "get_browser_state" | "browser_prepare")
+            {
+                return Err(refused("stale_browser_state", "Read get_browser_state after the desktop changed before using browser actions or refs."));
+            }
+            if tool != "get_browser_state" {
+                self.snapshot = None;
+            }
             return Ok(arguments.clone());
         }
         let allowed = fields(tool);
@@ -190,6 +223,152 @@ mod tests {
         );
         assert_eq!(
             input.prepare("click", &args).unwrap_err()["structuredContent"]["code"],
+            "stale_element"
+        );
+    }
+
+    #[test]
+    fn browser_catalog_and_actions_preserve_driver_capabilities() {
+        use crate::contract::{GuestCapability, GuestOperationKind};
+
+        let schema = json!({"type":"object","properties":{
+            "session":{"type":"string"},"target_id":{"type":"string"},
+            "tab_id":{"type":"string"},"ref":{"type":"string"},
+            "profile":{"type":"object"},"allow_launch":{"type":"boolean"},
+            "snapshot_format":{"enum":["dom_refs_v1","semantic_v2"]},
+            "include_screenshot":{"type":"boolean"},
+            "delivery_mode":{"enum":["background","foreground"]}
+        },"additionalProperties":false});
+        let tools = catalog(
+            BROWSER_TOOLS
+                .iter()
+                .chain(["execute_javascript"].iter())
+                .map(|name| DesktopTool {
+                    name: (*name).into(),
+                    description: format!("Driver {name}"),
+                    input_schema: schema.clone(),
+                })
+                .collect(),
+        );
+        assert_eq!(tools.len(), BROWSER_TOOLS.len());
+        for tool in &tools {
+            assert_eq!(tool.input_schema, schema);
+            assert_eq!(tool.description, format!("Driver {}", tool.name));
+        }
+
+        let mut input = observed();
+        for (tool, arguments) in [
+            (
+                "browser_prepare",
+                json!({"session":"owned","allow_launch":true,"profile":{"mode":"isolated_new"}}),
+            ),
+            (
+                "get_browser_state",
+                json!({"session":"owned","pid":42,"window_id":7}),
+            ),
+            (
+                "browser_navigate",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","url":"http://127.0.0.1:8000/"}),
+            ),
+            (
+                "get_browser_state",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","snapshot_format":"semantic_v2","include_screenshot":false}),
+            ),
+            (
+                "browser_type",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","ref":"p1:2","text":"Hello from Gbot."}),
+            ),
+            (
+                "browser_click",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","ref":"p2:3","delivery_mode":"foreground"}),
+            ),
+            (
+                "browser_dialog",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","action":"inspect"}),
+            ),
+            (
+                "browser_set_input_files",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","ref":"p3:4","files":["/home/bot/hello.txt"]}),
+            ),
+            (
+                "browser_download",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","ref":"p3:5","destination_root":"/home/bot/Downloads"}),
+            ),
+            (
+                "browser_pointer",
+                json!({"session":"owned","target_id":"target","tab_id":"tab","action":"hover","ref":"p3:5"}),
+            ),
+        ] {
+            assert!(tools.iter().any(|definition| definition.name == tool));
+            assert_eq!(input.prepare(tool, &arguments).unwrap(), arguments);
+            let capability = GuestOperationKind::Desktop {
+                tool: tool.into(),
+                arguments,
+            }
+            .capability();
+            assert_eq!(
+                capability,
+                if tool == "get_browser_state" {
+                    GuestCapability::DesktopCapture
+                } else {
+                    GuestCapability::DesktopInput
+                }
+            );
+        }
+        assert_eq!(
+            input
+                .prepare(
+                    "click",
+                    &json!({"pid":42,"window_id":7,"element_token":"fresh"})
+                )
+                .unwrap_err()["structuredContent"]["code"],
+            "stale_element"
+        );
+        assert!(input
+            .prepare("execute_javascript", &json!({"script":"1+1"}))
+            .is_err());
+
+        let page = json!({"status":"ok","target_id":"target","tab_id":"tab",
+            "binding_quality":"exact","mutation_allowed":true,"snapshot":{"id":"p3"},
+            "outline":[{"role":"textbox","name":"Message","ref":"p3:2"}],
+            "refs":{"p3:2":{"role":"textbox","actions":["type"],"value":"Hello from Gbot."}},
+            "content_refs":{"p3:3":{"text":"Saved"}}});
+        let raw = json!({"isError":false,"structuredContent":page,"content":[{"type":"text","text":"duplicate page"}]});
+        let mut expected = page;
+        expected["isError"] = false.into();
+        assert_eq!(
+            super::super::projection::desktop_model_result(&raw),
+            expected
+        );
+
+        let mut input = observed();
+        input.observe(
+            "get_desktop_state",
+            &json!({"isError":false,"structuredContent":{"windows":[]}}),
+        );
+        assert_eq!(
+            input
+                .prepare(
+                    "browser_click",
+                    &json!({"target_id":"target","tab_id":"tab","ref":"old"})
+                )
+                .unwrap_err()["structuredContent"]["effect"],
+            "none"
+        );
+        input.observe("get_browser_state", &raw);
+        assert!(input
+            .prepare(
+                "browser_click",
+                &json!({"target_id":"target","tab_id":"tab","ref":"fresh"})
+            )
+            .is_ok());
+        assert_eq!(
+            input
+                .prepare(
+                    "click",
+                    &json!({"pid":42,"window_id":7,"element_token":"fresh"})
+                )
+                .unwrap_err()["structuredContent"]["code"],
             "stale_element"
         );
     }

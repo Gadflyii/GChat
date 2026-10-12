@@ -482,6 +482,50 @@ mod tests {
     }
 
     #[test]
+    fn session_declares_xfce_x11_before_starting_desktop() {
+        let cloud = spec().cloud_init().unwrap();
+        let data: serde_json::Value =
+            serde_json::from_str(cloud.strip_prefix("#cloud-config\n").unwrap()).unwrap();
+        let script = data["write_files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|file| file["path"] == "/usr/local/bin/gbot-desktop-session")
+            .unwrap()["content"]
+            .as_str()
+            .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let session = dir.path().join("session");
+        std::fs::write(&session, script).unwrap();
+        let xauth = dir.path().join("xauth");
+        std::fs::write(&xauth, "#!/bin/sh\n/usr/bin/env\nexit 42\n").unwrap();
+        std::fs::set_permissions(&xauth, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let output = std::process::Command::new("bash")
+            .arg(session)
+            .env("GBOT_DESKTOP_NOTIFY_SOCKET", "fixture")
+            .env("XDG_RUNTIME_DIR", dir.path())
+            .env("PATH", format!("{}:/usr/bin:/bin", dir.path().display()))
+            .env("XDG_CURRENT_DESKTOP", "KDE")
+            .env("XDG_SESSION_DESKTOP", "plasma")
+            .env("XDG_SESSION_TYPE", "wayland")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(42));
+        let env = String::from_utf8(output.stdout).unwrap();
+        for value in [
+            "DISPLAY=:1",
+            "XDG_CURRENT_DESKTOP=XFCE",
+            "XDG_SESSION_DESKTOP=xfce",
+            "XDG_SESSION_TYPE=x11",
+            "GTK_MODULES=atk-bridge",
+            "QT_ACCESSIBILITY=1",
+            "NO_AT_BRIDGE=0",
+        ] {
+            assert!(env.lines().any(|line| line == value), "missing {value}");
+        }
+    }
+
+    #[test]
     fn shared_first_boot_is_dedicated_xfce_with_private_view() {
         let settings = spec();
         let text = settings.cloud_init().unwrap();

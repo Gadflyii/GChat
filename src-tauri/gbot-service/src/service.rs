@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::contract::{
     ContractError, GuestCapability, GuestHello, GuestOperationKind, GuestOperationState,
     GuestOutcome, GuestReply, GuestRequest, GuestResult, OperationId, ServicePc, SessionIdentity,
-    WorkspaceConfig, WorkspaceId,
+    VaultCredentialRef, WorkspaceConfig, WorkspaceId,
 };
 use crate::store::Store;
 
@@ -60,6 +60,50 @@ pub struct OperationRecord {
     pub state: OperationState,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionControlState {
+    Bot,
+    Pausing,
+    Human,
+    Paused,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SessionControl {
+    pub identity: SessionIdentity,
+    pub owner: Option<Uuid>,
+    pub state: SessionControlState,
+}
+
+/// Bot-owned inference settings. The credential itself belongs only to the vault.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelAssignment {
+    pub workspace_id: WorkspaceId,
+    pub api_base: String,
+    pub model: String,
+    pub context_tokens: u64,
+    pub credential_ref: Option<VaultCredentialRef>,
+}
+
+impl ModelAssignment {
+    pub fn validate(&self) -> Result<(), ServiceError> {
+        if self.workspace_id.validate().is_err()
+            || self.api_base.trim().is_empty()
+            || self.model.trim().is_empty()
+            || self.context_tokens == 0
+            || self
+                .credential_ref
+                .is_some_and(|reference| reference.validate().is_err())
+        {
+            return Err(ServiceError::InvalidAssignment);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DurableState {
@@ -67,6 +111,10 @@ pub struct DurableState {
     pub service_pc: ServicePc,
     pub workspaces: Vec<WorkspaceConfig>,
     pub operations: Vec<OperationRecord>,
+    #[serde(default)]
+    pub controls: Vec<SessionControl>,
+    #[serde(default)]
+    pub assignments: Vec<ModelAssignment>,
 }
 
 impl DurableState {
@@ -76,6 +124,8 @@ impl DurableState {
             service_pc: ServicePc::default(),
             workspaces: Vec::new(),
             operations: Vec::new(),
+            controls: Vec::new(),
+            assignments: Vec::new(),
         }
     }
 
@@ -93,6 +143,37 @@ impl DurableState {
             }
         }
         let mut operations = BTreeSet::new();
+        let mut assignments = BTreeSet::new();
+        let mut credentials = BTreeSet::new();
+        for assignment in &self.assignments {
+            assignment
+                .validate()
+                .map_err(|_| ServiceError::InvalidState)?;
+            if !workspaces.contains(&assignment.workspace_id)
+                || !assignments.insert(assignment.workspace_id)
+                || assignment
+                    .credential_ref
+                    .is_some_and(|reference| !credentials.insert(reference))
+            {
+                return Err(ServiceError::InvalidState);
+            }
+        }
+        let mut controls = BTreeSet::new();
+        for control in &self.controls {
+            control
+                .identity
+                .validate()
+                .map_err(|_| ServiceError::InvalidState)?;
+            if !workspaces.contains(&control.identity.workspace_id)
+                || !controls.insert(control.identity.workspace_id)
+                || match control.state {
+                    SessionControlState::Bot => control.owner.is_some(),
+                    _ => control.owner.is_none_or(|owner| owner.is_nil()),
+                }
+            {
+                return Err(ServiceError::InvalidState);
+            }
+        }
         for operation in &self.operations {
             operation
                 .id
@@ -143,6 +224,10 @@ pub enum ServiceError {
     OperationNotFound,
     DuplicateOperation,
     OperationState,
+    BotPaused,
+    ControlOwner,
+    InvalidAssignment,
+    AssignmentNotFound,
 }
 
 impl fmt::Display for ServiceError {
@@ -160,6 +245,14 @@ impl fmt::Display for ServiceError {
                 Self::OperationNotFound => "operation is not recorded; its outcome is unknown",
                 Self::DuplicateOperation => "operation is already recorded; do not replay it",
                 Self::OperationState => "operation requires review or is already finished",
+                Self::BotPaused => "bot dispatch is paused for human control",
+                Self::ControlOwner => "human control belongs to another client or session",
+                Self::InvalidAssignment => {
+                    "model assignment needs an endpoint, model and context capacity"
+                }
+                Self::AssignmentNotFound => {
+                    "configure this bot's model assignment before running a task"
+                }
                 Self::Contract(_) => unreachable!(),
             }),
         }
@@ -194,6 +287,12 @@ impl Service {
                 recovered = true;
             }
         }
+        for control in &mut durable.controls {
+            if control.state != SessionControlState::Bot {
+                control.state = SessionControlState::Paused;
+                recovered = true;
+            }
+        }
         if initial || recovered {
             store.save(&durable).await?;
         }
@@ -220,11 +319,69 @@ impl Service {
             .collect()
     }
 
+    pub async fn model_assignment(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Option<ModelAssignment>, ServiceError> {
+        let state = self.state.lock().await;
+        if !state
+            .durable
+            .workspaces
+            .iter()
+            .any(|workspace| workspace.id == workspace_id)
+        {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        Ok(state
+            .durable
+            .assignments
+            .iter()
+            .find(|assignment| assignment.workspace_id == workspace_id)
+            .cloned())
+    }
+
+    pub async fn save_model_assignment(
+        &self,
+        assignment: ModelAssignment,
+    ) -> Result<(), ServiceError> {
+        assignment.validate()?;
+        let state = self.state.clone().lock_owned().await;
+        if !state
+            .durable
+            .workspaces
+            .iter()
+            .any(|workspace| workspace.id == assignment.workspace_id)
+        {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        let mut next = state.durable.clone();
+        if let Some(existing) = next
+            .assignments
+            .iter_mut()
+            .find(|saved| saved.workspace_id == assignment.workspace_id)
+        {
+            *existing = assignment;
+        } else {
+            next.assignments.push(assignment);
+        }
+        next.validate()?;
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
     async fn commit(
         &self,
         mut state: OwnedMutexGuard<RuntimeState>,
-        next: DurableState,
+        mut next: DurableState,
     ) -> Result<OwnedMutexGuard<RuntimeState>, ServiceError> {
+        // A human may receive ownership only after all earlier effects are known.
+        for control in &mut next.controls {
+            if control.state == SessionControlState::Pausing
+                && !unresolved(&next.operations, control.identity)
+            {
+                control.state = SessionControlState::Human;
+            }
+        }
         let store = self.store.clone();
         // Cancellation of the caller must not release ownership during a disk commit.
         tokio::spawn(async move {
@@ -249,6 +406,10 @@ impl Service {
                 return Ok(());
             }
             if state.sessions.contains_key(&config.id)
+                || state.durable.controls.iter().any(|control| {
+                    control.identity.workspace_id == config.id
+                        && control.state != SessionControlState::Bot
+                })
                 || state.durable.operations.iter().any(|operation| {
                     operation.identity.workspace_id == config.id
                         && matches!(
@@ -285,6 +446,15 @@ impl Service {
         }
         let mut next = state.durable.clone();
         let mut changed = false;
+        if let Some(control) = next.controls.iter_mut().find(|control| {
+            control.identity.workspace_id == expected.workspace_id
+                && control.state == SessionControlState::Bot
+        }) {
+            if control.identity != expected {
+                control.identity = expected;
+                changed = true;
+            }
+        }
         for operation in &mut next.operations {
             if operation.identity.workspace_id == expected.workspace_id
                 && operation.identity != expected
@@ -315,6 +485,12 @@ impl Service {
         // A dead connection must not remain dispatchable if its review write fails.
         state.sessions.remove(&identity.workspace_id);
         let mut next = state.durable.clone();
+        if let Some(control) = next.controls.iter_mut().find(|control| {
+            control.identity.workspace_id == identity.workspace_id
+                && control.state != SessionControlState::Bot
+        }) {
+            control.state = SessionControlState::Paused;
+        }
         for operation in &mut next.operations {
             if operation.identity == identity && operation.state == OperationState::InFlight {
                 operation.state = OperationState::NeedsReview {
@@ -330,12 +506,52 @@ impl Service {
         &self,
         request: &GuestRequest,
     ) -> Result<OperationRecord, ServiceError> {
+        self.begin_operation_owned(request, None).await
+    }
+
+    /// Only the service's hand-back observation may cross a paused admission gate.
+    pub async fn begin_control_observation(
+        &self,
+        request: &GuestRequest,
+        owner: Uuid,
+    ) -> Result<OperationRecord, ServiceError> {
+        if !matches!(&request.operation, GuestOperationKind::Desktop { tool, .. }
+            if tool == "get_desktop_state")
+        {
+            return Err(ServiceError::OperationState);
+        }
+        self.begin_operation_owned(request, Some(owner)).await
+    }
+
+    async fn begin_operation_owned(
+        &self,
+        request: &GuestRequest,
+        owner: Option<Uuid>,
+    ) -> Result<OperationRecord, ServiceError> {
         let state = self.state.clone().lock_owned().await;
         let hello = state
             .sessions
             .get(&request.identity.workspace_id)
             .ok_or(ServiceError::SessionUnavailable)?;
         request.validate(hello).map_err(ServiceError::Contract)?;
+        if let Some(control) = state.durable.controls.iter().find(|control| {
+            control.identity.workspace_id == request.identity.workspace_id
+                && control.state != SessionControlState::Bot
+        }) {
+            let reconciliation = matches!(
+                request.operation,
+                GuestOperationKind::Status { .. } | GuestOperationKind::Cancel { .. }
+            );
+            let observation = owner.is_some()
+                && owner == control.owner
+                && control.identity == request.identity
+                && control.state == SessionControlState::Paused;
+            if !reconciliation && !observation {
+                return Err(ServiceError::BotPaused);
+            }
+        } else if owner.is_some() {
+            return Err(ServiceError::ControlOwner);
+        }
         if state
             .durable
             .operations
@@ -372,6 +588,112 @@ impl Service {
         next.operations.push(operation.clone());
         drop(self.commit(state, next).await?);
         Ok(operation)
+    }
+
+    pub async fn take_over(
+        &self,
+        identity: SessionIdentity,
+        owner: Uuid,
+    ) -> Result<SessionControl, ServiceError> {
+        if owner.is_nil() {
+            return Err(ServiceError::ControlOwner);
+        }
+        let state = self.state.clone().lock_owned().await;
+        verified_session(&state, identity)?;
+        let mut next = state.durable.clone();
+        let index = match next
+            .controls
+            .iter()
+            .position(|control| control.identity.workspace_id == identity.workspace_id)
+        {
+            Some(index) => {
+                let control = &next.controls[index];
+                if control.state != SessionControlState::Bot
+                    && (control.identity != identity || control.owner != Some(owner))
+                {
+                    return Err(ServiceError::ControlOwner);
+                }
+                index
+            }
+            None => {
+                next.controls.push(SessionControl {
+                    identity,
+                    owner: None,
+                    state: SessionControlState::Bot,
+                });
+                next.controls.len() - 1
+            }
+        };
+        next.controls[index] = SessionControl {
+            identity,
+            owner: Some(owner),
+            state: SessionControlState::Pausing,
+        };
+        let state = self.commit(state, next).await?;
+        Ok(state.durable.controls[index].clone())
+    }
+
+    pub async fn begin_hand_back(
+        &self,
+        identity: SessionIdentity,
+        owner: Uuid,
+    ) -> Result<(), ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        verified_session(&state, identity)?;
+        let mut next = state.durable.clone();
+        let control = owned_control(&mut next, identity, owner)?;
+        // Disable human ownership before closing its tunnel and observing the desktop.
+        control.state = SessionControlState::Paused;
+        let pending = unresolved(&next.operations, identity);
+        drop(self.commit(state, next).await?);
+        if pending {
+            Err(ServiceError::OperationState)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn pause_human_control(&self, identity: SessionIdentity) -> Result<(), ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        let mut next = state.durable.clone();
+        let Some(control) = next.controls.iter_mut().find(|control| {
+            control.identity == identity && control.state != SessionControlState::Bot
+        }) else {
+            return Ok(());
+        };
+        control.state = SessionControlState::Paused;
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
+    pub async fn finish_hand_back(
+        &self,
+        identity: SessionIdentity,
+        owner: Uuid,
+        observation: OperationId,
+    ) -> Result<SessionControl, ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        verified_session(&state, identity)?;
+        let mut next = state.durable.clone();
+        if unresolved(&next.operations, identity)
+            || !next.operations.iter().any(|operation| {
+                operation.id == observation
+                    && operation.identity == identity
+                    && operation.capability == GuestCapability::DesktopCapture
+                    && operation.state == OperationState::Completed
+            })
+        {
+            return Err(ServiceError::OperationState);
+        }
+        let control = owned_control(&mut next, identity, owner)?;
+        if control.state != SessionControlState::Paused {
+            return Err(ServiceError::OperationState);
+        }
+        control.state = SessionControlState::Bot;
+        control.owner = None;
+        let result = control.clone();
+        drop(self.commit(state, next).await?);
+        Ok(result)
     }
 
     pub async fn finish_operation(
@@ -499,6 +821,43 @@ impl Service {
     }
 }
 
+fn unresolved(operations: &[OperationRecord], identity: SessionIdentity) -> bool {
+    operations.iter().any(|operation| {
+        operation.identity == identity
+            && matches!(
+                operation.state,
+                OperationState::InFlight | OperationState::NeedsReview { .. }
+            )
+    })
+}
+
+fn verified_session(state: &RuntimeState, identity: SessionIdentity) -> Result<(), ServiceError> {
+    let hello = state
+        .sessions
+        .get(&identity.workspace_id)
+        .ok_or(ServiceError::SessionUnavailable)?;
+    if hello.identity != identity {
+        return Err(ServiceError::SessionMismatch);
+    }
+    Ok(())
+}
+
+fn owned_control(
+    state: &mut DurableState,
+    identity: SessionIdentity,
+    owner: Uuid,
+) -> Result<&mut SessionControl, ServiceError> {
+    state
+        .controls
+        .iter_mut()
+        .find(|control| {
+            control.identity == identity
+                && control.owner == Some(owner)
+                && control.state != SessionControlState::Bot
+        })
+        .ok_or(ServiceError::ControlOwner)
+}
+
 fn observed_state(state: &GuestOperationState) -> OperationState {
     match state {
         GuestOperationState::Running => OperationState::InFlight,
@@ -619,6 +978,134 @@ mod tests {
             .find(|record| record.id == id)
             .unwrap()
             .state
+    }
+
+    #[tokio::test]
+    async fn takeover_drains_exclusively_and_handback_requires_observation() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let service = Service::open(&path).await.unwrap();
+        let config = workspace();
+        let identity = SessionIdentity {
+            workspace_id: config.id,
+            session_id: SessionId::new(),
+        };
+        service.register_workspace(config).await.unwrap();
+        let mut guest = hello(identity);
+        guest.capabilities.insert(GuestCapability::DesktopCapture);
+        service
+            .register_session(identity, guest.clone())
+            .await
+            .unwrap();
+        let in_flight = exec(identity);
+        service.begin_operation(&in_flight).await.unwrap();
+        let owner = Uuid::new_v4();
+        assert_eq!(
+            service.take_over(identity, owner).await.unwrap().state,
+            SessionControlState::Pausing
+        );
+        assert_eq!(
+            service.begin_operation(&exec(identity)).await,
+            Err(ServiceError::BotPaused)
+        );
+        assert_eq!(
+            service.take_over(identity, Uuid::new_v4()).await,
+            Err(ServiceError::ControlOwner)
+        );
+        service
+            .finish_operation(
+                in_flight.operation_id,
+                identity,
+                OperationCompletion::Completed,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            service.snapshot().await.controls[0].state,
+            SessionControlState::Human
+        );
+        service.begin_hand_back(identity, owner).await.unwrap();
+        let observation = GuestRequest {
+            identity,
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Desktop {
+                tool: "get_desktop_state".into(),
+                arguments: serde_json::json!({}),
+            },
+        };
+        assert_eq!(
+            service
+                .finish_hand_back(identity, owner, observation.operation_id)
+                .await,
+            Err(ServiceError::OperationState)
+        );
+        assert_eq!(
+            service.begin_operation(&observation).await,
+            Err(ServiceError::BotPaused)
+        );
+        service
+            .begin_control_observation(&observation, owner)
+            .await
+            .unwrap();
+        service
+            .finish_operation(
+                observation.operation_id,
+                identity,
+                OperationCompletion::Completed,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            service
+                .finish_hand_back(identity, owner, observation.operation_id)
+                .await
+                .unwrap()
+                .state,
+            SessionControlState::Bot
+        );
+        let unknown = exec(identity);
+        service.begin_operation(&unknown).await.unwrap();
+        service.take_over(identity, owner).await.unwrap();
+        service
+            .mark_operation_uncertain(unknown.operation_id, identity)
+            .await
+            .unwrap();
+        assert_eq!(
+            service.begin_hand_back(identity, owner).await,
+            Err(ServiceError::OperationState)
+        );
+        assert_eq!(
+            service.snapshot().await.controls[0].state,
+            SessionControlState::Paused
+        );
+        drop(service);
+        let recovered = Service::open(&path).await.unwrap();
+        recovered.register_session(identity, guest).await.unwrap();
+        assert_eq!(
+            recovered.snapshot().await.controls[0].state,
+            SessionControlState::Paused
+        );
+        assert_eq!(
+            recovered.begin_operation(&exec(identity)).await,
+            Err(ServiceError::BotPaused)
+        );
+        // Status remains available while paused; no unknown effect is redispatched.
+        let status = probe(&unknown, false);
+        recovered.begin_operation(&status).await.unwrap();
+        recovered
+            .reconcile_operation(
+                &status,
+                &reply(
+                    &status,
+                    GuestOperationState::Completed { exit_code: Some(0) },
+                ),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            recovered.snapshot().await.controls[0].state,
+            SessionControlState::Paused
+        );
     }
 
     #[tokio::test]

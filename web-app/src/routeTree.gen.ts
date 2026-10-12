@@ -18,6 +18,7 @@ import { Route as SkillsIndexRouteImport } from './routes/skills/index'
 import { Route as MemoryIndexRouteImport } from './routes/memory/index'
 import { Route as LaunchIndexRouteImport } from './routes/launch/index'
 import { Route as HubIndexRouteImport } from './routes/hub/index'
+import { Route as GbotIndexRouteImport } from './routes/gbot/index'
 import { Route as EnginesIndexRouteImport } from './routes/engines/index'
 import { Route as BenchmarkIndexRouteImport } from './routes/benchmark/index'
 import { Route as AgentsIndexRouteImport } from './routes/agents/index'
@@ -85,6 +86,11 @@ const LaunchIndexRoute = LaunchIndexRouteImport.update({
 const HubIndexRoute = HubIndexRouteImport.update({
   id: '/hub/',
   path: '/hub/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GbotIndexRoute = GbotIndexRouteImport.update({
+  id: '/gbot/',
+  path: '/gbot/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EnginesIndexRoute = EnginesIndexRouteImport.update({
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/agents/': typeof AgentsIndexRoute
   '/benchmark/': typeof BenchmarkIndexRoute
   '/engines/': typeof EnginesIndexRoute
+  '/gbot/': typeof GbotIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
   '/memory/': typeof MemoryIndexRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/agents': typeof AgentsIndexRoute
   '/benchmark': typeof BenchmarkIndexRoute
   '/engines': typeof EnginesIndexRoute
+  '/gbot': typeof GbotIndexRoute
   '/hub': typeof HubIndexRoute
   '/launch': typeof LaunchIndexRoute
   '/memory': typeof MemoryIndexRoute
@@ -301,6 +309,7 @@ export interface FileRoutesById {
   '/agents/': typeof AgentsIndexRoute
   '/benchmark/': typeof BenchmarkIndexRoute
   '/engines/': typeof EnginesIndexRoute
+  '/gbot/': typeof GbotIndexRoute
   '/hub/': typeof HubIndexRoute
   '/launch/': typeof LaunchIndexRoute
   '/memory/': typeof MemoryIndexRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/agents/'
     | '/benchmark/'
     | '/engines/'
+    | '/gbot/'
     | '/hub/'
     | '/launch/'
     | '/memory/'
@@ -371,6 +381,7 @@ export interface FileRouteTypes {
     | '/agents'
     | '/benchmark'
     | '/engines'
+    | '/gbot'
     | '/hub'
     | '/launch'
     | '/memory'
@@ -405,6 +416,7 @@ export interface FileRouteTypes {
     | '/agents/'
     | '/benchmark/'
     | '/engines/'
+    | '/gbot/'
     | '/hub/'
     | '/launch/'
     | '/memory/'
@@ -440,6 +452,7 @@ export interface RootRouteChildren {
   AgentsIndexRoute: typeof AgentsIndexRoute
   BenchmarkIndexRoute: typeof BenchmarkIndexRoute
   EnginesIndexRoute: typeof EnginesIndexRoute
+  GbotIndexRoute: typeof GbotIndexRoute
   HubIndexRoute: typeof HubIndexRoute
   LaunchIndexRoute: typeof LaunchIndexRoute
   MemoryIndexRoute: typeof MemoryIndexRoute
@@ -511,6 +524,13 @@ declare module '@tanstack/react-router' {
       path: '/hub'
       fullPath: '/hub/'
       preLoaderRoute: typeof HubIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gbot/': {
+      id: '/gbot/'
+      path: '/gbot'
+      fullPath: '/gbot/'
+      preLoaderRoute: typeof GbotIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/engines/': {
@@ -704,6 +724,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgentsIndexRoute: AgentsIndexRoute,
   BenchmarkIndexRoute: BenchmarkIndexRoute,
   EnginesIndexRoute: EnginesIndexRoute,
+  GbotIndexRoute: GbotIndexRoute,
   HubIndexRoute: HubIndexRoute,
   LaunchIndexRoute: LaunchIndexRoute,
   MemoryIndexRoute: MemoryIndexRoute,

@@ -564,7 +564,7 @@ mod linux {
                 disk_gib: 40,
                 ssh_port: 0,
                 ssh_public_key: private.public_key().to_openssh()?,
-                browser_package: "firefox-esr".into(),
+                browser_package: "chromium".into(),
                 driver: GuestBinary::CloudInitArchive {
                     path: archive,
                     sha256: digest,

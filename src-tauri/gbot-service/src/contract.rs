@@ -358,7 +358,7 @@ impl GuestOperationKind {
             Self::Write { .. } => GuestCapability::Write,
             Self::Desktop { tool, .. } => match tool.as_str() {
                 "get_window_state" | "get_desktop_state" | "list_windows" | "list_displays"
-                | "verify_state" => GuestCapability::DesktopCapture,
+                | "verify_state" | "get_browser_state" => GuestCapability::DesktopCapture,
                 _ => GuestCapability::DesktopInput,
             },
             Self::Status { .. } => GuestCapability::Status,
