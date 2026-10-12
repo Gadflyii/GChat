@@ -201,7 +201,7 @@ mod linux {
         identity: SessionIdentity,
         evidence: &Path,
     ) -> Result<()> {
-        // A known tone distinguishes captured desktop audio from silent packets.
+        // The independent unit keeps playback alive after its launch command exits.
         let mut pcm = Vec::with_capacity(48000 * 4 * 8);
         for n in 0..48000 * 8 {
             let sample =
@@ -231,11 +231,30 @@ mod linux {
             })
             .await?;
         let mut socket = MediaProbe::open(&view.ws_url).await?;
-        let played = operation(runtime, identity, GuestOperationKind::Exec {
-            program: "/usr/local/bin/gbot-in-session".into(),
-            args: vec!["sh".into(), "-c".into(), "paplay --raw --format=s16le --rate=48000 --channels=2 /home/gbot/tone.pcm >/tmp/gbot-tone.log 2>&1 </dev/null &".into()],
-            cwd: GuestPath("/home/gbot".into()), env: Default::default(),
-        }).await?;
+        let played = operation(
+            runtime,
+            identity,
+            GuestOperationKind::Exec {
+                program: "/usr/local/bin/gbot-in-session".into(),
+                args: vec![
+                    "systemd-run".into(),
+                    "--user".into(),
+                    "--quiet".into(),
+                    "--collect".into(),
+                    "--unit=gbot-media-tone".into(),
+                    "/usr/local/bin/gbot-in-session".into(),
+                    "paplay".into(),
+                    "--raw".into(),
+                    "--format=s16le".into(),
+                    "--rate=48000".into(),
+                    "--channels=2".into(),
+                    "/home/gbot/tone.pcm".into(),
+                ],
+                cwd: GuestPath("/home/gbot".into()),
+                env: Default::default(),
+            },
+        )
+        .await?;
         if !matches!(played, GuestResult::ExecFinished { exit_code: 0, .. }) {
             return Err("tone launch failed".into());
         }
@@ -839,7 +858,7 @@ mod linux {
             let diagnostics = operation(&runtime, identity, GuestOperationKind::Exec {
                 program: "/usr/local/bin/gbot-in-session".into(),
                 args: vec!["sh".into(), "-c".into(),
-                    "systemctl --user status gbot-media --no-pager; journalctl --user -u gbot-media --no-pager -n 80; printf 'DISPLAY=%s\n' \"$DISPLAY\"; xdpyinfo | head -20; timeout 5 pactl info; timeout 5 pactl list short sources; cat /tmp/gbot-tone.log 2>/dev/null; true".into()],
+                    "systemctl --user status gbot-media --no-pager; journalctl --user -u gbot-media --no-pager -n 80; printf 'DISPLAY=%s\n' \"$DISPLAY\"; xdpyinfo | head -20; timeout 5 pactl info; timeout 5 pactl list short sources; systemctl --user status gbot-media-tone --no-pager; journalctl --user -u gbot-media-tone --no-pager -n 20; true".into()],
                 cwd: GuestPath("/home/gbot".into()), env: Default::default(),
             });
             let diagnostics = tokio::time::timeout(Duration::from_secs(15), diagnostics).await;

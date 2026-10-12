@@ -629,12 +629,13 @@ through PCM, view-only input refusal, harmless takeover input and interactive
 stream revocation on hand-back. Existing source and package receipts are reused.
 No model/GPU, person's desktop, browser playback, Windows or M365 claim.
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
-Next unresolved action: run the physical frame/audio/control check with the
-corrected probe. Negotiation now opens; the previous probe incorrectly read
-Cua’s video envelope as the descriptor. The focused case pins its actual
-`direction`/`message` wire format. Raw BGRA is saved with dimensions and converted
-to PNG for inspection. A failed retry retains its stopped guest and encrypted
-test vault so a probe correction does not require another full provision.
+Next unresolved action: finish the physical check with playback owned by its
+own transient unit, using the retained dedicated guest. The 17:00:41Z gate received a real
+1920×1080 BGRA desktop frame, converted to PNG and inspected; the configured
+48 kHz stereo PCM packets were all zero. View-only/takeover/hand-back were not
+reached. Guest `802d41b1-2e19-4413-af1a-1c2119f77973` is stopped with its
+native-vault credential retained, so diagnosis does not require reprovisioning.
+Focused codec and Cua-envelope receipts remain valid.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -1354,3 +1355,23 @@ the evidence folders and `retired-physical-guests.json`.
 Future launches stop on booking errors. The 239 MB embedded seed needs its
 observed first-boot duration inside the CPU booking. Focused media policy and
 error cases, strict Clippy and the example build are the source gates.
+
+The retired codec guest disk is removed after its retirement receipt, freeing
+4.66 GiB (`codec-evidence/disk-retirement.json`). The current guest is
+`802d41b1-2e19-4413-af1a-1c2119f77973`.
+
+The corrected probe `dcdd251e8` passes its one Cua-envelope fixture, strict
+example Clippy and build (`wire-{focused,clippy,build}.log`). The dedicated gate
+started at 16:40:56Z on S1 CPUs 112–113, booking through 17:10Z, tracked session
+96176. Its private state/results are in
+`/ai/gbot-vms/cua-media-20261012/wire-evidence`. Fixture vault unlock material is
+private to that test root; SSH keys stay in the encrypted native vault. The
+wrapper stops the guest on failure and retains it for a bounded correction;
+PASS or timeout retires its domain and key. No model/GPU or person’s desktop.
+
+The silent-audio cause was the probe's background `paplay` child. The guest
+command contract uses a transient unit with `KillMode=control-group`, so returning
+from `sh ... &` stops playback immediately. The tone now has its own transient
+user unit, as the existing editor-launch gate does; the production capture path
+is unchanged. The retained guest resumes for this correction; no fresh provision
+or calibration. S1 CPUs 112–113 are extended to 17:30Z for this finite check.
