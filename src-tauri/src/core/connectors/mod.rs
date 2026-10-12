@@ -232,7 +232,7 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
             self.stopping
                 .store(true, std::sync::atomic::Ordering::Release);
             let operations = std::mem::take(
-                &mut *self
+                &mut self
                     .operations
                     .lock()
                     .map_err(|_| "Connector operations unavailable")?
