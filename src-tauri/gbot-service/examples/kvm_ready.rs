@@ -7,7 +7,7 @@ mod linux {
             ApprovalFuture, Assignment, CuaTask, ExecutorProcesses, FunctionTool, ProcessSpec,
             ToolApproval, ToolBinding,
         },
-        kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, CUA_REVISION},
+        kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, CUA_DRIVER_REVISION},
         service::Service,
         vault::{NativeVault, Secret, Vault},
         workspace::WorkspaceRuntime,
@@ -441,6 +441,12 @@ mod linux {
         let root = PathBuf::from(args.next().ok_or("VM root required")?);
         let image = PathBuf::from(args.next().ok_or("exact image required")?);
         let evidence = PathBuf::from(args.next().ok_or("private evidence folder required")?);
+        let archive = PathBuf::from(args.next().ok_or("pinned driver archive required")?);
+        let digest = args
+            .next()
+            .ok_or("driver archive SHA-256 required")?
+            .into_string()
+            .map_err(|_| "driver digest must be UTF-8")?;
         tokio::fs::create_dir_all(&evidence).await?;
         let record_path = evidence.join("controller.json");
         let record: GateRecord = if record_path.try_exists()? {
@@ -472,7 +478,21 @@ mod linux {
                 .ok_or("fixture credential missing")?;
             let private = PrivateKey::from_openssh(saved.expose_secret())?;
             drop(saved);
-            let spec = KvmSpec {id:Uuid::new_v4(),cpus:2,host_cpus:vec![112,113],memory_mib:4096,disk_gib:40,ssh_port:0,ssh_public_key:private.public_key().to_openssh()?,browser_package:"firefox-esr".into(),driver:GuestBinary {url:"https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.34.1/cua-driver-rs-0.34.1-linux-x86_64-binary.tar.gz".into(),sha256:"a41fe2bdcbeea4501dc594c074f16b0975728e0cc7b08b90acea8564d48fafee".into()},driver_revision:CUA_REVISION.into()};
+            let spec = KvmSpec {
+                id: Uuid::new_v4(),
+                cpus: 2,
+                host_cpus: vec![112, 113],
+                memory_mib: 4096,
+                disk_gib: 40,
+                ssh_port: 0,
+                ssh_public_key: private.public_key().to_openssh()?,
+                browser_package: "firefox-esr".into(),
+                driver: GuestBinary::CloudInitArchive {
+                    path: archive,
+                    sha256: digest,
+                },
+                driver_revision: CUA_DRIVER_REVISION.into(),
+            };
             drop(private);
             let vm = match PreparedVm::prepare(&root, &image, spec, &KvmTools::default()).await {
                 Ok(vm) => vm,
