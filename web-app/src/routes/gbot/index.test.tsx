@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
 
 const mocks = vi.hoisted(() => ({
@@ -40,11 +40,30 @@ vi.mock('@/services/gbot', async (original) => ({
 }))
 
 import { Route } from './index'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 const Page = Route.options.component as ComponentType
+beforeEach(() => {
+  useGeneralSetting.setState({ gbotEnabled: true })
+})
 afterEach(() => {
   cleanup()
   sessionStorage.clear()
   vi.clearAllMocks()
+})
+
+it('opens first-bot setup after opt-in and makes no service calls while disabled', async () => {
+  useGeneralSetting.setState({ gbotEnabled: false })
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(async (path: string) => path === 'state'
+    ? { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+    : [])
+  render(<Page />)
+  expect(mocks.call).not.toHaveBeenCalled()
+  expect(mocks.listen).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Enable Gbot' }))
+  await screen.findByRole('form', { name: 'Set up Gbot' })
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('form', { name: 'Set up Gbot' })).not.toBeInTheDocument()
 })
 
 it('isolates bot assignments and approvals, and holds new tasks during takeover', async () => {

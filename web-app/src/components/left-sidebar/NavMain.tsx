@@ -61,6 +61,7 @@ export function NavMain() {
   const [creatingConversation, setCreatingConversation] = useState(false)
   const openCodeEnabled = useCodeTerminalStore((state) => state.enabled)
   const hermesEnabled = useHermesAgentStore((state) => state.enabled)
+  const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const localTransfers = useLocalModelDownloads(s => s.jobs.filter(j => j.status !== 'installed').length)
   const remoteTransfers = useEngineHosts(s => Object.values(s.snapshots).reduce((n, host) => n + (host.model_management?.downloads.filter(j => j.status !== 'installed').length ?? 0), 0))
 
@@ -148,14 +149,14 @@ export function NavMain() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        <SidebarMenuItem>
+        {gbotEnabled && <SidebarMenuItem>
           <SidebarMenuButton asChild isActive={pathname.startsWith('/gbot')} className="data-[active=true]:bg-sidebar-foreground/15">
             <Link to={route.gbot.index}>
               <IconRobot className="size-4 text-primary" />
               <span>Gbot</span>
             </Link>
           </SidebarMenuButton>
-        </SidebarMenuItem>
+        </SidebarMenuItem>}
         {hermesEnabled && (
           <SidebarMenuItem>
             <SidebarMenuButton
