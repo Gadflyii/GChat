@@ -39,6 +39,19 @@ install -m755 src-tauri/resources/bin/uv "${RESOURCE_DIR}/bin/uv"
   --source src-tauri/resources/ginfer/linux \
   --destination "${RESOURCE_DIR}/ginfer/linux"
 
+# Keep the accepted Cua interpreter, extension libraries and notices unchanged.
+"${PYTHON:-python3}" scripts/package-gbot-runtime.py \
+  --check --destination src-tauri/resources/gbot
+"${PYTHON:-python3}" - "${RESOURCE_DIR}/gbot" <<'PY'
+import shutil,sys
+from pathlib import Path
+destination=Path(sys.argv[1])
+if destination.exists(): shutil.rmtree(destination)
+shutil.copytree('src-tauri/resources/gbot', destination)
+PY
+"${PYTHON:-python3}" scripts/package-gbot-runtime.py \
+  --check --destination "${RESOURCE_DIR}/gbot"
+
 # Remove the AppImage produced by `tauri build` — we are about to
 # repackage from the unpacked AppDir.
 VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")

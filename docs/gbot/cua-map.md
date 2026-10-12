@@ -285,6 +285,74 @@ media endpoint/packaging closure. No decoder is copied without a working
 endpoint. Keep SSH/VNC until that boundary exists and demonstrates the
 same session/control behavior. M365 retains its selected Windows connection.
 
+#### Guest endpoint dependency decision
+
+The bounded backend inspection at GChat `323bfb07a` confirmed that the pinned
+[`cua-spacesd`][spacesd] binary supplies `StreamService` and the `/media`
+WebSocket. Its source is present in the fork's Git tree but excluded from the
+local sparse checkout; the HTML5 crate is an asset/router package, not a capture
+server. The existing Driver `0.34.1` stdio MCP service supplies screenshots and
+`start_recording`/`stop_recording` write an optional `recording.mp4`; neither
+supplies this media endpoint.
+
+There is no media-only feature on the daemon. Its mandatory direct path
+dependencies are `cua-driver-core`, `cua-spacesd-desktop`, `cua-logging`,
+`cua-media-protocol`, `cua-spacesd-provider-api`, `cua-spacesd-session`,
+`cua-media-transport`, `cua-spacesd-server`, `cua-spacesd-doctor`,
+`cua-spacesd-client`, `cua-media-codec`, `cua-proto` and `cua-relay`; Linux also
+requires `platform-linux` and `cua-volume` with FUSE. The [desktop manifest][spacesd-desktop]
+unconditionally enables media-codec's `server` feature and media-transport's
+`quic` feature. The [server manifest][spacesd-server] also includes
+`cua-machine-seal`, `cua-telemetry`, `cua-driver-sdk`, `cua-driver-contract`,
+`cua-spacesd-teleport`, `cua-spacesd-socks` and `cua-spacesd-html5`.
+The new closure includes tonic/prost `0.14`, axum `0.8`, QUIC/TLS and vendored
+OpenSSL; the [codec manifest][media-codec] enables OpenH264 `0.9.8`/
+`openh264-sys2` `0.9` and `audiopus_sys` `0.2.2`. Disabling QUIC or audio at
+runtime does not remove these compile-time dependencies. FSL permission for
+GChat does not approve this additional runtime/guest closure.
+
+The other pinned browser viewer, Fleet's [`DesktopPane`][fleet-desktop], imports
+external `@novnc/novnc` (`^1.7.0` in its package manifest) and sets
+`viewOnly=false`. Cua does not vendor that decoder. Its [XFCE bridge][novnc-bridge]
+executes external `websockify` to convert WebSocket traffic to VNC; the current
+SSH listener forwards raw TCP. Adopting this route therefore needs named
+noVNC/websockify dependencies plus enforced guest view/input policy. Changing
+the React flag alone would leave bidirectional input available.
+
+No media route, ticket placeholder, decoder or new guest daemon is selected by
+this inspection. The missing approval is the exact `cua-spacesd` guest binary
+closure above (or separately the noVNC/websockify route), with packaging into
+the existing dedicated guest. A selected Cua endpoint must bind guest loopback,
+retain root RPC authority in the service and expose only the selected session's
+ticketed media socket over SSH. Forwarding an unauthenticated daemon port to
+the panel would let it mint an interactive session despite a view-only ticket.
+Open must verify the exact Driver display and effective `VIEW_ONLY` policy;
+interactive open requires the current Human owner. Close must revoke the
+media session before hand-back can resume bot input. Until that dependency
+decision is made, the usable implementation remains the existing SSH/Driver
+control boundary and the desktop panel remains unavailable. No build, install
+or live guest/model test was run for this source-level decision.
+
+#### Viewer options for Ron
+
+The recommendation is the pinned Fleet **noVNC route** for the first embedded
+viewer. It preserves the accepted Debian/Xvnc/XFCE guest and SSH transport.
+This is a recommendation, not approval to add its dependencies. Both options
+leave ComputerAgent, the MCP Driver, GInfer assignments, the native vault,
+durable tasks and GChat bot channels in place.
+
+| Route | Benefits | Costs and limitations | Stack change |
+| --- | --- | --- | --- |
+| Cua native media | Reuses Cua's HTML5 media client and ticketed view/input policy; H.264 video and Opus audio are already designed into the stack. | Requires the full Spaces guest server closure above; more binary/native-library packaging. FSL components require a separate decision for paid Arbitor. No measured latency advantage or M365 compatibility is established. | Add pinned `cua-spacesd` to the guest, its native codec/RPC dependencies and the Cua HTML5 client; wrap its control and media sessions through SSH. Replace the panel's proposed VNC path, retaining the dedicated desktop and VM provisioning. |
+| Cua Fleet VNC | Reuses the current Xvnc desktop and SSH boundary; standard browser VNC client, smaller added stack; no adoption of FSL media components. | Adds separately pinned noVNC/websockify. The copied Fleet `viewOnly=false` setting is unsuitable; enforce read-only versus interactive access in the service/guest, close the interactive tunnel on hand-back. Audio is not supplied by this path; M365 retains its separate connection. | Add noVNC to GChat and loopback-only websockify to the guest, reached over the existing SSH session; bind viewer access to the current bot/control owner. |
+
+Neither route needs a new hypervisor, cloud relay, agent loop or model. The
+native route is preferable if integrated video/audio and Cua media-session
+features justify its larger guest stack. The VNC route reaches the decided
+view/take-over/hand-back feature with fewer changes to the accepted deployment.
+Dependency pins/notices and one focused view-only/takeover/hand-back gate are
+required after Ron selects a route; no benchmark campaign is proposed.
+
 Ron permits FSL in **GChat**, not Arbitor. Inspected candidates are
 `cua-spacesd-html5` (including its media core), `cua-media-protocol`,
 `cua-media-transport`, `cua-media-codec` and `cua-viewer`; each component's
@@ -359,6 +427,12 @@ All references below are to our fork, not an instruction to contact upstream.
 [stream-proto]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/proto/cua/env/v1/stream.proto
 [system-proto]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/proto/cua/env/v1/system.proto
 [media-session]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/crates/cua-spacesd-html5/web/src/core/mediaSession.ts
+[spacesd]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-spacesd/crates/cua-spacesd/Cargo.toml
+[spacesd-desktop]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-spacesd/crates/cua-spacesd-desktop/Cargo.toml
+[spacesd-server]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-spacesd/crates/cua-spacesd-server/Cargo.toml
+[media-codec]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/crates/cua-media-codec/Cargo.toml
+[fleet-desktop]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/fleet/src/components/DesktopPane.tsx
+[novnc-bridge]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/xfce-cua/src/scripts/start-novnc.sh
 [hello-task]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-bench/example_tasks/hello_file_env/main.py
 [click-task]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-bench/datasets/cua-bench-basic/click-button/main.py
 

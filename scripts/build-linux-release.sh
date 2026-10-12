@@ -7,17 +7,20 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 runtime_set=${GINFER_RUNTIME_SET:-}
 catalog_directory=${GINFER_PROFILE_CATALOG_DIRECTORY:-}
 operator_docs_directory=${GINFER_OPERATOR_DOCS_DIRECTORY:-}
+gbot_cua_runtime=${GBOT_CUA_RUNTIME:-}
 while (($#)); do
   case "$1" in
     --runtime-set) runtime_set=$2; shift 2 ;;
     --profile-catalog-directory) catalog_directory=$2; shift 2 ;;
     --operator-docs-directory) operator_docs_directory=$2; shift 2 ;;
-    *) echo "Usage: $0 --runtime-set DIR --profile-catalog-directory DIR --operator-docs-directory DIR" >&2; exit 2 ;;
+    --gbot-cua-runtime) gbot_cua_runtime=$2; shift 2 ;;
+    *) echo "Usage: $0 --runtime-set DIR --profile-catalog-directory DIR --operator-docs-directory DIR --gbot-cua-runtime DIR" >&2; exit 2 ;;
   esac
 done
 : "${runtime_set:?Select the complete GInfer Linux runtime set}"
 : "${catalog_directory:?Select the GInfer launch-profile catalog directory}"
 : "${operator_docs_directory:?Select operator documentation matching the GInfer runtime source}"
+: "${gbot_cua_runtime:?Select the accepted Gbot python-runtime closure}"
 source /etc/os-release
 if [[ $ID != ubuntu || $VERSION_ID != 24.04 ]]; then
   echo 'Build Linux releases in Ubuntu 24.04 to preserve the deployment ABI.' >&2
@@ -53,6 +56,8 @@ yarn build:core
 (cd extensions && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install)
 yarn build:extensions:linux
 yarn copy:assets:tauri
+"$python" scripts/package-gbot-runtime.py --source "$gbot_cua_runtime" \
+  --destination src-tauri/resources/gbot
 yarn build:icon
 for binary in bun uv uv-x86_64-unknown-linux-gnu sqlite-vec.so; do
   test -s "src-tauri/resources/bin/$binary" || {
@@ -68,7 +73,7 @@ trap 'cp out/linux/gchat-unbundled src-tauri/target/release/gchat' EXIT
 NO_STRIP=1 yarn tauri bundle --bundles deb
 cp out/linux/gchat-unbundled src-tauri/target/release/gchat
 
-# Linuxdeploy must not rewrite checksummed engine ELF files or absorb driver libraries.
+# Linuxdeploy must not rewrite checksummed engine or private Python ELF files.
 mkdir -p out/linux
 "$python" - <<'PY'
 import json,shutil
@@ -76,7 +81,7 @@ from pathlib import Path
 staging=Path('src-tauri/target/release/bundle/appimage_deb')
 if staging.exists(): shutil.rmtree(staging)
 config=json.loads(Path('src-tauri/tauri.linux.conf.json').read_text())
-resources=[p for p in config['bundle']['resources'] if not p.startswith('resources/ginfer/linux/') and p not in ('resources/bin/bun', 'resources/bin/uv')]
+resources=[p for p in config['bundle']['resources'] if not p.startswith(('resources/ginfer/linux/', 'resources/gbot/')) and p not in ('resources/bin/bun', 'resources/bin/uv')]
 Path('out/linux/appimage-config.json').write_text(json.dumps({'bundle':{'resources':resources}}))
 PY
 # The output plugin forwards this cached runtime to appimagetool --runtime-file.
