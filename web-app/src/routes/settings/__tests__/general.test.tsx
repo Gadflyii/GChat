@@ -61,6 +61,8 @@ vi.mock('@/containers/dialogs/ChangeDataFolderLocation', () => ({
 }))
 
 const mockSetPreloadModelOnStartup = vi.hoisted(() => vi.fn())
+const gbotSetting = vi.hoisted(() => ({ enabled: false, setEnabled: vi.fn() }))
+const mockNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
   useGeneralSetting: () => ({
@@ -70,6 +72,8 @@ vi.mock('@/hooks/useGeneralSetting', () => ({
     setHuggingfaceToken: vi.fn(),
     preloadModelOnStartup: false,
     setPreloadModelOnStartup: mockSetPreloadModelOnStartup,
+    gbotEnabled: gbotSetting.enabled,
+    setGbotEnabled: gbotSetting.setEnabled,
   }),
 }))
 
@@ -94,14 +98,17 @@ vi.mock('@/components/ui/switch', () => ({
   Switch: ({
     checked,
     onCheckedChange,
+    'aria-label': label,
   }: {
     checked: boolean
     onCheckedChange: (checked: boolean) => void
+    'aria-label'?: string
   }) => (
     <input
       data-testid="switch"
       type="checkbox"
       checked={checked}
+      aria-label={label}
       onChange={(e) => onCheckedChange(e.target.checked)}
     />
   ),
@@ -233,6 +240,7 @@ vi.mock('@/lib/utils', async (importOriginal) => ({
 
 vi.mock('@/constants/routes', () => ({
   route: {
+    gbot: { index: '/gbot/' },
     settings: {
       general: '/settings/general',
     },
@@ -253,6 +261,7 @@ vi.mock('@/types/events', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => mockNavigate,
   createFileRoute: (path: string) => (config: any) => ({
     ...config,
     component: config.component,
@@ -284,6 +293,7 @@ Object.assign(navigator, {
 describe('General Settings Route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    gbotSetting.enabled = false
     useConversationPolicy.getState().setDefaultApprovalMode('manual')
     seedServiceHub({
       app: {
@@ -420,6 +430,37 @@ describe('General Settings Route', () => {
       fireEvent.click(toggle)
     })
     expect(mockSetPreloadModelOnStartup).toHaveBeenCalledWith(true)
+  })
+
+  it('opens Gbot setup when enabled from Settings', async () => {
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Gbot' }))
+    expect(gbotSetting.setEnabled).toHaveBeenCalledWith(true)
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/gbot/' })
+  })
+
+  it('stays in Settings when Gbot is disabled', async () => {
+    gbotSetting.enabled = true
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Gbot' }))
+    expect(gbotSetting.setEnabled).toHaveBeenCalledWith(false)
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('does not enable or open Gbot when Settings loads', async () => {
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+    expect(screen.getByRole('checkbox', { name: 'Enable Gbot' })).not.toBeChecked()
+    expect(gbotSetting.setEnabled).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
   it('should handle huggingface token change', async () => {
