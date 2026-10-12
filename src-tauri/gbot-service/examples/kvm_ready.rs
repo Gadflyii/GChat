@@ -27,6 +27,26 @@ mod linux {
     use uuid::Uuid;
     type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
+    async fn guest_key(
+        mut console: impl tokio::io::AsyncBufRead + Unpin,
+        mut log: impl tokio::io::AsyncWrite + Unpin,
+    ) -> Result<PublicKey> {
+        let marker = b"GBOT_READY_KEY ";
+        let mut line = Vec::new();
+        loop {
+            line.clear();
+            if console.read_until(b'\n', &mut line).await? == 0 {
+                return Err("guest console closed before Ready".into());
+            }
+            log.write_all(&line).await?;
+            if let Some(offset) = line.windows(marker.len()).position(|part| part == marker) {
+                log.flush().await?;
+                let key = std::str::from_utf8(&line[offset + marker.len()..])?;
+                return Ok(PublicKey::from_openssh(key.trim())?);
+            }
+        }
+    }
+
     async fn operation(
         runtime: &WorkspaceRuntime,
         identity: SessionIdentity,
@@ -291,19 +311,9 @@ mod linux {
         {
             return Err("cannot read owned console".into());
         }
-        let mut console = BufReader::new(tokio::fs::File::open(tty).await?).lines();
-        let mut log = tokio::fs::File::create(evidence.join("serial.log")).await?;
-        let key = loop {
-            let line = console
-                .next_line()
-                .await?
-                .ok_or("guest console closed before Ready")?;
-            log.write_all(format!("{line}\n").as_bytes()).await?;
-            if let Some((_, key)) = line.split_once("GBOT_READY_KEY ") {
-                break PublicKey::from_openssh(key.trim())?;
-            }
-        };
-        log.flush().await?;
+        let console = BufReader::new(tokio::fs::File::open(tty).await?);
+        let log = tokio::fs::File::create(evidence.join("serial.log")).await?;
+        let key = guest_key(console, log).await?;
         let key = key.to_openssh()?;
         let mut fields = key.split_whitespace();
         let identity = SessionIdentity {
@@ -432,6 +442,24 @@ mod linux {
         cleanup?;
         result??;
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn non_utf8_console_keeps_raw_bytes_and_verifies_host_key() {
+        let private = PrivateKey::random(
+            &mut russh::keys::key::safe_rng(),
+            russh::keys::Algorithm::Ed25519,
+        )
+        .unwrap();
+        let expected = private.public_key().to_openssh().unwrap();
+        let mut input = b"boot \xff\xfe\n".to_vec();
+        input.extend_from_slice(format!("GBOT_READY_KEY {expected}\r\n").as_bytes());
+        let mut log = Vec::new();
+        let key = guest_key(BufReader::new(input.as_slice()), &mut log)
+            .await
+            .unwrap();
+        assert_eq!(key.to_openssh().unwrap(), expected);
+        assert_eq!(log, input);
     }
 }
 #[cfg(target_os = "linux")]

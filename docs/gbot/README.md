@@ -790,7 +790,13 @@ proven Cua timeout defect. The shared cloud-init now installs both packages,
 including GVfs's required daemon dependencies. The focused first-boot case passes
 (1 case), strict all-target Clippy passes, and the changed fixture builds. Logs:
 `out/gbot-cua-service-20261011/guest-dependencies-{focused,clippy,build}.log`.
-Next action: one fresh-guest retry with the same
+The first fresh-guest harness stopped before Ready because its UTF-8 line reader
+rejected a binary serial byte; no model ran, guest stop and vault cleanup passed.
+The harness now retains raw console bytes and decodes only the public-key marker,
+with a passing focused regression case; strict example Clippy and the changed
+fixture build pass. Evidence: `console-byte-{focused,clippy,build}.log`.
+No Cua, prompt or model-setting change.
+Next action: resume the planned save-task retry with the same
 prompt, accepted runtime/profile,262144/C1 and existing Cua timeouts. Only SSH
 readback of the saved file qualifies the task. Diagnostic evidence: S1
 `gate-ada-smol-98fd8622f/save-dialog-diagnostics.log` and raw `tool-*.json`.
@@ -826,7 +832,9 @@ Evidence and owned inventory:
 | GChat / Ada | `/ai/gbot-models/qwen38_27b_smol_df2.ginfer` | Release SHA verified after one S1-to-Ada copy;9576802560 bytes. |
 | GChat / Ada | `/ai/gbot-models/gate-ada-smol-98fd8622f/` | Failed save-task evidence; Engine stopped normally, temporary key removed. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-98fd8622f/` | Save As hang and live diagnostics; dedicated guest5d49b52f stopped, vault credential deleted. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps/` | Fresh dedicated guest candidate; unchanged task, revised first-boot packages. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps/` | Pre-Ready console-reader failure; guest7873f825 stopped, vault credential deleted, no model ran. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps-r1/` | Resumed save-task candidate with byte-safe console; no task request yet. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps-r1/` | Unchanged runtime/artifact/profile, model starts after guest Ready. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-gate-guest-deps` | Changed focused fixture; ready for one image-dependency retry. |
 | GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps/` | New model receipts; unchanged accepted runtime/artifact/profile. |
 | GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle/projection checks retained; guest-dependency fixture, strict Clippy and build passed. |
