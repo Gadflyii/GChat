@@ -195,8 +195,11 @@ fn supported_route(path: &str) -> bool {
         "/v1/state"
             | "/v1/credentials/ssh"
             | "/v1/workspaces"
+            | "/v1/workspaces/ssh"
             | "/v1/assignments/save"
             | "/v1/assignments/get"
+            | "/v1/connectors/get"
+            | "/v1/connectors/save"
             | "/v1/connect"
             | "/v1/disconnect"
             | "/v1/tasks"
@@ -230,7 +233,16 @@ pub async fn gbot_command<R: Runtime>(
 
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod tests {
-    use super::packaged_executor;
+    use super::{packaged_executor, supported_route};
+
+    #[test]
+    fn native_bridge_admits_transactional_setup_and_rejects_unknown_operations() {
+        assert!(supported_route("/v1/workspaces/ssh"));
+        assert!(supported_route("/v1/connectors/get"));
+        assert!(supported_route("/v1/connectors/save"));
+        assert!(!supported_route("/v1/workspaces/ssh/delete-all"));
+        assert!(!supported_route("/v1/connectors/global-accounts"));
+    }
 
     #[test]
     fn packaged_runtime_discovers_commands_and_rejects_incomplete_resources() {

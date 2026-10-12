@@ -20,13 +20,21 @@ BGRA negotiation and seed provisioning fixes are merged in `2e735624f`; evidence
 is linked in the current record below. Windows/M365 and browser playback remain
 release checks. Rust 1.97 is required on Windows release hosts.
 
-Current work is open-item reconciliation and the first guided setup correction.
-The candidate adds opt-in visibility and reviews an existing dedicated LAN SSH
-connection before vault import. Automatic VM/cloud/M365 creation, remote-service
-selection, per-bot connectors and scheduling remain implementation work. The
+Current work is open-item implementation on the reconciled October 12 list.
+Opt-in visibility and the guided dedicated-LAN SSH connection are implemented
+in the candidate. The service now owns credential import, workspace persistence,
+cleanup and idempotent retry as one operation; five injected-failure service
+cases and five route cases pass; the native admission fixture also passes.
+Chat can dispatch independent workers through its shared agent runner and
+collect or cancel them by run ID. Bots can link their own existing Google or
+Microsoft accounts; new bots inherit none. The combined focused connector,
+native admission, types, check and strict Clippy gates pass. Automatic KVM
+onboarding and service-running schedules are being implemented on isolated
+branches. Hyper-V/cloud/M365 creation, remote service selection and independent
+background lifetime remain unfinished. The
 [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates source gaps, accepted evidence and unrun gates. The physical browser
-form gate is still unrun; no browser qualification is claimed.
+form gate remains unrun.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -86,11 +94,11 @@ or performance.
 
 Each bot has its own name, computer, inference assignment and connector
 settings; more than one bot is allowed. A new bot starts with **no connector
-accounts**. Its mail/calendar/drive and other accounts are explicitly linked
-and held in the vault under that bot's identity. It never automatically inherits
-the user's GChat connector accounts. Agent, skill and tool definitions remain
-shared, with one executor. These are decided requirements, not claims that
-the per-bot connector UI is implemented.
+accounts**. Its mail/calendar/drive and other existing accounts are explicitly
+linked by account ID; credentials stay with the shared native account vault.
+It never automatically inherits the user's GChat connector selection. Agent,
+skill and tool definitions remain shared. The candidate account picker and
+scoped executor boundary are implemented; live OAuth still needs app registration.
 
 Gbot appears in the left menu **above Work**, only when Gbot integration is
 enabled in GChat. Ron wants a ChatGPT DOT/Grok-style bot experience, adapted to
@@ -102,7 +110,8 @@ Each bot retains a separate channel for conversation history, tasks, approvals
 and desktop view; multiple bots keep separate channels and assignments. The
 current functional channel supplies SSH key import, connection controls, saved
 brain settings, task history, approvals and takeover controls. The embedded media panel is merged in `e3ff85e8a`. Guided
-VM/cloud setup, per-bot connector picker and the final bot UI remain open.
+VM/cloud setup and the final bot UI remain open. The candidate includes the
+per-bot connector picker and guided dedicated-LAN connection.
 
 GChat remains the open base: front end, lightweight infrastructure management,
 LAN host management, agent builder/support, prebuilt skills and integrations.
@@ -628,14 +637,34 @@ Human assistance `32231c6ba` is incorporated in current main, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
 Current candidate: `feat/gchat-open-items-setup-bfd` at
 `/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `bfd42e530`.
-Deliverable: reconcile GChat/Manager/Gbot open work and implement opt-in plus a
-reviewable existing-LAN setup flow. Acceptance: migration/sidebar/setup/route
-focused cases, affected lint/types and the updated master list. No dependency,
-native build, model/GPU, provisioning, person's desktop or release change.
-Verification: 39 focused settings/sidebar/setup/route cases, affected ESLint and
-frontend types PASS. Next: normal source review/merge, then close the
-credential-orphan failure path before extending provisioning.
-Evidence for this candidate: `/ai/gchat/out/gchat-open-items-20261012/`.
+Deliverable: reconcile GChat/Manager/Gbot open work and implement guided setup,
+shared Chat workers, explicit per-bot account/tool wiring, schedules and KVM
+onboarding. Acceptance: focused
+observable-behavior fixtures, affected lint/types and Rust checks, current master
+rows and reviewable source. No new dependency, native Windows build, model/GPU,
+physical provisioning, person's desktop or release change. Scheduling does not
+claim independent background operation; KVM setup does not install host tools.
+Verification: opt-in/setup 39 cases plus affected lint/types PASS; transactional
+setup five service and five route cases, service all-target check and strict
+Clippy PASS. General worker dispatch: one native lifecycle case plus nine
+frontend cases and affected lint/check/Clippy PASS. Per-bot connectors: two
+focused native/service cases, six frontend cases and affected lint PASS.
+Combined native admission, frontend types, native check and strict Clippy PASS.
+Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
+
+| Owner / path | Revision and purpose | Live work / retention |
+| --- | --- | --- |
+| Root: `/ai/gchat-worktrees/gbot-browser-physical-2e735` | `feat/gchat-open-items-setup-bfd`, base `bfd42e530`; setup `08ab24223`, transaction `7b53ea942`, startup `3afd4ea8a`, workers `325998951`, connectors `ce8261bfe` | Combined gates passed; retain source for reviewed merge. |
+| Chat worker agent: `/ai/gchat-worktrees/chat-general-workers-08ab` | `84e799cc2`, integrated as `325998951` | No live job; retain source and `dispatch-*.log` until merge. |
+| Bot connector agent: `/ai/gchat-worktrees/gbot-per-bot-connectors-7b53` | `d8649fa0`, integrated as `ce8261bfe` | No live job; retain source and connector/integration evidence until merge. |
+| Scheduler agent: `/ai/gchat-worktrees/gbot-scheduled-tasks-3259` | `feat/gbot-scheduled-tasks-3259`, base `325998951` plus connectors | Source implementation; one persisted occurrence per dispatch, explicit missed-run policy. |
+| KVM agent: `/ai/gchat-worktrees/gbot-kvm-onboarding-ce826` | `feat/gbot-kvm-onboarding-ce826`, base `ce8261bfe` | Source implementation; prerequisite/pinned-asset checks and owned resumable provisioning. No physical guest. |
+| Completed setup agent: `/ai/gchat-worktrees/gbot-atomic-setup-08ab` | `77b3e48ab`, integrated as `7b53ea942` | No live job; retain for review, then retire after merge. |
+| Shared cache: `/ai/gchat/src-tauri/target` | Existing Rust cache, not owned by this item | Serialize Cargo with the canonical local build lock; no cleanup of shared cache. |
+
+Next unresolved action: send the completed setup/worker/connector source for
+merge; integrate scheduler and KVM source when their focused gates are ready.
+No guest, engine or GPU job is owned by this source change.
 
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
 Physical gate **PASS at 17:55:38 UTC on October 12**. The production native-vault
@@ -677,8 +706,11 @@ The current candidate wraps that path in a four-step name/computer/connection/re
 flow, opens setup for the first bot after opt-in and hides the sidebar entry
 while disabled. Unimplemented computer routes remain visibly unavailable. This
 is the existing-LAN setup slice, not completed novice VM provisioning. The
-existing two-request import/save path can leave an orphan vault key on workspace
-save failure; `GBOT-SETUP-CREDENTIAL-ORPHAN` tracks the owning transactional fix.
+service transaction uses a stable workspace ID and matching vault slot. It deletes
+its imported key when persistence fails before publication and preserves it when
+the workspace was published but durability confirmation failed. Retrying the same
+form operation resolves the same workspace. This is not a cross-store power-loss
+atomicity claim; native presentation remains unqualified.
 Linux x86-64 release packaging now includes the accepted Ubuntu 24.04
 CPython 3.12.3 interpreter, its unchanged 61-package Cua closure, native libraries
 and license notices. Native GChat discovers that resource automatically and
