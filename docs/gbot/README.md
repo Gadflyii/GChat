@@ -31,9 +31,9 @@ independent service ownership and schedules. Settings enablement opens guided
 setup. The wizard checks prerequisites and pinned assets, persists setup identity,
 and admits a bot only after SSH, desktop-file and view-only media readiness.
 Focused service, adapter, wizard and native-route cases, frontend types, native
-check and strict Clippy pass. These establish source behavior; packaged
-bootstrap, native vault, client-exit/sleep and live scheduled dispatch still need
-installed checks.
+check and strict Clippy pass. These establish source behavior. Native bootstrap, native vault and detached
+process lifetime also pass in the private S1 gate below; packaged wizard,
+client-window exit/sleep and live scheduled dispatch still need installed checks.
 
 The dedicated VM gate found an archive-symlink seed defect; the merged repair
 embeds the exact pinned bytes. Readiness diagnostics then identified obsolete
@@ -53,10 +53,15 @@ The current setup correction closes premature admission: a registered SSH
 session alone does not make an owned VM ready. The service holds tasks, guest
 operations, desktop viewing and takeover until its persisted setup reaches
 Ready. The wizard reopens the saved computer with Resume setup; it does not
-create another VM. Gates are the focused admission/restart and wizard cases,
-frontend types/lint and strict service Clippy. Native background/vault checks
-use a private test root and D-Bus session; a real installed wizard and client
-exit check remain owed where a private desktop is available.
+create another VM. Source `30a8be28a` passes two admission/restart cases, thirteen affected UI
+cases, frontend types/lint, service check and strict all-target Clippy. The
+native background owner also passes on S1 with the accepted `17f202edb`
+desktop executable (its bootstrap is unchanged): detached caller lifetime,
+native vault, secret-free discovery, duplicate-owner refusal, authenticated
+shutdown and same-identity restart. The private root and processes are retired.
+Evidence: `out/gchat-open-items-20261012/setup-admission/` and
+`installed-bootstrap/native-result.json`. That binary predates the new UI;
+installed wizard, client-window exit and sleep/resume remain owed.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain

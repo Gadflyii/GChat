@@ -1,7 +1,8 @@
 # Native background service lifetime
 
-Candidate: `feat/gbot-background-ec21`, owned worktree
-`/ai/gchat-worktrees/gbot-background-ec21`, baseline `ec21a1874`.
+Independent service ownership is merged in main `500a5f2cb`. Current integration
+uses `fix/gbot-readiness-detail-500a` in
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`; the original merged tree is retired.
 The coordinator owns the current [Gbot record](README.md) and master work ledger.
 This implementation supplies the missing independent lifetime while retaining
 existing runtime, executor, workspace, account and approval ownership.
@@ -67,7 +68,7 @@ existing desktop startup function. A separate `test-tauri` binary check reached
 the existing build script and stopped on missing `resources/pre-install/**/*`
 bundle resources; no fake resource or product configuration override was added.
 Installed/AppImage parent-close, native-vault, sleep/resume, live OAuth, KVM and
-model-backed scheduled dispatch lifetime remain unrun by this gate. No physical
+model-backed scheduled dispatch lifetime were unrun by that fixture gate. No physical
 Windows qualification is claimed. The fixture establishes API process lifetime
 and retained state, not packaged provider/desktop execution.
 
@@ -78,7 +79,19 @@ fingerprint to rebuild, and the observed one-case result passed. The initial
 fixture expected schedule creation status 201; existing API returns 200 and the
 fixture expectation was corrected without changing production behavior.
 
-Retain the owned source worktree/branch for integration and concise gate
-receipts in `/ai/gchat/out/gchat-open-items-20261012/background-service-note.md`.
+Retain concise fixture receipts in `/ai/gchat/out/gchat-open-items-20261012/background-service-note.md`.
 Reuse the coordinator-owned accepted Cargo/frontend caches; no owned build
 copy, downloaded artifact, VM, model or running service is allocated by this work.
+
+
+The October 12 native gate uses the accepted `17f202edb` desktop executable,
+not the test fixture, on S1 with a private D-Bus session and native keyring.
+Caller exit leaves the owner/API alive; native credentials are absent from
+discovery; duplicate ownership is refused; authenticated shutdown retires
+discovery; restart reuses identity and credential. All five checks pass.
+The private root and processes are retired. Empty guest resources produce
+not-ready asset diagnostics; no executor, GUI, VM or model ran. This establishes
+native process/vault lifetime, not installed GUI/AppImage close, sleep/resume,
+live OAuth or scheduled model work. Receipts:
+`out/gchat-open-items-20261012/installed-bootstrap/native-result.json` and
+`native-cleanup.json`.

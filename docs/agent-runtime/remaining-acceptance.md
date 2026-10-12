@@ -18,9 +18,9 @@ is part of this plan. The master list remains the sole issue-status authority.
 | --- | --- | --- |
 | General agent delegation from Chat | Main `8440b5f7a` supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
 | Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed presentation is still untested. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
-| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Installed wizard/bootstrap, Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
+| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Source `30a8be28a` holds operations until persisted Ready and reopens the same saved setup; 2 service/13 UI cases, check/strict Clippy/types/lint pass. Native detached bootstrap/vault/restart pass separately. Installed wizard, Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
 | Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
-| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; installed/native/AppImage lifetime, client-exit/sleep and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
+| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; Native detached lifetime, vault and authenticated shutdown/restart now pass; GUI/AppImage client-exit/sleep and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
 | Browser tools | Typed browser catalog/schema and one real isolated Chromium form pass: exact native window binding, navigation, typing and trusted input submission, independently verified over pinned-host system SSH. | Broader browser tasks and installed presentation remain separate; no model or performance claim. |
 
 ### Bugs, decisions and incomplete diagnostics
@@ -81,7 +81,7 @@ unchanged from the source used for this gate.
 | Google / Microsoft connectors | 36 focused auth/provider/runtime/UI cases. | App registration, real OAuth consent/refresh/revocation and read operations. |
 | Gbot Linux executor | Exact desktop overwrite + two actual Cua file evaluators passed. | Broader task set and Vision; new cua-bench dependency closure is not approved. |
 | Gbot runtime/media | Linux packaged runtime; physical frame, 440 Hz audio, view-only/takeover/revocation passed. | Browser playback/audio permission behavior; Windows/M365 runtime and media. |
-| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed. | Guest reboot/reconnect and installed independent background lifetime. |
+| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed. | Guest reboot/reconnect, installed GUI/AppImage client-exit/sleep and live scheduled dispatch; native detached process/vault/restart PASS. |
 | OI-073 public board | One disposable publish/read/delete and app delete path passed. | Broader retry/replay/concurrent/fault cases remain parked; never use official series as tests. |
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |
@@ -108,8 +108,28 @@ Product removal retired the guest, disk and vault key; the service exited
 normally. Owned private S1 roots `gd20261012`, `gdctl`, `gdcfg` and `gdrun` are
 removed and the CPU booking released. Source assets, other guests and retained
 evidence remain. Receipts: `out/gchat-open-items-20261012/readiness-input/` and
-`readiness-physical/`. Next: installed wizard/bootstrap and background lifetime;
+`readiness-physical/`. The native lifetime gate below passes. Next: installed wizard,
+client-window exit/sleep and live scheduled dispatch;
 Hyper-V/cloud/M365 and remote service selection remain explicit source gaps.
+
+Source `30a8be28a` closes premature admission after setup interruption or
+service restart: tasks, desktop operations, view and takeover wait on the
+persisted Ready stage. Resume setup retains the exact saved identity. Two
+owning Rust cases and thirteen UI cases pass, plus service check, strict
+all-target Clippy, frontend types and changed-file lint. Evidence:
+`out/gchat-open-items-20261012/setup-admission/`.
+
+The accepted Linux desktop executable from `17f202edb` passes a separate native
+background check on S1 in a private D-Bus/keyring and data root. Its launcher
+exits while the authenticated API remains alive; native vault credentials stay
+out of discovery; a second owner is refused; explicit shutdown removes discovery;
+restart reuses the same identity and vault credential. No GUI, executor, VM or
+model ran. Missing pinned guest assets correctly return actionable not-ready
+preflight issues. The private root is retired and no owned process remains.
+This binary predates `30a8be28a` UI changes: it qualifies unchanged native
+bootstrap, not the new wizard or installed client-window exit/sleep. Evidence:
+`out/gchat-open-items-20261012/installed-bootstrap/native-result.json` and
+`native-cleanup.json`.
 
 Coordinator tree: `fix/gbot-readiness-detail-500a` in
 `/ai/gchat-worktrees/gbot-browser-physical-2e735`, based on main `13f88c042`, which includes background ownership, seed repair and `ec21a1874` / `e49219967`.
