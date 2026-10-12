@@ -298,6 +298,7 @@ impl Api {
         self,
         shutdown: impl Future<Output = ()> + Send + 'static,
     ) -> Result<(), ApiError> {
+        let (explicit_stop, mut explicit_stopped) = tokio::sync::watch::channel(false);
         let service = self.service;
         let token = self.token;
         let runtime = self.runtime;
@@ -344,20 +345,22 @@ impl Api {
                 let token = token.clone();
                 let runtime = routing_runtime.clone();
                 let tasks = routing_tasks.clone();
+                let explicit_stop = explicit_stop.clone();
                 async move {
                     Ok::<_, Infallible>(service_fn(move |request| {
-                        route(
+                        service_route(
                             service.clone(),
                             runtime.clone(),
                             tasks.clone(),
                             token.clone(),
+                            explicit_stop.clone(),
                             request,
                         )
                     }))
                 }
             }))
             .with_graceful_shutdown(async move {
-                shutdown.await;
+                tokio::select! { _ = shutdown => {}, _ = explicit_stopped.changed() => {} }
                 stopping_scheduler.send_replace(true);
                 let task_result = match stopping_tasks {
                     Some(tasks) => tasks.close().await,
@@ -477,6 +480,92 @@ async fn setup_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> 
     }
 }
 
+async fn service_route(
+    service: Arc<Service>,
+    runtime: Arc<WorkspaceRuntime>,
+    tasks: Option<Arc<TaskRunner>>,
+    token: Arc<Secret>,
+    stop: tokio::sync::watch::Sender<bool>,
+    request: Request<Body>,
+) -> Result<Response<Body>, Infallible> {
+    if request.method() == Method::POST
+        && request.uri().path() == "/v1/service/shutdown"
+        && authorized(&request, &token)
+    {
+        stop.send_replace(true);
+        return Ok(json_response(
+            StatusCode::OK,
+            &serde_json::json!({"stopping": true}),
+        ));
+    }
+    let mut stopped = stop.subscribe();
+    if request.uri().path() == "/v1/updates" && authorized(&request, &token) {
+        if *stopped.borrow() {
+            return Ok(json_response(
+                StatusCode::OK,
+                &serde_json::json!({"stopping":true}),
+            ));
+        }
+        tokio::select! {
+            result = route(service, runtime, tasks, token, request) => result,
+            _ = stopped.changed() => Ok(json_response(StatusCode::OK, &serde_json::json!({"stopping":true}))),
+        }
+    } else {
+        route(service, runtime, tasks, token, request).await
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpdateRevision {
+    tasks: u64,
+    setup: u64,
+}
+
+async fn wait_updates(
+    runtime: &WorkspaceRuntime,
+    tasks: Option<&TaskRunner>,
+    revision: UpdateRevision,
+) -> Response<Body> {
+    let mut task_updates = tasks.map(TaskRunner::subscribe);
+    #[cfg(target_os = "linux")]
+    let mut setup_updates = runtime.kvm_setup().map(|setup| setup.subscribe());
+    #[cfg(not(target_os = "linux"))]
+    let mut setup_updates: Option<tokio::sync::watch::Receiver<u64>> = None;
+    #[cfg(not(target_os = "linux"))]
+    let _ = runtime;
+    let task_revision = task_updates
+        .as_mut()
+        .map(|updates| *updates.borrow_and_update())
+        .unwrap_or(0);
+    let setup_revision = setup_updates
+        .as_mut()
+        .map(|updates| *updates.borrow_and_update())
+        .unwrap_or(0);
+    if task_revision == revision.tasks && setup_revision == revision.setup {
+        async fn changed(updates: &mut Option<tokio::sync::watch::Receiver<u64>>) {
+            match updates {
+                Some(updates) => {
+                    let _ = updates.changed().await;
+                }
+                None => std::future::pending::<()>().await,
+            }
+        }
+        tokio::select! {
+            _ = changed(&mut task_updates) => {},
+            _ = changed(&mut setup_updates) => {},
+            _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {},
+        }
+    }
+    json_response(
+        StatusCode::OK,
+        &serde_json::json!({
+            "tasks": task_updates.as_ref().map(|updates| *updates.borrow()).unwrap_or(0),
+            "setup": setup_updates.as_ref().map(|updates| *updates.borrow()).unwrap_or(0),
+        }),
+    )
+}
+
 async fn route(
     service: Arc<Service>,
     runtime: Arc<WorkspaceRuntime>,
@@ -496,7 +585,32 @@ async fn route(
         );
         return Ok(response);
     }
+    let native_operation = request
+        .uri()
+        .path()
+        .strip_prefix("/v1/native/connectors/")
+        .map(str::to_owned);
+    if request.method() == Method::POST {
+        if let Some(operation) = native_operation {
+            return Ok(match parse_body::<serde_json::Value>(request).await {
+                Some(arguments) => match runtime
+                    .native_connector_operation(&operation, arguments)
+                    .await
+                {
+                    Ok(value) => json_response(StatusCode::OK, &value),
+                    Err(message) => {
+                        error_response(StatusCode::BAD_REQUEST, "connector_error", &message)
+                    }
+                },
+                None => invalid_request(),
+            });
+        }
+    }
     let response = match (request.method(), request.uri().path()) {
+        (&Method::POST, "/v1/updates") => match parse_body::<UpdateRevision>(request).await {
+            Some(revision) => wait_updates(&runtime, tasks.as_deref(), revision).await,
+            None => invalid_request(),
+        },
         (&Method::GET, "/v1/schedules") => match tasks {
             Some(tasks) => json_response(StatusCode::OK, &tasks.schedules.list_for_client().await),
             None => executor_unavailable(),
@@ -1031,6 +1145,181 @@ mod tests {
             "private_key": private.to_openssh(LineEnding::LF).unwrap().as_str(),
             "passphrase": null,
         })
+    }
+
+    // Run by the process-lifetime case below; never launches a guest or a model.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn background_service_process_fixture() {
+        let Some(root) = std::env::var_os("GBOT_PROCESS_FIXTURE_ROOT") else {
+            return;
+        };
+        let root = std::path::PathBuf::from(root);
+        let service = Arc::new(Service::open(root.join("state.json")).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        vault.0.lock().unwrap().insert(
+            service.snapshot().await.service_id,
+            b"process-fixture-bearer".to_vec(),
+        );
+        let process = crate::executor::ProcessSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "exit 0".into()],
+        };
+        let api = Api::bind(service, vault, 0)
+            .await
+            .unwrap()
+            .with_executor(
+                root.join("tasks"),
+                ExecutorProcesses {
+                    python: process.clone(),
+                    context: process,
+                },
+            )
+            .await
+            .unwrap();
+        tokio::fs::write(root.join("endpoint"), api.endpoint().to_string())
+            .await
+            .unwrap();
+        api.serve(std::future::pending()).await.unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn background_service_process_survives_client_disconnect_and_stops_explicitly() {
+        use std::time::Duration;
+        let directory = tempfile::tempdir().unwrap();
+        let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "api::tests::background_service_process_fixture",
+                "--nocapture",
+            ])
+            .env("GBOT_PROCESS_FIXTURE_ROOT", directory.path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let endpoint = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Ok(endpoint) =
+                    tokio::fs::read_to_string(directory.path().join("endpoint")).await
+                {
+                    break endpoint;
+                }
+                assert!(
+                    child.try_wait().unwrap().is_none(),
+                    "fixture process exited before readiness"
+                );
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        async fn request(
+            client: &hyper::Client<hyper::client::HttpConnector>,
+            endpoint: &str,
+            path: &str,
+            body: Option<serde_json::Value>,
+            token: &str,
+        ) -> (StatusCode, serde_json::Value) {
+            let request = Request::builder()
+                .method(if body.is_some() {
+                    Method::POST
+                } else {
+                    Method::GET
+                })
+                .uri(format!("http://{endpoint}{path}"))
+                .header(AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::from(
+                    body.map(|body| serde_json::to_vec(&body).unwrap())
+                        .unwrap_or_default(),
+                ))
+                .unwrap();
+            let response = client.request(request).await.unwrap();
+            let status = response.status();
+            let body =
+                serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                    .unwrap();
+            (status, body)
+        }
+        let client = hyper::Client::new();
+        let token = "process-fixture-bearer";
+        let (status, workspace) = request(
+            &client,
+            &endpoint,
+            "/v1/workspaces/ssh",
+            Some(ssh_workspace_request()),
+            token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let id = workspace["id"].clone();
+        let (status, _) = request(&client, &endpoint, "/v1/assignments/save", Some(serde_json::json!({"workspace_id":id,"api_base":"http://host.example:8080/v1","model":"fixture","context_tokens":4096})), token).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, schedule) = request(&client, &endpoint, "/v1/schedules/create", Some(serde_json::json!({"workspace_id":id,"prompt":"Persist across client exits","timing":{"kind":"interval","first_at":2000000000u64,"every_seconds":60},"missed_run_policy":"run_latest"})), token).await;
+        assert_eq!(status, StatusCode::CREATED);
+        let (_, before) = request(&client, &endpoint, "/v1/state", None, token).await;
+        drop(client);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(child.try_wait().unwrap().is_none());
+        let reconnected = hyper::Client::new();
+        let (_, after) = request(&reconnected, &endpoint, "/v1/state", None, token).await;
+        assert_eq!(before, after);
+        let (_, schedules) = request(&reconnected, &endpoint, "/v1/schedules", None, token).await;
+        assert_eq!(schedules["schedules"][0]["id"], schedule["id"]);
+        let (status, _) = request(
+            &reconnected,
+            &endpoint,
+            "/v1/service/shutdown",
+            Some(serde_json::Value::Null),
+            "wrong-token",
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert!(child.try_wait().unwrap().is_none());
+        // An active update long poll must drain on shutdown rather than delay it 30 seconds.
+        let poll = tokio::spawn({
+            let endpoint = endpoint.clone();
+            async move {
+                request(
+                    &hyper::Client::new(),
+                    &endpoint,
+                    "/v1/updates",
+                    Some(serde_json::json!({"tasks":0,"setup":0})),
+                    token,
+                )
+                .await
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let (status, _) = request(
+            &reconnected,
+            &endpoint,
+            "/v1/service/shutdown",
+            Some(serde_json::Value::Null),
+            token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(tokio::time::timeout(Duration::from_secs(5), child.wait())
+            .await
+            .unwrap()
+            .unwrap()
+            .success());
+        tokio::time::timeout(Duration::from_secs(1), poll)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(tokio::net::TcpStream::connect(&endpoint).await.is_err());
+        let reopened = Service::open(directory.path().join("state.json"))
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(reopened.snapshot().await).unwrap()["service_id"],
+            before["service_id"]
+        );
+        assert_eq!(reopened.snapshot().await.workspaces.len(), 1);
     }
 
     #[tokio::test]

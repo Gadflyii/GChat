@@ -81,13 +81,13 @@ export default function GbotSchedules({
   return (
     <div className="rounded-lg border p-3">
       <p className="my-3 text-sm text-muted-foreground">
-        Scheduled tasks run while GChat is open. Background service setup is not
-        available yet.
+        Scheduled tasks keep running after GChat closes while Gbot service and
+        the assigned inference endpoint are running.
       </p>
       {stopped && (
         <p role="alert" className="mb-3 text-sm text-destructive">
-          Scheduling has stopped: {stopped}. Restart GChat to recover before
-          schedules run again.
+          Scheduling has stopped: {stopped}. Quit and start Gbot service to
+          recover before schedules run again.
         </p>
       )}
       {error && (

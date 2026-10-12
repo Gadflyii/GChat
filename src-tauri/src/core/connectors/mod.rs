@@ -62,24 +62,36 @@ pub fn provider_for(name: &str) -> Result<Provider, String> {
     }
 }
 
-pub fn owner<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<AccountsState>, String> {
-    if app.try_state::<Arc<AccountsState>>().is_none() {
-        app.manage(Arc::new(AccountsState::default()));
-    }
-    let state = app
-        .try_state::<Arc<AccountsState>>()
-        .ok_or("Workspace account owner unavailable")?
-        .inner()
-        .clone();
-    state.initialize(crate::core::app::commands::get_jan_data_folder_path(
-        app.clone(),
-    ))?;
-    Ok(state)
+async fn native<R: Runtime>(
+    app: &AppHandle<R>,
+    operation: &str,
+    arguments: Value,
+) -> Result<Value, String> {
+    app.state::<super::gbot::GbotState>()
+        .call(
+            app,
+            &format!("/v1/native/connectors/{operation}"),
+            arguments,
+        )
+        .await
 }
 
-pub fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool>, String> {
-    let state = owner(app)?;
-    catalog_for_accounts(&state, None)
+pub async fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool>, String> {
+    let catalog: Vec<gbot_service::connectors::ConnectorTool> =
+        serde_json::from_value(native(app, "catalog", Value::Null).await?)
+            .map_err(|_| "Invalid native connector catalog")?;
+    catalog
+        .into_iter()
+        .map(|connected| {
+            let descriptor = tool(&connected.name).ok_or(
+                "Unknown native connector tool; restart Gbot service after upgrading GChat",
+            )?;
+            Ok(ConnectedTool {
+                description: connected.description,
+                ..ConnectedTool::from(descriptor.clone())
+            })
+        })
+        .collect()
 }
 
 fn catalog_for_accounts(
@@ -180,18 +192,175 @@ fn prepare_linked(
     state.prepare(name, args)
 }
 
-/// Bot service callback into the same native account and provider owners as Chat/Code.
-pub struct BotConnectorHost<R: Runtime> {
-    app: AppHandle<R>,
+/// One native account/provider owner shared by Gbot and GChat clients.
+struct NativeOperation {
+    cancellation: CancellationToken,
+    started: bool,
 }
 
-impl<R: Runtime> BotConnectorHost<R> {
-    pub fn new(app: AppHandle<R>) -> Self {
-        Self { app }
+pub struct BotConnectorHost {
+    state: Arc<AccountsState>,
+    operations: std::sync::Mutex<std::collections::BTreeMap<uuid::Uuid, NativeOperation>>,
+}
+
+impl BotConnectorHost {
+    pub fn open(root: std::path::PathBuf) -> Result<Self, String> {
+        let state = Arc::new(AccountsState::default());
+        state.initialize(root)?;
+        Ok(Self {
+            state,
+            operations: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+        })
     }
 }
 
-impl<R: Runtime> gbot_service::connectors::ConnectorHost for BotConnectorHost<R> {
+impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
+    fn close(&self) -> gbot_service::connectors::ConnectorFuture<'_, ()> {
+        Box::pin(async {
+            let operations = std::mem::take(
+                &mut *self
+                    .operations
+                    .lock()
+                    .map_err(|_| "Connector operations unavailable")?,
+            );
+            for operation in operations.into_values() {
+                operation.cancellation.cancel();
+            }
+            for flow in self.state.view()?.active_flows {
+                let _ = self.state.cancel_auth(&flow.flow_id).await;
+            }
+            Ok(())
+        })
+    }
+    fn native_operation<'a>(
+        &'a self,
+        operation: &'a str,
+        arguments: Value,
+    ) -> gbot_service::connectors::ConnectorFuture<'a, Value> {
+        Box::pin(async move {
+            fn encode(value: impl serde::Serialize) -> Result<Value, String> {
+                serde_json::to_value(value).map_err(|_| "Invalid native connector result".into())
+            }
+            fn decode<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, String> {
+                serde_json::from_value(value).map_err(|_| "Invalid native connector request".into())
+            }
+            fn text<'a>(value: &'a Value, field: &str) -> Result<&'a str, String> {
+                value[field]
+                    .as_str()
+                    .ok_or_else(|| format!("Missing connector {field}"))
+            }
+            match operation {
+                "accounts" => encode(self.state.view()?),
+                "configure" => encode(self.state.configure(decode(arguments)?).await?),
+                "begin_auth" => {
+                    let (flow, url) = self.state.begin_auth(decode(arguments)?).await?;
+                    Ok(serde_json::json!({"flow": flow, "url": url}))
+                }
+                "auth_status" => encode(self.state.auth_status(text(&arguments, "flow_id")?)?),
+                "cancel_auth" => {
+                    encode(self.state.cancel_auth(text(&arguments, "flow_id")?).await?)
+                }
+                "select_account" => encode(self.state.select(
+                    decode(arguments["provider"].clone())?,
+                    text(&arguments, "account_id")?,
+                )?),
+                "disconnect" => encode(
+                    self.state
+                        .disconnect(
+                            decode(arguments["provider"].clone())?,
+                            text(&arguments, "account_id")?,
+                            arguments["revoke"]
+                                .as_bool()
+                                .ok_or("Missing revoke policy")?,
+                        )
+                        .await?,
+                ),
+                "catalog" => encode(
+                    catalog_for_accounts(&self.state, None)?
+                        .into_iter()
+                        .map(|tool| gbot_service::connectors::ConnectorTool {
+                            name: tool.name.into(),
+                            description: tool.description,
+                            input_schema: tool.input_schema,
+                            write: tool.write,
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                "prepare" => self
+                    .state
+                    .prepare(text(&arguments, "name")?, arguments["arguments"].clone()),
+                "register" => {
+                    let id = uuid::Uuid::parse_str(text(&arguments, "request_id")?)
+                        .map_err(|_| "Invalid connector request identity")?;
+                    let mut operations = self
+                        .operations
+                        .lock()
+                        .map_err(|_| "Connector operations unavailable")?;
+                    if operations.contains_key(&id) {
+                        return Err("Connector request is already registered".into());
+                    }
+                    operations.insert(
+                        id,
+                        NativeOperation {
+                            cancellation: CancellationToken::new(),
+                            started: false,
+                        },
+                    );
+                    Ok(Value::Null)
+                }
+                "execute" => {
+                    let id = uuid::Uuid::parse_str(text(&arguments, "request_id")?)
+                        .map_err(|_| "Invalid connector request identity")?;
+                    let name = text(&arguments, "name")?;
+                    let cancellation = {
+                        let mut operations = self
+                            .operations
+                            .lock()
+                            .map_err(|_| "Connector operations unavailable")?;
+                        let operation = operations
+                            .get_mut(&id)
+                            .ok_or("Register the connector request before executing")?;
+                        if operation.started {
+                            return Err("Connector request is already executing".into());
+                        }
+                        operation.started = true;
+                        operation.cancellation.clone()
+                    };
+                    let result = if cancellation.is_cancelled() {
+                        Err("Connector operation cancelled".into())
+                    } else {
+                        execute_native(
+                            &self.state,
+                            name,
+                            arguments["arguments"].clone(),
+                            &cancellation,
+                        )
+                        .await
+                    };
+                    self.operations
+                        .lock()
+                        .map_err(|_| "Connector operations unavailable")?
+                        .remove(&id);
+                    result
+                }
+                "cancel" => {
+                    let id = uuid::Uuid::parse_str(text(&arguments, "request_id")?)
+                        .map_err(|_| "Invalid connector request identity")?;
+                    if let Some(operation) = self
+                        .operations
+                        .lock()
+                        .map_err(|_| "Connector operations unavailable")?
+                        .get(&id)
+                    {
+                        operation.cancellation.cancel();
+                    }
+                    Ok(Value::Null)
+                }
+                _ => Err("Unsupported native connector operation".into()),
+            }
+        })
+    }
+
     fn accounts(
         &self,
     ) -> gbot_service::connectors::ConnectorFuture<
@@ -199,7 +368,9 @@ impl<R: Runtime> gbot_service::connectors::ConnectorHost for BotConnectorHost<R>
         Vec<gbot_service::connectors::ConnectorAccount>,
     > {
         Box::pin(async {
-            Ok(owner(&self.app)?
+            Ok(self
+                .state
+                .clone()
                 .view()?
                 .accounts
                 .into_iter()
@@ -228,7 +399,7 @@ impl<R: Runtime> gbot_service::connectors::ConnectorHost for BotConnectorHost<R>
     ) -> gbot_service::connectors::ConnectorFuture<'a, Vec<gbot_service::connectors::ConnectorTool>>
     {
         Box::pin(async move {
-            let state = owner(&self.app)?;
+            let state = self.state.clone();
             Ok(catalog_for_accounts(&state, Some(linked))?
                 .into_iter()
                 .map(|tool| gbot_service::connectors::ConnectorTool {
@@ -249,7 +420,7 @@ impl<R: Runtime> gbot_service::connectors::ConnectorHost for BotConnectorHost<R>
     ) -> gbot_service::connectors::ConnectorFuture<'a, gbot_service::connectors::PreparedConnector>
     {
         Box::pin(async move {
-            let state = owner(&self.app)?;
+            let state = self.state.clone();
             let arguments = prepare_linked(&state, linked, name, arguments)?;
             Ok(gbot_service::connectors::PreparedConnector {
                 name: name.into(),
@@ -270,8 +441,8 @@ impl<R: Runtime> gbot_service::connectors::ConnectorHost for BotConnectorHost<R>
         Box::pin(async move {
             let cancellation = CancellationToken::new();
             let _cancel_on_drop = cancellation.clone().drop_guard();
-            execute(
-                &self.app,
+            execute_native(
+                &self.state,
                 &request.name,
                 request.arguments.clone(),
                 &cancellation,
@@ -281,8 +452,49 @@ impl<R: Runtime> gbot_service::connectors::ConnectorHost for BotConnectorHost<R>
     }
 }
 
-pub fn prepare<R: Runtime>(app: &AppHandle<R>, name: &str, args: Value) -> Result<Value, String> {
-    owner(app)?.prepare(name, args)
+pub async fn prepare<R: Runtime>(
+    app: &AppHandle<R>,
+    name: &str,
+    args: Value,
+) -> Result<Value, String> {
+    native(
+        app,
+        "prepare",
+        serde_json::json!({"name":name,"arguments":args}),
+    )
+    .await
+}
+
+async fn execute_native(
+    state: &AccountsState,
+    name: &str,
+    args: Value,
+    cancellation: &CancellationToken,
+) -> Result<Value, String> {
+    let args = state.prepare(name, args)?;
+    match provider_for(name)? {
+        Provider::Google => google::execute(state, name, &args, cancellation).await,
+        Provider::Microsoft => microsoft::execute(state, name, &args, cancellation).await,
+    }
+}
+
+struct CancelConnector {
+    client: super::gbot::Client,
+    id: String,
+}
+impl Drop for CancelConnector {
+    fn drop(&mut self) {
+        let client = self.client.clone();
+        let id = self.id.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = client
+                .call(
+                    "/v1/native/connectors/cancel",
+                    serde_json::json!({"request_id":id}),
+                )
+                .await;
+        });
+    }
 }
 
 pub async fn execute<R: Runtime>(
@@ -291,65 +503,93 @@ pub async fn execute<R: Runtime>(
     args: Value,
     cancellation: &CancellationToken,
 ) -> Result<Value, String> {
-    let state = owner(app)?;
-    let args = state.prepare(name, args)?;
-    match provider_for(name)? {
-        Provider::Google => google::execute(&state, name, &args, cancellation).await,
-        Provider::Microsoft => microsoft::execute(&state, name, &args, cancellation).await,
+    let client = app.state::<super::gbot::GbotState>().client(app).await?;
+    let id = uuid::Uuid::new_v4().to_string();
+    client
+        .call(
+            "/v1/native/connectors/register",
+            serde_json::json!({"request_id":id}),
+        )
+        .await?;
+    // Registration before dispatch makes cancellation safe even when it precedes execute.
+    // Dropping the caller sends cancellation directly to this service, without launching one.
+    let _cancel_on_drop = CancelConnector {
+        client: client.clone(),
+        id: id.clone(),
+    };
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => {
+            let _ = client.call("/v1/native/connectors/cancel", serde_json::json!({"request_id":id})).await;
+            Err("Connector operation cancelled".into())
+        },
+        result = client.call("/v1/native/connectors/execute", serde_json::json!({"request_id":id,"name":name,"arguments":args})) => result,
     }
 }
 
 #[tauri::command]
-pub fn connector_accounts<R: Runtime>(app: AppHandle<R>) -> Result<accounts::AccountsView, String> {
-    owner(&app)?.view()
+pub async fn connector_accounts<R: Runtime>(app: AppHandle<R>) -> Result<Value, String> {
+    native(&app, "accounts", Value::Null).await
 }
 
 #[tauri::command]
 pub async fn connector_configure<R: Runtime>(
     app: AppHandle<R>,
-    request: accounts::ConfigureRequest,
-) -> Result<accounts::AccountsView, String> {
-    owner(&app)?.configure(request).await
+    request: Value,
+) -> Result<Value, String> {
+    native(&app, "configure", request).await
 }
 
 #[tauri::command]
 pub async fn connector_begin_auth<R: Runtime>(
     app: AppHandle<R>,
-    request: accounts::AuthRequest,
-) -> Result<accounts::AuthFlow, String> {
+    request: Value,
+) -> Result<Value, String> {
     use tauri_plugin_opener::OpenerExt;
-    let state = owner(&app)?;
-    let (flow, url) = state.begin_auth(request).await?;
+    let result = native(&app, "begin_auth", request).await?;
+    let url = result["url"]
+        .as_str()
+        .ok_or("Invalid connector sign-in URL")?;
     if app.opener().open_url(url, None::<String>).is_err() {
-        state.cancel_auth(&flow.flow_id).await?;
+        let _ = native(
+            &app,
+            "cancel_auth",
+            serde_json::json!({"flow_id":result["flow"]["flow_id"]}),
+        )
+        .await;
         return Err("Could not open the system browser for sign-in".into());
     }
-    Ok(flow)
+    Ok(result["flow"].clone())
 }
 
 #[tauri::command]
-pub fn connector_auth_status<R: Runtime>(
+pub async fn connector_auth_status<R: Runtime>(
     app: AppHandle<R>,
     flow_id: String,
-) -> Result<accounts::AuthFlow, String> {
-    owner(&app)?.auth_status(&flow_id)
+) -> Result<Value, String> {
+    native(&app, "auth_status", serde_json::json!({"flow_id":flow_id})).await
 }
 
 #[tauri::command]
 pub async fn connector_cancel_auth<R: Runtime>(
     app: AppHandle<R>,
     flow_id: String,
-) -> Result<accounts::AuthFlow, String> {
-    owner(&app)?.cancel_auth(&flow_id).await
+) -> Result<Value, String> {
+    native(&app, "cancel_auth", serde_json::json!({"flow_id":flow_id})).await
 }
 
 #[tauri::command]
-pub fn connector_select_account<R: Runtime>(
+pub async fn connector_select_account<R: Runtime>(
     app: AppHandle<R>,
     provider: Provider,
     account_id: String,
-) -> Result<accounts::AccountsView, String> {
-    owner(&app)?.select(provider, &account_id)
+) -> Result<Value, String> {
+    native(
+        &app,
+        "select_account",
+        serde_json::json!({"provider":provider,"account_id":account_id}),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -358,6 +598,11 @@ pub async fn connector_disconnect<R: Runtime>(
     provider: Provider,
     account_id: String,
     revoke: bool,
-) -> Result<accounts::AccountsView, String> {
-    owner(&app)?.disconnect(provider, &account_id, revoke).await
+) -> Result<Value, String> {
+    native(
+        &app,
+        "disconnect",
+        serde_json::json!({"provider":provider,"account_id":account_id,"revoke":revoke}),
+    )
+    .await
 }

@@ -317,7 +317,7 @@ impl<R: Runtime> DesktopServices for AgentDesktopServices<R> {
         name: &str,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        crate::core::connectors::prepare(&self.app_handle, name, args)
+        crate::core::connectors::prepare(&self.app_handle, name, args).await
     }
 
     async fn connector(

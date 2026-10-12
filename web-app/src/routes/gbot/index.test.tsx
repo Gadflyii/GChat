@@ -10,6 +10,8 @@ import type { ComponentType } from 'react'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
+  quitService: vi.fn(),
+  startService: vi.fn(),
   listen: vi.fn(),
   mediaStart: vi.fn(),
   mediaStop: vi.fn(),
@@ -37,6 +39,8 @@ vi.mock('@/containers/HeaderPage', () => ({
 vi.mock('@/services/gbot', async (original) => ({
   ...(await original<object>()),
   gbot: mocks.call,
+  quitGbotService: mocks.quitService,
+  startGbotService: mocks.startService,
 }))
 
 import { Route } from './index'
@@ -531,4 +535,29 @@ it('links existing accounts per bot without inherited selection', async () => {
     workspace_id: 'two',
     account_ids: ['microsoft-b'],
   })
+})
+
+it('explicitly stops the service without refreshing and starts it before reconnecting', async () => {
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.quitService.mockResolvedValue(undefined)
+  mocks.startService.mockResolvedValue(undefined)
+  mocks.call.mockImplementation(async (path: string) =>
+    path === 'state'
+      ? { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      : []
+  )
+  render(<Page />)
+  await screen.findByRole('form', { name: 'Set up Gbot' })
+  fireEvent.click(screen.getByRole('button', { name: 'Quit Gbot service' }))
+  await screen.findByText(
+    'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+  )
+  expect(mocks.quitService).toHaveBeenCalledTimes(1)
+  const calls = mocks.call.mock.calls.length
+  await Promise.resolve()
+  expect(mocks.call.mock.calls).toHaveLength(calls)
+  fireEvent.click(screen.getByRole('button', { name: 'Start Gbot service' }))
+  await waitFor(() => expect(mocks.startService).toHaveBeenCalledTimes(1))
+  await screen.findByRole('button', { name: 'Quit Gbot service' })
+  expect(mocks.call.mock.calls.length).toBeGreaterThan(calls)
 })

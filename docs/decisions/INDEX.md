@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-12** — [Own Gbot lifetime in a native background process](2026-10-12-own-gbot-background-service-lifetime.md)
+
 - **2026-10-12** — [Deliver pinned Gbot guest resources through the installer](2026-10-12-deliver-pinned-gbot-guest-resources.md)
 
 - **2026-10-12** — [Own SSH workspace creation in the Gbot service](2026-10-12-own-ssh-workspace-creation-in-the-gbot-service.md)
