@@ -4,6 +4,51 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## Accepted Ubuntu Desktop packages — OI-057
+
+The retained `0705f31a6` GChat 2.0.42 DEB and AppImage pass installed desktop
+acceptance on stock Ubuntu 24.04.5.1 GNOME, with WebKitGTK 2.52.6, in the private
+S1 `gchat-linux-accept` guest. Both actual Wayland and Ubuntu on Xorg pass:
+
+| Desktop session | Installed DEB | AppImage after normal DEB exit |
+| --- | --- | --- |
+| Wayland | Visible render, ordinary Chat completion, normal exit | Visible render, sidebar reopen of the saved answer, normal exit |
+| Xorg | Visible render, ordinary Chat completion, normal exit | Visible render, sidebar reopen of the saved answer, normal exit |
+
+The same accepted native Host launches Qwen3.8-27B INT through `3235aaacc`
+SM120 `ginfer`/`ginfer-serve`, side by side, with the existing pro1-r2 dense
+hardware profile. The unchanged functional launch is TP1, C2, context16384,
+INT8 KV, DFlash fixed7 and AUTO arena, with Vision and structured outputs enabled.
+The two ordinary Chat turns finish with no active generation. Saved thread IDs
+are `0b72a24b-f513-44b1-9aeb-a8b256dbc4b7` (Wayland) and
+`8df54865-b9de-4872-8527-8ac2e5f13d6c` (Xorg).
+
+The private Xorg autologin session left its earlier test keyring locked, and the
+saved test-account password did not unlock it. The encrypted fixture was
+preserved; a fresh private keyring and normal Host Forget/Pair restored testing.
+Xorg authenticated Host access survives the subsequent app restart. This does
+not establish keyring preservation across desktop logout/login. No Ron desktop,
+credentials or history were used. No GChat product defect was demonstrated by
+that fixture recovery.
+
+The final model Stop returns HTTP200. Both apps, the owned Host and Engine exit;
+GPU0 is empty and its canonical guard is reacquired/released. The guest shuts
+down normally, its transient domain/QEMU process and private SSH listener are
+absent, and bookings1094/1101 are canceled. No rebuild, calibration, Windows
+change, signing or publication occurred. This is desktop functionality against
+an accepted external runtime, not qualification of the historical `05a` Engine
+bundled in these packages or a performance/release claim.
+
+Evidence: `/ai/gchat/out/oi057-linux-desktop-acceptance-20261011/result.json`,
+with the two terminal Chat receipts, saved-session/vault receipts, visible
+screenshots and resource-return receipts linked there. The immutable package
+receipt remains `/ai/gchat/out/oi057-linux-packages-20261011/artifact-result.json`.
+Retain the stopped S1 `/ai/gbot-vms/gchat-linux-accept` disk/clean-os snapshot,
+accepted packages and concise evidence as the Linux desktop baseline. The
+docs-only candidate is `/ai/gchat-worktrees/oi057-desktop-result-e15`; retire it
+after merge. OI-077 profile presentation is next; the Gbot model task remains
+parked on GInfer `QWEN-TOOLCALL-LITERALS`.
+
 ## Current Linux reasoning menu correction
 
 Ron reports the Linux reasoning popup is white and differs from Windows.

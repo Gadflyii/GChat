@@ -118,6 +118,7 @@ pub(super) async fn open(
     }
     if !tools.iter().any(|tool| tool.name == "get_window_state")
         || !tools.iter().any(|tool| tool.name == "invoke_menu")
+        || !tools.iter().any(|tool| tool.name == "start_session")
     {
         return Err(SshError::Protocol);
     }
@@ -359,10 +360,23 @@ impl SshSession {
             {
                 arguments["session"] = request.identity.session_id.as_uuid().to_string().into();
             }
-            let result = mcp
-                .rpc("tools/call", json!({"name":tool,"arguments":arguments}))
+            // Cua expires idle sessions; renew before dispatch, never replay an action.
+            let active = mcp
+                .rpc(
+                    "tools/call",
+                    json!({"name":"start_session","arguments":{"session":request.identity.session_id.as_uuid().to_string()}}),
+                )
                 .await
                 .map_err(|_| uncertain())?;
+            let result = if active["isError"] == true {
+                active
+            } else if active["structuredContent"]["active"] != true {
+                return Err(uncertain());
+            } else {
+                mcp.rpc("tools/call", json!({"name":tool,"arguments":arguments}))
+                    .await
+                    .map_err(|_| uncertain())?
+            };
             let status = if result["isError"] == true { "1" } else { "0" };
             let bytes = serde_json::to_vec(&result).map_err(|_| uncertain())?;
             let (code, saved) = collect(
