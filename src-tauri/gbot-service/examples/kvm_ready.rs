@@ -24,7 +24,7 @@ mod linux {
         time::Duration,
     };
     use tokio::{
-        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
         net::UnixListener,
         process::Command,
     };
@@ -96,6 +96,278 @@ mod linux {
         }
     }
     struct DedicatedApproval(SessionIdentity);
+
+    // Minimal wire probe for the opt-in physical gate; no second viewer client.
+    struct MediaProbe(hyper::upgrade::Upgraded);
+    impl MediaProbe {
+        async fn open(url: &str) -> Result<Self> {
+            let request = Request::get(url.replacen("ws://", "http://", 1))
+                .header("Connection", "Upgrade")
+                .header("Upgrade", "websocket")
+                .header("Sec-WebSocket-Version", "13")
+                .header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+                .body(Body::empty())?;
+            let response = Client::new().request(request).await?;
+            if response.status() != hyper::StatusCode::SWITCHING_PROTOCOLS {
+                return Err("media socket upgrade failed".into());
+            }
+            Ok(Self(hyper::upgrade::on(response).await?))
+        }
+        async fn send(&mut self, opcode: u8, data: &[u8]) -> Result<()> {
+            let mask = [17, 43, 91, 7];
+            let mut frame = vec![0x80 | opcode];
+            if data.len() < 126 {
+                frame.push(0x80 | data.len() as u8);
+            } else {
+                frame.push(0x80 | 126);
+                frame.extend_from_slice(&u16::try_from(data.len())?.to_be_bytes());
+            }
+            frame.extend_from_slice(&mask);
+            frame.extend(data.iter().enumerate().map(|(i, byte)| byte ^ mask[i % 4]));
+            self.0.write_all(&frame).await?;
+            Ok(())
+        }
+        async fn next(&mut self) -> Result<(u8, Vec<u8>)> {
+            loop {
+                let mut header = [0; 2];
+                self.0.read_exact(&mut header).await?;
+                if header[0] & 0x80 == 0 || header[1] & 0x80 != 0 {
+                    return Err("unexpected fragmented/masked server frame".into());
+                }
+                let size = match header[1] & 127 {
+                    126 => u64::from(self.0.read_u16().await?),
+                    127 => self.0.read_u64().await?,
+                    n => u64::from(n),
+                };
+                if size > 32 * 1024 * 1024 {
+                    return Err("physical probe frame too large".into());
+                }
+                let mut data = vec![0; usize::try_from(size)?];
+                self.0.read_exact(&mut data).await?;
+                let opcode = header[0] & 15;
+                if opcode == 9 {
+                    self.send(10, &data).await?;
+                } else {
+                    return Ok((opcode, data));
+                }
+            }
+        }
+        async fn input(&mut self, session: &str) -> Result<Value> {
+            self.send(
+                1,
+                &serde_json::to_vec(&json!({"type":"interactive_input","payload":{
+                "session_id":session,"first_sequence":1,"events":[{"kind":"pointer","phase":"move",
+                "button":null,"x_normalized":0.5,"y_normalized":0.5,"modifiers":[]}]}}))?,
+            )
+            .await?;
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    let (kind, bytes) = self.next().await?;
+                    if kind == 1 {
+                        let value: Value = serde_json::from_slice(&bytes)?;
+                        if value["type"] == "interactive_input_acknowledgement"
+                            || value["type"] == "error"
+                        {
+                            return Ok(value);
+                        }
+                    }
+                    if kind == 8 {
+                        return Err("input socket closed".into());
+                    }
+                }
+            })
+            .await?
+        }
+    }
+
+    async fn physical_media(
+        runtime: &Arc<WorkspaceRuntime>,
+        identity: SessionIdentity,
+        evidence: &Path,
+    ) -> Result<()> {
+        // A known tone distinguishes captured desktop audio from silent packets.
+        let mut pcm = Vec::with_capacity(48000 * 4 * 8);
+        for n in 0..48000 * 8 {
+            let sample =
+                ((n as f64 * std::f64::consts::TAU * 440.0 / 48000.0).sin() * 12000.0) as i16;
+            pcm.extend_from_slice(&sample.to_le_bytes());
+            pcm.extend_from_slice(&sample.to_le_bytes());
+        }
+        operation(
+            runtime,
+            identity,
+            GuestOperationKind::Write {
+                path: GuestPath("/home/gbot/tone.pcm".into()),
+                offset: 0,
+                data: pcm,
+                truncate: true,
+            },
+        )
+        .await?;
+        let owner = Uuid::new_v4();
+        let view = runtime
+            .open_view(OpenView {
+                identity,
+                owner,
+                interactive: false,
+                audio: true,
+                h264: false,
+            })
+            .await?;
+        let mut socket = MediaProbe::open(&view.ws_url).await?;
+        let played = operation(runtime, identity, GuestOperationKind::Exec {
+            program: "/usr/local/bin/gbot-in-session".into(),
+            args: vec!["sh".into(), "-c".into(), "paplay --raw --format=s16le --rate=48000 --channels=2 /home/gbot/tone.pcm >/tmp/gbot-tone.log 2>&1 </dev/null &".into()],
+            cwd: GuestPath("/home/gbot".into()), env: Default::default(),
+        }).await?;
+        if !matches!(played, GuestResult::ExecFinished { exit_code: 0, .. }) {
+            return Err("tone launch failed".into());
+        }
+        let mut session = String::new();
+        let mut controls = Vec::new();
+        let mut audio = Vec::new();
+        let mut frame = None;
+        tokio::time::timeout(Duration::from_secs(20), async {
+            while frame.is_none() || audio.len() < 48000 * 4 * 3 || session.is_empty() {
+                let (kind, bytes) = socket.next().await?;
+                if kind == 1 {
+                    let value: Value = serde_json::from_slice(&bytes)?;
+                    if value["type"] == "session_opened" {
+                        session = value["payload"]["session_id"]
+                            .as_str()
+                            .ok_or("media session id missing")?
+                            .into();
+                    }
+                    controls.push(value);
+                } else if kind == 2 && bytes.starts_with(b"RAU2") {
+                    if bytes.len() < 24 {
+                        return Err("short audio packet".into());
+                    }
+                    audio.extend_from_slice(&bytes[24..]);
+                } else if kind == 2 && bytes.len() >= 8 {
+                    let header = usize::try_from(u32::from_be_bytes(bytes[..4].try_into()?))?;
+                    let payload = usize::try_from(u32::from_be_bytes(bytes[4..8].try_into()?))?;
+                    if 8 + header + payload != bytes.len() {
+                        return Err("video frame lengths differ".into());
+                    }
+                    let descriptor: Value = serde_json::from_slice(&bytes[8..8 + header])?;
+                    let png = &bytes[8 + header..];
+                    if !png.starts_with(b"\x89PNG\r\n\x1a\n") {
+                        return Err("expected real PNG capture".into());
+                    }
+                    tokio::fs::write(evidence.join("capture.png"), png).await?;
+                    frame = Some(descriptor);
+                } else if kind == 8 {
+                    return Err("capture socket closed".into());
+                }
+            }
+            Ok::<(), Box<dyn Error + Send + Sync>>(())
+        })
+        .await??;
+        let config = controls
+            .iter()
+            .find(|value| {
+                value["type"] == "audio_config" && value["payload"]["direction"] == "down"
+            })
+            .ok_or("audio configuration missing")?;
+        if config["payload"]["sample_rate_hz"] != 48000 || config["payload"]["channels"] != 2 {
+            return Err("unexpected audio format".into());
+        }
+        let samples: Vec<f64> = audio
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|bytes| f64::from(i16::from_le_bytes([bytes[0], bytes[1]])))
+            .collect();
+        let power = samples.iter().map(|n| n * n).sum::<f64>() / samples.len() as f64;
+        let projection = |quadrature: bool| {
+            samples
+                .iter()
+                .enumerate()
+                .map(|(i, n)| {
+                    let angle = i as f64 * std::f64::consts::TAU * 440.0 / 48000.0;
+                    n * if quadrature { angle.sin() } else { angle.cos() }
+                })
+                .sum::<f64>()
+        };
+        let tone_power = 2.0 * (projection(false).powi(2) + projection(true).powi(2))
+            / (samples.len() as f64).powi(2);
+        tokio::fs::write(evidence.join("capture.s16le"), &audio).await?;
+        tokio::fs::write(
+            evidence.join("capture-controls.json"),
+            serde_json::to_vec_pretty(&controls)?,
+        )
+        .await?;
+        if power < 10000.0 || tone_power / power < 0.5 {
+            return Err(format!(
+                "known audio tone not received: power={power}, fraction={}",
+                tone_power / power
+            )
+            .into());
+        }
+        let refusal = socket.input(&session).await?;
+        if refusal["payload"]["delivered"] == true
+            || refusal["payload"]["error"].is_null() && refusal["type"] != "error"
+        {
+            return Err("view-only input was not rejected".into());
+        }
+        runtime
+            .close_view(CloseView {
+                identity,
+                owner,
+                lease_id: view.lease_id,
+            })
+            .await?;
+        let taken = runtime.take_over(identity, owner).await?;
+        let interactive = runtime
+            .open_view(OpenView {
+                identity,
+                owner,
+                interactive: true,
+                audio: false,
+                h264: false,
+            })
+            .await?;
+        let mut human = MediaProbe::open(&interactive.ws_url).await?;
+        let human_session = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let (kind, bytes) = human.next().await?;
+                if kind == 1 {
+                    let value: Value = serde_json::from_slice(&bytes)?;
+                    if value["type"] == "session_opened" {
+                        return Ok::<String, Box<dyn Error + Send + Sync>>(
+                            value["payload"]["session_id"]
+                                .as_str()
+                                .ok_or("interactive session missing")?
+                                .into(),
+                        );
+                    }
+                }
+            }
+        })
+        .await??;
+        let delivered = human.input(&human_session).await?;
+        if delivered["payload"]["delivered"] != true {
+            return Err(format!("takeover input failed: {delivered}").into());
+        }
+        let returned = runtime.hand_back(identity, owner).await?;
+        let closed = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match human.next().await {
+                    Ok((8, _)) | Err(_) => return true,
+                    _ => {}
+                }
+            }
+        })
+        .await?;
+        tokio::fs::write(evidence.join("physical-media.json"), serde_json::to_vec_pretty(&json!({
+            "frame":frame,"audio_bytes":audio.len(),"audio_rms":power.sqrt(),"tone_energy_fraction":tone_power/power,
+            "view_only":refusal,"take_over":taken,"input":delivered,"hand_back":returned,"interactive_socket_revoked":closed,
+            "scope":"dedicated Debian/Xvnc guest, PNG capture + PCM desktop tone + control ownership; no Windows/M365 or browser playback claim"
+        }))?).await?;
+        println!("PHYSICAL_MEDIA_PASS");
+        Ok(())
+    }
     impl ToolApproval for DedicatedApproval {
         fn approve<'a>(&'a self, _: Uuid, request: &'a GuestRequest) -> ApprovalFuture<'a> {
             Box::pin(async move { request.identity == self.0 })
@@ -447,6 +719,9 @@ mod linux {
                 serde_json::to_vec_pretty(&tools)?,
             )
             .await?;
+            if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {
+                return physical_media(&runtime, identity, evidence).await;
+            }
             let owner = Uuid::new_v4();
             let view = runtime
                 .open_view(OpenView {
@@ -528,6 +803,24 @@ mod linux {
             model_task(&runtime, identity, url.trim(), evidence).await
         }
         .await;
+        if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {
+            // Preserve guest evidence while SSH and the native-vault key still exist.
+            let diagnostics = operation(&runtime, identity, GuestOperationKind::Exec {
+                program: "/usr/local/bin/gbot-in-session".into(),
+                args: vec!["sh".into(), "-c".into(),
+                    "systemctl --user status gbot-media --no-pager; journalctl --user -u gbot-media --no-pager -n 80; printf 'DISPLAY=%s\n' \"$DISPLAY\"; xdpyinfo | head -20; timeout 5 pactl info; timeout 5 pactl list short sources; cat /tmp/gbot-tone.log 2>/dev/null; true".into()],
+                cwd: GuestPath("/home/gbot".into()), env: Default::default(),
+            });
+            let diagnostics = tokio::time::timeout(Duration::from_secs(15), diagnostics).await;
+            tokio::fs::write(
+                evidence.join("media-diagnostic.json"),
+                serde_json::to_vec_pretty(&match diagnostics {
+                    Ok(Ok(reply)) => serde_json::to_value(reply)?,
+                    other => json!({"diagnostic_error": format!("{other:?}")}),
+                })?,
+            )
+            .await?;
+        }
         let close = runtime.close().await;
         result?;
         close?;
@@ -650,6 +943,7 @@ mod linux {
         let stop = record.vm.force_stop(&KvmTools::default()).await;
         let passed = matches!(result, Ok(Ok(())));
         let retained = !passed
+            || std::env::var_os("GBOT_MEDIA_ONLY").is_some()
             || std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some()
             || std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some()
             || std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some();
@@ -658,7 +952,7 @@ mod linux {
         } else {
             Ok(())
         };
-        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
+        tokio::fs::write(evidence.join("gate-result.json"),serde_json::to_vec_pretty(&json!({"pass":passed,"result":format!("{result:?}"),"stop":format!("{stop:?}"),"credential_cleanup":format!("{cleanup:?}"),"credential_retained":retained,"vm_id":record.vm.spec.id,"scope":if std::env::var_os("GBOT_MEDIA_ONLY").is_some() {"dedicated Debian/Xvnc guest, PNG capture + PCM desktop tone + control ownership; no model, Windows/M365 or browser playback claim"} else if std::env::var_os("GBOT_GUEST_DIAGNOSTIC").is_some() {"dedicated guest geometry diagnosis; no model task"} else if std::env::var_os("GBOT_CUA_BENCH_ONLY").is_some() {"actual Cua hello_file_env variants only; desktop task acceptance remains separate"} else if std::env::var_os("GBOT_CUA_DESKTOP_ONLY").is_some() {"ComputerAgent + production service + pinned Cua MCP + native vault + view + exact text-only desktop overwrite task; existing Cua task acceptance reused; no performance/Vision claim"} else {"ComputerAgent + production service + pinned Cua MCP + native vault + view + text-only desktop task and actual Cua task setup/evaluation; no performance/Vision claim"}}))?).await?;
         stop?;
         cleanup?;
         result??;

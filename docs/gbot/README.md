@@ -15,8 +15,14 @@ pass, together with frontend types and strict Rust Clippy. The pinned guest
 daemon's cached container build and native/audio package passed. The audio-toggle
 UI case and SSH reconnect/ownership regression also pass.
 Acceptance is the focused view-only / takeover / hand-back gate and a packaged
-daemon/native-library closure. Physical desktop frames, audio and Windows/M365
-qualification remain release work, not claims of this source gate.
+daemon/native-library closure. The source is merged in `e3ff85e8a`. The physical gate used dedicated Debian guest `4c75f540`: SSH and Cua readiness passed,
+but production `open_view` returned `MediaError` before any frame or PCM arrived.
+The guest was stopped, unregistered and its vault key deleted. The next unresolved
+question is the precise media operation that failed. The current candidate now
+retains its operation and cause and saves guest diagnostics before retirement. Acceptance remains a real PNG and known 440 Hz PCM tone,
+view-only input refusal, harmless pointer input after takeover and revocation
+on hand-back. No model or GPU is required. Windows/M365 and browser playback
+remain separate release checks. Rust 1.97 is required on Windows release hosts.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -91,7 +97,7 @@ guided setup remain separate UI work.
 Each bot retains a separate channel for conversation history, tasks, approvals
 and desktop view; multiple bots keep separate channels and assignments. The
 current functional channel supplies SSH key import, connection controls, saved
-brain settings, task history, approvals and takeover controls. The embedded media panel is implemented in the current candidate. Guided
+brain settings, task history, approvals and takeover controls. The embedded media panel is merged in `e3ff85e8a`. Guided
 VM/cloud setup, per-bot connector picker and the final bot UI remain open.
 
 GChat remains the open base: front end, lightweight infrastructure management,
@@ -614,16 +620,16 @@ and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
 `7bf139610`. Compact output is merged as `9ab394244`. The channel/browser/control and runtime integration is merged in `45ac4ae7e`.
 Human assistance is implemented and pushed in `32231c6ba`, with its focused
 receipts under `/ai/gchat/out/gbot-human-handoff-20261012/`.
-Current candidate: `feat/gbot-human-handoff-45ac` at
-`/ai/gchat-worktrees/gbot-cua-skill-918c`. Deliverable: pinned Cua native media,
-authenticated SSH transport, an embedded view-only desktop panel, takeover and
-hand-back, and Ron's animated avatar. Acceptance: daemon/native/audio packaging,
-focused session-policy, revocation, reconnect-ownership, guest and UI checks,
-frontend types and strict service Clippy. Physical media/audio and Windows/M365
-qualification are excluded from this source gate and remain owed. Evidence:
-`/ai/gchat/out/gbot-cua-media-20261012/result.json`. Next unresolved action:
-review and merge the media candidate, then qualify capture and audio on a
-dedicated guest. No human desktop or model task is used by these source gates.
+Current candidate: `test/gbot-media-physical-e3ff` at
+`/ai/gchat-worktrees/gbot-cua-skill-918c`, based on merged `e3ff85e8a`.
+Deliverable: physically qualify the production SSH-backed Cua viewer on a
+separate Linux guest. Acceptance: one real PNG, a known 440 Hz desktop tone
+through PCM, view-only input refusal, harmless takeover input and interactive
+stream revocation on hand-back. Existing source and package receipts are reused.
+No model/GPU, person's desktop, browser playback, Windows or M365 claim.
+Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
+Next unresolved action: observe the fresh guest's actual media operation and
+capture/audio/control result; fix an identified owning-code defect if needed.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
@@ -1273,7 +1279,7 @@ October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/p
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-skill-918c`, `feat/gbot-human-handoff-45ac` | Current source candidate; retain until reviewed merge. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-skill-918c`, `test/gbot-media-physical-e3ff` | Physical media probe on merged source `e3ff85e8a`; retain until reviewed merge. |
 | GChat / local | `/ai/gchat/out/gbot-cua-media-20261012` | Focused source-gate evidence and disposable container recipe. |
 | GChat / S1 | `/media/ron/SSD_RAID/ai/gbot-cua-media-20261012` | Pinned daemon source/build/cache and package; retire build after the accepted package is retained. |
 
@@ -1300,3 +1306,32 @@ ignores an old lease's delayed close. The audio-toggle UI fixture also passes;
 strict all-target service Clippy remains clean. Evidence is in
 `out/gbot-cua-media-20261012/{reconnect-control,reconnect-ui,reconnect-clippy}.log`.
 No owned build container or GPU/model job remains.
+
+Current physical-gate inventory: source branch `test/gbot-media-physical-e3ff`,
+accepted daemon archive listed in [cua-map.md](cua-map.md), private controller
+at S1 `/ai/gbot-vms/cua-media-20261012/controller`; results are in the adjacent
+`evidence` folder. The adapter created guest
+`4c75f540-5134-4189-8f4a-b7dada071671` on CPUs 112–113. Its domain and
+vault key are retired; disk cleanup follows retained diagnostics. Local evidence is
+`out/gbot-cua-media-20261012/physical`; no person's desktop is accessed.
+
+Two attempts failed before boot because the private libvirt monitor path exceeded
+the Unix-socket limit. Both guests were retired. A separate `XDG_RUNTIME_DIR`
+prevents reuse of the daemon holding the old configuration; the short config
+path is `/ai/gbot-vms/cua2config`. Vault and results remain private.
+
+The first physical guest completed provisioning and SSH/Cua checks, then failed
+in `open_view` before capture. Its domain and key are retired; its disposable disk
+awaits cleanup. The previous wrapper retired the credential before collecting
+daemon logs. The probe now collects bounded guest diagnostics before retirement,
+and production media errors retain their failing operation and underlying cause.
+The next dedicated guest `3cc29715-e9ba-4928-b5af-e3b9bbf15606` uses the same
+pinned package and acceptance criteria. Its tracked controller is exec session
+29288; S1 results are `/ai/gbot-vms/cua-media-20261012/diagnostic-evidence`.
+CPU112–113 booking runs 15:53–16:23Z; there is no GPU/model job. The first minute
+started ahead of the old 16:00 reservation on otherwise free cores; the booking
+was corrected to the actual interval. Future launches must stop on booking errors.
+Focused media diagnostics cases (2), strict all-target Clippy and the example
+build pass; their receipts are in the local physical evidence folder.
+The embedded driver/media seed is 239 MB; allow its observed first-boot duration
+within the CPU booking. No frame/audio result is claimed yet.

@@ -84,3 +84,42 @@ async fn scoped_media_policies_and_revocation() {
     }
     assert_eq!(server.state.observed.media_close.lock().unwrap().len(), 2);
 }
+
+#[tokio::test]
+async fn media_failures_identify_the_operation_and_keep_the_cause() {
+    let root_token = "private-media-test-token";
+    let server = MockServer::start(MockAuth {
+        token: Some(root_token.into()),
+        ..Default::default()
+    })
+    .await;
+    let request = OpenView {
+        identity: SessionIdentity {
+            workspace_id: WorkspaceId::new(),
+            session_id: SessionId::new(),
+        },
+        owner: Uuid::new_v4(),
+        interactive: false,
+        audio: false,
+        h264: false,
+    };
+    let error = MediaLease::open(server.addr, root_token.into(), &request)
+        .await
+        .err()
+        .unwrap();
+    assert!(error.to_string().contains("select display"));
+    assert_eq!(
+        error.diagnostic(),
+        "expected one dedicated display, found 0"
+    );
+    let error = MediaLease::open(server.addr, "wrong-token".into(), &request)
+        .await
+        .err()
+        .unwrap();
+    assert!(error.to_string().contains("connect"));
+    assert!(error
+        .diagnostic()
+        .to_lowercase()
+        .contains("unauthenticated"));
+    assert!(!format!("{error:?}").contains(root_token));
+}
