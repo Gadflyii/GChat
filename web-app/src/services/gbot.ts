@@ -13,7 +13,22 @@ export type ViewTicket = {
   media_session_id: string
   interactive: boolean
 }
-export type Workspace = { id: string; name: string }
+export type Workspace = {
+  id: string
+  name: string
+  bot_pc?: { kind: string; hypervisor?: string }
+}
+export type SetupIssue = {
+  code: string
+  message: string
+  next_action: string
+}
+export type KvmSetupRecord = {
+  id: string
+  name: string
+  stage: string
+  issue: SetupIssue | null
+}
 export type Control = {
   identity: Identity
   owner: string | null

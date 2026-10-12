@@ -31,9 +31,9 @@ independent service ownership and schedules. Settings enablement opens guided
 setup. The wizard checks prerequisites and pinned assets, persists setup identity,
 and admits a bot only after SSH, desktop-file and view-only media readiness.
 Focused service, adapter, wizard and native-route cases, frontend types, native
-check and strict Clippy pass. These establish source behavior; packaged
-bootstrap, native vault, client-exit/sleep and live scheduled dispatch still need
-installed checks.
+check and strict Clippy pass. These establish source behavior. Native bootstrap, native vault and detached
+process lifetime also pass in the private S1 gate below; packaged wizard,
+client-window exit/sleep and live scheduled dispatch still need installed checks.
 
 The dedicated VM gate found an archive-symlink seed defect; the merged repair
 embeds the exact pinned bytes. Readiness diagnostics then identified obsolete
@@ -48,6 +48,20 @@ These qualify the Linux API owner; installed wizard presentation, packaged
 bootstrap, Hyper-V/cloud/M365 creation and remote service selection remain
 unfinished. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates source gaps, accepted evidence and remaining gates.
+
+The current setup correction closes premature admission: a registered SSH
+session alone does not make an owned VM ready. The service holds tasks, guest
+operations, desktop viewing and takeover until its persisted setup reaches
+Ready. The wizard reopens the saved computer with Resume setup; it does not
+create another VM. Source `30a8be28a` passes two admission/restart cases, thirteen affected UI
+cases, frontend types/lint, service check and strict all-target Clippy. The
+native background owner also passes on S1 with the accepted `17f202edb`
+desktop executable (its bootstrap is unchanged): detached caller lifetime,
+native vault, secret-free discovery, duplicate-owner refusal, authenticated
+shutdown and same-identity restart. The private root and processes are retired.
+Evidence: `out/gchat-open-items-20261012/setup-admission/` and
+`installed-bootstrap/native-result.json`. That binary predates the new UI;
+installed wizard, client-window exit and sleep/resume remain owed.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -710,8 +724,10 @@ cases, eight adapter cases and five wizard cases. The combined source passes its
 seven-route native admission case, frontend types, native check and strict native
 and service Clippy. Logs `wave2-*` record the combined gate; component handoffs are
 `scheduling-note.md` and `kvm-onboarding-note.md`. The dedicated VM API gate proved the seed repair's actual pinned archive bytes,
-then failed desktop readiness with lost failure detail. Both guests are retired;
-Ready/browser effects and installed wizard presentation remain unqualified. Pinned guest resource/data delivery is implemented
+then failed desktop readiness with lost failure detail. That historical failure
+is superseded by the accepted diagnostic and current-contract input fixes:
+the persisted guest reached Ready and the isolated browser exact-readback gate
+passed. Installed wizard presentation remains unqualified. Pinned guest resource/data delivery is implemented
 in `ec21a1874`; its one focused fixture, native check and strict Clippy pass.
 See [asset delivery](asset-delivery.md). Native v2 report consumption in
 `e49219967` passes eight owning Rust and 34 frontend cases plus owning checks;
@@ -733,24 +749,30 @@ Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 | Setup gate: `/ai/gchat-worktrees/gbot-wizard-e492` | `test/gbot-wizard-e492`, seed source `eac5e6688`, final `427a2bc29` | Accepted in main `a5490907d`; fixture and physical ISO digest PASS, desktop readiness failed. Both owned guests/private roots retired at 20:51Z; source tree now retired after clean/pushed merge, evidence retained. |
 | Merged tree retirement | Seven verified clean/pushed ancestors of main | First five: 1.35 GB apparent; final two: 0.55 GB allocated freed; paths and preservation in `disk-cleanup.md`. Dirty/unmerged/unpushed sources retained. |
 
-Current item: `GBOT-KVM-READINESS-FAILURE-DETAIL`, branch
-`fix/gbot-readiness-detail-500a`, accepted in reviewed main `13f88c042`. Preserve
-the failed operation and safe reason in the existing durable setup issue; frame
-checks use the same result projection. Acceptance is one focused typed/MCP/exec
-failure and restart-persistence case, owning Rust check and strict Clippy. CPU-only
-local booking 21:08–21:28 UTC; shared cache and canonical compile lock. No guest,
-model, new dependency or setup retry belongs to this diagnostic change.
-Result: one focused typed/MCP/exec failure/restart case, owning Rust check and
-strict all-target Clippy PASS at 21:18:43 UTC. Evidence: `readiness-detail/` under
-the existing evidence root. The process fixture now obtains its service snapshot
-before acquiring the synchronous vault lock. No passing gate was repeated.
-Accepted in main `13f88c042`. Next unresolved action: qualify dedicated-guest Ready and
-browser effects with useful failure details if another error occurs. The replacement first boot completed but `testing_desktop` failed;
-a diagnostic harness tag error ended its disposable keyring, so no speculative
-cause or retry is claimed. All agents/jobs/guests are stopped. The first QEMU
-bootstrap's CPU escape and replacement's verified exact-UUID pinning are retained
-in the gate receipt. Installed wizard, browser effects, live background lifetime
-and other computer adapters remain open; no engine or GPU is owned by this item.
+Current item: installed Gbot wizard/bootstrap and background service lifetime,
+in repository `/ai/gchat`, subject `docs/gbot/`, candidate
+`/ai/gchat-worktrees/gbot-browser-physical-2e735` on
+`fix/gbot-readiness-detail-500a`. Diagnostic source is accepted in main
+`13f88c042`; current input-contract correction `17f202edb` is pushed for review.
+The owning fixture, check, strict Clippy and incremental example passed in
+17 seconds. The same persisted dedicated S1 guest reached Ready after resume;
+the isolated Chromium form then passed exact independent SSH readback.
+Receipts: `readiness-input/result.json` and
+`readiness-physical/readiness-browser-note.md` under the existing evidence root.
+Product removal retired its VM, key and private roots; the service exited zero.
+
+Next unresolved action: exercise the current native executable's real vault,
+detached owner and discovery, then verify the wizard's visible prerequisite and
+resume states on an isolated display. Acceptance: ordinary client closure leaves
+the same service and durable state available; explicit service shutdown releases
+ownership; unfinished setup remains accessible and cannot be presented as Ready.
+Reuse accepted setup/browser/media evidence. A build agent owns the current
+Linux executable and embedded frontend build, local CPUs 0–31,
+21:54–22:14 UTC, shared Cargo cache and canonical compile lock; deadline 22:15.
+Evidence goes in `out/gchat-open-items-20261012/installed-bootstrap/`.
+No model/GPU, person's desktop, host installation, new dependency, Windows
+build, release or publication belongs to this item. Hyper-V/cloud/M365 creation
+and remote service selection remain open.
 Owned disk cleanup finished at 20:56:45Z: Cargo target 25.74 GB, 73.60 GB allocated
 freed, plus 1.35 GB apparent source size from five merged trees. Two newly merged trees
 were subsequently retired (0.55 GB allocated). After focused verification, the
@@ -783,22 +805,24 @@ native-vault key deleted, and its disposable root removed (2.688 GiB freed).
 The CPU booking is returned; no live guest, model, GPU job or owned build
 container remains. Keep evidence and accepted archives. Viewer source and
 physical acceptance are merged as `2e735624f`. Its worktree was deregistered;
-remaining generated files await safe cleanup. The bounded browser form gate is
-still owed on a dedicated guest. Windows/M365 and browser playback wait for
+remaining generated files await safe cleanup. The bounded browser form gate
+passed in `readiness-physical/result.json`. Windows/M365 and browser playback wait for
 Ron's release window; neither requires repeating accepted Linux capture evidence.
 
 The candidate uses the shared data-folder resolver and existing native vault.
 Task actors publish event-driven updates; no refresh timer is introduced. Stop
 and takeover drain child execution, keep unresolved effects as NeedsReview,
-and require a fresh observation before resumed input. The native bridge owns
-service lifetime: exiting GChat currently stops its child tasks; the independent
-background-service lifetime remains future integration.
+and require a fresh observation before resumed input. The accepted independent
+service owns bot tasks and schedules after GChat exits; ordinary Chat/Code
+connector operations are cancelled for the departing client. Its focused
+process fixture passes; installed native lifetime remains to be checked.
 
 The baseline UI supports a manually configured dedicated SSH bot computer.
 The current candidate wraps that path in a four-step name/computer/connection/review
 flow, opens setup for the first bot after opt-in and hides the sidebar entry
 while disabled. Unimplemented computer routes remain visibly unavailable. This
-is the existing-LAN setup slice, not completed novice VM provisioning. The
+includes resumable Linux KVM provisioning and a qualified dedicated-guest API
+path; installed novice presentation remains to be checked. The
 service transaction uses a stable workspace ID and matching vault slot. It deletes
 its imported key when persistence fails before publication and preserves it when
 the workspace was published but durability confirmation failed. Retrying the same

@@ -969,6 +969,7 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
         WorkspaceError::State(ServiceError::AssignmentNotFound) => {
             (StatusCode::CONFLICT, "assignment_not_found")
         }
+        WorkspaceError::SetupIncomplete => (StatusCode::CONFLICT, "computer_setup_incomplete"),
         WorkspaceError::Vault(_) => (StatusCode::SERVICE_UNAVAILABLE, "model_vault_unavailable"),
         WorkspaceError::CredentialCleanup(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -1109,6 +1110,20 @@ mod tests {
     }
 
     struct LockedVault(bool);
+
+    #[tokio::test]
+    async fn unfinished_computer_returns_a_typed_conflict() {
+        let response = workspace_error(WorkspaceError::SetupIncomplete);
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body: serde_json::Value =
+            serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                .unwrap();
+        assert_eq!(body["error"]["code"], "computer_setup_incomplete");
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("resume computer setup"));
+    }
 
     impl Vault for LockedVault {
         fn get(&self, _: Uuid) -> VaultFuture<'_, Option<Secret>> {
