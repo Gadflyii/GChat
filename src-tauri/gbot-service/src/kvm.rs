@@ -462,6 +462,8 @@ mod tests {
             "tigervnc-standalone-server",
             "dbus-x11",
             "dbus-user-session",
+            "gvfs",
+            "xdg-user-dirs",
             "at-spi2-core",
             "mousepad",
         ] {

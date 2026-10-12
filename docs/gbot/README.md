@@ -768,9 +768,32 @@ Inventory, completion, exact token count and shared-compaction requests all
 carry that key; it is excluded from evidence and removed after the gate.
 The changed authenticated fixture build and strict example Clippy pass; the shared
 context bridge is rebundled from the existing cached dependencies.
-No admission bypass or model/profile substitution is authorized. Next unresolved
-action: identify the accepted Ada runtime/profile and run one exact hello.txt task.
+No admission bypass or model/profile substitution is authorized. The retained merged
+SM89 closure below reached Ready in the startup-only attempt; no task request ran.
+That attempt was stopped normally after14.13s because its outer shell continued
+after a refused booking. The launch step now uses `set -euo pipefail`, requiring
+a successful booking before secret transfer or Engine launch. Receipt:
+Ada `gate-ada-smol-98fd8622f/aborted-after-booking-refusal/`.
 Muse SMOL remains second, only after Qwen PASS.
+
+**Current result (2026-10-12 00:42Z):** the authenticated Ada SMOL task opened
+Mousepad and reached Save As. Cua then reported `atspi_app_unresponsive` on
+GetChildren: zero descendants after its existing five-second timeout. The
+bounded fixture expired without a verified file; guest stop and vault cleanup
+passed. The Engine stopped normally at00:42:36Z, PID1588606 absent.
+
+The live guest capture confirms `gvfs` and `xdg-user-dirs` were not installed,
+with no `org.gtk.vfs` owner on the desktop bus. Mousepad's main thread was waiting
+in `futex_wait_queue`; the D-Bus sample does not establish the exact blocked call.
+These observations support a missing guest-desktop dependency diagnosis, not a
+proven Cua timeout defect. The shared cloud-init now installs both packages,
+including GVfs's required daemon dependencies. The focused first-boot case passes
+(1 case), strict all-target Clippy passes, and the changed fixture builds. Logs:
+`out/gbot-cua-service-20261011/guest-dependencies-{focused,clippy,build}.log`.
+Next action: one fresh-guest retry with the same
+prompt, accepted runtime/profile,262144/C1 and existing Cua timeouts. Only SSH
+readback of the saved file qualifies the task. Diagnostic evidence: S1
+`gate-ada-smol-98fd8622f/save-dialog-diagnostics.log` and raw `tool-*.json`.
 Evidence: S1 `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/`,
 including `model-1..7.json`, `tool-*.json` and `model-stop.json` (PID4048678 absent,
 normal exit0, 17.8s, end23:41:05Z). Dedicated guest95ce015c is stopped and its vault
@@ -781,7 +804,11 @@ Pinned lifecycle authority is retained under local
 of the actual saved bytes qualifies the task; no `hello.txt` PASS exists yet.
 
 Approved model gate on Ada GPU0, at most 20 minutes while a model runs:
-`19cc62bc5`-or-later SM89 Engine, exact retained donor path to be confirmed.
+`ec1666210` SM89 Engine, retained at Ada
+`/ai/tmp-c1-composed-spill-quote-ec1666210/qualified-ec166/bin/ginfer-serve`,
+including its own `lib/` closure. This merged revision contains the19cc parser fix.
+Accepted Ada profile: `/ai/tmp-c3-profile-v2-87f0820b0/privatehardware-v2-301974bb6.json`,
+schema2 and matching RTX4090 UUID. No calibration or new Engine build.
 Artifact: the verified S1 SSD copy is copied once to Ada local storage,
 `qwen38_27b_smol_df2.ginfer`, release-manifest SHA
 `ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`.
@@ -796,20 +823,28 @@ Evidence and owned inventory:
 
 | Owner / host | Path | State and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle/projection focused gates passed on701a5df9a; authenticated Ada gate prepared. |
+| GChat / Ada | `/ai/gbot-models/qwen38_27b_smol_df2.ginfer` | Release SHA verified after one S1-to-Ada copy;9576802560 bytes. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-98fd8622f/` | Failed save-task evidence; Engine stopped normally, temporary key removed. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-98fd8622f/` | Save As hang and live diagnostics; dedicated guest5d49b52f stopped, vault credential deleted. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-ada-smol-guest-deps/` | Fresh dedicated guest candidate; unchanged task, revised first-boot packages. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate-guest-deps` | Changed focused fixture; ready for one image-dependency retry. |
+| GChat / Ada | `/ai/gbot-models/gate-ada-smol-guest-deps/` | New model receipts; unchanged accepted runtime/artifact/profile. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle/projection checks retained; guest-dependency fixture, strict Clippy and build passed. |
 | GChat / local | `/ai/gchat/out/gbot-cua-service-20261011/` | Focused check logs, supervisor scripts and raw tool-call response retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/evidence/` | First integrated connection and API-ID failure evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate2/` | Model task/raw response/readback and normal-stop evidence retained. `model-2.json`, `choices[0].message.content`, is the exact native markup. |
 | GChat / S1 | `/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/` | Exact-source build passed, native-build-receipt.json retained; rejects Qwen SMOL on SM120. Retained for authorized read-only donor reuse. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-parser-19cc62bc5/` | Failed parser-fixed gate; desktop idle-expired, no saved file. Model/guest stopped and credential deleted; evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/` | Desktop/frame/type/menu pass; model context overflow before save. Model/guest stopped, vault credential deleted; evidence retained. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-gate-lifecycle` | Changed-service fixture; focused SSH/Clippy passed. |
-| GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Accepted integration fixture, API-ID discovery enabled and rejected prompt guidance absent. Reusable until source changes. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate-lifecycle` | Superseded binary retired in October12 cleanup; focused evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Superseded binary retired in October12 cleanup; integration evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-smol-projection-19cc62bc5/` | Profile accepted; Engine SM120 identity refusal before model load. Model/guest stopped, vault cleared; evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/disposable-cleanup-20261012.json` | Five stopped failed-task guests undefined then removed,7.393GiB freed; accepted baseline, Ubuntu guest, raw evidence/runtime/models retained. |
 
-Latest model PID4054261 exited with code1 before load and was absent at
-2026-10-11T23:54:08Z; the guest is stopped and its credential deleted. No model,
-guest or GPU lock remains held. Initial fixture root/keyring failures occurred
+Prior model PID4054261 exited with code1 before load and was absent at
+2026-10-11T23:54:08Z; the guest is stopped and its credential deleted. That failed attempt holds no model or GPU lock. The new isolated Ada gate
+has one dedicated S1 guest; it never uses a human desktop. Initial fixture root/keyring failures occurred
 before VM creation; separate evidence roots and fresh private keyrings prevent
 them without touching Ron's configuration.
+
+October 12 cleanup retired superseded fixture binaries and closed OI-057 guest/package bulk. Task evidence, the active bot guest, image bases and open candidates remain. All five hosts checked; approximately 60.3 GB recovered. Report and per-path receipts: `/ai/coordination/disk-hygiene-20261012/GChat.md` and `GChat.json`. Earlier failed-guest recovery is excluded from that total.

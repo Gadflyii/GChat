@@ -21,6 +21,8 @@
     "xfce4-terminal",
     "dbus-x11",
     "dbus-user-session",
+    "gvfs",
+    "xdg-user-dirs",
     "at-spi2-core",
     "xauth",
     "fonts-dejavu-core",
