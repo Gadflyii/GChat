@@ -25,7 +25,7 @@ mod linux {
     };
     use tokio::{
         io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-        net::UnixListener,
+        net::{TcpStream, UnixListener},
         process::Command,
     };
     use uuid::Uuid;
@@ -54,6 +54,19 @@ mod linux {
                 log.flush().await?;
                 let key = std::str::from_utf8(&line[offset + marker.len()..])?;
                 return Ok(PublicKey::from_openssh(key.trim())?);
+            }
+        }
+    }
+
+    async fn ssh_banner(mut connection: impl tokio::io::AsyncBufRead + Unpin) -> Result<()> {
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if connection.read_line(&mut line).await? == 0 {
+                return Err("guest SSH closed before its banner".into());
+            }
+            if line.starts_with("SSH-2.0-") {
+                return Ok(());
             }
         }
     }
@@ -757,6 +770,13 @@ mod linux {
             Arc::new(NativeVault),
         ));
         let result = async {
+            // QEMU accepts forwarded TCP before the resumed guest's sshd is ready.
+            tokio::time::timeout(Duration::from_secs(120), async {
+                let connection = TcpStream::connect(("127.0.0.1", vm.spec.ssh_port)).await?;
+                ssh_banner(BufReader::new(connection)).await
+            })
+            .await??;
+            println!("GUEST_SSH_READY");
             let hello = runtime.connect(identity).await?;
             tokio::fs::write(
                 evidence.join("hello.json"),
@@ -1025,6 +1045,16 @@ mod linux {
         assert_eq!(payload, pixels);
         packet.pop();
         assert!(video_frame(&packet).is_err());
+    }
+
+    #[tokio::test]
+    async fn ssh_readiness_waits_for_the_guest_banner() {
+        let (mut server, client) = tokio::io::duplex(256);
+        let reader = tokio::spawn(ssh_banner(BufReader::new(client)));
+        server.write_all(b"guest starting\r\n").await.unwrap();
+        server.write_all(b"SSH-2.0-OpenSSH_10.0\r\n").await.unwrap();
+        reader.await.unwrap().unwrap();
+        assert!(ssh_banner(BufReader::new(b"".as_slice())).await.is_err());
     }
 
     #[tokio::test]

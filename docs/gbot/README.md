@@ -630,7 +630,7 @@ stream revocation on hand-back. Existing source and package receipts are reused.
 No model/GPU, person's desktop, browser playback, Windows or M365 claim.
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
 Next unresolved action: finish the physical check with playback owned by its
-own transient unit, using the retained dedicated guest. The 17:00:41Z gate received a real
+own transient unit, using the retained dedicated guest after SSH readiness. The 17:00:41Z gate received a real
 1920×1080 BGRA desktop frame, converted to PNG and inspected; the configured
 48 kHz stereo PCM packets were all zero. View-only/takeover/hand-back were not
 reached. Guest `802d41b1-2e19-4413-af1a-1c2119f77973` is stopped with its
@@ -1375,3 +1375,9 @@ from `sh ... &` stops playback immediately. The tone now has its own transient
 user unit, as the existing editor-launch gate does; the production capture path
 is unchanged. The retained guest resumes for this correction; no fresh provision
 or calibration. S1 CPUs 112–113 are extended to 17:30Z for this finite check.
+
+The 17:06Z resume stopped at the production SSH connect deadline before media
+opened: the probe skipped first-boot readiness for a registered workspace and
+connected while the guest was booting. The probe now waits once for its SSH
+banner, bounded to two minutes; production connection deadlines are unchanged.
+The stopped guest and encrypted vault are retained for the remaining gate.
