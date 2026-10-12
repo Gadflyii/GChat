@@ -715,7 +715,7 @@ XML `on_screen_only` parameter. GInfer's strict JSON parameter parser returned
 that call as content, preventing typing/saving; independent SSH readback found
 no file. This does not qualify the end-to-end model task.
 
-**Current decision (2026-10-11 23:41Z):** exact GInfer `19cc62bc5` built
+**Earlier parser gate (2026-10-11 23:41Z):** exact GInfer `19cc62bc5` built
 both `ginfer` and `ginfer-serve` on S1, Release SM120a, GNU12.4/CUDA13.3.73.
 The 570-target build passed. The post-build `ginfer --version` probe was invalid
 for that CLI and exited1; this was a harness probe failure, not a compilation
@@ -751,7 +751,7 @@ compaction policy. The unchanged desktop prompt remains the acceptance task.
 
 Default recommended Gbot brain: released Qwen or Muse SMOL, with at least128K
 context and full native context where VRAM permits. Qwen SMOL is the first gate
-at262144 context/C1 on Ada; Muse SMOL is checked only after Qwen passes. Earlier dense
+at262144 context/C2 on S1 PRO GPU0; Muse SMOL is checked only after Qwen passes. Earlier dense
 INT/16384 and intermediate32768/131072 gate sizing are superseded. The Qwen
 artifact is copied once to S1 SSD and verified against the release SHA256SUMS;
 a rejected hardware profile is reported rather than bypassed.
@@ -764,44 +764,50 @@ and SM89 but rejects SM120. The hardware profile was accepted (`inventory_match=
 there was no model request or saved file. Evidence: S1
 `/ai/gbot-vms/cua-service-20261011/gate-smol-projection-19cc62bc5/`.
 
-**Approved next gate (2026-10-12 00:02Z):** released SHA-verified Qwen SMOL
-runs on Ada RTX4090, context262144/C1/INT8/DFlashK7/greedy/no-thinking. Guest
-and service remain on S1. Reuse a current `19cc`-or-later SM89 Engine when
-available; bind the temporary endpoint to Ada LAN IP with a gate-only API key.
-Inventory, completion, exact token count and shared-compaction requests all
-carry that key; it is excluded from evidence and removed after the gate.
-The changed authenticated fixture build and strict example Clippy pass; the shared
-context bridge is rebundled from the existing cached dependencies.
-No admission bypass or model/profile substitution is authorized. The retained merged
-SM89 closure below reached Ready in the startup-only attempt; no task request ran.
-That attempt was stopped normally after14.13s because its outer shell continued
-after a refused booking. The launch step now uses `set -euo pipefail`, requiring
-a successful booking before secret transfer or Engine launch. Receipt:
-Ada `gate-ada-smol-98fd8622f/aborted-after-booking-refusal/`.
-Muse SMOL remains second, only after Qwen PASS.
+**Current decision (2026-10-12 03:03Z): native foreground activation.**
+The private guest diagnosis established the Save As failure: Mousepad's main
+thread enters `gtk_dialog_run` from the AT-SPI D-Bus `DoAction` callback. Its
+nested dialog loop cannot service further accessibility calls until the dialog
+closes. The focused Save As window belongs to Mousepad, not a portal process;
+independent AT-SPI calls also time out. GVfs and xdg-user-dirs were present.
+The stack, independent calls and guest recovery differences are retained under
+S1 `save-deadlock-backtrace-20261012/`; its guest is stopped and undefined and
+the diagnostic credentials are removed.
 
-**Current result (2026-10-12 01:07:51Z): BLOCKED.** The one image-dependency
-retry reached Ready and opened Mousepad's Save As dialog, but the dialog's
-accessibility tree stopped answering. No `/home/gbot/hello.txt` was verified.
-The requested outcome remains the model-created file with exact SSH readback;
-opening the editor or dialog does not qualify it. Muse remains unstarted.
+The owning service now uses AT-SPI only to observe the tree. Its model-facing
+catalog exposes native click and keyboard operations, omitting `invoke_menu`,
+`set_value` and accessibility action metadata. A click resolves the current
+window's element token to visible enabled geometry, then sends screen
+coordinates to Cua with `delivery_mode=foreground` and no accessibility target.
+Hidden/frameless controls are refused: Cua's element-click fallback would still
+invoke `DoAction`, so merely setting delivery mode is insufficient. Keyboard
+operations target the foreground window without element addressing. Every input
+invalidates cached tokens; the next click requires a fresh observation. Known
+refusals remain durable operation receipts, and full raw MCP replies remain in
+the task log. See the [activation decision](../decisions/2026-10-12-activate-gbot-controls-through-foreground-input.md).
 
-The retained native focus report identifies Save As window `23068952` as
-Mousepad PID `5054` (`focus_outcome=same_app_dialog`). The pinned Cua focus guard
-reads the native X11 owner and requires both window owners to match the target
-PID before reporting that outcome. This is ownership evidence, not a PID echoed
-from the tool request. The independent AT-SPI bus lookup also resolves the
-application to PID `5054`; root Introspect and GetChildren return
-`org.freedesktop.DBus.Error.NoReply` outside Cua. A separate portal owner is not
-supported by this run. No fresh `xprop` was taken after the guest stopped.
+**Focused result:** native-input cases2/2, projection cases2/2, hermetic native
+input and Cua idle-revival cases1/1 each, strict all-target Clippy and the
+fixture build PASS. Logs: local `out/gbot-cua-service-20261011/native-activation/`.
+The first integration compile caught a fixture JSON-macro expression error;
+parenthesizing that expression corrected it before any guest/model ran.
 
-`gvfs`, `gvfs-daemons` and `xdg-user-dirs` are installed in the corrected guest,
-and the GVfs bus service is owned. Missing dependencies therefore do not explain
-the remaining hang. The retry's Mousepad main thread was in `do_sys_poll`; the
-exact blocked call or internal deadlock is not established. No timeout, prompt
-or targeting workaround was applied. Next action: resolve the recorded
-`GBOT-GUEST-AT-SPI-SAVE-DEADLOCK` in the owning guest/application path before
-another model retry; the coordinator's decision is to stop this item here.
+**Next acceptance:** ONE unchanged `hello.txt` task through the production service. Use released
+SHA-verified Qwen SMOL on S1 PRO GPU0, an accepted Engine at or after `96082415c`,
+context262144/C2/INT8/DFlashK7/greedy/no-thinking. The guest remains private and
+pinned to112–113; no human desktop, prompt workaround, calibration or timeout
+change. Acceptance is model-created `/home/gbot/hello.txt` with exact SSH readback
+`Hello from Gbot.` (with optional final newline), followed by guest/model stop and vault-key deletion.
+The exact runtime and matching-device profile are pending the runtime owner's
+path. Muse remains unstarted until Qwen passes. This is functional acceptance,
+not a GBench or performance claim.
+
+**Prior result (2026-10-12 01:07:51Z): blocked.** The image-dependency retry
+reached Ready and opened Save As but did not save the file. Native focus and
+independent bus lookup identified Mousepad PID5054/window23068952; the
+accessibility bus returned `org.freedesktop.DBus.Error.NoReply`. No separate
+portal owner was supported. The attributed stack now supersedes the earlier
+unresolved `do_sys_poll` observation.
 
 The Engine exited normally at `2026-10-12T01:07:51Z`, PID `1600086` absent.
 The fixture's later `fetch failed` followed the explicit Engine stop and is a
@@ -830,21 +836,11 @@ are stopped and credentials deleted. The original missing-dependency capture
 remains at `gate-ada-smol-98fd8622f/`. Pinned native ownership/lifecycle source is
 retained locally under `out/gbot-cua-service-20261011/cua-pin-lifecycle/`.
 
-Approved model gate on Ada GPU0, at most 20 minutes while a model runs:
-`ec1666210` SM89 Engine, retained at Ada
-`/ai/tmp-c1-composed-spill-quote-ec1666210/qualified-ec166/bin/ginfer-serve`,
-including its own `lib/` closure. This merged revision contains the19cc parser fix.
-Accepted Ada profile: `/ai/tmp-c3-profile-v2-87f0820b0/privatehardware-v2-301974bb6.json`,
-schema2 and matching RTX4090 UUID. No calibration or new Engine build.
-Artifact: the verified S1 SSD copy is copied once to Ada local storage,
-`qwen38_27b_smol_df2.ginfer`, release-manifest SHA
-`ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`.
-Effective launch: artifact first, `--tp 1 --max-context 262144 --max-concurrency 1
---kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy
---host <Ada LAN IP> --api-key <ephemeral>`. Use an accepted exact-device profile,
-not S1's profile. Greedy avoids the open sampled-speculation defect. This is a
-functional task, not a GBench/performance claim. Settings and the task prompt
-otherwise remain unchanged.
+Historical Ada gate used accepted `ec1666210` SM89 runtime and the matching
+RTX4090 schema2 profile. Its model is stopped and temporary API key removed.
+S1 and Ada copies of `qwen38_27b_smol_df2.ginfer` were verified against release
+SHA `ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`.
+Reuse the existing S1 SSD artifact; no further model copy is needed.
 
 Evidence and owned inventory:
 

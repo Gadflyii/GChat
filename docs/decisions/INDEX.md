@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-12** — [Activate Gbot controls through foreground input](2026-10-12-activate-gbot-controls-through-foreground-input.md)
+
 - **2026-10-11** — [Import Gbot SSH keys through the native vault](2026-10-11-import-gbot-ssh-keys-through-native-vault.md)
 
 - **2026-10-11** — [Bind Standard Benchmark to versioned Max Perf launches](2026-10-11-bind-standard-benchmarks-to-versioned-max-perf.md)

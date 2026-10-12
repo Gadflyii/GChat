@@ -94,9 +94,7 @@ mod linux {
         let names = [
             "list_windows",
             "get_window_state",
-            "invoke_menu",
             "type_text",
-            "set_value",
             "press_key",
             "hotkey",
             "click",
@@ -104,9 +102,9 @@ mod linux {
         ];
         let mut tools: Vec<Value> = catalog.iter().filter(|tool| names.contains(&tool.name.as_str())).map(|tool|
             json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.input_schema}})).collect();
-        tools.push(json!({"type":"function","function":{"name":"open_editor","description":"Open Mousepad on the dedicated bot desktop. Use this once, then accessibility tools to type and save.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}));
+        tools.push(json!({"type":"function","function":{"name":"open_editor","description":"Open Mousepad on the dedicated bot desktop. Use this once, then foreground input tools to type and save.","parameters":{"type":"object","properties":{},"additionalProperties":false}}}));
         let mut messages = vec![
-            json!({"role":"system","content":"You operate a dedicated Linux bot computer through AT-SPI accessibility tools. Open Mousepad, type exactly one line: Hello from Gbot. Save it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop accessibility, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving."}),
+            json!({"role":"system","content":"You operate a dedicated Linux bot computer through accessibility observations and real foreground input. Open Mousepad, type exactly one line: Hello from Gbot. Save it as /home/gbot/hello.txt. Use open_editor to launch it; all typing and saving must use desktop foreground input, never shell/file-writing. Inspect the window before actions and verify changes. get_window_state must use include_screenshot=false. Use element tokens from its current tree. You are text-only; do not request screenshots. The service owns session IDs. Finish only after saving."}),
             json!({"role":"user","content":"Please create the text file now."}),
         ];
         let client = Client::new();

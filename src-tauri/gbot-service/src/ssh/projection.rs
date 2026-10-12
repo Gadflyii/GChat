@@ -16,6 +16,7 @@ pub fn desktop_model_result(reply: &Value) -> Value {
         for element in elements {
             if let Some(fields) = element.as_object() {
                 let mut state = fields.clone();
+                state.remove("actions");
                 let role = state.remove("role").unwrap_or(Value::Null);
                 let name = state.remove("label").unwrap_or(Value::Null);
                 let token = state.remove("element_token").unwrap_or(Value::Null);
@@ -54,7 +55,7 @@ mod tests {
         let projected = desktop_model_result(&raw);
         assert_eq!(
             projected,
-            json!({"snapshot_id":"s1","truncated":true,"elements_complete":false,"elements":[{"role":"entry","name":"Filename","element_token":"s1:4","state":{"enabled":true,"focused":true,"value":"hello.txt","actions":["set_value"],"element_index":4,"frame":{"x":10}}}]})
+            json!({"snapshot_id":"s1","truncated":true,"elements_complete":false,"elements":[{"role":"entry","name":"Filename","element_token":"s1:4","state":{"enabled":true,"focused":true,"value":"hello.txt","element_index":4,"frame":{"x":10}}}]})
         );
         assert_eq!(raw, saved);
     }

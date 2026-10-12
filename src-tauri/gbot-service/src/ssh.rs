@@ -37,9 +37,10 @@ use crate::{
 };
 
 mod guest;
+mod native;
 mod projection;
-pub use projection::desktop_model_result;
 pub use guest::DesktopTool;
+pub use projection::desktop_model_result;
 
 #[derive(Clone, Copy, Debug)]
 pub struct SshPolicy {
