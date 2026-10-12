@@ -13,21 +13,26 @@ approvals, sessions and inference assignment. The service boundary retains appro
 iteration.
 
 The local-first service, vault-backed SSH/Cua transport and dedicated Debian
-guest are implemented. The current Cua executor candidate is `4560baae2`, with
-fork `896c68871` fixing custom-loop configuration and awaited asynchronous tools.
-Focused executor, provider and child-process gates pass. The first real
-ComputerAgent task opened Mousepad, typed the line and reached its File menu,
-then Cua's X11 foreground guard refused the owned popup. No saved-file PASS
-exists. The fork's narrow owned-popup fixture and compatible Ubuntu 24 driver
-build pass at `199e92644bdfd7d76066b3c2964fe43e9e84a67e`. Ron's driver-update
-decision requires one fresh guest and new vault key through cloud-init; no guest
+guest are implemented. The current Cua executor candidate is `b4dea80e6`, with
+fork `199e92644` including the provider fixes and owned-popup foreground fix.
+Focused executor, provider and child-process gates pass. The fork's narrow
+owned-popup fixture and compatible Ubuntu 24 driver build pass at
+`199e92644bdfd7d76066b3c2964fe43e9e84a67e`. The patched driver was installed
+through cloud-init into one fresh guest with a new native-vault key; no guest
 sudo or disk surgery. Its archive SHA-256 is
 `0a12206990d2e72a77f7ef8f0b6c56c5a71b498984851878caefc6ffef6497b9`.
 
-The prior guest and completed action receipts are retained until fresh provisioning
-succeeds, then its stopped disk and isolated credential store are retired. The guest is stopped; the Ada engine stopped normally at
-05:26:19Z and its GPU booking was returned. No human desktop input or native
-Windows execution is authorized. No new Python sandbox/dataset closure is used.
+Fresh guest `992b4eff-8624-4983-91e5-e990696eb3c2` reached Ready. The previous
+guest and credential store were retired, freeing 1.54 GiB. Native popup input
+now opens Save As and its accessibility tree remains responsive. The desktop
+task was stopped after 57 tool calls because Save's center `(1052,889)` is below
+the guest's 1280×800 screen. The coordinate conversion is correct; the driver
+checks window bounds but not screen bounds. No saved-file or benchmark PASS is
+claimed. Next: decide the guest display size and explicit rejection of off-screen
+element input before another model run. The engine and guest are stopped,
+bookings released, and the private vault controller is retained.
+No human desktop input or native Windows execution is authorized. No new Python
+sandbox/dataset closure is used.
 
 ## Decided product scope
 
@@ -42,7 +47,7 @@ Windows execution is authorized. No new Python sandbox/dataset closure is used.
 | Sizing and price | Linux default 2 vCPU / 4 GB; 2 GB minimum. Read live regional prices and show monthly cost before creation. No fixed price or stale plan alias. Windows follows its OS requirements. |
 | Persistence | Tasks, history and results survive service restart, PC sleep and client reconnect. Resume only after reconciling actual state. |
 | M365 Cloud PC | Required first-release scope, not a later extension. Ron's existing Cloud PC is a development target. |
-| Computer foundation | Pin Cua SDK and Driver to one source revision; use direct SSH on the LAN, without a cloud relay. |
+| Computer foundation | Pin the Cua SDK base and reviewed Driver fork revisions explicitly; use direct SSH on the LAN, without a cloud relay. |
 | Credentials | GChat's native vault owns GChat-managed credentials; task records retain references, not secrets. |
 | Development machines | Small Linux and Windows VMs on this desktop and S1 where their hypervisor supports them; Ron's running M365 Cloud PC. No machine is provisioned by this document. |
 
@@ -574,47 +579,56 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 Repository: GChat. Subject authority: `docs/gbot/README.md`; this replaces the
 older `docs/gbot-design/README.md` path. The [October 11 decision](../decisions/2026-10-11-design-local-first-gbot-and-computer-setup.md)
-supersedes the initial draft's unassigned-cloud scope without changing runtime
-code. The approved Cua map is merged in main `aa60f9015`. Current candidate is
-`feat/gbot-cua-executor-aa60` at `/ai/gchat-worktrees/gbot-cua-executor-aa60`.
+supersedes the initial draft's unassigned-cloud scope. The approved Cua map is
+merged in main `aa60f9015`. Current candidate is `feat/gbot-cua-executor-aa60`
+at `/ai/gchat-worktrees/gbot-cua-executor-aa60`, source `b4dea80e6`.
 Deliverable: replace the prototype model loop with pinned Cua `ComputerAgent`
 and its GInfer function-tool provider, retaining the approved guest and transport.
 Acceptance: focused provider/IPC/receipt/compaction cases, the desktop hello.txt
-task with independent SSH readback, and both Cua `hello_file_env` variants through
-that same SSH session. No Windows, human desktop, new VM stack, model conversion,
-sampling changes or broad benchmark campaign. Next action: verify the pinned archive
-provisioning fixture, provision one fresh guest/new vault key through the existing
-KVM adapter, then retry the desktop task and both actual Cua benchmark variants
-through that same new session. At 05:26Z the real ComputerAgent opened Mousepad and typed the line, but
-its File menu click was refused: popup `0x16001d8` held focus while its owner
-`0x1600003` remained EWMH-active. No Save/readback or benchmark result is claimed.
-Ada's model stopped normally at 05:26:19Z, PID absent and booking returned;
-the superseded guest is stopped and its private vault session remains open
-until fresh provisioning succeeds.
-The approved narrow fork change recognizes an active popup owner by X client,
-PID or WM_TRANSIENT_FOR, retains focus checks, and never uses accessibility
-DoAction or bypasses a foreign-window guard. Use the existing accepted ec166
-SM89 runtime, SHA-verified Qwen SMOL, 262144 context, C1, INT8 KV, DFlash7 and
-greedy sampling for the retry; this is functional acceptance only.
-Fresh guest `eff02358-59d8-480f-88f6-2d274250ab1b` initially failed before
-boot because the private libvirt config root made its monitor socket exceed
-the UNIX path limit. Its stopped definition was moved to the shorter owned
-`/ai/gbot-vms/cua1config` root; the same disk and native-vault reference remain.
-The fixture wrapper preserves all arguments and changes only libvirt's config
-root, leaving the private keyring data/session intact. Restarting only the verified
-private daemon corrected that path; the same guest is now Ready. This was a
-fixture startup failure before any model load, not guest/product qualification.
+task with independent SSH readback, and both actual Cua `hello_file_env` variants
+through that same SSH session. No Windows, human desktop, new VM stack, model
+conversion, sampling changes or broad benchmark campaign.
+Next action: resolve the measured off-screen Save failure, then complete the
+three file tasks through one dedicated guest/session. Do not retry unchanged.
 
-The October 12 04:35Z guest decision permits one fresh disk and vault credential
-through the existing libvirt-session adapter. The image, cloud-init and transport
-remain fixed. Keep that guest for all steps; retire the stopped old disk
-`1481bf25-2910-41dc-8b3a-803800e7c8c9` after preserving its cited evidence.
-Python 3.12.3 is isolated in the existing build image; the base Cua closure is
-hash-locked, with no host installation. The executor/provider and Driver candidate is in
-the approved fork's `gbot/pin-0c69d9a` branch at
+Archive provisioning gates passed; evidence is
+`popup-driver/provision-{test,clippy,build}.log` under
+`/ai/gchat/out/gbot-cua-executor-20261012/`. Builds use the accepted Ubuntu 24
+container and shared cache. The tracked controller must keep its PTY open;
+an initial pipe closed before provisioning and was corrected by keeping stdin.
+The prior guest's private libvirt monitor exceeded the UNIX socket path limit;
+a shorter owned config root corrected that fixture failure before model load.
+
+The 05:26Z task exposed the owned-popup guard failure. Fork `199e92644` fixes
+that route using positive X-client/PID/transient ownership and retained focus
+checks; no foreign-window bypass or accessibility DoAction fallback. The fresh
+patched guest reached Ready at 05:58Z, and its real ComputerAgent task opened
+the File menu and Save As through native input. The dialog tree stayed responsive.
+The later Save click resolved to window `(1047,833)` plus origin `(5,56)`,
+correctly producing screen `(1052,889)`. The dialog is 1096×856 at `(5,56)`,
+so its Save button lies below the 800-pixel desktop. The driver reported
+unverifiable delivery and Cua repeated the click. The task was interrupted at
+06:07Z, without a saved file or either benchmark result. The model also typed
+the line without its requested final period; exact file acceptance remains owed.
+Evidence: `/ai/gbot-vms/cua-patched-20261012/evidence/offscreen-save-result.json`
+and its referenced raw task, desktop and gate records on S1. Actual pointer
+clamping was not measured. Ada's engine stopped normally at 06:07:35Z; its PID
+and the guest's QEMU PID are absent and both bookings were returned. The private
+vault controller remains open to retain its credential before the next decision.
+
+Guest `eff02358-59d8-480f-88f6-2d274250ab1b` and its private credential store
+were retired at 06:01Z after the fresh guest reached Ready, freeing 1.54 GiB.
+Its retirement receipt and earlier task evidence remain on S1. The new guest
+uses the same Debian image and transport with the patched archive installed
+by cloud-init; no guest sudo or disk surgery.
+
+The approved fork is `Gadflyii/cua`, branch `gbot/pin-0c69d9a`, at
 `/ai/gchat-worktrees/cua-gbot-pin-0c69`, committed and pushed as `199e92644`.
-The custom-loop config and awaited asynchronous tool call fixes at `896c68871` have three focused
-ComputerAgent cases passing. Upstream is not a publication target.
+Base SDK pin is `0c69d9a2c8`; custom-loop config and awaited asynchronous tool
+fixes at `896c68871` have three focused ComputerAgent cases passing. Python
+3.12.3 and the approved closure are isolated on S1. Actual cua-bench setup and
+evaluate modules import without its sandbox/datasets dependency closure.
+No host packages or upstream publication are part of this candidate.
 
 Focused service gate: four durable-recovery cases, strict Clippy and example build
 pass. The actual Python child + loopback HTTP provider/compaction/async-tool IPC
@@ -632,11 +646,12 @@ External pages, runtime and physical acceptance were not exercised by this gate.
 
 | Owner / host | Path | Purpose and retention |
 | --- | --- | --- |
-| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | Current service executor candidate 4560baae2 on aa60f9015; physical gate blocked on Cua popup guard; same dedicated guest/vault retained, model stopped. |
-| GChat coordinator / local | `/ai/gchat-worktrees/cua-gbot-pin-0c69` | Fork provider/fixes 896c68871 on 0c69d9a2c8, focused tests passed; keep until reviewed integration. |
+| GChat coordinator / local | `/ai/gchat-worktrees/gbot-cua-executor-aa60` | Candidate b4dea80e6; focused gates passed, physical task blocked by off-screen Save; no live model. |
+| GChat coordinator / local | `/ai/gchat-worktrees/cua-gbot-pin-0c69` | Fork199e92644 on0c69d9a2c8; provider and owned-popup fixtures passed, compatible driver built; keep until reviewed integration. |
 | GChat coordinator / local | `/ai/gchat/out/gbot-cua-executor-20261012/` | Isolated Python closure and focused integration evidence; dependency import/pip-check gate passed. |
-| GChat coordinator / S1 | `/ai/gbot-vms/cua-first-20261012/` | Staged executor4560, approved isolated Python closure and real benchmark modules; private vault session and one guest gate on CPUs112-113. |
-| GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-first-20261012/` | Functional model gate using the existing accepted ec166 runtime/model/profile in place; load only after guest Ready, at most20min. Retain launch/stop and task evidence. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-first-20261012/` | Approved isolated Python closure and actual benchmark modules reused by the fresh gate; old VM/keyring retired, evidence retained. |
+| GChat coordinator / S1 | `/ai/gbot-vms/cua-patched-20261012/` and `/ai/gbot-vms/992b4eff-8624-4983-91e5-e990696eb3c2/` | Candidate b4dea80e6, driver199e92644/archive0a122069; Ready passed, task interrupted, QEMU absent. Keep stopped guest, evidence and native-vault controller43755 pending decision; booking released. |
+| GChat coordinator / Ada4090 | `/ai/gbot-models/gate-cua-patched-20261012/` | Functional ec166 runtime/model/profile gate; engine stopped06:07:35Z, PID absent, locks/booking released. Retain launch/stop evidence; no performance claim. |
 | GChat coordinator / local workstation | `/ai/gchat/out/gbot-cua-adoption-20261012/cua-source` | Read-only fork checkout at exact pin `0c69d9a2c8`; retained source inspection, no build or guest. |
 | GChat coordinator / local workstation | `/ai/gchat-worktrees/gbot-cua-service-be226`, branch `park/gbot-popup-binding-66093`, pushed `391667372` | Merged native-input source `66093dd03`; unverified popup patch committed separately, retained until adoption decision. Not a merge candidate. |
 | GChat coordinator / S1 | `/ai/gbot-vms/cua-service-20261011/gate-native-activation/` | Latest model retry: typed line/File menu, popup guard refusal, normal model stop 03:43:45Z. Evidence retained; no live model/guest. |
