@@ -752,7 +752,7 @@ app actions or release occurred. This establishes focused fixture cleanup,
 not a warning-free full suite or real Shiki WASM/browser qualification.
 Next action: review the pushed branch for main integration. Handoff:
 `out/gchat-open-items-20261012/web-warning-note.md`.
-Candidate source (268 MiB) and new concise evidence remain retained through
+Candidate source (270 MiB) and new concise evidence remain retained through
 reviewed merge; the earlier candidate and evidence are preserved.
 
 ## Implementation and verification
