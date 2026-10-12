@@ -15,6 +15,8 @@ pub mod engine_hosts;
 pub mod extensions;
 pub mod filesystem;
 pub mod ginfer_models;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod gbot;
 pub mod http;
 pub mod mcp;
 #[cfg(target_os = "windows")]

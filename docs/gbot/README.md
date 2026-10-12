@@ -5,8 +5,16 @@ computer, shared agents, skills, tools and connectors. It also carries into paid
 Arbitor. Its service runs on the user's own PC by default; owning a server is
 not a prerequisite.
 
-Current item: compact-output contract audit complete; next is the XFCE guest
-image comparison in the [Cua adoption plan](cua-map.md).
+Current item: connect the accepted Cua executor to GChat bot channels, approvals,
+browser tools and takeover controls in the [Cua adoption plan](cua-map.md).
+Acceptance: focused actor/browser/control/guest fixtures, native type check and
+changed frontend checks; reuse the accepted desktop task instead of repeating it.
+Next question: package the accepted Cua runtime and connect its media/view endpoint. The embedded
+viewer needs a Cua media endpoint, and the accepted Python executor closure
+still needs installer packaging. No new dependency, VM or model gate.
+The candidate passes its six focused cases, strict service Clippy, native type
+check and frontend types/lint. Evidence: `out/gbot-cua-guest-20261012/result.json`.
+Compact output is merged in `9ab394244`.
 Ron selected Cua for the agent framework while retaining our VM provisioning,
 Hyper-V and M365 Cloud PC connection. GChat retains durable state, vault,
 approvals, sessions and inference assignment. The service boundary retains approvals and saved effect receipts; Cua owns task
@@ -62,8 +70,10 @@ the per-bot connector UI is implemented.
 Each bot gets its own sidebar channel next to Chat, Studio and Code. The bot
 channel owns its conversation history, tasks, approvals and desktop view,
 separate from ordinary model chats and Code sessions. Multiple bots retain
-separate channels and assignments. This UI is planned, not delivered by the
-workspace transport skeleton.
+separate channels and assignments. The candidate now supplies bot channels,
+SSH key import, connection controls, saved brain settings, task history,
+approvals and takeover controls. Its embedded desktop viewer, guided VM/cloud
+setup and per-bot connector picker are not delivered yet.
 
 GChat remains the open base: front end, lightweight infrastructure management,
 LAN host management, agent builder/support, prebuilt skills and integrations.
@@ -580,15 +590,35 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
 and two Cua evaluator receipts below. Skill import `45b2637ae` is merged as
-`7bf139610`. The compact-output candidate is `feat/gbot-cua-output-45b` at
-`/ai/gchat-worktrees/gbot-cua-skill-918c`.
-Deliverable: seed the pinned MIT Cua skill and linked guides through GChat's
-existing catalog, and use that same bundle in Gbot's accepted executor.
-Acceptance is complete: catalog seeding/platform policy (4 cases), skill
-loading (1), executor recovery (5), strict service Clippy and example build
-pass. The local guide tool needs neither guest access nor approval and resumes
-safely after restart. All relative bundle links resolve.
+`7bf139610`. Compact output is merged as `9ab394244`. The current guest-image candidate is
+`feat/gbot-cua-guest-9ab` at `/ai/gchat-worktrees/gbot-cua-skill-918c`.
+Current deliverable: connect the existing Cua executor to native GChat channels,
+persist per-bot model assignments with vault-held API keys, preserve browser
+schemas and approvals, and implement exclusive takeover/hand-back.
+Acceptance: the four focused guest/browser/control/task cases, one assignment
+persistence/vault case, strict service Clippy, native type check, and one frontend
+case covering bot isolation, approvals, saved settings and takeover. Accepted
+desktop execution is reused.
 
+The candidate uses the shared data-folder resolver and existing native vault.
+Task actors publish event-driven updates; no refresh timer is introduced. Stop
+and takeover drain child execution, keep unresolved effects as NeedsReview,
+and require a fresh observation before resumed input. The native bridge owns
+service lifetime: exiting GChat currently stops its child tasks; the independent
+background-service lifetime remains future integration.
+
+The current UI supports a manually configured dedicated SSH bot computer. It
+is not the novice setup walkthrough. Task execution currently needs the approved
+Python environment and shared context-preparer path configured with
+`GBOT_CUA_PYTHON` and `GBOT_CONTEXT_PREPARER`; no Python runtime is bundled yet.
+The viewer is not exposed because the guest has VNC, not Cua's media endpoint.
+Do not advertise these pending packaging/view paths as ready for end users.
+
+Owned candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch
+`feat/gbot-cua-guest-9ab`. Retain source and concise evidence in
+`/ai/gchat/out/gbot-cua-guest-20261012/` until review/merge. The existing shared
+`/ai/gchat/src-tauri/target` cache is reused, not owned by this item. No live guest,
+model, calibration or Windows job belongs to this change.
 One fresh dedicated Debian guest ran the skill-enabled ComputerAgent with the
 unchanged accepted Qwen SMOL 262144/C1/INT8/DFlash K7/greedy configuration.
 The model read `LINUX.md` through `read_cua_guide`, used foreground input,
@@ -629,7 +659,39 @@ and satisfied/unsatisfied/unknown postconditions without promoting delivery to
 task success. The focused fixture (1 case) and strict service Clippy pass.
 The shared build cache is container-owned, so checks use the existing build
 container rather than changing ownership or creating a second cache.
-Next unresolved action: reviewed handoff, then the XFCE guest image comparison.
+Compact output is merged in main `9ab394244`.
+
+**XFCE guest-image item.** Compare pinned `libs/xfce` and `libs/xfce-cua` with
+our dedicated Debian 13 cloud-init. Adopt confirmed missing session settings;
+retain the approved VM, SSH-only access, private viewer and native vault.
+Gate: one focused fixture executing the rendered session script and strict service
+Clippy. Reuse the accepted private-guest desktop overwrite evidence; these session
+settings do not justify another guest/model task (Ron, 2026-10-12).
+No new packages, dependency closure, sampler changes, human desktop input or
+Windows execution. Existing executor/evaluation evidence remains valid.
+The pinned `xfce-cua` startup explicitly declares `XFCE` / `xfce` / `x11`;
+ours previously published only display, Xauthority and D-Bus. Provisioning now
+sets that identity before starting XFCE, supplies it to D-Bus activation, and
+publishes the same values to SSH tools. It also adopts `xset s noblank` from
+both Cua images. This does not claim that missing identity disabled AT-SPI:
+the pinned Driver defaults an unknown desktop to full accessibility advertising.
+Its input routing does consult desktop/session identity, so tools should receive
+the actual private session rather than an inherited or absent value.
+
+| Pinned guest difference | Decision |
+| --- | --- |
+| Xvnc, XFCE, AT-SPI, D-Bus, fonts, terminal and native input utilities | Already included; retain our dedicated Debian 13 VM. |
+| `gvfs`, user directories and user-session bus | Already included; the earlier modal deadlock was AT-SPI dispatch, not a proved missing-package failure. |
+| Desktop identity and no blanking | Adopt in the shared session and SSH environment. |
+| Screen/lock/power-manager autostart | Our explicit autostart disables and X server settings already cover the private guest. |
+| Browser package | The typed browser gate selects Chromium for this Driver pin; Firefox ESR cannot supply its required page binding. |
+| KiCad/Qt apps, ffmpeg, Python agent, supervisor, noVNC/websockify, spacesd and passwordless sudo | Not required by our accepted VM/SSH/Cua path; no package expansion. |
+| Public VNC/HTTP container ports | Retain localhost VNC over vault-backed SSH. |
+
+The focused rendered-session fixture passes with inherited KDE/Wayland values:
+it checks that both startup and SSH tools receive XFCE/X11 and AT-SPI. No fresh
+physical guest is needed to establish this environment transformation. The
+accepted desktop task remains valid and is not repeated for this change.
 
 **Nested modal candidate (2026-10-12).** Fork `c549ab4d7f31a08c339da1732700b6664af438a6`
 removes the empty-title exclusion from X11 enumeration, includes every visible

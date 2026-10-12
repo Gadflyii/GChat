@@ -3,7 +3,8 @@
 Ron selected Cua as Gbot's computer-agent framework on October 12. His follow-up
 keeps our VM provisioning, especially Hyper-V and M365 Cloud PC. This map is the
 current integration plan; it supersedes the custom Gbot-loop plan in the
-[design](README.md). This change is documentation only.
+[design](README.md). Implementation status and physical gates are recorded below
+and in the [current record](README.md#current-record-and-inventory).
 
 ## Source and selection
 
@@ -30,14 +31,14 @@ Current prototype evidence and retained paths are in the [design record](README.
 | Windows guest and M365 Cloud PC connection | **KEEP** | Hyper-V guest setup and the selected Windows 365 connection/session/view route remain GChat work. Adopt Driver's Windows control inside the bot session; do not claim that the SDK or viewer supplies a Windows 365 connector. |
 | Guest desktop image | **KEEP**, borrow Cua settings | Keep Debian 13 + localhost-only Xvnc + XFCE and its session environment. Borrow relevant packages/settings from `libs/xfce-cua`; do not replace it with the container image or older Spaces image. |
 | Computer-agent loop | **WRAP** | `cua_agent.ComputerAgent` owns model/action iteration, tool dispatch and event callbacks. The Gbot service hosts it and journals state; retire the Gbot-specific model/tool iteration once the Cua route passes. Leave ordinary Chat/Studio/Code execution unchanged. |
-| GInfer model provider | **WRAP** | Assigned OpenAI-compatible endpoint/key/model supplied by GChat. Cua accepts `api_base`/`api_key`, but its generic VLM loop injects screenshots. A narrow function-tool provider configuration is needed for our text-only AT-SPI route; compatibility is not yet demonstrated. |
-| Desktop capture, input and accessibility | **ADOPT** | Pinned Cua Driver over persistent stdio MCP/SSH, with the selected desktop environment. AT-SPI observations plus foreground native input for modal controls. No GChat accessibility implementation. The popup foreground gap remains unresolved below. |
+| GInfer model provider | **WRAP** | Assigned OpenAI-compatible endpoint/key/model supplied by GChat. Cua accepts `api_base`/`api_key`, but its generic VLM loop injects screenshots. The merged function-tool provider supplies the tested text-only AT-SPI route; exact desktop and two Cua evaluator receipts pass. |
+| Desktop capture, input and accessibility | **ADOPT** | Pinned Cua Driver over persistent stdio MCP/SSH, with the selected desktop environment. AT-SPI observations plus foreground native input for modal controls. No GChat accessibility implementation. The reviewed fork handles owned popup input and nested modal observations; accepted exact desktop evidence covers both. |
 | Driver skills | **ADOPT** | Import the pinned skill bundle (`SKILL.md`, `LINUX`, `WINDOWS`, `MACOS`, `BROWSER`, `WORKFLOW`, `VISUAL`, `RUNTIME`) through shared skill discovery, with notices, platform selection and source/version metadata. Keep session/target semantics; adapt modal activation to native input. No independently evolving computer-use skill. |
 | Computer tool schemas and dispatch | **WRAP** | Expose Driver MCP tools as Cua function tools through the existing vault/session transport. Tool calls go through GChat approvals and operation receipts before execution. Preserve raw MCP replies in the task log; model-facing accessibility output has one elements representation. |
-| Browser tools | **ADOPT** Driver, **WRAP** exposure | Driver's native browser tools provide page state, navigation, interaction, dialogs, files/downloads and preparation. `PythonBrowserTool` still references a legacy Playwright endpoint; do not adopt that path as working. Browser prerequisites and supported browser coverage need their own gate. |
-| Human requests | **WRAP** | Cua `human_tool` has a queued request/completion mechanism. Route requests into the bot's GChat channel. Keep durable approvals and exclusive takeover in GChat; the in-process queue/Gradio UI is not those capabilities. |
-| Desktop viewer and media | **WRAP**, evaluate Cua | Cua FSL media/HTML5 viewer is permitted for GChat. Its embedded web path is the plausible Tauri candidate. Native `cua-viewer` only supports Windows/macOS at the pin. Keep SSH/VNC view transport until a Cua route works inside Linux/Windows GChat over direct SSH with equivalent session/control behavior. |
-| Take over / Hand back | **KEEP** authority, **WRAP** viewer input | GChat owns the durable exclusive input grant: pause bot dispatch before human input, resume only after hand-back and fresh observation. Viewer input must use that grant; a viewer or `human_tool` queue alone does not enforce it. |
+| Browser tools | **ADOPT** Driver, **WRAP** exposure | Gbot exposes the pinned Driver's typed browser catalog and preserves its schemas and arguments through the existing approval/session/receipt path. Cua owns exact page binding, navigation, refs, dialogs and files/downloads; no GChat browser engine. `PythonBrowserTool`'s legacy Playwright endpoint is excluded. Source fixture and remaining Chromium guest gate are described below. |
+| Human requests | **KEEP** GChat requests, borrow Cua's request/completion shape | `human_tool` is a human model-completion provider, not desktop takeover or approval. Borrow request IDs, pending/completed/failed outcomes and separate text/tool-call replies. Bind any future assistance request to the existing bot/task journal and channel; do not import its in-memory FastAPI/Gradio server. |
+| Desktop viewer and media | **WRAP** Cua media core when its guest endpoint is available; **KEEP** SSH/VNC now | Cua's `MediaSession` canvas core is the narrow integration candidate. The full HTML5 viewer requires Spaces RPC/media services and additional JS dependencies, permits input by default and forbids iframe embedding. No source or latency evidence establishes a better replacement for our current VNC transport. Native `cua-viewer` lacks Linux support and supplies no M365 broker connection. |
+| Take over / Hand back | **KEEP** authority, **WRAP** Cua media input | GChat must own a durable exclusive input grant for the selected session, drain/cancel bot input, and revoke human media access before hand-back. Cua `VIEW_ONLY`, scoped tickets and `CloseMedia` provide mechanisms to wrap; neither `human_tool`, presence cursors nor an interactive viewer session supplies that authority. |
 | Evaluation | **ADOPT** tasks/verifiers, **WRAP** guest session | Use `cua-bench` task definitions, rewards and ATIF trajectories. Bind its session operations to our existing dedicated guest; stock `cb run` defaults to container/managed infrastructure and is not a libvirt/SSH adapter. No new benchmark framework. |
 | Terminal recording | **ADOPT** `tools/cli-cast` for development | Real PTY → asciinema v2 casts for Code input/render evidence and guest CLI traces. Its transcript-parser goldens are currently Claude Code-oriented; OpenCode semantic parsing is unqualified. Recording is not permission to replay commands or use a user's history. |
 | GChat UI, sessions and per-bot channel | **KEEP** | Setup, status, shared history, result rendering, connector selection and multiple bot identities belong to GChat. No second Cua Spaces app or Gradio product UI. |
@@ -61,6 +62,59 @@ The older `libs/xfce` launches Spaces services and is not the chosen image.
 Borrowing package lists does not fix the proven modal DoAction deadlock. Our
 image dependency correction is already merged; further package additions need
 an identified application prerequisite.
+
+### Typed browser adoption
+
+Queue item 4 uses Driver fork `c549ab4d7` on SDK base `0c69d9a2c8`.
+The saved editor/file evidence establishes the persistent MCP transport, but
+does not establish browser execution. Source inspection found an actual
+integration gap: `ssh/native.rs` removed all browser tools from `tools/list`
+and refused their page arguments. The candidate now preserves these nine exact
+Driver definitions: `get_browser_state`, `browser_prepare`, `browser_navigate`,
+`browser_click`, `browser_type`, `browser_dialog`, `browser_set_input_files`,
+`browser_download` and `browser_pointer`. Browser calls bypass the native
+geometry adapter; mutations invalidate its cached native observation.
+`get_browser_state` uses `DesktopCapture`; the other tools use `DesktopInput`.
+Native modal activation remains foreground-only.
+
+The callable path is `WorkspaceRuntime::desktop_tools` (also
+`POST /v1/desktop/tools`) → the returned Driver definition mapped to
+`FunctionTool` with `ToolBinding::Desktop { name }` → `CuaTask` approval →
+`SshSession::guest_request` → the same persistent Driver MCP `tools/call`.
+The existing editor example selects a native-only subset; a browser task must
+select the advertised browser tools too. The service overwrites the caller's
+`session`, renews it before each call and records the raw result in the existing
+operation receipt. Reconnect does not restore old page capabilities; obtain a
+fresh binding and snapshot rather than replaying an uncertain action.
+
+The bundled Gbot skill now distinguishes native input from typed page actions
+and directs the agent to the existing `BROWSER.md`. For an authorized isolated
+browser, call `browser_prepare` with `allow_launch:true` and
+`profile:{mode:"isolated_new"}`. Use its `prepared_pid` with `list_windows`,
+bind the returned exact window using `get_browser_state`, require
+`status:"ok"`, `binding_quality:"exact"`, `mutation_allowed:true`, then use
+returned target/tab IDs. Navigate, read `semantic_v2` with
+`include_screenshot:false`, act once using a fresh page ref, and read again to
+verify the requested postcondition. Native permission prompts and explicit
+GUI-only tasks retain the native route.
+
+The focused source fixture
+`ssh::native::tests::browser_catalog_and_actions_preserve_driver_capabilities`
+checks catalog/schema preservation, preparation/binding/navigation/input
+argument passthrough, capability classification, preservation of semantic
+outline/refs/actions in the model projection and invalidation of native tokens.
+The focused fixture passes in the shared cached check. It does not claim a
+physical Chromium browser result.
+
+The next physical gate is one harmless local-page task on the dedicated bot
+guest: a supported package-owned Chromium installation, Driver-owned isolated
+profile, text-only navigation/form/button interaction and an independent page
+postcondition. The existing `GuestBootstrap::browser_package` is the package
+selection seam. Firefox ESR cannot serve this pin's page route: Gecko binding
+requires unsupported launch-time BiDi setup. No package install, live guest,
+model task, browser framework or dependency was added by the browser source
+work. `cua-bench`'s `click-button` evaluator still needs its distinct
+`launch_window`/`execute_javascript` session mapping before it can be claimed.
 
 ### Cua loop and GInfer
 
@@ -97,8 +151,10 @@ Supply only the current task's endpoint credentials and mediated tool handles;
 return usage, messages and tool outcomes to the existing journal/UI. The child
 owns no vault, scheduler or recovery database. On child loss, the service keeps
 the task and unresolved operation receipts. This is a host-side binding, not a
-new guest worker or network service. Its packaging/IPC contract is part of the
-proposed integration and has not been implemented or qualified.
+new guest worker or network service. Its private IPC, event-driven task/approval API and GChat native bridge are
+implemented and pass focused checks. Runtime packaging is still pending: the
+accepted Python closure and shared context preparer currently require explicit
+paths, rather than an installer-owned runtime.
 
 ### Durable actions and approval
 
@@ -151,19 +207,91 @@ Evidence: S1 `/ai/gbot-vms/cua-service-20261011/gate-native-activation/`, includ
 
 ### Viewer and license boundary
 
-Ron permits FSL viewer/media in **GChat**. The exact component LICENSE controls:
-even `cua-media-protocol` is FSL at this pin. The native viewer's Linux entry
-exits unsupported. The [`HTML5 viewer`][html5] supplies a browser frontend over
-Spaces gRPC-Web/media WebSocket and viewer tickets; it is not a standalone
-VNC client. Evaluate embedding that web path with guest-local service endpoints
-forwarded over SSH. Do not assume QUIC can use our TCP forwarding or expose
-the guest's viewer port on the LAN/WAN.
+Queue items 5/7 have a source-level decision. The approved outcome is a usable
+takeover/viewer integration or its smallest concrete boundary, without new
+dependencies or a new live campaign. The source review used
+`/ai/gchat-worktrees/cua-gbot-pin-0c69` at Driver fork `c549ab4d7` (SDK base
+`0c69d9a2c8`) against GChat
+`/ai/gchat-worktrees/gbot-cua-skill-918c` at `9ab394244`. No new desktop, model,
+VM or latency run was needed to answer the interface question.
 
-Keep our SSH/VNC route for the smallest working task; qualify Cua media before
-replacing it. M365 continues through its selected Windows connection. For
-Arbitor, retain an independent MIT-compatible path until Ron reviews the FSL
-boundary. AGPL `cua-som` and optional perception assets are excluded. Retain
-license notices and check the selected dependency closure before distribution.
+#### Human assistance is separate from desktop ownership
+
+[`CompletionQueue`][human-queue] stores UUID-keyed pending/completed/failed
+requests in memory. A reply can contain text or proposed function calls.
+[`HumanAdapter`][human-adapter] uses that queue as a LiteLLM model provider;
+it does not pause another agent, drain Driver input or grant a desktop lease.
+Importing `cua_agent.human_tool` also imports its Gradio UI. Its standalone
+server listens on `0.0.0.0:8002`; neither server nor UI is selected for GChat.
+
+Borrow the request/completion shape only. GChat's existing task/channel and
+journal owners must persist an assistance request with its bot/task/session
+identity and record its resolution. A human-suggested function call enters the
+same approval and operation-receipt route as a model-suggested call. Completing
+an assistance request cannot authorize Take over or resume a paused desktop.
+The assistance-request UI remains a GChat task/channel boundary; no separate
+human-completion server is added.
+
+#### Implemented service ownership
+
+`service.rs` now persists one `SessionControl` per workspace with exact session
+identity, client owner UUID and `bot`, `pausing`, `human` or `paused` state.
+`POST /v1/control/take-over` accepts `{identity, owner}`. Its durable admission
+gate rejects new bot operations before they are recorded or sent. Previously
+admitted effects must finish or be reconciled before `pausing` becomes `human`;
+status/cancel probes remain available. A second owner cannot take the grant.
+
+`POST /v1/control/hand-back` accepts the same identity/owner. The workspace owner
+pauses input, closes the VNC tunnel, requests fresh Driver `get_desktop_state`
+and requires a frame with valid screen/screenshot geometry before restoring
+`bot`. Its response includes `{control, observation}` so the task runner can
+replan from that observation instead of replaying a pre-takeover tool call.
+The runtime also retains that observation for one exact-session resume; a new
+bot operation, takeover or disconnect invalidates it, and restart requires a
+fresh capture.
+Unknown effects, failed close/capture, explicit view close, disconnect and
+service restart keep the bot paused. `GET /v1/state` exposes controls and live
+session identities. These service transitions do not enforce read-only VNC.
+
+#### The selected viewer seam
+
+| Existing Cua mechanism | GChat integration decision |
+| --- | --- |
+| [`StreamService`][stream-proto] target discovery, `OpenMedia` and `CloseMedia` | Use these contracts when the guest provides them. Match the selected Driver session/display and reported geometry; reject an unavailable selected display instead of the full viewer's fallback to the first display. |
+| [`CreateViewerTicket`][system-proto] policy, clipboard, files and microphone scope | Service retains the guest authority. View uses explicit `VIEW_ONLY`, no clipboard, empty `files_root` and no audio uplink. Unset ticket policy means interactive, so a URL's `view_only=1` is insufficient authority. |
+| [`MediaSession`][media-session] canvas, wire v2, H.264/PNG and WebSocket | Wrap this core in GChat's desktop panel. It has browser-native imports, so the core itself does not require the full viewer's ConnectRPC/protobuf packages. Service supplies the session's media ticket; view sets `interactive=false`. Its counters do not establish a latency advantage over VNC. |
+| Same-origin gRPC-Web and `/media` WebSocket | A guest-local TCP endpoint can use the existing SSH forwarding mechanism. The current guest advertises VNC, not a Spaces/media endpoint; changing its port alone would not supply these services. Direct QUIC requires UDP and cannot use the current TCP tunnel. |
+| Full [`HTML5 viewer`][html5] / `web/src/viewer.ts` | Do not embed as-is: its CSP has `frame-ancestors 'none'`, the app defaults to `ALLOW_ACTIVATION`, and it exposes clipboard/files/microphone and automatic interactive reconnect. Keep GChat's channel, controls and lifecycle owner. |
+| Native `cua-viewer` and presence | Native surface is Windows/macOS only. Presence displays participant cursors; it does not establish GChat's exclusive input grant. Neither supplies Hyper-V provisioning or Windows 365 brokered access. |
+
+When the media endpoint is adopted, Take over opens one human media session
+only after the service reports `human`. Give the panel that session's media
+ticket, rather than a reusable interactive viewer ticket that can mint more
+sessions. On Hand back,
+loss or close, disable local input and revoke the interactive media session
+with `CloseMedia`; unresolved revocation keeps the bot paused. Interactive
+reconnect must recheck the service's current grant instead of using the core's
+automatic `reopen` callback. Hand back obtains a fresh frame/geometry and
+reconciles unresolved effects before the bot resumes. These are the existing
+product requirements mapped to Cua media mechanisms; the current service
+implements the pause/drain/hand-back boundary through SSH/Driver/VNC instead.
+
+The current `/v1/view/open` in `src-tauri/gbot-service/src/api.rs` and
+`SshSession::open_view` in `src-tauri/gbot-service/src/ssh.rs` expose only
+session-bound bidirectional VNC bytes. They cannot mint media tickets or mediate
+human input. The service control owner above is available to GChat's task/UI
+binding; a browser-renderable desktop stream still needs an approved guest
+media endpoint/packaging closure. No decoder is copied without a working
+endpoint. Keep SSH/VNC until that boundary exists and demonstrates the
+same session/control behavior. M365 retains its selected Windows connection.
+
+Ron permits FSL in **GChat**, not Arbitor. Inspected candidates are
+`cua-spacesd-html5` (including its media core), `cua-media-protocol`,
+`cua-media-transport`, `cua-media-codec` and `cua-viewer`; each component's
+`LICENSE` is **FSL-1.1-MIT** at the pin. None was copied, linked or installed by
+this review. Any adoption retains its notices and records the selected closure
+here before distribution. The independent MIT-compatible Arbitor route remains;
+AGPL `cua-som` and optional perception assets remain excluded.
 
 ## Smallest integration to a working Gbot
 
@@ -226,6 +354,11 @@ All references below are to our fork, not an instruction to contact upstream.
 [callbacks]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/python/agent/cua_agent/callbacks/base.py
 [foreground]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-driver/rust/crates/platform-linux/src/input/foreground.rs
 [html5]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/crates/cua-spacesd-html5/src/lib.rs
+[human-queue]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/python/agent/cua_agent/human_tool/server.py
+[human-adapter]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/python/agent/cua_agent/adapters/human_adapter.py
+[stream-proto]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/proto/cua/env/v1/stream.proto
+[system-proto]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/proto/cua/env/v1/system.proto
+[media-session]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua/crates/cua-spacesd-html5/web/src/core/mediaSession.ts
 [hello-task]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-bench/example_tasks/hello_file_env/main.py
 [click-task]: https://github.com/Gadflyii/cua/blob/0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc/libs/cua-bench/datasets/cua-bench-basic/click-button/main.py
 

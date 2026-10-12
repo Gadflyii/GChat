@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::{
     collections::BTreeMap,
     net::SocketAddr,
@@ -7,15 +8,21 @@ use std::{
     },
 };
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 use crate::{
     contract::{
         GuestHello, GuestOperationKind, GuestOutcome, GuestReply, GuestRequest, GuestResult,
-        ServicePc, SessionIdentity, WorkspaceConfig, WorkspaceConnection, WorkspaceId,
+        OperationId, ServicePc, SessionIdentity, VaultCredentialRef, WorkspaceConfig,
+        WorkspaceConnection, WorkspaceId,
     },
-    service::{OperationCompletion, Service, ServiceError},
+    executor::Assignment,
+    service::{
+        ModelAssignment, OperationCompletion, Service, ServiceError, SessionControl,
+        SessionControlState,
+    },
     ssh::{import_ssh_key, ImportedSshKey, SshError, SshPolicy, SshSession},
-    vault::{Secret, Vault},
+    vault::{Secret, Vault, VaultError},
 };
 
 #[derive(Debug)]
@@ -27,6 +34,8 @@ pub enum WorkspaceError {
     AdapterUnavailable,
     ServiceLocationUnavailable,
     ShuttingDown,
+    Vault(VaultError),
+    CredentialCleanup(VaultError),
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -41,6 +50,11 @@ impl std::fmt::Display for WorkspaceError {
                 f.write_str("this service cannot run on the selected PC")
             }
             Self::ShuttingDown => f.write_str("Gbot service is stopping"),
+            Self::Vault(error) => error.fmt(f),
+            Self::CredentialCleanup(error) => write!(
+                f,
+                "Model assignment was saved, but the old credential could not be removed: {error}"
+            ),
         }
     }
 }
@@ -62,7 +76,14 @@ pub struct WorkspaceRuntime {
     vault: Arc<dyn Vault>,
     sessions: Mutex<BTreeMap<WorkspaceId, Arc<SshSession>>>,
     lifecycle: Mutex<BTreeMap<WorkspaceId, Arc<Mutex<()>>>>,
+    resume_observations: Mutex<BTreeMap<WorkspaceId, GuestReply>>,
     stopping: AtomicBool,
+}
+
+#[derive(Serialize)]
+pub struct HandBack {
+    pub control: SessionControl,
+    pub observation: GuestReply,
 }
 
 impl WorkspaceRuntime {
@@ -72,6 +93,7 @@ impl WorkspaceRuntime {
             vault,
             sessions: Mutex::new(BTreeMap::new()),
             lifecycle: Mutex::new(BTreeMap::new()),
+            resume_observations: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
         }
     }
@@ -109,6 +131,107 @@ impl WorkspaceRuntime {
         self.accepting()?;
         self.service.register_workspace(config).await?;
         Ok(())
+    }
+
+    /// Missing API key preserves this bot's key; an empty API key removes it.
+    pub async fn save_model_assignment(
+        &self,
+        workspace_id: WorkspaceId,
+        assignment: Assignment,
+    ) -> Result<ModelAssignment, WorkspaceError> {
+        self.accepting()?;
+        let lock = self.lifecycle_lock(workspace_id).await;
+        let service = self.service.clone();
+        let vault = self.vault.clone();
+        // Retain the vault/state transaction if the client disconnects mid-save.
+        tokio::spawn(async move {
+            let _guard = lock.lock().await;
+            let previous = service.model_assignment(workspace_id).await?;
+            let old_reference = previous.and_then(|saved| saved.credential_ref);
+            let credential_ref = match assignment.api_key.as_deref() {
+                None => old_reference,
+                Some("") => None,
+                Some(_) => Some(VaultCredentialRef::new()),
+            };
+            let saved = ModelAssignment {
+                workspace_id,
+                api_base: assignment.api_base,
+                model: assignment.model,
+                context_tokens: assignment.context_tokens,
+                credential_ref,
+            };
+            saved.validate()?;
+            if let (Some(reference), Some(key)) = (credential_ref, assignment.api_key) {
+                vault
+                    .put(reference.as_uuid(), Secret::new(key.into_bytes()))
+                    .await
+                    .map_err(WorkspaceError::Vault)?;
+            }
+            if let Err(error) = service.save_model_assignment(saved.clone()).await {
+                if credential_ref != old_reference {
+                    if let Some(reference) = credential_ref {
+                        let _ = vault.delete(reference.as_uuid()).await;
+                    }
+                }
+                return Err(WorkspaceError::State(error));
+            }
+            if credential_ref != old_reference {
+                if let Some(reference) = old_reference {
+                    vault
+                        .delete(reference.as_uuid())
+                        .await
+                        .map_err(WorkspaceError::CredentialCleanup)?;
+                }
+            }
+            Ok(saved)
+        })
+        .await
+        .map_err(|_| WorkspaceError::Vault(VaultError::WorkerFailure))?
+    }
+
+    pub async fn model_assignment(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Option<ModelAssignment>, WorkspaceError> {
+        self.accepting()?;
+        Ok(self.service.model_assignment(workspace_id).await?)
+    }
+
+    /// Fetch the key only at the execution boundary, never into task records.
+    pub async fn resolve_model_assignment(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Assignment, WorkspaceError> {
+        self.accepting()?;
+        let lock = self.lifecycle_lock(workspace_id).await;
+        let _guard = lock.lock().await;
+        let saved = self
+            .service
+            .model_assignment(workspace_id)
+            .await?
+            .ok_or(ServiceError::AssignmentNotFound)?;
+        let api_key = match saved.credential_ref {
+            Some(reference) => {
+                let secret = self
+                    .vault
+                    .get(reference.as_uuid())
+                    .await
+                    .map_err(WorkspaceError::Vault)?
+                    .ok_or(WorkspaceError::Vault(VaultError::Missing))?;
+                Some(
+                    std::str::from_utf8(secret.expose_secret())
+                        .map_err(|_| WorkspaceError::Vault(VaultError::InvalidData))?
+                        .to_owned(),
+                )
+            }
+            None => None,
+        };
+        Ok(Assignment {
+            api_base: saved.api_base,
+            api_key,
+            model: saved.model,
+            context_tokens: saved.context_tokens,
+        })
     }
 
     pub async fn connect(&self, identity: SessionIdentity) -> Result<GuestHello, WorkspaceError> {
@@ -191,8 +314,26 @@ impl WorkspaceRuntime {
     }
 
     pub async fn request(&self, request: GuestRequest) -> Result<GuestReply, WorkspaceError> {
+        self.request_owned(request, None).await
+    }
+
+    async fn request_owned(
+        &self,
+        request: GuestRequest,
+        owner: Option<Uuid>,
+    ) -> Result<GuestReply, WorkspaceError> {
         let session = self.session(request.identity).await?;
-        self.service.begin_operation(&request).await?;
+        if let Some(owner) = owner {
+            self.service
+                .begin_control_observation(&request, owner)
+                .await?;
+        } else {
+            self.service.begin_operation(&request).await?;
+            self.resume_observations
+                .lock()
+                .await
+                .remove(&request.identity.workspace_id);
+        }
         let reply = match session.request(request.clone()).await {
             Ok(reply) => reply,
             Err(error) => {
@@ -245,11 +386,119 @@ impl WorkspaceRuntime {
         Ok(reply)
     }
 
+    pub async fn take_over(
+        &self,
+        identity: SessionIdentity,
+        owner: Uuid,
+    ) -> Result<SessionControl, WorkspaceError> {
+        let lock = self.lifecycle_lock(identity.workspace_id).await;
+        let _guard = lock.lock().await;
+        self.session(identity).await?;
+        let control = self.service.take_over(identity, owner).await?;
+        self.resume_observations
+            .lock()
+            .await
+            .remove(&identity.workspace_id);
+        Ok(control)
+    }
+
+    pub async fn hand_back(
+        &self,
+        identity: SessionIdentity,
+        owner: Uuid,
+    ) -> Result<HandBack, WorkspaceError> {
+        let lock = self.lifecycle_lock(identity.workspace_id).await;
+        let _guard = lock.lock().await;
+        let session = self.session(identity).await?;
+        let admitted = self.service.begin_hand_back(identity, owner).await;
+        if let Err(error) = admitted {
+            if error == ServiceError::OperationState {
+                session.close_view().await?;
+            }
+            return Err(error.into());
+        }
+        // Human connections and queued bytes end before the bot may observe/resume.
+        session.close_view().await?;
+        let request = GuestRequest {
+            identity,
+            operation_id: OperationId::new(),
+            operation: GuestOperationKind::Desktop {
+                tool: "get_desktop_state".into(),
+                arguments: serde_json::json!({}),
+            },
+        };
+        let observation = self.request_owned(request.clone(), Some(owner)).await?;
+        let valid = matches!(&observation.outcome,
+            GuestOutcome::Success { result: GuestResult::Desktop { result } }
+                if result["isError"] != true
+                    && ["screenshot_width", "screenshot_height", "screen_width", "screen_height"]
+                        .iter().all(|field| result["structuredContent"][field].as_u64().is_some_and(|n| n > 0))
+                    && result["content"].as_array().is_some_and(|content|
+                        content.iter().any(|part| part["type"] == "image" && part["data"].as_str().is_some_and(|data| !data.is_empty()))));
+        if !valid {
+            return Err(ServiceError::OperationState.into());
+        }
+        self.resume_observations
+            .lock()
+            .await
+            .insert(identity.workspace_id, observation.clone());
+        let control = match self
+            .service
+            .finish_hand_back(identity, owner, request.operation_id)
+            .await
+        {
+            Ok(control) => control,
+            Err(error) => {
+                self.resume_observations
+                    .lock()
+                    .await
+                    .remove(&identity.workspace_id);
+                return Err(error.into());
+            }
+        };
+        Ok(HandBack {
+            control,
+            observation,
+        })
+    }
+
+    /// Consume the fresh hand-back frame; a restarted runner captures another frame.
+    pub async fn resume_observation(&self, identity: SessionIdentity) -> Option<GuestReply> {
+        let lock = self.lifecycle_lock(identity.workspace_id).await;
+        let _guard = lock.lock().await;
+        if !self
+            .service
+            .snapshot()
+            .await
+            .controls
+            .iter()
+            .any(|control| {
+                control.identity == identity && control.state == SessionControlState::Bot
+            })
+        {
+            return None;
+        }
+        let mut observations = self.resume_observations.lock().await;
+        if observations
+            .get(&identity.workspace_id)
+            .is_some_and(|reply| reply.identity == identity)
+        {
+            observations.remove(&identity.workspace_id)
+        } else {
+            None
+        }
+    }
+
     pub async fn open_view(&self, identity: SessionIdentity) -> Result<SocketAddr, WorkspaceError> {
+        let lock = self.lifecycle_lock(identity.workspace_id).await;
+        let _guard = lock.lock().await;
         Ok(self.session(identity).await?.open_view().await?)
     }
 
     pub async fn close_view(&self, identity: SessionIdentity) -> Result<(), WorkspaceError> {
+        let lock = self.lifecycle_lock(identity.workspace_id).await;
+        let _guard = lock.lock().await;
+        self.service.pause_human_control(identity).await?;
         self.session(identity).await?.close_view().await?;
         Ok(())
     }
@@ -276,6 +525,7 @@ impl WorkspaceRuntime {
     }
 
     async fn disconnect_locked(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
+        self.resume_observations.lock().await.remove(&workspace);
         let Some(session) = self.sessions.lock().await.remove(&workspace) else {
             return Ok(());
         };

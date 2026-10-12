@@ -83,6 +83,7 @@ pub fn run() {
     // Desktop: include updater commands
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
+        core::gbot::gbot_command,
         core::benchmark_submission::submit_benchmark,
         core::benchmark_submission::delete_benchmark,
         core::connectors::connector_accounts,
@@ -424,6 +425,9 @@ pub fn run() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let app_builder = app_builder.manage(core::terminal::TerminalState::default());
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let app_builder = app_builder.manage(core::gbot::GbotState::default());
+
     let app = app_builder
         .manage(Arc::new(core::connectors::AccountsState::default()))
         .manage(AppState {
@@ -663,6 +667,9 @@ pub fn run() {
                 app_handle
                     .state::<core::terminal::TerminalState>()
                     .shutdown();
+
+                #[cfg(not(any(target_os = "ios", target_os = "android")))]
+                tauri::async_runtime::block_on(app_handle.state::<core::gbot::GbotState>().shutdown());
 
                 #[cfg(not(any(target_os = "ios", target_os = "android")))]
                 {

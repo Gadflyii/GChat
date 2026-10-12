@@ -1,4 +1,5 @@
 export const route = {
+  gbot: { index: '/gbot/' },
   // home as new chat or thread
   home: '/',
   appLogs: '/logs',

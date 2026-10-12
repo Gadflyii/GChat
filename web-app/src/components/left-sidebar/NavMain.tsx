@@ -19,7 +19,7 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useProjectDialog } from '@/hooks/useProjectDialog'
 import { useSearchDialog } from '@/hooks/useSearchDialog'
 import { useThreadManagement } from '@/hooks/useThreadManagement'
-import { IconChartHistogram, IconSparkles, IconTerminal2, IconServer, IconBrain } from '@tabler/icons-react'
+import { IconChartHistogram, IconSparkles, IconTerminal2, IconServer, IconBrain, IconRobot } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { useMessages } from '@/hooks/useMessages'
 import { usePrompt } from '@/hooks/usePrompt'
@@ -145,6 +145,14 @@ export function NavMain() {
             <Link to={route.agents.index}>
               <IconSparkles className="size-4 text-primary" />
               <span>Agent Studio</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild isActive={pathname.startsWith('/gbot')} className="data-[active=true]:bg-sidebar-foreground/15">
+            <Link to={route.gbot.index}>
+              <IconRobot className="size-4 text-primary" />
+              <span>Gbot</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

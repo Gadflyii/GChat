@@ -9,9 +9,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    contract::{GuestRequest, SessionIdentity, WorkspaceConfig},
+    contract::{GuestRequest, SessionIdentity, WorkspaceConfig, WorkspaceId},
+    executor::{Assignment, ExecutorProcesses},
     service::{Service, ServiceError},
     ssh::SshError,
+    tasks::{TaskRunner, TaskRunnerError},
     vault::{Secret, Vault, VaultError},
     workspace::{WorkspaceError, WorkspaceRuntime},
 };
@@ -22,6 +24,7 @@ pub enum ApiError {
     Listener(std::io::Error),
     Http(hyper::Error),
     Workspace(WorkspaceError),
+    Tasks(TaskRunnerError),
 }
 
 impl std::fmt::Display for ApiError {
@@ -31,6 +34,7 @@ impl std::fmt::Display for ApiError {
             Self::Listener(_) => formatter.write_str("Gbot loopback listener is unavailable"),
             Self::Http(_) => formatter.write_str("Gbot HTTP service could not complete"),
             Self::Workspace(error) => error.fmt(formatter),
+            Self::Tasks(error) => error.fmt(formatter),
         }
     }
 }
@@ -43,6 +47,115 @@ pub struct Api {
     listener: std::net::TcpListener,
     endpoint: SocketAddr,
     runtime: Arc<WorkspaceRuntime>,
+    tasks: Option<Arc<TaskRunner>>,
+}
+
+#[derive(Clone)]
+pub struct ApiClient {
+    service: Arc<Service>,
+    token: Arc<Secret>,
+    runtime: Arc<WorkspaceRuntime>,
+    tasks: Option<Arc<TaskRunner>>,
+}
+
+impl ApiClient {
+    pub fn subscribe_tasks(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        self.tasks.as_ref().map(|tasks| tasks.subscribe())
+    }
+    /// Native clients retain the authentication secret outside the webview.
+    pub async fn call(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        if matches!(path, "/v1/tasks/start" | "/v1/tasks/resume")
+            && body.get("assignment").is_some()
+        {
+            return Err("Bot tasks use this bot's saved model assignment".into());
+        }
+        let method = if matches!(path, "/v1/state" | "/v1/tasks" | "/v1/tasks/approvals") {
+            Method::GET
+        } else {
+            Method::POST
+        };
+        let token = std::str::from_utf8(self.token.expose_secret())
+            .map_err(|_| "Invalid service credential")?;
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::from(
+                serde_json::to_vec(&body).map_err(|_| "Invalid request")?,
+            ))
+            .map_err(|_| "Invalid service request")?;
+        let response = route(
+            self.service.clone(),
+            self.runtime.clone(),
+            self.tasks.clone(),
+            self.token.clone(),
+            request,
+        )
+        .await
+        .unwrap();
+        let status = response.status();
+        let bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(|_| "Service response unavailable")?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|_| "Invalid service response")?;
+        if status.is_success() {
+            Ok(value)
+        } else {
+            Err(value["error"]["message"]
+                .as_str()
+                .unwrap_or("Gbot request failed")
+                .to_string())
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StartTask {
+    identity: SessionIdentity,
+    prompt: String,
+    assignment: Option<Assignment>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResumeTask {
+    id: Uuid,
+    assignment: Option<Assignment>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SaveAssignment {
+    pub workspace_id: WorkspaceId,
+    pub api_base: String,
+    pub model: String,
+    pub context_tokens: u64,
+    pub api_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GetAssignment {
+    pub workspace_id: WorkspaceId,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TaskId {
+    id: Uuid,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ApprovalDecision {
+    id: Uuid,
+    allow: bool,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +163,13 @@ pub struct Api {
 struct SshKeyImportRequest {
     private_key: String,
     passphrase: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ControlRequest {
+    identity: SessionIdentity,
+    owner: Uuid,
 }
 
 impl Api {
@@ -90,7 +210,30 @@ impl Api {
             token: Arc::new(token),
             listener,
             endpoint,
+            tasks: None,
         })
+    }
+
+    pub async fn with_executor(
+        mut self,
+        root: std::path::PathBuf,
+        processes: ExecutorProcesses,
+    ) -> Result<Self, ApiError> {
+        self.tasks = Some(Arc::new(
+            TaskRunner::new(root, self.runtime.clone(), processes)
+                .await
+                .map_err(ApiError::Tasks)?,
+        ));
+        Ok(self)
+    }
+
+    pub fn client(&self) -> ApiClient {
+        ApiClient {
+            service: self.service.clone(),
+            token: self.token.clone(),
+            runtime: self.runtime.clone(),
+            tasks: self.tasks.clone(),
+        }
     }
 
     pub fn endpoint(&self) -> SocketAddr {
@@ -104,6 +247,9 @@ impl Api {
         let service = self.service;
         let token = self.token;
         let runtime = self.runtime;
+        let tasks = self.tasks;
+        let routing_tasks = tasks.clone();
+        let stopping_tasks = tasks.clone();
         let routing_runtime = runtime.clone();
         let stopping_runtime = runtime.clone();
         let (stopped, mut stop_result) = tokio::sync::oneshot::channel();
@@ -113,22 +259,41 @@ impl Api {
                 let service = service.clone();
                 let token = token.clone();
                 let runtime = routing_runtime.clone();
+                let tasks = routing_tasks.clone();
                 async move {
                     Ok::<_, Infallible>(service_fn(move |request| {
-                        route(service.clone(), runtime.clone(), token.clone(), request)
+                        route(
+                            service.clone(),
+                            runtime.clone(),
+                            tasks.clone(),
+                            token.clone(),
+                            request,
+                        )
                     }))
                 }
             }))
             .with_graceful_shutdown(async move {
                 shutdown.await;
-                let _ = stopped.send(stopping_runtime.close().await);
+                let task_result = match stopping_tasks {
+                    Some(tasks) => tasks.close().await,
+                    None => Ok(()),
+                };
+                let workspace_result = stopping_runtime.close().await;
+                let _ = stopped.send((task_result, workspace_result));
             })
             .await;
         let cleanup = match stop_result.try_recv() {
             Ok(result) => result,
-            Err(_) => runtime.close().await,
+            Err(_) => {
+                let task_result = match tasks {
+                    Some(tasks) => tasks.close().await,
+                    None => Ok(()),
+                };
+                (task_result, runtime.close().await)
+            }
         };
-        cleanup.map_err(ApiError::Workspace)?;
+        cleanup.1.map_err(ApiError::Workspace)?;
+        cleanup.0.map_err(ApiError::Tasks)?;
         serving.map_err(ApiError::Http)
     }
 }
@@ -183,6 +348,7 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response<Bod
 async fn route(
     service: Arc<Service>,
     runtime: Arc<WorkspaceRuntime>,
+    tasks: Option<Arc<TaskRunner>>,
     token: Arc<Secret>,
     request: Request<Body>,
 ) -> Result<Response<Body>, Infallible> {
@@ -199,7 +365,83 @@ async fn route(
         return Ok(response);
     }
     let response = match (request.method(), request.uri().path()) {
-        (&Method::GET, "/v1/state") => json_response(StatusCode::OK, &service.snapshot().await),
+        (&Method::POST, "/v1/assignments/save") => {
+            match parse_body::<SaveAssignment>(request).await {
+                Some(input) => match runtime
+                    .save_model_assignment(
+                        input.workspace_id,
+                        Assignment {
+                            api_base: input.api_base,
+                            api_key: input.api_key,
+                            model: input.model,
+                            context_tokens: input.context_tokens,
+                        },
+                    )
+                    .await
+                {
+                    Ok(saved) => json_response(StatusCode::OK, &saved),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/assignments/get") => {
+            match parse_body::<GetAssignment>(request).await {
+                Some(input) => match runtime.model_assignment(input.workspace_id).await {
+                    Ok(saved) => json_response(StatusCode::OK, &saved),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::GET, "/v1/tasks") => match tasks {
+            Some(tasks) => task_result(tasks.list().await),
+            None => executor_unavailable(),
+        },
+        (&Method::GET, "/v1/tasks/approvals") => match tasks {
+            Some(tasks) => task_result(tasks.approvals().await),
+            None => executor_unavailable(),
+        },
+        (&Method::POST, "/v1/tasks/start") => match (tasks, parse_body::<StartTask>(request).await)
+        {
+            (Some(tasks), Some(input)) => task_result(
+                tasks
+                    .start(input.identity, input.prompt, input.assignment)
+                    .await,
+            ),
+            (None, _) => executor_unavailable(),
+            _ => invalid_request(),
+        },
+        (&Method::POST, "/v1/tasks/resume") => {
+            match (tasks, parse_body::<ResumeTask>(request).await) {
+                (Some(tasks), Some(input)) => {
+                    task_result(tasks.resume(input.id, input.assignment).await)
+                }
+                (None, _) => executor_unavailable(),
+                _ => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/tasks/cancel") => match (tasks, parse_body::<TaskId>(request).await) {
+            (Some(tasks), Some(input)) => task_result(tasks.cancel(input.id).await),
+            (None, _) => executor_unavailable(),
+            _ => invalid_request(),
+        },
+        (&Method::POST, "/v1/tasks/approval") => {
+            match (tasks, parse_body::<ApprovalDecision>(request).await) {
+                (Some(tasks), Some(input)) => {
+                    task_result(tasks.decide(input.id, input.allow).await)
+                }
+                (None, _) => executor_unavailable(),
+                _ => invalid_request(),
+            }
+        }
+        (&Method::GET, "/v1/state") => {
+            let mut state =
+                serde_json::to_value(service.snapshot().await).expect("Gbot state is serializable");
+            state["live_sessions"] = serde_json::to_value(service.live_sessions().await)
+                .expect("session identities are serializable");
+            json_response(StatusCode::OK, &state)
+        }
         (&Method::POST, "/v1/credentials/ssh") => {
             match parse_body::<SshKeyImportRequest>(request).await {
                 Some(import) => match runtime
@@ -264,6 +506,36 @@ async fn route(
             },
             None => invalid_request(),
         },
+        (&Method::POST, "/v1/control/take-over" | "/v1/control/hand-back") => {
+            let take_over = request.uri().path() == "/v1/control/take-over";
+            match parse_body::<ControlRequest>(request).await {
+                Some(control) if take_over => {
+                    match runtime.take_over(control.identity, control.owner).await {
+                        Ok(control) => {
+                            if let Some(tasks) = &tasks {
+                                if let Err(error) = tasks.pause(control.identity).await {
+                                    return Ok(task_result::<()>(Err(error)));
+                                }
+                            }
+                            let current = service
+                                .snapshot()
+                                .await
+                                .controls
+                                .into_iter()
+                                .find(|value| value.identity == control.identity)
+                                .unwrap_or(control);
+                            json_response(StatusCode::OK, &current)
+                        }
+                        Err(error) => workspace_error(error),
+                    }
+                }
+                Some(control) => match runtime.hand_back(control.identity, control.owner).await {
+                    Ok(result) => json_response(StatusCode::OK, &result),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/connect" | "/v1/disconnect" | "/v1/view/open" | "/v1/view/close") => {
             let path = request.uri().path().to_string();
             match parse_body::<SessionIdentity>(request).await {
@@ -323,14 +595,52 @@ fn invalid_request() -> Response<Body> {
     )
 }
 
+fn executor_unavailable() -> Response<Body> {
+    error_response(StatusCode::SERVICE_UNAVAILABLE, "executor_unavailable", "Configure the pinned Cua Python runtime and shared context preparer before running a bot task")
+}
+
+fn task_result<T: Serialize>(result: Result<T, TaskRunnerError>) -> Response<Body> {
+    match result {
+        Ok(value) => json_response(StatusCode::OK, &value),
+        Err(TaskRunnerError::Workspace(error)) => workspace_error(error),
+        Err(error) => {
+            let status = match &error {
+                TaskRunnerError::NotFound => StatusCode::NOT_FOUND,
+                TaskRunnerError::InvalidPrompt => StatusCode::BAD_REQUEST,
+                TaskRunnerError::AlreadyRunning => StatusCode::CONFLICT,
+                TaskRunnerError::Closed => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
+            error_response(status, "task_failed", &error.to_string())
+        }
+    }
+}
+
 fn workspace_error(error: WorkspaceError) -> Response<Body> {
     let (status, code) = match &error {
-        WorkspaceError::NotFound => (StatusCode::NOT_FOUND, "workspace_not_found"),
+        WorkspaceError::NotFound | WorkspaceError::State(ServiceError::WorkspaceNotFound) => {
+            (StatusCode::NOT_FOUND, "workspace_not_found")
+        }
+        WorkspaceError::State(ServiceError::InvalidAssignment) => {
+            (StatusCode::BAD_REQUEST, "invalid_assignment")
+        }
+        WorkspaceError::State(ServiceError::AssignmentNotFound) => {
+            (StatusCode::CONFLICT, "assignment_not_found")
+        }
+        WorkspaceError::Vault(_) => (StatusCode::SERVICE_UNAVAILABLE, "model_vault_unavailable"),
+        WorkspaceError::CredentialCleanup(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "assignment_credential_cleanup_pending",
+        ),
         WorkspaceError::State(ServiceError::Contract(_)) => {
             (StatusCode::BAD_REQUEST, "invalid_guest_request")
         }
         WorkspaceError::State(ServiceError::Persistence) => {
             (StatusCode::INTERNAL_SERVER_ERROR, "state_not_saved")
+        }
+        WorkspaceError::State(ServiceError::BotPaused) => (StatusCode::CONFLICT, "bot_paused"),
+        WorkspaceError::State(ServiceError::ControlOwner) => {
+            (StatusCode::CONFLICT, "control_owner")
         }
         WorkspaceError::Transport(_) => (StatusCode::BAD_GATEWAY, "guest_connection_failed"),
         WorkspaceError::AdapterUnavailable | WorkspaceError::ServiceLocationUnavailable => {
@@ -618,6 +928,7 @@ mod tests {
         let service_id = service.snapshot().await.service_id;
         let vault = Arc::new(MemoryVault::default());
         let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let local_api = api.client();
         let endpoint = api.endpoint();
         assert_eq!(endpoint.ip(), std::net::Ipv4Addr::LOCALHOST);
         let token = vault.0.lock().unwrap()[&service_id].clone();
@@ -705,6 +1016,86 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
         let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
         assert!(!bytes.windows(token.len()).any(|window| window == token));
+        let mut second_bot = config.clone();
+        second_bot.id = WorkspaceId::new();
+        second_bot.name = "Independent fixture bot".into();
+        service
+            .register_workspace(second_bot.clone())
+            .await
+            .unwrap();
+        let save = |workspace_id, model: &str, api_key: Option<&str>| {
+            serde_json::json!({
+                "workspace_id": workspace_id,
+                "api_base": "http://fixture.local/v1",
+                "model": model,
+                "context_tokens": 131072,
+                "api_key": api_key,
+            })
+        };
+        let first = local_api
+            .call(
+                "/v1/assignments/save",
+                save(config.id, "first-model", Some("first-model-secret")),
+            )
+            .await
+            .unwrap();
+        let second = local_api
+            .call(
+                "/v1/assignments/save",
+                save(second_bot.id, "second-model", Some("second-model-secret")),
+            )
+            .await
+            .unwrap();
+        assert!(!first.to_string().contains("first-model-secret"));
+        assert!(first.get("api_key").is_none());
+        assert_ne!(first["credential_ref"], second["credential_ref"]);
+        let saved = local_api
+            .call(
+                "/v1/assignments/save",
+                save(config.id, "updated-first-model", None),
+            )
+            .await
+            .unwrap();
+        assert_eq!(saved["credential_ref"], first["credential_ref"]);
+        assert_eq!(
+            local_api
+                .runtime
+                .resolve_model_assignment(config.id)
+                .await
+                .unwrap()
+                .api_key
+                .as_deref(),
+            Some("first-model-secret")
+        );
+        vault.1.store(true, Ordering::Release);
+        let failed = local_api
+            .call(
+                "/v1/assignments/save",
+                save(config.id, "must-not-save", Some("blocked-secret")),
+            )
+            .await
+            .unwrap_err();
+        assert!(!failed.contains("blocked-secret"));
+        vault.1.store(false, Ordering::Release);
+        assert_eq!(
+            local_api
+                .call(
+                    "/v1/assignments/get",
+                    serde_json::json!({"workspace_id":config.id})
+                )
+                .await
+                .unwrap(),
+            saved
+        );
+        assert_eq!(
+            local_api
+                .runtime
+                .resolve_model_assignment(second_bot.id)
+                .await
+                .unwrap()
+                .model,
+            "second-model"
+        );
         let response = client
             .request(
                 Request::builder()
@@ -720,7 +1111,9 @@ mod tests {
             serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
                 .unwrap();
         assert_eq!(state["service_id"], service_id.to_string());
-        assert_eq!(state["workspaces"], serde_json::json!([config]));
+        assert_eq!(state["workspaces"], serde_json::json!([config, second_bot]));
+        assert_eq!(state["assignments"].as_array().unwrap().len(), 2);
+        assert!(!state.to_string().contains("model-secret"));
         shutdown.send(()).unwrap();
         tokio::time::timeout(Duration::from_secs(2), serving)
             .await
@@ -729,15 +1122,48 @@ mod tests {
             .unwrap();
         assert!(tokio::net::TcpStream::connect(endpoint).await.is_err());
         drop(client);
+        drop(local_api);
         drop(service);
 
         let persisted = std::fs::read(&state_path).unwrap();
         assert!(!persisted.windows(token.len()).any(|window| window == token));
+        assert!(!String::from_utf8_lossy(&persisted).contains("model-secret"));
         let reopened = Arc::new(Service::open(state_path).await.unwrap());
         assert_eq!(reopened.snapshot().await.service_id, service_id);
-        assert_eq!(reopened.snapshot().await.workspaces, vec![config]);
+        assert_eq!(
+            reopened.snapshot().await.workspaces,
+            vec![config.clone(), second_bot.clone()]
+        );
         let api = Api::bind(reopened.clone(), vault.clone(), 0).await.unwrap();
         assert_eq!(vault.0.lock().unwrap()[&service_id], token);
+        assert_eq!(
+            api.client()
+                .call(
+                    "/v1/assignments/get",
+                    serde_json::json!({"workspace_id":config.id})
+                )
+                .await
+                .unwrap(),
+            saved
+        );
+        assert_eq!(
+            api.runtime
+                .resolve_model_assignment(config.id)
+                .await
+                .unwrap()
+                .api_key
+                .as_deref(),
+            Some("first-model-secret")
+        );
+        assert_eq!(
+            api.runtime
+                .resolve_model_assignment(second_bot.id)
+                .await
+                .unwrap()
+                .api_key
+                .as_deref(),
+            Some("second-model-secret")
+        );
         drop(api);
         for denied in [LockedVault(false), LockedVault(true)] {
             assert!(matches!(

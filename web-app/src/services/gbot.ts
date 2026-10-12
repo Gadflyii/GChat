@@ -1,0 +1,54 @@
+import { invoke } from '@tauri-apps/api/core'
+
+export type Identity = { workspace_id: string; session_id: string }
+export type Workspace = { id: string; name: string }
+export type Control = {
+  identity: Identity
+  owner: string | null
+  state: string
+}
+export type BotState = {
+  workspaces: Workspace[]
+  live_sessions: { identity: Identity }[]
+  controls: Control[]
+  assignments: SavedAssignment[]
+}
+export type Assignment = {
+  api_base: string
+  model: string
+  context_tokens: number
+  api_key?: string
+}
+export type SavedAssignment = Omit<Assignment, 'api_key'> & {
+  workspace_id: string
+  credential_ref: string | null
+}
+export type Task = {
+  id: string
+  identity: Identity
+  state: string
+  messages: { role: string; content: unknown }[]
+}
+export type Approval = {
+  id: string
+  task_id: string
+  request: { operation: unknown }
+}
+
+export function gbot<T>(path: string, body?: unknown): Promise<T> {
+  return invoke<T>('gbot_command', { path: `/v1/${path}`, body })
+}
+
+export function messageText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content))
+    return content
+      .map((part) =>
+        part && typeof part === 'object' && 'text' in part
+          ? String(part.text)
+          : ''
+      )
+      .filter(Boolean)
+      .join('\n')
+  return ''
+}
