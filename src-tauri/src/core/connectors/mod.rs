@@ -341,7 +341,8 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                             .operations
                             .lock()
                             .map_err(|_| "Connector operations unavailable")?;
-                        let operation = operations.requests
+                        let operation = operations
+                            .requests
                             .get_mut(&id)
                             .ok_or("Register the connector request before executing")?;
                         if operation.started {
@@ -364,13 +365,16 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                     self.operations
                         .lock()
                         .map_err(|_| "Connector operations unavailable")?
-                        .requests.remove(&id);
+                        .requests
+                        .remove(&id);
                     result
                 }
                 "client_disconnected" => {
                     let client_id = uuid::Uuid::parse_str(text(&arguments, "client_id")?)
                         .map_err(|_| "Invalid connector client identity")?;
-                    let mut operations = self.operations.lock()
+                    let mut operations = self
+                        .operations
+                        .lock()
                         .map_err(|_| "Connector operations unavailable")?;
                     operations.disconnected_clients.insert(client_id);
                     for operation in operations.requests.values() {
@@ -387,7 +391,8 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
                         .operations
                         .lock()
                         .map_err(|_| "Connector operations unavailable")?
-                        .requests.get(&id)
+                        .requests
+                        .get(&id)
                     {
                         operation.cancellation.cancel();
                     }

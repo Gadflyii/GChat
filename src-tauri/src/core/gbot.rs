@@ -127,7 +127,8 @@ impl GbotState {
                     "/v1/native/connectors/client_disconnected",
                     serde_json::json!({"client_id": self.connector_client_id}),
                 ),
-            ).await;
+            )
+            .await;
         }
     }
 
