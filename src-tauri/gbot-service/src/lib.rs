@@ -5,6 +5,8 @@ mod cua_skill;
 pub mod executor;
 #[cfg(target_os = "linux")]
 pub mod kvm;
+#[cfg(target_os = "linux")]
+pub mod kvm_setup;
 pub mod media;
 pub mod schedules;
 pub mod service;

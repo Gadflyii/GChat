@@ -634,6 +634,61 @@ impl Service {
         Ok(())
     }
 
+    /// Remove only the exact guest registered by the local setup owner. Attached bot
+    /// accounts/model assignments or unsettled work must be resolved first.
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn remove_owned_workspace(
+        &self,
+        id: WorkspaceId,
+        owner: &crate::contract::BotPc,
+    ) -> Result<(), ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        if let Some(workspace) = state
+            .durable
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.id == id)
+        {
+            if &workspace.bot_pc != owner {
+                return Err(ServiceError::WorkspaceInUse);
+            }
+        } else {
+            return Ok(());
+        }
+        if state.sessions.contains_key(&id)
+            || state
+                .durable
+                .assignments
+                .iter()
+                .any(|item| item.workspace_id == id)
+            || state
+                .durable
+                .connector_accounts
+                .iter()
+                .any(|item| item.workspace_id == id)
+            || state.durable.controls.iter().any(|item| {
+                item.identity.workspace_id == id && item.state != SessionControlState::Bot
+            })
+            || state.durable.operations.iter().any(|item| {
+                item.identity.workspace_id == id
+                    && matches!(
+                        item.state,
+                        OperationState::InFlight | OperationState::NeedsReview { .. }
+                    )
+            })
+        {
+            return Err(ServiceError::WorkspaceInUse);
+        }
+        let mut next = state.durable.clone();
+        next.workspaces.retain(|item| item.id != id);
+        next.controls
+            .retain(|item| item.identity.workspace_id != id);
+        next.operations
+            .retain(|item| item.identity.workspace_id != id);
+        drop(self.commit(state, next).await?);
+        Ok(())
+    }
+
     /// The caller owns and verifies the transport; only its session binding is retained here.
     pub async fn register_session(
         &self,

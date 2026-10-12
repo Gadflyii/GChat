@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import KvmSetup from './KvmSetup'
 
 export type BotConnection = {
   name: string
@@ -16,7 +17,7 @@ const computers = [
   [
     'local',
     'A separate local VM',
-    'Automatic Hyper-V / KVM setup is not available yet.',
+    'Create a separate Linux KVM guest with approved local assets. Hyper-V setup remains unfinished.',
   ],
   [
     'lan',
@@ -35,9 +36,11 @@ const steps = ['Name', 'Computer', 'Connection', 'Review']
 export default function GbotSetup({
   save,
   cancel,
+  localReady,
 }: {
   save: (connection: BotConnection) => Promise<void>
   cancel: () => void
+  localReady: (id: string) => Promise<void>
 }) {
   const [step, setStep] = useState(0)
   const [computer, setComputer] = useState('')
@@ -61,7 +64,7 @@ export default function GbotSetup({
     step === 0
       ? Boolean(connection.name.trim())
       : step === 1
-        ? computer === 'lan'
+        ? computer === 'lan' || computer === 'local'
         : step === 2
           ? Boolean(
               connection.hostname.trim() &&
@@ -107,7 +110,10 @@ export default function GbotSetup({
       <div>
         <h3 className="font-medium">Set up your bot</h3>
         <p className="text-sm text-muted-foreground">
-          Step {step + 1} of 4 · {steps[step]}
+          Step {step + 1} of {computer === 'local' ? 3 : 4} ·{' '}
+          {step === 2 && computer === 'local'
+            ? 'Review and setup'
+            : steps[step]}
         </p>
       </div>
       {step === 0 && (
@@ -174,7 +180,10 @@ export default function GbotSetup({
           </p>
         </>
       )}
-      {step === 2 && (
+      {step === 2 && computer === 'local' && (
+        <KvmSetup name={connection.name} connected={localReady} />
+      )}
+      {step === 2 && computer === 'lan' && (
         <>
           <p className="text-sm text-muted-foreground">
             Enter the connection details for the prepared bot computer. Verify
@@ -250,9 +259,11 @@ export default function GbotSetup({
         </p>
       )}
       <div className="flex gap-2">
-        <Button disabled={saving || !canContinue}>
-          {saving ? 'Saving…' : step === 3 ? 'Save bot' : 'Continue'}
-        </Button>
+        {!(step === 2 && computer === 'local') && (
+          <Button disabled={saving || !canContinue}>
+            {saving ? 'Saving…' : step === 3 ? 'Save bot' : 'Continue'}
+          </Button>
+        )}
         {step > 0 && (
           <Button
             type="button"

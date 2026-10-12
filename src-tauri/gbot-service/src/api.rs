@@ -27,6 +27,8 @@ pub enum ApiError {
     Http(hyper::Error),
     Workspace(WorkspaceError),
     Tasks(TaskRunnerError),
+    #[cfg(target_os = "linux")]
+    Setup(crate::kvm_setup::SetupIssue),
 }
 
 impl std::fmt::Display for ApiError {
@@ -37,6 +39,8 @@ impl std::fmt::Display for ApiError {
             Self::Http(_) => formatter.write_str("Gbot HTTP service could not complete"),
             Self::Workspace(error) => error.fmt(formatter),
             Self::Tasks(error) => error.fmt(formatter),
+            #[cfg(target_os = "linux")]
+            Self::Setup(error) => error.fmt(formatter),
         }
     }
 }
@@ -61,6 +65,11 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
+    #[cfg(target_os = "linux")]
+    pub fn subscribe_setup(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
+        self.runtime.kvm_setup().map(|setup| setup.subscribe())
+    }
+
     pub fn subscribe_tasks(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
         self.tasks.as_ref().map(|tasks| tasks.subscribe())
     }
@@ -111,10 +120,11 @@ impl ApiClient {
         if status.is_success() {
             Ok(value)
         } else {
-            Err(value["error"]["message"]
+            let message = value["error"]["message"]
                 .as_str()
-                .unwrap_or("Gbot request failed")
-                .to_string())
+                .unwrap_or("Gbot request failed");
+            let action = value["error"]["next_action"].as_str().unwrap_or("");
+            Err(format!("{message} {action}").trim().to_string())
         }
     }
 }
@@ -247,6 +257,15 @@ impl Api {
             endpoint,
             tasks: None,
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn with_kvm_setup(self, root: std::path::PathBuf) -> Result<Self, ApiError> {
+        self.runtime
+            .configure_kvm_setup(root)
+            .await
+            .map_err(ApiError::Setup)?;
+        Ok(self)
     }
 
     pub async fn with_executor(
@@ -413,6 +432,51 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response<Bod
     )
 }
 
+async fn setup_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> Response<Body> {
+    #[cfg(target_os = "linux")]
+    {
+        let Some(setup) = runtime.kvm_setup() else {
+            return error_response(StatusCode::SERVICE_UNAVAILABLE, "setup_unavailable", "Local VM setup is not enabled in this service. Reopen GChat with its local service enabled.");
+        };
+        match request.uri().path() {
+            "/v1/setup/kvm/preflight" => json_response(StatusCode::OK, &setup.preflight().await),
+            "/v1/setup/kvm/status" => json_response(StatusCode::OK, &setup.status().await),
+            "/v1/setup/kvm/start" => {
+                match parse_body::<crate::kvm_setup::StartSetup>(request).await {
+                    Some(input) => match setup.start(input).await {
+                        Ok(record) => json_response(StatusCode::OK, &record),
+                        Err(issue) => {
+                            json_response(StatusCode::CONFLICT, &serde_json::json!({"error":issue}))
+                        }
+                    },
+                    None => invalid_request(),
+                }
+            }
+            "/v1/setup/kvm/remove" => {
+                match parse_body::<crate::kvm_setup::SetupId>(request).await {
+                    Some(input) => match setup.remove(input.id).await {
+                        Ok(record) => json_response(StatusCode::OK, &record),
+                        Err(issue) => {
+                            json_response(StatusCode::CONFLICT, &serde_json::json!({"error":issue}))
+                        }
+                    },
+                    None => invalid_request(),
+                }
+            }
+            _ => invalid_request(),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (runtime, request);
+        error_response(
+            StatusCode::NOT_IMPLEMENTED,
+            "unsupported_host",
+            "Local KVM setup requires Linux x86-64. Hyper-V setup is unfinished.",
+        )
+    }
+}
+
 async fn route(
     service: Arc<Service>,
     runtime: Arc<WorkspaceRuntime>,
@@ -471,6 +535,14 @@ async fn route(
             (None, _) => executor_unavailable(),
             _ => invalid_request(),
         },
+        (
+            &Method::POST,
+            "/v1/setup/kvm/preflight"
+            | "/v1/setup/kvm/status"
+            | "/v1/setup/kvm/start"
+            | "/v1/setup/kvm/remove",
+        ) => setup_route(runtime, request).await,
+
         (&Method::POST, "/v1/connectors/get") => match parse_body::<GetAssignment>(request).await {
             Some(input) => match runtime.bot_connectors(input.workspace_id).await {
                 Ok(settings) => json_response(StatusCode::OK, &settings),

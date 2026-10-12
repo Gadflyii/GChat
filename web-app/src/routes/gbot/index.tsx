@@ -310,6 +310,11 @@ function GbotPage() {
           {adding && (
             <GbotSetup
               save={add}
+              localReady={async (id) => {
+                setSelected(id)
+                setAdding(false)
+                await refresh()
+              }}
               cancel={() => {
                 setupIdentity.current = null
                 setAdding(false)
