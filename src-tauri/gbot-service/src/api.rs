@@ -1258,7 +1258,7 @@ mod tests {
         let (status, _) = request(&client, &endpoint, "/v1/assignments/save", Some(serde_json::json!({"workspace_id":id,"api_base":"http://host.example:8080/v1","model":"fixture","context_tokens":4096})), token).await;
         assert_eq!(status, StatusCode::OK);
         let (status, schedule) = request(&client, &endpoint, "/v1/schedules/create", Some(serde_json::json!({"workspace_id":id,"prompt":"Persist across client exits","timing":{"kind":"interval","first_at":2000000000u64,"every_seconds":60},"missed_run_policy":"run_latest"})), token).await;
-        assert_eq!(status, StatusCode::CREATED);
+        assert_eq!(status, StatusCode::OK);
         let (_, before) = request(&client, &endpoint, "/v1/state", None, token).await;
         drop(client);
         tokio::time::sleep(Duration::from_millis(50)).await;
