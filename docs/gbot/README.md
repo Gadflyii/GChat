@@ -1378,6 +1378,9 @@ or calibration. S1 CPUs 112–113 are extended to 17:30Z for this finite check.
 
 The 17:06Z resume stopped at the production SSH connect deadline before media
 opened: the probe skipped first-boot readiness for a registered workspace and
-connected while the guest was booting. The probe now waits once for its SSH
-banner, bounded to two minutes; production connection deadlines are unchanged.
-The stopped guest and encrypted vault are retained for the remaining gate.
+connected while the guest was booting. Waiting on a single early forwarded TCP
+connection also failed before the banner: QEMU closed it while the guest was
+booting. The probe now reads the console once until systemd reports SSH started,
+bounded to three minutes, preserving resumed-boot output for diagnosis.
+Production connection deadlines are unchanged. The stopped guest and encrypted
+vault are retained for the remaining gate.

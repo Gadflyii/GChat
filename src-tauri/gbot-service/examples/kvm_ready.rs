@@ -25,7 +25,7 @@ mod linux {
     };
     use tokio::{
         io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
-        net::{TcpStream, UnixListener},
+        net::UnixListener,
         process::Command,
     };
     use uuid::Uuid;
@@ -58,14 +58,22 @@ mod linux {
         }
     }
 
-    async fn ssh_banner(mut connection: impl tokio::io::AsyncBufRead + Unpin) -> Result<()> {
-        let mut line = String::new();
+    async fn ssh_started(
+        mut console: impl tokio::io::AsyncBufRead + Unpin,
+        mut log: impl tokio::io::AsyncWrite + Unpin,
+    ) -> Result<()> {
+        let mut line = Vec::new();
         loop {
             line.clear();
-            if connection.read_line(&mut line).await? == 0 {
-                return Err("guest SSH closed before its banner".into());
+            if console.read_until(b'\n', &mut line).await? == 0 {
+                return Err("guest console closed before SSH started".into());
             }
-            if line.starts_with("SSH-2.0-") {
+            log.write_all(&line).await?;
+            if [b"Started ".as_slice(), b"ssh.service".as_slice()]
+                .iter()
+                .all(|marker| line.windows(marker.len()).any(|part| part == *marker))
+            {
+                log.flush().await?;
                 return Ok(());
             }
         }
@@ -707,12 +715,12 @@ mod linux {
         vm.start(&KvmTools::default()).await?;
         let service = Arc::new(Service::open(evidence.join("service.json")).await?);
         let identity = record.identity;
-        if !service
+        let registered = service
             .snapshot()
             .await
             .workspaces
             .iter()
-            .any(|w| w.id == identity.workspace_id)
+            .any(|w| w.id == identity.workspace_id);
         {
             let tty = Command::new("virsh")
                 .args([
@@ -736,46 +744,49 @@ mod linux {
                 return Err("cannot read owned console".into());
             }
             let console = BufReader::new(tokio::fs::File::open(tty).await?);
-            let log = tokio::fs::File::create(evidence.join("serial.log")).await?;
-            let key = guest_key(console, log).await?;
-            let key = key.to_openssh()?;
-            let mut fields = key.split_whitespace();
-            service
-                .register_workspace(WorkspaceConfig {
-                    id: identity.workspace_id,
-                    name: "Dedicated Cua gate".into(),
-                    service_pc: ServicePc::Local,
-                    bot_pc: BotPc::LocalVm {
-                        host_id: service.snapshot().await.service_id,
-                        vm_id: vm.spec.id.to_string(),
-                        hypervisor: Hypervisor::Kvm,
-                    },
-                    connection: WorkspaceConnection::Ssh(SshConnection {
-                        endpoint: SshEndpoint {
-                            hostname: "127.0.0.1".into(),
-                            port: vm.spec.ssh_port,
-                            user: "gbot".into(),
+            let log = tokio::fs::File::create(evidence.join(if registered {
+                "resume-serial.log"
+            } else {
+                "serial.log"
+            }))
+            .await?;
+            if registered {
+                tokio::time::timeout(Duration::from_secs(180), ssh_started(console, log)).await??;
+            } else {
+                let key = guest_key(console, log).await?;
+                let key = key.to_openssh()?;
+                let mut fields = key.split_whitespace();
+                service
+                    .register_workspace(WorkspaceConfig {
+                        id: identity.workspace_id,
+                        name: "Dedicated Cua gate".into(),
+                        service_pc: ServicePc::Local,
+                        bot_pc: BotPc::LocalVm {
+                            host_id: service.snapshot().await.service_id,
+                            vm_id: vm.spec.id.to_string(),
+                            hypervisor: Hypervisor::Kvm,
                         },
-                        pinned_host_key: SshHostPublicKey {
-                            algorithm: fields.next().ok_or("host algorithm missing")?.into(),
-                            public_key: fields.next().ok_or("host key missing")?.into(),
-                        },
-                        credential_ref: VaultCredentialRef(record.credential_ref),
-                    }),
-                })
-                .await?;
+                        connection: WorkspaceConnection::Ssh(SshConnection {
+                            endpoint: SshEndpoint {
+                                hostname: "127.0.0.1".into(),
+                                port: vm.spec.ssh_port,
+                                user: "gbot".into(),
+                            },
+                            pinned_host_key: SshHostPublicKey {
+                                algorithm: fields.next().ok_or("host algorithm missing")?.into(),
+                                public_key: fields.next().ok_or("host key missing")?.into(),
+                            },
+                            credential_ref: VaultCredentialRef(record.credential_ref),
+                        }),
+                    })
+                    .await?;
+            }
         }
         let runtime = Arc::new(WorkspaceRuntime::new(
             service.clone(),
             Arc::new(NativeVault),
         ));
         let result = async {
-            // QEMU accepts forwarded TCP before the resumed guest's sshd is ready.
-            tokio::time::timeout(Duration::from_secs(120), async {
-                let connection = TcpStream::connect(("127.0.0.1", vm.spec.ssh_port)).await?;
-                ssh_banner(BufReader::new(connection)).await
-            })
-            .await??;
             println!("GUEST_SSH_READY");
             let hello = runtime.connect(identity).await?;
             tokio::fs::write(
@@ -1048,13 +1059,16 @@ mod linux {
     }
 
     #[tokio::test]
-    async fn ssh_readiness_waits_for_the_guest_banner() {
-        let (mut server, client) = tokio::io::duplex(256);
-        let reader = tokio::spawn(ssh_banner(BufReader::new(client)));
-        server.write_all(b"guest starting\r\n").await.unwrap();
-        server.write_all(b"SSH-2.0-OpenSSH_10.0\r\n").await.unwrap();
-        reader.await.unwrap().unwrap();
-        assert!(ssh_banner(BufReader::new(b"".as_slice())).await.is_err());
+    async fn ssh_readiness_waits_for_the_guest_service_start() {
+        let boot = b"Starting ssh.service...\n[\x1b[0;32m OK \x1b[0m] Started \x1b[0;1;39mssh.service\x1b[0m - OpenBSD Secure Shell server.\n";
+        let mut log = Vec::new();
+        ssh_started(BufReader::new(boot.as_slice()), &mut log)
+            .await
+            .unwrap();
+        assert_eq!(log, boot);
+        assert!(ssh_started(BufReader::new(b"".as_slice()), &mut Vec::new())
+            .await
+            .is_err());
     }
 
     #[tokio::test]
