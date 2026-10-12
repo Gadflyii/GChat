@@ -11,8 +11,9 @@ contract and SSH-tunnelled view channel. The approved S1 user-mode KVM preparati
 acceptance-host proposals; the Debian image and Host tools are staged, with
 first dedicated-guest gate passed. Production Cua MCP/SSH integration is implemented
 on `feat/gbot-cua-service-be226`; the parser-fixed model task exposed an idle
-Cua session-lifecycle gap, now fixed. The model task is blocked on raw MCP
-window-state history filling the approved context before the file is saved.
+Cua session-lifecycle gap, now fixed. Canonical model-facing elements and the shared Chat compactor are implemented.
+The first released Qwen SMOL attempt was rejected by the Engine SM120 admission
+rule; the approved next gate moves only the model to the Ada RTX4090.
 The focused contracts and actual loopback SSH fixture pass.
 No user desktop input or native Windows execution is authorized. Ron separately
 approved the isolated S1 Debian guest and its harmless accessibility gate below.
@@ -735,7 +736,7 @@ appears in text content, structured `tree_markdown`, and structured `elements`.
 The two snapshots were13833 and22992 bytes. This is a separate model-facing
 history/representation issue; the file was not saved and the task is not qualified.
 
-**Approved next gate (2026-10-11 23:50Z):** the service owns model-facing Cua
+**Current model handoff:** the service owns model-facing Cua
 projection: one elements list with role, name, element token and state; complete
 raw MCP replies remain in the task log. Text and tree_markdown duplicates are
 removed, with actionable state and incomplete-tree/error metadata retained.
@@ -746,15 +747,30 @@ compaction policy. The unchanged desktop prompt remains the acceptance task.
 
 Default recommended Gbot brain: released Qwen or Muse SMOL, with at least128K
 context and full native context where VRAM permits. Qwen SMOL is the first gate
-at262144 context/C2; Muse SMOL is checked only after Qwen passes. Earlier dense
+at262144 context/C1 on Ada; Muse SMOL is checked only after Qwen passes. Earlier dense
 INT/16384 and intermediate32768/131072 gate sizing are superseded. The Qwen
 artifact is copied once to S1 SSD and verified against the release SHA256SUMS;
 a rejected hardware profile is reported rather than bypassed.
 
 Both focused projection cases, strict all-target Clippy and the changed gate
 build pass. S1 SSD artifact copy is verified against the release manifest
-(9576802560 bytes). Next: one Qwen SMOL hello.txt run with the shared context
-preparer; preserve the full task prompt and independent exact SSH file readback.
+(9576802560 bytes). The S1 Qwen SMOL attempt exited before model load: at
+`19cc62bc5`, `Package::gpu_requirements` explicitly admits this identity on SM86
+and SM89 but rejects SM120. The hardware profile was accepted (`inventory_match=1`);
+there was no model request or saved file. Evidence: S1
+`/ai/gbot-vms/cua-service-20261011/gate-smol-projection-19cc62bc5/`.
+
+**Approved next gate (2026-10-12 00:02Z):** released SHA-verified Qwen SMOL
+runs on Ada RTX4090, context262144/C1/INT8/DFlashK7/greedy/no-thinking. Guest
+and service remain on S1. Reuse a current `19cc`-or-later SM89 Engine when
+available; bind the temporary endpoint to Ada LAN IP with a gate-only API key.
+Inventory, completion, exact token count and shared-compaction requests all
+carry that key; it is excluded from evidence and removed after the gate.
+The changed authenticated fixture build and strict example Clippy pass; the shared
+context bridge is rebundled from the existing cached dependencies.
+No admission bypass or model/profile substitution is authorized. Next unresolved
+action: identify the accepted Ada runtime/profile and run one exact hello.txt task.
+Muse SMOL remains second, only after Qwen PASS.
 Evidence: S1 `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/`,
 including `model-1..7.json`, `tool-*.json` and `model-stop.json` (PID4048678 absent,
 normal exit0, 17.8s, end23:41:05Z). Dedicated guest95ce015c is stopped and its vault
@@ -764,39 +780,36 @@ Pinned lifecycle authority is retained under local
 `out/gbot-cua-service-20261011/cua-pin-lifecycle/`. Only independent SSH readback
 of the actual saved bytes qualifies the task; no `hello.txt` PASS exists yet.
 
-Approved runtime on S1 GPU0, at most 20 minutes while a model runs:
-`/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/build120/apps/ginfer-serve`.
-Artifact:
-`/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer`
-(from NAS `release-waves/v1`, release-manifest SHA
-`ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`).
-Profile:
-`/media/ron/SSD_RAID/ai/tmp-c4-gbench-scoreboard-20261011/results/pro1-r2/profiles/dense-qwen-int.json`.
-Effective launch: artifact first, `--tp 1 --max-context 262144 --max-concurrency 2
---kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy --no-profile
---hardware-profile <above>`, bound to localhost. Greedy avoids the open sampled
-speculation defect. This is a functional task, not a GBench/performance claim.
-The new runtime must identify the requested source before task dispatch; model
-settings otherwise remain unchanged.
+Approved model gate on Ada GPU0, at most 20 minutes while a model runs:
+`19cc62bc5`-or-later SM89 Engine, exact retained donor path to be confirmed.
+Artifact: the verified S1 SSD copy is copied once to Ada local storage,
+`qwen38_27b_smol_df2.ginfer`, release-manifest SHA
+`ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`.
+Effective launch: artifact first, `--tp 1 --max-context 262144 --max-concurrency 1
+--kv-dtype int8 --spec dflash --draft-tokens 7 --no-thinking --greedy
+--host <Ada LAN IP> --api-key <ephemeral>`. Use an accepted exact-device profile,
+not S1's profile. Greedy avoids the open sampled-speculation defect. This is a
+functional task, not a GBench/performance claim. Settings and the task prompt
+otherwise remain unchanged.
 
 Evidence and owned inventory:
 
 | Owner / host | Path | State and retention |
 | --- | --- | --- |
-| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle verified; canonical model projection in progress. |
+| GChat / local | `/ai/gchat-worktrees/gbot-cua-service-be226` | Transport/lifecycle/projection focused gates passed on701a5df9a; authenticated Ada gate prepared. |
 | GChat / local | `/ai/gchat/out/gbot-cua-service-20261011/` | Focused check logs, supervisor scripts and raw tool-call response retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/evidence/` | First integrated connection and API-ID failure evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate2/` | Model task/raw response/readback and normal-stop evidence retained. `model-2.json`, `choices[0].message.content`, is the exact native markup. |
-| GChat / S1 | `/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/` | Exact-source build passed, native-build-receipt.json retained; accepted runtime for the remaining functional gate. |
+| GChat / S1 | `/media/ron/SSD_RAID/ai/tmp-gchat-gbot-parser-19cc62bc5/` | Exact-source build passed, native-build-receipt.json retained; rejects Qwen SMOL on SM120. Retained for authorized read-only donor reuse. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-parser-19cc62bc5/` | Failed parser-fixed gate; desktop idle-expired, no saved file. Model/guest stopped and credential deleted; evidence retained. |
-| GChat / S1 | `/ai/gbot-vms/6fae39a5-220a-4cbc-802d-0135ff040354` | Failed test guest stopped; native undefine required before removing its disposable disk. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-lifecycle-19cc62bc5/` | Desktop/frame/type/menu pass; model context overflow before save. Model/guest stopped, vault credential deleted; evidence retained. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-gate-lifecycle` | Changed-service fixture; focused SSH/Clippy passed. |
 | GChat / S1 | `/ai/gbot-vms/cua-service-gate` | Accepted integration fixture, API-ID discovery enabled and rejected prompt guidance absent. Reusable until source changes. |
-| GChat / S1 | `/ai/gbot-vms/18b93479-d663-4b12-9715-7894d2e03e89`, `/ai/gbot-vms/cfbeb614-85d0-4b06-a447-c7a91763b692` | Failed task guests stopped, vault references deleted; disposable disks may be removed after native undefine. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/gate-smol-projection-19cc62bc5/` | Profile accepted; Engine SM120 identity refusal before model load. Model/guest stopped, vault cleared; evidence retained. |
+| GChat / S1 | `/ai/gbot-vms/cua-service-20261011/disposable-cleanup-20261012.json` | Five stopped failed-task guests undefined then removed,7.393GiB freed; accepted baseline, Ubuntu guest, raw evidence/runtime/models retained. |
 
-Latest model PID4048678 exited normally with code0 and was absent at
-2026-10-11T23:41:05Z; the guest is stopped and its credential deleted. No model,
+Latest model PID4054261 exited with code1 before load and was absent at
+2026-10-11T23:54:08Z; the guest is stopped and its credential deleted. No model,
 guest or GPU lock remains held. Initial fixture root/keyring failures occurred
 before VM creation; separate evidence roots and fresh private keyrings prevent
 them without touching Ron's configuration.

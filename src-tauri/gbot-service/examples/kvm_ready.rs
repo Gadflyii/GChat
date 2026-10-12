@@ -90,8 +90,19 @@ mod linux {
             json!({"role":"user","content":"Please create the text file now."}),
         ];
         let client = Client::new();
+        let api_key = std::env::var("GBOT_MODEL_API_KEY").ok();
+        let authorize = |builder: hyper::http::request::Builder| match &api_key {
+            Some(key) => builder.header("authorization", format!("Bearer {key}")),
+            None => builder,
+        };
         let response = client
-            .get(format!("{}/v1/models", url.trim_end_matches('/')).parse()?)
+            .request(
+                authorize(Request::get(format!(
+                    "{}/v1/models",
+                    url.trim_end_matches('/')
+                )))
+                .body(Body::empty())?,
+            )
             .await?;
         let status = response.status();
         let bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -142,10 +153,12 @@ mod linux {
             let body = prepared["body"]
                 .as_str()
                 .ok_or_else(|| format!("context preparation failed: {prepared}"))?;
-            let request =
-                Request::post(format!("{}/v1/chat/completions", url.trim_end_matches('/')))
-                    .header("content-type", "application/json")
-                    .body(Body::from(body.to_owned()))?;
+            let request = authorize(Request::post(format!(
+                "{}/v1/chat/completions",
+                url.trim_end_matches('/')
+            )))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_owned()))?;
             let response = client.request(request).await?;
             let status = response.status();
             let bytes = hyper::body::to_bytes(response.into_body()).await?;
