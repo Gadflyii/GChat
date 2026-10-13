@@ -6,31 +6,57 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-118 Host snapshot resources
+## Current item — OI-115 Host request copies (merge-ready)
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
-Candidate `fix/gchat-host-idle-39c9` in `/ai/gchat-worktrees/host-idle-39c9`.
-Outcome: reduce the remaining measured Host snapshot cost while preserving catalog,
-GPU reservations, instance state and control semantics. Accepted idle-monitor,
-exit-drain and TLS reuse fixes remain the baseline; Tokio keeps its default workers.
-Measured cause: the final `json!` copied three already-built JSON arrays.
-The snapshot now takes ownership of those arrays; no catalog cache, longer lock
-scope or stale-data reuse. Existing synthetic-process setup was aligned with the
-CPU concurrency fixture after hardware admission changed; admission is unchanged.
-Result: allocations 55,115→29,754 (−46.0%); requested bytes 5,024,911→2,622,867;
-peak bytes above the initial live set 4,944,642→2,542,586 (−48.6%). Single measured
-fixture elapsed 12.476→5.599ms. This is requested-allocation evidence, not RSS or
-installed/concurrent throughput. Final live bytes increase by 2,376 bytes.
-Gate: exact catalog/models/reservations/instance fixture and strict Host all-target
-Clippy PASS, warnings denied. CPU only, `-j6`, under five minutes; no GPU/model,
-native Windows, dependencies, new harness, signing or publication. Tokio keeps
-default workers. Physical Windows SCM acceptance remains owed to the release gate.
-Next action: reviewed merge of this change, then OI-115 request-copy attribution.
-Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; retained prior evidence
-`/ai/gchat/out/review-remaining-20261011/`; new result
-`/ai/gchat/out/oi118-host-idle-20261013/result.json`. No live jobs or model copies.
+Candidate `fix/gchat-host-body-39c9` in `/ai/gchat-worktrees/host-body-39c9`.
+Origin main `f0db75362` is merged without rebasing; both request-body and snapshot
+ownership changes are retained. All four focused fixtures and strict Host all-target
+Clippy pass on the composition; CPU only, under one minute. The first container
+command lacked Cargo and stopped before compilation; the established native WSL
+Cargo route completed the gate. No package/version or lock-file change.
+The Host validates a borrowed JSON-object map, preserves raw field values and
+replaces only its model field into one preallocated buffer. The benchmark path
+forwards validated original bytes. Bounded admission and headers are unchanged.
+The coordinator approved the existing `serde_json/raw_value` feature; no package,
+version or lock changes. Strict Host Clippy and the three focused forwarding,
+raw-field and actual-byte-limit fixtures pass. No new harness or model/GPU run.
 
-## Accepted OI-116 and OI-118 — merged as 3bccdb243
+One 64 MiB request: allocated bytes714,299,696→435,356,476; peak above initial
+255,244,537→149,259,224; elapsed1.188→0.333s. One 1 MiB request: allocated bytes
+12,624,806→9,090,074; peak4,515,107→3,549,922; elapsed21.555→7.664ms. These are
+instrumented same-process mock-upstream samples, not isolated Host RSS or real
+media qualification. Unknown numeric/string JSON representations stay exact.
+The fixture-only CPU child setup uses the accepted concurrent resource pattern;
+production admission is unchanged. Prior SSE/tail/auth checks remain accepted.
+
+Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; no live jobs or model
+copies. Evidence `/ai/gchat/out/oi115-host-body-20261013/result.json`; fixture
+wall time2.11s baseline/1.24s candidate, each control under1s, strict Clippy PASS.
+Next: reviewed merge. OI-116's Windows/NAS checks remain release-gated;
+OI-119's larger-fleet native qualification remains open after the limited sample below.
+
+## Accepted OI-118 — snapshot ownership (merged f0db75362)
+
+Three owned JSON arrays now move into the final snapshot. Same 174-profile/four-
+CPU-instance fixture allocations55,115→29,754; requested peak above initial
+4,944,642→2,542,586. One instrumented elapsed12.476→5.599ms, not RSS or concurrency
+throughput. Exact catalog/models/reservations/instances and strict Clippy PASS.
+Evidence `/ai/gchat/out/oi118-host-idle-20261013/result.json`. Default workers kept;
+physical Windows SCM qualification remains owed to the release gate.
+The clean/pushed merged source tree is retired; evidence and shared targets remain.
+
+## OI-119 — limited native Linux observation
+
+Accepted source0705f31a6 includes the merged projection/UI fix2ad018261.
+One isolated local Host/client, no models/profiles:30s Manager idle0.13% of one
+core, privateRSS306.27MiB (WebKit content226.26MiB); Host0.00%,4.52MiB.
+This is Linux/WSLg, not a before/after gain or Windows private-commit result.
+Large-fleet idle/private-memory qualification remains open. Own processes and
+private state are retired; accepted binaries remain. No rebuild/model/GPU run.
+Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
+
+## Accepted OI-116 and OI-118 lifecycle review
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
 Candidate `/ai/gchat-worktrees/review-remaining-712d5718`, branch

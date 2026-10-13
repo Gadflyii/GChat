@@ -1172,16 +1172,10 @@ impl Host {
         if req.method() == hyper::Method::POST {
             let bytes = bounded_body(req, 384 * 1024 * 1024).await?;
             if !bytes.is_empty() {
-                let mut body: serde_json::Value =
-                    serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-                drop(bytes);
-                if !body.is_object() {
-                    return Err("inference body must be a JSON object".into());
-                }
-                if suffix != "v1/ginfer/benchmark" {
-                    body["model"] = model.into();
-                }
-                upstream = upstream.json(&body);
+                let model = (suffix != "v1/ginfer/benchmark").then_some(model.as_str());
+                upstream = upstream
+                    .header(hyper::header::CONTENT_TYPE, "application/json")
+                    .body(inference_body(bytes, model)?);
             }
         }
         let response = upstream.send().await.map_err(|e| e.to_string())?;
@@ -2629,9 +2623,25 @@ mod resource_tests {
 
     #[tokio::test]
     #[ignore = "global allocation measurement; run explicitly with --test-threads=1"]
-    async fn service_resource_inference_body_one_mib_preserves_json_and_model() {
-        let (_dir, host, request) = fixture().await;
-        let id = host.launch(request).await.unwrap();
+    async fn service_resource_inference_body_preserves_json_and_model() {
+        let (dir, host, mut request) = fixture().await;
+        let hardware = host.processes.lock().await.hardware_profile.clone();
+        let mut synthetic = HostProcesses::new(
+            dir.path().join("engine"),
+            host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
+            Duration::from_secs(600),
+        ).unwrap();
+        synthetic.configure_runtimes(Default::default(), host.gpus.iter().filter_map(|gpu| {
+            gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))
+        }).collect()).unwrap();
+        let prepared = host.prepare_launch(&request).await.unwrap();
+        let id = prepared.instance_id;
+        synthetic.launch(prepared).unwrap();
+        request.instance_id = Some(id);
+        host.data.lock().await.profiles.insert(id, request);
+        synthetic.mark_profile_persisted(id);
+        synthetic.hardware_profile = hardware;
+        *host.processes.lock().await = synthetic;
         let port = host.processes.lock().await.instances().find(|instance| instance.instance_id == id).unwrap().launch.port;
         let received = Arc::new(std::sync::Mutex::new(Vec::new()));
         let capture = received.clone();
@@ -2665,17 +2675,25 @@ mod resource_tests {
                 .body(Body::from(bytes))
                 .unwrap()
         };
-        let mut original = serde_json::json!({"model":"caller-alias", "messages":[{"role":"user", "content":"Unicode 🐦\nquoted \"text\""}], "padding":""});
-        let prefix_bytes = serde_json::to_vec(&original).unwrap().len();
-        original["padding"] = "x".repeat(1024 * 1024 - prefix_bytes).into();
-        let bytes = serde_json::to_vec(&original).unwrap();
-        let input_bytes = bytes.len();
-        let request = call("v1/chat/completions", bytes);
-        let measurement = crate::resource_measurement::Measurement::start();
-        let response = host.clone().route(request).await.unwrap();
-        let status = response.status();
-        let response_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        measurement.finish("service_resource_inference_body_one_mib");
+        for mib in [1, 64] {
+            let mut original = serde_json::json!({"model":"caller-alias", "messages":[{"role":"user", "content":"Unicode 🐦\nquoted \"text\""}], "padding":""});
+            let prefix_bytes = serde_json::to_vec(&original).unwrap().len();
+            original["padding"] = "x".repeat(mib * 1024 * 1024 - prefix_bytes).into();
+            let bytes = serde_json::to_vec(&original).unwrap();
+            assert_eq!(bytes.len(), mib * 1024 * 1024);
+            let request = call("v1/chat/completions", bytes);
+            let label = format!("service_resource_inference_body_{mib}_mib");
+            let measurement = crate::resource_measurement::Measurement::start();
+            let response = host.clone().route(request).await.unwrap();
+            let status = response.status();
+            let response_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+            measurement.finish(&label);
+            original["model"] = "muse-glimmer-30b/nvfp4".into();
+            let captured = std::mem::take(&mut *received.lock().unwrap());
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(response_bytes.as_ref(), b"{}");
+            assert_eq!(captured, vec![(Some("application/json".to_owned()), original)]);
+        }
         let benchmark = host
             .clone()
             .route(call(
@@ -2694,20 +2712,35 @@ mod resource_tests {
             .route(call("v1/chat/completions", b"{broken".to_vec()))
             .await
             .unwrap();
-        let captured = received.lock().unwrap().clone();
+        let captured = std::mem::take(&mut *received.lock().unwrap());
         host.processes.lock().await.shutdown().await.unwrap();
         server.abort();
         let _ = server.await;
-        original["model"] = "muse-glimmer-30b/nvfp4".into();
-        assert_eq!(input_bytes, 1024 * 1024);
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(response_bytes.as_ref(), b"{}");
         assert_eq!(benchmark.status(), StatusCode::OK);
         assert_eq!(invalid_object.status(), StatusCode::BAD_REQUEST);
         assert_eq!(invalid_json.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(captured.len(), 2);
-        assert_eq!(captured[0], (Some("application/json".to_owned()), original));
-        assert_eq!(captured[1], (Some("application/json".to_owned()), serde_json::json!({"model":"benchmark-owned"})));
+        assert_eq!(captured, vec![(Some("application/json".to_owned()), serde_json::json!({"model":"benchmark-owned"}))]);
+    }
+
+    #[test]
+    fn service_inference_body_preserves_raw_fields_and_object_validation() {
+        use serde_json::value::RawValue;
+        let source = br#"{"m\u006fdel":"first","model":"last","nested": { "n": 123456789012345678901234567890, "f": 1.2300e+40, "s": "\u0041\/" },"model2":"untouched"}"#;
+        let output = inference_body(source.to_vec(), Some("host\"model")).unwrap();
+        let fields: BTreeMap<String, &RawValue> = serde_json::from_slice(&output).unwrap();
+        assert_eq!(fields["model"].get(), r#""host\"model""#);
+        assert_eq!(fields["model2"].get(), r#""untouched""#);
+        assert_eq!(fields["nested"].get(), r#"{ "n": 123456789012345678901234567890, "f": 1.2300e+40, "s": "\u0041\/" }"#);
+        assert_eq!(fields.len(), 3);
+        assert_eq!(inference_body(b"{}".to_vec(), Some("host")).unwrap(), br#"{"model":"host"}"#);
+        let benchmark = b" { \"model\" : \"benchmark-owned\" } ".to_vec();
+        assert_eq!(inference_body(benchmark.clone(), None).unwrap(), benchmark);
+        for source in ["[]", "null", "true", "42", "\"text\""] {
+            assert_eq!(inference_body(source.as_bytes().to_vec(), Some("host")).unwrap_err(), "inference body must be a JSON object");
+        }
+        for source in ["{broken", "{} trailing", "{\"x\": NaN}"] {
+            assert!(inference_body(source.as_bytes().to_vec(), None).is_err());
+        }
     }
 
     #[tokio::test]
@@ -3884,6 +3917,28 @@ mod lifecycle_tests {
         restored.processes.lock().await.shutdown().await.unwrap();
         serde_json::from_value::<crate::engine_registry::HostSnapshot>(snapshot).unwrap();
     }
+}
+fn inference_body(bytes: Vec<u8>, model: Option<&str>) -> Result<Vec<u8>, String> {
+    use serde_json::value::{to_raw_value, RawValue};
+    let mut fields: BTreeMap<String, &RawValue> = serde_json::from_slice(&bytes).map_err(|error| {
+        if error.is_data() {
+            "inference body must be a JSON object".to_owned()
+        } else {
+            error.to_string()
+        }
+    })?;
+    let Some(model) = model else {
+        return Ok(bytes);
+    };
+    let model = to_raw_value(model).map_err(|error| error.to_string())?;
+    // Input size plus the encoded model and its key bounds the rewritten object.
+    let capacity = bytes.len().checked_add(model.get().len())
+        .and_then(|size| size.checked_add(9))
+        .ok_or_else(|| "inference body size overflow".to_owned())?;
+    fields.insert("model".to_owned(), &model);
+    let mut output = Vec::with_capacity(capacity);
+    serde_json::to_writer(&mut output, &fields).map_err(|error| error.to_string())?;
+    Ok(output)
 }
 async fn bounded_body(req: &mut Request<Body>, limit: usize) -> Result<Vec<u8>, String> {
     use hyper::body::HttpBody;
