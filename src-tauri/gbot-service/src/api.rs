@@ -844,6 +844,35 @@ async fn route(
                 .expect("session identities are serializable");
             json_response(StatusCode::OK, &state)
         }
+        (&Method::POST, "/v1/ssh/identity") => {
+            match parse_body::<crate::contract::SshEndpoint>(request).await {
+                Some(endpoint) => match runtime.inspect_ssh_identity(endpoint).await {
+                    Ok(identity) => json_response(StatusCode::OK, &identity),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/workspaces/ssh/key") => {
+            match parse_body::<GetAssignment>(request).await {
+                Some(input) => match runtime.ssh_public_key(input.workspace_id).await {
+                    Ok(key) => json_response(StatusCode::OK, &key),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/workspaces/ssh/check") => {
+            match parse_body::<GetAssignment>(request).await {
+                Some(input) => match runtime.check_ssh_connection(input.workspace_id).await {
+                    Ok(()) => {
+                        json_response(StatusCode::OK, &serde_json::json!({"authenticated": true}))
+                    }
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/workspaces/ssh") => {
             match parse_body::<CreateSshWorkspace>(request).await {
                 Some(input) => match runtime.create_ssh_workspace(input).await {
@@ -1069,6 +1098,16 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
             (StatusCode::CONFLICT, "control_owner")
         }
         WorkspaceError::Media(_) => (StatusCode::BAD_GATEWAY, "desktop_media_unavailable"),
+        WorkspaceError::Transport(SshError::PeerRejected) => {
+            (StatusCode::CONFLICT, "ssh_identity_changed")
+        }
+        WorkspaceError::Transport(SshError::AuthenticationRejected) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "ssh_authentication_rejected",
+        ),
+        WorkspaceError::Transport(SshError::Contract(_)) => {
+            (StatusCode::BAD_REQUEST, "invalid_ssh_connection")
+        }
         WorkspaceError::Transport(_) => (StatusCode::BAD_GATEWAY, "guest_connection_failed"),
         WorkspaceError::AdapterUnavailable | WorkspaceError::ServiceLocationUnavailable => {
             (StatusCode::NOT_IMPLEMENTED, "adapter_unavailable")
@@ -1590,7 +1629,8 @@ mod tests {
         let vault = Arc::new(MemoryVault::default());
         let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
         let client = api.client();
-        let input = ssh_workspace_request();
+        let mut input = ssh_workspace_request();
+        input["private_key"] = serde_json::Value::Null;
         let before = service.snapshot().await;
         let prior_bytes = std::fs::read(&path).unwrap();
         std::fs::rename(&path, &retained).unwrap();
@@ -1617,6 +1657,27 @@ mod tests {
         assert_eq!(saved["connection"]["credential_ref"], input["id"]);
         assert!(saved.get("private_key").is_none());
         assert!(saved.get("passphrase").is_none());
+        let public = client
+            .call(
+                "/v1/workspaces/ssh/key",
+                serde_json::json!({"workspace_id": input["id"]}),
+            )
+            .await
+            .unwrap();
+        let stored = vault.0.lock().unwrap()
+            [&serde_json::from_value::<Uuid>(input["id"].clone()).unwrap()]
+            .clone();
+        let generated = russh::keys::PrivateKey::from_openssh(stored).unwrap();
+        assert_eq!(generated.algorithm(), russh::keys::Algorithm::Ed25519);
+        assert_eq!(public["algorithm"], "ssh-ed25519");
+        assert_eq!(
+            format!(
+                "{} {}",
+                public["algorithm"].as_str().unwrap(),
+                public["public_key"].as_str().unwrap()
+            ),
+            generated.public_key().to_openssh().unwrap()
+        );
         let entries = vault.0.lock().unwrap().clone();
         let retry = client
             .call("/v1/workspaces/ssh", input.clone())

@@ -717,14 +717,31 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 ## Current record and inventory
 
-**Current queue — October 13.** Media/view, built-in Driver skill, compact
-output, guest settings and typed browser adoption are merged and accepted at
-the scopes in the [Cua map](cua-map.md#current-adoption-status). Next: review the
-missing Cua browser-task session/dependency boundary; its additional closure
-remains unapproved. Owner: GChat; source tree
-`/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
-`docs/gbot-cua-queue-06bf`, retained for this active-authority correction.
-Existing evidence is reused; no new build, guest, model, booking or live job.
+**Current queue — October 13.** The earlier Cua adoption items are merged
+and accepted at the scopes in the [Cua map](cua-map.md#current-adoption-status).
+The next product queue is guided LAN SSH connection, consented LAN guest-tools
+preparation, live cloud cost review, owned cloud creation/recovery, and M365
+assigned-PC setup. Cua browser evaluation runs after the LAN connection, with its
+approved dependencies confined to a disposable Debian guest (no AGPL).
+Cloud/M365 implementation uses mocks only: no account access, tokens, sign-in,
+paid resources or provisioning without Ron's authorization.
+
+Guided LAN connection is implemented: a generated Ed25519 key stays in the
+vault, computer identity is explicitly verified, and authentication is checked
+before continuing. Only the public key is shown for installation on the bot
+computer. A saved bot owns the key from creation; unfinished setup resumes with
+the same key. Existing key import remains available.
+Five wizard cases, the existing hermetic SSH identity/authentication case, five
+affected API cases, frontend types/lint, service check and strict Clippy pass.
+Evidence: `out/gbot-lan-guided/result.json`. No physical LAN computer or guest-tools
+installation is claimed. Next: the original Cua browser task and verifier in a
+disposable Debian guest, with the approved guest-only dependencies and license
+inventory. No live desktop, host dependency, new harness, Windows build,
+release/signing/publication.
+Owner: GChat; tree `/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
+`feat/gbot-lan-guided-be78`; baseline main `be78c1bdc`. Source awaits reviewed
+merge. No guest, model, booking or live job remains; the shared Cargo cache was
+borrowed for the focused checks.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at

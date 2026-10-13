@@ -17,6 +17,11 @@ export type Workspace = {
   id: string
   name: string
   bot_pc?: { kind: string; hypervisor?: string }
+  connection?: {
+    kind: string
+    endpoint?: { hostname: string; port: number; user: string }
+    pinned_host_key?: { algorithm: string; public_key: string }
+  }
 }
 export type SetupIssue = {
   code: string

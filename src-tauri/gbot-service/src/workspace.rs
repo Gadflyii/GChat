@@ -29,7 +29,10 @@ use crate::{
         ModelAssignment, OperationCompletion, Service, ServiceError, SessionControl,
         SessionControlState, SshWorkspaceCreationError,
     },
-    ssh::{import_ssh_key, prepare_ssh_key, ImportedSshKey, SshError, SshPolicy, SshSession},
+    ssh::{
+        check_ssh_connection, import_ssh_key, inspect_ssh_identity, prepare_ssh_key,
+        ssh_public_key, ImportedSshKey, SshError, SshIdentity, SshPolicy, SshSession,
+    },
     vault::{Secret, Vault, VaultError},
 };
 
@@ -105,7 +108,7 @@ pub struct CreateSshWorkspace {
     pub bot_pc: BotPc,
     pub endpoint: SshEndpoint,
     pub pinned_host_key: SshHostPublicKey,
-    pub private_key: String,
+    pub private_key: Option<String>,
     pub passphrase: Option<String>,
 }
 
@@ -374,18 +377,68 @@ impl WorkspaceRuntime {
             connection.pinned_host_key.algorithm, connection.pinned_host_key.public_key
         ))
         .map_err(|_| ServiceError::Contract(ContractError::InvalidHostKey))?;
-        let (_, key) = prepare_ssh_key(
-            Secret::new(input.private_key.into_bytes()),
-            input
-                .passphrase
-                .map(|value| Secret::new(value.into_bytes())),
-        )
-        .await?;
+        let key = match input.private_key {
+            Some(key) => Some(
+                prepare_ssh_key(
+                    Secret::new(key.into_bytes()),
+                    input
+                        .passphrase
+                        .map(|value| Secret::new(value.into_bytes())),
+                )
+                .await?
+                .1,
+            ),
+            None if input.passphrase.is_none() => None,
+            None => return Err(SshError::InvalidCredential.into()),
+        };
         self.accepting()?;
         self.service
             .create_ssh_workspace(config, key, self.vault.clone())
             .await
             .map_err(WorkspaceError::Creation)
+    }
+
+    pub async fn inspect_ssh_identity(
+        &self,
+        endpoint: SshEndpoint,
+    ) -> Result<SshIdentity, WorkspaceError> {
+        self.accepting()?;
+        Ok(inspect_ssh_identity(endpoint, SshPolicy::default()).await?)
+    }
+
+    async fn ssh_connection(&self, id: WorkspaceId) -> Result<SshConnection, WorkspaceError> {
+        self.accepting()?;
+        let config = self
+            .service
+            .snapshot()
+            .await
+            .workspaces
+            .into_iter()
+            .find(|workspace| workspace.id == id)
+            .ok_or(WorkspaceError::NotFound)?;
+        match config.connection {
+            WorkspaceConnection::Ssh(connection) => Ok(connection),
+            _ => Err(WorkspaceError::AdapterUnavailable),
+        }
+    }
+
+    pub async fn ssh_public_key(
+        &self,
+        id: WorkspaceId,
+    ) -> Result<SshHostPublicKey, WorkspaceError> {
+        let connection = self.ssh_connection(id).await?;
+        let secret = self
+            .vault
+            .get(connection.credential_ref.as_uuid())
+            .await
+            .map_err(WorkspaceError::Vault)?
+            .ok_or(SshError::MissingCredential)?;
+        Ok(ssh_public_key(&secret)?)
+    }
+
+    pub async fn check_ssh_connection(&self, id: WorkspaceId) -> Result<(), WorkspaceError> {
+        let connection = self.ssh_connection(id).await?;
+        Ok(check_ssh_connection(&connection, self.vault.as_ref(), SshPolicy::default()).await?)
     }
 
     pub async fn import_ssh_key(

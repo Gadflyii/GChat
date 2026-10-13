@@ -554,7 +554,7 @@ impl Service {
     pub(crate) async fn create_ssh_workspace(
         &self,
         config: WorkspaceConfig,
-        key: Secret,
+        key: Option<Secret>,
         vault: Arc<dyn Vault>,
     ) -> Result<WorkspaceConfig, SshWorkspaceCreationError> {
         config.validate().map_err(ServiceError::Contract)?;
@@ -580,7 +580,10 @@ impl Service {
                     .get(reference)
                     .await
                     .map_err(SshWorkspaceCreationError::Vault)?;
-                if !stored.is_some_and(|stored| stored.expose_secret() == key.expose_secret()) {
+                if !stored.is_some_and(|stored| {
+                    key.as_ref()
+                        .is_none_or(|key| stored.expose_secret() == key.expose_secret())
+                }) {
                     return Err(ServiceError::WorkspaceConflict.into());
                 }
                 // Also confirms durability after a save whose rename succeeded but sync failed.
@@ -606,6 +609,11 @@ impl Service {
             let mut next = state.durable.clone();
             next.workspaces.push(config.clone());
             next.validate()?;
+            let key = match key {
+                Some(key) => key,
+                None => crate::ssh::generate_ssh_key()
+                    .map_err(|_| SshWorkspaceCreationError::State(ServiceError::InvalidState))?,
+            };
             if let Err(error) = vault.put(reference, key).await {
                 vault
                     .delete(reference)

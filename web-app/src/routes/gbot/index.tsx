@@ -6,7 +6,10 @@ import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
-import GbotSetup, { type BotConnection } from '@/components/GbotSetup'
+import GbotSetup, {
+  type BotConnection,
+  type SetupResume,
+} from '@/components/GbotSetup'
 import { BrainSetup } from '@/components/GbotSetup/BrainSetup'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
@@ -109,7 +112,7 @@ function GbotPage() {
   const [error, setError] = useState('')
   const [executorError, setExecutorError] = useState('')
   const [adding, setAdding] = useState(false)
-  const [resuming, setResuming] = useState<{ id: string; name: string }>()
+  const [resuming, setResuming] = useState<SetupResume>()
   const [setups, setSetups] = useState<KvmSetupRecord[]>()
   const [setupError, setSetupError] = useState('')
   const [prompt, setPrompt] = useState('')
@@ -259,6 +262,13 @@ function GbotPage() {
       savedAssignment.context_tokens > 0
   )
   const add = async (connection: BotConnection) => {
+    if (connection.workspaceId) {
+      setSelected(connection.workspaceId)
+      setAdding(false)
+      setResuming(undefined)
+      await refresh()
+      return
+    }
     const [algorithm, publicKey] = connection.hostKey.trim().split(/\s+/)
     if (!algorithm || !publicKey)
       throw new Error('Enter the dedicated computer’s SSH host public key')
@@ -414,6 +424,7 @@ function GbotPage() {
                   setupIdentity.current = null
                   setResuming(undefined)
                   setAdding(false)
+                  void refresh()
                 }}
               />
             )}
@@ -456,6 +467,24 @@ function GbotPage() {
                             : 'Connected'
                           : 'Disconnected'}
                     </span>
+                    {!identity &&
+                      bot.bot_pc?.kind === 'lan' &&
+                      bot.connection?.kind === 'ssh' && (
+                        <Button
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            setResuming({
+                              id: bot.id,
+                              name: bot.name,
+                              connection: bot.connection,
+                            })
+                            setAdding(true)
+                          }}
+                        >
+                          Set up SSH access
+                        </Button>
+                      )}
                     <Button
                       variant="outline"
                       disabled={busy}

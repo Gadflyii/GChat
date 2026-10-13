@@ -10,7 +10,9 @@ use std::time::Duration;
 use gbot_service::api::Api;
 use gbot_service::contract::*;
 use gbot_service::service::{OperationState, ReviewReason, Service, ServiceError};
-use gbot_service::ssh::{import_ssh_key, SshError, SshPolicy, SshSession};
+use gbot_service::ssh::{
+    check_ssh_connection, import_ssh_key, inspect_ssh_identity, SshError, SshPolicy, SshSession,
+};
 use gbot_service::vault::{Secret, Vault, VaultFuture};
 use gbot_service::workspace::{WorkspaceError, WorkspaceRuntime};
 use hyper::{
@@ -695,6 +697,59 @@ impl server::Handler for Peer {
             }));
         Ok(())
     }
+}
+
+#[tokio::test]
+async fn guided_ssh_check_verifies_identity_and_auth_without_desktop_tools() {
+    let fixture = Fixture::new().await;
+    let identity = inspect_ssh_identity(fixture.connection.endpoint.clone(), policy())
+        .await
+        .unwrap();
+    assert_eq!(identity.public_key, fixture.connection.pinned_host_key);
+    assert!(identity.fingerprint.starts_with("SHA256:"));
+    assert!(fixture
+        .guest
+        .authenticated_algorithms
+        .lock()
+        .unwrap()
+        .is_empty());
+    check_ssh_connection(&fixture.connection, fixture.vault.as_ref(), policy())
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture.guest.authenticated_algorithms.lock().unwrap().len(),
+        1
+    );
+    assert!(fixture.guest.desktop_calls.lock().unwrap().is_empty());
+    assert!(!fixture
+        .guest
+        .cua_active
+        .load(std::sync::atomic::Ordering::Acquire));
+    let mut wrong_host = fixture.connection.clone();
+    wrong_host.pinned_host_key = pin(&key());
+    assert!(matches!(
+        check_ssh_connection(&wrong_host, fixture.vault.as_ref(), policy()).await,
+        Err(SshError::PeerRejected)
+    ));
+    fixture
+        .vault
+        .put(
+            fixture.connection.credential_ref.as_uuid(),
+            Secret::new(
+                key()
+                    .to_openssh(LineEnding::LF)
+                    .unwrap()
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        check_ssh_connection(&fixture.connection, fixture.vault.as_ref(), policy()).await,
+        Err(SshError::AuthenticationRejected)
+    ));
+    fixture.shutdown().await;
 }
 
 fn bufferless_dispatch(guest: &Guest, id: OperationId) -> usize {
