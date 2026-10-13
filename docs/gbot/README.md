@@ -730,7 +730,8 @@ Guided LAN connection is merged in main `1bc9e0df7`. Its focused wizard,
 hermetic SSH/API, types/lint/check/Clippy evidence remains valid at
 `out/gbot-lan-guided/result.json`; no physical LAN installation is claimed.
 
-**Current item: consented dedicated LAN guest preparation.** Reuse the approved
+**Accepted: consented dedicated LAN guest preparation**, merged in main
+`62dba3599`. Reuse the approved
 Debian guest package/session contract and pinned Cua archives. Upload an owned
 installer through the saved vault key and verified SSH identity, show one local
 administrator command, and verify the installed tools before continuing. The
@@ -749,8 +750,20 @@ native check, service strict Clippy, types and lint. Evidence:
 Browser evaluation PASS through the pinned driver/original Cua Submit evaluator,
 not a model-driven task; package/license evidence is in
 `out/gbot-browser-evaluation/result.json`. Its guest, disk and credentials are retired.
-No live job, agent, guest, model or booking. Next: cloud cost review using mocks;
-no account access or paid resource creation.
+**Current item: cloud provider cost review.** Owner: GChat; tree
+`/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
+`feat/gbot-cloud-cost-62d`, baseline main `62dba3599`. Implement live
+Hetzner/DigitalOcean region/plan prices with vault-held provider credentials,
+resumable review and explicit confirmation. Include IPv4, tax and traffic terms;
+never substitute a plan or accept an expired quote. VM creation remains the next
+item. Acceptance: focused provider/quote/persistence and wizard cases, affected
+types/lint/check/Clippy. Tests use mocks only; no real account access, spending,
+new dependencies or harness, native Windows build or release action. Next
+unresolved action: verify the implemented service/native adapter and guided review
+with the focused gates (expected at most 10 minutes), then commit/push for merge.
+Provider tokens remain vault-only; JSON stores catalogs and consent, never tokens.
+Quotes expire after 15 minutes and refreshing clears plan selection and consent.
+No live job, agent, guest, model or booking; next result 17:00 UTC.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at

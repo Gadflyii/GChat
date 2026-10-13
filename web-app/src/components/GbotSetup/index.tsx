@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import KvmSetup from './KvmSetup'
 import LanSetup from './LanSetup'
-import type { Workspace } from '@/services/gbot'
+import CloudCosts from './CloudCosts'
+import type { CloudReview, Workspace } from '@/services/gbot'
 
 export type BotConnection = {
   name: string
@@ -20,6 +21,7 @@ export type SetupResume = {
   id: string
   name: string
   connection?: Workspace['connection']
+  cloud?: CloudReview
 }
 
 const computers = [
@@ -36,7 +38,7 @@ const computers = [
   [
     'cloud',
     'Cloud hosted',
-    'Provider creation and cost review are not available yet.',
+    'Review live Hetzner or DigitalOcean prices. VM creation is the next step under development.',
   ],
   ['m365', 'M365 Cloud PC', 'The Cloud PC connection is not available yet.'],
 ] as const
@@ -46,16 +48,18 @@ export default function GbotSetup({
   save,
   cancel,
   localReady,
+  cloudReviewed = async () => {},
   resume,
 }: {
   save: (connection: BotConnection) => Promise<void>
   cancel: () => void
   localReady: (id: string) => Promise<void>
+  cloudReviewed?: () => Promise<void>
   resume?: SetupResume
 }) {
   const [step, setStep] = useState(resume ? 3 : 0)
   const [computer, setComputer] = useState(
-    resume?.connection ? 'lan' : resume ? 'local' : ''
+    resume?.cloud ? 'cloud' : resume?.connection ? 'lan' : resume ? 'local' : ''
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -81,7 +85,7 @@ export default function GbotSetup({
     step === 0
       ? Boolean(connection.name.trim())
       : step === 2
-        ? computer === 'lan' || computer === 'local'
+        ? ['lan', 'local', 'cloud'].includes(computer)
         : step === 3
           ? computer === 'lan' && lanReady
           : true
@@ -119,10 +123,13 @@ export default function GbotSetup({
       <div>
         <h3 className="font-medium">Set up your bot</h3>
         <p className="text-sm text-muted-foreground">
-          Step {step + 1} of {computer === 'local' ? 4 : 5} ·{' '}
+          Step {step + 1} of{' '}
+          {computer === 'local' || computer === 'cloud' ? 4 : 5} ·{' '}
           {step === 3 && computer === 'local'
             ? 'Review and setup'
-            : steps[step]}
+            : step === 3 && computer === 'cloud'
+              ? 'Cost review'
+              : steps[step]}
         </p>
       </div>
       {step === 0 && (
@@ -216,6 +223,14 @@ export default function GbotSetup({
           busy={setConnecting}
         />
       )}
+      {step === 3 && computer === 'cloud' && (
+        <CloudCosts
+          name={connection.name}
+          initial={resume?.cloud}
+          busy={setConnecting}
+          reviewed={cloudReviewed}
+        />
+      )}
       {step === 4 && (
         <>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
@@ -246,7 +261,7 @@ export default function GbotSetup({
         </p>
       )}
       <div className="flex gap-2">
-        {!(step === 3 && computer === 'local') && (
+        {!(step === 3 && ['local', 'cloud'].includes(computer)) && (
           <Button disabled={saving || connecting || !canContinue}>
             {saving ? 'Saving…' : step === 4 ? 'Save bot' : 'Continue'}
           </Button>

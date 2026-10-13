@@ -282,6 +282,18 @@ impl Api {
         Ok(self)
     }
 
+    pub async fn with_cloud_setup(
+        self,
+        root: std::path::PathBuf,
+        host: Arc<dyn crate::cloud::CloudHost>,
+    ) -> Result<Self, ApiError> {
+        self.runtime
+            .configure_cloud_setup(root, host)
+            .await
+            .map_err(ApiError::Workspace)?;
+        Ok(self)
+    }
+
     #[cfg(target_os = "linux")]
     pub async fn with_kvm_setup(self, root: std::path::PathBuf) -> Result<Self, ApiError> {
         self.runtime
@@ -524,6 +536,60 @@ async fn setup_route(
     }
 }
 
+async fn cloud_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> Response<Body> {
+    use crate::cloud::{ConfirmQuote, ReadCatalog, ReviewId, SelectPlan};
+    let Some(setup) = runtime.cloud_setup() else {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "cloud_unavailable",
+            "Cloud cost review is unavailable in this service. Reopen GChat.",
+        );
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let result = match request.uri().path() {
+        "/v1/setup/cloud/status" => setup
+            .status()
+            .await
+            .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+        "/v1/setup/cloud/catalog" => match parse_body::<ReadCatalog>(request).await {
+            Some(input) => setup
+                .read(input, now)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
+        "/v1/setup/cloud/select" => match parse_body::<SelectPlan>(request).await {
+            Some(input) => setup
+                .select(input, now)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
+        "/v1/setup/cloud/confirm" => match parse_body::<ConfirmQuote>(request).await {
+            Some(input) => setup
+                .confirm(input, now)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
+        "/v1/setup/cloud/remove" => match parse_body::<ReviewId>(request).await {
+            Some(input) => setup
+                .remove(input.id)
+                .await
+                .map(|()| serde_json::json!({"removed":true})),
+            None => return invalid_request(),
+        },
+        _ => return invalid_request(),
+    };
+    match result {
+        Ok(value) => json_response(StatusCode::OK, &value),
+        Err(message) => error_response(StatusCode::CONFLICT, "cloud_review", &message),
+    }
+}
+
 async fn service_route(
     service: Arc<Service>,
     runtime: Arc<WorkspaceRuntime>,
@@ -628,6 +694,9 @@ async fn route(
             hyper::header::HeaderValue::from_static("Bearer"),
         );
         return Ok(response);
+    }
+    if request.method() == Method::POST && request.uri().path().starts_with("/v1/setup/cloud/") {
+        return Ok(cloud_route(runtime, request).await);
     }
     #[cfg(target_os = "linux")]
     if request.method() == Method::POST

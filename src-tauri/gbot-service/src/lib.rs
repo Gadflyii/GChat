@@ -1,4 +1,5 @@
 pub mod api;
+pub mod cloud;
 pub mod connectors;
 pub mod contract;
 mod cua_skill;

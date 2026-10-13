@@ -413,6 +413,13 @@ async fn serve(
         .with_guest_assets(directory.join("vms/assets"))
         .map_err(|error| error.to_string())?;
     api = api
+        .with_cloud_setup(
+            directory.clone(),
+            Arc::new(super::cloud::NativeCloudHost::new()?),
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    api = api
         .with_inference_host(Arc::new(
             super::inference::NativeInferenceHost::open().await?,
         ))

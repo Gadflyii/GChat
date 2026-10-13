@@ -125,6 +125,7 @@ pub struct WorkspaceRuntime {
     stopping: AtomicBool,
     connectors: Option<Arc<dyn ConnectorHost>>,
     inference: std::sync::OnceLock<Arc<dyn InferenceHost>>,
+    cloud_setup: std::sync::OnceLock<Arc<crate::cloud::CloudSetup>>,
     guest_assets: std::sync::OnceLock<std::path::PathBuf>,
     #[cfg(target_os = "linux")]
     kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
@@ -178,6 +179,7 @@ impl WorkspaceRuntime {
             stopping: AtomicBool::new(false),
             connectors: None,
             inference: std::sync::OnceLock::new(),
+            cloud_setup: std::sync::OnceLock::new(),
             guest_assets: std::sync::OnceLock::new(),
             #[cfg(target_os = "linux")]
             kvm_setup: std::sync::OnceLock::new(),
@@ -188,6 +190,22 @@ impl WorkspaceRuntime {
         self.guest_assets
             .set(root)
             .map_err(|_| WorkspaceError::GuestSetup("Guest tools are already configured".into()))
+    }
+
+    pub async fn configure_cloud_setup(
+        &self,
+        root: std::path::PathBuf,
+        host: Arc<dyn crate::cloud::CloudHost>,
+    ) -> Result<(), WorkspaceError> {
+        let setup = crate::cloud::CloudSetup::open(root, self.vault.clone(), host)
+            .await
+            .map_err(WorkspaceError::GuestSetup)?;
+        self.cloud_setup
+            .set(Arc::new(setup))
+            .map_err(|_| WorkspaceError::GuestSetup("Cloud setup is already configured.".into()))
+    }
+    pub fn cloud_setup(&self) -> Option<Arc<crate::cloud::CloudSetup>> {
+        self.cloud_setup.get().cloned()
     }
 
     #[cfg(target_os = "linux")]

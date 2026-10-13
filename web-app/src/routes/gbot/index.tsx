@@ -30,6 +30,7 @@ import {
   type HelpRequest,
   type Identity,
   type KvmSetupRecord,
+  type CloudReview,
   type Task,
 } from '@/services/gbot'
 
@@ -114,6 +115,7 @@ function GbotPage() {
   const [adding, setAdding] = useState(false)
   const [resuming, setResuming] = useState<SetupResume>()
   const [setups, setSetups] = useState<KvmSetupRecord[]>()
+  const [cloudReviews, setCloudReviews] = useState<CloudReview[]>([])
   const [setupError, setSetupError] = useState('')
   const [prompt, setPrompt] = useState('')
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
@@ -136,6 +138,16 @@ function GbotPage() {
       )
       setState(value)
       setSetupError('')
+      let cloud: CloudReview[] = []
+      try {
+        const saved = await gbot<CloudReview[]>('setup/cloud/status', {})
+        if (stopped.current || version !== refreshVersion.current) return
+        cloud = Array.isArray(saved) ? saved : []
+        setCloudReviews(cloud)
+      } catch (cause) {
+        if (stopped.current || version !== refreshVersion.current) return
+        setSetupError(String(cause))
+      }
       if (hasKvm) {
         try {
           const records = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
@@ -148,7 +160,7 @@ function GbotPage() {
       }
       if (!setupOffered.current) {
         setupOffered.current = true
-        if (!value.workspaces.length) setAdding(true)
+        if (!value.workspaces.length && !cloud.length) setAdding(true)
       }
       setError('')
       try {
@@ -420,6 +432,11 @@ function GbotPage() {
                   setResuming(undefined)
                   await refresh()
                 }}
+                cloudReviewed={async () => {
+                  setAdding(false)
+                  setResuming(undefined)
+                  await refresh()
+                }}
                 cancel={() => {
                   setupIdentity.current = null
                   setResuming(undefined)
@@ -427,6 +444,56 @@ function GbotPage() {
                   void refresh()
                 }}
               />
+            )}
+            {!adding &&
+              cloudReviews.map((review) => (
+                <section
+                  key={review.id}
+                  aria-label={`Cloud setup ${review.name}`}
+                  className="space-y-2 rounded-md border p-3 text-sm"
+                >
+                  <p className="font-medium">
+                    {review.name} · Cloud computer setup
+                  </p>
+                  <p>
+                    {review.confirmed
+                      ? 'Cost review saved'
+                      : 'Cost review incomplete'}{' '}
+                    · No VM created
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        setResuming({
+                          id: review.id,
+                          name: review.name,
+                          cloud: review,
+                        })
+                        setAdding(true)
+                      }}
+                    >
+                      Resume cost review
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        void perform(() =>
+                          gbot('setup/cloud/remove', { id: review.id })
+                        )
+                      }
+                    >
+                      Remove saved review
+                    </Button>
+                  </div>
+                </section>
+              ))}
+            {!bot && setupError && (
+              <p role="alert" className="text-sm text-destructive">
+                {setupError}
+              </p>
             )}
             {bot && (
               <>

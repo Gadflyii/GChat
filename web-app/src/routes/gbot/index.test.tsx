@@ -79,6 +79,49 @@ it('opens first-bot setup after opt-in and makes no service calls while disabled
   ).not.toBeInTheDocument()
 })
 
+it('resumes a saved cloud price review without creating a workspace or offering first setup', async () => {
+  mocks.listen.mockResolvedValue(() => {})
+  const now = Math.floor(Date.now() / 1000)
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state')
+      return {
+        workspaces: [],
+        live_sessions: [],
+        assignments: [],
+        controls: [],
+      }
+    if (path === 'setup/cloud/status')
+      return [
+        {
+          id: 'saved-review',
+          name: 'Cloud researcher',
+          provider: 'hetzner',
+          fetched_at: now,
+          expires_at: now + 900,
+          confirmed: false,
+          quote: null,
+          catalog: { currency: 'EUR', tax: 'VAT', regions: [], plans: [] },
+        },
+      ]
+    return []
+  })
+  render(<Page />)
+  await screen.findByText('Cloud researcher')
+  expect(
+    screen.queryByRole('form', { name: 'Set up Gbot' })
+  ).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Resume cost review' }))
+  expect(
+    await screen.findByRole('region', { name: 'Cloud cost review' })
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText('Provider API token')).toHaveValue('')
+  expect(
+    mocks.call.mock.calls.some(
+      ([path]) => path === 'workspaces/ssh' || path === 'workspaces'
+    )
+  ).toBe(false)
+})
+
 it('creates an SSH workspace in one request and preserves setup identity on retry', async () => {
   const workspaces: { id: string; name: string }[] = []
   let attempt = 0
