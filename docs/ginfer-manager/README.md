@@ -50,6 +50,14 @@ Host/vault behavior, native application or user credential changes
 are included. Evidence belongs in `out/manager-forget-credential-warning-20261011/`;
 the source tree is retained for review, with existing Node dependencies reused.
 
+## Linux AppIndicator dependency deprecation
+
+`GCHAT-LINUX-APPINDICATOR-DEPRECATION`: diagnosis complete; external dependency migration is parked.
+Locked `tray-icon` 0.21.3 → `libappindicator`/`libappindicator-sys` 0.9.0 calls Ayatana's deprecated constructor, which emits the retained warning unconditionally ([owning source](https://github.com/AyatanaIndicators/libayatana-appindicator/blob/master/src/app-indicator.c)).
+The [replacement API](https://github.com/AyatanaIndicators/libayatana-appindicator-glib/blob/main/src/ayatana-appindicator.h) requires `GMenu`/`GSimpleActionGroup`; the current backend passes `GtkMenu`, so changing a library name cannot deliver the migration.
+Next decision: authorize a replacement Linux runtime library/binding plus a Gio menu/action exporter and package updates; current dependency graph has no safe migration.
+Docs-only disposition; `git diff --check` passes. Evidence and owned source inventory: `/ai/gchat/out/gchat-focused-burndown-20261013/appindicator/result.json`.
+
 ## Closed Linux tray registration diagnosis
 
 `GCHAT-MANAGER-LINUX-TRAY-NO-SNI` is closed by the October 11 15:44Z decision:
