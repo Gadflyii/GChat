@@ -200,6 +200,18 @@ impl WorkspaceRuntime {
         let setup = crate::cloud::CloudSetup::open(root, self.vault.clone(), host)
             .await
             .map_err(WorkspaceError::GuestSetup)?;
+        let live: Vec<_> = self
+            .service
+            .snapshot()
+            .await
+            .workspaces
+            .iter()
+            .map(|w| w.id.as_uuid())
+            .collect();
+        setup
+            .finish_workspace_retirements(&live)
+            .await
+            .map_err(WorkspaceError::GuestSetup)?;
         self.cloud_setup
             .set(Arc::new(setup))
             .map_err(|_| WorkspaceError::GuestSetup("Cloud setup is already configured.".into()))
@@ -437,6 +449,145 @@ impl WorkspaceRuntime {
             .map_err(WorkspaceError::Creation)
     }
 
+    pub async fn create_cloud(
+        self: &Arc<Self>,
+        input: crate::cloud::CreateComputer,
+        now: u64,
+    ) -> Result<crate::cloud::Review, String> {
+        let owner = self.clone();
+        tokio::spawn(async move {
+            owner.accepting().map_err(|e| e.to_string())?;
+            let lock = owner.lifecycle_lock(WorkspaceId(input.id)).await;
+            let _guard = lock.lock().await;
+            let setup = owner.cloud_setup().ok_or("Cloud setup unavailable.")?;
+            if owner.service.snapshot().await.workspaces.iter().any(|w| w.id == WorkspaceId(input.id)) {
+                return Err("This setup already has a workspace. Remove it before creating another computer.".into());
+            }
+            setup.create(input, now).await
+        }).await.map_err(|_| "Cloud creation interrupted. Check the saved setup.".to_string())?
+    }
+
+    pub async fn remove_cloud_review(&self, id: Uuid) -> Result<(), String> {
+        self.accepting().map_err(|e| e.to_string())?;
+        let lock = self.lifecycle_lock(WorkspaceId(id)).await;
+        let _guard = lock.lock().await;
+        if self
+            .service
+            .snapshot()
+            .await
+            .workspaces
+            .iter()
+            .any(|w| w.id == WorkspaceId(id))
+        {
+            return Err("Remove this setup's workspace before removing the review.".into());
+        }
+        self.cloud_setup()
+            .ok_or("Cloud setup unavailable.")?
+            .remove(id)
+            .await
+    }
+
+    pub async fn attach_cloud(
+        self: &Arc<Self>,
+        input: crate::cloud::AttachComputer,
+    ) -> Result<WorkspaceConfig, String> {
+        let owner = self.clone();
+        tokio::spawn(async move {
+            owner.accepting().map_err(|e| e.to_string())?;
+            let lock = owner.lifecycle_lock(WorkspaceId(input.id)).await;
+            let _guard = lock.lock().await;
+            let setup = owner.cloud_setup().ok_or("Cloud setup unavailable.")?;
+            let (config, key) = setup.connection(input).await?;
+            if let Some(saved) = owner
+                .service
+                .snapshot()
+                .await
+                .workspaces
+                .into_iter()
+                .find(|w| w.id == config.id)
+            {
+                return if saved == config {
+                    Ok(saved)
+                } else {
+                    Err("The saved workspace connection differs. Nothing was replaced.".into())
+                };
+            }
+            owner
+                .service
+                .create_ssh_workspace(config, Some(key), owner.vault.clone())
+                .await
+                .map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|_| "Cloud connection interrupted. Resume the saved setup.".to_string())?
+    }
+
+    pub async fn delete_cloud(
+        self: &Arc<Self>,
+        input: crate::cloud::DeleteComputer,
+    ) -> Result<crate::cloud::Review, String> {
+        let owner = self.clone();
+        tokio::spawn(async move {
+            let id = WorkspaceId(input.id);
+            let lock = owner.lifecycle_lock(id).await;
+            let _guard = lock.lock().await;
+            owner.accepting().map_err(|e| e.to_string())?;
+            let setup = owner.cloud_setup().ok_or("Cloud setup unavailable.")?;
+            let review = setup
+                .status()
+                .await?
+                .into_iter()
+                .find(|r| r.id == input.id)
+                .ok_or("Cloud setup not found.")?;
+            let server_id = review
+                .deployment
+                .as_ref()
+                .and_then(|d| d.server_id.clone())
+                .unwrap_or_default();
+            let bot_pc = BotPc::Cloud {
+                provider: review.provider,
+                resource_id: server_id,
+            };
+            let state = owner.service.snapshot().await;
+            let config = state.workspaces.iter().find(|w| w.id == id);
+            if config.is_some_and(|w| w.bot_pc != bot_pc) {
+                return Err("Workspace ownership does not match this cloud setup.".into());
+            }
+            let removal = owner
+                .service
+                .begin_owned_workspace_removal(id, &bot_pc, None)
+                .await
+                .map_err(|e| e.to_string())?;
+            let result = setup.delete(input).await?;
+            if result
+                .deployment
+                .as_ref()
+                .is_some_and(|d| d.phase == crate::cloud::Phase::Deleted)
+            {
+                let mut credentials = vec![id.as_uuid()];
+                if let Some(key) = removal.model_credential() {
+                    credentials.push(key.as_uuid());
+                }
+                setup
+                    .stage_workspace_retirement(id.as_uuid(), credentials)
+                    .await?;
+                removal.commit().await.map_err(|e| e.to_string())?;
+                let live: Vec<_> = owner
+                    .service
+                    .snapshot()
+                    .await
+                    .workspaces
+                    .iter()
+                    .map(|w| w.id.as_uuid())
+                    .collect();
+                setup.finish_workspace_retirements(&live).await?;
+            }
+            Ok(result)
+        })
+        .await
+        .map_err(|_| "Cloud removal interrupted. Check progress before continuing.".to_string())?
+    }
+
     pub async fn inspect_ssh_identity(
         &self,
         endpoint: SshEndpoint,
@@ -447,6 +598,7 @@ impl WorkspaceRuntime {
 
     async fn ssh_connection(&self, id: WorkspaceId) -> Result<SshConnection, WorkspaceError> {
         self.accepting()?;
+        self.ensure_workspace_ready(id).await?;
         let config = self
             .service
             .snapshot()
@@ -512,7 +664,7 @@ impl WorkspaceRuntime {
             .iter()
             .find(|workspace| workspace.id == id)
             .ok_or(WorkspaceError::NotFound)?;
-        if !matches!(config.bot_pc, BotPc::Lan { .. }) {
+        if !matches!(config.bot_pc, BotPc::Lan { .. } | BotPc::Cloud { .. }) {
             return Err(WorkspaceError::AdapterUnavailable);
         }
         if self
@@ -543,10 +695,14 @@ impl WorkspaceRuntime {
                         .into(),
                 )
             })?;
-            crate::ssh::GuestPreparation::Stage(
+            let bundle =
                 crate::lan_setup::Bundle::new(root, id.as_uuid(), connection.endpoint.user.clone())
-                    .map_err(|error| WorkspaceError::GuestSetup(error.to_string()))?,
-            )
+                    .map_err(|error| WorkspaceError::GuestSetup(error.to_string()))?;
+            if matches!(config.bot_pc, BotPc::Cloud { .. }) {
+                crate::ssh::GuestPreparation::CloudInstall(bundle)
+            } else {
+                crate::ssh::GuestPreparation::Stage(bundle)
+            }
         } else {
             crate::ssh::GuestPreparation::Check
         };
@@ -751,8 +907,38 @@ impl WorkspaceRuntime {
         if let Some(setup) = self.kvm_setup.get() {
             setup.ensure_ready(workspace).await?;
         }
-        #[cfg(not(target_os = "linux"))]
-        let _ = workspace;
+        if let Some(config) = self
+            .service
+            .snapshot()
+            .await
+            .workspaces
+            .iter()
+            .find(|w| w.id == workspace)
+        {
+            if let BotPc::Cloud {
+                provider,
+                resource_id,
+            } = &config.bot_pc
+            {
+                let setup = self
+                    .cloud_setup()
+                    .ok_or_else(|| WorkspaceError::GuestSetup("Cloud setup unavailable.".into()))?;
+                let reviews = setup.status().await.map_err(WorkspaceError::GuestSetup)?;
+                let ready = reviews.iter().any(|r| {
+                    r.id == workspace.as_uuid()
+                        && r.provider == *provider
+                        && r.deployment.as_ref().is_some_and(|d| {
+                            d.phase == crate::cloud::Phase::Running
+                                && d.server_id.as_ref() == Some(resource_id)
+                        })
+                });
+                if !ready {
+                    return Err(WorkspaceError::GuestSetup(
+                        "Cloud computer is not running. Check its setup progress.".into(),
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -764,6 +950,7 @@ impl WorkspaceRuntime {
         let lock = self.lifecycle_lock(identity.workspace_id).await;
         let _guard = lock.lock().await;
         self.accepting()?;
+        self.ensure_workspace_ready(identity.workspace_id).await?;
         let previous = self
             .sessions
             .lock()

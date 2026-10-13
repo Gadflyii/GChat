@@ -229,6 +229,11 @@ fn supported_route(path: &str) -> bool {
             | "/v1/setup/cloud/select"
             | "/v1/setup/cloud/confirm"
             | "/v1/setup/cloud/remove"
+            | "/v1/setup/cloud/create"
+            | "/v1/setup/cloud/check"
+            | "/v1/setup/cloud/delete"
+            | "/v1/setup/cloud/identity"
+            | "/v1/setup/cloud/attach"
             | "/v1/control/take-over"
             | "/v1/control/hand-back"
     )

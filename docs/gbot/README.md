@@ -756,24 +756,16 @@ Live Hetzner/DigitalOcean prices include IPv4, tax and traffic terms; vault-held
 credentials and saved reviews survive restart. Fifteen-minute quotes require
 fresh consent after refresh. Five service, two provider and affected UI cases,
 types/lint and strict desktop Clippy pass. Evidence: `out/gbot-cloud-cost/result.json`.
-Mock providers only; VM creation and physical cloud qualification remain open.
+Mock providers only; physical cloud qualification remains open.
 
-**Current item: owned cloud VM creation and recovery.** Owner: GChat; repository
-`/ai/gchat`, subject `docs/gbot`; working tree
-`/ai/gchat-worktrees/gchat-focused-burndown-c36a`. Extend the accepted cost-review
-owner to create exactly the approved Hetzner/DigitalOcean plan, keep provider
-credentials and SSH private keys in the vault, and persist each owned resource
-and pending action before advancing. Reconcile uncertain creates without issuing
-a duplicate; recover after restart and remove only this setup's resources.
-Reuse Debian guest tools and the verified SSH connection path. A provider's
-Running state is separate from desktop Ready. Acceptance: focused mocked provider,
-price-change, ambiguous-create/recovery and owned-removal cases plus affected
-wizard/types/lint/Clippy checks; expected test phase under ten minutes.
-Exclusions: real tokens/accounts, paid provisioning, new dependencies/harnesses,
-native Windows builds, release/signing/publication. Next unresolved action:
-implement the durable create/inspect/delete contract and first-boot bootstrap
-using the pinned local guest-tools bundle. No live job, guest, model or resource;
-shared Cargo cache is borrowed. Result target: 17:30 UTC.
+**Accepted: owned cloud creation/recovery**, branch `feat/gbot-cloud-create-b6f`.
+Hetzner/DO exact-plan creation, renewed live-cost consent, durable reconciliation,
+owned removal and verified SSH/tool attachment are implemented. Nine service,
+four provider and nine wizard cases, types/lint and strict Clippy pass.
+Evidence: `out/gbot-cloud-create/result.json`; mocked providers only, physical
+provisioning remains owed. No paid resources or guests; shared cache borrowed.
+Next: M365 assigned-PC setup through the existing Microsoft account/vault owner;
+mocked Graph only, with physical desktop connection still awaiting qualification.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at

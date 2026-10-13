@@ -323,15 +323,14 @@ pub struct Service {
     state: Arc<Mutex<RuntimeState>>,
 }
 
-#[cfg(target_os = "linux")]
 pub(crate) struct OwnedWorkspaceRemoval<'a> {
     service: &'a Service,
     state: OwnedMutexGuard<RuntimeState>,
     id: WorkspaceId,
 }
 
-#[cfg(target_os = "linux")]
 impl OwnedWorkspaceRemoval<'_> {
+    #[cfg(target_os = "linux")]
     pub(crate) fn detach_session(&mut self) {
         self.state.sessions.remove(&self.id);
     }
@@ -682,7 +681,6 @@ impl Service {
     }
 
     /// Hold ownership until the guest is removed; failed cleanup preserves its brain.
-    #[cfg(target_os = "linux")]
     pub(crate) async fn begin_owned_workspace_removal(
         &self,
         id: WorkspaceId,

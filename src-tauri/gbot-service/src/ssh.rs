@@ -207,6 +207,7 @@ async fn connection_credentials(
 
 pub(crate) enum GuestPreparation {
     Stage(crate::lan_setup::Bundle),
+    CloudInstall(crate::lan_setup::Bundle),
     Check,
 }
 
@@ -217,7 +218,10 @@ pub(crate) async fn prepare_ssh_guest(
 ) -> Result<crate::lan_setup::Preparation, SshError> {
     let credentials = connection_credentials(connection, vault).await?;
     let mut policy = SshPolicy::default();
-    if matches!(action, GuestPreparation::Stage(_)) {
+    if matches!(
+        action,
+        GuestPreparation::Stage(_) | GuestPreparation::CloudInstall(_)
+    ) {
         policy.connect_timeout = Duration::from_secs(600);
     }
     probe_ssh(
@@ -353,7 +357,9 @@ async fn prepare_guest(
 ) -> Result<crate::lan_setup::Preparation, SshError> {
     use crate::lan_setup::{quote, Preparation};
     let command = match &action {
-        GuestPreparation::Stage(_) => crate::lan_setup::preflight(),
+        GuestPreparation::Stage(_) | GuestPreparation::CloudInstall(_) => {
+            crate::lan_setup::preflight()
+        }
         GuestPreparation::Check => crate::lan_setup::check_command(),
     };
     let (status, output) = guest::collect(client, &format!("( {command} ) 2>&1"), &[]).await?;
@@ -364,7 +370,8 @@ async fn prepare_guest(
             issue: Some(String::from_utf8_lossy(&output).trim().to_string()),
         });
     }
-    let GuestPreparation::Stage(bundle) = action else {
+    let install = matches!(action, GuestPreparation::CloudInstall(_));
+    let (GuestPreparation::Stage(bundle) | GuestPreparation::CloudInstall(bundle)) = action else {
         return Ok(Preparation {
             command: None,
             installed: true,
@@ -409,6 +416,28 @@ async fn prepare_guest(
                 "Guest installer upload failed: {}",
                 String::from_utf8_lossy(&output).trim()
             )),
+        });
+    }
+    if install {
+        let (status, output) = guest::collect(
+            client,
+            "sudo -n -- /usr/local/sbin/gbot-cloud-tools 2>&1",
+            &[],
+        )
+        .await?;
+        if status != 0 {
+            return Ok(Preparation {
+                command: None,
+                installed: false,
+                issue: Some(String::from_utf8_lossy(&output).trim().to_string()),
+            });
+        }
+        let (status, output) =
+            guest::collect(client, crate::lan_setup::check_command(), &[]).await?;
+        return Ok(Preparation {
+            command: None,
+            installed: status == 0,
+            issue: (status != 0).then(|| String::from_utf8_lossy(&output).trim().to_string()),
         });
     }
     Ok(Preparation {

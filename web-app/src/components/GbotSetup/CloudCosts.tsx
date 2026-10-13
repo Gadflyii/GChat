@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import CloudComputer from './CloudComputer'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,11 +61,13 @@ export default function CloudCosts({
   initial,
   busy,
   reviewed,
+  connected = async () => {},
 }: {
   name: string
   initial?: CloudReview
   busy: (value: boolean) => void
   reviewed: () => Promise<void>
+  connected?: (id: string) => Promise<void>
 }) {
   const [id, setId] = useState(initial?.id ?? crypto.randomUUID())
   const [provider, setProvider] = useState<CloudProvider>(
@@ -72,8 +75,8 @@ export default function CloudCosts({
   )
   const [token, setToken] = useState('')
   const [review, setReview] = useState(initial)
-  const [region, setRegion] = useState(initial?.quote?.plan.region ?? '')
-  const [plan, setPlan] = useState(initial?.quote?.plan.id ?? '')
+  const [region, setRegion] = useState(initial?.deployment?.plan.region ?? initial?.quote?.plan.region ?? '')
+  const [plan, setPlan] = useState(initial?.deployment?.plan.id ?? initial?.quote?.plan.id ?? '')
   const [acknowledged, setAcknowledged] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -112,8 +115,8 @@ export default function CloudCosts({
           ...(token.trim() ? { api_token: token.trim() } : {}),
         })
         setReview(result)
-        setRegion('')
-        setPlan('')
+        setRegion(result.deployment?.plan.region ?? '')
+        setPlan(result.deployment?.plan.id ?? '')
         setRefreshFailed(false)
       } finally {
         setToken('')
@@ -122,13 +125,14 @@ export default function CloudCosts({
   const quote = review?.quote
   const matches = quote?.plan.region === region && quote?.plan.id === plan
   const valid = Boolean(review && !expired && !refreshFailed)
+  const deployed = Boolean(review?.deployment && review.deployment.phase !== 'deleted')
   const money = (amount: CloudAmount) =>
     `${review?.catalog.currency} ${amount.net} before tax${amount.gross === null ? '' : ` · ${review?.catalog.currency} ${amount.gross} including tax`}`
   return (
     <section aria-label="Cloud cost review" className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Connect your own provider account. This step reviews prices and saves
-        your choice; VM creation is not available yet.
+        Connect your own provider account, review live prices, then create a
+        dedicated bot computer with a separate billing confirmation.
       </p>
       <Choice
         label="Provider"
@@ -159,8 +163,8 @@ export default function CloudCosts({
       </label>
       <p className="text-xs text-muted-foreground">
         {provider === 'hetzner'
-          ? 'Use a Hetzner read-only project token.'
-          : 'Allow sizes:read and regions:read on your DigitalOcean token.'}{' '}
+          ? 'Use a Hetzner read-write project token.'
+          : 'Allow catalog reads and Droplet, firewall and tag creation, reads and deletion on your DigitalOcean token.'}{' '}
         Saved only in GChat’s vault.
         {review && ' Leave blank to reuse your saved token.'}
       </p>
@@ -177,7 +181,7 @@ export default function CloudCosts({
           <Choice
             label="Region"
             value={region}
-            disabled={pending || !valid}
+            disabled={pending || !valid || deployed}
             items={review.catalog.regions.filter((r) =>
               review.catalog.plans.some((p) => p.region === r.id)
             )}
@@ -190,7 +194,7 @@ export default function CloudCosts({
           <Choice
             label="Plan"
             value={plan}
-            disabled={pending || !valid || !region}
+            disabled={pending || !valid || !region || deployed}
             items={review.catalog.plans
               .filter((p) => p.region === region)
               .map((p) => ({
@@ -262,7 +266,7 @@ export default function CloudCosts({
             {new Date(quote.expires_at * 1000).toLocaleString()}.
           </p>
           {review.confirmed ? (
-            <p role="status">Cost review saved. No VM has been created.</p>
+            <p role="status">{deployed ? 'Costs confirmed for this computer.' : 'Cost review saved. No VM has been created.'}</p>
           ) : (
             <>
               <label className="flex items-start gap-2">
@@ -296,6 +300,15 @@ export default function CloudCosts({
             </>
           )}
         </div>
+      )}
+      {review && (review.deployment || (review.confirmed && quote && matches)) && (
+        <CloudComputer
+          review={review}
+          updated={setReview}
+          canCreate={valid && Boolean(review.confirmed && quote && matches)}
+          busy={(value) => { setPending(value); busy(value) }}
+          connected={connected}
+        />
       )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
