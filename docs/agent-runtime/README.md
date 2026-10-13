@@ -6,7 +6,9 @@ prerequisites and distinguishes saved source evidence from installed replay.
 [Credential-store tiers](../decisions/2026-10-13-credential-store-tiers.md) is the
 approved shared-store design. Linux now supports Secret Service or an explicit
 passphrase-encrypted vault; WSL uses these Linux tiers until the Windows helper
-release gate. Focused verification and integration status are recorded below. OI-069's two-Host
+release gate. The native Linux missing-provider/passphrase setup gate passes, including
+lock, rejected passphrase and unlock after restart; physical locked desktop-provider
+and Windows release checks remain owed. Evidence is in the acceptance record. OI-069's two-Host
 worker gate passes; simultaneous independent-workstation clients remain owed.
 
 The [updater offline metadata gate](remaining-acceptance.md#updater-offline-metadata-gate--october-12)
@@ -69,8 +71,8 @@ owns metadata-only generation, exact results, limitations and deleted fixture.
 
 The delegated Chat worker-card restoration now passes 25 focused cases and one
 isolated native Linux reload: every saved run returns once, with live updates
-merged by run ID and terminal state preserved. Source `177d574e6` is ready for
-merge; [the acceptance record](remaining-acceptance.md) owns scope and evidence.
+merged by run ID and terminal state preserved. The correction is merged on
+main `585c95484`; [the acceptance record](remaining-acceptance.md) owns scope and evidence.
 
 ## Current acceptance
 
