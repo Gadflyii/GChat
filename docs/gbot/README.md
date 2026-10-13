@@ -14,14 +14,13 @@ on `feat/gbot-paired-brain-b3fd`, merged to main `fe79233c3`: the independent se
 pinned/session routing and a revocable per-task loopback connection. The selector
 uses the ready instance's model and actual served context. Its 18 focused UI, route, session, lease, vault and scheduler cases pass,
 together with frontend types/lint, native desktop check and strict Clippy.
-Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`. The installed paired-Host gate created its dedicated computer and reached
-Ready/Connected. Its native selector POSTed a GET-only route; shared HTTP method
-ownership fixes that divergence. One assignment fixture, the incremental desktop
-build and installed selector check pass. The model launch was rejected because
-the reused CLI/server donor versions differ; no model started. Brain save,
-hello-file task and result reopen remain owed with a matching accepted runtime.
-The bot and disposable desktop are retired; GPU guards and bookings are released.
-Evidence: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
+Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`.
+Installed paired-Host selection, brain save, desktop hello-file task, independent
+exact SSH readback and saved-result reopen pass. The native selector correction
+is merged in main `98bef9d07`; its assignment fixture and incremental build pass.
+All owned guests, Hosts, models and reservations are retired. Removing a bot with
+an assigned brain remains blocked; `GBOT-REMOVE-SAVED-BRAIN` tracks that defect.
+Evidence and capacity scope: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
 
 Gbot is an embedded GChat feature: a persistent assistant that can use a separate
 computer, shared agents, skills, tools and connectors. It also carries into paid
@@ -109,8 +108,8 @@ processes passed at 01:09:06 UTC on October 13, freeing 30.47 GB on S1 and
 2.25 GB of superseded local builds. Retain the current tested desktop artifact
 and concise evidence; no guest, job or reservation remains.
 
-Remaining setup acceptance includes AppImage lifetime, sleep recovery, live
-brain/task dispatch, Windows/Hyper-V, cloud/M365 creation, remote service
+Remaining setup acceptance includes AppImage lifetime, sleep recovery, scheduled
+dispatch after client exit, Windows/Hyper-V, cloud/M365 creation, remote service
 selection and installer opt-in. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates these from accepted setup evidence. The CPU-only installed guest also
 exposed unguarded local Host hardware preparation; its owning native gate now rejects unsupported local hardware before Host
@@ -888,11 +887,11 @@ Cleanup receipts are `desktop-guest/{nested-removal,cleanup}.json` and
 source tree, current tested desktop artifact and evidence; no live job or
 reservation remains. The accepted baseline package was preserved.
 
-Next action: reviewed main merge of this candidate and issue-status update.
+This setup candidate is merged to main `bb4cde410`; reuse its installed evidence.
 Remaining setup acceptance: AppImage lifetime, Windows/Hyper-V, cloud/M365,
-remote service selection, installer choice, sleep recovery and live brain/task
-dispatch. Gbot's explicit brain assignment must select a persistent Host or
-other inference endpoint for client-exit continuity. Hardware preparation is a
+remote service selection, installer choice, sleep recovery and scheduled
+dispatch after client exit. Gbot's explicit brain assignment must select a
+persistent Host or other inference endpoint for client-exit continuity. Hardware preparation is a
 separate finding: the retained historical Host log reports that NVIDIA GPU
 inventory could not be executed (ENOENT) in the CPU-only guest; this does not
 qualify a GPU installation or prove the exact missing executable.

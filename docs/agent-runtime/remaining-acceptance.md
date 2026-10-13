@@ -6,39 +6,17 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
-Current goal: finish Gbot's installed paired-Host brain/task integration.
-The standing source queue is complete. Plan and acceptance are this file;
-results are in `out/gchat-open-items-20261013/paired-brain-installed/`. Source candidate:
-`/ai/gchat-worktrees/gchat-focused-burndown-c36a`; results:
-`/ai/gchat/out/gchat-focused-burndown-20261013/` retains the completed source queue.
-Candidate branch: `feat/gbot-integration-70d`, based on reviewed main `a4effc6bb`.
-Gate: one isolated installed Linux desktop selects a Ready paired Host's model
-and actual context, saves its brain, completes one exact-content hello-file task
-on its dedicated bot computer, and reopens the saved result. Reuse accepted
-image/resources and source checks; build the changed desktop once. The installed wizard created one dedicated computer and reached Ready/Connected.
-Brain selection exposed a native client POST to the GET-only Ready-model route.
-The shared request-method fix passes the existing assignment fixture (1/1),
-incremental desktop build (45.83 s), and installed selector check: the route error
-is gone and the empty Ready-model list renders correctly.
-
-The one Host launch was refused before model start: `Profiling CLI does not match
-the selected Engine runtime`. The reused donor combined an older CLI with a newer
-server. This is a valid admission rejection, not evidence of an Engine defect.
-Ready-model selection, brain save, exact `Hello from Gbot.` file task and saved
-result reopen remain unqualified. Next: obtain one accepted matching CLI/server
-closure, then run only those remaining steps within a newly booked <=20-minute
-model window. Do not bypass the version check or rebuild the Engine for this gate.
-
-The test phase ended at 11:17:04 UTC, within its 45-minute budget. Normal bot
-removal passed; the disposable desktop, disk, keys and private daemons are retired,
-freeing 15.80 GB on S1. The owned Host stopped normally, no model loaded, both
-canonical local guards were returned, and bookings 617/1580 are canceled. Inventory
-retains the source candidate, corrected desktop executable and concise evidence in
-`out/gchat-open-items-20261013/paired-brain-installed/result.json`; no live guest,
-Host, model or reservation remains. The shared Debian image is retained.
-Release signing/publication, native Windows builds, personal desktop input,
-Engine rebuild/calibration and repeated walkthroughs are excluded.
-The master list remains the status authority.
+Installed paired-Host brain/task acceptance **PASS**: select a Ready model, save
+its actual served context, create `~/hello.txt` through the desktop editor,
+verify exact `Hello from Gbot.` by independent SSH read, and reopen the saved result.
+The native selector fix is merged in main `98bef9d07`; its focused fixture and
+incremental desktop build pass. Evidence: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
+Inventory: source `/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
+`feat/gbot-integration-70d`, tested desktop and cited evidence; no live guest, Host,
+model or reservation. Shared base image and baseline package are retained.
+Next: fix `GBOT-REMOVE-SAVED-BRAIN`, then the remaining installed release checks.
+Signing/publication, native Windows builds, personal desktop input and Engine
+rebuild/calibration are excluded. The master list remains the status authority.
 
 | Queue item | Current result and next unresolved action |
 | --- | --- |
@@ -160,8 +138,8 @@ removal requires the explicit checkbox. Failed save errors stay beside the
 form and retain its inputs. Evidence:
 `out/gchat-open-items-20261013/brain-setup/result.json` and its focused logs.
 Its guided-brain source is the current branch baseline. The merged paired-Host
-item above owns its source evidence; installed real-model task acceptance is
-still pending. Saving settings alone does not prove connection or task readiness.
+item above owns its source evidence; installed real-model selection, task and
+result-reopen acceptance now pass, as recorded in the current plan above.
 Inventory at this item’s completion: one source tree, accepted installed desktop
 artifact and cited evidence; no live job, model, VM or booking. CPU booking 591 is canceled
 and its canonical build guard released.
@@ -217,9 +195,9 @@ reservation remains. The accepted baseline package was preserved.
 
 This candidate is merged to main `bb4cde410`; its installed evidence is reused.
 Remaining setup acceptance: AppImage lifetime, Windows/Hyper-V, cloud/M365,
-remote service selection, installer choice, sleep recovery and live brain/task
-dispatch. Gbot's explicit brain assignment must select a persistent Host or
-other inference endpoint for client-exit continuity. Hardware preparation is a
+remote service selection, installer choice, sleep recovery and scheduled
+dispatch after client exit. Gbot's explicit brain assignment must select a
+persistent Host or other inference endpoint for client-exit continuity. Hardware preparation is a
 separate finding: the retained historical Host log reports that NVIDIA GPU
 inventory could not be executed (ENOENT) in the CPU-only guest; this does not
 qualify a GPU installation or prove the exact missing executable.
