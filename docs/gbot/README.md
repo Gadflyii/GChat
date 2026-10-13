@@ -750,20 +750,30 @@ native check, service strict Clippy, types and lint. Evidence:
 Browser evaluation PASS through the pinned driver/original Cua Submit evaluator,
 not a model-driven task; package/license evidence is in
 `out/gbot-browser-evaluation/result.json`. Its guest, disk and credentials are retired.
-**Current item: cloud provider cost review.** Owner: GChat; tree
-`/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
-`feat/gbot-cloud-cost-62d`, baseline main `62dba3599`. Implement live
-Hetzner/DigitalOcean region/plan prices with vault-held provider credentials,
-resumable review and explicit confirmation. Include IPv4, tax and traffic terms;
-never substitute a plan or accept an expired quote. VM creation remains the next
-item. Acceptance: focused provider/quote/persistence and wizard cases, affected
-types/lint/check/Clippy. Tests use mocks only; no real account access, spending,
-new dependencies or harness, native Windows build or release action. Next
-unresolved action: verify the implemented service/native adapter and guided review
-with the focused gates (expected at most 10 minutes), then commit/push for merge.
-Provider tokens remain vault-only; JSON stores catalogs and consent, never tokens.
-Quotes expire after 15 minutes and refreshing clears plan selection and consent.
-No live job, agent, guest, model or booking; next result 17:00 UTC.
+**Accepted: cloud cost review**, source `5f34c7862`, branch
+`feat/gbot-cloud-cost-62d`, based on main `62dba3599`.
+Live Hetzner/DigitalOcean prices include IPv4, tax and traffic terms; vault-held
+credentials and saved reviews survive restart. Fifteen-minute quotes require
+fresh consent after refresh. Five service, two provider and affected UI cases,
+types/lint and strict desktop Clippy pass. Evidence: `out/gbot-cloud-cost/result.json`.
+Mock providers only; VM creation and physical cloud qualification remain open.
+
+**Current item: owned cloud VM creation and recovery.** Owner: GChat; repository
+`/ai/gchat`, subject `docs/gbot`; working tree
+`/ai/gchat-worktrees/gchat-focused-burndown-c36a`. Extend the accepted cost-review
+owner to create exactly the approved Hetzner/DigitalOcean plan, keep provider
+credentials and SSH private keys in the vault, and persist each owned resource
+and pending action before advancing. Reconcile uncertain creates without issuing
+a duplicate; recover after restart and remove only this setup's resources.
+Reuse Debian guest tools and the verified SSH connection path. A provider's
+Running state is separate from desktop Ready. Acceptance: focused mocked provider,
+price-change, ambiguous-create/recovery and owned-removal cases plus affected
+wizard/types/lint/Clippy checks; expected test phase under ten minutes.
+Exclusions: real tokens/accounts, paid provisioning, new dependencies/harnesses,
+native Windows builds, release/signing/publication. Next unresolved action:
+implement the durable create/inspect/delete contract and first-boot bootstrap
+using the pinned local guest-tools bundle. No live job, guest, model or resource;
+shared Cargo cache is borrowed. Result target: 17:30 UTC.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at
