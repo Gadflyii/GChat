@@ -122,7 +122,7 @@ it('resumes a saved cloud price review without creating a workspace or offering 
   ).toBe(false)
 })
 
-it('creates an SSH workspace in one request and preserves setup identity on retry', async () => {
+it('imports an SSH workspace and preserves setup identity on retry', async () => {
   const workspaces: { id: string; name: string }[] = []
   let attempt = 0
   mocks.listen.mockResolvedValue(() => {})
@@ -131,6 +131,8 @@ it('creates an SSH workspace in one request and preserves setup identity on retr
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
       if (path === 'state')
         return { workspaces, live_sessions: [], assignments: [], controls: [] }
+      if (path === 'workspaces/ssh/key')
+        return { algorithm: 'ssh-ed25519', public_key: 'bot-key' }
       if (path === 'workspaces/ssh') {
         if (++attempt === 1) throw new Error('Workspace could not be saved')
         workspaces.push({ id: body.id as string, name: body.name as string })
@@ -157,17 +159,12 @@ it('creates an SSH workspace in one request and preserves setup identity on retr
     ['Key passphrase', 'key-passphrase'],
   ])
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Workspace could not be saved'
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
-  await waitFor(() =>
-    expect(
-      screen.queryByRole('form', { name: 'Set up Gbot' })
-    ).not.toBeInTheDocument()
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+  await screen.findByRole('button', { name: 'Check SSH access' })
   const creates = mocks.call.mock.calls.filter(
     ([path]) => path === 'workspaces/ssh'
   )
@@ -188,7 +185,6 @@ it('creates an SSH workspace in one request and preserves setup identity on retr
     expect.anything()
   )
   expect(mocks.call).not.toHaveBeenCalledWith('workspaces', expect.anything())
-  expect(screen.getByRole('button', { name: 'Writer' })).toBeInTheDocument()
   expect(JSON.stringify(sessionStorage)).not.toContain('private-key')
 })
 
