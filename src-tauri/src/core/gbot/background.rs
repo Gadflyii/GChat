@@ -1,6 +1,6 @@
 //! Native per-user service bootstrap. No webview, GUI lifetime, or secrets in discovery.
 use gbot_service::{
-    api::Api,
+    api::{request_method, Api},
     executor::{ExecutorProcesses, ProcessSpec},
     service::Service,
     vault::{NativeVault, Secret, Vault},
@@ -114,14 +114,7 @@ impl Client {
             return Err("Bot tasks use this bot's saved model assignment".into());
         }
         let url = format!("http://{}{path}", self.endpoint);
-        let request = if matches!(
-            path,
-            "/v1/state" | "/v1/tasks" | "/v1/tasks/approvals" | "/v1/schedules"
-        ) {
-            self.http.get(url)
-        } else {
-            self.http.post(url).json(&body)
-        };
+        let request = self.http.request(request_method(path), url).json(&body);
         let token = std::str::from_utf8(self.token.expose_secret())
             .map_err(|_| "Invalid service credential")?;
         let response = request

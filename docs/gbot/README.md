@@ -1,6 +1,6 @@
 # Gbot design
 
-Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12).
+Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-13).
 Linux installed computer creation and same-setup resume passed on main
 `bb4cde410`; hardware admission merged in `e42805f2a`. Branch
 `feat/gbot-guided-brain-e428`, merged to main `0f752946a`, exposes numbered brain setup immediately after
@@ -14,7 +14,14 @@ on `feat/gbot-paired-brain-b3fd`, merged to main `fe79233c3`: the independent se
 pinned/session routing and a revocable per-task loopback connection. The selector
 uses the ready instance's model and actual served context. Its 18 focused UI, route, session, lease, vault and scheduler cases pass,
 together with frontend types/lint, native desktop check and strict Clippy.
-Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`. The installed real-model brain/task gate remains open.
+Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`. The installed paired-Host gate created its dedicated computer and reached
+Ready/Connected. Its native selector POSTed a GET-only route; shared HTTP method
+ownership fixes that divergence. One assignment fixture, the incremental desktop
+build and installed selector check pass. The model launch was rejected because
+the reused CLI/server donor versions differ; no model started. Brain save,
+hello-file task and result reopen remain owed with a matching accepted runtime.
+The bot and disposable desktop are retired; GPU guards and bookings are released.
+Evidence: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
 
 Gbot is an embedded GChat feature: a persistent assistant that can use a separate
 computer, shared agents, skills, tools and connectors. It also carries into paid

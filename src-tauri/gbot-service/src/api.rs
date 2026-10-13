@@ -64,6 +64,22 @@ pub struct ApiClient {
     tasks: Option<Arc<TaskRunner>>,
 }
 
+/// Shared HTTP routing for native and in-process clients.
+pub fn request_method(path: &str) -> Method {
+    if matches!(
+        path,
+        "/v1/state"
+            | "/v1/tasks"
+            | "/v1/tasks/approvals"
+            | "/v1/schedules"
+            | "/v1/assignments/models"
+    ) {
+        Method::GET
+    } else {
+        Method::POST
+    }
+}
+
 impl ApiClient {
     #[cfg(target_os = "linux")]
     pub fn subscribe_setup(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
@@ -84,18 +100,7 @@ impl ApiClient {
         {
             return Err("Bot tasks use this bot's saved model assignment".into());
         }
-        let method = if matches!(
-            path,
-            "/v1/state"
-                | "/v1/tasks"
-                | "/v1/tasks/approvals"
-                | "/v1/schedules"
-                | "/v1/assignments/models"
-        ) {
-            Method::GET
-        } else {
-            Method::POST
-        };
+        let method = request_method(path);
         let token = std::str::from_utf8(self.token.expose_secret())
             .map_err(|_| "Invalid service credential")?;
         let request = Request::builder()
