@@ -252,7 +252,7 @@ impl TaskRunner {
         prompt: String,
         assignment: Option<Assignment>,
     ) -> Result<TaskRecord> {
-        self.start_with_id(Uuid::new_v4(), identity, prompt, assignment)
+        self.start_with_id(Uuid::new_v4(), identity, prompt, assignment.map(Into::into))
             .await
     }
 
@@ -262,7 +262,7 @@ impl TaskRunner {
         id: Uuid,
         identity: SessionIdentity,
         prompt: String,
-        assignment: Option<Assignment>,
+        assignment: Option<crate::inference::ResolvedAssignment>,
     ) -> Result<TaskRecord> {
         if prompt.trim().is_empty() {
             return Err(TaskRunnerError::InvalidPrompt);
@@ -335,7 +335,7 @@ impl TaskRunner {
             return Err(ExecutorError::NeedsReview.into());
         }
         let assignment = match assignment {
-            Some(assignment) => assignment,
+            Some(assignment) => assignment.into(),
             None => {
                 self.runtime
                     .resolve_model_assignment(task.snapshot().identity.workspace_id)
@@ -358,7 +358,12 @@ impl TaskRunner {
         Ok(record)
     }
 
-    fn launch(&self, state: &mut State, mut task: CuaTask, assignment: Assignment) {
+    fn launch(
+        &self,
+        state: &mut State,
+        mut task: CuaTask,
+        assignment: crate::inference::ResolvedAssignment,
+    ) {
         let id = task.snapshot().id;
         state.records.insert(id, task.snapshot().clone());
         let record = task.subscribe();
@@ -674,7 +679,7 @@ mod tests {
         )
         .await
         .unwrap();
-        runner.launch(&mut *runner.state.lock().await, task, assignment());
+        runner.launch(&mut *runner.state.lock().await, task, assignment().into());
         let request = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 let record = runner.snapshot(id).await.unwrap();
@@ -784,7 +789,7 @@ mod tests {
         )
         .await
         .unwrap();
-        runner.launch(&mut *runner.state.lock().await, task, assignment());
+        runner.launch(&mut *runner.state.lock().await, task, assignment().into());
         let pending = next_approval(&runner, &mut changes).await;
         assert!(matches!(
             serde_json::from_value::<GuestRequest>(pending.request.clone())
@@ -817,7 +822,7 @@ mod tests {
         assert_eq!(runner.list().await.unwrap()[0].state, TaskState::Paused);
         let mut changes = runner.subscribe();
         let task = CuaTask::open(runner.path(id)).await.unwrap();
-        runner.launch(&mut *runner.state.lock().await, task, assignment());
+        runner.launch(&mut *runner.state.lock().await, task, assignment().into());
         let refresh = next_approval(&runner, &mut changes).await;
         assert!(refresh.request["operation"]["tool"] == "get_desktop_state");
         let record = runner.snapshot(id).await.unwrap();

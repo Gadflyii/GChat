@@ -590,33 +590,10 @@ pub async fn request_instance(
     path: &str,
     body: Option<&Value>,
 ) -> Result<reqwest::Response, String> {
-    let host = {
-        let state = state().await?;
-        if state.registry.resolve(reference)?.session_id != Some(session_id) {
-            return Err("assigned engine instance restarted; resume the run against its new session explicitly".into());
-        }
-        state
-            .saved
-            .get(&reference.host_id)
-            .cloned()
-            .ok_or("host registration missing")?
-    };
-    let transport = client().pinned_transport(&host).await?;
-    let mut request = transport
-        .request(
-            method,
-            format!(
-                "{}/host/v1/instances/{}/inference{}",
-                host.base_url, reference.instance_id, path
-            ),
-        )
-        .bearer_auth(secret(host.client_id).await?)
-        .header("x-ginfer-session-id", session_id.to_string())
-        .timeout(std::time::Duration::from_secs(600));
-    if let Some(body) = body {
-        request = request.json(body);
-    }
-    request.send().await.map_err(|e| e.to_string())
+    client()
+        .request_instance(reference, session_id, method, path, body)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 pub async fn agent_instances() -> Vec<crate::core::agent::commands::AgentModelInstance> {

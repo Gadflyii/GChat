@@ -3,14 +3,19 @@
 Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12).
 Linux installed computer creation and same-setup resume passed on main
 `bb4cde410`; hardware admission merged in `e42805f2a`. Branch
-`feat/gbot-guided-brain-e428` exposes numbered brain setup immediately after
+`feat/gbot-guided-brain-e428`, merged to main `0f752946a`, exposes numbered brain setup immediately after
 computer setup. Its endpoint/model/save flow uses the existing service/vault
 owner. Saved-key retention, explicit removal, strict save payloads and failed
 save retry pass in three component and eight route cases, with frontend types
 and affected production lint. Evidence is
 `out/gchat-open-items-20261013/brain-setup/result.json`. Saving settings does not
-qualify model connectivity or task execution. Paired-Host selection and the
-installed real-model brain/task gate remain open.
+qualify model connectivity or task execution. Paired-Host selection is implemented
+on `feat/gbot-paired-brain-b3fd`: the independent service uses shared native
+pinned/session routing and a revocable per-task loopback connection. The selector
+uses the ready instance's model and actual served context. Its 18 focused UI, route, session, lease, vault and scheduler cases pass,
+together with frontend types/lint, native desktop check and strict Clippy.
+Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`. Reviewed
+source landing and the installed real-model brain/task gate remain open.
 
 Gbot is an embedded GChat feature: a persistent assistant that can use a separate
 computer, shared agents, skills, tools and connectors. It also carries into paid

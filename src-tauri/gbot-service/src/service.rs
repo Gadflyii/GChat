@@ -84,7 +84,7 @@ pub struct SessionControl {
 #[serde(deny_unknown_fields)]
 pub struct ModelAssignment {
     pub workspace_id: WorkspaceId,
-    pub api_base: String,
+    pub connection: crate::inference::ModelConnection,
     pub model: String,
     pub context_tokens: u64,
     pub credential_ref: Option<VaultCredentialRef>,
@@ -93,7 +93,11 @@ pub struct ModelAssignment {
 impl ModelAssignment {
     pub fn validate(&self) -> Result<(), ServiceError> {
         if self.workspace_id.validate().is_err()
-            || self.api_base.trim().is_empty()
+            || !self.connection.valid()
+            || (matches!(
+                self.connection,
+                crate::inference::ModelConnection::PairedHost { .. }
+            ) && self.credential_ref.is_some())
             || self.model.trim().is_empty()
             || self.context_tokens == 0
             || self

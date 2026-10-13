@@ -40,8 +40,31 @@ export type BotState = {
   controls: Control[]
   assignments: SavedAssignment[]
 }
+export type PairedTarget = {
+  host_id: string
+  instance_id: string
+  session_id: string
+}
+export type ModelConnection =
+  | { kind: 'endpoint'; api_base: string }
+  | { kind: 'paired_host'; target: PairedTarget }
+export type PairedModel = {
+  target: PairedTarget
+  host_name: string
+  model: string
+  context_tokens: number
+}
+export const emptyPairedConnection: ModelConnection = {
+  kind: 'paired_host',
+  target: { host_id: '', instance_id: '', session_id: '' },
+}
+export function validBrainConnection(connection: ModelConnection) {
+  return connection.kind === 'endpoint'
+    ? Boolean(connection.api_base.trim())
+    : Object.values(connection.target).every(Boolean)
+}
 export type Assignment = {
-  api_base: string
+  connection: ModelConnection
   model: string
   context_tokens: number
   api_key?: string

@@ -332,6 +332,11 @@ async fn serve(root: PathBuf, resources: PathBuf) -> Result<(), String> {
     let mut api = Api::bind_with_connectors(service, Arc::new(NativeVault), 0, connectors)
         .await
         .map_err(|error| error.to_string())?;
+    api = api
+        .with_inference_host(Arc::new(
+            super::inference::NativeInferenceHost::open().await?,
+        ))
+        .map_err(|error| error.to_string())?;
     #[cfg(target_os = "linux")]
     {
         api = api

@@ -759,6 +759,44 @@ impl Client {
         self.refresh().await?;
         self.request_current(host_id, method, path, body).await
     }
+    pub async fn request_instance(
+        &self,
+        reference: &crate::engine_registry::InstanceRef,
+        session_id: Uuid,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<reqwest::Response, ClientError> {
+        self.refresh().await?;
+        if self
+            .state
+            .lock()
+            .await
+            .registry
+            .resolve(reference)?
+            .session_id
+            != Some(session_id)
+        {
+            return Err(
+                "assigned engine instance restarted; select its ready session again".into(),
+            );
+        }
+        self.prepare_request_current(
+            reference.host_id,
+            method,
+            &format!(
+                "/host/v1/instances/{}/inference{path}",
+                reference.instance_id
+            ),
+            body,
+        )
+        .await?
+        .header("x-ginfer-session-id", session_id.to_string())
+        .send()
+        .await
+        .map_err(ClientError::from)
+    }
+
     async fn request_current(
         &self,
         host_id: Uuid,

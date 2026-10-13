@@ -1,7 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import type { Assignment, SavedAssignment } from '@/services/gbot'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  gbot,
+  emptyPairedConnection,
+  type Assignment,
+  type PairedModel,
+  type SavedAssignment,
+} from '@/services/gbot'
+
+const modelKey = (item: PairedModel) =>
+  `${item.target.host_id}/${item.target.instance_id}/${item.target.session_id}`
 
 interface Props {
   value: Assignment
@@ -22,8 +37,48 @@ export function BrainSetup({
 }: Props) {
   const [editing, setEditing] = useState(!saved)
   const [error, setError] = useState<string>()
+  const [models, setModels] = useState<PairedModel[]>([])
+  const [loading, setLoading] = useState(false)
+  const [refresh, setRefresh] = useState(0)
+  const paired = value.connection.kind === 'paired_host'
+  useEffect(() => {
+    if (!editing || !paired) return
+    let current = true
+    setLoading(true)
+    setError(undefined)
+    void gbot<PairedModel[]>('assignments/models')
+      .then(
+        (items) => {
+          if (current) setModels(items)
+        },
+        (reason: unknown) => {
+          if (current) {
+            setModels([])
+            setError(String(reason))
+          }
+        }
+      )
+      .finally(() => {
+        if (current) setLoading(false)
+      })
+    return () => {
+      current = false
+    }
+  }, [editing, paired, refresh])
+  const connection = value.connection
+  const selected =
+    connection.kind === 'paired_host'
+      ? models.find(
+          (item) =>
+            item.target.host_id === connection.target.host_id &&
+            item.target.instance_id === connection.target.instance_id &&
+            item.target.session_id === connection.target.session_id
+        )
+      : undefined
   const valid = Boolean(
-    value.api_base.trim() &&
+    (connection.kind === 'endpoint'
+      ? connection.api_base.trim()
+      : selected && !loading) &&
       value.model.trim() &&
       Number.isSafeInteger(value.context_tokens) &&
       value.context_tokens > 0
@@ -51,7 +106,6 @@ export function BrainSetup({
       </section>
     )
   }
-
   return (
     <form
       aria-label="Set up bot brain"
@@ -79,70 +133,189 @@ export function BrainSetup({
       </div>
       <fieldset disabled={busy} className="space-y-3">
         <legend className="text-sm font-medium">1. Inference server</legend>
-        <p className="text-xs text-muted-foreground">
-          Use a GInfer API endpoint that stays running when GChat closes.
-          GChat’s local port 1337 API stops when GChat exits.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm">
-            GInfer API URL
-            <Input
-              type="url"
-              placeholder="http://host:port/v1"
-              value={value.api_base}
-              onChange={(event) =>
-                onChange({ ...value, api_base: event.target.value })
-              }
-            />
-          </label>
-          <label className="text-sm">
-            API key
-            <Input
-              type="password"
-              autoComplete="off"
-              placeholder={
-                saved?.credential_ref ? 'Saved in vault' : 'If required'
-              }
-              value={value.api_key || ''}
-              disabled={Boolean(saved?.credential_ref && value.api_key === '')}
-              onChange={(event) =>
-                onChange({ ...value, api_key: event.target.value || undefined })
-              }
-            />
-          </label>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {saved?.credential_ref
-            ? 'Leave the key blank to keep this bot’s saved key.'
-            : 'This bot’s key is stored in the vault.'}
-        </p>
-        {saved?.credential_ref && (
-          <label className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-2">
             <input
-              type="checkbox"
-              checked={value.api_key === ''}
-              onChange={(event) =>
+              type="radio"
+              name="brain-connection"
+              checked={paired}
+              onChange={() =>
                 onChange({
-                  ...value,
-                  api_key: event.target.checked ? '' : undefined,
+                  connection: emptyPairedConnection,
+                  model: '',
+                  context_tokens: 0,
                 })
               }
             />
-            Remove saved API key
+            Paired GInfer Host
           </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="brain-connection"
+              checked={!paired}
+              onChange={() =>
+                onChange({
+                  connection: { kind: 'endpoint', api_base: '' },
+                  model: '',
+                  context_tokens: 0,
+                })
+              }
+            />
+            API endpoint
+          </label>
+        </div>
+        {paired ? (
+          <>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label="Ready Host model"
+                    disabled={busy || loading || !models.length}
+                  >
+                    {selected
+                      ? `${selected.host_name} · ${selected.model}`
+                      : loading
+                        ? 'Checking paired hosts…'
+                        : 'Choose a ready model'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {models.map((item) => (
+                    <DropdownMenuItem
+                      key={modelKey(item)}
+                      onSelect={() =>
+                        onChange({
+                          connection: {
+                            kind: 'paired_host',
+                            target: item.target,
+                          },
+                          model: item.model,
+                          context_tokens: item.context_tokens,
+                        })
+                      }
+                    >
+                      {item.host_name} · {item.model} ·{' '}
+                      {item.context_tokens.toLocaleString()} context
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || loading}
+                onClick={() => setRefresh((count) => count + 1)}
+              >
+                Refresh hosts
+              </Button>
+            </div>
+            {!loading && !models.length && (
+              <p className="text-sm text-muted-foreground">
+                No ready models. Pair a host and start a model in GInfer Hosts,
+                then refresh.
+              </p>
+            )}
+            {!loading &&
+              !selected &&
+              connection.kind === 'paired_host' &&
+              connection.target.session_id && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  The saved session is unavailable. Select a ready model again.
+                </p>
+              )}
+            <p className="text-xs text-muted-foreground">
+              Gbot uses the paired host while GChat is closed. If that model
+              restarts, select its new session here.
+            </p>
+          </>
+        ) : (
+          connection.kind === 'endpoint' && (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Use a GInfer API endpoint that stays running when GChat closes.
+                GChat’s local port 1337 API stops when GChat exits.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm">
+                  GInfer API URL
+                  <Input
+                    type="url"
+                    placeholder="http://host:port/v1"
+                    value={connection.api_base}
+                    onChange={(event) =>
+                      onChange({
+                        ...value,
+                        connection: {
+                          kind: 'endpoint',
+                          api_base: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label className="text-sm">
+                  API key
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={
+                      saved?.credential_ref ? 'Saved in vault' : 'If required'
+                    }
+                    value={value.api_key || ''}
+                    disabled={Boolean(
+                      saved?.credential_ref && value.api_key === ''
+                    )}
+                    onChange={(event) =>
+                      onChange({
+                        ...value,
+                        api_key: event.target.value || undefined,
+                      })
+                    }
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {saved?.credential_ref
+                  ? 'Leave the key blank to keep this bot’s saved key.'
+                  : 'This bot’s key is stored in the vault.'}
+              </p>
+              {saved?.credential_ref && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={value.api_key === ''}
+                    onChange={(event) =>
+                      onChange({
+                        ...value,
+                        api_key: event.target.checked ? '' : undefined,
+                      })
+                    }
+                  />
+                  Remove saved API key
+                </label>
+              )}
+            </>
+          )
         )}
       </fieldset>
       <fieldset disabled={busy} className="space-y-3">
         <legend className="text-sm font-medium">2. Model</legend>
         <p className="text-xs text-muted-foreground">
-          Enter the model ID and context capacity served by that endpoint. Qwen
-          or Muse SMOL with at least 128K context is recommended.
+          {paired
+            ? 'Model and served context come from the selected Host instance.'
+            : 'Enter the model ID and context capacity served by that endpoint.'}{' '}
+          Qwen or Muse SMOL with at least 128K context is recommended.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
             Model ID
             <Input
               value={value.model}
+              readOnly={paired}
               onChange={(event) =>
                 onChange({ ...value, model: event.target.value })
               }
@@ -154,6 +327,7 @@ export function BrainSetup({
               type="number"
               min="1"
               step="1"
+              readOnly={paired}
               value={value.context_tokens || ''}
               onChange={(event) =>
                 onChange({

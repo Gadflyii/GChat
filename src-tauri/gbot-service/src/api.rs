@@ -86,7 +86,11 @@ impl ApiClient {
         }
         let method = if matches!(
             path,
-            "/v1/state" | "/v1/tasks" | "/v1/tasks/approvals" | "/v1/schedules"
+            "/v1/state"
+                | "/v1/tasks"
+                | "/v1/tasks/approvals"
+                | "/v1/schedules"
+                | "/v1/assignments/models"
         ) {
             Method::GET
         } else {
@@ -148,7 +152,7 @@ struct ResumeTask {
 #[serde(deny_unknown_fields)]
 pub struct SaveAssignment {
     pub workspace_id: WorkspaceId,
-    pub api_base: String,
+    pub connection: crate::inference::ModelConnection,
     pub model: String,
     pub context_tokens: u64,
     pub api_key: Option<String>,
@@ -265,6 +269,16 @@ impl Api {
             .configure_kvm_setup(root)
             .await
             .map_err(ApiError::Setup)?;
+        Ok(self)
+    }
+
+    pub fn with_inference_host(
+        self,
+        host: Arc<dyn crate::inference::InferenceHost>,
+    ) -> Result<Self, ApiError> {
+        self.runtime
+            .configure_inference(host)
+            .map_err(ApiError::Workspace)?;
         Ok(self)
     }
 
@@ -678,8 +692,9 @@ async fn route(
                 Some(input) => match runtime
                     .save_model_assignment(
                         input.workspace_id,
+                        input.connection,
                         Assignment {
-                            api_base: input.api_base,
+                            api_base: String::new(),
                             api_key: input.api_key,
                             model: input.model,
                             context_tokens: input.context_tokens,
@@ -693,6 +708,10 @@ async fn route(
                 None => invalid_request(),
             }
         }
+        (&Method::GET, "/v1/assignments/models") => match runtime.paired_models().await {
+            Ok(models) => json_response(StatusCode::OK, &models),
+            Err(error) => workspace_error(error),
+        },
         (&Method::POST, "/v1/assignments/get") => {
             match parse_body::<GetAssignment>(request).await {
                 Some(input) => match runtime.model_assignment(input.workspace_id).await {
@@ -992,6 +1011,7 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
         }
         WorkspaceError::ShuttingDown => (StatusCode::SERVICE_UNAVAILABLE, "service_stopping"),
         WorkspaceError::Connector(_) => (StatusCode::BAD_REQUEST, "connector_unavailable"),
+        WorkspaceError::Inference(_) => (StatusCode::CONFLICT, "paired_inference_unavailable"),
         _ => (StatusCode::CONFLICT, "guest_state_conflict"),
     };
     error_response(status, code, &error.to_string())
@@ -1272,7 +1292,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::CREATED);
         let id = workspace["id"].clone();
-        let (status, _) = request(&client, &endpoint, "/v1/assignments/save", Some(serde_json::json!({"workspace_id":id,"api_base":"http://host.example:8080/v1","model":"fixture","context_tokens":4096})), token).await;
+        let (status, _) = request(&client, &endpoint, "/v1/assignments/save", Some(serde_json::json!({"workspace_id":id,"connection":{"kind":"endpoint","api_base":"http://host.example:8080/v1"},"model":"fixture","context_tokens":4096})), token).await;
         assert_eq!(status, StatusCode::OK);
         let (status, schedule) = request(&client, &endpoint, "/v1/schedules/create", Some(serde_json::json!({"workspace_id":id,"prompt":"Persist across client exits","timing":{"kind":"interval","first_at":2000000000u64,"every_seconds":60},"missed_run_policy":"run_latest"})), token).await;
         assert_eq!(status, StatusCode::OK);
@@ -1376,7 +1396,7 @@ mod tests {
             .await
             .unwrap_err()
             .contains("model assignment"));
-        client.call("/v1/assignments/save", serde_json::json!({"workspace_id":id,"api_base":"http://localhost:1337/v1","model":"scheduled-model","context_tokens":131072})).await.unwrap();
+        client.call("/v1/assignments/save", serde_json::json!({"workspace_id":id,"connection":{"kind":"endpoint","api_base":"http://localhost:1337/v1"},"model":"scheduled-model","context_tokens":131072})).await.unwrap();
         let mut injected = input.clone();
         injected["assignment"] = serde_json::json!({"model":"other-model"});
         assert!(client.call("/v1/schedules/create", injected).await.is_err());
@@ -1833,6 +1853,139 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn paired_assignment_persists_session_and_removes_endpoint_key() {
+        use crate::inference::{
+            InferenceFuture, InferenceHost, InferenceResponse, PairedModel, PairedTarget,
+        };
+        struct Host(Mutex<PairedModel>);
+        impl InferenceHost for Host {
+            fn models(&self) -> InferenceFuture<'_, Vec<PairedModel>> {
+                Box::pin(async { Ok(vec![self.0.lock().unwrap().clone()]) })
+            }
+            fn request<'a>(
+                &'a self,
+                _: &'a PairedTarget,
+                _: &'a str,
+                _: serde_json::Value,
+            ) -> InferenceFuture<'a, InferenceResponse> {
+                Box::pin(async { Err("fixture has no model".into()) })
+            }
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let state_path = directory.path().join("state.json");
+        let service = Arc::new(Service::open(state_path.clone()).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let host = Arc::new(Host(Mutex::new(PairedModel {
+            target: PairedTarget {
+                host_id: Uuid::new_v4(),
+                instance_id: Uuid::new_v4(),
+                session_id: Uuid::new_v4(),
+            },
+            host_name: "Server 2".into(),
+            model: "qwen-smol".into(),
+            context_tokens: 262144,
+        })));
+        let api = Api::bind(service.clone(), vault.clone(), 0)
+            .await
+            .unwrap()
+            .with_inference_host(host.clone())
+            .unwrap();
+        let client = api.client();
+        let config = WorkspaceConfig {
+            id: WorkspaceId::new(),
+            name: "Dedicated fixture guest".into(),
+            service_pc: ServicePc::Local,
+            bot_pc: BotPc::LocalVm {
+                host_id: Uuid::new_v4(),
+                vm_id: "fixture-linux".into(),
+                hypervisor: Hypervisor::Kvm,
+            },
+            connection: WorkspaceConnection::Ssh(SshConnection {
+                endpoint: SshEndpoint {
+                    hostname: "guest.example".into(),
+                    port: 22,
+                    user: "bot".into(),
+                },
+                pinned_host_key: SshHostPublicKey {
+                    algorithm: "ssh-ed25519".into(),
+                    public_key: "AAAAC3NzaC1lZDI1NTE5AAAAIA==".into(),
+                },
+                credential_ref: VaultCredentialRef::new(),
+            }),
+        };
+        service.register_workspace(config.clone()).await.unwrap();
+        let endpoint = client.call("/v1/assignments/save", serde_json::json!({
+            "workspace_id":config.id, "connection":{"kind":"endpoint","api_base":"http://fixture/v1"},
+            "model":"old", "context_tokens":4096, "api_key":"endpoint-secret"
+        })).await.unwrap();
+        let old_key: VaultCredentialRef =
+            serde_json::from_value(endpoint["credential_ref"].clone()).unwrap();
+        let ready = client
+            .call("/v1/assignments/models", serde_json::json!({}))
+            .await
+            .unwrap();
+        let connection = serde_json::json!({"kind":"paired_host", "target":ready[0]["target"]});
+        let mut payload = serde_json::json!({"workspace_id":config.id, "connection":connection, "model":"qwen-smol", "context_tokens":262144});
+        payload["context_tokens"] = serde_json::json!(131072);
+        assert!(client
+            .call("/v1/assignments/save", payload.clone())
+            .await
+            .unwrap_err()
+            .contains("select its ready session"));
+        payload["context_tokens"] = serde_json::json!(262144);
+        payload["api_key"] = serde_json::json!("must-not-enter-host");
+        assert!(client
+            .call("/v1/assignments/save", payload.clone())
+            .await
+            .is_err());
+        assert!(vault.0.lock().unwrap().contains_key(&old_key.as_uuid()));
+        payload.as_object_mut().unwrap().remove("api_key");
+        let saved = client
+            .call("/v1/assignments/save", payload.clone())
+            .await
+            .unwrap();
+        assert!(saved["credential_ref"].is_null());
+        assert!(!vault.0.lock().unwrap().contains_key(&old_key.as_uuid()));
+        let resolved = client
+            .runtime
+            .resolve_model_assignment(config.id)
+            .await
+            .unwrap();
+        assert!(resolved.api_base.starts_with("http://127.0.0.1:"));
+        assert!(resolved.api_key.is_some());
+        drop(resolved);
+        host.0.lock().unwrap().target.session_id = Uuid::new_v4();
+        assert!(client
+            .runtime
+            .resolve_model_assignment(config.id)
+            .await
+            .is_err());
+        assert!(client.call("/v1/assignments/save", payload).await.is_err());
+        assert_eq!(
+            client
+                .call(
+                    "/v1/assignments/get",
+                    serde_json::json!({"workspace_id":config.id})
+                )
+                .await
+                .unwrap(),
+            saved
+        );
+        let state = std::fs::read_to_string(directory.path().join("state.json")).unwrap();
+        assert!(!state.contains("endpoint-secret"));
+        assert!(!state.contains("127.0.0.1:"));
+        drop(client);
+        drop(api);
+        drop(service);
+        let reopened = Service::open(state_path).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(reopened.model_assignment(config.id).await.unwrap().unwrap())
+                .unwrap(),
+            saved
+        );
+    }
+
+    #[tokio::test]
     async fn loopback_auth_workspace_persistence_and_vault_failure() {
         let directory = tempfile::tempdir().unwrap();
         let state_path = directory.path().join("gbot/state.json");
@@ -1938,7 +2091,7 @@ mod tests {
         let save = |workspace_id, model: &str, api_key: Option<&str>| {
             serde_json::json!({
                 "workspace_id": workspace_id,
-                "api_base": "http://fixture.local/v1",
+                "connection": {"kind":"endpoint", "api_base": "http://fixture.local/v1"},
                 "model": model,
                 "context_tokens": 131072,
                 "api_key": api_key,

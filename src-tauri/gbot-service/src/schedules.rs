@@ -522,9 +522,7 @@ impl Schedules {
                 };
                 // Bind the saved identity even if the user edits inference while the
                 // vault is unlocking. A changed assignment must never receive this run.
-                if assignment.api_base != schedule.assignment.api_base
-                    || assignment.model != schedule.assignment.model
-                    || assignment.context_tokens != schedule.assignment.context_tokens
+                if assignment.source.as_ref() != Some(&schedule.assignment)
                     || service
                         .model_assignment(schedule.workspace_id)
                         .await?
@@ -593,7 +591,9 @@ mod tests {
     fn assignment() -> ModelAssignment {
         ModelAssignment {
             workspace_id: WorkspaceId::new(),
-            api_base: "http://unused/v1".into(),
+            connection: crate::inference::ModelConnection::Endpoint {
+                api_base: "http://unused/v1".into(),
+            },
             model: "fixture".into(),
             context_tokens: 131072,
             credential_ref: None,
@@ -794,7 +794,10 @@ mod tests {
                 &runtime,
                 &Deny,
                 &Assignment {
-                    api_base: assignment.api_base,
+                    api_base: match assignment.connection {
+                        crate::inference::ModelConnection::Endpoint { api_base } => api_base,
+                        _ => unreachable!(),
+                    },
                     api_key: None,
                     model: assignment.model,
                     context_tokens: assignment.context_tokens,

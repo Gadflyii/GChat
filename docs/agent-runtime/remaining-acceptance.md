@@ -6,8 +6,36 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-Current item: guided Gbot brain assignment, branch
-`feat/gbot-guided-brain-e428`, based on reviewed main `e42805f2a`, in
+Current item: service-owned paired-Host Gbot brain selection, branch
+`feat/gbot-paired-brain-b3fd`, based on pushed guided-brain source `b3fd0de24`.
+The independent service reads the shared native Host registry/vault and owns
+pinned, session-bound requests. Cua and shared context preparation use a
+revocable per-task loopback connection; no Host grant enters UI or task state.
+The selector lists ready Host instances; saving binds their model, context and
+exact session, with explicit re-selection after a restart. Direct endpoint
+configuration remains available. Acceptance: focused forwarding/session and
+lease-cancel fixtures, selector/save cases, frontend types/lint, affected Rust
+check/Clippy. No new dependency, native Windows build, VM or model run. A real
+installed brain/task gate remains owed after the source gate.
+Implementation and focused source gates are complete: five brain-selector cases,
+eight route cases, two paired service/lease cases, one vault transaction, one
+schedule restart and one native stale-session case pass (18 total). Frontend
+types, affected production lint, desktop `cargo check` and strict Clippy pass.
+The dropdown fixture now uses its supported keyboard interaction; the first
+Host fixture omitted registry initialization, which its corrected setup includes.
+Native validation needed the existing permission-cache mount and disabled bundle
+resources for type checking because this source tree's old resource link is
+dangling. These checks do not qualify a package or installed task. No passing
+checks were repeated without a relevant change.
+Next unresolved action: reviewed source landing, then one installed paired-model
+task. Evidence: `out/gchat-open-items-20261013/paired-brain/result.json` and its
+focused logs. Inventory: one candidate tree and the previously accepted desktop,
+with no new packaged artifact. The check container exited normally at 02:38:29
+UTC, its canonical build guard is released and CPU booking 592 is canceled.
+No model, VM or live job remains.
+
+Completed source item: guided Gbot brain assignment, merged to main `0f752946a`
+from `feat/gbot-guided-brain-e428`, based on reviewed main `e42805f2a`, in
 `/ai/gchat-worktrees/gbot-browser-physical-2e735`. After computer setup the
 next step must be visible: choose a persistent inference endpoint, enter the
 model and its served context capacity, review, and save through the existing
@@ -16,8 +44,8 @@ an edit control. Failed saves retain inputs and remain visibly incomplete.
 Acceptance is three focused frontend flows (new setup, retained vault key on
 edit, save failure/retry), the owning route integration case, frontend types
 and affected lint. This is UI configuration acceptance; it does not prove a
-reachable model or a completed task. Paired-Host selection still needs the
-service to own the certificate/grant/session transport, and remains open.
+reachable model or a completed task. The paired-Host transport gap identified
+by this completed item is addressed by the current source item above.
 No new dependency, native build, VM, GPU, inference probe or credential copy.
 Implementation and acceptance are complete for this source change: three
 component flows and eight route cases pass (11 total, 1.46 seconds), frontend
@@ -33,8 +61,8 @@ only supported input fields. Empty key input retains the saved vault key;
 removal requires the explicit checkbox. Failed save errors stay beside the
 form and retain its inputs. Evidence:
 `out/gchat-open-items-20261013/brain-setup/result.json` and its focused logs.
-Next unresolved action: reviewed landing, then service-owned paired-Host brain
-selection and the installed real-model task gate. Saving settings alone does
+Its guided-brain source is the current branch baseline. The current paired-Host
+item above owns the remaining source work and installed real-model task gate. Saving settings alone does
 not prove connection or task readiness.
 Current inventory: one source tree, accepted installed desktop artifact and
 cited evidence; no live job, model, VM or booking. CPU booking 591 is canceled

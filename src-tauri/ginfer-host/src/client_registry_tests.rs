@@ -30,6 +30,86 @@ impl CredentialStore for MetadataOnlyVault {
 }
 
 #[tokio::test]
+async fn inference_rejects_restarted_session_before_accessing_credentials() {
+    use crate::engine_registry::{
+        HostSnapshot, InstanceRef, InstanceSnapshot, InstanceStatus, HOST_PROTOCOL_VERSION,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let client = Client::new(
+        Some(root.path().join("hosts.json")),
+        Arc::new(MetadataOnlyVault),
+    );
+    client.initialize().await.unwrap();
+    let host_id = Uuid::new_v4();
+    let instance_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+    {
+        let mut state = client.state.lock().await;
+        let host = SavedHost {
+            host_id,
+            name: "Fixture".into(),
+            base_url: "https://127.0.0.1:7443".into(),
+            certificate_sha256: "ab".repeat(32),
+            client_id: Uuid::new_v4(),
+        };
+        state.registry.register_paired(registration(&host));
+        state.saved.insert(host_id, host);
+        persist(&state).unwrap();
+        let connection = state.registry.connect(host_id).unwrap();
+        state
+            .registry
+            .reconcile(
+                connection,
+                HostSnapshot {
+                    protocol_version: HOST_PROTOCOL_VERSION,
+                    host_id,
+                    boot_id: Uuid::new_v4(),
+                    revision: 1,
+                    display_name: "Fixture".into(),
+                    hardware_profile: None,
+                    instances: vec![InstanceSnapshot {
+                        instance_id,
+                        session_id: Some(session_id),
+                        display_name: "Qwen".into(),
+                        upstream_model_id: "qwen".into(),
+                        status: InstanceStatus::Ready,
+                    }],
+                },
+            )
+            .unwrap();
+    }
+    let error = client
+        .request_instance(
+            &InstanceRef {
+                host_id,
+                instance_id,
+            },
+            Uuid::new_v4(),
+            reqwest::Method::POST,
+            "/v1/chat/completions",
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("restarted"));
+    client.state.lock().await.registry.mark_offline(host_id);
+    let error = client
+        .request_instance(
+            &InstanceRef {
+                host_id,
+                instance_id,
+            },
+            session_id,
+            reqwest::Method::POST,
+            "/v1/chat/completions",
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("offline"));
+}
+
+#[tokio::test]
 async fn cached_catalog_tracks_cross_client_changes_and_rejects_old_authority() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("hosts.json");
