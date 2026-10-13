@@ -7,6 +7,7 @@ import GbotAvatar from '@/components/GbotAvatar'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
 import GbotSetup, { type BotConnection } from '@/components/GbotSetup'
+import { BrainSetup } from '@/components/GbotSetup/BrainSetup'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
   type DesktopViewHandle,
@@ -518,110 +519,35 @@ function GbotPage() {
                     workspaceId={bot.id}
                     assignment={savedAssignment}
                   />
-                  <details className="rounded-lg border p-3">
-                    <summary className="cursor-pointer text-sm">
-                      Bot brain
-                    </summary>
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      For background tasks, select a Host endpoint that stays
-                      running when GChat closes. GChat’s local port 1337 API stops
-                      when GChat exits.
-                    </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label className="text-sm">
-                        GInfer API URL
-                        <Input
-                          placeholder="http://host:port/v1"
-                          value={assignment.api_base}
-                          onChange={(event) =>
-                            setAssignment({
-                              ...assignment,
-                              api_base: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="text-sm">
-                        Model ID
-                        <Input
-                          value={assignment.model}
-                          onChange={(event) =>
-                            setAssignment({
-                              ...assignment,
-                              model: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="text-sm">
-                        Model context tokens
-                        <Input
-                          type="number"
-                          min="1"
-                          value={assignment.context_tokens || ''}
-                          onChange={(event) =>
-                            setAssignment({
-                              ...assignment,
-                              context_tokens: Number(event.target.value),
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="text-sm">
-                        API key
-                        <Input
-                          type="password"
-                          autoComplete="off"
-                          placeholder={
-                            savedAssignment?.credential_ref
-                              ? 'Saved in vault'
-                              : ''
-                          }
-                          value={
-                            'api_key' in assignment
-                              ? assignment.api_key || ''
-                              : ''
-                          }
-                          onChange={(event) =>
-                            setAssignment({
-                              ...assignment,
-                              api_key: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                    <Button
-                      className="mt-3"
-                      variant="outline"
-                      disabled={
-                        busy ||
-                        !assignment.api_base.trim() ||
-                        !assignment.model.trim() ||
-                        assignment.context_tokens <= 0
-                      }
-                      onClick={() =>
-                        void perform(async () => {
-                          await gbot('assignments/save', {
-                            ...assignment,
-                            workspace_id: workspaceId,
-                          })
-                          setAssignments((previous) => {
-                            const next = { ...previous }
-                            delete next[workspaceId || '']
-                            return next
-                          })
+                  <BrainSetup
+                    key={`brain-${workspaceId}`}
+                    value={assignment}
+                    saved={savedAssignment}
+                    busy={busy}
+                    computerReady={Boolean(identity && !setupBlocked)}
+                    onChange={setAssignment}
+                    onSave={async () => {
+                      if (busy) return
+                      setBusy(true)
+                      try {
+                        await gbot('assignments/save', {
+                          workspace_id: workspaceId,
+                          api_base: assignment.api_base,
+                          model: assignment.model,
+                          context_tokens: assignment.context_tokens,
+                          api_key: assignment.api_key,
                         })
+                        setAssignments((previous) => {
+                          const next = { ...previous }
+                          delete next[workspaceId || '']
+                          return next
+                        })
+                      } finally {
+                        await refresh()
+                        setBusy(false)
                       }
-                    >
-                      Save brain settings
-                    </Button>
-                    {draft && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Save these settings before starting a task.
-                      </p>
-                    )}
-                  </details>
+                    }}
+                  />
                   {approvals
                     .filter((approval) =>
                       history.some((task) => task.id === approval.task_id)
