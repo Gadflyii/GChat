@@ -116,7 +116,7 @@ processes passed at 01:09:06 UTC on October 13, freeing 30.47 GB on S1 and
 2.25 GB of superseded local builds. Retain the current tested desktop artifact
 and concise evidence; no guest, job or reservation remains.
 
-Remaining setup acceptance includes AppImage lifetime, sleep recovery, scheduled
+Remaining setup acceptance includes sleep recovery, scheduled
 dispatch after client exit, Windows/Hyper-V, cloud/M365 creation, remote service
 selection and installer opt-in. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates these from accepted setup evidence. The CPU-only installed guest also
@@ -759,7 +759,7 @@ Accepted main `500a5f2cb` includes independent service ownership and durable res
 (source `77c6cab04`) survives client disconnect, reconnects persisted state and
 drains authenticated Quit in a focused API process fixture. That fixture uses a
 memory vault, inert executor and future schedule. Native bootstrap/vault and installed DEB client-window exit now pass.
-AppImage-specific lifetime, sleep/restart and model-backed scheduled dispatch remain owed.
+AppImage GUI-exit/resource/shutdown lifetime passes; sleep/restart and model-backed scheduled dispatch remain owed.
 See `docs/gbot/background-service.md`; the
 master scheduled/background row remains PARTIAL.
 
@@ -809,7 +809,7 @@ Evidence: `/ai/gchat/out/gchat-open-items-20261012/`.
 | Web fixtures: `/ai/gchat-worktrees/web-warning-8440` | `e0e8ac49d` and docs `3d7ded0db`, integrated as `2c1bb9c41` / `03139b2bd` | Accepted in main `b1502528b`; all 26 selected cases PASS, eligible for verified retirement; no full suite. |
 | Shared cache: `/ai/gchat/src-tauri/target` | User-authorized pruning; final accounting before current build | 99.34 → 29.57 GB allocated, 69.77 GB net reclaimed. Current closure/product outputs retained. Receipt `disk-cleanup.md`. |
 | Asset/report agents: `/ai/gchat-worktrees/gbot-asset-delivery-89e4`, `/ai/gchat-worktrees/gbench-native-v2-report-89e4` | Pushed `58747bb28` / `c6b18cc69`, integrated as `ec21a1874` / `e49219967` | Accepted in main `ca4346ba2`; clean, no live jobs, eligible for verified retirement. |
-| Background owner: `/ai/gchat-worktrees/gbot-background-ec21` | `feat/gbot-background-ec21`, tested source `77c6cab04`, final `a2b0053a9` | Accepted in main `500a5f2cb`, gate END 20:46:51Z. One process and eleven UI cases plus checks PASS; native vault and installed DEB GUI-exit continuity PASS; AppImage/sleep/live dispatch owed. No live job. |
+| Background owner: `/ai/gchat-worktrees/gbot-background-ec21` | `feat/gbot-background-ec21`, tested source `77c6cab04`, final `a2b0053a9` | Accepted in main `500a5f2cb`, gate END 20:46:51Z. One process and eleven UI cases plus checks PASS; native vault and installed DEB GUI-exit continuity PASS; AppImage GUI-exit/resource/shutdown PASS; sleep/live dispatch owed. No live job. |
 | Setup gate: `/ai/gchat-worktrees/gbot-wizard-e492` | `test/gbot-wizard-e492`, seed source `eac5e6688`, final `427a2bc29` | Accepted in main `a5490907d`; fixture and physical ISO digest PASS, desktop readiness failed. Both owned guests/private roots retired at 20:51Z; source tree now retired after clean/pushed merge, evidence retained. |
 | Merged tree retirement | Seven verified clean/pushed ancestors of main | First five: 1.35 GB apparent; final two: 0.55 GB allocated freed; paths and preservation in `disk-cleanup.md`. Dirty/unmerged/unpushed sources retained. |
 
@@ -896,7 +896,7 @@ source tree, current tested desktop artifact and evidence; no live job or
 reservation remains. The accepted baseline package was preserved.
 
 This setup candidate is merged to main `bb4cde410`; reuse its installed evidence.
-Remaining setup acceptance: AppImage lifetime, Windows/Hyper-V, cloud/M365,
+Remaining setup acceptance: Windows/Hyper-V, cloud/M365,
 remote service selection, installer choice, sleep recovery and scheduled
 dispatch after client exit. Gbot's explicit brain assignment must select a
 persistent Host or other inference endpoint for client-exit continuity. Hardware preparation is a

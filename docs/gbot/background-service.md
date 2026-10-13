@@ -1,8 +1,9 @@
 # Native background service lifetime
 
-Independent service ownership is merged in main `500a5f2cb`. Current integration
-uses `fix/gbot-readiness-detail-500a` in
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`; the original merged tree is retired.
+Independent service ownership is merged in main `500a5f2cb`. Current AppImage acceptance uses the accepted `edb4235bf` desktop and packaged
+Cua runtime in `/ai/gchat/out/gchat-open-items-20261013/paired-brain-installed/`.
+The source candidate is `fix/gbot-remove-refusal-e56` in
+`/ai/gchat-worktrees/gchat-focused-burndown-c36a`.
 The coordinator owns the current [Gbot record](README.md) and master work ledger.
 This implementation supplies the missing independent lifetime while retaining
 existing runtime, executor, workspace, account and approval ownership.
@@ -95,3 +96,11 @@ native process/vault lifetime, not installed GUI/AppImage close, sleep/resume,
 live OAuth or scheduled model work. Receipts:
 `out/gchat-open-items-20261012/installed-bootstrap/native-result.json` and
 `native-cleanup.json`.
+
+The October 13 AppImage gate passes: ordinary GUI exit preserves the same
+native-vault authenticated Gbot owner; its separate mount imports Cua and runs
+Bun; explicit shutdown retires the owner, endpoint, discovery and both image
+mounts. The original GUI mount remains while the background owner runs.
+The disposable guest and dev image are retired. Sleep/restart and live scheduled
+dispatch remain unqualified. Evidence:
+`out/gchat-open-items-20261013/appimage-lifetime/result.json`.

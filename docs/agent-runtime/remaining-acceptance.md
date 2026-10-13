@@ -207,7 +207,7 @@ source tree, current tested desktop artifact and evidence; no live job or
 reservation remains. The accepted baseline package was preserved.
 
 This candidate is merged to main `bb4cde410`; its installed evidence is reused.
-Remaining setup acceptance: AppImage lifetime, Windows/Hyper-V, cloud/M365,
+Remaining setup acceptance: Windows/Hyper-V, cloud/M365,
 remote service selection, installer choice, sleep recovery and scheduled
 dispatch after client exit. Gbot's explicit brain assignment must select a
 persistent Host or other inference endpoint for client-exit continuity. Hardware preparation is a
@@ -281,7 +281,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed DEB creation and same-setup resume pass on main `bb4cde410`; prerequisite holds remain actionable. The current brain handoff adds 11 focused frontend cases. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
 | Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Source `30a8be28a` holds operations until persisted Ready and reopens the same saved setup; 2 service/13 UI cases, check/strict Clippy/types/lint pass. Native detached bootstrap/vault/restart pass separately. Installed wizard creation, Computer ready and same-setup resume pass on main `bb4cde410`. Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
 | Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
-| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; native detached lifetime, vault and authenticated shutdown/restart now pass; installed DEB ordinary GUI close keeps the same native service alive. AppImage-specific lifetime, sleep/restart and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
+| Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; native detached lifetime, vault and authenticated shutdown/restart now pass; installed DEB ordinary GUI close keeps the same native service alive. AppImage GUI-exit/resource/shutdown lifetime also passes; sleep/restart and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
 | Browser tools | Typed browser catalog/schema and one real isolated Chromium form pass: exact native window binding, navigation, typing and trusted input submission, independently verified over pinned-host system SSH. | Broader browser tasks and installed presentation remain separate; no model or performance claim. |
 
 ### Bugs, decisions and incomplete diagnostics
@@ -343,7 +343,7 @@ unchanged from the source used for this gate.
 | Google / Microsoft connectors | 36 focused auth/provider/runtime/UI cases. | App registration first; one account's consent/refresh/read/revocation and per-bot isolation, without a broad CRUD matrix. |
 | Gbot Linux executor | Exact desktop overwrite + two actual Cua file evaluators passed. | Broader task set and Vision; new cua-bench dependency closure is not approved. |
 | Gbot runtime/media | Linux packaged runtime; physical frame, 440 Hz audio, view-only/takeover/revocation passed. | One browser playback/permission check; Windows/M365 connection/runtime at release. Reuse physical Linux media evidence. |
-| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed; installed DEB exit continuity passed. | One guest reboot/reconnect and one AppImage exit continuity check. Durable scheduling fixtures first; no long sleep harness. |
+| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed; installed DEB and AppImage exit continuity passed. | One guest reboot/reconnect. Durable scheduling fixtures first; no long sleep harness. |
 | OI-073 public board | One disposable publish/read/delete and app delete path passed. | Broader retry/replay/concurrent/fault cases remain parked; never use official series as tests. |
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |
@@ -405,7 +405,7 @@ Component receipts and `wave2-*` logs are in
 `/ai/gchat/out/gchat-open-items-20261012/`. Reuse passing first-wave evidence;
 no installed UI, new VM, live OAuth or active-worker recovery qualification is
 claimed for these changes. Schedules now belong to the independent service; installed DEB client-exit continuity
-passes; AppImage-specific lifetime, sleep and live dispatch remain unqualified. KVM refuses missing
+passes; AppImage GUI-exit/resource/shutdown lifetime also passes. Sleep and live dispatch remain unqualified. KVM refuses missing
 host prerequisites/assets and does not install tools or substitute another PC.
 
 The disabled-embedding startup correction has one focused case and frontend types
