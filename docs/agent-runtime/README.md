@@ -3,6 +3,11 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+[Credential-store tiers](../decisions/2026-10-13-credential-store-tiers.md) is the
+current one-page proposal for Secret Service, WSL Windows-backed storage and
+encrypted headless storage. Implementation awaits review. OI-069's two-Host
+worker gate passes; simultaneous independent-workstation clients remain owed.
+
 The [updater offline metadata gate](remaining-acceptance.md#updater-offline-metadata-gate--october-12)
 passes all 19 existing cases against accepted source `874cbc98d` using existing
 S1 jq/Python. Cryptographic final-payload verification and signed release/feed
