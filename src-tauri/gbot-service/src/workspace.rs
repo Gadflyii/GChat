@@ -52,6 +52,7 @@ pub enum WorkspaceError {
     CredentialCleanup(VaultError),
     Connector(String),
     Inference(String),
+    GuestSetup(String),
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -76,7 +77,9 @@ impl std::fmt::Display for WorkspaceError {
                 f,
                 "Model assignment was saved, but the old credential could not be removed: {error}"
             ),
-            Self::Connector(error) | Self::Inference(error) => f.write_str(error),
+            Self::Connector(error) | Self::Inference(error) | Self::GuestSetup(error) => {
+                f.write_str(error)
+            }
         }
     }
 }
@@ -122,6 +125,7 @@ pub struct WorkspaceRuntime {
     stopping: AtomicBool,
     connectors: Option<Arc<dyn ConnectorHost>>,
     inference: std::sync::OnceLock<Arc<dyn InferenceHost>>,
+    guest_assets: std::sync::OnceLock<std::path::PathBuf>,
     #[cfg(target_os = "linux")]
     kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
 }
@@ -174,9 +178,16 @@ impl WorkspaceRuntime {
             stopping: AtomicBool::new(false),
             connectors: None,
             inference: std::sync::OnceLock::new(),
+            guest_assets: std::sync::OnceLock::new(),
             #[cfg(target_os = "linux")]
             kvm_setup: std::sync::OnceLock::new(),
         }
+    }
+
+    pub fn configure_guest_assets(&self, root: std::path::PathBuf) -> Result<(), WorkspaceError> {
+        self.guest_assets
+            .set(root)
+            .map_err(|_| WorkspaceError::GuestSetup("Guest tools are already configured".into()))
     }
 
     #[cfg(target_os = "linux")]
@@ -184,6 +195,16 @@ impl WorkspaceRuntime {
         self: &Arc<Self>,
         root: std::path::PathBuf,
     ) -> Result<(), crate::kvm_setup::SetupIssue> {
+        if self.guest_assets.get().is_none() {
+            self.configure_guest_assets(root.join("vms/assets"))
+                .map_err(|error| {
+                    crate::kvm_setup::SetupIssue::new(
+                        "guest_assets",
+                        error.to_string(),
+                        "Restart Gbot setup.",
+                    )
+                })?;
+        }
         let owner = Arc::new(
             crate::kvm_setup::KvmSetup::open(
                 root,
@@ -439,6 +460,79 @@ impl WorkspaceRuntime {
     pub async fn check_ssh_connection(&self, id: WorkspaceId) -> Result<(), WorkspaceError> {
         let connection = self.ssh_connection(id).await?;
         Ok(check_ssh_connection(&connection, self.vault.as_ref(), SshPolicy::default()).await?)
+    }
+
+    pub async fn prepare_lan_tools(
+        &self,
+        id: WorkspaceId,
+        consent: bool,
+    ) -> Result<crate::lan_setup::Preparation, WorkspaceError> {
+        if !consent {
+            return Err(WorkspaceError::GuestSetup("Confirm that this is a dedicated bot computer and that you authorize tool installation.".into()));
+        }
+        self.lan_tools(id, true).await
+    }
+
+    pub async fn check_lan_tools(
+        &self,
+        id: WorkspaceId,
+    ) -> Result<crate::lan_setup::Preparation, WorkspaceError> {
+        self.lan_tools(id, false).await
+    }
+
+    async fn lan_tools(
+        &self,
+        id: WorkspaceId,
+        stage: bool,
+    ) -> Result<crate::lan_setup::Preparation, WorkspaceError> {
+        let lock = self.lifecycle_lock(id).await;
+        let _guard = lock.lock().await;
+        self.accepting()?;
+        let state = self.service.snapshot().await;
+        let config = state
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.id == id)
+            .ok_or(WorkspaceError::NotFound)?;
+        if !matches!(config.bot_pc, BotPc::Lan { .. }) {
+            return Err(WorkspaceError::AdapterUnavailable);
+        }
+        if self
+            .service
+            .live_sessions()
+            .await
+            .iter()
+            .any(|identity| identity.workspace_id == id)
+            || state.controls.iter().any(|control| {
+                control.identity.workspace_id == id && control.state != SessionControlState::Bot
+            })
+            || state.operations.iter().any(|operation| {
+                operation.identity.workspace_id == id
+                    && matches!(
+                        operation.state,
+                        crate::service::OperationState::InFlight
+                            | crate::service::OperationState::NeedsReview { .. }
+                    )
+            })
+        {
+            return Err(ServiceError::WorkspaceInUse.into());
+        }
+        let connection = self.ssh_connection(id).await?;
+        let action = if stage {
+            let root = self.guest_assets.get().ok_or_else(|| {
+                WorkspaceError::GuestSetup(
+                    "The pinned guest tools are unavailable. Install the complete GChat package."
+                        .into(),
+                )
+            })?;
+            crate::ssh::GuestPreparation::Stage(
+                crate::lan_setup::Bundle::new(root, id.as_uuid(), connection.endpoint.user.clone())
+                    .map_err(|error| WorkspaceError::GuestSetup(error.to_string()))?,
+            )
+        } else {
+            crate::ssh::GuestPreparation::Check
+        };
+        Ok(crate::ssh::prepare_ssh_guest(&connection, self.vault.as_ref(), action).await?)
     }
 
     pub async fn import_ssh_key(

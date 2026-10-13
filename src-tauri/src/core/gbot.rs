@@ -201,6 +201,8 @@ fn supported_route(path: &str) -> bool {
             | "/v1/ssh/identity"
             | "/v1/workspaces/ssh/key"
             | "/v1/workspaces/ssh/check"
+            | "/v1/workspaces/ssh/prepare"
+            | "/v1/workspaces/ssh/tools"
             | "/v1/assignments/save"
             | "/v1/assignments/get"
             | "/v1/assignments/models"

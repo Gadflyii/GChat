@@ -726,22 +726,31 @@ approved dependencies confined to a disposable Debian guest (no AGPL).
 Cloud/M365 implementation uses mocks only: no account access, tokens, sign-in,
 paid resources or provisioning without Ron's authorization.
 
-Guided LAN connection is implemented: a generated Ed25519 key stays in the
-vault, computer identity is explicitly verified, and authentication is checked
-before continuing. Only the public key is shown for installation on the bot
-computer. A saved bot owns the key from creation; unfinished setup resumes with
-the same key. Existing key import remains available.
-Five wizard cases, the existing hermetic SSH identity/authentication case, five
-affected API cases, frontend types/lint, service check and strict Clippy pass.
-Evidence: `out/gbot-lan-guided/result.json`. No physical LAN computer or guest-tools
-installation is claimed. Next: the original Cua browser task and verifier in a
-disposable Debian guest, with the approved guest-only dependencies and license
-inventory. No live desktop, host dependency, new harness, Windows build,
-release/signing/publication.
+Guided LAN connection is merged in main `1bc9e0df7`. Its focused wizard,
+hermetic SSH/API, types/lint/check/Clippy evidence remains valid at
+`out/gbot-lan-guided/result.json`; no physical LAN installation is claimed.
+
+**Current item: consented dedicated LAN guest preparation.** Reuse the approved
+Debian guest package/session contract and pinned Cua archives. Upload an owned
+installer through the saved vault key and verified SSH identity, show one local
+administrator command, and verify the installed tools before continuing. The
+administrator enters their password on that computer; GChat never requests it.
+Preparation refuses a person's active graphical session and foreign Gbot files;
+existing SSH/firewall, apps and data stay in place. Installation is distinct from
+a connected/Ready desktop. Acceptance: the existing hermetic SSH fixture proves
+pinned upload/check and failure handling, focused UI cases prove consent and
+retry, plus affected types/lint/check/Clippy. No physical LAN installation, new
+dependency/harness, native Windows build or release action.
 Owner: GChat; tree `/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
-`feat/gbot-lan-guided-be78`; baseline main `be78c1bdc`. Source awaits reviewed
-merge. No guest, model, booking or live job remains; the shared Cargo cache was
-borrowed for the focused checks.
+`feat/gbot-lan-tools-1bc9`; baseline main `1bc9e0df7`.
+LAN preparation PASS: two hermetic SSH cases, seven wizard cases and affected
+native check, service strict Clippy, types and lint. Evidence:
+`out/gbot-lan-tools/result.json`. No physical LAN installation is claimed.
+Browser evaluation PASS through the pinned driver/original Cua Submit evaluator,
+not a model-driven task; package/license evidence is in
+`out/gbot-browser-evaluation/result.json`. Its guest, disk and credentials are retired.
+No live job, agent, guest, model or booking. Next: cloud cost review using mocks;
+no account access or paid resource creation.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at

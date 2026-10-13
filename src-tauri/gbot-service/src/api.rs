@@ -171,6 +171,13 @@ pub struct GetAssignment {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct PrepareLanTools {
+    workspace_id: WorkspaceId,
+    consent: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TaskId {
     id: Uuid,
 }
@@ -266,6 +273,13 @@ impl Api {
             endpoint,
             tasks: None,
         })
+    }
+
+    pub fn with_guest_assets(self, root: std::path::PathBuf) -> Result<Self, ApiError> {
+        self.runtime
+            .configure_guest_assets(root)
+            .map_err(ApiError::Workspace)?;
+        Ok(self)
     }
 
     #[cfg(target_os = "linux")]
@@ -873,6 +887,27 @@ async fn route(
                 None => invalid_request(),
             }
         }
+        (&Method::POST, "/v1/workspaces/ssh/prepare") => {
+            match parse_body::<PrepareLanTools>(request).await {
+                Some(input) => match runtime
+                    .prepare_lan_tools(input.workspace_id, input.consent)
+                    .await
+                {
+                    Ok(result) => json_response(StatusCode::OK, &result),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/workspaces/ssh/tools") => {
+            match parse_body::<GetAssignment>(request).await {
+                Some(input) => match runtime.check_lan_tools(input.workspace_id).await {
+                    Ok(result) => json_response(StatusCode::OK, &result),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/workspaces/ssh") => {
             match parse_body::<CreateSshWorkspace>(request).await {
                 Some(input) => match runtime.create_ssh_workspace(input).await {
@@ -1113,6 +1148,7 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
             (StatusCode::NOT_IMPLEMENTED, "adapter_unavailable")
         }
         WorkspaceError::ShuttingDown => (StatusCode::SERVICE_UNAVAILABLE, "service_stopping"),
+        WorkspaceError::GuestSetup(_) => (StatusCode::CONFLICT, "guest_setup_required"),
         WorkspaceError::Connector(_) => (StatusCode::BAD_REQUEST, "connector_unavailable"),
         WorkspaceError::Inference(_) => (StatusCode::CONFLICT, "paired_inference_unavailable"),
         _ => (StatusCode::CONFLICT, "guest_state_conflict"),

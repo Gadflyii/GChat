@@ -410,6 +410,9 @@ async fn serve(
         .await
         .map_err(|error| error.to_string())?;
     api = api
+        .with_guest_assets(directory.join("vms/assets"))
+        .map_err(|error| error.to_string())?;
+    api = api
         .with_inference_host(Arc::new(
             super::inference::NativeInferenceHost::open().await?,
         ))

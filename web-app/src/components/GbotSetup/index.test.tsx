@@ -13,8 +13,29 @@ vi.mock('@/services/gbot', () => ({ gbot: vi.fn() }))
 
 afterEach(() => {
   cleanup()
-  vi.clearAllMocks()
+  vi.resetAllMocks()
 })
+
+function preparedApi() {
+  vi.mocked(gbot).mockImplementation(async (route) => {
+    if (route === 'workspaces/ssh') return { id: 'saved-bot' }
+    if (route === 'workspaces/ssh/key')
+      return { algorithm: 'ssh-ed25519', public_key: 'public-only' }
+    if (route === 'workspaces/ssh/check') return { authenticated: true }
+    if (route === 'workspaces/ssh/tools')
+      return { installed: true, command: null, issue: null }
+    throw new Error(`Unexpected ${route}`)
+  })
+}
+
+async function checkTools() {
+  await screen.findByDisplayValue('ssh-ed25519 public-only')
+  fireEvent.click(screen.getByRole('button', { name: 'Check SSH access' }))
+  await screen.findByRole('button', { name: 'Check tools' })
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
+  await screen.findByRole('status')
+}
 
 function chooseLan() {
   fireEvent.change(screen.getByLabelText('Bot name'), {
@@ -67,6 +88,7 @@ it('asks separately where the service runs and where the bot computer lives', ()
 })
 
 it('reviews a valid LAN connection without showing secrets and saves only on confirmation', async () => {
+  preparedApi()
   const save = vi.fn().mockResolvedValue(undefined)
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
   chooseLan()
@@ -78,6 +100,8 @@ it('reviews a valid LAN connection without showing secrets and saves only on con
   fireEvent.change(screen.getByLabelText('SSH port'), {
     target: { value: '2222' },
   })
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+  await checkTools()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   expect(screen.getByText('bot@bot.local:2222')).toBeInTheDocument()
   expect(screen.queryByDisplayValue('private-key')).not.toBeInTheDocument()
@@ -93,12 +117,14 @@ it('reviews a valid LAN connection without showing secrets and saves only on con
     port: '2222',
     user: 'bot',
     hostKey: 'ssh-ed25519 pinned-key',
-    key: 'private-key',
-    passphrase: 'secret-passphrase',
+    key: '',
+    passphrase: '',
+    workspaceId: 'saved-bot',
   })
 })
 
 it('keeps a failed save reviewable and allows retry', async () => {
+  preparedApi()
   const save = vi
     .fn()
     .mockRejectedValueOnce(new Error('Vault unavailable'))
@@ -106,6 +132,8 @@ it('keeps a failed save reviewable and allows retry', async () => {
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
   chooseLan()
   fillConnection()
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+  await checkTools()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
   await screen.findByRole('alert')
@@ -126,6 +154,7 @@ it('verifies the fingerprint, saves a vault key and requires SSH authentication 
     .mockResolvedValueOnce({ id: 'saved-bot' })
     .mockResolvedValueOnce(publicKey)
     .mockResolvedValueOnce({ authenticated: true })
+    .mockResolvedValueOnce({ installed: true, command: null, issue: null })
   const save = vi.fn().mockResolvedValue(undefined)
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
   chooseLan()
@@ -156,8 +185,7 @@ it('verifies the fingerprint, saves a vault key and requires SSH authentication 
     })
   )
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Check SSH access' }))
-  await screen.findByRole('status')
+  await checkTools()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
   await waitFor(() =>

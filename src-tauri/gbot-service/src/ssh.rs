@@ -164,7 +164,9 @@ pub async fn inspect_ssh_identity(
     endpoint: SshEndpoint,
     policy: SshPolicy,
 ) -> Result<SshIdentity, SshError> {
-    probe_ssh(endpoint, None, policy).await
+    probe_ssh(endpoint, None, None, policy)
+        .await
+        .map(|(identity, _)| identity)
 }
 
 pub async fn check_ssh_connection(
@@ -172,6 +174,15 @@ pub async fn check_ssh_connection(
     vault: &dyn Vault,
     policy: SshPolicy,
 ) -> Result<(), SshError> {
+    let credentials = connection_credentials(connection, vault).await?;
+    probe_ssh(connection.endpoint.clone(), Some(credentials), None, policy).await?;
+    Ok(())
+}
+
+async fn connection_credentials(
+    connection: &SshConnection,
+    vault: &dyn Vault,
+) -> Result<(PublicKey, PrivateKey), SshError> {
     connection.pinned_host_key.validate()?;
     connection.credential_ref.validate()?;
     let pinned = PublicKey::from_openssh(&format!(
@@ -191,15 +202,41 @@ pub async fn check_ssh_connection(
         return Err(SshError::PassphraseRequired);
     }
     drop(secret);
-    probe_ssh(connection.endpoint.clone(), Some((pinned, private)), policy).await?;
-    Ok(())
+    Ok((pinned, private))
+}
+
+pub(crate) enum GuestPreparation {
+    Stage(crate::lan_setup::Bundle),
+    Check,
+}
+
+pub(crate) async fn prepare_ssh_guest(
+    connection: &SshConnection,
+    vault: &dyn Vault,
+    action: GuestPreparation,
+) -> Result<crate::lan_setup::Preparation, SshError> {
+    let credentials = connection_credentials(connection, vault).await?;
+    let mut policy = SshPolicy::default();
+    if matches!(action, GuestPreparation::Stage(_)) {
+        policy.connect_timeout = Duration::from_secs(600);
+    }
+    probe_ssh(
+        connection.endpoint.clone(),
+        Some(credentials),
+        Some(action),
+        policy,
+    )
+    .await?
+    .1
+    .ok_or(SshError::Protocol)
 }
 
 async fn probe_ssh(
     endpoint: SshEndpoint,
     credentials: Option<(PublicKey, PrivateKey)>,
+    preparation: Option<GuestPreparation>,
     policy: SshPolicy,
-) -> Result<SshIdentity, SshError> {
+) -> Result<(SshIdentity, Option<crate::lan_setup::Preparation>), SshError> {
     endpoint.validate()?;
     if policy.connect_timeout.is_zero()
         || policy.keepalive_interval.is_zero()
@@ -219,7 +256,13 @@ async fn probe_ssh(
         let standard = stream.into_std().map_err(|_| SshError::Transport)?;
         let socket = standard.try_clone().map_err(|_| SshError::Transport)?;
         let stream = TcpStream::from_std(standard).map_err(|_| SshError::Transport)?;
-        let mut setup = Box::pin(probe_session(stream, endpoint.user, credentials, policy));
+        let mut setup = Box::pin(probe_session(
+            stream,
+            endpoint.user,
+            credentials,
+            preparation,
+            policy,
+        ));
         let interrupted = tokio::select! {
             result = &mut setup => return result,
             _ = &mut cancelled => SshError::Closed,
@@ -238,8 +281,9 @@ async fn probe_session(
     stream: TcpStream,
     user: String,
     credentials: Option<(PublicKey, PrivateKey)>,
+    preparation: Option<GuestPreparation>,
     policy: SshPolicy,
-) -> Result<SshIdentity, SshError> {
+) -> Result<(SshIdentity, Option<crate::lan_setup::Preparation>), SshError> {
     let offered = Arc::new(StdMutex::new(None));
     let rejected = Arc::new(AtomicBool::new(false));
     let (pinned, private) = match credentials {
@@ -267,20 +311,31 @@ async fn probe_session(
         .map(public_identity)
         .transpose()?;
     match (result, private) {
-        (Err(_), None) => identity.ok_or(SshError::Transport),
+        (Err(_), None) => identity
+            .map(|identity| (identity, None))
+            .ok_or(SshError::Transport),
         (Err(_), Some(_)) => Err(if rejected.load(Ordering::Acquire) {
             SshError::PeerRejected
         } else {
             SshError::Transport
         }),
         (Ok(mut client), Some(private)) => {
-            let auth = authenticate(&mut client, user, private).await;
+            let result = async {
+                authenticate(&mut client, user, private).await?;
+                match preparation {
+                    Some(action) => prepare_guest(&client, action).await.map(Some),
+                    None => Ok(None),
+                }
+            }
+            .await;
             let _ = client
                 .disconnect(Disconnect::ByApplication, "Connection check finished", "")
                 .await;
             let _ = client.await;
-            auth?;
-            identity.ok_or(SshError::Protocol)
+            let prepared = result?;
+            identity
+                .map(|identity| (identity, prepared))
+                .ok_or(SshError::Protocol)
         }
         (Ok(client), None) => {
             let _ = client
@@ -290,6 +345,77 @@ async fn probe_session(
             Err(SshError::Protocol)
         }
     }
+}
+
+async fn prepare_guest(
+    client: &Client,
+    action: GuestPreparation,
+) -> Result<crate::lan_setup::Preparation, SshError> {
+    use crate::lan_setup::{quote, Preparation};
+    let command = match &action {
+        GuestPreparation::Stage(_) => crate::lan_setup::preflight(),
+        GuestPreparation::Check => crate::lan_setup::check_command(),
+    };
+    let (status, output) = guest::collect(client, &format!("( {command} ) 2>&1"), &[]).await?;
+    if status != 0 {
+        return Ok(Preparation {
+            command: None,
+            installed: false,
+            issue: Some(String::from_utf8_lossy(&output).trim().to_string()),
+        });
+    }
+    let GuestPreparation::Stage(bundle) = action else {
+        return Ok(Preparation {
+            command: None,
+            installed: true,
+            issue: None,
+        });
+    };
+    let upload = |name: &str, digest: &str| {
+        format!("set -eu; umask 077; directory=\"{}\"; [ ! -L \"$directory\" ]; mkdir -p \"$directory\"; cat > \"$directory/{name}.part\"; printf '%s  %s\\n' {} \"$directory/{name}.part\" | sha256sum --check --status; mv \"$directory/{name}.part\" \"$directory/{name}\"", bundle.directory(), quote(digest))
+    };
+    for (path, name, digest) in &bundle.archives {
+        let file = tokio::fs::File::open(path)
+            .await
+            .map_err(|_| SshError::Protocol)?;
+        let (status, output) =
+            guest::collect_stream(client, &format!("( {} ) 2>&1", upload(name, digest)), file)
+                .await?;
+        if status != 0 {
+            return Ok(Preparation {
+                command: None,
+                installed: false,
+                issue: Some(format!(
+                    "Guest archive upload failed: {}",
+                    String::from_utf8_lossy(&output).trim()
+                )),
+            });
+        }
+    }
+    let (status, output) = guest::collect(
+        client,
+        &format!(
+            "( {} ) 2>&1",
+            upload("install.sh", &bundle.installer_digest())
+        ),
+        &bundle.installer,
+    )
+    .await?;
+    if status != 0 {
+        return Ok(Preparation {
+            command: None,
+            installed: false,
+            issue: Some(format!(
+                "Guest installer upload failed: {}",
+                String::from_utf8_lossy(&output).trim()
+            )),
+        });
+    }
+    Ok(Preparation {
+        command: Some(bundle.command()),
+        installed: false,
+        issue: None,
+    })
 }
 
 fn validate_credential_algorithm(private: &PrivateKey) -> Result<(), SshError> {
