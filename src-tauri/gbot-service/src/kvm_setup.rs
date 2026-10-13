@@ -1022,14 +1022,20 @@ impl KvmSetup {
         tokio::spawn(async move { let _guard = lock.lock().await;
             let mut record = owner.records.lock().await.get(&id).cloned().ok_or_else(|| SetupIssue::new("setup_missing", "This setup was not found.", "Refresh the setup list."))?;
             if record.stage == SetupStage::Removed { return Ok(record); }
-            owner.stage(&mut record, SetupStage::Removing).await?;
             let result: Result<(), SetupIssue> = async {
             let owned_pc = BotPc::LocalVm { host_id: record.service_id, vm_id: id.as_uuid().to_string(), hypervisor: Hypervisor::Kvm };
             if owner.service.snapshot().await.workspaces.iter().any(|workspace| workspace.id == id && workspace.bot_pc != owned_pc) {
                 return Err(SetupIssue::new("workspace_not_owned", "This workspace no longer belongs to this local setup.", "Resolve the workspace ownership before removing this setup."));
             }
-            if let Some(runtime) = owner.runtime.upgrade() { let _ = runtime.disconnect(record.identity).await; }
-            let removal = owner.service.begin_owned_workspace_removal(id, &owned_pc).await.map_err(|error| SetupIssue::new("workspace_in_use", error.to_string(), "Resolve attached accounts, unsettled operations and human control before removing this VM."))?;
+            let runtime = owner.runtime.upgrade();
+            let transport = match runtime.as_ref() {
+                Some(runtime) => Some(runtime.lock_for_removal(record.identity).await.map_err(persistence)?),
+                None => None,
+            };
+            let mut removal = owner.service.begin_owned_workspace_removal(id, &owned_pc, transport.as_ref().and_then(|transport| transport.session())).await.map_err(|error| SetupIssue::new("workspace_in_use", error.to_string(), "Resolve attached accounts, unsettled operations and human control before removing this VM."))?;
+            owner.stage(&mut record, SetupStage::Removing).await?;
+            removal.detach_session();
+            if let Some(transport) = &transport { transport.disconnect().await.map_err(persistence)?; }
             if let Some(credential) = removal.model_credential() {
                 record.pending_model_credential = Some(credential);
                 owner.save(record.clone()).await?;
@@ -1453,6 +1459,129 @@ mod tests {
             "setup_conflict"
         );
     }
+    #[tokio::test]
+    async fn removal_refusal_preserves_ready_setup_and_live_session() {
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let setup = Arc::new(
+            KvmSetup::open(
+                root.path().to_owned(),
+                service.clone(),
+                vault.clone(),
+                Weak::new(),
+            )
+            .await
+            .unwrap(),
+        );
+        let id = WorkspaceId::new();
+        let record = SetupRecord {
+            id,
+            name: "Ready bot".into(),
+            service_id: service.snapshot().await.service_id,
+            credential_ref: VaultCredentialRef::new(),
+            pending_model_credential: None,
+            identity: SessionIdentity {
+                workspace_id: id,
+                session_id: SessionId::new(),
+            },
+            stage: SetupStage::Ready,
+            issue: None,
+            spec: None,
+            pinned_host_key: None,
+        };
+        setup.save(record.clone()).await.unwrap();
+        service
+            .register_workspace(WorkspaceConfig {
+                id,
+                name: record.name.clone(),
+                service_pc: ServicePc::Local,
+                bot_pc: BotPc::LocalVm {
+                    host_id: record.service_id,
+                    vm_id: id.as_uuid().to_string(),
+                    hypervisor: Hypervisor::Kvm,
+                },
+                connection: WorkspaceConnection::Ssh(SshConnection {
+                    endpoint: SshEndpoint {
+                        hostname: "127.0.0.1".into(),
+                        port: 2222,
+                        user: "gbot".into(),
+                    },
+                    pinned_host_key: SshHostPublicKey {
+                        algorithm: "ssh-ed25519".into(),
+                        public_key: "AAAA".into(),
+                    },
+                    credential_ref: record.credential_ref,
+                }),
+            })
+            .await
+            .unwrap();
+        let brain = crate::service::ModelAssignment {
+            workspace_id: id,
+            connection: crate::inference::ModelConnection::Endpoint {
+                api_base: "http://fixture/v1".into(),
+            },
+            model: "fixture".into(),
+            context_tokens: 131072,
+            credential_ref: None,
+        };
+        service.save_model_assignment(brain.clone()).await.unwrap();
+        let hello = GuestHello {
+            protocol_version: GUEST_PROTOCOL_VERSION,
+            identity: record.identity,
+            capabilities: [
+                GuestCapability::Exec,
+                GuestCapability::Read,
+                GuestCapability::Write,
+                GuestCapability::Status,
+                GuestCapability::Cancel,
+            ]
+            .into(),
+            view: None,
+        };
+        service
+            .register_session(record.identity, hello)
+            .await
+            .unwrap();
+        assert_eq!(setup.remove(id).await.unwrap_err().code, "workspace_in_use");
+        let saved = setup
+            .status()
+            .await
+            .into_iter()
+            .find(|item| item.id == id)
+            .unwrap();
+        assert_eq!(saved.stage, SetupStage::Ready);
+        assert_eq!(service.model_assignment(id).await.unwrap(), Some(brain));
+        // A live operation can still be admitted through the original session.
+        service
+            .begin_operation(&GuestRequest {
+                identity: record.identity,
+                operation_id: OperationId::new(),
+                operation: GuestOperationKind::Exec {
+                    program: "fixture".into(),
+                    args: vec![],
+                    cwd: GuestPath("/tmp".into()),
+                    env: BTreeMap::new(),
+                },
+            })
+            .await
+            .unwrap();
+        let durable = setup
+            .store
+            .load::<Vec<SetupRecord>>()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            durable
+                .into_iter()
+                .find(|item| item.id == id)
+                .unwrap()
+                .stage,
+            SetupStage::Ready
+        );
+    }
+
     #[tokio::test]
     async fn removal_preserves_brain_on_failure_and_retries_credential_cleanup() {
         let root = tempfile::tempdir().unwrap();

@@ -332,6 +332,10 @@ pub(crate) struct OwnedWorkspaceRemoval<'a> {
 
 #[cfg(target_os = "linux")]
 impl OwnedWorkspaceRemoval<'_> {
+    pub(crate) fn detach_session(&mut self) {
+        self.state.sessions.remove(&self.id);
+    }
+
     pub(crate) fn model_credential(&self) -> Option<VaultCredentialRef> {
         self.state
             .durable
@@ -675,6 +679,7 @@ impl Service {
         &self,
         id: WorkspaceId,
         owner: &crate::contract::BotPc,
+        owned_session: Option<SessionIdentity>,
     ) -> Result<OwnedWorkspaceRemoval<'_>, ServiceError> {
         let state = self.state.clone().lock_owned().await;
         if let Some(workspace) = state
@@ -687,7 +692,10 @@ impl Service {
                 return Err(ServiceError::WorkspaceInUse);
             }
         }
-        if state.sessions.contains_key(&id)
+        if state
+            .sessions
+            .get(&id)
+            .is_some_and(|hello| Some(hello.identity) != owned_session)
             || state
                 .durable
                 .connector_accounts
@@ -1299,10 +1307,11 @@ mod tests {
             } else {
                 owner
             };
+            let before = service.snapshot().await;
             assert!(
                 matches!(
                     service
-                        .begin_owned_workspace_removal(identity.workspace_id, &owner)
+                        .begin_owned_workspace_removal(identity.workspace_id, &owner, None)
                         .await,
                     Err(ServiceError::WorkspaceInUse)
                 ),
@@ -1311,7 +1320,63 @@ mod tests {
             let saved = service.snapshot().await;
             assert_eq!(saved.workspaces.len(), 1);
             assert_eq!(saved.assignments.len(), 1);
+            assert_eq!(saved.controls, before.controls);
+            assert_eq!(saved.operations, before.operations);
+            if matches!(kind, "operation" | "human") {
+                assert!(matches!(
+                    service
+                        .begin_owned_workspace_removal(
+                            identity.workspace_id,
+                            &owner,
+                            Some(identity)
+                        )
+                        .await,
+                    Err(ServiceError::WorkspaceInUse)
+                ));
+            }
         }
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn workspace_removal_accepts_only_the_owned_idle_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = Service::open(directory.path().join("state.json"))
+            .await
+            .unwrap();
+        let config = workspace();
+        let owner = config.bot_pc.clone();
+        let identity = SessionIdentity {
+            workspace_id: config.id,
+            session_id: SessionId::new(),
+        };
+        service.register_workspace(config).await.unwrap();
+        service
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        let wrong = SessionIdentity {
+            session_id: SessionId::new(),
+            ..identity
+        };
+        assert!(matches!(
+            service
+                .begin_owned_workspace_removal(identity.workspace_id, &owner, Some(wrong))
+                .await,
+            Err(ServiceError::WorkspaceInUse)
+        ));
+        assert_eq!(
+            service.state.lock().await.sessions[&identity.workspace_id].identity,
+            identity
+        );
+        let mut removal = service
+            .begin_owned_workspace_removal(identity.workspace_id, &owner, Some(identity))
+            .await
+            .unwrap();
+        removal.detach_session();
+        removal.commit().await.unwrap();
+        assert!(service.state.lock().await.sessions.is_empty());
+        assert!(service.snapshot().await.workspaces.is_empty());
     }
 
     #[tokio::test]

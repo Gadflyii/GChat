@@ -24,6 +24,10 @@ preserves the assignment; credential cleanup resumes from its durable reference.
 Unfinished tasks, pending schedules, operations, accounts and human control still
 block removal. Four focused cases and strict service Clippy pass; no additional
 guest run is claimed. Evidence: `out/gchat-open-items-20261013/remove-saved-brain/result.json`.
+A refused computer removal preserves Ready and its live session. Admission now
+precedes setup/transport changes; the matching idle session is held exclusively
+through cleanup. Six affected removal cases and strict service Clippy pass.
+Evidence: `out/gchat-open-items-20261013/remove-refusal-state/result.json`.
 Evidence and capacity scope: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
 
 Gbot is an embedded GChat feature: a persistent assistant that can use a separate

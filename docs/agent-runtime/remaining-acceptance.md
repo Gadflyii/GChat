@@ -12,7 +12,7 @@ verify exact `Hello from Gbot.` by independent SSH read, and reopen the saved re
 The native selector fix is merged in main `98bef9d07`; its focused fixture and
 incremental desktop build pass. Evidence: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
 Inventory: source `/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
-`fix/gbot-remove-saved-brain-98b`, tested desktop and cited evidence; no live guest, Host,
+`fix/gbot-remove-refusal-e56`, tested desktop and cited evidence; no live guest, Host,
 model or reservation. Shared base image and baseline package are retained.
 Completed source fix `GBOT-REMOVE-SAVED-BRAIN`. Explicit removal clears an idle brain only
 after physical guest cleanup; durable credential cleanup supports retry. Pending
@@ -20,7 +20,14 @@ tasks, schedules, operations, accounts and human control remain protected. Gate:
 four focused service/setup/task/schedule cases and strict service Clippy pass,
 no model or guest run.
 Results: `out/gchat-open-items-20261013/remove-saved-brain/result.json`.
-Next unresolved action: merge the reviewed source, then select the next open bug.
+Completed source fix `GBOT-REMOVE-REFUSAL-STATE`: removal checks ownership and
+live-work blockers before marking Removing or disconnecting. The existing runtime
+lifecycle and Service locks hold ownership through cleanup; only the matching idle
+session can be detached. Refusal preserves Ready, its live session, brain and
+control/operation state. Six affected removal cases and strict service Clippy pass
+in 16 seconds; no physical guest or model gate.
+Results: `out/gchat-open-items-20261013/remove-refusal-state/result.json`.
+Next unresolved action: reviewed merge, then the next open GChat/Gbot item.
 Signing/publication, native Windows builds, personal desktop input and Engine
 rebuild/calibration are excluded. The master list remains the status authority.
 
