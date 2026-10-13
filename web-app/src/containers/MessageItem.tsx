@@ -1,3 +1,5 @@
+import { isTerminalAgentRun } from '@/lib/agent-run-message'
+import type { AgentRunSummary } from '@/types/agent'
 import { incompleteOutcomeMessage } from '@/lib/agent-outcome'
 import {
   memo,
@@ -80,6 +82,8 @@ export type MessageItemProps = {
   isAnimating?: boolean
   hideActions?: boolean
   agentAttachmentReferences?: readonly AgentFileReference[]
+  agentRuns?: readonly AgentRunSummary[]
+  onCancelAgentRun?: (runId: string) => void
 }
 
 export const MessageItem = memo(
@@ -95,6 +99,8 @@ export const MessageItem = memo(
     onEdit,
     onDelete,
     agentAttachmentReferences = [],
+    agentRuns,
+    onCancelAgentRun,
   }: MessageItemProps) => {
     const { t } = useTranslation('chat')
     const serviceHub = useServiceHub()
@@ -159,7 +165,8 @@ export const MessageItem = memo(
       (requestActive ??
         (status === CHAT_STATUS.STREAMING || status === CHAT_STATUS.SUBMITTED))
     const isAgentMessage = Boolean(
-      (message.metadata as { agent_run?: unknown } | undefined)?.agent_run
+      agentRuns?.length ||
+        (message.metadata as { agent_run?: unknown } | undefined)?.agent_run
     )
     const agentFileReferences = useMemo(
       () =>
@@ -418,12 +425,11 @@ export const MessageItem = memo(
 
     const renderActivityBlock = (block: ActivityTraceBlock) => {
       const agentStatus = block.agentSummary?.status
-      const active =
-        isRequestActive &&
-        (!agentStatus ||
-          agentStatus === 'running' ||
-          agentStatus === 'awaiting_approval' ||
-          agentStatus === 'awaiting_folder_access')
+      const active = agentStatus
+        ? agentStatus !== 'idle' &&
+          !isTerminalAgentRun(agentStatus) &&
+          (isRequestActive || agentRuns !== undefined)
+        : isRequestActive
       const summaryToolCount =
         block.agentSummary?.tools.filter(
           ({ tool }) => tool !== 'reply' && tool !== 'finish'
@@ -452,112 +458,118 @@ export const MessageItem = memo(
       )
 
       return (
-        <AgentActivity
-          key={block.key}
-          active={active}
-          workingLabel={t('activity.working')}
-          durationLabel={t('activity.workedFor', {
-            count: durationSeconds,
-          })}
-          hasDetails={toolCount > 0 || stages.length > 0 || Boolean(incompleteReason)}
-          error={runError?.message}
-        >
-          {incompleteReason && (
-            <ActivityDetail label="Run outcome">
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-                {incompleteReason}
-              </div>
-            </ActivityDetail>
-          )}
-          {stages.length > 0 && (
-            <ActivityDetail
-              label={`${block.agentSummary?.definition?.name ?? 'Agent'} · ${stages.length} ${stages.length === 1 ? 'stage' : 'stages'}`}
-            >
-              {stages.map((stage) => (
-                <div
-                  key={`${block.key}-stage-${stage.id}`}
-                  className="flex items-center gap-2 py-1 text-xs"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-foreground/80">
-                      {stage.name}
-                    </span>
-                    <span className="block truncate font-mono text-[10px] text-muted-foreground">
-                      {stage.model_instance_id} · {stage.status}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-muted-foreground">
-                    {stage.step_count ?? 0} steps
-                    {stage.duration_ms !== undefined
-                      ? ` · ${stage.duration_ms} ms`
-                      : ''}
-                    {stage.inference
-                      ? ` · ${formatTokensPerSecond(stage.inference.generated_tokens, stage.inference.generation_ms)} gen t/s`
-                      : ''}
-                  </span>
+        <div key={block.key}>
+          <AgentActivity
+            active={active}
+            workingLabel={t('activity.working')}
+            durationLabel={t('activity.workedFor', {
+              count: durationSeconds,
+            })}
+            hasDetails={toolCount > 0 || stages.length > 0 || Boolean(incompleteReason)}
+            error={runError?.message}
+          >
+            {incompleteReason && (
+              <ActivityDetail label="Run outcome">
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                  {incompleteReason}
                 </div>
-              ))}
-            </ActivityDetail>
-          )}
-          {instanceMetrics.length > 0 && (
-            <ActivityDetail label="Model-instance throughput">
-              {instanceMetrics.map((metrics) => (
-                <div
-                  key={`${block.key}-metrics-${metrics.modelInstanceId}`}
-                  className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-1 text-xs"
-                >
-                  <span
-                    className="truncate font-mono text-[10px] text-foreground/80"
-                    title={metrics.modelInstanceId}
+              </ActivityDetail>
+            )}
+            {stages.length > 0 && (
+              <ActivityDetail
+                label={`${block.agentSummary?.definition?.name ?? 'Agent'} · ${stages.length} ${stages.length === 1 ? 'stage' : 'stages'}`}
+              >
+                {stages.map((stage) => (
+                  <div
+                    key={`${block.key}-stage-${stage.id}`}
+                    className="flex items-center gap-2 py-1 text-xs"
                   >
-                    {metrics.modelInstanceId}
-                  </span>
-                  <span>
-                    {formatTokensPerSecond(
-                      metrics.generatedTokens,
-                      metrics.generationMs
-                    )}{' '}
-                    gen t/s
-                  </span>
-                  <span>
-                    {formatTokensPerSecond(
-                      metrics.promptTokens,
-                      metrics.promptMs
-                    )}{' '}
-                    prompt t/s
-                  </span>
-                </div>
-              ))}
-            </ActivityDetail>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-foreground/80">
+                        {stage.name}
+                      </span>
+                      <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                        {stage.model_instance_id} · {stage.status}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {stage.step_count ?? 0} steps
+                      {stage.duration_ms !== undefined
+                        ? ` · ${stage.duration_ms} ms`
+                        : ''}
+                      {stage.inference
+                        ? ` · ${formatTokensPerSecond(stage.inference.generated_tokens, stage.inference.generation_ms)} gen t/s`
+                        : ''}
+                    </span>
+                  </div>
+                ))}
+              </ActivityDetail>
+            )}
+            {instanceMetrics.length > 0 && (
+              <ActivityDetail label="Model-instance throughput">
+                {instanceMetrics.map((metrics) => (
+                  <div
+                    key={`${block.key}-metrics-${metrics.modelInstanceId}`}
+                    className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-1 text-xs"
+                  >
+                    <span
+                      className="truncate font-mono text-[10px] text-foreground/80"
+                      title={metrics.modelInstanceId}
+                    >
+                      {metrics.modelInstanceId}
+                    </span>
+                    <span>
+                      {formatTokensPerSecond(
+                        metrics.generatedTokens,
+                        metrics.generationMs
+                      )}{' '}
+                      gen t/s
+                    </span>
+                    <span>
+                      {formatTokensPerSecond(
+                        metrics.promptTokens,
+                        metrics.promptMs
+                      )}{' '}
+                      prompt t/s
+                    </span>
+                  </div>
+                ))}
+              </ActivityDetail>
+            )}
+            {toolCount > 0 && (
+              <ActivityDetail
+                label={t(
+                  toolCount === 1
+                    ? 'activity.calledTool'
+                    : 'activity.calledTools',
+                  { count: toolCount }
+                )}
+              >
+                {block.tools.map((tool) => (
+                  <Tool key={tool.key} state={tool.state} className="py-1">
+                    <ToolRenderer
+                      presentation={tool.presentation}
+                      state={tool.state}
+                    />
+                  </Tool>
+                ))}
+              </ActivityDetail>
+            )}
+            {block.agentSummary?.loops.map((loop, index) => (
+              <div
+                key={`${block.key}-loop-${index}`}
+                className="py-1 text-xs text-muted-foreground"
+              >
+                {loop.message}
+              </div>
+            ))}
+          </AgentActivity>
+          {active && block.agentSummary?.run_id && onCancelAgentRun && (
+            <Button variant="ghost" size="sm" onClick={() => onCancelAgentRun(block.agentSummary!.run_id)}>
+              Stop worker
+            </Button>
           )}
-          {toolCount > 0 && (
-            <ActivityDetail
-              label={t(
-                toolCount === 1
-                  ? 'activity.calledTool'
-                  : 'activity.calledTools',
-                { count: toolCount }
-              )}
-            >
-              {block.tools.map((tool) => (
-                <Tool key={tool.key} state={tool.state} className="py-1">
-                  <ToolRenderer
-                    presentation={tool.presentation}
-                    state={tool.state}
-                  />
-                </Tool>
-              ))}
-            </ActivityDetail>
-          )}
-          {block.agentSummary?.loops.map((loop, index) => (
-            <div
-              key={`${block.key}-loop-${index}`}
-              className="py-1 text-xs text-muted-foreground"
-            >
-              {loop.message}
-            </div>
-          ))}
-        </AgentActivity>
+        </div>
       )
     }
 
@@ -565,8 +577,9 @@ export const MessageItem = memo(
       () =>
         buildTraceBlocks(message, disableReasoning, {
           ensureActivity: isRequestActive,
+          agentRuns,
         }),
-      [message, disableReasoning, isRequestActive]
+      [message, disableReasoning, isRequestActive, agentRuns]
     )
 
     // Attachment-only messages need an editor outside the text blocks.
@@ -728,6 +741,8 @@ export const MessageItem = memo(
       prevProps.isLastMessage === nextProps.isLastMessage &&
       prevProps.status === nextProps.status &&
       prevProps.requestActive === nextProps.requestActive &&
+      prevProps.agentRuns === nextProps.agentRuns &&
+      prevProps.onCancelAgentRun === nextProps.onCancelAgentRun &&
       prevProps.showAssistant === nextProps.showAssistant &&
       prevProps.hideActions === nextProps.hideActions &&
       prevProps.agentAttachmentReferences ===

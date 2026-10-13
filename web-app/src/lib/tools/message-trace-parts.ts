@@ -6,19 +6,20 @@ import { presentTool } from './registry'
 export function buildTraceBlocks(
   message: UIMessage,
   disableReasoning: boolean,
-  options: { ensureActivity?: boolean } = {}
+  options: { ensureActivity?: boolean; agentRuns?: readonly AgentRunSummary[] } = {}
 ): TraceBlock[] {
   const blocks: TraceBlock[] = []
   const metadata = message.metadata as
     { agent_run?: AgentRunSummary; activityDurationMs?: number } | undefined
-  const agentRun = metadata?.agent_run
+  const agentRuns = options.agentRuns ?? (metadata?.agent_run ? [metadata.agent_run] : [])
+  const agentRun = agentRuns.length === 1 ? agentRuns[0] : undefined
   const reasoning: Array<{ key: string; text: string }> = []
   const tools: Extract<TraceBlock, { kind: 'activity' }>['tools'] = []
   let reasoningIndex = -1
   let reasoningState: 'streaming' | 'done' | undefined
   let answeredAfterReasoning = false
   let activityIndex =
-    agentRun ||
+    agentRuns.length > 0 ||
     metadata?.activityDurationMs !== undefined ||
     options.ensureActivity
       ? 0
@@ -119,19 +120,32 @@ export function buildTraceBlocks(
   // stacks two spinners on one message.
   const activityIsPlaceholder =
     tools.length === 0 &&
-    !agentRun &&
+    agentRuns.length === 0 &&
     metadata?.activityDurationMs === undefined
   const showActivity =
     activityIndex >= 0 && !(activityIsPlaceholder && reasoningStreaming)
 
   if (showActivity) {
-    blocks.splice(activityIndex, 0, {
-      kind: 'activity',
-      key: `${message.id}-activity`,
-      durationMs: agentRun?.duration_ms ?? metadata?.activityDurationMs,
-      tools,
-      agentSummary: agentRun,
-    })
+    const activities: Extract<TraceBlock, { kind: 'activity' }>[] = []
+    if (agentRuns.length <= 1 || tools.length > 0 || metadata?.activityDurationMs !== undefined) {
+      activities.push({
+        kind: 'activity',
+        key: `${message.id}-activity`,
+        durationMs: agentRun?.duration_ms ?? metadata?.activityDurationMs,
+        tools,
+        agentSummary: agentRun,
+      })
+    }
+    if (agentRuns.length > 1) {
+      activities.push(...agentRuns.map((summary) => ({
+        kind: 'activity' as const,
+        key: `${message.id}-agent-${summary.run_id}`,
+        durationMs: summary.duration_ms,
+        tools: [],
+        agentSummary: summary,
+      })))
+    }
+    blocks.splice(activityIndex, 0, ...activities)
   }
 
   if (reasoning.length > 0) {

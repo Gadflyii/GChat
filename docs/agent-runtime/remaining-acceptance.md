@@ -6,30 +6,20 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
-Current item: [GCHAT-SECRET-STORE](../decisions/2026-10-13-credential-store-tiers.md).
-Approved Linux implementation shares one per-user store across Chat, Manager,
-Gbot and connectors. It persists the selected tier, reports missing/locked
-Secret Service with setup guidance, and offers an explicit passphrase vault.
-Migration copies referenced entries, verifies their bytes and atomically changes
-ownership; an interrupted migration resumes without removing source entries.
+Completed GCHAT-MULTI-WORKER-CARD-RESTORE: source `177d574e6` restores
+all saved workers once, merges live progress by run ID and preserves answers.
+Twenty-five focused cases, frontend types/lint and the native embed pass.
+One isolated Linux/WSLg reload restores two cards exactly once, one saved
+answer, and zero Working/Stop controls for completed workers; generated history only.
+Evidence: `out/worker-card-restore-20261013/result.json`; no model or Windows change.
+Candidate `fix/gchat-worker-card-restore-ca45` retains source/executable/evidence;
+private fixture retired, owned processes absent, bookings604/605 canceled; merge owed.
 
-Acceptance complete at source scope: core 5/5, Chat 8/8, Manager 3/3 and
-Gbot authenticated lock/unlock 1/1 pass. Affected app check, strict Clippy,
-frontend types and production lint pass. The concurrency fixture uses independent
-store handles and threads; it does not claim separate-process qualification.
-No GPU or native Windows build ran. Installed missing/locked-provider setup,
-the WSL Credential Manager helper and Windows cancellation/lifetime remain owed.
-
-Evidence: `out/secret-store-20261013/result.json`, including the dependency diff:
-nine added edges, zero new packages or version changes. Inventory retains the
-candidate `/ai/gchat-worktrees/gbot-browser-physical-2e735`, branch
-`feat/gchat-linux-secret-store-206c`, baseline `206c3c93f`, the evidence packet
-and shared Cargo cache `/ai/gchat/src-tauri/target`. Root-owned retired cache
-resources are listed in that packet and preserved for owner cleanup. Candidate
-evidence copies are retired; no live job, model, guest or container remains.
-The approved disposable build container supplied protoc; no host package was
-installed. Next: reviewed main merge, then the remaining installed setup checks;
-the Windows helper stays deferred to the scheduled release gate.
+Completed GCHAT-SECRET-STORE Linux tiers merged to main `ca45da2a0`.
+Core 5, Chat 8, Manager 3 and Gbot 1 focused cases, check, strict Clippy,
+frontend types/lint pass; lock adds nine edges, no package/version changes.
+Evidence: `out/secret-store-20261013/result.json`. Installed provider setup
+and the release-only Windows helper/lifetime gates remain owed.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
 Two concurrent workers finished; a third queued at full capacity and was cancelled.

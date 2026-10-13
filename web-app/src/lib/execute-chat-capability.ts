@@ -4,7 +4,7 @@ import { chatWorkerRunKey, useAgentRun } from '@/hooks/useAgentRun'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { useThreads } from '@/hooks/useThreads'
 import type { CapabilitiesService } from '@/services/capabilities/types'
-import type { AgentAttachment, AgentRunRecord, AgentRunSummary } from '@/types/agent'
+import type { AgentAttachment, AgentRunRecord } from '@/types/agent'
 import { useChatSessions } from '@/stores/chat-session-store'
 import {
   buildAgentRecordSummary,
@@ -168,14 +168,4 @@ export function conversationAttachments(messages: UIMessage[]): AgentAttachment[
   const files: AgentAttachment[] = (metadata?.file_attachments ?? []).flatMap((file) =>
     file.name && file.path ? [{ kind: 'file', name: file.name, path: file.path, ...(file.mediaType ? { media_type: file.mediaType } : {}) }] : [])
   return [...images, ...files]
-}
-
-// Keep delegated activity with its SDK tool output when a conversation reopens.
-export function chatCapabilityRun(message: UIMessage): AgentRunSummary | undefined {
-  for (const part of [...message.parts].reverse()) {
-    if (!('output' in part) || !part.output || typeof part.output !== 'object') continue
-    const summary = (part.output as { agent_run?: AgentRunSummary }).agent_run
-    if (summary?.run_id) return summary
-  }
-  return undefined
 }

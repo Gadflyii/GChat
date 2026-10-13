@@ -181,3 +181,51 @@ export function buildAgentUIMessage(state: AgentRunState): UIMessage {
     },
   }
 }
+
+// Tool outputs retain every delegated run across conversation reloads.
+export function chatCapabilityRuns(message: UIMessage): AgentRunSummary[] {
+  const metadata = message.metadata as {
+    agent_run?: AgentRunSummary
+    agent_runs?: AgentRunSummary[]
+  } | undefined
+  const runs = new Map<string, AgentRunSummary>()
+  for (const summary of metadata?.agent_runs ?? (metadata?.agent_run ? [metadata.agent_run] : [])) {
+    if (summary.run_id) runs.set(summary.run_id, summary)
+  }
+  for (const part of message.parts) {
+    if (!('output' in part) || !part.output || typeof part.output !== 'object') continue
+    const summary = (part.output as { agent_run?: AgentRunSummary }).agent_run
+    if (summary?.run_id) runs.set(summary.run_id, summary)
+  }
+  return [...runs.values()]
+}
+
+export function projectChatRunActivity(
+  messages: readonly UIMessage[],
+  workers: Readonly<Record<string, AgentRunState>>
+): { byMessageId: Map<string, AgentRunSummary[]>; runIds: Set<string> } {
+  const runs = new Map<string, { messageId: string; summary: AgentRunSummary }>()
+  const byMessageId = new Map<string, AgentRunSummary[]>()
+  for (const message of messages) {
+    byMessageId.set(message.id, [])
+    for (const summary of chatCapabilityRuns(message)) {
+      const previous = runs.get(summary.run_id)
+      runs.set(summary.run_id, { messageId: previous?.messageId ?? message.id, summary })
+    }
+  }
+  for (const worker of Object.values(workers)) {
+    if (!worker.runId) continue
+    const saved = runs.get(worker.runId)
+    if (saved && worker.status !== 'idle' && !isTerminalAgentRun(saved.summary.status)) {
+      saved.summary = buildAgentRunSummary(worker)
+    }
+  }
+  for (const { messageId, summary } of runs.values()) {
+    byMessageId.get(messageId)!.push(summary)
+  }
+  return { byMessageId, runIds: new Set(runs.keys()) }
+}
+
+export function isTerminalAgentRun(status: AgentRunSummary['status']): boolean {
+  return status === 'finished' || status === 'incomplete' || status === 'failed' || status === 'cancelled'
+}

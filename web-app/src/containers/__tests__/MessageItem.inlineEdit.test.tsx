@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessage } from 'ai'
 import type { AgentRunSummary } from '@/types/agent'
 import { MessageItem } from '../MessageItem'
+import { projectChatRunActivity } from '@/lib/agent-run-message'
 import { seedServiceHub } from '@/test/service-hub'
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
@@ -146,5 +147,31 @@ describe('MessageItem agent outcome', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run outcome' }))
     expect(screen.getByText(/A stage stopped after repeated tool calls made no progress/)).toBeInTheDocument()
     expect(screen.getByText('completed synthesis')).toBeInTheDocument()
+  })
+})
+
+describe('MessageItem restored worker activity', () => {
+  it('renders two saved workers and keeps live cancellation attached to the correct run', () => {
+    const runs: AgentRunSummary[] = ['Document worker', 'Math worker'].map((name, index) => ({
+      run_id: `worker-${index}`, status: index ? 'finished' : 'running',
+      definition: { id: `agent-${index}`, name, kind: 'standard', model_instance_id: 'qwen' },
+      stages: [{ id: name, name, role: 'worker', status: index ? 'finished' : 'running', model_instance_id: 'qwen' }],
+      tools: [], loops: [],
+    }))
+    const message: UIMessage = { id: 'two-workers', role: 'assistant', parts: [{ type: 'text', text: 'Both answers saved.' }], metadata: { agent_runs: runs } }
+    const onCancel = vi.fn()
+    const projection = projectChatRunActivity([message], {})
+    const view = render(<MessageItem message={message} agentRuns={projection.byMessageId.get(message.id)} onCancelAgentRun={onCancel} isFirstMessage isLastMessage={false} status="ready" />)
+    expect(screen.getByText('Both answers saved.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'activity.working' }))
+    fireEvent.click(screen.getByRole('button', { name: 'activity.workedFor' }))
+    expect(screen.getByRole('button', { name: 'Document worker · 1 stage' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Math worker · 1 stage' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop worker' }))
+    expect(onCancel).toHaveBeenCalledWith('worker-0')
+    runs[0] = { ...runs[0], status: 'finished' }
+    view.rerender(<MessageItem message={message} agentRuns={projectChatRunActivity([message], {}).byMessageId.get(message.id)} onCancelAgentRun={onCancel} isFirstMessage isLastMessage={false} status="ready" />)
+    expect(screen.queryByRole('button', { name: 'Stop worker' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'activity.working' })).not.toBeInTheDocument()
   })
 })
