@@ -454,7 +454,11 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response<Bod
     )
 }
 
-async fn setup_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> Response<Body> {
+async fn setup_route(
+    runtime: Arc<WorkspaceRuntime>,
+    tasks: Option<Arc<TaskRunner>>,
+    request: Request<Body>,
+) -> Response<Body> {
     #[cfg(target_os = "linux")]
     {
         let Some(setup) = runtime.kvm_setup() else {
@@ -476,12 +480,19 @@ async fn setup_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> 
             }
             "/v1/setup/kvm/remove" => {
                 match parse_body::<crate::kvm_setup::SetupId>(request).await {
-                    Some(input) => match setup.remove(input.id).await {
-                        Ok(record) => json_response(StatusCode::OK, &record),
-                        Err(issue) => {
-                            json_response(StatusCode::CONFLICT, &serde_json::json!({"error":issue}))
+                    Some(input) => {
+                        let result = match tasks {
+                            Some(tasks) => tasks.remove_computer(setup.clone(), input.id).await,
+                            None => setup.remove(input.id).await,
+                        };
+                        match result {
+                            Ok(record) => json_response(StatusCode::OK, &record),
+                            Err(issue) => json_response(
+                                StatusCode::CONFLICT,
+                                &serde_json::json!({"error":issue}),
+                            ),
                         }
-                    },
+                    }
                     None => invalid_request(),
                 }
             }
@@ -490,7 +501,7 @@ async fn setup_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> 
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (runtime, request);
+        let _ = (runtime, tasks, request);
         error_response(
             StatusCode::NOT_IMPLEMENTED,
             "unsupported_host",
@@ -722,7 +733,7 @@ async fn route(
             | "/v1/setup/kvm/status"
             | "/v1/setup/kvm/start"
             | "/v1/setup/kvm/remove",
-        ) => setup_route(runtime, request).await,
+        ) => setup_route(runtime, tasks, request).await,
 
         (&Method::POST, "/v1/connectors/get") => match parse_body::<GetAssignment>(request).await {
             Some(input) => match runtime.bot_connectors(input.workspace_id).await {

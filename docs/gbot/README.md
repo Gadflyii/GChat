@@ -18,8 +18,12 @@ Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`.
 Installed paired-Host selection, brain save, desktop hello-file task, independent
 exact SSH readback and saved-result reopen pass. The native selector correction
 is merged in main `98bef9d07`; its assignment fixture and incremental build pass.
-All owned guests, Hosts, models and reservations are retired. Removing a bot with
-an assigned brain remains blocked; `GBOT-REMOVE-SAVED-BRAIN` tracks that defect.
+All owned guests, Hosts, models and reservations are retired. Explicit computer
+removal now clears an idle bot's saved brain after guest cleanup. Failed cleanup
+preserves the assignment; credential cleanup resumes from its durable reference.
+Unfinished tasks, pending schedules, operations, accounts and human control still
+block removal. Four focused cases and strict service Clippy pass; no additional
+guest run is claimed. Evidence: `out/gchat-open-items-20261013/remove-saved-brain/result.json`.
 Evidence and capacity scope: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
 
 Gbot is an embedded GChat feature: a persistent assistant that can use a separate

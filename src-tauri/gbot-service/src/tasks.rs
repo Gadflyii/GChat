@@ -425,6 +425,29 @@ impl TaskRunner {
             .collect())
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn remove_computer(
+        self: &Arc<Self>,
+        setup: Arc<crate::kvm_setup::KvmSetup>,
+        id: crate::contract::WorkspaceId,
+    ) -> std::result::Result<crate::kvm_setup::SetupRecord, crate::kvm_setup::SetupIssue> {
+        let owner = self.clone();
+        tokio::spawn(async move {
+            let state = owner.state.lock().await;
+            if state.records.iter().any(|(task_id, saved)| {
+                let record = state.actors.get(task_id)
+                    .map_or_else(|| saved.clone(), |actor| actor.record.borrow().clone());
+                record.identity.workspace_id == id
+                    && !matches!(record.state, crate::executor::TaskState::Completed | crate::executor::TaskState::Cancelled)
+            }) {
+                return Err(crate::kvm_setup::SetupIssue::new("workspace_in_use", "This bot has unfinished tasks.", "Finish or cancel its tasks before removing this computer."));
+            }
+            let _schedules = owner.schedules.guard_workspace_removal(id).await
+                .map_err(|error| crate::kvm_setup::SetupIssue::new("workspace_in_use", error.to_string(), "Disable its schedules and resolve pending runs before removing this computer."))?;
+            setup.remove(id).await
+        }).await.map_err(|error| crate::kvm_setup::SetupIssue::new("removal_failed", error.to_string(), "Retry removal of this same computer."))?
+    }
+
     pub async fn snapshot(&self, id: Uuid) -> Result<TaskRecord> {
         let state = self.state.lock().await;
         if let Some(actor) = state.actors.get(&id) {
@@ -624,6 +647,84 @@ mod tests {
             api_key: Some("memory-only-fixture-secret".into()),
             model: "fixture".into(),
             context_tokens: 131072,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn computer_removal_requires_finished_tasks() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = Arc::new(
+            Service::open(dir.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let vault = Arc::new(NativeVault);
+        let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
+        let setup = Arc::new(
+            crate::kvm_setup::KvmSetup::open(
+                dir.path().join("setup"),
+                service,
+                vault,
+                Arc::downgrade(&runtime),
+            )
+            .await
+            .unwrap(),
+        );
+        let processes = ExecutorProcesses {
+            python: ProcessSpec {
+                program: "/bin/false".into(),
+                args: vec![],
+            },
+            context: ProcessSpec {
+                program: "/bin/false".into(),
+                args: vec![],
+            },
+        };
+        let runner = Arc::new(
+            TaskRunner::new(dir.path().join("tasks"), runtime, processes)
+                .await
+                .unwrap(),
+        );
+        let id = Uuid::new_v4();
+        let identity = SessionIdentity {
+            workspace_id: WorkspaceId::new(),
+            session_id: SessionId::new(),
+        };
+        let task = CuaTask::create_with_id(
+            runner.path(id),
+            id,
+            identity,
+            vec![json!({"role":"user","content":"fixture"})],
+            vec![],
+        )
+        .await
+        .unwrap();
+        for state in [
+            TaskState::Ready,
+            TaskState::Running,
+            TaskState::WaitingForHuman,
+            TaskState::Interrupted,
+            TaskState::Paused,
+            TaskState::NeedsReview,
+            TaskState::Completed,
+            TaskState::Cancelled,
+        ] {
+            let mut record = task.snapshot().clone();
+            record.state = state;
+            runner.state.lock().await.records.insert(id, record);
+            let issue = runner
+                .remove_computer(setup.clone(), identity.workspace_id)
+                .await
+                .unwrap_err();
+            assert_eq!(
+                issue.code,
+                if matches!(state, TaskState::Completed | TaskState::Cancelled) {
+                    "setup_missing"
+                } else {
+                    "workspace_in_use"
+                }
+            );
         }
     }
 

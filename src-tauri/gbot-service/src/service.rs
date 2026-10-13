@@ -323,6 +323,37 @@ pub struct Service {
     state: Arc<Mutex<RuntimeState>>,
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) struct OwnedWorkspaceRemoval<'a> {
+    service: &'a Service,
+    state: OwnedMutexGuard<RuntimeState>,
+    id: WorkspaceId,
+}
+
+#[cfg(target_os = "linux")]
+impl OwnedWorkspaceRemoval<'_> {
+    pub(crate) fn model_credential(&self) -> Option<VaultCredentialRef> {
+        self.state
+            .durable
+            .assignments
+            .iter()
+            .find(|item| item.workspace_id == self.id)
+            .and_then(|item| item.credential_ref)
+    }
+
+    pub(crate) async fn commit(self) -> Result<(), ServiceError> {
+        let mut next = self.state.durable.clone();
+        next.workspaces.retain(|item| item.id != self.id);
+        next.assignments.retain(|item| item.workspace_id != self.id);
+        next.controls
+            .retain(|item| item.identity.workspace_id != self.id);
+        next.operations
+            .retain(|item| item.identity.workspace_id != self.id);
+        drop(self.service.commit(self.state, next).await?);
+        Ok(())
+    }
+}
+
 impl Service {
     pub async fn open(path: impl Into<PathBuf>) -> Result<Self, ServiceError> {
         let store = Arc::new(Store::open(path.into()).await?);
@@ -638,14 +669,13 @@ impl Service {
         Ok(())
     }
 
-    /// Remove only the exact guest registered by the local setup owner. Attached bot
-    /// accounts/model assignments or unsettled work must be resolved first.
+    /// Hold ownership until the guest is removed; failed cleanup preserves its brain.
     #[cfg(target_os = "linux")]
-    pub(crate) async fn remove_owned_workspace(
+    pub(crate) async fn begin_owned_workspace_removal(
         &self,
         id: WorkspaceId,
         owner: &crate::contract::BotPc,
-    ) -> Result<(), ServiceError> {
+    ) -> Result<OwnedWorkspaceRemoval<'_>, ServiceError> {
         let state = self.state.clone().lock_owned().await;
         if let Some(workspace) = state
             .durable
@@ -656,15 +686,8 @@ impl Service {
             if &workspace.bot_pc != owner {
                 return Err(ServiceError::WorkspaceInUse);
             }
-        } else {
-            return Ok(());
         }
         if state.sessions.contains_key(&id)
-            || state
-                .durable
-                .assignments
-                .iter()
-                .any(|item| item.workspace_id == id)
             || state
                 .durable
                 .connector_accounts
@@ -683,14 +706,11 @@ impl Service {
         {
             return Err(ServiceError::WorkspaceInUse);
         }
-        let mut next = state.durable.clone();
-        next.workspaces.retain(|item| item.id != id);
-        next.controls
-            .retain(|item| item.identity.workspace_id != id);
-        next.operations
-            .retain(|item| item.identity.workspace_id != id);
-        drop(self.commit(state, next).await?);
-        Ok(())
+        Ok(OwnedWorkspaceRemoval {
+            service: self,
+            state,
+            id,
+        })
     }
 
     /// The caller owns and verifies the transport; only its session binding is retained here.
@@ -1230,6 +1250,68 @@ mod tests {
             .find(|record| record.id == id)
             .unwrap()
             .state
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn workspace_removal_keeps_live_operations_and_human_control() {
+        for kind in ["foreign", "session", "operation", "review", "human"] {
+            let directory = tempfile::tempdir().unwrap();
+            let service = Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap();
+            let config = workspace();
+            let owner = config.bot_pc.clone();
+            let identity = SessionIdentity {
+                workspace_id: config.id,
+                session_id: SessionId::new(),
+            };
+            service.register_workspace(config).await.unwrap();
+            service
+                .save_model_assignment(ModelAssignment {
+                    workspace_id: identity.workspace_id,
+                    connection: crate::inference::ModelConnection::Endpoint {
+                        api_base: "http://fixture/v1".into(),
+                    },
+                    model: "fixture".into(),
+                    context_tokens: 131072,
+                    credential_ref: None,
+                })
+                .await
+                .unwrap();
+            if kind != "foreign" {
+                let mut guest = hello(identity);
+                guest.capabilities.insert(GuestCapability::DesktopCapture);
+                service.register_session(identity, guest).await.unwrap();
+            }
+            if matches!(kind, "operation" | "review") {
+                service.begin_operation(&exec(identity)).await.unwrap();
+            }
+            if kind == "review" {
+                service.disconnect_session(identity).await.unwrap();
+            }
+            if kind == "human" {
+                service.take_over(identity, Uuid::new_v4()).await.unwrap();
+                service.disconnect_session(identity).await.unwrap();
+            }
+            let owner = if kind == "foreign" {
+                workspace().bot_pc
+            } else {
+                owner
+            };
+            assert!(
+                matches!(
+                    service
+                        .begin_owned_workspace_removal(identity.workspace_id, &owner)
+                        .await,
+                    Err(ServiceError::WorkspaceInUse)
+                ),
+                "{kind}"
+            );
+            let saved = service.snapshot().await;
+            assert_eq!(saved.workspaces.len(), 1);
+            assert_eq!(saved.assignments.len(), 1);
+        }
     }
 
     #[tokio::test]

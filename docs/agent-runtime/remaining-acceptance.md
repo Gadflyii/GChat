@@ -12,9 +12,15 @@ verify exact `Hello from Gbot.` by independent SSH read, and reopen the saved re
 The native selector fix is merged in main `98bef9d07`; its focused fixture and
 incremental desktop build pass. Evidence: `out/gchat-open-items-20261013/paired-brain-installed/result.json`.
 Inventory: source `/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
-`feat/gbot-integration-70d`, tested desktop and cited evidence; no live guest, Host,
+`fix/gbot-remove-saved-brain-98b`, tested desktop and cited evidence; no live guest, Host,
 model or reservation. Shared base image and baseline package are retained.
-Next: fix `GBOT-REMOVE-SAVED-BRAIN`, then the remaining installed release checks.
+Completed source fix `GBOT-REMOVE-SAVED-BRAIN`. Explicit removal clears an idle brain only
+after physical guest cleanup; durable credential cleanup supports retry. Pending
+tasks, schedules, operations, accounts and human control remain protected. Gate:
+four focused service/setup/task/schedule cases and strict service Clippy pass,
+no model or guest run.
+Results: `out/gchat-open-items-20261013/remove-saved-brain/result.json`.
+Next unresolved action: merge the reviewed source, then select the next open bug.
 Signing/publication, native Windows builds, personal desktop input and Engine
 rebuild/calibration are excluded. The master list remains the status authority.
 
