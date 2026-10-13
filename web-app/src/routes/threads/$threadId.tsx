@@ -1226,7 +1226,9 @@ function ThreadDetail() {
                       // ATO-170: replace the raw engine 400 body (e.g. mlx-vlm's
                       // "... but MAX_KV_SIZE is N") with a clear, actionable message
                       // instead of the generic "Error generating response".
-                      const title = isContextError
+                      const title = smartFailure?.code === 'context_output_conflict'
+                        ? 'Context settings conflict'
+                        : isContextError
                         ? CONTEXT_OVERFLOW_TITLE
                         : isAccessError
                           ? MODEL_ACCESS_DENIED_TITLE

@@ -56,7 +56,7 @@ export function logChatWarning(
     if (typeof responseBody === 'string') {
       try {
         const envelope = JSON.parse(responseBody.slice(responseBody.indexOf('{')))
-        for (const key of ['inputTokens', 'inputBudget', 'summaryInputTokens', 'configuredContextTokens']) {
+        for (const key of ['inputTokens', 'inputBudget', 'summaryInputTokens', 'configuredContextTokens', 'reservedOutputTokens', 'inputSafetyMargin']) {
           const value = envelope?.error?.[key]
           if (typeof value === 'number' && Number.isFinite(value)) errorContext[key] = value
         }
@@ -71,7 +71,8 @@ export function logChatWarning(
     ...context,
     formatDecision: promptDecision ?? (errorName === 'AI_InvalidPromptError' ? 'invalid-prompt'
       : errorName === 'AI_TypeValidationError' ? 'value-schema-rejected' : context.conversion),
-    displayDecision: contextError ? 'context-window-full'
+    displayDecision: smart?.code === 'context_output_conflict' ? 'context-settings-conflict'
+      : contextError ? 'context-window-full'
       : accessError ? 'model-access-error'
         : memoryError ? 'out-of-memory' : 'error-generating-response',
     classificationTrigger: completion ? trigger
