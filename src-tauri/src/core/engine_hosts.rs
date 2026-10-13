@@ -148,11 +148,29 @@ fn installed_desktop_host(
     })
 }
 
+#[cfg(feature = "hardware")]
+fn require_local_cuda_gpu(gpus: &[tauri_plugin_hardware::GpuInfo]) -> Result<(), String> {
+    if gpus
+        .iter()
+        .any(|gpu| matches!(gpu.vendor, tauri_plugin_hardware::Vendor::NVIDIA))
+    {
+        return Ok(());
+    }
+    Err("GInfer local inference requires an NVIDIA CUDA GPU. No NVIDIA GPU was detected on this computer. Use a paired GInfer host or another inference provider.".into())
+}
+
+#[cfg(feature = "hardware")]
+async fn require_local_hardware() -> Result<(), String> {
+    require_local_cuda_gpu(&tauri_plugin_hardware::get_system_info().await?.gpus)
+}
+
 async fn ensure_desktop_host<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<ginfer_host::launcher::LocalControl, String> {
     use tauri::Manager;
     crate::core::setup::wait_for_bundled_resources(app).await?;
+    #[cfg(feature = "hardware")]
+    require_local_hardware().await?;
     installed_desktop_host(
         &crate::core::app::commands::get_jan_data_folder_path(app.clone()),
         &app.path().resource_dir().map_err(|e| e.to_string())?,
@@ -180,6 +198,8 @@ pub async fn prepare_installed_hardware_from_paths(
     resource_directory: std::path::PathBuf,
     gpu_uuids: Option<Vec<String>>,
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
+    #[cfg(feature = "hardware")]
+    require_local_hardware().await?;
     installed_desktop_host(&data_folder, &resource_directory)?
         .ensure_shared_running()
         .await?;
@@ -779,6 +799,27 @@ mod live_tests;
 #[cfg(test)]
 mod registration_tests {
     use super::*;
+
+    #[cfg(feature = "hardware")]
+    #[test]
+    fn local_host_rejects_no_nvidia_but_defers_unreadable_capability_to_host() {
+        use tauri_plugin_hardware::{GpuInfo, Vendor};
+
+        let gpu = |vendor| GpuInfo {
+            name: "fixture GPU".into(),
+            total_memory: 0,
+            vendor,
+            uuid: "fixture".into(),
+            driver_version: String::new(),
+            nvidia_info: None,
+            vulkan_info: None,
+        };
+        let error = require_local_cuda_gpu(&[]).unwrap_err();
+        assert!(error.contains("No NVIDIA GPU was detected"));
+        assert!(error.contains("paired GInfer host"));
+        assert_eq!(require_local_cuda_gpu(&[gpu(Vendor::Intel)]), Err(error));
+        assert!(require_local_cuda_gpu(&[gpu(Vendor::NVIDIA)]).is_ok());
+    }
 
     #[test]
     fn benchmark_session_retains_actual_launch_profile_without_defaulting_missing_facts() {
