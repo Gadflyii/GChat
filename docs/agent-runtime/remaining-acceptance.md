@@ -6,13 +6,39 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
-Current goal: finish the approved GChat standing queue using existing evidence
-and one focused check per changed behavior. Plan and acceptance are this file;
-results are in the existing `out/` tree. Source candidate:
+Current goal: finish Gbot's installed paired-Host brain/task integration.
+The standing source queue is complete. Plan and acceptance are this file;
+results are in `out/gchat-open-items-20261013/paired-brain-installed/`. Source candidate:
 `/ai/gchat-worktrees/gchat-focused-burndown-c36a`; results:
-`/ai/gchat/out/gchat-focused-burndown-20261013/`. No model, build or desktop job
-is running for this item. Candidate branch: `fix/gchat-flash-cutover-70d` on main `70d29252b`. The next item is installed paired-Host brain/task integration in Gbot, using its existing source and acceptance receipts. Release signing/publication and native Windows builds
-are excluded. The master list remains the status authority.
+`/ai/gchat/out/gchat-focused-burndown-20261013/` retains the completed source queue.
+Candidate branch: `feat/gbot-integration-70d`, based on reviewed main `a4effc6bb`.
+Gate: one isolated installed Linux desktop selects a Ready paired Host's model
+and actual context, saves its brain, completes one exact-content hello-file task
+on its dedicated bot computer, and reopens the saved result. Reuse accepted
+image/resources and source checks; build the changed desktop once. The installed wizard created one dedicated computer and reached Ready/Connected.
+Brain selection exposed a native client POST to the GET-only Ready-model route.
+The shared request-method fix passes the existing assignment fixture (1/1),
+incremental desktop build (45.83 s), and installed selector check: the route error
+is gone and the empty Ready-model list renders correctly.
+
+The one Host launch was refused before model start: `Profiling CLI does not match
+the selected Engine runtime`. The reused donor combined an older CLI with a newer
+server. This is a valid admission rejection, not evidence of an Engine defect.
+Ready-model selection, brain save, exact `Hello from Gbot.` file task and saved
+result reopen remain unqualified. Next: obtain one accepted matching CLI/server
+closure, then run only those remaining steps within a newly booked <=20-minute
+model window. Do not bypass the version check or rebuild the Engine for this gate.
+
+The test phase ended at 11:17:04 UTC, within its 45-minute budget. Normal bot
+removal passed; the disposable desktop, disk, keys and private daemons are retired,
+freeing 15.80 GB on S1. The owned Host stopped normally, no model loaded, both
+canonical local guards were returned, and bookings 617/1580 are canceled. Inventory
+retains the source candidate, corrected desktop executable and concise evidence in
+`out/gchat-open-items-20261013/paired-brain-installed/result.json`; no live guest,
+Host, model or reservation remains. The shared Debian image is retained.
+Release signing/publication, native Windows builds, personal desktop input,
+Engine rebuild/calibration and repeated walkthroughs are excluded.
+The master list remains the status authority.
 
 | Queue item | Current result and next unresolved action |
 | --- | --- |
