@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { gbot } from '@/services/gbot'
 import type { BotConnection } from './index'
+import LanTools from './LanTools'
 
 type PublicKey = { algorithm: string; public_key: string }
 type Identity = { public_key: PublicKey; fingerprint: string }
@@ -42,6 +43,24 @@ export default function LanSetup({
     hostname: connection.hostname.trim(),
     port,
     user: connection.user.trim(),
+  }
+  const create = async (importKey: boolean) => {
+    const [algorithm, public_key] = connection.hostKey.trim().split(/\s+/)
+    const created = await gbot<{ id: string }>('workspaces/ssh', {
+      id: ids.id,
+      name: connection.name.trim(),
+      service_pc: { kind: 'local' },
+      bot_pc: { kind: 'lan', computer_id: ids.computerId },
+      endpoint,
+      pinned_host_key: importKey
+        ? { algorithm, public_key }
+        : identity!.public_key,
+      private_key: importKey ? connection.key : null,
+      passphrase: importKey ? connection.passphrase || null : null,
+    })
+    setLocked(true)
+    setImporting(false)
+    change({ ...connection, workspaceId: created.id, key: '', passphrase: '' })
   }
   const run = async (action: () => Promise<void>) => {
     setWorking(true)
@@ -170,6 +189,18 @@ export default function LanSetup({
           <p className="text-xs text-muted-foreground">
             Verify the host public key on the bot computer before continuing.
           </p>
+          <Button
+            type="button"
+            disabled={
+              working ||
+              !validEndpoint ||
+              !connection.key.trim() ||
+              connection.hostKey.trim().split(/\s+/).length < 2
+            }
+            onClick={() => void run(() => create(true))}
+          >
+            Import bot key
+          </Button>
         </>
       ) : (
         <>
@@ -219,22 +250,7 @@ export default function LanSetup({
             <Button
               type="button"
               disabled={working || !verified || !identity}
-              onClick={() =>
-                void run(async () => {
-                  setLocked(true)
-                  const created = await gbot<{ id: string }>('workspaces/ssh', {
-                    id: ids.id,
-                    name: connection.name.trim(),
-                    service_pc: { kind: 'local' },
-                    bot_pc: { kind: 'lan', computer_id: ids.computerId },
-                    endpoint,
-                    pinned_host_key: identity!.public_key,
-                    private_key: null,
-                    passphrase: null,
-                  })
-                  change({ ...connection, workspaceId: created.id })
-                })
-              }
+              onClick={() => void run(() => create(false))}
             >
               {working ? 'Working…' : 'Create bot key'}
             </Button>
@@ -278,17 +294,18 @@ export default function LanSetup({
                       workspace_id: connection.workspaceId,
                     })
                     setChecked(true)
-                    ready(true)
+                    ready(false)
                   })
                 }
               >
                 Check SSH access
               </Button>
               {checked && (
-                <p role="status">
-                  SSH access verified. Desktop tools are checked when you
-                  connect the bot.
-                </p>
+                <LanTools
+                  workspaceId={connection.workspaceId}
+                  ready={ready}
+                  busy={busy}
+                />
               )}
             </div>
           )}

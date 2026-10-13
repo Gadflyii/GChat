@@ -107,6 +107,9 @@ struct Guest {
     cua_active: std::sync::atomic::AtomicBool,
     reject_start: std::sync::atomic::AtomicBool,
     desktop_calls: Mutex<Vec<serde_json::Value>>,
+    setup_uploads: Mutex<Vec<Vec<u8>>>,
+    setup_issue: Mutex<Option<String>>,
+    setup_installed: std::sync::atomic::AtomicBool,
 }
 
 fn failure(message: impl Into<String>) -> GuestError {
@@ -353,6 +356,7 @@ async fn send_receipt(
 enum Input {
     Mcp(Vec<u8>),
     Helper { args: Vec<String>, data: Vec<u8> },
+    Setup { command: String, data: Vec<u8> },
 }
 struct Peer {
     user_key: PublicKey,
@@ -439,7 +443,18 @@ impl server::Handler for Peer {
             session.eof(channel)?;
             return session.close(channel);
         }
-        let args = argv(std::str::from_utf8(data).unwrap());
+        let command = std::str::from_utf8(data).unwrap();
+        if command.starts_with("( set -eu;") {
+            self.buffers.insert(
+                channel,
+                Input::Setup {
+                    command: command.into(),
+                    data: vec![],
+                },
+            );
+            return session.channel_success(channel);
+        }
+        let args = argv(command);
         let input = match args.first().map(String::as_str) {
             Some("/usr/local/bin/gbot-cua") => Input::Mcp(vec![]),
             Some("/usr/local/bin/gbot-operation") => Input::Helper { args, data: vec![] },
@@ -458,7 +473,9 @@ impl server::Handler for Peer {
             return Ok(());
         };
         match input {
-            Input::Helper { data: bytes, .. } => bytes.extend_from_slice(data),
+            Input::Helper { data: bytes, .. } | Input::Setup { data: bytes, .. } => {
+                bytes.extend_from_slice(data)
+            }
             Input::Mcp(bytes) => {
                 bytes.extend_from_slice(data);
                 while let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
@@ -535,7 +552,33 @@ impl server::Handler for Peer {
         channel: ChannelId,
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
-        let Some(Input::Helper { args, data }) = self.buffers.remove(&channel) else {
+        let input = self.buffers.remove(&channel);
+        if let Some(Input::Setup { command, data }) = input {
+            let upload = !data.is_empty();
+            if upload {
+                self.guest.setup_uploads.lock().unwrap().push(data);
+            }
+            let check = command.starts_with("( set -eu; for p");
+            let issue = if upload {
+                self.guest.setup_issue.lock().unwrap().take()
+            } else if check
+                && !self
+                    .guest
+                    .setup_installed
+                    .load(std::sync::atomic::Ordering::Acquire)
+            {
+                Some("Gbot tools are not installed".into())
+            } else {
+                None
+            };
+            if let Some(ref issue) = issue {
+                session.data(channel, issue.as_bytes().to_vec())?;
+            }
+            session.exit_status_request(channel, u32::from(issue.is_some()))?;
+            session.eof(channel)?;
+            return session.close(channel);
+        }
+        let Some(Input::Helper { args, data }) = input else {
             return Ok(());
         };
         let handle = session.handle();
@@ -759,6 +802,109 @@ fn bufferless_dispatch(guest: &Guest, id: OperationId) -> usize {
     *count
 }
 
+#[tokio::test]
+async fn lan_tools_require_consent_stage_over_pinned_ssh_and_preserve_retry_errors() {
+    let fixture = Fixture::new().await;
+    let service = Arc::new(
+        Service::open(fixture.directory.path().join("service.json"))
+            .await
+            .unwrap(),
+    );
+    let runtime = fixture.runtime(service).await;
+    let identity = fixture.guest.hello.identity;
+    let assets = fixture.directory.path().join("assets");
+    tokio::fs::create_dir(&assets).await.unwrap();
+    // Synthetic archive bytes test transport, not archive or desktop installation.
+    let mut bytes = vec![];
+    for (index, asset) in gbot_service::guest_assets::accepted()[1..]
+        .iter()
+        .enumerate()
+    {
+        let payload = vec![index as u8; 70_000];
+        tokio::fs::write(assets.join(&asset.filename), &payload)
+            .await
+            .unwrap();
+        bytes.push(payload);
+    }
+    runtime.configure_guest_assets(assets).unwrap();
+    assert!(matches!(
+        runtime
+            .prepare_lan_tools(identity.workspace_id, false)
+            .await,
+        Err(WorkspaceError::GuestSetup(_))
+    ));
+    assert!(fixture
+        .guest
+        .authenticated_algorithms
+        .lock()
+        .unwrap()
+        .is_empty());
+    *fixture.guest.setup_issue.lock().unwrap() = Some("sha256sum: checksum mismatch".into());
+    let rejected = runtime
+        .prepare_lan_tools(identity.workspace_id, true)
+        .await
+        .unwrap();
+    assert!(!rejected.installed);
+    assert!(rejected.command.is_none());
+    assert_eq!(
+        rejected.issue.as_deref(),
+        Some("Guest archive upload failed: sha256sum: checksum mismatch")
+    );
+    fixture.guest.setup_uploads.lock().unwrap().clear();
+    let staged = runtime
+        .prepare_lan_tools(identity.workspace_id, true)
+        .await
+        .unwrap();
+    assert_eq!(
+        staged.command,
+        Some(format!(
+            "sudo -- sh \"$HOME/.local/share/gbot/setup/{}/install.sh\"",
+            identity.workspace_id.as_uuid()
+        ))
+    );
+    assert!(!staged.installed);
+    assert!(staged.issue.is_none());
+    {
+        let uploads = fixture.guest.setup_uploads.lock().unwrap();
+        assert_eq!(&uploads[..2], bytes.as_slice());
+        assert_eq!(uploads.len(), 3);
+        let script = fixture.directory.path().join("staged-installer.sh");
+        std::fs::write(&script, &uploads[2]).unwrap();
+        assert!(std::process::Command::new("sh")
+            .arg("-n")
+            .arg(script)
+            .status()
+            .unwrap()
+            .success());
+    }
+    let missing = runtime
+        .check_lan_tools(identity.workspace_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        missing.issue.as_deref(),
+        Some("Gbot tools are not installed")
+    );
+    fixture
+        .guest
+        .setup_installed
+        .store(true, std::sync::atomic::Ordering::Release);
+    assert!(
+        runtime
+            .check_lan_tools(identity.workspace_id)
+            .await
+            .unwrap()
+            .installed
+    );
+    runtime.connect(identity).await.unwrap();
+    assert!(matches!(
+        runtime.prepare_lan_tools(identity.workspace_id, true).await,
+        Err(WorkspaceError::State(ServiceError::WorkspaceInUse))
+    ));
+    runtime.close().await.unwrap();
+    fixture.shutdown().await;
+}
+
 struct Fixture {
     directory: TempDir,
     address: SocketAddr,
@@ -852,6 +998,9 @@ impl Fixture {
             cua_active: std::sync::atomic::AtomicBool::new(false),
             reject_start: std::sync::atomic::AtomicBool::new(false),
             desktop_calls: Mutex::default(),
+            setup_uploads: Mutex::default(),
+            setup_issue: Mutex::default(),
+            setup_installed: std::sync::atomic::AtomicBool::new(false),
         });
         let handles = Arc::new(Mutex::new(Vec::new()));
         let config = Arc::new(server::Config {

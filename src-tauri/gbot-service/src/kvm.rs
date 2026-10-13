@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 pub const CUA_REVISION: &str = "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc";
 pub const CUA_DRIVER_REVISION: &str = "c549ab4d7f31a08c339da1732700b6664af438a6";
-const CLOUD_INIT: &str = include_str!("../guest/cloud-init.json");
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
@@ -123,19 +122,7 @@ impl KvmSpec {
 
     pub fn cloud_init(&self) -> io::Result<String> {
         self.validate()?;
-        let mut value: serde_json::Value = serde_json::from_str(CLOUD_INIT)?;
-        value["packages"]
-            .as_array_mut()
-            .ok_or_else(|| io::Error::other("guest package list is invalid"))?
-            .push(self.browser_package.clone().into());
-        value["packages"]
-            .as_array_mut()
-            .ok_or_else(|| io::Error::other("guest package list is invalid"))?
-            .push("mousepad".into());
-        value["write_files"].as_array_mut().ok_or_else(|| io::Error::other("guest setup is invalid"))?.push(serde_json::json!({
-            "path": "/usr/local/bin/gbot-operation", "owner": "root:root", "permissions": "0755",
-            "content": include_str!("../guest/operation.sh")
-        }));
+        let mut value = crate::guest_assets::desktop_config(&self.browser_package)?;
         value["hostname"] = format!("gbot-{}", self.id.simple()).into();
         value["users"][0]["ssh_authorized_keys"] = serde_json::json!([self.ssh_public_key]);
         let installer = value["write_files"]

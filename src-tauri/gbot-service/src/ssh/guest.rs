@@ -231,7 +231,19 @@ impl Drop for CommandWrite {
     }
 }
 
-async fn collect(client: &Client, command: &str, input: &[u8]) -> Result<(u32, Vec<u8>), SshError> {
+pub(super) async fn collect(
+    client: &Client,
+    command: &str,
+    input: &[u8],
+) -> Result<(u32, Vec<u8>), SshError> {
+    collect_stream(client, command, input).await
+}
+
+pub(super) async fn collect_stream<R: tokio::io::AsyncRead + Unpin>(
+    client: &Client,
+    command: &str,
+    input: R,
+) -> Result<(u32, Vec<u8>), SshError> {
     let channel = open_exec(client, command).await?;
     let (mut read, write) = channel.split();
     let write = CommandWrite(Some(write));

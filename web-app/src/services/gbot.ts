@@ -122,3 +122,9 @@ export function messageText(content: unknown): string {
       .join('\n')
   return ''
 }
+
+export type LanPreparation = {
+  command: string | null
+  installed: boolean
+  issue: string | null
+}

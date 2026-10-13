@@ -77,24 +77,13 @@ export default function GbotSetup({
     setError('')
     setConnection((previous) => ({ ...previous, [field]: value }))
   }
-  const port = Number(connection.port)
   const canContinue =
     step === 0
       ? Boolean(connection.name.trim())
       : step === 2
         ? computer === 'lan' || computer === 'local'
         : step === 3
-          ? computer === 'lan' &&
-            (lanReady ||
-              Boolean(
-                connection.hostname.trim() &&
-                  connection.user.trim() &&
-                  connection.key.trim() &&
-                  connection.hostKey.trim().split(/\s+/).length >= 2 &&
-                  Number.isInteger(port) &&
-                  port > 0 &&
-                  port <= 65535
-              ))
+          ? computer === 'lan' && lanReady
           : true
   const submit = async () => {
     if (saving || connecting || !canContinue) return
@@ -236,7 +225,8 @@ export default function GbotSetup({
             <dd>This PC</dd>
             <dt>Computer</dt>
             <dd>
-              {connection.user.trim()}@{connection.hostname.trim()}:{port}
+              {connection.user.trim()}@{connection.hostname.trim()}:
+              {Number(connection.port)}
             </dd>
             <dt>SSH host public key</dt>
             <dd className="break-all font-mono">{connection.hostKey.trim()}</dd>
