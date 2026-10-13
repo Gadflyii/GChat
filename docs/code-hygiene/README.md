@@ -6,7 +6,17 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-116 and OI-118 merge-ready
+## Current item — GCHAT-RELEASE-NAMES
+
+Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `063b6deac`.
+Candidate `fix/gchat-release-names-063b` in `/ai/gchat-worktrees/gbot-browser-physical-2e735`.
+Accept `qwen38_flash_next_180b_<int|nvfp4|smol>_mtp[_tp2|_tp4]` in catalog/profile matching;
+retain old Flash names until the artifact-owner cutover. Engine identities and launch settings stay unchanged.
+Gate: owning filename/profile and catalog tests once, CPU only. No Engine build, model copy or publication.
+Result: both owning Vitest files pass (124 cases); catalog discovery/load retains exact paths and 262144 native context.
+Evidence: `/ai/gchat/out/release-names-20261013/result.json`. Next: reviewed merge, then remove old aliases after C3's rename.
+
+## Previous item — OI-116 and OI-118 merge-ready
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
 Candidate `/ai/gchat-worktrees/review-remaining-712d5718`, branch

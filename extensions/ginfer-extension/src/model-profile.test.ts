@@ -26,6 +26,9 @@ describe('ginferModelProfile', () => {
   })
 
   it.each([
+    ...['int', 'nvfp4', 'smol'].flatMap((recipe) =>
+      degrees.map((degree) => `qwen38_flash_next_180b_${recipe}_mtp${degree}`)
+    ),
     ...['int', 'smol'].flatMap((recipe) =>
       degrees.map((degree) => `qwen38_flash_${recipe}_mtp${degree}`)
     ),
@@ -96,6 +99,14 @@ describe('ginferModelProfile', () => {
     'muse_glimmer_30b_smol_df2_tp2',
     'qwen38_flash_unknown_mtp',
     'qwen38_flash_int_mtp_tp8',
+    'qwen38_flash_next_180b_unknown_mtp',
+    'qwen38_flash_next_180b_int_df2',
+    'qwen38_flash_next_180b_int_mtp_tp1',
+    'qwen38_flash_next_180b_int_mtp_tp8',
+    'qwen38_flash_next_180b_nvfp4_mtp_TP2',
+    'qwen38_flash_next_180b_smol_mtp_backup',
+    'qwen38_flash_next_180b_smol_mtp.ginfer',
+    'qwen38_flash_next_18b_smol_mtp',
     'qwen38_flash_nvfp4_mtp_tp2',
     'qwen38_flash_nvfp4_mtp_tp4',
     'qwen3.8-flash-next-nvfp4-tp8-nv-kv',

@@ -104,6 +104,35 @@ describe('GInfer library model context and names', () => {
     expect(model).toMatchObject({ id, name: 'My local model', nativeContextTokens: context })
   })
 
+  it.each([
+    'qwen38_flash_next_180b_int_mtp',
+    'qwen38_flash_next_180b_smol_mtp',
+    'qwen38_flash_next_180b_nvfp4_mtp',
+    'qwen38_flash_next_180b_nvfp4_mtp_tp2',
+    'qwen38_flash_next_180b_nvfp4_mtp_tp4',
+    'qwen38_flash_int_mtp',
+    'qwen38_flash_smol_mtp',
+    'qwen3.8-flash-next-nvfp4-tp1-nv-kv',
+    'qwen3.8-flash-next-nvfp4-tp2-nv-kv',
+    'qwen3.8-flash-next-nvfp4-tp4-nv-kv',
+  ])('discovers and loads the exact Flash catalog path for %s', async (id) => {
+    const path = `/linux/models/${id}/${id}.ginfer`
+    config.locations = [{
+      modelId: id,
+      modelDir: `/linux/models/${id}`,
+      manifestPath: `/linux/models/${id}/model.yml`,
+    }]
+    config.value = { model_path: path, name: 'My Flash model' }
+    const extension = new GinferExtension()
+    const expected = { id, path, name: 'My Flash model', nativeContextTokens: 262_144 }
+    expect(await extension.list()).toMatchObject([expected])
+    expect(await extension.get(id)).toMatchObject(expected)
+    await extension.load(id)
+    expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
+      modelId: id, modelPath: path,
+    }))
+  })
+
   it('uses the registered artifact family even with a conflicting filename and label', async () => {
     config.value = {
       identity: { model_id: 'muse-glimmer-30b', weights_id: 'nvfp4-dflash-nvfp4' },
