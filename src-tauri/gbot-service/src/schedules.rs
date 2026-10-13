@@ -129,7 +129,35 @@ pub struct Schedules {
     revision: std::sync::atomic::AtomicU64,
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) struct WorkspaceRemovalGuard<'a> {
+    _state: tokio::sync::MutexGuard<'a, State>,
+}
+
 impl Schedules {
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn guard_workspace_removal(
+        &self,
+        id: WorkspaceId,
+    ) -> Result<WorkspaceRemovalGuard<'_>, WorkspaceError> {
+        let state = self.state.lock().await;
+        if state.journal.schedules.iter().any(|schedule| {
+            schedule.workspace_id == id
+                && ((schedule.enabled && schedule.next_at.is_some())
+                    || schedule.occurrences.iter().any(|occurrence| {
+                        !matches!(
+                            occurrence.state,
+                            OccurrenceState::Completed | OccurrenceState::Skipped
+                        )
+                    }))
+        }) {
+            return Err(WorkspaceError::State(
+                crate::service::ServiceError::WorkspaceInUse,
+            ));
+        }
+        Ok(WorkspaceRemovalGuard { _state: state })
+    }
+
     pub async fn open(path: PathBuf) -> Result<Self, WorkspaceError> {
         Self::open_at(path, now()).await
     }
@@ -611,6 +639,74 @@ mod tests {
             missed_run_policy: policy,
         }
     }
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn workspace_removal_requires_disabled_schedules_and_resolved_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        let assignment = assignment();
+        let schedules = Schedules::open_at(dir.path().join("schedules.json"), 100)
+            .await
+            .unwrap();
+        let schedule = schedules
+            .create_at(
+                input(
+                    &assignment,
+                    Timing::Interval {
+                        first_at: 200,
+                        every_seconds: 60,
+                    },
+                    MissedRunPolicy::SkipMissed,
+                ),
+                assignment.clone(),
+                100,
+            )
+            .await
+            .unwrap();
+        assert!(schedules
+            .guard_workspace_removal(assignment.workspace_id)
+            .await
+            .is_err());
+        schedules
+            .set_enabled_at(
+                SetEnabled {
+                    id: schedule.id,
+                    enabled: false,
+                },
+                100,
+            )
+            .await
+            .unwrap();
+        drop(
+            schedules
+                .guard_workspace_removal(assignment.workspace_id)
+                .await
+                .unwrap(),
+        );
+        for state in [
+            OccurrenceState::Queued,
+            OccurrenceState::Dispatching,
+            OccurrenceState::Dispatched,
+            OccurrenceState::NeedsReview,
+            OccurrenceState::Completed,
+            OccurrenceState::Skipped,
+        ] {
+            schedules.state.lock().await.journal.schedules[0].occurrences = vec![Occurrence {
+                task_id: Uuid::new_v4(),
+                due_at: 100,
+                state,
+                note: None,
+                retry_at: None,
+            }];
+            assert_eq!(
+                schedules
+                    .guard_workspace_removal(assignment.workspace_id)
+                    .await
+                    .is_ok(),
+                matches!(state, OccurrenceState::Completed | OccurrenceState::Skipped)
+            );
+        }
+    }
+
     fn fake_processes(effect: &std::path::Path) -> ExecutorProcesses {
         // Same JSON subprocess protocol used by TaskRunner's existing hermetic executor.
         ExecutorProcesses {

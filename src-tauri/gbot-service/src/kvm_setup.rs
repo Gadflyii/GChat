@@ -74,6 +74,8 @@ pub struct SetupRecord {
     pub name: String,
     pub service_id: Uuid,
     pub credential_ref: VaultCredentialRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_model_credential: Option<VaultCredentialRef>,
     pub identity: SessionIdentity,
     pub stage: SetupStage,
     pub issue: Option<SetupIssue>,
@@ -448,6 +450,7 @@ impl KvmSetup {
                     name: input.name.trim().into(),
                     service_id: self.service.snapshot().await.service_id,
                     credential_ref: VaultCredentialRef::new(),
+                    pending_model_credential: None,
                     identity: SessionIdentity {
                         workspace_id: input.id,
                         session_id: SessionId::new(),
@@ -1026,7 +1029,11 @@ impl KvmSetup {
                 return Err(SetupIssue::new("workspace_not_owned", "This workspace no longer belongs to this local setup.", "Resolve the workspace ownership before removing this setup."));
             }
             if let Some(runtime) = owner.runtime.upgrade() { let _ = runtime.disconnect(record.identity).await; }
-            owner.service.remove_owned_workspace(id, &owned_pc).await.map_err(|error| SetupIssue::new("workspace_in_use", error.to_string(), "Resolve attached model/accounts, unsettled operations and human control before removing this VM."))?;
+            let removal = owner.service.begin_owned_workspace_removal(id, &owned_pc).await.map_err(|error| SetupIssue::new("workspace_in_use", error.to_string(), "Resolve attached accounts, unsettled operations and human control before removing this VM."))?;
+            if let Some(credential) = removal.model_credential() {
+                record.pending_model_credential = Some(credential);
+                owner.save(record.clone()).await?;
+            }
             let directory = owner.root.join(id.as_uuid().to_string());
             let output = Command::new(&owner.tools.virsh).args(["--connect", "qemu:///session", "list", "--all", "--uuid"]).output().await.map_err(persistence)?;
             if !output.status.success() { return Err(SetupIssue::new("removal_unconfirmed", "Libvirt could not confirm owned guest registration.", "Restore the libvirt session, then retry removal.")); }
@@ -1038,7 +1045,12 @@ impl KvmSetup {
                 return Err(SetupIssue::new("removal_unconfirmed", "An incompletely prepared guest may still be registered.", "Resume the same setup to reconcile registration before removing its disk or key."));
             }
             if directory.exists() { fs::remove_dir_all(&directory).await.map_err(persistence)?; }
+            removal.commit().await.map_err(persistence)?;
+            if let Some(credential) = record.pending_model_credential {
+                owner.vault.delete(credential.as_uuid()).await.map_err(|error| SetupIssue::new("credential_cleanup", error.to_string(), "Unlock the vault and retry removal of this same setup."))?;
+            }
             owner.vault.delete(record.credential_ref.as_uuid()).await.map_err(|error| SetupIssue::new("credential_cleanup", error.to_string(), "Unlock the vault and retry removal of this same setup."))?;
+            record.pending_model_credential = None;
             owner.stage(&mut record, SetupStage::Removed).await?; Ok(())
             }.await;
             if let Err(issue) = result { record.issue = Some(issue.clone()); owner.save(record).await?; return Err(issue); }
@@ -1121,7 +1133,7 @@ mod tests {
     use crate::vault::VaultFuture;
     use std::os::unix::fs::PermissionsExt;
     #[derive(Default)]
-    struct MemoryVault(Mutex<BTreeMap<Uuid, Vec<u8>>>);
+    struct MemoryVault(Mutex<BTreeMap<Uuid, Vec<u8>>>, Mutex<Option<Uuid>>);
     impl Vault for MemoryVault {
         fn get(&self, id: Uuid) -> VaultFuture<'_, Option<Secret>> {
             Box::pin(async move { Ok(self.0.lock().await.get(&id).cloned().map(Secret::new)) })
@@ -1137,6 +1149,9 @@ mod tests {
         }
         fn delete(&self, id: Uuid) -> VaultFuture<'_, ()> {
             Box::pin(async move {
+                if self.1.lock().await.as_ref() == Some(&id) {
+                    return Err(crate::vault::VaultError::AccessDenied);
+                }
                 self.0.lock().await.remove(&id);
                 Ok(())
             })
@@ -1173,6 +1188,7 @@ mod tests {
             name: "Unfinished computer".into(),
             service_id: service.snapshot().await.service_id,
             credential_ref: VaultCredentialRef::new(),
+            pending_model_credential: None,
             identity,
             stage: SetupStage::TestingDesktop,
             issue: None,
@@ -1282,6 +1298,7 @@ mod tests {
             name: "Readiness".into(),
             service_id: service.snapshot().await.service_id,
             credential_ref: VaultCredentialRef::new(),
+            pending_model_credential: None,
             identity: SessionIdentity {
                 workspace_id: id,
                 session_id: SessionId::new(),
@@ -1437,19 +1454,24 @@ mod tests {
         );
     }
     #[tokio::test]
-    async fn removal_is_owned_durable_and_idempotent_after_failed_setup() {
+    async fn removal_preserves_brain_on_failure_and_retries_credential_cleanup() {
         let root = tempfile::tempdir().unwrap();
         let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
         let vault = Arc::new(MemoryVault::default());
-        let mut owner = KvmSetup::open(root.path().to_owned(), service, vault.clone(), Weak::new())
-            .await
-            .unwrap();
+        let mut owner = KvmSetup::open(
+            root.path().to_owned(),
+            service.clone(),
+            vault.clone(),
+            Weak::new(),
+        )
+        .await
+        .unwrap();
         let virsh = root.path().join("virsh");
         fs::write(&virsh, "#!/bin/sh\nexit 0\n").await.unwrap();
         fs::set_permissions(&virsh, std::fs::Permissions::from_mode(0o755))
             .await
             .unwrap();
-        owner.tools.virsh = virsh;
+        owner.tools.virsh = virsh.clone();
         let setup = Arc::new(owner);
         let id = WorkspaceId::new();
         let record = setup
@@ -1460,6 +1482,49 @@ mod tests {
             .await
             .unwrap();
         settled(&setup).await;
+        service
+            .register_workspace(WorkspaceConfig {
+                id,
+                name: record.name.clone(),
+                service_pc: ServicePc::Local,
+                bot_pc: BotPc::LocalVm {
+                    host_id: record.service_id,
+                    vm_id: id.as_uuid().to_string(),
+                    hypervisor: Hypervisor::Kvm,
+                },
+                connection: WorkspaceConnection::Ssh(SshConnection {
+                    endpoint: SshEndpoint {
+                        hostname: "127.0.0.1".into(),
+                        port: 2222,
+                        user: "gbot".into(),
+                    },
+                    pinned_host_key: SshHostPublicKey {
+                        algorithm: "ssh-ed25519".into(),
+                        public_key: "AAAA".into(),
+                    },
+                    credential_ref: record.credential_ref,
+                }),
+            })
+            .await
+            .unwrap();
+        let brain_key = VaultCredentialRef::new();
+        let assignment = crate::service::ModelAssignment {
+            workspace_id: id,
+            connection: crate::inference::ModelConnection::Endpoint {
+                api_base: "http://fixture/v1".into(),
+            },
+            model: "fixture".into(),
+            context_tokens: 131072,
+            credential_ref: Some(brain_key),
+        };
+        service
+            .save_model_assignment(assignment.clone())
+            .await
+            .unwrap();
+        vault
+            .put(brain_key.as_uuid(), Secret::new(b"brain key".to_vec()))
+            .await
+            .unwrap();
         let directory = setup.root.join(id.as_uuid().to_string());
         fs::create_dir(&directory).await.unwrap();
         fs::write(directory.join("partial.img"), "owned interrupted disk")
@@ -1478,8 +1543,53 @@ mod tests {
             setup.remove(WorkspaceId::new()).await.unwrap_err().code,
             "setup_missing"
         );
+        fs::write(&virsh, "#!/bin/sh\nexit 1\n").await.unwrap();
+        assert_eq!(
+            setup.remove(id).await.unwrap_err().code,
+            "removal_unconfirmed"
+        );
+        assert_eq!(
+            service.model_assignment(id).await.unwrap(),
+            Some(assignment)
+        );
+        assert!(directory.exists());
+        fs::write(&virsh, "#!/bin/sh\nexit 0\n").await.unwrap();
+        *vault.1.lock().await = Some(brain_key.as_uuid());
+        assert_eq!(
+            setup.remove(id).await.unwrap_err().code,
+            "credential_cleanup"
+        );
+        assert!(service.snapshot().await.assignments.is_empty());
+        assert!(!directory.exists());
+        let saved = setup
+            .store
+            .load::<Vec<SetupRecord>>()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            saved
+                .iter()
+                .find(|record| record.id == id)
+                .unwrap()
+                .pending_model_credential,
+            Some(brain_key)
+        );
+        drop(setup);
+        *vault.1.lock().await = None;
+        let mut owner = KvmSetup::open(
+            root.path().to_owned(),
+            service.clone(),
+            vault.clone(),
+            Weak::new(),
+        )
+        .await
+        .unwrap();
+        owner.tools.virsh = virsh;
+        let setup = Arc::new(owner);
         assert_eq!(setup.remove(id).await.unwrap().stage, SetupStage::Removed);
         assert_eq!(setup.remove(id).await.unwrap().stage, SetupStage::Removed);
+        assert!(vault.get(brain_key.as_uuid()).await.unwrap().is_none());
         assert!(!directory.exists());
         assert!(unrelated.exists());
         assert!(vault
