@@ -192,6 +192,35 @@ pub(super) async fn connect(root: &Path) -> Result<Client, String> {
     Ok(client)
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) async fn credential_control(
+    root: &Path,
+    operation: &str,
+    passphrase: Option<&str>,
+) -> Result<(), String> {
+    if !root.join("gbot/service.json").exists() {
+        return Ok(());
+    }
+    let client = match connect(root).await {
+        Ok(client) => client,
+        // A stopped process has no unlocked key to clear or update.
+        Err(error) if error.contains("connection lost") || error.contains("not responding") => {
+            return Ok(())
+        }
+        Err(error) => return Err(error),
+    };
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        client.call(
+            &format!("/v1/credentials/{operation}"),
+            serde_json::json!({"passphrase": passphrase}),
+        ),
+    )
+    .await
+    .map_err(|_| "Gbot secure storage did not respond; reconnect before continuing".to_string())?
+    .map(|_| ())
+}
+
 pub(super) async fn ensure_running(root: &Path, resources: &Path) -> Result<Client, String> {
     if !root.is_absolute() || !resources.is_absolute() {
         return Err("Gbot requires the exact absolute GChat data and resource folders".into());
@@ -233,6 +262,13 @@ pub(super) async fn ensure_running(root: &Path, resources: &Path) -> Result<Clie
             .arg(root)
             .arg("--resources")
             .arg(resources);
+        #[cfg(target_os = "linux")]
+        let session_key = {
+            command.arg("--credential-session-stdin");
+            super::super::engine_hosts::initialize_credentials()?
+                .session_key()
+                .map_err(|e| e.to_string())?
+        };
         let mut options = std::fs::OpenOptions::new();
         options.create(true).append(true);
         #[cfg(unix)]
@@ -250,6 +286,8 @@ pub(super) async fn ensure_running(root: &Path, resources: &Path) -> Result<Clie
             ))
             .stderr(Stdio::from(log))
             .kill_on_drop(false);
+        #[cfg(target_os = "linux")]
+        command.stdin(Stdio::piped());
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
@@ -265,6 +303,24 @@ pub(super) async fn ensure_running(root: &Path, resources: &Path) -> Result<Clie
                 .spawn()
                 .map_err(|error| format!("Could not start Gbot service: {error}"))?,
         );
+        #[cfg(target_os = "linux")]
+        if let Some(process) = child.as_mut() {
+            use tokio::io::AsyncWriteExt;
+            let mut input = process
+                .stdin
+                .take()
+                .ok_or("Gbot credential channel unavailable")?;
+            if let Some(key) = session_key {
+                input
+                    .write_all(&key)
+                    .await
+                    .map_err(|_| "Gbot credential channel closed")?;
+            }
+            input
+                .shutdown()
+                .await
+                .map_err(|_| "Gbot credential channel closed")?;
+        }
     }
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
     loop {
@@ -304,6 +360,8 @@ pub(super) async fn ensure_running(root: &Path, resources: &Path) -> Result<Clie
 struct ServiceArgs {
     #[arg(long)]
     data_folder: PathBuf,
+    #[arg(long)]
+    credential_session_stdin: bool,
     #[arg(
         long,
         conflicts_with = "appimage_resources",
@@ -314,10 +372,36 @@ struct ServiceArgs {
     appimage_resources: Option<PathBuf>,
 }
 
-async fn serve(root: PathBuf, resources: PathBuf) -> Result<(), String> {
+async fn serve(
+    root: PathBuf,
+    resources: PathBuf,
+    credential_session_stdin: bool,
+) -> Result<(), String> {
     if !root.is_absolute() || !resources.is_absolute() {
         return Err("Gbot requires absolute data and resource folders".into());
     }
+    let store = super::super::engine_hosts::initialize_credentials()?;
+    #[cfg(target_os = "linux")]
+    if credential_session_stdin {
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
+            use std::io::Read;
+            let mut bytes = jan_utils::credential_store::Zeroizing::new(Vec::new());
+            std::io::stdin()
+                .take(49)
+                .read_to_end(&mut bytes)
+                .map_err(|_| "Gbot credential channel unavailable")?;
+            if !bytes.is_empty() {
+                store
+                    .accept_session_key(&bytes)
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (store, credential_session_stdin);
     let directory = root.join("gbot");
     let _owner = ServiceOwner::acquire(&directory)?;
     let service = Arc::new(
@@ -397,7 +481,11 @@ pub fn run_service_mode() -> Option<std::process::ExitCode> {
             .enable_all()
             .build()
             .map_err(|error| error.to_string())?
-            .block_on(serve(args.data_folder, resources))
+            .block_on(serve(
+                args.data_folder,
+                resources,
+                args.credential_session_stdin,
+            ))
     });
     Some(match result {
         Ok(()) => std::process::ExitCode::SUCCESS,

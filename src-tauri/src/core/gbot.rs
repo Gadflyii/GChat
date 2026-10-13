@@ -5,6 +5,8 @@ use tokio::sync::Mutex;
 
 mod background;
 mod inference;
+#[cfg(target_os = "linux")]
+pub(crate) use background::credential_control;
 pub use background::run_service_mode;
 pub(crate) use background::Client;
 

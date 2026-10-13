@@ -7,6 +7,7 @@ license = "Apache-2.0"
 description = "GChat's local-first bot workspace service"
 
 [dependencies]
+jan-utils = { path = "../utils" }
 cua-spacesd-client = { path = "../vendor/cua-media/crates/cua-spacesd-client" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -599,6 +599,54 @@ async fn route(
         );
         return Ok(response);
     }
+    #[cfg(target_os = "linux")]
+    if request.method() == Method::POST
+        && matches!(
+            request.uri().path(),
+            "/v1/credentials/unlock" | "/v1/credentials/lock"
+        )
+    {
+        let unlock = request.uri().path().ends_with("/unlock");
+        let Some(mut arguments) = parse_body::<serde_json::Value>(request).await else {
+            return Ok(invalid_request());
+        };
+        let passphrase = arguments
+            .as_object_mut()
+            .and_then(|args| args.remove("passphrase"))
+            .and_then(|value| match value {
+                serde_json::Value::String(value) => {
+                    Some(jan_utils::credential_store::Zeroizing::new(value))
+                }
+                _ => None,
+            });
+        let result = tokio::task::spawn_blocking(move || {
+            let store = jan_utils::credential_store::shared()?;
+            if unlock {
+                store.unlock(
+                    passphrase
+                        .as_ref()
+                        .ok_or(jan_utils::credential_store::Error::InvalidData)?
+                        .as_bytes(),
+                )
+            } else {
+                store.lock()
+            }
+        })
+        .await;
+        return Ok(match result {
+            Ok(Ok(())) => json_response(StatusCode::OK, &serde_json::json!({"ready": unlock})),
+            Ok(Err(error)) => error_response(
+                StatusCode::BAD_REQUEST,
+                "credential_store",
+                &error.to_string(),
+            ),
+            Err(_) => error_response(
+                StatusCode::BAD_REQUEST,
+                "credential_store",
+                "Secure storage did not respond",
+            ),
+        });
+    }
     let native_operation = request
         .uri()
         .path()
@@ -1130,6 +1178,75 @@ mod tests {
     }
 
     struct LockedVault(bool);
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn credential_control_requires_auth_and_recovers_after_lock() {
+        let root = tempfile::tempdir().unwrap();
+        let store = jan_utils::credential_store::initialize(root.path()).unwrap();
+        store.create_or_migrate(b"fixture passphrase", &[]).unwrap();
+        store
+            .put("app.gchat.gbot", "fixture", b"private bytes")
+            .unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let api = Api::bind(service, Arc::new(MemoryVault::default()), 0)
+            .await
+            .unwrap();
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/credentials/lock")
+            .body(Body::from("{}"))
+            .unwrap();
+        let response = route(
+            api.service.clone(),
+            api.runtime.clone(),
+            api.tasks.clone(),
+            api.token.clone(),
+            request,
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert!(store.status().ready);
+        let client = api.client();
+        assert_eq!(
+            client
+                .call("/v1/credentials/lock", serde_json::json!({}))
+                .await
+                .unwrap()["ready"],
+            false
+        );
+        assert!(matches!(
+            store.get("app.gchat.gbot", "fixture"),
+            Err(jan_utils::credential_store::Error::Locked)
+        ));
+        assert!(client
+            .call(
+                "/v1/credentials/unlock",
+                serde_json::json!({"passphrase": "wrong"})
+            )
+            .await
+            .is_err());
+        assert!(!store.status().ready);
+        assert_eq!(
+            client
+                .call(
+                    "/v1/credentials/unlock",
+                    serde_json::json!({"passphrase": "fixture passphrase"})
+                )
+                .await
+                .unwrap()["ready"],
+            true
+        );
+        assert_eq!(
+            store
+                .get("app.gchat.gbot", "fixture")
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"private bytes"
+        );
+    }
 
     #[tokio::test]
     async fn unfinished_computer_returns_a_typed_conflict() {

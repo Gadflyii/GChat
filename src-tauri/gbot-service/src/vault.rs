@@ -5,11 +5,11 @@ use uuid::Uuid;
 pub const VAULT_SERVICE: &str = "app.gchat.gbot";
 
 /// Secret bytes cross only the native vault/transport boundary.
-pub struct Secret(Vec<u8>);
+pub struct Secret(jan_utils::credential_store::Zeroizing<Vec<u8>>);
 
 impl Secret {
     pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
+        Self(jan_utils::credential_store::Zeroizing::new(bytes))
     }
 
     pub fn expose_secret(&self) -> &[u8] {
@@ -52,17 +52,14 @@ pub trait Vault: Send + Sync {
 
 pub struct NativeVault;
 
-fn storage_error(error: keyring::Error) -> VaultError {
-    // Provider errors can contain credential data; never retain or format them.
+fn storage_error(error: jan_utils::credential_store::Error) -> VaultError {
+    use jan_utils::credential_store::Error;
     match error {
-        keyring::Error::NoStorageAccess(_) => VaultError::AccessDenied,
-        keyring::Error::PlatformFailure(_) => VaultError::Unavailable,
-        keyring::Error::NoEntry => VaultError::Missing,
-        keyring::Error::BadEncoding(_)
-        | keyring::Error::TooLong(_, _)
-        | keyring::Error::Invalid(_, _) => VaultError::InvalidData,
-        keyring::Error::Ambiguous(_) => VaultError::Ambiguous,
-        _ => VaultError::Unavailable,
+        Error::Locked => VaultError::AccessDenied,
+        Error::Missing => VaultError::Missing,
+        Error::InvalidData => VaultError::InvalidData,
+        Error::Conflict => VaultError::Ambiguous,
+        Error::MissingProvider | Error::Unavailable => VaultError::Unavailable,
     }
 }
 
@@ -77,32 +74,31 @@ async fn blocking<T: Send + 'static>(
 impl Vault for NativeVault {
     fn get(&self, reference: Uuid) -> VaultFuture<'_, Option<Secret>> {
         Box::pin(blocking(move || {
-            let entry = keyring::Entry::new(VAULT_SERVICE, &reference.to_string())
-                .map_err(storage_error)?;
-            match entry.get_secret() {
-                Ok(bytes) => Ok(Some(Secret::new(bytes))),
-                Err(keyring::Error::NoEntry) => Ok(None),
-                Err(error) => Err(storage_error(error)),
-            }
-        }))
-    }
-
-    fn put(&self, reference: Uuid, secret: Secret) -> VaultFuture<'_, ()> {
-        Box::pin(blocking(move || {
-            keyring::Entry::new(VAULT_SERVICE, &reference.to_string())
-                .and_then(|entry| entry.set_secret(secret.expose_secret()))
+            jan_utils::credential_store::shared()
+                .map_err(storage_error)?
+                .get(VAULT_SERVICE, &reference.to_string())
+                .map(|bytes| bytes.map(Secret))
                 .map_err(storage_error)
         }))
     }
-
+    fn put(&self, reference: Uuid, secret: Secret) -> VaultFuture<'_, ()> {
+        Box::pin(blocking(move || {
+            jan_utils::credential_store::shared()
+                .map_err(storage_error)?
+                .put(
+                    VAULT_SERVICE,
+                    &reference.to_string(),
+                    secret.expose_secret(),
+                )
+                .map_err(storage_error)
+        }))
+    }
     fn delete(&self, reference: Uuid) -> VaultFuture<'_, ()> {
         Box::pin(blocking(move || {
-            let entry = keyring::Entry::new(VAULT_SERVICE, &reference.to_string())
-                .map_err(storage_error)?;
-            match entry.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-                Err(error) => Err(storage_error(error)),
-            }
+            jan_utils::credential_store::shared()
+                .map_err(storage_error)?
+                .delete(VAULT_SERVICE, &reference.to_string())
+                .map_err(storage_error)
         }))
     }
 }
@@ -166,9 +162,7 @@ mod tests {
         vault.delete(reference).await.unwrap();
         assert!(vault.get(reference).await.unwrap().is_none());
 
-        let locked = storage_error(keyring::Error::NoStorageAccess(Box::new(
-            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "fixture-private-key"),
-        )));
+        let locked = storage_error(jan_utils::credential_store::Error::Locked);
         assert_eq!(locked, VaultError::AccessDenied);
         assert_eq!(
             locked.to_string(),

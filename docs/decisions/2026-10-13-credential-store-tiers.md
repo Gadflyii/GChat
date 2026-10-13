@@ -1,27 +1,28 @@
 ---
 date: 2026-10-13
 title: "Support Linux credential storage without requiring a desktop keyring"
-status: proposed
+status: accepted
 ---
 
-# Credential-store tiers — proposal for review
+# Credential-store tiers
 
 **Owner:** GChat. **Scope:** GCHAT-SECRET-STORE, including paired-Host grants,
-Gbot secrets and connector tokens. No implementation, dependency change or
-Windows build is authorized by this proposal.
+Gbot secrets and connector tokens. Linux implementation and the named locked
+dependencies are approved. The WSL Windows helper waits for the Windows release
+gate; no native Windows build is authorized during this development item.
 
 **Context.** Stock WSL lacked `org.freedesktop.secrets`, blocking native pairing.
-Installing and unlocking gnome-keyring resolved the test prerequisite. Current
-Chat/Manager readiness probes and setup guidance exist; they do not provide a
-backend when Secret Service is absent. Existing vault adapters also cover Gbot
-and workspace connectors separately.
+Installing and unlocking gnome-keyring resolved the test prerequisite. The
+shared store now owns Chat/Manager readiness and the adapters used by Gbot and
+workspace connectors. An explicit encrypted vault supplies storage when
+Secret Service is absent.
 
 ## Selection and user experience
 
-| Environment | Proposed storage | User action |
+| Environment | Current storage | User action |
 | --- | --- | --- |
 | Linux, including WSL, with Secret Service | Existing Secret Service entries | Unlock the provider if needed |
-| WSL without Secret Service | Encrypted Linux vault; its random vault key is held in Windows Credential Manager | Confirm Windows-backed storage; require working WSL interop |
+| WSL without Secret Service | Passphrase-encrypted Linux vault | Choose a passphrase; Windows-backed unlock is deferred |
 | Linux without either provider | Same encrypted vault; random vault key wrapped by a passphrase-derived key | Choose a passphrase or install a Secret Service provider |
 | Native Windows | Existing Windows Credential Manager entries | Existing Windows behavior |
 
@@ -42,7 +43,7 @@ Keep locked `keyring` **3.6.3**, `sync-secret-service`, `crypto-rust`, `vendored
 and `windows-native`. Do not enable a session-only Linux keyutils fallback.
 Run blocking native operations off the async executor and serialize writes.
 
-Package a versioned `gchat-windows-credential-helper.exe` as an explicit Linux
+**Deferred Windows release work:** package a versioned `gchat-windows-credential-helper.exe` as an explicit Linux
 DEB/AppImage resource, produced and qualified at the Windows release gate.
 Resolve only that packaged path; use direct WSL interop, no shell, elevation or
 search of arbitrary Windows installations. A private stdin/stdout protocol
@@ -54,8 +55,7 @@ its [credential blob limit is 2,560 bytes](https://learn.microsoft.com/en-us/win
 Use user-local persistence and a vault UUID to distinguish WSL stores.
 
 The encrypted store lives in a private `credentials/` subdirectory of that
-registry root. Reuse locked AES-256-GCM/Argon2id/zeroize crates after dependency
-review; no custom cryptography. Version KDF parameters; use random salt/nonces
+registry root. Use approved locked AES-256-GCM/Argon2id/zeroize crates; no custom cryptography. Version KDF parameters; use random salt/nonces
 and authenticated record identity. Headless passphrases and unlocked keys stay
 in process memory and are cleared on lock/exit, never saved beside ciphertext.
 Each process must unlock; Gbot's existing authenticated local control accepts
@@ -73,10 +73,17 @@ source deletion is a subsequent explicit cleanup. Missing or locked source
 entries require recovery or deliberate reconnect, never newly issued grants
 without consent. Connector and bot account bindings remain unchanged.
 
-After review: focused tier/locked-provider and interrupted-migration fixtures;
-encrypted round-trip/tamper/wrong-passphrase and concurrent-write cases; one
-WSL helper grant/key round-trip and unavailable-interop case at the Windows
-release gate. No physical gate or code test is needed for this design-only item.
-**Next decision:** approve the tiers, shared owner, helper packaging and migration
-before implementation. Existing native-Windows large-secret limitations are
-unchanged; qualify RSA import separately at its release gate.
+Linux gates cover tier/locked-provider behavior, interrupted migration,
+encrypted round-trip/tamper/wrong-passphrase, concurrent writes and setup/control.
+See [current acceptance](../agent-runtime/remaining-acceptance.md) for results.
+Windows helper grant/key round-trip, unavailable interop and native cancellation/
+lifetime checks remain owed to the Windows release gate. Existing native-Windows
+large-secret limitations are unchanged; qualify RSA import there separately.
+
+The approved dependency pins are keyring 3.6.3, zeroize 1.9.1, aes-gcm 0.11.1,
+argon2 0.6.0 and Linux dbus 0.9.12. The Cargo.lock change adds dependency edges
+only, without new packages or version changes, and is submitted for merge review.
+Passphrase keys use Argon2id with versioned parameters and AES-256-GCM wrapping;
+records bind ciphertext to their vault and credential identity. Gbot receives an
+unlocked session key through private child stdin and supports authenticated
+lock/unlock on its existing loopback control channel; no clear key is written.

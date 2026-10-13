@@ -245,6 +245,28 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     dialog(title, description, [], title, () => run(request, success))
   }
 
+  async function secureStorage() {
+    const status = await run({ action: 'secure_storage' }, '')
+    if (status.tier === 'passphrase' && !status.ready) {
+      dialog('Unlock secure storage', 'Unlock Manager’s passphrase vault. Each app unlocks separately; your passphrase is never saved.',
+        [field('Passphrase', 'passphrase', '', 'password', { required: '', autocomplete: 'current-password' })], 'Unlock', async (form) => {
+          const passphrase = fieldValue(form, 'passphrase')
+          form.elements.namedItem('passphrase').value = ''
+          const result = await run({ action: 'secure_storage', operation: 'unlock', passphrase }, 'Secure storage is ready')
+          if (!result.ready) throw new Error(result.error || 'Secure storage is unavailable')
+        })
+    } else if (status.tier === 'passphrase') {
+      dialog('Secure storage', 'Lock the vault in Manager. Other apps keep their own unlock state.', [], 'Lock vault',
+        () => run({ action: 'secure_storage', operation: 'lock' }, 'Manager’s vault is locked'))
+    } else {
+      dialog('Secure storage', status.ready ? 'Your desktop keyring is ready. To create or migrate to a passphrase vault, open secure storage setup in GChat.' :
+        `${status.error || 'Secure storage is unavailable'}. Unlock your keyring, or create a passphrase vault in GChat.`, [], 'Check again', async () => {
+          const result = await run({ action: 'secure_storage' }, '')
+          if (!result.ready) throw new Error(result.error || 'Secure storage is unavailable')
+        })
+    }
+  }
+
   function pair(discovered = null) {
     if (discovered) {
       run({ action: 'pair', host_id: discovered.host_id, base_url: discovered.urls?.[0] || null, client_name: null }, 'Host paired')
@@ -260,7 +282,11 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         secureStatus.textContent = ''
         secureStatus.className = 'muted'
         secureStatus.setAttribute('role', 'status')
-        try { await run({ action: 'secure_storage' }, 'Secure storage is ready'); secureStatus.textContent = 'Secure storage is ready' }
+        try {
+          const result = await run({ action: 'secure_storage' }, '')
+          if (!result.ready) throw new Error(result.error || 'Secure storage is unavailable')
+          secureStatus.textContent = 'Secure storage is ready'
+        }
         catch (error) {
           secureStatus.className = 'section-error'
           secureStatus.setAttribute('role', 'alert')
@@ -826,7 +852,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     const nearby = array(state.view.discovered).filter((entry) => !observation().hosts.has(entry.host_id) && !state.ignored.has(entry.host_id))
     const header = h('header', {}, h('div', { class: 'brand' }, h('img', { src: 'icon.png', alt: '' }),
       h('div', {}, h('strong', {}, 'GInfer Server Manager'), h('small', {}, `${hosts.filter(online).length} of ${hosts.length} hosts online`))),
-      h('div', { class: 'actions' }, state.busy ? h('span', { class: 'muted', role: 'status' }, 'Working…') : null, button('Refresh', refresh)))
+      h('div', { class: 'actions' }, state.busy ? h('span', { class: 'muted', role: 'status' }, 'Working…') : null,
+        button('Secure storage', () => secureStorage().catch(() => {})), button('Refresh', refresh)))
     const sidebar = h('aside', {}, h('div', { class: 'eyebrow' }, 'Hosts'), hosts.map((entry) => h('button', {
       type: 'button', class: `host-button ${state.selected === entry.host_id ? 'selected' : ''}`, onclick: () => {
         state.selected = entry.host_id; savePreference('host', state.selected); render()

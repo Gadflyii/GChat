@@ -4,8 +4,9 @@
 prerequisites and distinguishes saved source evidence from installed replay.
 
 [Credential-store tiers](../decisions/2026-10-13-credential-store-tiers.md) is the
-current one-page proposal for Secret Service, WSL Windows-backed storage and
-encrypted headless storage. Implementation awaits review. OI-069's two-Host
+approved shared-store design. Linux now supports Secret Service or an explicit
+passphrase-encrypted vault; WSL uses these Linux tiers until the Windows helper
+release gate. Focused verification and integration status are recorded below. OI-069's two-Host
 worker gate passes; simultaneous independent-workstation clients remain owed.
 
 The [updater offline metadata gate](remaining-acceptance.md#updater-offline-metadata-gate--october-12)

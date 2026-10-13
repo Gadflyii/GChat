@@ -2,7 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { engineCommand } from '@/services/engines'
 
-type Status = { ready: boolean; platform: string; can_install: boolean; error?: string }
+type Status = {
+  ready: boolean
+  platform: string
+  can_install: boolean
+  tier?: 'native' | 'passphrase' | null
+  state?: string
+  can_create?: boolean
+  migrating?: boolean
+  error?: string
+}
 
 /** Shared first-run and pairing prerequisite. Skipping never authorizes pairing. */
 export function CredentialSetup({ onReady }: { onReady?: (ready: boolean) => void }) {
@@ -11,6 +20,9 @@ export function CredentialSetup({ onReady }: { onReady?: (ready: boolean) => voi
   const [skipped, setSkipped] = useState(false)
   const [guide, setGuide] = useState(false)
   const [message, setMessage] = useState('')
+  const [intent, setIntent] = useState<'create' | 'unlock'>()
+  const [passphrase, setPassphrase] = useState('')
+  const [confirmation, setConfirmation] = useState('')
   const check = useCallback(async () => {
     setBusy(true)
     onReady?.(false)
@@ -33,16 +45,59 @@ export function CredentialSetup({ onReady }: { onReady?: (ready: boolean) => voi
     } catch (error) { setMessage(String(error)) }
     finally { setBusy(false) }
   }
-  if (status?.ready) return <p className="text-sm text-muted-foreground" role="status">Secure credential storage is ready for LAN pairing.</p>
+  const change = async (action: 'create' | 'unlock' | 'lock') => {
+    if (action === 'create' && !status?.migrating && passphrase !== confirmation) {
+      setMessage('The passphrases do not match.')
+      return
+    }
+    const secret = passphrase
+    setPassphrase('')
+    setConfirmation('')
+    setMessage('')
+    setBusy(true)
+    onReady?.(false)
+    try {
+      const result = await engineCommand<Status>(`credential_${action}`,
+        action === 'lock' ? {} : { passphrase: secret, ...(action === 'create' ? { confirmed: true } : {}) })
+      setStatus(result)
+      onReady?.(result.ready === true)
+      setIntent(undefined)
+    } catch (error) {
+      setMessage(String(error))
+      await check()
+    } finally { setBusy(false) }
+  }
+  const choose = (action: 'create' | 'unlock') => {
+    setIntent(action)
+    setPassphrase('')
+    setConfirmation('')
+    setMessage('')
+  }
+  if (status?.ready && !intent) return <div className="space-y-2">
+    <p className="text-sm text-muted-foreground" role="status">Secure credential storage is ready for LAN pairing.</p>
+    {status.tier === 'passphrase' && <Button variant="outline" disabled={busy} onClick={() => void change('lock')}>Lock vault</Button>}
+    {status.tier === 'native' && status.platform === 'linux' && <Button variant="outline" disabled={busy} onClick={() => choose('create')}>Use a passphrase vault</Button>}
+    {!!message && <p role="alert" className="text-sm">{message}</p>}
+  </div>
   if (skipped) return <div className="text-sm"><p>LAN pairing needs secure storage. Local models remain available.</p><Button variant="outline" onClick={() => setSkipped(false)}>Set up secure storage</Button></div>
   return <section className="rounded-lg border p-4 space-y-3" aria-label="Secure storage setup">
     <h3 className="font-medium">Secure storage for your LAN connections</h3>
-    <p className="text-sm text-muted-foreground">GChat stores pairing credentials in your desktop keyring, never in plain text. This is needed only on this computer, not your inference servers. Your desktop may ask you to unlock its keyring.</p>
+    <p className="text-sm text-muted-foreground">Use your desktop keyring or an encrypted passphrase vault for pairing credentials, connector tokens and Gbot keys. Your selected store remains selected when it is locked or unavailable.</p>
     {busy && <p role="status">Checking or setting up secure storage…</p>}
-    {!busy && status && <p role="alert">Secure storage is unavailable. Set it up or unlock it before pairing.</p>}
+    {!busy && status && !status.ready && <p role="alert">Secure storage is unavailable. Set it up or unlock it before pairing.</p>}
+    {(status?.tier === 'passphrase' || intent === 'create' || status?.migrating) && <p className="text-sm">Credentials are encrypted with your passphrase. Unlock after restarting; unattended tasks wait until then. Keep your passphrase safe: losing it requires reconnecting your accounts and hosts.</p>}
+    {intent && <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void change(intent) }}>
+      {intent === 'create' && <p className="text-sm">{status?.migrating ? 'Resume the interrupted migration using the same vault passphrase.' : 'Create the vault and copy referenced credentials. GChat switches stores only after every copy verifies and keeps the original keyring entries.'}</p>}
+      <label className="block text-sm">Passphrase<input className="block w-full rounded-md border bg-background p-2" type="password" required autoComplete={intent === 'create' && !status?.migrating ? 'new-password' : 'current-password'} value={passphrase} onChange={(event) => setPassphrase(event.target.value)} /></label>
+      {intent === 'create' && !status?.migrating && <label className="block text-sm">Confirm passphrase<input className="block w-full rounded-md border bg-background p-2" type="password" required autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>}
+      <div className="flex gap-2"><Button type="submit" disabled={busy}>{intent === 'unlock' ? 'Unlock vault' : status?.migrating ? 'Resume migration' : 'Create passphrase vault'}</Button><Button type="button" variant="ghost" disabled={busy} onClick={() => { setIntent(undefined); setPassphrase(''); setConfirmation('') }}>Cancel</Button></div>
+    </form>}
     {status?.can_install && <p className="text-sm">Automatic setup installs GNOME Keyring through your system package manager. Clicking below requests administrator approval; nothing is installed silently.</p>}
     <div className="flex flex-wrap gap-2">
-      <Button disabled={busy} onClick={() => status?.can_install ? void install() : setGuide(true)}>Set up secure storage</Button>
+      {!intent && status?.tier === 'passphrase' && <Button disabled={busy} onClick={() => choose('unlock')}>Unlock vault</Button>}
+      {!intent && status?.migrating && <Button disabled={busy} onClick={() => choose('create')}>Resume migration</Button>}
+      {!intent && status?.can_create && !status.migrating && <Button disabled={busy} onClick={() => choose('create')}>Use a passphrase vault</Button>}
+      {status?.tier !== 'passphrase' && <Button disabled={busy} onClick={() => status?.can_install ? void install() : setGuide(true)}>Set up secure storage</Button>}
       <Button variant="outline" disabled={busy} onClick={() => void check()}>Check again</Button>
       <Button variant="ghost" onClick={() => setSkipped(true)}>Skip for now</Button>
     </div>
