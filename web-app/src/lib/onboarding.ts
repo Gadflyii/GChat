@@ -16,7 +16,7 @@ type ProviderLike = {
  */
 export function hasValidProviders(providers: ProviderLike[]): boolean {
   return providers.some((provider) => {
-    if (provider.provider === 'ginfer') return true
+    if (provider.provider === 'ginfer') return provider.models.length > 0
     if (!isKnownProvider(provider.provider)) {
       return provider.models.length > 0
     }
