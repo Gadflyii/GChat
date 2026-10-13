@@ -30,12 +30,12 @@ Current prototype evidence and retained paths are in the [design record](README.
 | Cloud bot computer | **KEEP** | Our cloud-init and provider attachment/provisioning boundary: Hetzner/DigitalOcean, guided Azure/AWS/GCP, live cost confirmation. Cua's managed Fleet is a different hosting product; it is not our user-rented provider integration. No Cua account or relay for LAN. |
 | Windows guest and M365 Cloud PC connection | **KEEP** | Hyper-V guest setup and the selected Windows 365 connection/session/view route remain GChat work. Adopt Driver's Windows control inside the bot session; do not claim that the SDK or viewer supplies a Windows 365 connector. |
 | Guest desktop image | **KEEP**, borrow Cua settings | Keep Debian 13 + localhost-only Xvnc + XFCE and its session environment. Borrow relevant packages/settings from `libs/xfce-cua`; do not replace it with the container image or older Spaces image. |
-| Computer-agent loop | **WRAP** | `cua_agent.ComputerAgent` owns model/action iteration, tool dispatch and event callbacks. The Gbot service hosts it and journals state; retire the Gbot-specific model/tool iteration once the Cua route passes. Leave ordinary Chat/Studio/Code execution unchanged. |
+| Computer-agent loop | **WRAP** | `cua_agent.ComputerAgent` owns model/action iteration, tool dispatch and event callbacks. The accepted Gbot executor hosts it and journals state. Ordinary Chat/Studio/Code retains its shared runtime. |
 | GInfer model provider | **WRAP** | Assigned OpenAI-compatible endpoint/key/model supplied by GChat. Cua accepts `api_base`/`api_key`, but its generic VLM loop injects screenshots. The merged function-tool provider supplies the tested text-only AT-SPI route; exact desktop and two Cua evaluator receipts pass. |
 | Desktop capture, input and accessibility | **ADOPT** | Pinned Cua Driver over persistent stdio MCP/SSH, with the selected desktop environment. AT-SPI observations plus foreground native input for modal controls. No GChat accessibility implementation. The reviewed fork handles owned popup input and nested modal observations; accepted exact desktop evidence covers both. |
 | Driver skills | **ADOPT** | Import the pinned skill bundle (`SKILL.md`, `LINUX`, `WINDOWS`, `MACOS`, `BROWSER`, `WORKFLOW`, `VISUAL`, `RUNTIME`) through shared skill discovery, with notices, platform selection and source/version metadata. Keep session/target semantics; adapt modal activation to native input. No independently evolving computer-use skill. |
 | Computer tool schemas and dispatch | **WRAP** | Expose Driver MCP tools as Cua function tools through the existing vault/session transport. Tool calls go through GChat approvals and operation receipts before execution. Preserve raw MCP replies in the task log; model-facing accessibility output has one elements representation. |
-| Browser tools | **ADOPT** Driver, **WRAP** exposure | Gbot exposes the pinned Driver's typed browser catalog and preserves its schemas and arguments through the existing approval/session/receipt path. Cua owns exact page binding, navigation, refs, dialogs and files/downloads; no GChat browser engine. `PythonBrowserTool`'s legacy Playwright endpoint is excluded. Source fixture and remaining Chromium guest gate are described below. |
+| Browser tools | **ADOPT** Driver, **WRAP** exposure | Gbot exposes the pinned Driver's typed browser catalog and preserves its schemas and arguments through the existing approval/session/receipt path. Cua owns exact page binding, navigation, refs, dialogs and files/downloads; no GChat browser engine. `PythonBrowserTool`'s legacy Playwright endpoint is excluded. The source fixture and dedicated Chromium guest gate passed; model-backed browser evaluation remains separate. |
 | Human requests | **KEEP** GChat requests, borrow Cua's request/completion shape | `human_tool` is a human model-completion provider, not desktop takeover or approval. Borrow request IDs, pending/completed/failed outcomes and separate text/tool-call replies. Persist assistance requests and replies in the existing bot/task journal and channel; do not import its in-memory FastAPI/Gradio server. |
 | Desktop viewer and media | **WRAP** Cua native media, selected for v1 | Ron selected the pinned Spaces media endpoint and `MediaSession` browser core on October 12. Keep SSH transport and the dedicated XFCE desktop, wrap view/input/audio in GChat's session and control owner. The full HTML5 viewer is not embedded as-is. Windows/M365 and latency remain unqualified. |
 | Take over / Hand back | **KEEP** authority, **WRAP** Cua media input | GChat must own a durable exclusive input grant for the selected session, drain/cancel bot input, and revoke human media access before hand-back. Cua `VIEW_ONLY`, scoped tickets and `CloseMedia` provide mechanisms to wrap; neither `human_tool`, presence cursors nor an interactive viewer session supplies that authority. |
@@ -47,6 +47,24 @@ Current prototype evidence and retained paths are in the [design record](README.
 | Approvals and shared capabilities | **KEEP** | Shared definitions, skills, tools and connector adapters keep GChat policy and folder grants. Cua execution invokes those adapters. Per-bot connector accounts are explicit, never inherited from the human's session. |
 | GInfer assignment and compaction | **KEEP** | Host/work-pool selection and shared compaction remain GChat-owned. Cua receives the selected endpoint and a compacted working history. Do not invent model limits or change sampling on reconnect. |
 | Arbitor extension hooks | **KEEP** | Policy-before-action, audit events and usage/cost observations remain extension boundaries. No paid policy/rules/cost product in GChat. FSL components remain excluded from Arbitor pending Ron's review. |
+
+## Current adoption status
+
+Queue items 13–17 are merged. Recovery checked their current source and saved
+results; no passing gate was repeated.
+
+| Item | Accepted scope | Saved evidence |
+| --- | --- | --- |
+| 13. Media/view | Embedded Cua media, dedicated Linux frame/audio, view-only refusal, takeover and hand-back revocation. | [Physical media result](../../out/gbot-cua-media-20261012/physical/seed/summary.json) |
+| 14. Built-in Driver skill | One shared embedded skill bundle, pinned MIT provenance, foreground activation and on-demand guides; desktop task passed. | [Skill source checks](../../out/gbot-cua-skill-20261012/source-result.json), [desktop result](../../out/gbot-cua-skill-20261012/gate-result.json) |
+| 15. Compact output | Typed Driver results and one accessibility representation reach the model; full raw MCP replies remain in task receipts. | [Projection fixture](../../out/gbot-cua-output-20261012/result.json), [saved-reply audit](../../out/gbot-cua-output-20261012/receipt-audit.json) |
+| 16. Guest image | Relevant XFCE/accessibility/session prerequisites are in Debian cloud-init; SSH-only reachability and dedicated desktop ownership are retained. | [Guest checks](../../out/gbot-cua-guest-20261012/result.json), [runtime closure](../../out/gbot-cua-runtime-20261012/result.json) |
+| 17. Browser evaluation | Typed catalog and argument preservation, isolated Chromium binding, navigation, form input/submit and independent readback passed without Vision. | [Dedicated-guest result](../../out/gchat-open-items-20261012/readiness-physical/result.json) |
+
+The browser physical result used direct tool calls, not a model task. Installed
+browser media playback and Windows/M365 remain release checks in the
+[acceptance plan](../agent-runtime/remaining-acceptance.md#untested-or-only-partly-tested).
+These results do not qualify latency, Vision or a broader Cua benchmark set.
 
 ## What the pin actually supplies
 
@@ -69,7 +87,7 @@ Queue item 4 uses Driver fork `c549ab4d7` on SDK base `0c69d9a2c8`.
 The saved editor/file evidence establishes the persistent MCP transport, but
 does not establish browser execution. Source inspection found an actual
 integration gap: `ssh/native.rs` removed all browser tools from `tools/list`
-and refused their page arguments. The candidate now preserves these nine exact
+and refused their page arguments. The merged route preserves these nine exact
 Driver definitions: `get_browser_state`, `browser_prepare`, `browser_navigate`,
 `browser_click`, `browser_type`, `browser_dialog`, `browser_set_input_files`,
 `browser_download` and `browser_pointer`. Browser calls bypass the native
@@ -106,15 +124,13 @@ outline/refs/actions in the model projection and invalidation of native tokens.
 The focused fixture passes in the shared cached check. It does not claim a
 physical Chromium browser result.
 
-The next physical gate is one harmless local-page task on the dedicated bot
-guest: a supported package-owned Chromium installation, Driver-owned isolated
-profile, text-only navigation/form/button interaction and an independent page
-postcondition. The existing `GuestBootstrap::browser_package` is the package
-selection seam. Firefox ESR cannot serve this pin's page route: Gecko binding
-requires unsupported launch-time BiDi setup. No package install, live guest,
-model task, browser framework or dependency was added by the browser source
-work. `cua-bench`'s `click-button` evaluator still needs its distinct
-`launch_window`/`execute_javascript` session mapping before it can be claimed.
+The dedicated-guest gate passed with package-owned Chromium, a Driver-owned
+isolated profile, text-only navigation/form/button interaction and independent
+readback. It made no model or GPU run. `GuestBootstrap::browser_package` selects
+the guest package. Firefox ESR cannot serve this pin's page route: Gecko binding
+requires unsupported launch-time BiDi setup. `cua-bench`'s `click-button`
+evaluator still needs its distinct `launch_window`/`execute_javascript` session
+mapping before it can be claimed.
 
 ### Cua loop and GInfer
 
@@ -409,7 +425,7 @@ no benchmark campaign or performance claim is part of this integration.
 Ron permits FSL in **GChat**, not Arbitor. Inspected candidates are
 `cua-spacesd-html5` (including its media core), `cua-media-protocol`,
 `cua-media-transport`, `cua-media-codec` and `cua-viewer`; each component's
-`LICENSE` is **FSL-1.1-MIT** at the pin. The current candidate vendors the HTML5 media core and links the daemon
+`LICENSE` is **FSL-1.1-MIT** at the pin. The merged integration vendors the HTML5 media core and links the daemon
 closure below; each original notice is retained. The MIT Rust client and proto
 source are vendored separately. This approval is for GChat only. The independent MIT-compatible Arbitor route remains;
 AGPL `cua-som` and optional perception assets remain excluded.
@@ -441,10 +457,11 @@ AGPL `cua-som` and optional perception assets remain excluded.
    them. Map those to Cua's supported browser/session path before including it;
    do not weaken its evaluator or claim that coverage now.
 
-This proposal targets one real desktop task and a small existing task set,
-without waiting for cloud provisioning, M365 qualification, a viewer replacement
-or Vision. Those remain first-release obligations in the [design](README.md).
-It adds a provider/session adapter, not another agent or evaluation framework.
+All four steps passed: the exact desktop task and both existing file evaluators
+are accepted through the pinned Cua executor. Their evidence is in the
+[current record](README.md#current-record-and-inventory). Cloud provisioning,
+M365 qualification and Vision remain first-release obligations in the
+[design](README.md).
 
 ### Acceptance questions
 
@@ -456,10 +473,21 @@ It adds a provider/session adapter, not another agent or evaluation framework.
 | One dedicated-guest task | Model completes the editor/save flow; independent SSH read matches the line. Stop the guest/model and release keys/guards afterward. |
 | Small Cua subset | Existing evaluators pass the two file variants through the GChat guest session. Keep task/variant IDs, rewards and trajectory; GUI/browser benchmark coverage is separate. |
 
-No runs are part of this docs change. The next implementation decision is review
-of the Cua provider/session adapter, service-to-Python binding and exact
-dependency closure. Build, GPU time, guest packages and Windows qualification
-remain separately scheduled.
+### Next integration: browser task evaluation
+
+The next unfinished Cua evaluation step is its existing `click-button` task,
+with the original setup and verifier unchanged. Source inspection confirms that
+`launch_window` and `execute_javascript` use Cua's `bench_ui`/pywebview path;
+the nine adopted Driver browser tools do not supply those evaluator operations.
+The current SSH-backed task adapter implements only the accepted file-task
+operations. Broader cua-bench dependencies remain unapproved.
+
+Next action: review the minimum pinned Cua task/session dependency closure before
+extending the existing adapter. Do not install dependencies, introduce another
+harness, substitute a DOM assertion for the evaluator, or claim a browser reward
+from the accepted direct-tool gate. Any approved run uses the dedicated guest
+and the existing tools, with expected wall time stated up front and the rule-43
+limits of 20 minutes per GPU run and 45 minutes for the whole test phase.
 
 ## Inspected source at the fixed pin
 
