@@ -6,22 +6,53 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-Completed source item: first-run Gbot opt-in in the existing welcome screen. The explicit
-“Enable Gbot” action saves the shared preference and enters the existing guided
-wizard; choosing a model, connecting a Host or skipping setup keeps Gbot off.
-The wizard owns computer selection and connection, so welcome never provisions a
-computer. Five welcome cases and one existing route handoff case pass, together with
-frontend types and affected lint. Evidence: `out/gchat-open-items-20261012/
-welcome-opt-in/receipt.json`. Installer packaging choices, installed welcome
-presentation and completed computer creation remain open.
+Completed item: installed Linux Gbot computer creation and same-setup resume.
+Candidate `test/gbot-installed-creation-2eff` at source `6acaead46`, based on
+reviewed main `2effbe4df`, fixes two installed blockers: the empty built-in
+GInfer provider no longer skips Welcome, and the Gbot frontend consumes the
+service's plain `live_sessions` identities instead of a nonexistent wrapper.
+Nine onboarding cases and the existing Ready/session regression pass, together
+with frontend types, affected lint and one incremental desktop build per source
+change. The route fixture emits two React act warnings; they are retained in
+`ready-session-contract/build/ready-tests.log`. Unchanged passing checks were
+not repeated.
 
-Owned candidate: `/ai/gchat-worktrees/gbot-browser-physical-2e735`, branch
-`feat/gbot-welcome-8d268`, baseline main `8d268fc11`. The previous OI-074 source
-is committed/pushed on `fix/gchat-chat-bundle-8d268`; its build evidence is retained
-under `out/gchat-open-items-20261012/oi074/` for coordinator review. No live jobs,
-models or guests. Next action: coordinator review/merge, then the remaining installed wizard
-creation/resume gate. Welcome persists explicit opt-in and ordinary model setup
-keeps Gbot off; no computer is provisioned by the welcome screen.
+The unsigned developer DEB passed the installed gate at 01:08:07 UTC on
+October 13 in one disposable Debian 13 desktop on S1. Welcome rendered; the
+visible wizard created one local KVM bot and reached Computer ready. After
+client and service restart, visible Resume reconnected the same workspace,
+session, pinned host key and native-vault credential. The corrected Ready page
+renders Connected. Authenticated state returned 200, unauthenticated state 401;
+there was exactly one workspace. This establishes computer setup and resume,
+not model/brain/task readiness. No model, GPU, person's desktop or host package
+installation was involved.
+
+Evidence: `out/gchat-open-items-20261013/installed-creation/desktop-guest/`
+contains `installed-result.json`, `ready-before.json`, `setup-final.json`,
+`state-ready-fixed.json`, `ui-after-install.png`, `ui-ready-final.png` and
+`ui-connected-final.png`. The pre-fix crash and failed Host log are retained.
+The disposable package refresh initially copied an executable with mode 0664;
+packaging now sets and verifies archive mode 0755 before installation, without
+another compilation. The corrected developer package/build receipts are under
+`ready-session-contract/`; this was not a release package gate.
+
+The nested bot was removed through the production setup API, then the private
+service and client exited. Outer guest/domain/disks/keys/private daemons were
+retired at 01:09:06 UTC, reclaiming 30.47 GB on S1; booking 1442 was canceled.
+Two superseded local desktop binaries were retired, reclaiming another 2.25 GB.
+Cleanup receipts are `desktop-guest/{nested-removal,cleanup}.json` and
+`retired-local-builds.json`. Current inventory retains only the candidate
+source tree, current tested desktop artifact and evidence; no live job or
+reservation remains. The accepted baseline package was preserved.
+
+Next action: reviewed main merge of this candidate and issue-status update.
+Remaining setup acceptance: AppImage lifetime, Windows/Hyper-V, cloud/M365,
+remote service selection, installer choice, sleep recovery and live brain/task
+dispatch. Gbot's explicit brain assignment must select a persistent Host or
+other inference endpoint for client-exit continuity. Hardware preparation is a
+separate finding: the retained historical Host log reports that NVIDIA GPU
+inventory could not be executed (ENOENT) in the CPU-only guest; this does not
+qualify a GPU installation or prove the exact missing executable.
 
 Completed item: the two-question Linux Gbot wizard, source `f39961b6c` from
 main `e7d761c2f` in `test/gbot-installed-wizard-e7d`. Five affected wizard/route

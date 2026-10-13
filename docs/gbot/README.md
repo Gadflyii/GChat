@@ -809,16 +809,60 @@ manifests, Host and three Gbot assets matched the packaged bytes. No staging
 paths remained. Guest/domain/disk/keys/private daemons were retired at 23:49:00
 UTC, booking 1433 canceled and 13.33 GB reclaimed.
 Automatic hardware preparation subsequently reported Host exit 1 with no local
-owner ready in this CPU-only guest. Its cause is unverified: the Host log was
-not retained. This is a separate master-list finding, outside startup/resource
-acceptance. Future failed Host gates must retain that log before fixture cleanup.
-Next unresolved action: reviewed merge; no second launch or model test is required.
+owner ready in this CPU-only guest. The original Host log was not retained. The later installed-creation gate
+retains a Host log reporting GPU inventory ENOENT in the CPU-only guest; the
+exact missing executable and supported-GPU readiness remain unverified. This
+separate master-list finding is outside startup/resource acceptance.
+Accepted in main `8d268fc11`; no second startup launch or model test is required.
 Evidence and disposable outputs: `out/gchat-open-items-20261012/resource-startup/`.
-Owned disk cleanup reclaimed 69.77 GB net and left the target at 29.57 GB
-before this build; seven merged source trees were removed. Inventory and
-receipts: `/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`. Product setup does not default its brain to
-GChat's UI-owned port1337 facade: its explicit assignment must select a persistent
-Host or other inference endpoint for client-exit continuity.
+
+Completed item: installed Linux Gbot computer creation and same-setup resume.
+Candidate `test/gbot-installed-creation-2eff` at source `6acaead46`, based on
+reviewed main `2effbe4df`, fixes two installed blockers: the empty built-in
+GInfer provider no longer skips Welcome, and the Gbot frontend consumes the
+service's plain `live_sessions` identities instead of a nonexistent wrapper.
+Nine onboarding cases and the existing Ready/session regression pass, together
+with frontend types, affected lint and one incremental desktop build per source
+change. The route fixture emits two React act warnings; they are retained in
+`ready-session-contract/build/ready-tests.log`. Unchanged passing checks were
+not repeated.
+
+The unsigned developer DEB passed the installed gate at 01:08:07 UTC on
+October 13 in one disposable Debian 13 desktop on S1. Welcome rendered; the
+visible wizard created one local KVM bot and reached Computer ready. After
+client and service restart, visible Resume reconnected the same workspace,
+session, pinned host key and native-vault credential. The corrected Ready page
+renders Connected. Authenticated state returned 200, unauthenticated state 401;
+there was exactly one workspace. This establishes computer setup and resume,
+not model/brain/task readiness. No model, GPU, person's desktop or host package
+installation was involved.
+
+Evidence: `out/gchat-open-items-20261013/installed-creation/desktop-guest/`
+contains `installed-result.json`, `ready-before.json`, `setup-final.json`,
+`state-ready-fixed.json`, `ui-after-install.png`, `ui-ready-final.png` and
+`ui-connected-final.png`. The pre-fix crash and failed Host log are retained.
+The disposable package refresh initially copied an executable with mode 0664;
+packaging now sets and verifies archive mode 0755 before installation, without
+another compilation. The corrected developer package/build receipts are under
+`ready-session-contract/`; this was not a release package gate.
+
+The nested bot was removed through the production setup API, then the private
+service and client exited. Outer guest/domain/disks/keys/private daemons were
+retired at 01:09:06 UTC, reclaiming 30.47 GB on S1; booking 1442 was canceled.
+Two superseded local desktop binaries were retired, reclaiming another 2.25 GB.
+Cleanup receipts are `desktop-guest/{nested-removal,cleanup}.json` and
+`retired-local-builds.json`. Current inventory retains only the candidate
+source tree, current tested desktop artifact and evidence; no live job or
+reservation remains. The accepted baseline package was preserved.
+
+Next action: reviewed main merge of this candidate and issue-status update.
+Remaining setup acceptance: AppImage lifetime, Windows/Hyper-V, cloud/M365,
+remote service selection, installer choice, sleep recovery and live brain/task
+dispatch. Gbot's explicit brain assignment must select a persistent Host or
+other inference endpoint for client-exit continuity. Hardware preparation is a
+separate finding: the retained historical Host log reports that NVIDIA GPU
+inventory could not be executed (ENOENT) in the CPU-only guest; this does not
+qualify a GPU installation or prove the exact missing executable.
 
 Evidence: `/ai/gchat/out/gbot-cua-media-20261012/physical`.
 Physical gate **PASS at 17:55:38 UTC on October 12**. The production native-vault
