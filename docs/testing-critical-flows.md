@@ -1,9 +1,12 @@
 # Critical-flow verification
 
-Run `make verify` from the repository root for frontend lint, TypeScript checks,
-quality/registry guards, Vitest with critical coverage floors, and supported Rust
-suites. Platform-specific and opt-in live checks remain separate. A successful
-mock or loopback test does not establish physical GPU or installed-app behavior.
+Run the smallest check that answers the change's question, once. Reuse passing
+evidence when its source and scope still apply. Documentation needs diff review;
+tools need their affected cases; UI changes need the affected component behavior
+and relevant lint/types. Native changes need the owning fixture and build checks.
+Reserve full `make verify` and platform release walkthroughs for a scheduled
+release gate. Repeat a check only after a relevant change or inconclusive result.
+A mock or loopback pass does not establish installed-app or physical GPU behavior.
 
 | Flow | Evidence and scope |
 | --- | --- |
@@ -23,8 +26,9 @@ The separately hosted G.bench source has PHP contract/signature tests, a DOM boa
 regression test, and an offline reference importer. Live signed official publication
 and readback passed for 12 series / 36 points. The current board was browser-checked
 for wordmarks, independent generic filters, all-concurrency rows, and throughput
-columns. That evidence does not establish deletion, retry, replay, or installed
-community-client publication.
+columns. A separate disposable community submission passed publish/read/delete;
+the app delete control is merged as `a4bebb2e1`. Retry/replay/fault acceptance
+remains separate. Never use the official reference series as test fixtures.
 
 Current outstanding physical and release checks belong in [open work](open-work.md).
 Keep tests focused on supported behavior; retired llama.cpp/MLX paths are not GChat
