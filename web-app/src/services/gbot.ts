@@ -34,6 +34,43 @@ export type KvmSetupRecord = {
   stage: string
   issue: SetupIssue | null
 }
+export type CloudProvider = 'hetzner' | 'digital_ocean'
+export type CloudAmount = { net: string; gross: string | null }
+export type CloudPrice = { monthly: CloudAmount; hourly: CloudAmount }
+export type CloudPlan = {
+  id: string
+  name: string
+  region: string
+  vcpus: number
+  memory_mib: number
+  disk_gb: number
+  included_traffic_bytes: number
+  compute: CloudPrice
+  ipv4: CloudPrice
+  traffic_per_tb: CloudAmount | null
+  recommended: boolean
+}
+export type CloudReview = {
+  id: string
+  name: string
+  provider: CloudProvider
+  catalog: {
+    currency: string
+    tax: string
+    regions: { id: string; name: string }[]
+    plans: CloudPlan[]
+  }
+  fetched_at: number
+  expires_at: number
+  quote: {
+    id: string
+    plan: CloudPlan
+    total: CloudPrice
+    quoted_at: number
+    expires_at: number
+  } | null
+  confirmed: boolean
+}
 export type Control = {
   identity: Identity
   owner: string | null

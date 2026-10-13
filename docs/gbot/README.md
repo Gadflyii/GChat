@@ -730,7 +730,8 @@ Guided LAN connection is merged in main `1bc9e0df7`. Its focused wizard,
 hermetic SSH/API, types/lint/check/Clippy evidence remains valid at
 `out/gbot-lan-guided/result.json`; no physical LAN installation is claimed.
 
-**Current item: consented dedicated LAN guest preparation.** Reuse the approved
+**Accepted: consented dedicated LAN guest preparation**, merged in main
+`62dba3599`. Reuse the approved
 Debian guest package/session contract and pinned Cua archives. Upload an owned
 installer through the saved vault key and verified SSH identity, show one local
 administrator command, and verify the installed tools before continuing. The
@@ -749,8 +750,30 @@ native check, service strict Clippy, types and lint. Evidence:
 Browser evaluation PASS through the pinned driver/original Cua Submit evaluator,
 not a model-driven task; package/license evidence is in
 `out/gbot-browser-evaluation/result.json`. Its guest, disk and credentials are retired.
-No live job, agent, guest, model or booking. Next: cloud cost review using mocks;
-no account access or paid resource creation.
+**Accepted: cloud cost review**, source `5f34c7862`, branch
+`feat/gbot-cloud-cost-62d`, based on main `62dba3599`.
+Live Hetzner/DigitalOcean prices include IPv4, tax and traffic terms; vault-held
+credentials and saved reviews survive restart. Fifteen-minute quotes require
+fresh consent after refresh. Five service, two provider and affected UI cases,
+types/lint and strict desktop Clippy pass. Evidence: `out/gbot-cloud-cost/result.json`.
+Mock providers only; VM creation and physical cloud qualification remain open.
+
+**Current item: owned cloud VM creation and recovery.** Owner: GChat; repository
+`/ai/gchat`, subject `docs/gbot`; working tree
+`/ai/gchat-worktrees/gchat-focused-burndown-c36a`. Extend the accepted cost-review
+owner to create exactly the approved Hetzner/DigitalOcean plan, keep provider
+credentials and SSH private keys in the vault, and persist each owned resource
+and pending action before advancing. Reconcile uncertain creates without issuing
+a duplicate; recover after restart and remove only this setup's resources.
+Reuse Debian guest tools and the verified SSH connection path. A provider's
+Running state is separate from desktop Ready. Acceptance: focused mocked provider,
+price-change, ambiguous-create/recovery and owned-removal cases plus affected
+wizard/types/lint/Clippy checks; expected test phase under ten minutes.
+Exclusions: real tokens/accounts, paid provisioning, new dependencies/harnesses,
+native Windows builds, release/signing/publication. Next unresolved action:
+implement the durable create/inspect/delete contract and first-boot bootstrap
+using the pinned local guest-tools bundle. No live job, guest, model or resource;
+shared Cargo cache is borrowed. Result target: 17:30 UTC.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at

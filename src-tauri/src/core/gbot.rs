@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
 mod background;
+mod cloud;
 mod inference;
 #[cfg(target_os = "linux")]
 pub(crate) use background::credential_control;
@@ -223,6 +224,11 @@ fn supported_route(path: &str) -> bool {
             | "/v1/setup/kvm/start"
             | "/v1/setup/kvm/status"
             | "/v1/setup/kvm/remove"
+            | "/v1/setup/cloud/status"
+            | "/v1/setup/cloud/catalog"
+            | "/v1/setup/cloud/select"
+            | "/v1/setup/cloud/confirm"
+            | "/v1/setup/cloud/remove"
             | "/v1/control/take-over"
             | "/v1/control/hand-back"
     )
