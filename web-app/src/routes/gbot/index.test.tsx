@@ -159,7 +159,7 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
             { id: 'one', name: 'Writer' },
             { id: 'two', name: 'Researcher' },
           ],
-          live_sessions: [{ identity }],
+          live_sessions: [identity],
           assignments,
           controls: [
             {
@@ -299,7 +299,7 @@ it('sends task-bound human replies and declines, retaining them after reload', a
       if (path === 'state')
         return {
           workspaces: [{ id: 'one', name: 'Writer' }],
-          live_sessions: [{ identity }],
+          live_sessions: [identity],
           assignments: [],
           controls: [],
         }
@@ -363,7 +363,7 @@ it('opens view-only and closes interactive input before handing back to the bot'
       if (path === 'state')
         return {
           workspaces: [{ id: 'one', name: 'Writer' }],
-          live_sessions: [{ identity }],
+          live_sessions: [identity],
           assignments: [],
           controls: [
             {
@@ -565,7 +565,7 @@ it('explicitly stops the service without refreshing and starts it before reconne
   expect(mocks.call.mock.calls.length).toBeGreaterThan(calls)
 })
 
-it('holds an unfinished KVM with live SSH, resumes its same setup and admits actions on Ready update', async () => {
+it('renders service session identities, holds unfinished KVM and admits actions on Ready update', async () => {
   const identity = { workspace_id: 'owned-kvm', session_id: 'session' }
   let record: KvmSetupRecord = {
     id: identity.workspace_id,
@@ -600,7 +600,7 @@ it('holds an unfinished KVM with live SSH, resumes its same setup and admits act
               bot_pc: { kind: 'local_vm', hypervisor: 'kvm' },
             },
           ],
-          live_sessions: [{ identity }],
+          live_sessions: [identity],
           controls: [],
           assignments: [
             {

@@ -214,8 +214,8 @@ function GbotPage() {
     (workspace) => workspace.id === workspaceId
   )
   const identity = state?.live_sessions.find(
-    (session) => session.identity.workspace_id === workspaceId
-  )?.identity
+    (session) => session.workspace_id === workspaceId
+  )
   const control = state?.controls.find(
     (value) => value.identity.workspace_id === workspaceId
   )
@@ -330,7 +330,7 @@ function GbotPage() {
                   state={
                     !state.live_sessions.some(
                       (session) =>
-                        session.identity.workspace_id === workspace.id
+                        session.workspace_id === workspace.id
                     )
                       ? 'sleeping'
                       : tasks.some(

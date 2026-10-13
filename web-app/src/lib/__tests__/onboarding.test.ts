@@ -32,6 +32,21 @@ describe('onboarding provider gate', () => {
 
     expect(isOnboardingPending([])).toBe(false)
   })
+
+  it('shows setup when the built-in GInfer provider has no models', () => {
+    const provider = { provider: 'ginfer', models: [] }
+    expect(hasValidProviders([provider])).toBe(false)
+    expect(isOnboardingPending([provider])).toBe(true)
+
+    localStorage.setItem(localStorageKey.setupCompleted, 'true')
+    expect(isOnboardingPending([provider])).toBe(false)
+  })
+
+  it('opens chat when GInfer already has an installed model', () => {
+    const provider = { provider: 'ginfer', models: [{ id: 'installed-model' }] }
+    expect(hasValidProviders([provider])).toBe(true)
+    expect(isOnboardingPending([provider])).toBe(false)
+  })
 })
 
 describe('forced onboarding runs', () => {

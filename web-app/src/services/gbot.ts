@@ -36,7 +36,7 @@ export type Control = {
 }
 export type BotState = {
   workspaces: Workspace[]
-  live_sessions: { identity: Identity }[]
+  live_sessions: Identity[]
   controls: Control[]
   assignments: SavedAssignment[]
 }
