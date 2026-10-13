@@ -11,6 +11,7 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
+jan-utils = { path = "../utils" }
 ginfer-host = { path = "../ginfer-host" }
 tauri = { version = "=2.10.3", default-features = false, features = ["wry", "tray-icon", "image-png", "common-controls-v6", "x11"] }
 tauri-plugin-single-instance = "=2.4.0"

@@ -127,7 +127,7 @@ test('secure storage results show neutral success and an error alert only on fai
   const app = await manager(t, fixture(), (request) => {
     assert.equal(request.action, 'secure_storage')
     if (failure) throw failure
-    return {}
+    return { ready: true }
   })
   button(app.document, 'Pair a host…').click()
   const pane = app.document.querySelector('[role="dialog"]')
@@ -150,6 +150,45 @@ test('secure storage results show neutral success and an error alert only on fai
   assert.equal(status.className, 'muted')
   assert.equal(status.getAttribute('role'), 'status')
   assert.deepEqual(requests(app).map((request) => request.action), ['secure_storage', 'secure_storage', 'secure_storage'])
+})
+
+test('secure storage pairing check rejects an unavailable resolved status', async (t) => {
+  const app = await manager(t, fixture(), () => ({ ready: false, error: 'Unlock the selected store' }))
+  button(app.document, 'Pair a host…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  button(pane, 'Check secure storage').click()
+  await waitFor(() => pane.querySelector('[role="alert"]')?.textContent.includes('Unlock the selected store'), 'unavailable store must remain an error')
+  assert.equal(pane.querySelector('[role="status"]'), null)
+})
+
+test('passphrase vault clears rejected input, unlocks and locks from Manager', async (t) => {
+  let ready = false
+  const app = await manager(t, fixture(), (request) => {
+    assert.equal(request.action, 'secure_storage')
+    if (request.operation === 'unlock') {
+      if (request.passphrase !== 'correct passphrase') throw new Error('Incorrect passphrase')
+      ready = true
+    } else if (request.operation === 'lock') ready = false
+    return { ready, tier: 'passphrase', state: ready ? 'ready' : 'locked' }
+  })
+  button(app.document, 'Secure storage').click()
+  await waitFor(() => app.document.querySelector('[role="dialog"] input[type="password"]'), 'locked store must ask for a passphrase')
+  const pane = app.document.querySelector('[role="dialog"]')
+  const input = pane.querySelector('input[type="password"]')
+  input.value = 'incorrect'
+  submit(app)
+  await waitFor(() => pane.querySelector('[role="alert"]')?.textContent.includes('Incorrect passphrase'), 'rejected passphrase must be reported')
+  assert.equal(input.value, '')
+  input.value = 'correct passphrase'
+  submit(app)
+  await waitFor(() => !app.document.querySelector('[role="dialog"]'), 'successful unlock must close the prompt')
+  assert.equal(input.value, '')
+  assert.equal(ready, true)
+  button(app.document, 'Secure storage').click()
+  await waitFor(() => app.document.querySelector('[role="dialog"]'), 'unlocked store must offer lock')
+  button(app.document.querySelector('[role="dialog"]'), 'Lock vault').click()
+  await waitFor(() => !ready && !app.document.querySelector('[role="dialog"]'), 'lock must complete')
+  assert.ok(requests(app).some((request) => request.operation === 'lock'))
 })
 
 test('Forget removes the host while its credential warning survives snapshots and refresh errors', async (t) => {

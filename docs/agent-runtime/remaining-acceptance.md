@@ -6,11 +6,30 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
-Current item: [GCHAT-SECRET-STORE design](../decisions/2026-10-13-credential-store-tiers.md),
-prepared for review. Acceptance: one page naming tiers, retained backends,
-helper packaging and existing-grant migration. No implementation or Windows
-build before review; next action is the reviewer decision. Inventory: one reused
-source candidate, existing accepted builds/evidence; no live job or booking.
+Current item: [GCHAT-SECRET-STORE](../decisions/2026-10-13-credential-store-tiers.md).
+Approved Linux implementation shares one per-user store across Chat, Manager,
+Gbot and connectors. It persists the selected tier, reports missing/locked
+Secret Service with setup guidance, and offers an explicit passphrase vault.
+Migration copies referenced entries, verifies their bytes and atomically changes
+ownership; an interrupted migration resumes without removing source entries.
+
+Acceptance complete at source scope: core 5/5, Chat 8/8, Manager 3/3 and
+Gbot authenticated lock/unlock 1/1 pass. Affected app check, strict Clippy,
+frontend types and production lint pass. The concurrency fixture uses independent
+store handles and threads; it does not claim separate-process qualification.
+No GPU or native Windows build ran. Installed missing/locked-provider setup,
+the WSL Credential Manager helper and Windows cancellation/lifetime remain owed.
+
+Evidence: `out/secret-store-20261013/result.json`, including the dependency diff:
+nine added edges, zero new packages or version changes. Inventory retains the
+candidate `/ai/gchat-worktrees/gbot-browser-physical-2e735`, branch
+`feat/gchat-linux-secret-store-206c`, baseline `206c3c93f`, the evidence packet
+and shared Cargo cache `/ai/gchat/src-tauri/target`. Root-owned retired cache
+resources are listed in that packet and preserved for owner cleanup. Candidate
+evidence copies are retired; no live job, model, guest or container remains.
+The approved disposable build container supplied protoc; no host package was
+installed. Next: reviewed main merge, then the remaining installed setup checks;
+the Windows helper stays deferred to the scheduled release gate.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
 Two concurrent workers finished; a third queued at full capacity and was cancelled.
@@ -19,7 +38,7 @@ Evidence: `out/s2-acceptance-20261011/local-worker/result.json`.
 Simultaneous use from two independent workstations remains owed; the native clients ran
 sequentially with independent folders on one desktop and shared its coordinator grant.
 All disposable Hosts, clients, services, credentials/state and bookings are retired.
-The credential-store proposal above follows; no GPU is needed.
+The credential-store implementation above follows; no GPU is needed.
 
 Completed item: the reproduced OI-068 custom-launch/output-budget conflict.
 The old installed fresh Chat served 8,192 context, reserved 8,192 output and

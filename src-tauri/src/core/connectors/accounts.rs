@@ -154,25 +154,52 @@ trait Vault: Send + Sync {
 struct NativeVault;
 impl Vault for NativeVault {
     fn get(&self, key: &str) -> Result<Option<String>, String> {
-        let entry = keyring::Entry::new(VAULT_SERVICE, key)
-            .map_err(|_| "Workspace secure storage is unavailable")?;
-        match entry.get_password() {
-            Ok(value) => Ok(Some(value)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err("Workspace secure storage could not be read".into()),
-        }
+        crate::core::engine_hosts::initialize_credentials()?
+            .get(VAULT_SERVICE, key)
+            .map_err(|e| e.to_string())?
+            .map(|bytes| {
+                String::from_utf8(bytes.to_vec())
+                    .map_err(|_| "Workspace credential is invalid".into())
+            })
+            .transpose()
     }
     fn set(&self, key: &str, value: &str) -> Result<(), String> {
-        keyring::Entry::new(VAULT_SERVICE, key)
-            .and_then(|entry| entry.set_password(value))
-            .map_err(|_| "Workspace secure storage could not be updated".into())
+        crate::core::engine_hosts::initialize_credentials()?
+            .put(VAULT_SERVICE, key, value.as_bytes())
+            .map_err(|e| e.to_string())
     }
     fn delete(&self, key: &str) -> Result<(), String> {
-        match keyring::Entry::new(VAULT_SERVICE, key).and_then(|entry| entry.delete_credential()) {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err("Workspace secure storage could not be cleared".into()),
-        }
+        crate::core::engine_hosts::initialize_credentials()?
+            .delete(VAULT_SERVICE, key)
+            .map_err(|e| e.to_string())
     }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn credential_references(
+    root: &std::path::Path,
+) -> Result<Vec<jan_utils::credential_store::Reference>, String> {
+    let document: Document = match std::fs::read(root.join("workspace-connections.json")) {
+        Ok(bytes) => {
+            serde_json::from_slice(&bytes).map_err(|_| "Workspace account metadata is invalid")?
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Document::default(),
+        Err(_) => return Err("Workspace account metadata could not be read".into()),
+    };
+    let mut references = Vec::new();
+    for config in document.configs.values().filter(|c| c.has_client_secret) {
+        references.push(jan_utils::credential_store::Reference::new(
+            VAULT_SERVICE,
+            &format!("{}:registration", config.provider.as_str()),
+        ));
+    }
+    for account in document.accounts.values() {
+        references.push(jan_utils::credential_store::Reference::new(
+            VAULT_SERVICE,
+            &format!("account:{}", account.id),
+        ));
+    }
+    Ok(references)
 }
 
 pub struct AccountsState {

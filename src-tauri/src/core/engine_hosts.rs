@@ -4,25 +4,40 @@ use ginfer_host::client::{Client, ClientState as Hosts, CredentialFuture, Creden
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 use uuid::Uuid;
+pub(crate) fn initialize_credentials() -> Result<&'static jan_utils::credential_store::Store, String>
+{
+    let locator = ginfer_host::local_host_registry::locator_path()?;
+    jan_utils::credential_store::initialize(
+        locator.parent().ok_or("Host registry root is missing")?,
+    )
+    .map_err(|e| e.to_string())
+}
 struct NativeVault;
 impl CredentialStore for NativeVault {
     fn get(&self, id: Uuid) -> CredentialFuture<'_, String> {
         Box::pin(async move {
             tokio::task::spawn_blocking(move || {
-                keyring::Entry::new(ginfer_host::client::VAULT_SERVICE, &id.to_string())
-                    .and_then(|e| e.get_password())
-                    .map_err(|e| e.to_string())
+                let bytes = initialize_credentials()?
+                    .get(ginfer_host::client::VAULT_SERVICE, &id.to_string())
+                    .map_err(|e| e.to_string())?
+                    .ok_or("Pairing credential is missing")?;
+                String::from_utf8(bytes.to_vec())
+                    .map_err(|_| "Pairing credential is invalid".into())
             })
             .await
             .map_err(|e| e.to_string())?
         })
     }
     fn set<'a>(&'a self, id: Uuid, token: &'a str) -> CredentialFuture<'a, ()> {
+        let token = jan_utils::credential_store::Zeroizing::new(token.to_owned());
         Box::pin(async move {
-            let token = token.to_owned();
             tokio::task::spawn_blocking(move || {
-                keyring::Entry::new(ginfer_host::client::VAULT_SERVICE, &id.to_string())
-                    .and_then(|e| e.set_password(&token))
+                initialize_credentials()?
+                    .put(
+                        ginfer_host::client::VAULT_SERVICE,
+                        &id.to_string(),
+                        token.as_bytes(),
+                    )
                     .map_err(|e| e.to_string())
             })
             .await
@@ -32,12 +47,9 @@ impl CredentialStore for NativeVault {
     fn delete(&self, id: Uuid) -> CredentialFuture<'_, ()> {
         Box::pin(async move {
             tokio::task::spawn_blocking(move || {
-                match keyring::Entry::new(ginfer_host::client::VAULT_SERVICE, &id.to_string())
-                    .and_then(|e| e.delete_credential())
-                {
-                    Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-                    Err(e) => Err(e.to_string()),
-                }
+                initialize_credentials()?
+                    .delete(ginfer_host::client::VAULT_SERVICE, &id.to_string())
+                    .map_err(|e| e.to_string())
             })
             .await
             .map_err(|e| e.to_string())?
@@ -262,6 +274,14 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     // The prerequisite check must work before registry initialization or pairing.
     if action == "credential_status" {
         return Ok(credential_setup::status().await);
+    }
+    #[cfg(target_os = "linux")]
+    if matches!(
+        action.as_str(),
+        "credential_create" | "credential_unlock" | "credential_lock"
+    ) {
+        let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
+        return credential_setup::change(&root, &action, args).await;
     }
     if action == "credential_install" {
         return credential_setup::install(

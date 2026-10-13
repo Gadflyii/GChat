@@ -2656,6 +2656,7 @@ dependencies = [
  "clap",
  "cua-spacesd-client",
  "hyper 0.14.32",
+ "jan-utils",
  "keyring",
  "russh",
  "serde",
@@ -2971,6 +2972,7 @@ name = "ginfer-manager"
 version = "0.1.0"
 dependencies = [
  "ginfer-host",
+ "jan-utils",
  "keyring",
  "png 0.18.1",
  "reqwest 0.11.27",
@@ -3943,8 +3945,12 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 name = "jan-utils"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
+ "argon2",
  "base64 0.22.1",
+ "dbus",
  "hmac 0.12.1",
+ "keyring",
  "log",
  "rand 0.8.5",
  "reqwest 0.11.27",
@@ -3956,6 +3962,7 @@ dependencies = [
  "tokio-util",
  "url",
  "windows-sys 0.60.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -5359,6 +5366,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aab41826031698d6ffcd9cff78ef56ef998e39dc7e5067cdfebe373842d4723b"
 dependencies = [
+ "getrandom 0.4.2",
  "phc",
 ]
 
@@ -5544,6 +5552,7 @@ checksum = "44dc769b75f93afdddd8c7fa12d685292ddeff1e66f7f0f3a234cf1818afe892"
 dependencies = [
  "base64ct",
  "ctutils",
+ "getrandom 0.4.2",
 ]
 
 [[package]]

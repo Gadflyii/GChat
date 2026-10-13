@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod config;
+pub mod credential_store;
 pub mod crypto;
 pub mod fs;
 pub mod http;

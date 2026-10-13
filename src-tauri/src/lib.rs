@@ -459,6 +459,7 @@ pub fn run() {
             tray_handles: Arc::new(std::sync::Mutex::new(None)),
         })
         .setup(move |app| {
+            core::engine_hosts::initialize_credentials().map_err(std::io::Error::other)?;
             let log_dir = get_jan_data_folder_path(app.handle().clone()).join("logs");
             // The plugin's defaults are 40 KB per file with
             // `RotationStrategy::KeepOne`, and `KeepOne` does not archive

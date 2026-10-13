@@ -3,7 +3,7 @@
 mod vault;
 
 use ginfer_host::{
-    client::{Client, ClientError, CredentialStore, PairRequest},
+    client::{Client, ClientError, PairRequest},
     fleet::{AuthorityLocator, FleetUpdate},
     fleet_client::FleetClient,
 };
@@ -138,8 +138,8 @@ fn local_share_request(view: &Value) -> Result<ManagerRequest, String> {
         .flatten()
         .find(|host| host["local"] == true && host["online"] == true)
         .ok_or("This computer is offline")?;
-    let host_id = serde_json::from_value(local["host_id"].clone())
-        .map_err(|error| error.to_string())?;
+    let host_id =
+        serde_json::from_value(local["host_id"].clone()).map_err(|error| error.to_string())?;
     Ok(ManagerRequest::Host {
         host_id,
         operation: HostOperation::Share,
@@ -156,7 +156,10 @@ fn refreshed_view(
     let mut view = Map::new();
     view.insert("hosts".into(), Value::Array(hosts));
     view.insert("discovered".into(), listed["discovered"].take());
-    view.insert("client_name".into(), client_name.map(Value::String).unwrap_or(Value::Null));
+    view.insert(
+        "client_name".into(),
+        client_name.map(Value::String).unwrap_or(Value::Null),
+    );
     view.insert("local_error".into(), listed["local_error"].take());
     view.insert("fleet".into(), fleet);
     ManagerView::new(Value::Object(view))
@@ -176,7 +179,10 @@ enum ManagerRequest {
     Forget {
         host_id: Uuid,
     },
-    SecureStorage,
+    SecureStorage {
+        operation: Option<String>,
+        passphrase: Option<String>,
+    },
     FleetConfigure {
         member_host_id: Uuid,
         authority: AuthorityLocator,
@@ -233,15 +239,20 @@ impl ManagerState {
             .as_array_mut()
             .map(std::mem::take)
             .unwrap_or_default();
-        let ids = registrations.iter().map(|host| {
-            serde_json::from_value(host["host_id"].clone()).map_err(|error| error.to_string())
-        }).collect::<Result<Vec<Uuid>, _>>()?;
+        let ids = registrations
+            .iter()
+            .map(|host| {
+                serde_json::from_value(host["host_id"].clone()).map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<Uuid>, _>>()?;
         let snapshots = self.client.snapshots(&ids).await;
         let hosts = project_hosts(registrations, snapshots, &previous.snapshot);
         let fleet = match self.fleet.read().await {
             Ok(report) => serde_json::to_value(report).map_err(|error| error.to_string())?,
-            Err(error) => json!({"connected":false,"snapshot":previous.snapshot["fleet"]["snapshot"],
-                "authority":previous.snapshot["fleet"]["authority"],"error":error}),
+            Err(error) => {
+                json!({"connected":false,"snapshot":previous.snapshot["fleet"]["snapshot"],
+                "authority":previous.snapshot["fleet"]["authority"],"error":error})
+            }
         };
         let view = refreshed_view(
             hosts,
@@ -254,6 +265,13 @@ impl ManagerState {
     }
 
     async fn execute(&self, request: ManagerRequest) -> Result<Value, String> {
+        if let ManagerRequest::SecureStorage {
+            operation,
+            passphrase,
+        } = request
+        {
+            return vault::control(operation, passphrase).await;
+        }
         self.initialize().await?;
         match request {
             ManagerRequest::Pair {
@@ -274,10 +292,7 @@ impl ManagerState {
             }
             ManagerRequest::Discovery { enabled } => self.client.discovery(enabled).await,
             ManagerRequest::Forget { host_id } => self.client.forget(host_id).await,
-            ManagerRequest::SecureStorage => {
-                vault::NativeVault.ensure_ready().await?;
-                Ok(json!({"ready":true}))
-            }
+            ManagerRequest::SecureStorage { .. } => unreachable!(),
             ManagerRequest::FleetConfigure {
                 member_host_id,
                 authority,
@@ -302,8 +317,11 @@ impl ManagerState {
                     HostOperation::HardwareProfile => {
                         let request: ginfer_host::hardware_profile::HardwareProfileRequest =
                             serde_json::from_value(args).map_err(|error| error.to_string())?;
-                        let status = self.client.hardware_profile(host_id, request)
-                            .await.map_err(String::from)?;
+                        let status = self
+                            .client
+                            .hardware_profile(host_id, request)
+                            .await
+                            .map_err(String::from)?;
                         return serde_json::to_value(status).map_err(|error| error.to_string());
                     }
                     HostOperation::Scan => (Method::POST, "/host/v1/scan".into()),
@@ -404,7 +422,10 @@ async fn manager_snapshot(app: tauri::AppHandle) -> Result<ManagerView, String> 
 }
 
 #[tauri::command]
-async fn manager_request(app: tauri::AppHandle, request: ManagerRequest) -> Result<ManagerResponse, String> {
+async fn manager_request(
+    app: tauri::AppHandle,
+    request: ManagerRequest,
+) -> Result<ManagerResponse, String> {
     let result = app.state::<ManagerState>().execute(request).await?;
     // Keep tray state and visible controls on the same host-owned account.
     let view = match publish(&app).await {
@@ -426,10 +447,16 @@ fn linux_tray_watcher_available() -> bool {
         // AppIndicator construction can succeed without a desktop watcher.
         let mut child = match tokio::process::Command::new("gdbus")
             .args([
-                "call", "--session", "--timeout", "1",
-                "--dest", "org.freedesktop.DBus",
-                "--object-path", "/org/freedesktop/DBus",
-                "--method", "org.freedesktop.DBus.NameHasOwner",
+                "call",
+                "--session",
+                "--timeout",
+                "1",
+                "--dest",
+                "org.freedesktop.DBus",
+                "--object-path",
+                "/org/freedesktop/DBus",
+                "--method",
+                "org.freedesktop.DBus.NameHasOwner",
                 "org.kde.StatusNotifierWatcher",
             ])
             .stdin(std::process::Stdio::null())
@@ -446,12 +473,14 @@ fn linux_tray_watcher_available() -> bool {
         let result = tokio::time::timeout(std::time::Duration::from_secs(1), async {
             let (_, status) = tokio::try_join!(stdout.read_to_end(&mut output), child.wait())?;
             Ok::<_, std::io::Error>(status.success() && output == b"(true,)\n")
-        }).await;
+        })
+        .await;
         match result {
             Ok(Ok(available)) => available,
             _ => {
                 let _ = child.start_kill();
-                let _ = tokio::time::timeout(std::time::Duration::from_millis(250), child.wait()).await;
+                let _ =
+                    tokio::time::timeout(std::time::Duration::from_millis(250), child.wait()).await;
                 false
             }
         }
@@ -469,13 +498,17 @@ fn main() {
     let state = ManagerState {
         fleet: FleetClient::new(client.clone()),
         client,
-        view: Mutex::new(ManagerView::new(json!({"hosts":[],"discovered":[],"fleet":null}))),
+        view: Mutex::new(ManagerView::new(
+            json!({"hosts":[],"discovered":[],"fleet":null}),
+        )),
         initialized: Mutex::new(false),
         refresh: Mutex::new(()),
         tray_ready: AtomicBool::new(false),
     };
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| show_window(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            show_window(app)
+        }))
         .manage(state)
         .invoke_handler(tauri::generate_handler![manager_snapshot, manager_request])
         .setup(move |app| {
@@ -484,13 +517,23 @@ fn main() {
             #[cfg(target_os = "linux")]
             let tray_enabled = tray_enabled && linux_tray_watcher_available();
             if tray_enabled {
-                let open = MenuItem::with_id(app, "open", "Open Server Manager", true, None::<&str>)?;
+                let open =
+                    MenuItem::with_id(app, "open", "Open Server Manager", true, None::<&str>)?;
                 let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)?;
-                let share = CheckMenuItem::with_id(app, "share", "Share this host", false, false, None::<&str>)?;
+                let share = CheckMenuItem::with_id(
+                    app,
+                    "share",
+                    "Share this host",
+                    false,
+                    false,
+                    None::<&str>,
+                )?;
                 let exit = MenuItem::with_id(app, "exit", "Exit Manager", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&open, &refresh, &share, &exit])?;
-                let mut builder = TrayIconBuilder::with_id("manager").menu(&menu)
-                    .tooltip("GInfer Server Manager").show_menu_on_left_click(true)
+                let mut builder = TrayIconBuilder::with_id("manager")
+                    .menu(&menu)
+                    .tooltip("GInfer Server Manager")
+                    .show_menu_on_left_click(true)
                     .on_menu_event(|app, event| match event.id().as_ref() {
                         "open" => show_window(app),
                         "exit" => app.exit(0),
@@ -508,33 +551,59 @@ fn main() {
                                         state.execute(request).await?;
                                     }
                                     publish(&app).await
-                                }.await;
-                                if let Err(error) = result { let _ = app.emit("manager-error", error); show_window(&app); }
+                                }
+                                .await;
+                                if let Err(error) = result {
+                                    let _ = app.emit("manager-error", error);
+                                    show_window(&app);
+                                }
                             });
                         }
                         _ => {}
                     });
-                if let Some(icon) = app.default_window_icon() { builder = builder.icon(icon.clone()); }
+                if let Some(icon) = app.default_window_icon() {
+                    builder = builder.icon(icon.clone());
+                }
                 match builder.build(app) {
-                    Ok(_) => { app.manage(share); app.state::<ManagerState>().tray_ready.store(true, Ordering::SeqCst); }
+                    Ok(_) => {
+                        app.manage(share);
+                        app.state::<ManagerState>()
+                            .tray_ready
+                            .store(true, Ordering::SeqCst);
+                    }
                     Err(error) => eprintln!("Manager tray unavailable; using the window: {error}"),
                 }
             }
             let client = app.state::<ManagerState>().client.clone();
             tauri::async_runtime::spawn(async move {
                 let initialization = handle.state::<ManagerState>().initialize().await;
-                if let Err(error) = initialization { let _ = handle.emit("manager-error", error); show_window(&handle); }
+                if let Err(error) = initialization {
+                    let _ = handle.emit("manager-error", error);
+                    show_window(&handle);
+                }
                 let _ = client.discovery(true).await;
                 let mut initial = true;
                 loop {
                     match publish(&handle).await {
                         Ok(view) => {
-                            if initial && !start_window && handle.state::<ManagerState>().tray_ready.load(Ordering::SeqCst)
-                                && view.snapshot["hosts"].as_array().is_some_and(|hosts| !hosts.is_empty()) {
-                                if let Some(window) = handle.get_webview_window("main") { let _ = window.hide(); }
+                            if initial
+                                && !start_window
+                                && handle
+                                    .state::<ManagerState>()
+                                    .tray_ready
+                                    .load(Ordering::SeqCst)
+                                && view.snapshot["hosts"]
+                                    .as_array()
+                                    .is_some_and(|hosts| !hosts.is_empty())
+                            {
+                                if let Some(window) = handle.get_webview_window("main") {
+                                    let _ = window.hide();
+                                }
                             }
                         }
-                        Err(error) => { let _ = handle.emit("manager-error", error); }
+                        Err(error) => {
+                            let _ = handle.emit("manager-error", error);
+                        }
                     }
                     initial = false;
                     tokio::time::sleep(std::time::Duration::from_secs(4)).await;
@@ -544,7 +613,12 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.app_handle().state::<ManagerState>().tray_ready.load(Ordering::SeqCst) {
+                if window
+                    .app_handle()
+                    .state::<ManagerState>()
+                    .tray_ready
+                    .load(Ordering::SeqCst)
+                {
                     api.prevent_close();
                     let _ = window.hide();
                 }
