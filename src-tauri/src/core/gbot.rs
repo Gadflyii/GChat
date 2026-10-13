@@ -234,6 +234,11 @@ fn supported_route(path: &str) -> bool {
             | "/v1/setup/cloud/delete"
             | "/v1/setup/cloud/identity"
             | "/v1/setup/cloud/attach"
+            | "/v1/setup/m365/status"
+            | "/v1/setup/m365/assigned"
+            | "/v1/setup/m365/save"
+            | "/v1/setup/m365/launch"
+            | "/v1/setup/m365/remove"
             | "/v1/control/take-over"
             | "/v1/control/hand-back"
     )

@@ -420,6 +420,10 @@ async fn serve(
         .await
         .map_err(|error| error.to_string())?;
     api = api
+        .with_m365_setup(directory.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    api = api
         .with_inference_host(Arc::new(
             super::inference::NativeInferenceHost::open().await?,
         ))

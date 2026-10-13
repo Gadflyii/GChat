@@ -126,6 +126,7 @@ pub struct WorkspaceRuntime {
     connectors: Option<Arc<dyn ConnectorHost>>,
     inference: std::sync::OnceLock<Arc<dyn InferenceHost>>,
     cloud_setup: std::sync::OnceLock<Arc<crate::cloud::CloudSetup>>,
+    m365_setup: std::sync::OnceLock<Arc<crate::m365::M365Setup>>,
     guest_assets: std::sync::OnceLock<std::path::PathBuf>,
     #[cfg(target_os = "linux")]
     kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
@@ -180,6 +181,7 @@ impl WorkspaceRuntime {
             connectors: None,
             inference: std::sync::OnceLock::new(),
             cloud_setup: std::sync::OnceLock::new(),
+            m365_setup: std::sync::OnceLock::new(),
             guest_assets: std::sync::OnceLock::new(),
             #[cfg(target_os = "linux")]
             kvm_setup: std::sync::OnceLock::new(),
@@ -218,6 +220,25 @@ impl WorkspaceRuntime {
     }
     pub fn cloud_setup(&self) -> Option<Arc<crate::cloud::CloudSetup>> {
         self.cloud_setup.get().cloned()
+    }
+
+    pub async fn configure_m365_setup(
+        &self,
+        root: std::path::PathBuf,
+    ) -> Result<(), WorkspaceError> {
+        let accounts = self.connectors.clone().ok_or_else(|| {
+            WorkspaceError::GuestSetup("Microsoft account owner unavailable.".into())
+        })?;
+        let setup = crate::m365::M365Setup::open(root, accounts)
+            .await
+            .map_err(WorkspaceError::GuestSetup)?;
+        self.m365_setup
+            .set(Arc::new(setup))
+            .map_err(|_| WorkspaceError::GuestSetup("Cloud PC setup is already configured.".into()))
+    }
+
+    pub fn m365_setup(&self) -> Option<Arc<crate::m365::M365Setup>> {
+        self.m365_setup.get().cloned()
     }
 
     #[cfg(target_os = "linux")]

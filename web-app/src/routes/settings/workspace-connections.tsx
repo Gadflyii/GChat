@@ -57,6 +57,7 @@ const serviceNames: Record<string, string> = {
   todo: 'Microsoft To Do',
   onenote: 'OneNote',
   excel: 'Excel',
+  cloud_pc: 'Windows 365 Cloud PCs',
 }
 const serviceName = (id: string) => serviceNames[id] ?? id
 
