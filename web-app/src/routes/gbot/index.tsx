@@ -306,7 +306,10 @@ function GbotPage() {
       id: identity.id,
       name: connection.name,
       service_pc: { kind: 'local' },
-      bot_pc: { kind: 'lan', computer_id: identity.computerId },
+      bot_pc: connection.cloud ?? {
+        kind: 'lan',
+        computer_id: identity.computerId,
+      },
       endpoint: {
         hostname: connection.hostname,
         port: Number(connection.port),
@@ -617,7 +620,11 @@ function GbotPage() {
                           : 'Disconnected'}
                     </span>
                     {!identity &&
-                      bot.bot_pc?.kind === 'lan' &&
+                      (bot.bot_pc?.kind === 'lan' ||
+                        (bot.bot_pc?.kind === 'cloud' &&
+                          ['azure', 'aws', 'gcp'].includes(
+                            bot.bot_pc.provider ?? ''
+                          ))) &&
                       bot.connection?.kind === 'ssh' && (
                         <Button
                           variant="outline"
@@ -627,6 +634,7 @@ function GbotPage() {
                               id: bot.id,
                               name: bot.name,
                               connection: bot.connection,
+                              bot_pc: bot.bot_pc,
                             })
                             setAdding(true)
                           }}

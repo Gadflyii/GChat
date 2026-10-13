@@ -13,10 +13,21 @@ export type ViewTicket = {
   media_session_id: string
   interactive: boolean
 }
+export type GuidedCloudProvider = 'azure' | 'aws' | 'gcp'
+export type GuidedCloudComputer = {
+  kind: 'cloud'
+  provider: GuidedCloudProvider
+  resource_id: string
+}
 export type Workspace = {
   id: string
   name: string
-  bot_pc?: { kind: string; hypervisor?: string }
+  bot_pc?: {
+    kind: string
+    hypervisor?: string
+    provider?: CloudProvider | GuidedCloudProvider
+    resource_id?: string
+  }
   connection?: {
     kind: string
     endpoint?: { hostname: string; port: number; user: string }

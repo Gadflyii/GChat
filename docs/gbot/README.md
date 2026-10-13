@@ -717,6 +717,28 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 ## Current record and inventory
 
+**Accepted source: guided cloud attachment. Active: LAN service authorization.** Candidate
+`feat/gbot-guided-service-36ce`, tree
+`/ai/gchat-worktrees/gbot-guided-service-36ce`, baseline main `cf2dd919c`.
+Azure/AWS/GCP attach a user-created dedicated Debian 13 VM through the existing
+vault-key, pinned SSH and consented guest-tools flow. Provider/resource identity
+survives Finish later. GChat does not purchase or delete these manually created
+VMs; automatic Hetzner/DigitalOcean resource reconciliation remains unchanged.
+Acceptance: focused mocked wizard/resume cases and the existing hermetic SSH
+fixture for guided-vs-owned provider admission and preparation, types/lint and
+strict service Clippy. No real accounts, tokens, sign-ins, purchases or desktop
+input. PASS: all 16 affected wizard/cost cases (resume corrected and checked
+separately), two hermetic SSH provider cases, frontend types/lint and strict
+service Clippy. Evidence: `out/gbot-guided-cloud-20261013/result.json`.
+The attachment flow is implemented; physical provider installation is not claimed.
+Next: implement the separate paired-device Gbot grant and service connection.
+
+LAN service setup is separately approved: a Host-owned Gbot-only control grant
+on the existing paired-TLS connection, explicitly approved per device, revocable,
+and with grant/use events logged. SSH and inference grants do not authorize it.
+No new packages; the Host/Gbot bootstrap dependency edge needs review. Its radio
+remains disabled until the full grant/proxy/UI path lands.
+
 **Current queue — October 13.** The earlier Cua adoption items are merged
 and accepted at the scopes in the [Cua map](cua-map.md#current-adoption-status).
 The next product queue is guided LAN SSH connection, consented LAN guest-tools

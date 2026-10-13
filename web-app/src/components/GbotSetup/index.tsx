@@ -3,9 +3,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import KvmSetup from './KvmSetup'
 import LanSetup from './LanSetup'
-import CloudCosts from './CloudCosts'
+import CloudSetup from './CloudSetup'
 import M365Setup from './M365Setup'
-import type { CloudReview, M365SetupRecord, Workspace } from '@/services/gbot'
+import type {
+  CloudReview,
+  GuidedCloudComputer,
+  M365SetupRecord,
+  Workspace,
+} from '@/services/gbot'
 
 export type BotConnection = {
   name: string
@@ -16,6 +21,7 @@ export type BotConnection = {
   key: string
   passphrase: string
   workspaceId?: string
+  cloud?: GuidedCloudComputer
 }
 
 export type SetupResume = {
@@ -23,6 +29,7 @@ export type SetupResume = {
   name: string
   connection?: Workspace['connection']
   cloud?: CloudReview
+  bot_pc?: Workspace['bot_pc']
   m365?: M365SetupRecord
 }
 
@@ -40,7 +47,7 @@ const computers = [
   [
     'cloud',
     'Cloud hosted',
-    'Review live prices, create your own Hetzner or DigitalOcean VM, then connect its dedicated desktop.',
+    'Create your own Hetzner or DigitalOcean VM, or attach a dedicated Azure, AWS or Google Cloud VM.',
   ],
   [
     'm365',
@@ -69,7 +76,7 @@ export default function GbotSetup({
   const [computer, setComputer] = useState(
     resume?.m365
       ? 'm365'
-      : resume?.cloud
+      : resume?.cloud || resume?.bot_pc?.kind === 'cloud'
         ? 'cloud'
         : resume?.connection
           ? 'lan'
@@ -92,7 +99,12 @@ export default function GbotSetup({
     key: '',
     passphrase: '',
     ...(resume?.connection ? { workspaceId: resume.id } : {}),
+    ...(resume?.bot_pc?.kind === 'cloud' &&
+    ['azure', 'aws', 'gcp'].includes(resume.bot_pc.provider ?? '')
+      ? { cloud: resume.bot_pc as GuidedCloudComputer }
+      : {}),
   })
+  const guidedCloud = computer === 'cloud' && Boolean(connection.cloud)
   const update = (field: keyof BotConnection, value: string) => {
     setError('')
     setConnection((previous) => ({ ...previous, [field]: value }))
@@ -103,7 +115,7 @@ export default function GbotSetup({
       : step === 2
         ? ['lan', 'local', 'cloud', 'm365'].includes(computer)
         : step === 3
-          ? computer === 'lan' && lanReady
+          ? (computer === 'lan' || guidedCloud) && lanReady
           : true
   const submit = async () => {
     if (saving || connecting || !canContinue) return
@@ -140,10 +152,13 @@ export default function GbotSetup({
         <h3 className="font-medium">Set up your bot</h3>
         <p className="text-sm text-muted-foreground">
           Step {step + 1} of{' '}
-          {['local', 'cloud', 'm365'].includes(computer) ? 4 : 5} ·{' '}
+          {['local', 'cloud', 'm365'].includes(computer) && !guidedCloud
+            ? 4
+            : 5}{' '}
+          ·{' '}
           {step === 3 && computer === 'local'
             ? 'Review and setup'
-            : step === 3 && computer === 'cloud'
+            : step === 3 && computer === 'cloud' && !guidedCloud
               ? 'Create and connect'
               : step === 3 && computer === 'm365'
                 ? 'Cloud PC prerequisites'
@@ -208,7 +223,14 @@ export default function GbotSetup({
                   name="computer"
                   value={value}
                   checked={computer === value}
-                  onChange={() => setComputer(value)}
+                  onChange={() => {
+                    setComputer(value)
+                    setLanReady(false)
+                    setConnection((previous) => ({
+                      ...previous,
+                      cloud: undefined,
+                    }))
+                  }}
                   className="mt-0.5 size-4 shrink-0 accent-primary"
                 />
                 <span>
@@ -242,9 +264,12 @@ export default function GbotSetup({
         />
       )}
       {step === 3 && computer === 'cloud' && (
-        <CloudCosts
+        <CloudSetup
           name={connection.name}
           initial={resume?.cloud}
+          connection={connection}
+          change={setConnection}
+          ready={setLanReady}
           busy={setConnecting}
           reviewed={cloudReviewed}
           connected={localReady}
@@ -270,6 +295,14 @@ export default function GbotSetup({
               {connection.user.trim()}@{connection.hostname.trim()}:
               {Number(connection.port)}
             </dd>
+            {connection.cloud && (
+              <>
+                <dt>Cloud VM</dt>
+                <dd>
+                  {connection.cloud.provider} · {connection.cloud.resource_id}
+                </dd>
+              </>
+            )}
             <dt>SSH host public key</dt>
             <dd className="break-all font-mono">{connection.hostKey.trim()}</dd>
           </dl>
@@ -288,7 +321,11 @@ export default function GbotSetup({
         </p>
       )}
       <div className="flex gap-2">
-        {!(step === 3 && ['local', 'cloud', 'm365'].includes(computer)) && (
+        {!(
+          step === 3 &&
+          ['local', 'cloud', 'm365'].includes(computer) &&
+          !guidedCloud
+        ) && (
           <Button disabled={saving || connecting || !canContinue}>
             {saving ? 'Saving…' : step === 4 ? 'Save bot' : 'Continue'}
           </Button>
