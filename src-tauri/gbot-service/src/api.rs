@@ -294,6 +294,14 @@ impl Api {
         Ok(self)
     }
 
+    pub async fn with_m365_setup(self, root: std::path::PathBuf) -> Result<Self, ApiError> {
+        self.runtime
+            .configure_m365_setup(root)
+            .await
+            .map_err(ApiError::Workspace)?;
+        Ok(self)
+    }
+
     #[cfg(target_os = "linux")]
     pub async fn with_kvm_setup(self, root: std::path::PathBuf) -> Result<Self, ApiError> {
         self.runtime
@@ -647,6 +655,53 @@ async fn cloud_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> 
     }
 }
 
+async fn m365_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> Response<Body> {
+    use crate::m365::{AccountRequest, SaveSetup, SetupId};
+    let Some(setup) = runtime.m365_setup() else {
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "m365_unavailable",
+            "Cloud PC setup is unavailable. Reopen GChat.",
+        );
+    };
+    let result = match request.uri().path() {
+        "/v1/setup/m365/status" => setup
+            .status()
+            .await
+            .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+        "/v1/setup/m365/assigned" => match parse_body::<AccountRequest>(request).await {
+            Some(input) => setup
+                .assigned(&input.account_id)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
+        "/v1/setup/m365/save" => match parse_body::<SaveSetup>(request).await {
+            Some(input) => setup
+                .save(input)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
+        "/v1/setup/m365/launch" => match parse_body::<SetupId>(request).await {
+            Some(input) => setup.launch(input.id).await,
+            None => return invalid_request(),
+        },
+        "/v1/setup/m365/remove" => match parse_body::<SetupId>(request).await {
+            Some(input) => setup
+                .remove(input.id)
+                .await
+                .map(|()| serde_json::json!({"removed":true})),
+            None => return invalid_request(),
+        },
+        _ => return invalid_request(),
+    };
+    match result {
+        Ok(value) => json_response(StatusCode::OK, &value),
+        Err(message) => error_response(StatusCode::CONFLICT, "m365_setup", &message),
+    }
+}
+
 async fn service_route(
     service: Arc<Service>,
     runtime: Arc<WorkspaceRuntime>,
@@ -751,6 +806,9 @@ async fn route(
             hyper::header::HeaderValue::from_static("Bearer"),
         );
         return Ok(response);
+    }
+    if request.method() == Method::POST && request.uri().path().starts_with("/v1/setup/m365/") {
+        return Ok(m365_route(runtime, request).await);
     }
     if request.method() == Method::POST && request.uri().path().starts_with("/v1/setup/cloud/") {
         return Ok(cloud_route(runtime, request).await);

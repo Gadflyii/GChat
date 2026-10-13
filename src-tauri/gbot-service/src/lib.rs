@@ -11,6 +11,7 @@ pub mod kvm;
 #[cfg(target_os = "linux")]
 pub mod kvm_setup;
 pub mod lan_setup;
+pub mod m365;
 pub mod media;
 pub mod schedules;
 pub mod service;

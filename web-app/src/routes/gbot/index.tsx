@@ -31,6 +31,7 @@ import {
   type Identity,
   type KvmSetupRecord,
   type CloudReview,
+  type M365SetupRecord,
   type Task,
 } from '@/services/gbot'
 
@@ -116,6 +117,7 @@ function GbotPage() {
   const [resuming, setResuming] = useState<SetupResume>()
   const [setups, setSetups] = useState<KvmSetupRecord[]>()
   const [cloudReviews, setCloudReviews] = useState<CloudReview[]>([])
+  const [m365Setups, setM365Setups] = useState<M365SetupRecord[]>([])
   const [setupError, setSetupError] = useState('')
   const [prompt, setPrompt] = useState('')
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
@@ -139,11 +141,21 @@ function GbotPage() {
       setState(value)
       setSetupError('')
       let cloud: CloudReview[] = []
+      let m365: M365SetupRecord[] = []
       try {
         const saved = await gbot<CloudReview[]>('setup/cloud/status', {})
         if (stopped.current || version !== refreshVersion.current) return
         cloud = Array.isArray(saved) ? saved : []
         setCloudReviews(cloud)
+      } catch (cause) {
+        if (stopped.current || version !== refreshVersion.current) return
+        setSetupError(String(cause))
+      }
+      try {
+        const saved = await gbot<M365SetupRecord[]>('setup/m365/status', {})
+        if (stopped.current || version !== refreshVersion.current) return
+        m365 = Array.isArray(saved) ? saved : []
+        setM365Setups(m365)
       } catch (cause) {
         if (stopped.current || version !== refreshVersion.current) return
         setSetupError(String(cause))
@@ -160,7 +172,8 @@ function GbotPage() {
       }
       if (!setupOffered.current) {
         setupOffered.current = true
-        if (!value.workspaces.length && !cloud.length) setAdding(true)
+        if (!value.workspaces.length && !cloud.length && !m365.length)
+          setAdding(true)
       }
       setError('')
       try {
@@ -435,6 +448,9 @@ function GbotPage() {
                 cloudReviewed={async () => {
                   await refresh()
                 }}
+                m365Saved={async () => {
+                  await refresh()
+                }}
                 cancel={() => {
                   setupIdentity.current = null
                   setResuming(undefined)
@@ -454,9 +470,11 @@ function GbotPage() {
                     {review.name} · Cloud computer setup
                   </p>
                   <p>
-                    {review.deployment ? `Computer ${review.deployment.phase.replaceAll('_', ' ')}` : review.confirmed
-                      ? 'Cost review saved'
-                      : 'Cost review incomplete · No VM created'}
+                    {review.deployment
+                      ? `Computer ${review.deployment.phase.replaceAll('_', ' ')}`
+                      : review.confirmed
+                        ? 'Cost review saved'
+                        : 'Cost review incomplete · No VM created'}
                   </p>
                   {review.deployment?.issue && <p>{review.deployment.issue}</p>}
                   <div className="flex gap-2">
@@ -476,7 +494,18 @@ function GbotPage() {
                     </Button>
                     <Button
                       variant="ghost"
-                      disabled={busy || Boolean(review.deployment && review.deployment.phase !== 'deleted') || Boolean(state?.workspaces.some((workspace) => workspace.id === review.id))}
+                      disabled={
+                        busy ||
+                        Boolean(
+                          review.deployment &&
+                            review.deployment.phase !== 'deleted'
+                        ) ||
+                        Boolean(
+                          state?.workspaces.some(
+                            (workspace) => workspace.id === review.id
+                          )
+                        )
+                      }
                       onClick={() =>
                         void perform(() =>
                           gbot('setup/cloud/remove', { id: review.id })
@@ -484,6 +513,61 @@ function GbotPage() {
                       }
                     >
                       Remove saved review
+                    </Button>
+                  </div>
+                </section>
+              ))}
+            {!adding &&
+              m365Setups.map((record) => (
+                <section
+                  key={record.id}
+                  aria-label={`M365 setup ${record.name}`}
+                  className="space-y-2 rounded-md border p-3 text-sm"
+                >
+                  <p className="font-medium">
+                    {record.name} · M365 Cloud PC setup
+                  </p>
+                  <p>Setup saved · Desktop control is not connected yet</p>
+                  <p>
+                    {record.cloud_pc.display_name || record.cloud_pc.id} ·{' '}
+                    {record.cloud_pc.image_name || 'Image not supplied'} ·{' '}
+                    {record.cloud_pc.plan_name || 'Plan not supplied'}
+                  </p>
+                  <p>
+                    {record.route === 'guest_worker'
+                      ? 'Worker in the Cloud PC user session'
+                      : 'Supported Microsoft client'}{' '}
+                    · Resume setup to prepare the desktop connection
+                  </p>
+                  <p className="text-muted-foreground">
+                    This saved setup is not a connected bot workspace. Removing
+                    it keeps your Microsoft account and Cloud PC.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        setResuming({
+                          id: record.id,
+                          name: record.name,
+                          m365: record,
+                        })
+                        setAdding(true)
+                      }}
+                    >
+                      Resume Cloud PC setup
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        void perform(() =>
+                          gbot('setup/m365/remove', { id: record.id })
+                        )
+                      }
+                    >
+                      Remove saved Cloud PC setup
                     </Button>
                   </div>
                 </section>

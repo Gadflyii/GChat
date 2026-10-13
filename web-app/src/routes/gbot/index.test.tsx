@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
 import type { KvmSetupRecord } from '@/services/gbot'
+import { connectorAccounts } from '@/services/workspace-connectors'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
@@ -33,6 +34,12 @@ vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (options: unknown) => ({ options }),
 }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }))
+vi.mock('@/services/workspace-connectors', () => ({
+  connectorAccounts: vi.fn(),
+  beginConnectorAuth: vi.fn(),
+  connectorAuthStatus: vi.fn(),
+  cancelConnectorAuth: vi.fn(),
+}))
 vi.mock('@/containers/HeaderPage', () => ({
   default: ({ children }: { children: React.ReactNode }) => (
     <header>{children}</header>
@@ -110,7 +117,7 @@ it('resumes a saved cloud price review without creating a workspace or offering 
   expect(
     screen.queryByRole('form', { name: 'Set up Gbot' })
   ).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Resume cost review' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Resume setup' }))
   expect(
     await screen.findByRole('region', { name: 'Cloud cost review' })
   ).toBeInTheDocument()
@@ -120,6 +127,137 @@ it('resumes a saved cloud price review without creating a workspace or offering 
       ([path]) => path === 'workspaces/ssh' || path === 'workspaces'
     )
   ).toBe(false)
+})
+
+it('resumes saved M365 prerequisites without presenting a connected bot workspace', async () => {
+  mocks.listen.mockResolvedValue(() => {})
+  const record = {
+    id: 'm365-setup',
+    name: 'Cloud PC researcher',
+    account_id: 'selected-work-account',
+    cloud_pc: {
+      id: 'selected-cloud-pc',
+      display_name: 'Dedicated PC',
+      image_name: 'Windows 11',
+      plan_name: '2 vCPU',
+    },
+    route: 'guest_worker',
+  }
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state')
+      return {
+        workspaces: [],
+        live_sessions: [],
+        assignments: [],
+        controls: [],
+      }
+    if (path === 'setup/m365/status') return [record]
+    return []
+  })
+  vi.mocked(connectorAccounts).mockResolvedValue({
+    configs: [],
+    accounts: [],
+    active_flows: [],
+    selected_accounts: {},
+    services: { google: [], microsoft: [] },
+  })
+  render(<Page />)
+  const card = await screen.findByRole('region', {
+    name: 'M365 setup Cloud PC researcher',
+  })
+  expect(
+    within(card).getByText('Setup saved · Desktop control is not connected yet')
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('form', { name: 'Set up Gbot' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
+  fireEvent.click(
+    within(card).getByRole('button', { name: 'Resume Cloud PC setup' })
+  )
+  await screen.findByRole('region', { name: 'M365 Cloud PC setup' })
+  expect(
+    screen.getByText('Step 4 of 4 · Cloud PC prerequisites')
+  ).toBeInTheDocument()
+  expect(await screen.findByLabelText('Microsoft account')).toHaveValue(
+    record.account_id
+  )
+  expect(
+    screen.getByLabelText('Worker in the Cloud PC user session')
+  ).toBeChecked()
+  expect(
+    screen.getByRole('button', { name: 'Save Cloud PC setup' })
+  ).toBeDisabled()
+  expect(
+    mocks.call.mock.calls.every(
+      ([path]) =>
+        ![
+          'connect',
+          'workspaces',
+          'workspaces/ssh',
+          'setup/m365/assigned',
+        ].includes(path)
+    )
+  ).toBe(true)
+})
+
+it('removes only the saved M365 setup and preserves the Cloud PC and Microsoft account', async () => {
+  mocks.listen.mockResolvedValue(() => {})
+  let records = [
+    {
+      id: 'm365-setup',
+      name: 'Cloud PC researcher',
+      account_id: 'work-account',
+      cloud_pc: {
+        id: 'cloud-pc',
+        display_name: 'Dedicated PC',
+        image_name: 'Windows 11',
+        plan_name: '2 vCPU',
+      },
+      route: 'brokered_client',
+    },
+  ]
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state')
+      return {
+        workspaces: [],
+        live_sessions: [],
+        assignments: [],
+        controls: [],
+      }
+    if (path === 'setup/m365/status') return records
+    if (path === 'setup/m365/remove') {
+      records = []
+      return {}
+    }
+    return []
+  })
+  render(<Page />)
+  const card = await screen.findByRole('region', {
+    name: 'M365 setup Cloud PC researcher',
+  })
+  expect(
+    within(card).getByText(
+      /Removing it keeps your Microsoft account and Cloud PC/
+    )
+  ).toBeInTheDocument()
+  fireEvent.click(
+    within(card).getByRole('button', { name: 'Remove saved Cloud PC setup' })
+  )
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('region', { name: 'M365 setup Cloud PC researcher' })
+    ).not.toBeInTheDocument()
+  )
+  expect(mocks.call).toHaveBeenCalledWith('setup/m365/remove', {
+    id: 'm365-setup',
+  })
+  expect(
+    mocks.call.mock.calls.every(
+      ([path]) =>
+        !['workspaces/remove', 'connect', 'setup/cloud/delete'].includes(path)
+    )
+  ).toBe(true)
 })
 
 it('imports an SSH workspace and preserves setup identity on retry', async () => {

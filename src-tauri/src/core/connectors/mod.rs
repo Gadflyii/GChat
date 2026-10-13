@@ -1,4 +1,5 @@
 pub mod accounts;
+mod cloud_pc;
 pub mod google;
 pub mod microsoft;
 
@@ -269,6 +270,18 @@ impl gbot_service::connectors::ConnectorHost for BotConnectorHost {
             }
             match operation {
                 "accounts" => encode(self.state.view()?),
+                "cloud_pc_list" => {
+                    encode(cloud_pc::list(&self.state, text(&arguments, "account_id")?).await?)
+                }
+                "cloud_pc_launch" => {
+                    cloud_pc::launch(
+                        &self.state,
+                        text(&arguments, "account_id")?,
+                        decode(arguments["cloud_pc_id"].clone())?,
+                    )
+                    .await
+                }
+
                 "configure" => encode(self.state.configure(decode(arguments)?).await?),
                 "begin_auth" => {
                     let (flow, url) = self.state.begin_auth(decode(arguments)?).await?;

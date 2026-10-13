@@ -1290,6 +1290,7 @@ fn service_ids(provider: Provider) -> &'static [&'static str] {
             "todo",
             "onenote",
             "excel",
+            "cloud_pc",
         ],
     }
 }
@@ -1337,6 +1338,7 @@ fn scopes(provider: Provider, service: &str, access: Access) -> Result<Vec<Strin
         } else {
             "https://www.googleapis.com/auth/tasks.readonly"
         }],
+        (Provider::Microsoft, "cloud_pc") => vec!["CloudPC.Read.All"],
         (Provider::Microsoft, "outlook") => {
             if write {
                 vec!["Mail.ReadWrite", "Mail.Send"]
@@ -1618,6 +1620,17 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::sync::Condvar;
+
+    #[test]
+    fn assigned_cloud_pc_permission_is_delegated_and_read_only() {
+        assert!(service_ids(Provider::Microsoft).contains(&"cloud_pc"));
+        for access in [Access::ReadOnly, Access::ReadWrite] {
+            assert_eq!(
+                scopes(Provider::Microsoft, "cloud_pc", access).unwrap(),
+                vec!["CloudPC.Read.All"]
+            );
+        }
+    }
 
     #[derive(Default)]
     struct MemoryVault {

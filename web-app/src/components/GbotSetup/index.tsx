@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input'
 import KvmSetup from './KvmSetup'
 import LanSetup from './LanSetup'
 import CloudCosts from './CloudCosts'
-import type { CloudReview, Workspace } from '@/services/gbot'
+import M365Setup from './M365Setup'
+import type { CloudReview, M365SetupRecord, Workspace } from '@/services/gbot'
 
 export type BotConnection = {
   name: string
@@ -22,6 +23,7 @@ export type SetupResume = {
   name: string
   connection?: Workspace['connection']
   cloud?: CloudReview
+  m365?: M365SetupRecord
 }
 
 const computers = [
@@ -40,7 +42,11 @@ const computers = [
     'Cloud hosted',
     'Review live prices, create your own Hetzner or DigitalOcean VM, then connect its dedicated desktop.',
   ],
-  ['m365', 'M365 Cloud PC', 'The Cloud PC connection is not available yet.'],
+  [
+    'm365',
+    'M365 Cloud PC',
+    'Select an existing assigned Cloud PC and save its connection prerequisites.',
+  ],
 ] as const
 const steps = ['Name', 'Service', 'Computer', 'Connection', 'Review']
 
@@ -49,17 +55,27 @@ export default function GbotSetup({
   cancel,
   localReady,
   cloudReviewed = async () => {},
+  m365Saved = async () => {},
   resume,
 }: {
   save: (connection: BotConnection) => Promise<void>
   cancel: () => void
   localReady: (id: string) => Promise<void>
   cloudReviewed?: () => Promise<void>
+  m365Saved?: () => Promise<void>
   resume?: SetupResume
 }) {
   const [step, setStep] = useState(resume ? 3 : 0)
   const [computer, setComputer] = useState(
-    resume?.cloud ? 'cloud' : resume?.connection ? 'lan' : resume ? 'local' : ''
+    resume?.m365
+      ? 'm365'
+      : resume?.cloud
+        ? 'cloud'
+        : resume?.connection
+          ? 'lan'
+          : resume
+            ? 'local'
+            : ''
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -85,7 +101,7 @@ export default function GbotSetup({
     step === 0
       ? Boolean(connection.name.trim())
       : step === 2
-        ? ['lan', 'local', 'cloud'].includes(computer)
+        ? ['lan', 'local', 'cloud', 'm365'].includes(computer)
         : step === 3
           ? computer === 'lan' && lanReady
           : true
@@ -124,12 +140,14 @@ export default function GbotSetup({
         <h3 className="font-medium">Set up your bot</h3>
         <p className="text-sm text-muted-foreground">
           Step {step + 1} of{' '}
-          {computer === 'local' || computer === 'cloud' ? 4 : 5} ·{' '}
+          {['local', 'cloud', 'm365'].includes(computer) ? 4 : 5} ·{' '}
           {step === 3 && computer === 'local'
             ? 'Review and setup'
             : step === 3 && computer === 'cloud'
               ? 'Create and connect'
-              : steps[step]}
+              : step === 3 && computer === 'm365'
+                ? 'Cloud PC prerequisites'
+                : steps[step]}
         </p>
       </div>
       {step === 0 && (
@@ -232,6 +250,14 @@ export default function GbotSetup({
           connected={localReady}
         />
       )}
+      {step === 3 && computer === 'm365' && (
+        <M365Setup
+          name={connection.name}
+          initial={resume?.m365}
+          busy={setConnecting}
+          saved={m365Saved}
+        />
+      )}
       {step === 4 && (
         <>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
@@ -262,7 +288,7 @@ export default function GbotSetup({
         </p>
       )}
       <div className="flex gap-2">
-        {!(step === 3 && ['local', 'cloud'].includes(computer)) && (
+        {!(step === 3 && ['local', 'cloud', 'm365'].includes(computer)) && (
           <Button disabled={saving || connecting || !canContinue}>
             {saving ? 'Saving…' : step === 4 ? 'Save bot' : 'Continue'}
           </Button>
@@ -286,7 +312,9 @@ export default function GbotSetup({
           disabled={saving || connecting}
           onClick={cancel}
         >
-          {connection.workspaceId ? 'Finish later' : 'Cancel'}
+          {connection.workspaceId || (step === 3 && computer === 'm365')
+            ? 'Finish later'
+            : 'Cancel'}
         </Button>
       </div>
     </form>

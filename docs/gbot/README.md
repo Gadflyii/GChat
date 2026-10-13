@@ -723,8 +723,9 @@ The next product queue is guided LAN SSH connection, consented LAN guest-tools
 preparation, live cloud cost review, owned cloud creation/recovery, and M365
 assigned-PC setup. Cua browser evaluation runs after the LAN connection, with its
 approved dependencies confined to a disposable Debian guest (no AGPL).
-Cloud/M365 implementation uses mocks only: no account access, tokens, sign-in,
-paid resources or provisioning without Ron's authorization.
+Cloud/M365 source gates use mock providers. Ron authorized a read-only probe of
+his existing Cloud PC; paid resources and physical provisioning require a separate
+approved account and cost window.
 
 Guided LAN connection is merged in main `1bc9e0df7`. Its focused wizard,
 hermetic SSH/API, types/lint/check/Clippy evidence remains valid at
@@ -764,8 +765,15 @@ owned removal and verified SSH/tool attachment are implemented. Nine service,
 four provider and nine wizard cases, types/lint and strict Clippy pass.
 Evidence: `out/gbot-cloud-create/result.json`; mocked providers only, physical
 provisioning remains owed. No paid resources or guests; shared cache borrowed.
-Next: M365 assigned-PC setup through the existing Microsoft account/vault owner;
-mocked Graph only, with physical desktop connection still awaiting qualification.
+**Implemented: M365 assigned-PC setup**, branch `feat/gbot-m365-setup-2f39`.
+The wizard requests delegated read-only access, lists the chosen account's assigned
+PCs, saves an explicit route and dedicated-PC consent, and resumes after restart.
+It opens a fresh Microsoft launch link; saved setup never claims desktop Ready.
+Two service, four native Graph/scope and ten M365 UI cases pass, with affected
+wizard/route cases, types, lint and strict Clippy. Evidence: `out/gbot-m365-setup/result.json`.
+Ron identified `rhenderson@sectilelabs.ai`; live sign-in and dedicated-session
+confirmation are still needed. No live Graph/desktop control qualification, paid
+resource, Windows build or new dependency. Tree unchanged; shared cache retained.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at

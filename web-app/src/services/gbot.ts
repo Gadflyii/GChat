@@ -34,6 +34,20 @@ export type KvmSetupRecord = {
   stage: string
   issue: SetupIssue | null
 }
+export type CloudPc = {
+  id: string
+  display_name: string
+  image_name: string
+  plan_name: string
+}
+export type M365Route = 'brokered_client' | 'guest_worker'
+export type M365SetupRecord = {
+  id: string
+  name: string
+  account_id: string
+  cloud_pc: CloudPc
+  route: M365Route
+}
 export type CloudProvider = 'hetzner' | 'digital_ocean'
 export type CloudAmount = { net: string; gross: string | null }
 export type CloudPrice = { monthly: CloudAmount; hourly: CloudAmount }
