@@ -38,7 +38,7 @@ const computers = [
   [
     'cloud',
     'Cloud hosted',
-    'Review live Hetzner or DigitalOcean prices. VM creation is the next step under development.',
+    'Review live prices, create your own Hetzner or DigitalOcean VM, then connect its dedicated desktop.',
   ],
   ['m365', 'M365 Cloud PC', 'The Cloud PC connection is not available yet.'],
 ] as const
@@ -128,7 +128,7 @@ export default function GbotSetup({
           {step === 3 && computer === 'local'
             ? 'Review and setup'
             : step === 3 && computer === 'cloud'
-              ? 'Cost review'
+              ? 'Create and connect'
               : steps[step]}
         </p>
       </div>
@@ -229,6 +229,7 @@ export default function GbotSetup({
           initial={resume?.cloud}
           busy={setConnecting}
           reviewed={cloudReviewed}
+          connected={localReady}
         />
       )}
       {step === 4 && (

@@ -1,11 +1,17 @@
 //! Provider-owned prices; only fixed catalog endpoints receive vault credentials.
 use gbot_service::{
-    cloud::{decimal_units, Amount, Catalog, CloudFuture, CloudHost, Plan, Price, Region},
+    cloud::{
+        decimal_units, Amount, Catalog, CloudFuture, CloudHost, CreateResource, Pending, Plan,
+        Price, Region, Resource, ResourceFuture,
+    },
     contract::CloudProvider,
     vault::Secret,
 };
 use serde_json::Value;
 use std::time::Duration;
+
+#[path = "cloud_resources.rs"]
+mod cloud_resources;
 
 pub struct NativeCloudHost(reqwest::Client);
 impl NativeCloudHost {
@@ -102,6 +108,45 @@ impl CloudHost for NativeCloudHost {
                 _ => Err("This provider uses guided setup. Choose Hetzner or DigitalOcean for live cost review.".into()),
             }
         })
+    }
+    fn create<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        request: &'a CreateResource,
+    ) -> ResourceFuture<'a, Resource> {
+        Box::pin(cloud_resources::create(self, provider, token, request))
+    }
+    fn find<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        setup: uuid::Uuid,
+        pending: &'a Pending,
+    ) -> ResourceFuture<'a, Vec<Resource>> {
+        Box::pin(cloud_resources::find(self, provider, token, setup, pending))
+    }
+    fn inspect<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        setup: uuid::Uuid,
+        resource: &'a Resource,
+    ) -> ResourceFuture<'a, Option<Resource>> {
+        Box::pin(cloud_resources::inspect(
+            self, provider, token, setup, resource,
+        ))
+    }
+    fn delete<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        setup: uuid::Uuid,
+        resource: &'a Resource,
+    ) -> ResourceFuture<'a, ()> {
+        Box::pin(cloud_resources::delete(
+            self, provider, token, setup, resource,
+        ))
     }
 }
 fn invalid() -> String {

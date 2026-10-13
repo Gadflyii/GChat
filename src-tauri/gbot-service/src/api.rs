@@ -537,7 +537,10 @@ async fn setup_route(
 }
 
 async fn cloud_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> Response<Body> {
-    use crate::cloud::{ConfirmQuote, ReadCatalog, ReviewId, SelectPlan};
+    use crate::cloud::{
+        AttachComputer, ConfirmQuote, CreateComputer, DeleteComputer, ReadCatalog, ReviewId,
+        SelectPlan,
+    };
     let Some(setup) = runtime.cloud_setup() else {
         return error_response(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -575,9 +578,63 @@ async fn cloud_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> 
                 .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
             None => return invalid_request(),
         },
+        "/v1/setup/cloud/create" => match parse_body::<CreateComputer>(request).await {
+            Some(input) => runtime
+                .create_cloud(input, now)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
+        "/v1/setup/cloud/check" => match parse_body::<ReviewId>(request).await {
+            Some(input) => match setup.check(input.id, now).await {
+                Ok(review)
+                    if review.deployment.as_ref().is_some_and(|d| {
+                        matches!(
+                            d.phase,
+                            crate::cloud::Phase::Deleting | crate::cloud::Phase::Deleted
+                        )
+                    }) =>
+                {
+                    runtime
+                        .delete_cloud(DeleteComputer {
+                            id: input.id,
+                            consent: true,
+                        })
+                        .await
+                        .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string()))
+                }
+                result => result.and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            },
+            None => return invalid_request(),
+        },
+        "/v1/setup/cloud/delete" => match parse_body::<DeleteComputer>(request).await {
+            Some(input) => runtime
+                .delete_cloud(input)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
+        "/v1/setup/cloud/identity" => match parse_body::<ReviewId>(request).await {
+            Some(input) => match setup.endpoint(input.id).await {
+                Ok(endpoint) => runtime
+                    .inspect_ssh_identity(endpoint)
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+                Err(e) => Err(e),
+            },
+            None => return invalid_request(),
+        },
+        "/v1/setup/cloud/attach" => match parse_body::<AttachComputer>(request).await {
+            Some(input) => runtime
+                .attach_cloud(input)
+                .await
+                .and_then(|r| serde_json::to_value(r).map_err(|e| e.to_string())),
+            None => return invalid_request(),
+        },
         "/v1/setup/cloud/remove" => match parse_body::<ReviewId>(request).await {
-            Some(input) => setup
-                .remove(input.id)
+            Some(input) => runtime
+                .remove_cloud_review(input.id)
                 .await
                 .map(|()| serde_json::json!({"removed":true})),
             None => return invalid_request(),

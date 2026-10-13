@@ -17,9 +17,9 @@ Credential replacement uses durable cleanup intent before the vault write. State
 publication is reconciled on reload, and retired credentials remain queued until
 deleted. Client disconnection does not cancel the credential/state transaction.
 
-This change saves cost reviews only. The following provisioning change must
-revalidate the exact quote before creating a VM and own ambiguous provider
-responses, recovery and deletion. A saved review is never a Ready workspace.
+This change saves cost reviews only. [Cloud creation and recovery](2026-10-13-own-cloud-resource-creation-and-recovery.md)
+extends that owner with exact-quote revalidation, resource ownership and recovery.
+A saved review is never a Ready workspace.
 
 The boundary uses the existing authenticated Gbot service and native HTTP client;
 it adds no dependencies, cloud relay or polling loop.

@@ -6,10 +6,12 @@ export default function LanTools({
   workspaceId,
   ready,
   busy,
+  cloud = false,
 }: {
   workspaceId: string
   ready: (value: boolean) => void
   busy: (value: boolean) => void
+  cloud?: boolean
 }) {
   const [consent, setConsent] = useState(false)
   const [working, setWorking] = useState(false)
@@ -56,8 +58,7 @@ export default function LanTools({
         browser, driver and media tools.
       </label>
       <p className="text-xs text-muted-foreground">
-        Sign out of graphical sessions first. Your SSH settings and firewall
-        stay in place.
+        {cloud ? 'GChat installs the pinned tools through the computer’s setup helper.' : 'Sign out of graphical sessions first. Your SSH settings and firewall stay in place.'}
       </p>
       <div className="flex flex-wrap gap-2">
         <Button

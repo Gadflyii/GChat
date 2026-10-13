@@ -70,6 +70,25 @@ export type CloudReview = {
     expires_at: number
   } | null
   confirmed: boolean
+  deployment?: {
+    phase: 'creating' | 'check_required' | 'running' | 'deleting' | 'deleted'
+    plan: CloudPlan
+    source_cidrs: string[]
+    resources: {
+      kind: 'tag' | 'firewall' | 'ipv4' | 'server'
+      id: string
+      name: string
+      ready: boolean
+      address: string | null
+      actions: string[]
+    }[]
+    pending: { kind: string; name: string; deleting: unknown } | null
+    issue: string | null
+  } | null
+}
+export type SshIdentity = {
+  public_key: { algorithm: string; public_key: string }
+  fingerprint: string
 }
 export type Control = {
   identity: Identity

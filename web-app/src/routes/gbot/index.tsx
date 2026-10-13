@@ -433,8 +433,6 @@ function GbotPage() {
                   await refresh()
                 }}
                 cloudReviewed={async () => {
-                  setAdding(false)
-                  setResuming(undefined)
                   await refresh()
                 }}
                 cancel={() => {
@@ -456,11 +454,11 @@ function GbotPage() {
                     {review.name} · Cloud computer setup
                   </p>
                   <p>
-                    {review.confirmed
+                    {review.deployment ? `Computer ${review.deployment.phase.replaceAll('_', ' ')}` : review.confirmed
                       ? 'Cost review saved'
-                      : 'Cost review incomplete'}{' '}
-                    · No VM created
+                      : 'Cost review incomplete · No VM created'}
                   </p>
+                  {review.deployment?.issue && <p>{review.deployment.issue}</p>}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -474,11 +472,11 @@ function GbotPage() {
                         setAdding(true)
                       }}
                     >
-                      Resume cost review
+                      Resume setup
                     </Button>
                     <Button
                       variant="ghost"
-                      disabled={busy}
+                      disabled={busy || Boolean(review.deployment && review.deployment.phase !== 'deleted') || Boolean(state?.workspaces.some((workspace) => workspace.id === review.id))}
                       onClick={() =>
                         void perform(() =>
                           gbot('setup/cloud/remove', { id: review.id })

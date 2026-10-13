@@ -1,4 +1,4 @@
-//! Read-only provider catalogs and durable cost consent; this owner creates no resources.
+//! Provider costs, consent and recovery of this setup's cloud resources.
 use crate::{
     contract::CloudProvider,
     store::{SaveError, Store},
@@ -10,8 +10,110 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 pub type CloudFuture<'a> = Pin<Box<dyn Future<Output = Result<Catalog, String>> + Send + 'a>>;
+pub type ResourceFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, ProviderError>> + Send + 'a>>;
 pub trait CloudHost: Send + Sync {
     fn catalog<'a>(&'a self, provider: CloudProvider, token: &'a Secret) -> CloudFuture<'a>;
+    fn create<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        request: &'a CreateResource,
+    ) -> ResourceFuture<'a, Resource>;
+    fn find<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        setup: Uuid,
+        pending: &'a Pending,
+    ) -> ResourceFuture<'a, Vec<Resource>>;
+    fn inspect<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        setup: Uuid,
+        resource: &'a Resource,
+    ) -> ResourceFuture<'a, Option<Resource>>;
+    fn delete<'a>(
+        &'a self,
+        provider: CloudProvider,
+        token: &'a Secret,
+        setup: Uuid,
+        resource: &'a Resource,
+    ) -> ResourceFuture<'a, ()>;
+}
+
+#[derive(Debug)]
+pub struct ProviderError {
+    pub message: String,
+    pub uncertain: bool,
+}
+impl ProviderError {
+    pub fn rejected(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            uncertain: false,
+        }
+    }
+    pub fn uncertain(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            uncertain: true,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResourceKind {
+    Tag,
+    Firewall,
+    Ipv4,
+    Server,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Resource {
+    pub kind: ResourceKind,
+    pub id: String,
+    pub name: String,
+    pub ready: bool,
+    pub address: Option<String>,
+    pub actions: Vec<String>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Pending {
+    pub kind: ResourceKind,
+    pub name: String,
+    pub deleting: Option<Resource>,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    Creating,
+    CheckRequired,
+    Running,
+    Deleting,
+    Deleted,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Deployment {
+    pub plan: Plan,
+    pub currency: String,
+    pub tax: String,
+    pub source_cidrs: Vec<String>,
+    pub public_key: crate::contract::SshHostPublicKey,
+    pub phase: Phase,
+    pub server_id: Option<String>,
+    pub resources: Vec<Resource>,
+    pub pending: Option<Pending>,
+    pub issue: Option<String>,
+}
+pub struct CreateResource {
+    pub setup: Uuid,
+    pub pending: Pending,
+    pub plan: Plan,
+    pub source_cidrs: Vec<String>,
+    pub resources: Vec<Resource>,
+    pub user_data: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -29,7 +131,7 @@ pub struct Region {
     pub id: String,
     pub name: String,
 }
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Plan {
     pub id: String,
     pub name: String,
@@ -161,16 +263,22 @@ pub struct Review {
     pub expires_at: u64,
     pub quote: Option<Quote>,
     pub confirmed: bool,
+    #[serde(default)]
+    pub deployment: Option<Deployment>,
 }
 #[derive(Clone, Deserialize, Serialize)]
 struct Record {
     review: Review,
     credential_ref: Uuid,
+    #[serde(default)]
+    key_ref: Option<Uuid>,
 }
 #[derive(Clone, Default, Deserialize, Serialize)]
 struct State {
     records: Vec<Record>,
     retired_credentials: Vec<Uuid>,
+    #[serde(default)]
+    workspace_retirements: std::collections::BTreeMap<Uuid, Vec<Uuid>>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -198,12 +306,34 @@ pub struct ConfirmQuote {
 pub struct ReviewId {
     pub id: Uuid,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateComputer {
+    pub id: Uuid,
+    pub quote_id: Uuid,
+    pub consent: bool,
+    pub source_cidrs: Vec<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeleteComputer {
+    pub id: Uuid,
+    pub consent: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttachComputer {
+    pub id: Uuid,
+    pub pinned_host_key: crate::contract::SshHostPublicKey,
+    pub verified: bool,
+}
 
 pub struct CloudSetup {
     store: Arc<Store>,
     state: Mutex<State>,
     vault: Arc<dyn Vault>,
     host: Arc<dyn CloudHost>,
+    assets: PathBuf,
 }
 impl CloudSetup {
     pub async fn open(
@@ -226,6 +356,7 @@ impl CloudSetup {
             state: Mutex::new(state),
             vault,
             host,
+            assets: root.join("vms/assets"),
         })
     }
     async fn recover(&self, state: &mut State) -> Result<(), String> {
@@ -331,7 +462,9 @@ impl CloudSetup {
             expires_at: now.checked_add(900).ok_or("Invalid quote time")?,
             quote: None,
             confirmed: false,
+            deployment: previous.and_then(|r| r.review.deployment.clone()),
         };
+        let key_ref = previous.and_then(|r| r.key_ref);
         if new_secret {
             // Record cleanup intent before writing a credential outside the state file.
             let mut pending = state.clone();
@@ -353,6 +486,7 @@ impl CloudSetup {
         next.records.push(Record {
             review: review.clone(),
             credential_ref: reference,
+            key_ref,
         });
         self.commit(&mut state, next).await?;
         self.cleanup(&mut state).await?;
@@ -368,6 +502,11 @@ impl CloudSetup {
             .find(|r| r.review.id == input.id)
             .ok_or("Cost review not found.")?;
         let review = &mut record.review;
+        if review.deployment.as_ref().is_some_and(|d| {
+            d.phase != Phase::Deleted && (d.plan.id != input.plan || d.plan.region != input.region)
+        }) {
+            return Err("This setup already owns resources for another plan. Remove those resources before choosing a new plan.".into());
+        }
         if now < review.fetched_at || now >= review.expires_at {
             return Err("Prices expired. Refresh the plans and review the cost again.".into());
         }
@@ -423,16 +562,641 @@ impl CloudSetup {
         let mut state = self.state.lock().await;
         self.recover(&mut state).await?;
         let mut next = state.clone();
+        if next.workspace_retirements.contains_key(&id) {
+            return Err("Finish workspace removal before removing the review.".into());
+        }
         let record = next
             .records
             .iter()
             .find(|r| r.review.id == id)
             .ok_or("Cost review not found.")?;
+        if record
+            .review
+            .deployment
+            .as_ref()
+            .is_some_and(|d| d.phase != Phase::Deleted)
+        {
+            return Err(
+                "Remove this setup's cloud resources before removing its saved review.".into(),
+            );
+        }
         next.retired_credentials.push(record.credential_ref);
+        if let Some(key) = record.key_ref {
+            next.retired_credentials.push(key);
+        }
         next.records.retain(|r| r.review.id != id);
         self.commit(&mut state, next).await?;
         self.cleanup(&mut state).await
     }
+
+    pub async fn create(
+        self: &Arc<Self>,
+        input: CreateComputer,
+        now: u64,
+    ) -> Result<Review, String> {
+        let owner = self.clone();
+        tokio::spawn(async move { owner.create_inner(input, now).await })
+            .await
+            .map_err(|_| {
+                "Cloud creation was interrupted. Check the saved setup before continuing."
+                    .to_string()
+            })?
+    }
+
+    async fn create_inner(&self, input: CreateComputer, now: u64) -> Result<Review, String> {
+        if !input.consent {
+            return Err("Confirm creation and provider billing first.".into());
+        }
+        let cidrs = validate_cidrs(input.source_cidrs)?;
+        let mut state = self.state.lock().await;
+        self.recover(&mut state).await?;
+        let index = position(&state, input.id)?;
+        if state.workspace_retirements.contains_key(&input.id) {
+            return Err("Finish workspace removal before creating another computer.".into());
+        }
+        let record = state.records[index].clone();
+        let quote = record
+            .review
+            .quote
+            .as_ref()
+            .ok_or("Review the live price first.")?;
+        if !record.review.confirmed
+            || quote.id != input.quote_id
+            || now < quote.quoted_at
+            || now >= quote.expires_at
+        {
+            return Err(
+                "Review the current price and confirm it before creating resources.".into(),
+            );
+        }
+        if let Some(deployment) = &record.review.deployment {
+            if deployment.phase != Phase::Deleted {
+                if deployment.phase == Phase::Deleting {
+                    return Err("Finish deleting this computer before creating another one.".into());
+                }
+                if deployment.source_cidrs != cidrs {
+                    return Err("The saved firewall sources cannot change during creation.".into());
+                }
+                if deployment.pending.is_some() {
+                    return Err("An earlier request needs checking. Use Check progress; do not create again.".into());
+                }
+                let mut next = state.clone();
+                let target = next.records[index].review.deployment.as_mut().unwrap();
+                target.plan = quote.plan.clone();
+                target.currency = record.review.catalog.currency.clone();
+                target.tax = record.review.catalog.tax.clone();
+                self.commit(&mut state, next).await?;
+                return self.advance(&mut state, index, now).await;
+            }
+        }
+        // Missing bundled tools must fail before a billable resource exists.
+        crate::lan_setup::Bundle::new(&self.assets, input.id, "gbot".into())
+            .map_err(|e| e.to_string())?;
+        let key = crate::ssh::generate_ssh_key().map_err(|e| e.to_string())?;
+        let public_key = crate::ssh::ssh_public_key(&key).map_err(|e| e.to_string())?;
+        let key_ref = Uuid::new_v4();
+        let mut next = state.clone();
+        next.retired_credentials.push(key_ref);
+        self.commit(&mut state, next).await?;
+        self.vault
+            .put(key_ref, key)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut next = state.clone();
+        next.retired_credentials.retain(|id| *id != key_ref);
+        if let Some(old) = next.records[index].key_ref.replace(key_ref) {
+            next.retired_credentials.push(old);
+        }
+        next.records[index].review.deployment = Some(Deployment {
+            plan: quote.plan.clone(),
+            currency: record.review.catalog.currency,
+            tax: record.review.catalog.tax,
+            source_cidrs: cidrs,
+            public_key,
+            phase: Phase::Creating,
+            server_id: None,
+            resources: vec![],
+            pending: None,
+            issue: None,
+        });
+        self.commit(&mut state, next).await?;
+        self.cleanup(&mut state).await?;
+        self.advance(&mut state, index, now).await
+    }
+
+    pub async fn check(self: &Arc<Self>, id: Uuid, now: u64) -> Result<Review, String> {
+        let owner = self.clone();
+        tokio::spawn(async move {
+            let mut state = owner.state.lock().await;
+            owner.recover(&mut state).await?;
+            let index = position(&state, id)?;
+            owner.reconcile(&mut state, index).await?;
+            if state.records[index]
+                .review
+                .deployment
+                .as_ref()
+                .is_some_and(|d| d.phase == Phase::Creating)
+            {
+                owner.advance(&mut state, index, now).await
+            } else {
+                Ok(state.records[index].review.clone())
+            }
+        })
+        .await
+        .map_err(|_| {
+            "Cloud progress check was interrupted. Check again before continuing.".to_string()
+        })?
+    }
+
+    async fn issue(&self, state: &mut State, index: usize, message: String) -> Result<(), String> {
+        let mut next = state.clone();
+        let deployment = next.records[index]
+            .review
+            .deployment
+            .as_mut()
+            .ok_or("Computer has not been created.")?;
+        if deployment.phase != Phase::Deleting {
+            deployment.phase = Phase::CheckRequired;
+        }
+        deployment.issue = Some(message);
+        self.commit(state, next).await
+    }
+
+    async fn reconcile(&self, state: &mut State, index: usize) -> Result<(), String> {
+        let record = state.records[index].clone();
+        let deployment = record
+            .review
+            .deployment
+            .as_ref()
+            .ok_or("Computer has not been created.")?;
+        if deployment.phase == Phase::Deleted {
+            return Ok(());
+        }
+        let token = self
+            .vault
+            .get(record.credential_ref)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("Provider token is missing.")?;
+        let mut next = state.clone();
+        let target = next.records[index].review.deployment.as_mut().unwrap();
+        if let Some(pending) = &deployment.pending {
+            if let Some(resource) = &pending.deleting {
+                match self
+                    .host
+                    .inspect(record.review.provider, &token, record.review.id, resource)
+                    .await
+                {
+                    Ok(None) => {
+                        target
+                            .resources
+                            .retain(|r| r.id != resource.id || r.kind != resource.kind);
+                        target.pending = None;
+                    }
+                    Ok(Some(_)) => {
+                        target.pending = None;
+                    }
+                    Err(error) => return self.issue(state, index, error.message).await,
+                }
+            } else {
+                match self.host.find(record.review.provider, &token, record.review.id, pending).await {
+                    Ok(mut found) if found.len() == 1 => { let resource = found.remove(0); if resource.kind == ResourceKind::Server { target.server_id = Some(resource.id.clone()); } target.resources.push(resource); target.pending = None; target.phase = Phase::Creating; target.issue = None; }
+                    Ok(found) => return self.issue(state, index, format!("Creation outcome is still uncertain ({} matching resources). Review the named operation {} in the provider console. No duplicate will be created.", found.len(), pending.name)).await,
+                    Err(error) => return self.issue(state, index, error.message).await,
+                }
+            }
+        }
+        for resource in &mut target.resources {
+            match self.host.inspect(record.review.provider, &token, record.review.id, resource).await {
+                Ok(Some(updated)) => *resource = updated,
+                Ok(None) if target.phase == Phase::Deleting => {}
+                Ok(None) => return self.issue(state, index, "An owned resource is missing. Review the provider console before continuing.".into()).await,
+                Err(error) => return self.issue(state, index, error.message).await,
+            }
+        }
+        if target.phase != Phase::Deleting {
+            target.phase = if target.resources.iter().all(|r| r.ready)
+                && target
+                    .resources
+                    .iter()
+                    .any(|r| r.kind == ResourceKind::Server && r.ready && r.address.is_some())
+            {
+                Phase::Running
+            } else {
+                Phase::Creating
+            };
+            target.issue = None;
+        }
+        self.commit(state, next).await
+    }
+
+    async fn advance(&self, state: &mut State, index: usize, now: u64) -> Result<Review, String> {
+        let started = std::time::Instant::now();
+        for _ in 0..4 {
+            let record = state.records[index].clone();
+            let deployment = record
+                .review
+                .deployment
+                .as_ref()
+                .ok_or("Computer has not been created.")?;
+            if deployment.pending.is_some()
+                || deployment.phase == Phase::Deleting
+                || deployment.phase == Phase::Deleted
+            {
+                break;
+            }
+            let order = match record.review.provider {
+                CloudProvider::Hetzner => &[
+                    ResourceKind::Firewall,
+                    ResourceKind::Ipv4,
+                    ResourceKind::Server,
+                ][..],
+                CloudProvider::DigitalOcean => &[
+                    ResourceKind::Tag,
+                    ResourceKind::Firewall,
+                    ResourceKind::Server,
+                ][..],
+                _ => return Err("This provider is not supported for automatic creation.".into()),
+            };
+            let Some(kind) = order
+                .iter()
+                .find(|kind| !deployment.resources.iter().any(|r| r.kind == **kind))
+                .copied()
+            else {
+                break;
+            };
+            if deployment.resources.iter().any(|r| !r.ready) {
+                break;
+            }
+            let token = self
+                .vault
+                .get(record.credential_ref)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or("Provider token is missing.")?;
+            let catalog = self.host.catalog(record.review.provider, &token).await?;
+            catalog.validate()?;
+            let quote_valid = record.review.confirmed
+                && record.review.quote.as_ref().is_some_and(|q| {
+                    now.saturating_add(started.elapsed().as_secs()) < q.expires_at
+                        && q.plan == deployment.plan
+                });
+            if !quote_valid
+                || catalog.currency != deployment.currency
+                || catalog.tax != deployment.tax
+                || !catalog.plans.iter().any(|p| p == &deployment.plan)
+            {
+                let mut next = state.clone();
+                next.records[index].review.confirmed = false;
+                next.records[index].review.deployment.as_mut().unwrap().issue = Some("Price or availability changed. Refresh, select the same plan and confirm its cost again. Existing owned resources are retained.".into());
+                self.commit(state, next).await?;
+                break;
+            }
+            let pending = Pending {
+                kind,
+                name: if kind == ResourceKind::Tag {
+                    format!("gbot-{}", record.review.id.simple())
+                } else {
+                    format!(
+                        "gbot-{}-{}",
+                        &record.review.id.simple().to_string()[..8],
+                        Uuid::new_v4().simple()
+                    )
+                },
+                deleting: None,
+            };
+            let bundle =
+                crate::lan_setup::Bundle::new(&self.assets, record.review.id, "gbot".into())
+                    .map_err(|e| e.to_string())?;
+            let request = CreateResource {
+                setup: record.review.id,
+                pending: pending.clone(),
+                plan: deployment.plan.clone(),
+                source_cidrs: deployment.source_cidrs.clone(),
+                resources: deployment.resources.clone(),
+                user_data: bootstrap(&bundle, &deployment.public_key, &deployment.source_cidrs)?,
+            };
+            let mut next = state.clone();
+            next.records[index]
+                .review
+                .deployment
+                .as_mut()
+                .unwrap()
+                .pending = Some(pending);
+            self.commit(state, next).await?;
+            match self
+                .host
+                .create(record.review.provider, &token, &request)
+                .await
+            {
+                Ok(resource) => {
+                    let mut next = state.clone();
+                    let target = next.records[index].review.deployment.as_mut().unwrap();
+                    if resource.kind != kind
+                        || resource.name != request.pending.name
+                        || resource.id.is_empty()
+                    {
+                        self.issue(state, index, "Provider create response could not be matched. Check progress before continuing.".into()).await?;
+                        break;
+                    }
+                    if resource.kind == ResourceKind::Server {
+                        target.server_id = Some(resource.id.clone());
+                    }
+                    target.resources.push(resource);
+                    target.pending = None;
+                    target.issue = None;
+                    self.commit(state, next).await?;
+                }
+                Err(error) => {
+                    let mut next = state.clone();
+                    let target = next.records[index].review.deployment.as_mut().unwrap();
+                    if !error.uncertain {
+                        target.pending = None;
+                    }
+                    target.phase = Phase::CheckRequired;
+                    target.issue = Some(error.message);
+                    self.commit(state, next).await?;
+                    break;
+                }
+            }
+        }
+        Ok(state.records[index].review.clone())
+    }
+
+    pub async fn delete(self: &Arc<Self>, input: DeleteComputer) -> Result<Review, String> {
+        if !input.consent {
+            return Err("Confirm deletion of this bot computer and its files first.".into());
+        }
+        let owner = self.clone();
+        tokio::spawn(async move {
+            let mut state = owner.state.lock().await;
+            owner.recover(&mut state).await?;
+            let index = position(&state, input.id)?;
+            let mut next = state.clone();
+            let deployment = next.records[index].review.deployment.as_mut().ok_or("Computer has not been created.")?;
+            if deployment.pending.as_ref().is_some_and(|p| p.deleting.is_none()) { return Err("Resolve the uncertain creation in the provider console before deleting this setup.".into()); }
+            deployment.phase = Phase::Deleting;
+            owner.commit(&mut state, next).await?;
+            owner.delete_inner(&mut state, index).await
+        }).await.map_err(|_| "Deletion was interrupted. Check progress; the owned resource list is retained.".to_string())?
+    }
+
+    async fn delete_inner(&self, state: &mut State, index: usize) -> Result<Review, String> {
+        let record = state.records[index].clone();
+        let token = self
+            .vault
+            .get(record.credential_ref)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("Provider token is missing.")?;
+        for _ in 0..4 {
+            let deployment = state.records[index]
+                .review
+                .deployment
+                .as_ref()
+                .ok_or("Computer has not been created.")?;
+            let Some(resource) = deployment.resources.last().cloned() else {
+                let mut next = state.clone();
+                let target = next.records[index].review.deployment.as_mut().unwrap();
+                target.phase = Phase::Deleted;
+                target.pending = None;
+                target.issue = None;
+                self.commit(state, next).await?;
+                break;
+            };
+            if let Err(error) = self
+                .host
+                .inspect(record.review.provider, &token, record.review.id, &resource)
+                .await
+            {
+                self.issue(state, index, error.message).await?;
+                break;
+            }
+            let mut next = state.clone();
+            next.records[index]
+                .review
+                .deployment
+                .as_mut()
+                .unwrap()
+                .pending = Some(Pending {
+                kind: resource.kind,
+                name: resource.name.clone(),
+                deleting: Some(resource.clone()),
+            });
+            self.commit(state, next).await?;
+            if let Err(error) = self
+                .host
+                .delete(record.review.provider, &token, record.review.id, &resource)
+                .await
+            {
+                self.issue(state, index, error.message).await?;
+                break;
+            }
+            match self
+                .host
+                .inspect(record.review.provider, &token, record.review.id, &resource)
+                .await
+            {
+                Ok(None) => {
+                    let mut next = state.clone();
+                    let target = next.records[index].review.deployment.as_mut().unwrap();
+                    target.resources.pop();
+                    target.pending = None;
+                    self.commit(state, next).await?;
+                }
+                Ok(Some(_)) => break,
+                Err(error) => {
+                    self.issue(state, index, error.message).await?;
+                    break;
+                }
+            }
+        }
+        Ok(state.records[index].review.clone())
+    }
+
+    pub(crate) async fn stage_workspace_retirement(
+        &self,
+        id: Uuid,
+        credentials: Vec<Uuid>,
+    ) -> Result<(), String> {
+        let mut state = self.state.lock().await;
+        self.recover(&mut state).await?;
+        let mut next = state.clone();
+        next.workspace_retirements.insert(id, credentials);
+        self.commit(&mut state, next).await
+    }
+
+    pub(crate) async fn finish_workspace_retirements(&self, live: &[Uuid]) -> Result<(), String> {
+        let mut state = self.state.lock().await;
+        self.recover(&mut state).await?;
+        let mut next = state.clone();
+        let retired: Vec<_> = next
+            .workspace_retirements
+            .keys()
+            .filter(|id| !live.contains(id))
+            .copied()
+            .collect();
+        for id in retired {
+            if let Some(keys) = next.workspace_retirements.remove(&id) {
+                next.retired_credentials.extend(keys);
+            }
+        }
+        self.commit(&mut state, next).await?;
+        self.cleanup(&mut state).await
+    }
+
+    pub async fn endpoint(&self, id: Uuid) -> Result<crate::contract::SshEndpoint, String> {
+        let reviews = self.status().await?;
+        let record = reviews
+            .iter()
+            .find(|r| r.id == id)
+            .ok_or("Cloud setup not found.")?;
+        let deployment = record
+            .deployment
+            .as_ref()
+            .filter(|d| d.phase == Phase::Running)
+            .ok_or("Check progress until the computer is running first.")?;
+        let server = deployment
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceKind::Server && r.ready)
+            .ok_or("Computer is not running.")?;
+        Ok(crate::contract::SshEndpoint {
+            hostname: server
+                .address
+                .clone()
+                .ok_or("Computer has no public IPv4 address.")?,
+            port: 22,
+            user: "gbot".into(),
+        })
+    }
+
+    pub async fn connection(
+        &self,
+        input: AttachComputer,
+    ) -> Result<(crate::contract::WorkspaceConfig, Secret), String> {
+        use crate::contract::{
+            BotPc, ServicePc, SshConnection, SshEndpoint, VaultCredentialRef, WorkspaceConfig,
+            WorkspaceConnection, WorkspaceId,
+        };
+        if !input.verified {
+            return Err("Verify the SSH fingerprint in your provider console first.".into());
+        }
+        input
+            .pinned_host_key
+            .validate()
+            .map_err(|e| e.to_string())?;
+        let mut state = self.state.lock().await;
+        self.recover(&mut state).await?;
+        let record = &state.records[position(&state, input.id)?];
+        let deployment = record
+            .review
+            .deployment
+            .as_ref()
+            .filter(|d| d.phase == Phase::Running)
+            .ok_or("Check progress until the computer is running first.")?;
+        let server = deployment
+            .resources
+            .iter()
+            .find(|r| r.kind == ResourceKind::Server && r.ready)
+            .ok_or("Computer is not running.")?;
+        let key = self
+            .vault
+            .get(record.key_ref.ok_or("Bot SSH key is missing.")?)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("Bot SSH key is missing.")?;
+        let config = WorkspaceConfig {
+            id: WorkspaceId(input.id),
+            name: record.review.name.clone(),
+            service_pc: ServicePc::Local,
+            bot_pc: BotPc::Cloud {
+                provider: record.review.provider,
+                resource_id: server.id.clone(),
+            },
+            connection: WorkspaceConnection::Ssh(SshConnection {
+                endpoint: SshEndpoint {
+                    hostname: server
+                        .address
+                        .clone()
+                        .ok_or("Computer has no public IPv4 address.")?,
+                    port: 22,
+                    user: "gbot".into(),
+                },
+                pinned_host_key: input.pinned_host_key,
+                credential_ref: VaultCredentialRef(input.id),
+            }),
+        };
+        config.validate().map_err(|e| e.to_string())?;
+        Ok((config, key))
+    }
+}
+
+fn position(state: &State, id: Uuid) -> Result<usize, String> {
+    state
+        .records
+        .iter()
+        .position(|r| r.review.id == id)
+        .ok_or_else(|| "Cloud setup not found.".into())
+}
+
+fn validate_cidrs(values: Vec<String>) -> Result<Vec<String>, String> {
+    if values.is_empty() || values.len() > 16 {
+        return Err("Enter the IP ranges allowed to SSH to this bot computer.".into());
+    }
+    values
+        .into_iter()
+        .map(|value| {
+            let value = value.trim();
+            let (address, prefix) = value
+                .split_once('/')
+                .ok_or("Use IP ranges such as 203.0.113.4/32.")?;
+            let address: std::net::IpAddr = address
+                .parse()
+                .map_err(|_| "Invalid SSH source IP range.")?;
+            let prefix: u8 = prefix.parse().map_err(|_| "Invalid SSH source IP range.")?;
+            if prefix > if address.is_ipv4() { 32 } else { 128 } {
+                return Err("Invalid SSH source IP range.".into());
+            }
+            Ok(format!("{address}/{prefix}"))
+        })
+        .collect()
+}
+
+fn bootstrap(
+    bundle: &crate::lan_setup::Bundle,
+    key: &crate::contract::SshHostPublicKey,
+    cidrs: &[String],
+) -> Result<String, String> {
+    use crate::lan_setup::quote;
+    let source = format!("/home/gbot/.local/share/gbot/setup/{}", bundle.id);
+    let mut helper = format!("#!/bin/sh\nset -eu\n[ \"$#\" -eq 0 ]\n[ \"${{SUDO_USER:-}}\" = gbot ]\nsource={}\n[ ! -L \"$source\" ]\ncopy=$(mktemp -d /var/tmp/gbot-install.XXXXXXXX)\ntrap 'rm -f -- \"$copy\"/*; rmdir -- \"$copy\"' EXIT\n", quote(&source));
+    for (name, digest) in std::iter::once(("install.sh", bundle.installer_digest())).chain(
+        bundle
+            .archives
+            .iter()
+            .map(|(_, name, digest)| (name.as_str(), digest.clone())),
+    ) {
+        helper.push_str(&format!("[ ! -L \"$source/{name}\" ]\ncp -- \"$source/{name}\" \"$copy/{name}\"\nprintf '%s  %s\\n' {} \"$copy/{name}\" | sha256sum --check --status\n", quote(&digest)));
+    }
+    helper.push_str("sh \"$copy/install.sh\"\n");
+    let firewall = format!(
+        "set -eu; ufw default deny incoming; ufw default allow outgoing; {}; ufw --force enable",
+        cidrs
+            .iter()
+            .map(|cidr| format!("ufw allow from {} to any port 22 proto tcp", quote(cidr)))
+            .collect::<Vec<_>>()
+            .join("; ")
+    );
+    Ok(format!(
+        "#cloud-config\n{}\n",
+        serde_json::json!({
+            "users": [{"name":"gbot","shell":"/bin/bash","lock_passwd":true,"ssh_authorized_keys":[format!("{} {}", key.algorithm,key.public_key)],"sudo":["ALL=(root) NOPASSWD: /usr/local/sbin/gbot-cloud-tools"]}],
+            "disable_root":true,"ssh_pwauth":false,"apt":{"preserve_sources_list":false,"sources_list":"Types: deb\nURIs: https://deb.debian.org/debian\nSuites: trixie trixie-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: https://security.debian.org/debian-security\nSuites: trixie-security\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n"},"package_update":true,"packages":["openssh-server","sudo","ufw","systemd","cloud-init"],
+            "write_files":[{"path":"/usr/local/sbin/gbot-cloud-tools","owner":"root:root","permissions":"0755","content":helper},{"path":"/etc/ssh/sshd_config.d/70-gbot.conf","permissions":"0644","content":"PasswordAuthentication no\nPermitRootLogin no\n"}],
+            "runcmd":[["sh","-c",firewall],["systemctl","reload","ssh"]]
+        })
+    ))
 }
 
 #[cfg(test)]
@@ -466,12 +1230,112 @@ mod tests {
             })
         }
     }
-    struct Provider(SyncMutex<Catalog>);
+    #[derive(Default)]
+    struct Resources {
+        items: Vec<(Uuid, Resource)>,
+        creates: usize,
+        lost_reply: bool,
+        reject_delete: Option<ResourceKind>,
+        deleted: Vec<ResourceKind>,
+    }
+    struct Provider(SyncMutex<Catalog>, SyncMutex<Resources>);
+    impl Provider {
+        fn new() -> Self {
+            Self(
+                SyncMutex::new(catalog()),
+                SyncMutex::new(Resources::default()),
+            )
+        }
+    }
     impl CloudHost for Provider {
         fn catalog<'a>(&'a self, _: CloudProvider, token: &'a Secret) -> CloudFuture<'a> {
             Box::pin(async move {
                 assert!(!token.expose_secret().is_empty());
                 Ok(self.0.lock().unwrap().clone())
+            })
+        }
+        fn create<'a>(
+            &'a self,
+            _: CloudProvider,
+            _: &'a Secret,
+            request: &'a CreateResource,
+        ) -> ResourceFuture<'a, Resource> {
+            Box::pin(async move {
+                let mut state = self.1.lock().unwrap();
+                state.creates += 1;
+                let resource = Resource {
+                    kind: request.pending.kind,
+                    id: state.creates.to_string(),
+                    name: request.pending.name.clone(),
+                    ready: true,
+                    address: (request.pending.kind == ResourceKind::Server)
+                        .then(|| "203.0.113.7".into()),
+                    actions: vec![],
+                };
+                state.items.push((request.setup, resource.clone()));
+                if std::mem::take(&mut state.lost_reply) {
+                    Err(ProviderError::uncertain("Lost create reply"))
+                } else {
+                    Ok(resource)
+                }
+            })
+        }
+        fn find<'a>(
+            &'a self,
+            _: CloudProvider,
+            _: &'a Secret,
+            setup: Uuid,
+            pending: &'a Pending,
+        ) -> ResourceFuture<'a, Vec<Resource>> {
+            Box::pin(async move {
+                Ok(self
+                    .1
+                    .lock()
+                    .unwrap()
+                    .items
+                    .iter()
+                    .filter(|(id, r)| {
+                        *id == setup && r.kind == pending.kind && r.name == pending.name
+                    })
+                    .map(|(_, r)| r.clone())
+                    .collect())
+            })
+        }
+        fn inspect<'a>(
+            &'a self,
+            _: CloudProvider,
+            _: &'a Secret,
+            setup: Uuid,
+            resource: &'a Resource,
+        ) -> ResourceFuture<'a, Option<Resource>> {
+            Box::pin(async move {
+                Ok(self
+                    .1
+                    .lock()
+                    .unwrap()
+                    .items
+                    .iter()
+                    .find(|(id, r)| *id == setup && r.id == resource.id && r.kind == resource.kind)
+                    .map(|(_, r)| r.clone()))
+            })
+        }
+        fn delete<'a>(
+            &'a self,
+            _: CloudProvider,
+            _: &'a Secret,
+            setup: Uuid,
+            resource: &'a Resource,
+        ) -> ResourceFuture<'a, ()> {
+            Box::pin(async move {
+                let mut state = self.1.lock().unwrap();
+                if state.reject_delete == Some(resource.kind) {
+                    return Err(ProviderError::rejected("Delete refused"));
+                }
+                state.items.retain(|(id, r)| {
+                    !(*id == setup && r.id == resource.id && r.kind == resource.kind)
+                });
+                state.deleted.push(resource.kind);
+                Ok(())
             })
         }
     }
@@ -530,7 +1394,7 @@ mod tests {
     async fn cloud_review_persists_exact_prices_without_secrets_and_refresh_requires_new_consent() {
         let root = tempfile::tempdir().unwrap();
         let vault = Arc::new(MemoryVault::default());
-        let host = Arc::new(Provider(SyncMutex::new(catalog())));
+        let host = Arc::new(Provider::new());
         let id = Uuid::new_v4();
         let owner = Arc::new(
             CloudSetup::open(root.path().into(), vault.clone(), host.clone())
@@ -598,7 +1462,7 @@ mod tests {
     async fn cloud_review_refuses_expired_missing_and_changed_plans_without_substitution() {
         let root = tempfile::tempdir().unwrap();
         let vault = Arc::new(MemoryVault::default());
-        let host = Arc::new(Provider(SyncMutex::new(catalog())));
+        let host = Arc::new(Provider::new());
         let owner = Arc::new(
             CloudSetup::open(root.path().into(), vault.clone(), host.clone())
                 .await
@@ -674,7 +1538,7 @@ mod tests {
     async fn cloud_review_recovers_published_saves_and_credential_cleanup_intent() {
         let root = tempfile::tempdir().unwrap();
         let vault = Arc::new(MemoryVault::default());
-        let host = Arc::new(Provider(SyncMutex::new(catalog())));
+        let host = Arc::new(Provider::new());
         let owner = Arc::new(
             CloudSetup::open(root.path().into(), vault.clone(), host)
                 .await
@@ -726,5 +1590,189 @@ mod tests {
         ] {
             assert!(decimal_units(invalid).is_err(), "{invalid}");
         }
+    }
+    async fn ready_setup(
+        root: &std::path::Path,
+        host: Arc<Provider>,
+    ) -> (Arc<CloudSetup>, Arc<MemoryVault>, Uuid, CreateComputer) {
+        let assets = root.join("vms/assets");
+        std::fs::create_dir_all(&assets).unwrap();
+        for asset in crate::guest_assets::accepted().iter().skip(1) {
+            std::fs::write(assets.join(&asset.filename), b"fixture").unwrap();
+        }
+        let vault = Arc::new(MemoryVault::default());
+        let setup = Arc::new(
+            CloudSetup::open(root.into(), vault.clone(), host)
+                .await
+                .unwrap(),
+        );
+        let id = Uuid::new_v4();
+        setup.read(input(id, Some("fixture")), 100).await.unwrap();
+        let quote = setup
+            .select(selection(id), 101)
+            .await
+            .unwrap()
+            .quote
+            .unwrap();
+        setup
+            .confirm(
+                ConfirmQuote {
+                    id,
+                    quote_id: quote.id,
+                },
+                102,
+            )
+            .await
+            .unwrap();
+        let create = CreateComputer {
+            id,
+            quote_id: quote.id,
+            consent: true,
+            source_cidrs: vec!["203.0.113.4/32".into()],
+        };
+        (setup, vault, id, create)
+    }
+    #[tokio::test]
+    async fn cloud_creation_reconciles_lost_reply_after_restart_without_duplicate() {
+        let root = tempfile::tempdir().unwrap();
+        let host = Arc::new(Provider::new());
+        let (setup, vault, id, create) = ready_setup(root.path(), host.clone()).await;
+        host.1.lock().unwrap().lost_reply = true;
+        let result = setup.create(create, 103).await.unwrap();
+        assert!(result.deployment.unwrap().pending.is_some());
+        drop(setup);
+        let setup = Arc::new(
+            CloudSetup::open(root.path().into(), vault, host.clone())
+                .await
+                .unwrap(),
+        );
+        setup.check(id, 104).await.unwrap();
+        let result = setup.check(id, 105).await.unwrap();
+        assert_eq!(result.deployment.unwrap().phase, Phase::Running);
+        assert_eq!(host.1.lock().unwrap().creates, 3);
+        assert!(setup.remove(id).await.is_err());
+    }
+    #[tokio::test]
+    async fn cloud_creation_refuses_changed_price_before_mutation() {
+        let root = tempfile::tempdir().unwrap();
+        let host = Arc::new(Provider::new());
+        let (setup, _, _, create) = ready_setup(root.path(), host.clone()).await;
+        {
+            let mut catalog = host.0.lock().unwrap();
+            catalog.plans[0].compute.monthly.net = "9".into();
+            catalog.plans[0].compute.monthly.gross = Some("10.8".into());
+        }
+        let result = setup.create(create, 103).await.unwrap();
+        assert!(!result.confirmed);
+        assert_eq!(host.1.lock().unwrap().creates, 0);
+    }
+    #[tokio::test]
+    async fn cloud_ambiguous_creation_is_not_retried_or_deleted() {
+        let root = tempfile::tempdir().unwrap();
+        let host = Arc::new(Provider::new());
+        let (setup, _, id, create) = ready_setup(root.path(), host.clone()).await;
+        host.1.lock().unwrap().lost_reply = true;
+        setup.create(create, 103).await.unwrap();
+        host.1.lock().unwrap().items.clear();
+        assert_eq!(
+            setup
+                .check(id, 104)
+                .await
+                .unwrap()
+                .deployment
+                .unwrap()
+                .phase,
+            Phase::CheckRequired
+        );
+        assert_eq!(host.1.lock().unwrap().creates, 1);
+        assert!(setup
+            .delete(DeleteComputer { id, consent: true })
+            .await
+            .is_err());
+    }
+    #[tokio::test]
+    async fn cloud_deletion_retries_owned_resources_in_reverse_order_and_keeps_live_keys() {
+        let root = tempfile::tempdir().unwrap();
+        let host = Arc::new(Provider::new());
+        let (setup, vault, id, create) = ready_setup(root.path(), host.clone()).await;
+        setup.create(create, 103).await.unwrap();
+        let foreign = Uuid::new_v4();
+        host.1.lock().unwrap().items.push((
+            foreign,
+            Resource {
+                kind: ResourceKind::Server,
+                id: "foreign".into(),
+                name: "other".into(),
+                ready: true,
+                address: None,
+                actions: vec![],
+            },
+        ));
+        host.1.lock().unwrap().reject_delete = Some(ResourceKind::Ipv4);
+        assert_eq!(
+            setup
+                .delete(DeleteComputer { id, consent: true })
+                .await
+                .unwrap()
+                .deployment
+                .unwrap()
+                .phase,
+            Phase::Deleting
+        );
+        host.1.lock().unwrap().reject_delete = None;
+        assert_eq!(
+            setup
+                .delete(DeleteComputer { id, consent: true })
+                .await
+                .unwrap()
+                .deployment
+                .unwrap()
+                .phase,
+            Phase::Deleted
+        );
+        {
+            let resources = host.1.lock().unwrap();
+            assert_eq!(
+                resources.deleted,
+                vec![
+                    ResourceKind::Server,
+                    ResourceKind::Ipv4,
+                    ResourceKind::Firewall
+                ]
+            );
+            assert_eq!(resources.items[0].0, foreign);
+        }
+        vault
+            .put(id, Secret::new(b"workspace-key".to_vec()))
+            .await
+            .unwrap();
+        setup
+            .stage_workspace_retirement(id, vec![id])
+            .await
+            .unwrap();
+        setup.finish_workspace_retirements(&[id]).await.unwrap();
+        assert!(vault.get(id).await.unwrap().is_some());
+        setup.finish_workspace_retirements(&[]).await.unwrap();
+        assert!(vault.get(id).await.unwrap().is_none());
+    }
+    #[test]
+    fn cloud_bootstrap_limits_ssh_and_checks_pinned_tools() {
+        let root = tempfile::tempdir().unwrap();
+        let assets = root.path();
+        for asset in crate::guest_assets::accepted().iter().skip(1) {
+            std::fs::write(assets.join(&asset.filename), b"fixture").unwrap();
+        }
+        let bundle = crate::lan_setup::Bundle::new(assets, Uuid::new_v4(), "gbot".into()).unwrap();
+        let key = crate::ssh::ssh_public_key(&crate::ssh::generate_ssh_key().unwrap()).unwrap();
+        let data = bootstrap(&bundle, &key, &["203.0.113.4/32".into()]).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(data.strip_prefix("#cloud-config\n").unwrap()).unwrap();
+        assert_eq!(v["ssh_pwauth"], false);
+        assert_eq!(v["disable_root"], true);
+        let helper = v["write_files"][0]["content"].as_str().unwrap();
+        assert!(helper.contains(&bundle.installer_digest()));
+        assert!(helper.contains("sha256sum --check"));
+        assert!(helper.contains("[ \"$#\" -eq 0 ]"));
+        assert!(validate_cidrs(vec!["203.0.113.4/33".into()]).is_err());
     }
 }
