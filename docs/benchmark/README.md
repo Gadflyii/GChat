@@ -20,6 +20,11 @@ Ron selected these version-1 release classes on October 11:
 The native NVFP4 drafter is historical, not the release drafter. Muse and other
 artifact classes have no Standard Max Perf definition in this decision.
 
+Flash filenames now use `qwen38_flash_next_180b_<int|smol|nvfp4>_mtp[_tp2|_tp4].ginfer`.
+The [model catalog](../model-management.md#release-package-names) accepts old names
+during the artifact rename. Max Perf matches unchanged artifact identities; filenames
+do not change its settings or add an NVFP4 Flash release class.
+
 Host owns the immutable, versioned launch policy separately from the catalog of
 physically qualified capacity profiles. Choosing Max Perf uses the normal model
 launch/restart lifecycle, persists its identity and retains ordinary automatic

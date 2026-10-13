@@ -47,6 +47,25 @@ This describes producer-final singleton containers, including exact TP payloads.
 It does not split or repack weights and does not infer artifact-set siblings.
 Manually configured deployment descriptors retain their existing inventory route.
 
+### Release package names
+
+Release filenames use `<model>_<size>b_<int|nvfp4|smol>_<df2|df2q4|mtp>[_tp2|_tp4].ginfer`;
+TP1 has no suffix. Qwen 27B and Muse 30B names remain unchanged.
+
+| Flash package | Current filename | Accepted during the rename |
+| --- | --- | --- |
+| INT | `qwen38_flash_next_180b_int_mtp.ginfer` | `qwen38_flash_int_mtp.ginfer` |
+| SMOL | `qwen38_flash_next_180b_smol_mtp.ginfer` | `qwen38_flash_smol_mtp.ginfer` |
+| NVFP4 TP1 | `qwen38_flash_next_180b_nvfp4_mtp.ginfer` | `qwen3.8-flash-next-nvfp4-tp1-nv-kv.ginfer` |
+| NVFP4 TP2/TP4 | `qwen38_flash_next_180b_nvfp4_mtp_tp2.ginfer` / `_tp4.ginfer` | `qwen3.8-flash-next-nvfp4-tp2-nv-kv.ginfer` / `-tp4-nv-kv.ginfer` |
+
+Both filename sets resolve the Flash native context (262,144 tokens). Catalog entries
+retain their actual file paths; GChat does not rename files or infer missing siblings.
+Artifact identities remain `qwen3.8-flash-next` with `groupwise-int`, `smol-q2g64` or
+`nvfp4` weights. Host capacity profiles and GBench Max Perf match those identities,
+so filenames do not change their launch settings or qualify a new package.
+Remove old filename aliases after the release artifact owner completes the rename.
+
 ## Storage and transfer lifecycle
 
 LAN downloads run in ginfer-host and continue when GChat closes. One active

@@ -46,11 +46,7 @@ function registeredIdentity(
   )
 }
 
-/**
- * Match registered artifact identities and current package stems separately.
- * Display names are editable labels; they cannot establish a context contract.
- * The October 8 rename preserves the artifact identities and package contents.
- */
+/** Match registered identities or package stems; editable labels do not define context. */
 export function ginferModelProfile(modelId: string): GinferModelProfile | undefined {
   if (
     registeredIdentity(modelId, 'muse-glimmer-30b', MUSE_WEIGHTS) ||
@@ -72,8 +68,9 @@ export function ginferModelProfile(modelId: string): GinferModelProfile | undefi
   }
   if (
     registeredIdentity(modelId, 'qwen3.8-flash-next', FLASH_WEIGHTS) ||
+    /^qwen38_flash_next_180b_(?:int|nvfp4|smol)_mtp(?:_tp[24])?$/.test(modelId) ||
+    // Retain old Flash stems until the release artifact rename lands.
     /^qwen38_flash_(?:(?:int|smol)_mtp(?:_tp[24])?|nvfp4_mtp)$/.test(modelId) ||
-    // Released Flash NVFP4 packages were excluded from the filename rename.
     /^qwen3\.8-flash-next-nvfp4-tp[124]-nv-kv$/.test(modelId)
   ) {
     return {
