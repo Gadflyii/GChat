@@ -28,10 +28,10 @@ production admission is unchanged. Prior SSE/tail/auth checks remain accepted.
 Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; no live jobs or model
 copies. Evidence `/ai/gchat/out/oi115-host-body-20261013/result.json`; fixture
 wall time2.11s baseline/1.24s candidate, each control under1s, strict Clippy PASS.
-Next: reviewed merge; OI-116's remaining Windows/NAS gate stays release-gated,
-then OI-119's native desktop idle/private-byte obligation using existing tools.
+Next: reviewed merge. OI-116's Windows/NAS checks remain release-gated;
+OI-119's larger-fleet native qualification remains open after the limited sample below.
 
-## Accepted OI-118 — snapshot ownership (merge-ready a5be0c8af)
+## Accepted OI-118 — snapshot ownership (merged f0db75362)
 
 Three owned JSON arrays now move into the final snapshot. Same 174-profile/four-
 CPU-instance fixture allocations55,115→29,754; requested peak above initial
@@ -39,6 +39,17 @@ CPU-instance fixture allocations55,115→29,754; requested peak above initial
 throughput. Exact catalog/models/reservations/instances and strict Clippy PASS.
 Evidence `/ai/gchat/out/oi118-host-idle-20261013/result.json`. Default workers kept;
 physical Windows SCM qualification remains owed to the release gate.
+The clean/pushed merged source tree is retired; evidence and shared targets remain.
+
+## OI-119 — limited native Linux observation
+
+Accepted source0705f31a6 includes the merged projection/UI fix2ad018261.
+One isolated local Host/client, no models/profiles:30s Manager idle0.13% of one
+core, privateRSS306.27MiB (WebKit content226.26MiB); Host0.00%,4.52MiB.
+This is Linux/WSLg, not a before/after gain or Windows private-commit result.
+Large-fleet idle/private-memory qualification remains open. Own processes and
+private state are retired; accepted binaries remain. No rebuild/model/GPU run.
+Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
 
 ## Accepted OI-116 and OI-118 lifecycle review
 
