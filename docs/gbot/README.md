@@ -69,20 +69,30 @@ performance measurement. Package provenance is in
 resources were outside this GUI-only qualification. Extracted staging and copied
 inputs are retired; the developer DEB and tested desktop remain for review.
 
-The `feat/gbot-welcome-8d268` candidate adds first-run opt-in to GChat's welcome
-screen. “Enable Gbot” saves the existing shared preference and opens the guided
-wizard; ordinary model selection, Host connection and skipping setup keep Gbot
-off. Already enabled users can continue Gbot setup. Five welcome cases, the
-existing first-bot route handoff, frontend types and affected lint pass; evidence
-is in `out/gchat-open-items-20261012/welcome-opt-in/receipt.json`. Installer
-checkboxes and installed welcome presentation remain unqualified.
+Welcome opt-in and completed Linux computer setup are merged in main
+`bb4cde410`. Source `6acaead46` fixes the empty GInfer provider bypass and
+consumes the service's actual live-session identity contract. The installed
+unsigned DEB passed in one disposable Debian 13 desktop: Welcome, local KVM
+creation, Computer ready, client/service restart and visible Resume reconnected
+one identical workspace, session, host key and native-vault credential. The
+Ready page renders Connected. Authenticated state returned 200 and
+unauthenticated state 401. This qualifies computer setup, not brain/task
+readiness. Nine onboarding cases, the Ready regression, frontend types/lint and
+the incremental desktop build pass; unchanged passing checks were reused.
+Evidence is in `out/gchat-open-items-20261013/installed-creation/`.
 
-Installed Linux wizard presentation and DEB window-close continuity now pass.
-Completed wizard creation/resume, sleep/restart, live scheduled dispatch,
-Hyper-V/cloud/M365 creation, remote service selection and installer opt-in remain
-open. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
-separates accepted evidence from those remaining gates. The earlier dedicated bot
-guest and Ubuntu acceptance disk were retired; their saved evidence remains valid.
+Production removal and retirement of both guests, disks, keys and private
+processes passed at 01:09:06 UTC on October 13, freeing 30.47 GB on S1 and
+2.25 GB of superseded local builds. Retain the current tested desktop artifact
+and concise evidence; no guest, job or reservation remains.
+
+Remaining setup acceptance includes AppImage lifetime, sleep recovery, live
+brain/task dispatch, Windows/Hyper-V, cloud/M365 creation, remote service
+selection and installer opt-in. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
+separates these from accepted setup evidence. The CPU-only installed guest also
+exposed unguarded local Host hardware preparation; its owning native gate now rejects unsupported local hardware before Host
+bootstrap, with focused fixture/check/Clippy evidence in that plan. Remote inference and Gbot do not require a local
+NVIDIA GPU.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain

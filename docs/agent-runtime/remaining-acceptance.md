@@ -6,6 +6,30 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
+Completed source item: `GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE`, based
+on main `bb4cde410`, branch `fix/gchat-local-hardware-gate-bb4` in
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`. Local Host bootstrap and
+post-install hardware preparation now consult the existing cached hardware
+inventory before ownership/spawn. Without NVIDIA hardware they return a clear
+local-inference unsupported message; remote connections and Gbot remain
+available. NVIDIA inventory with unreadable compute capability continues to
+Host validation, preserving its driver/inventory errors. The CLI enables the
+already locked hardware plugin and uses the same preparation entry.
+
+One focused inventory/admission case, desktop and CLI compiler checks, and
+strict Clippy pass. The desktop check and Clippy emit no warnings; the test and
+CLI builds emit two and four unused-function warnings in unchanged setup code.
+Evidence is
+`out/gchat-open-items-20261013/hardware-gate/result.json`. No new dependency or
+version, physical GPU qualification, Windows build or repeated installed guest
+gate. The historical Host log demonstrates inventory execution ENOENT, not its
+exact missing executable/loader. Its automatic preparation was invalid on the
+CPU-only guest; the gate removes that trigger before Host execution. The
+container and CPU booking are retired; no model/GPU was used. Retain source,
+concise evidence, the accepted desktop artifact and shared Cargo cache.
+Next action: reviewed main merge; supported-GPU installed preparation remains
+owed to its scheduled physical qualification.
+
 Completed item: installed Linux Gbot computer creation and same-setup resume.
 Candidate `test/gbot-installed-creation-2eff` at source `6acaead46`, based on
 reviewed main `2effbe4df`, fixes two installed blockers: the empty built-in
@@ -45,7 +69,7 @@ Cleanup receipts are `desktop-guest/{nested-removal,cleanup}.json` and
 source tree, current tested desktop artifact and evidence; no live job or
 reservation remains. The accepted baseline package was preserved.
 
-Next action: reviewed main merge of this candidate and issue-status update.
+This candidate is merged to main `bb4cde410`; its installed evidence is reused.
 Remaining setup acceptance: AppImage lifetime, Windows/Hyper-V, cloud/M365,
 remote service selection, installer choice, sleep recovery and live brain/task
 dispatch. Gbot's explicit brain assignment must select a persistent Host or
@@ -79,8 +103,7 @@ runtime-set, Host and Gbot assets also verified; no staging paths remained.
 Guest/domain/disk/keys/private daemons were retired at 23:49:00 UTC, booking
 1433 canceled and 13.33 GB freed. Source and documentation merged as `8d268fc11`.
 Automatic hardware preparation later failed with Host exit 1/no local owner
-ready in the CPU-only guest. Its cause remains unverified because the Host log
-was not retained; `GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE` tracks diagnosis.
+ready in the CPU-only guest. The subsequent installed-creation gate retains its Host inventory ENOENT log; `GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE` tracks diagnosis.
 Evidence is under
 `out/gchat-open-items-20261012/resource-startup/`; this is functional startup
 acceptance, with no Engine or performance qualification claim.
@@ -133,7 +156,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-069 | Pair/restart/grant restore passed; shared-pool queue, cancellation and recovery across two Ready hosts did not. | Resolve the worker startup/RAM blocker, then one two-host job lifecycle. |
 | OI-072-RUNTIME | Muse runtime memory loss has no demonstrated allocation owner/fix. | Reuse capture evidence; one admitted candidate and an ownership timeline only when authorized. |
 | OI-076 | Continued-chat context/format warning's original cause remains unknown. | Diagnostics merged in `36ac89441`; collect exact trigger on the next occurrence. No speculative fix. |
-| GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE | Automatic post-install hardware preparation reported Host exit 1/no local owner ready in a disposable CPU-only guest; the exit cause is unverified. | Preserve the failed Host log before cleanup at the next applicable gate. No speculative no-GPU attribution or repeat startup test. |
+| GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE | Local bootstrap/preparation now rejects no-NVIDIA inventory before Host spawn; unreadable NVIDIA capability continues to Host validation. Source `789d089db`; focused fixture, desktop/CLI checks and strict Clippy PASS. | Reviewed merge; supported-GPU installed preparation remains owed. Historical inventory ENOENT is retained without asserting its missing executable/loader. |
 | OI-066 | Guard diagnosis is closed; fit-message correction `85bc3d087` is not in origin/dev/next. | Owning CPU/syntax fixtures pass; reviewed engine landing remains pending. Profile qualification is OI-072. |
 | OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; all 19 existing offline metadata cases PASS on S1. The live feed is not published. | Exact final-payload signature and signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |

@@ -65,7 +65,7 @@ test-tauri = [
     "tauri/test",
     "desktop",
 ]
-cli = ["dep:env_logger", "dep:dialoguer", "dep:indicatif", "dep:console"]
+cli = ["hardware", "dep:env_logger", "dep:dialoguer", "dep:indicatif", "dep:console"]
 
 [build-dependencies]
 tauri-build = { version = "2.0.2", features = [] }
