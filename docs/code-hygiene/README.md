@@ -10,6 +10,11 @@ and pushed; current candidate inventory is below.
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
 Candidate `fix/gchat-host-body-39c9` in `/ai/gchat-worktrees/host-body-39c9`.
+Origin main `f0db75362` is merged without rebasing; both request-body and snapshot
+ownership changes are retained. All four focused fixtures and strict Host all-target
+Clippy pass on the composition; CPU only, under one minute. The first container
+command lacked Cargo and stopped before compilation; the established native WSL
+Cargo route completed the gate. No package/version or lock-file change.
 The Host validates a borrowed JSON-object map, preserves raw field values and
 replaces only its model field into one preallocated buffer. The benchmark path
 forwards validated original bytes. Bounded admission and headers are unchanged.
@@ -141,7 +146,7 @@ Evidence and inventory: `/ai/gchat/out/review-remaining-20261011/` contains
 on `f5d88db2f` are reused after the native-fixture-only setup correction; only
 the previously unrun measurement and strict Clippy execute on `9ff45a2f3`.
 Shared Cargo caches and prior accepted resource/statvfs evidence remain.
-The candidate source above is retained until reviewed main integration.
+The accepted candidate is merged and its working tree retired.
 The gate ends06:54:20 UTC; its container is absent, the canonical build guard
 is reacquired/released and CPU446 canceled06:56:53. No model, job, booking or
 guard remains. Private fixture state and CPU children end with the passing case.
@@ -157,8 +162,7 @@ hardware admission and reattaches the actual hardware owner before measured
 Scan. Production admission is unchanged. Failure logs remain alongside accepted
 results; no failed setup is counted as measurement or qualification.
 
-Next action: push the reviewed source/documentation and master-row result for
-main integration, then retire the clean merged candidate. Physical Windows
+Physical Windows
 SCM/worker/UNC-path acceptance and prior OI-121 slow-NAS launch/hash latency
 remain release-gate obligations. No additional model qualification or count
 change follows from this Linux gate.

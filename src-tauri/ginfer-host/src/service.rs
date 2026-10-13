@@ -808,7 +808,8 @@ impl Host {
                 }
             }
         }
-        serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
+        let engine_presets_available = !available_profiles.is_empty() || !max_perf_profiles.is_empty();
+        let mut snapshot = serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
             "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
                 "active":network["active"],"port":network["port"],"error":network["error"]},
             "display_name":name,"revision":revision,
@@ -816,12 +817,15 @@ impl Host {
             "fleet_membership":membership,
             "clients":usage["clients"],"local_administrator":usage["local_administrator"],
             "hardware_profile":hardware_profile,
-            "instances":instances,"gpus":self.gpus,"models":models,
+            "gpus":self.gpus,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
-            "launch_profiles":available_profiles,"profile_error":*self.profile_error.read().await,
-            "max_perf_profiles":max_perf_profiles,
+            "profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
-                "managed_root":self.downloads.root(),"engine_presets_available":!available_profiles.is_empty() || !max_perf_profiles.is_empty()}})
+                "managed_root":self.downloads.root(),"engine_presets_available":engine_presets_available}});
+        snapshot["instances"] = serde_json::Value::Array(instances);
+        snapshot["launch_profiles"] = serde_json::Value::Array(available_profiles);
+        snapshot["max_perf_profiles"] = serde_json::Value::Array(max_perf_profiles);
+        snapshot
     }
     pub async fn authenticated(&self, request: &Request<Body>) -> bool {
         self.principal(request).await.is_some()
@@ -2971,12 +2975,29 @@ mod resource_tests {
             catalog.push(profile);
         }
         *host.launch_profiles.write().await = catalog.clone();
+        let hardware = host.processes.lock().await.hardware_profile.clone();
+        // Synthetic children measure projection without hardware admission.
+        let mut synthetic = HostProcesses::new(
+            dir.path().join("engine"),
+            host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
+            Duration::from_secs(600),
+        ).unwrap();
+        synthetic.configure_runtimes(Default::default(), host.gpus.iter().filter_map(|gpu| {
+            gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))
+        }).collect()).unwrap();
         let mut ids = Vec::new();
         for index in 0..4 {
             let mut request = request.clone();
             request.gpu_uuids = vec![format!("GPU-fixture-{index}")];
-            ids.push(host.launch(request).await.unwrap());
+            let prepared = host.prepare_launch(&request).await.unwrap();
+            let id = prepared.instance_id;
+            synthetic.launch(prepared).unwrap();
+            request.instance_id = Some(id);
+            host.data.lock().await.profiles.insert(id, request);
+            ids.push(id);
         }
+        synthetic.hardware_profile = hardware;
+        *host.processes.lock().await = synthetic;
         let offline_id = Uuid::new_v4();
         let mut offline = request.clone();
         offline.instance_id = Some(offline_id);
@@ -2997,6 +3018,9 @@ mod resource_tests {
         measurement.finish("service_resource_snapshot_174_profiles_4_instances");
         host.processes.lock().await.shutdown().await.unwrap();
         assert_eq!(snapshot["launch_profiles"], serde_json::json!(expected));
+        assert_eq!(snapshot["models"], serde_json::json!(models));
+        assert_eq!(snapshot["max_perf_profiles"], serde_json::json!([]));
+        assert_eq!(snapshot["model_management"]["engine_presets_available"], !expected.is_empty());
         let instances = snapshot["instances"].as_array().unwrap();
         assert_eq!(instances.len(), 5);
         let stopped = instances.iter().find(|instance| instance["instance_id"] == offline_id.to_string()).unwrap();
