@@ -6,6 +6,23 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
+Completed source item: first-run Gbot opt-in in the existing welcome screen. The explicit
+“Enable Gbot” action saves the shared preference and enters the existing guided
+wizard; choosing a model, connecting a Host or skipping setup keeps Gbot off.
+The wizard owns computer selection and connection, so welcome never provisions a
+computer. Five welcome cases and one existing route handoff case pass, together with
+frontend types and affected lint. Evidence: `out/gchat-open-items-20261012/
+welcome-opt-in/receipt.json`. Installer packaging choices, installed welcome
+presentation and completed computer creation remain open.
+
+Owned candidate: `/ai/gchat-worktrees/gbot-browser-physical-2e735`, branch
+`feat/gbot-welcome-8d268`, baseline main `8d268fc11`. The previous OI-074 source
+is committed/pushed on `fix/gchat-chat-bundle-8d268`; its build evidence is retained
+under `out/gchat-open-items-20261012/oi074/` for coordinator review. No live jobs,
+models or guests. Next action: coordinator review/merge, then the remaining installed wizard
+creation/resume gate. Welcome persists explicit opt-in and ordinary model setup
+keeps Gbot off; no computer is provisioned by the welcome screen.
+
 Completed item: the two-question Linux Gbot wizard, source `f39961b6c` from
 main `e7d761c2f` in `test/gbot-installed-wizard-e7d`. Five affected wizard/route
 cases, frontend types/Vite, lint and the incremental desktop build pass. The

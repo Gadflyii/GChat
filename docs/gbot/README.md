@@ -69,6 +69,14 @@ performance measurement. Package provenance is in
 resources were outside this GUI-only qualification. Extracted staging and copied
 inputs are retired; the developer DEB and tested desktop remain for review.
 
+The `feat/gbot-welcome-8d268` candidate adds first-run opt-in to GChat's welcome
+screen. “Enable Gbot” saves the existing shared preference and opens the guided
+wizard; ordinary model selection, Host connection and skipping setup keep Gbot
+off. Already enabled users can continue Gbot setup. Five welcome cases, the
+existing first-bot route handoff, frontend types and affected lint pass; evidence
+is in `out/gchat-open-items-20261012/welcome-opt-in/receipt.json`. Installer
+checkboxes and installed welcome presentation remain unqualified.
+
 Installed Linux wizard presentation and DEB window-close continuity now pass.
 Completed wizard creation/resume, sleep/restart, live scheduled dispatch,
 Hyper-V/cloud/M365 creation, remote service selection and installer opt-in remain
