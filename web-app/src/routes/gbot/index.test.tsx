@@ -106,7 +106,7 @@ it('resumes a saved cloud price review without creating a workspace or offering 
     return []
   })
   render(<Page />)
-  await screen.findByText('Cloud researcher')
+  await screen.findByRole('region', { name: 'Cloud setup Cloud researcher' })
   expect(
     screen.queryByRole('form', { name: 'Set up Gbot' })
   ).not.toBeInTheDocument()
@@ -148,6 +148,7 @@ it('creates an SSH workspace in one request and preserves setup identity on retr
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByLabelText(/Another computer on the LAN/))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByLabelText('Use an existing SSH key'))
   for (const [label, value] of [
     ['SSH host', 'bot.local'],
     ['SSH user', 'bot'],

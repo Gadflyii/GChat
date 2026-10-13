@@ -303,7 +303,7 @@ mod tests {
             "traffic":{"price_per_tb":{"net":"0","gross":"0"}},
             "primary_ips":[{"type":"ipv4","prices":[{"location":"fsn1",
                 "price_monthly":{"net":"0.5","gross":"0.595"},"price_hourly":{"net":"0.0007","gross":"0.000833"}}]}],
-            "server_types":[{"id":22,"prices":[{"location":"fsn1","included_traffic":20000000000000,
+            "server_types":[{"id":22,"prices":[{"location":"fsn1","included_traffic":20000000000000u64,
                 "price_per_tb_traffic":{"net":"1","gross":"1.19"},
                 "price_monthly":{"net":"4.1","gross":"4.879"},"price_hourly":{"net":"0.0061","gross":"0.007259"}}]}]}});
         let catalog = hetzner_catalog(types.clone(), locations.clone(), raw.clone()).unwrap();

@@ -461,3 +461,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-12** — [Consume native v2 benchmark phases with their measured scope](2026-10-12-consume-native-v2-benchmark-phases.md)
 - **2026-10-12** — [Install Linux resources asynchronously before local admission](2026-10-12-install-linux-resources-before-local-admission.md)
 - **2026-10-13** — [Proposed credential-store tiers for Linux and WSL](2026-10-13-credential-store-tiers.md)
+- **2026-10-13** — [Review cloud costs before Gbot provisioning](2026-10-13-review-cloud-costs-before-gbot-provisioning.md)
