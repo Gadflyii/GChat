@@ -6,20 +6,30 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
+Completed Linux missing-provider/passphrase setup gate: the native app shows
+its missing-keyring guidance, creates the chosen vault, preserves its tier while
+locked, rejects an incorrect passphrase, and unlocks. Restart retains the selected
+vault in its locked state; entering the correct passphrase unlocks it again.
+Evidence: `out/secret-store-installed-20261013/result.json`. No product source
+change or rebuild was needed. The private fixture is retired; no model ran.
+Physical locked desktop-keyring behavior was not replayed; prior focused cases
+cover provider errors. Windows helper/lifetime checks remain at the release gate.
+
 Completed GCHAT-MULTI-WORKER-CARD-RESTORE: source `177d574e6` restores
 all saved workers once, merges live progress by run ID and preserves answers.
 Twenty-five focused cases, frontend types/lint and the native embed pass.
 One isolated Linux/WSLg reload restores two cards exactly once, one saved
 answer, and zero Working/Stop controls for completed workers; generated history only.
 Evidence: `out/worker-card-restore-20261013/result.json`; no model or Windows change.
-Candidate `fix/gchat-worker-card-restore-ca45` retains source/executable/evidence;
-private fixture retired, owned processes absent, bookings604/605 canceled; merge owed.
+Merged to main `585c95484`; executable/evidence retained, private fixture retired,
+owned processes absent, bookings604/605 canceled.
 
 Completed GCHAT-SECRET-STORE Linux tiers merged to main `ca45da2a0`.
 Core 5, Chat 8, Manager 3 and Gbot 1 focused cases, check, strict Clippy,
 frontend types/lint pass; lock adds nine edges, no package/version changes.
-Evidence: `out/secret-store-20261013/result.json`. Installed provider setup
-and the release-only Windows helper/lifetime gates remain owed.
+Evidence: `out/secret-store-20261013/result.json`; native missing-provider and
+passphrase setup acceptance is recorded above. Physical locked desktop-provider
+and release-only Windows helper/lifetime checks remain owed.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
 Two concurrent workers finished; a third queued at full capacity and was cancelled.
