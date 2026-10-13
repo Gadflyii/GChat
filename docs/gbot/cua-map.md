@@ -480,12 +480,15 @@ with the original setup and verifier unchanged. Source inspection confirms that
 `launch_window` and `execute_javascript` use Cua's `bench_ui`/pywebview path;
 the nine adopted Driver browser tools do not supply those evaluator operations.
 The current SSH-backed task adapter implements only the accepted file-task
-operations. Broader cua-bench dependencies remain unapproved.
+operations. Ron approved the required cua-bench pieces on October 13 at 13:45Z
+only inside a disposable Debian guest. They must not enter any host environment
+or GChat dependency closure; any AGPL package stops the evaluation.
 
-Next action: review the minimum pinned Cua task/session dependency closure before
-extending the existing adapter. Do not install dependencies, introduce another
-harness, substitute a DOM assertion for the evaluator, or claim a browser reward
-from the accepted direct-tool gate. Any approved run uses the dedicated guest
+Next action: install the minimum pinned task/session closure in the disposable
+guest, list its packages and licenses in the result, and use the original setup
+and verifier for one `Submit` variant. Reuse the existing adapter and tools;
+do not introduce another harness, substitute a DOM assertion for the evaluator,
+or claim a browser reward from the accepted direct-tool gate. The run uses the dedicated guest
 and the existing tools, with expected wall time stated up front and the rule-43
 limits of 20 minutes per GPU run and 45 minutes for the whole test phase.
 

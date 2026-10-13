@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import KvmSetup from './KvmSetup'
+import LanSetup from './LanSetup'
+import type { Workspace } from '@/services/gbot'
 
 export type BotConnection = {
   name: string
@@ -11,6 +13,13 @@ export type BotConnection = {
   hostKey: string
   key: string
   passphrase: string
+  workspaceId?: string
+}
+
+export type SetupResume = {
+  id: string
+  name: string
+  connection?: Workspace['connection']
 }
 
 const computers = [
@@ -42,20 +51,27 @@ export default function GbotSetup({
   save: (connection: BotConnection) => Promise<void>
   cancel: () => void
   localReady: (id: string) => Promise<void>
-  resume?: { id: string; name: string }
+  resume?: SetupResume
 }) {
   const [step, setStep] = useState(resume ? 3 : 0)
-  const [computer, setComputer] = useState(resume ? 'local' : '')
+  const [computer, setComputer] = useState(
+    resume?.connection ? 'lan' : resume ? 'local' : ''
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [lanReady, setLanReady] = useState(false)
+  const [connecting, setConnecting] = useState(false)
   const [connection, setConnection] = useState<BotConnection>({
     name: resume?.name ?? '',
-    hostname: '',
-    port: '22',
-    user: '',
-    hostKey: '',
+    hostname: resume?.connection?.endpoint?.hostname ?? '',
+    port: String(resume?.connection?.endpoint?.port ?? 22),
+    user: resume?.connection?.endpoint?.user ?? '',
+    hostKey: resume?.connection?.pinned_host_key
+      ? `${resume.connection.pinned_host_key.algorithm} ${resume.connection.pinned_host_key.public_key}`
+      : '',
     key: '',
     passphrase: '',
+    ...(resume?.connection ? { workspaceId: resume.id } : {}),
   })
   const update = (field: keyof BotConnection, value: string) => {
     setError('')
@@ -68,18 +84,20 @@ export default function GbotSetup({
       : step === 2
         ? computer === 'lan' || computer === 'local'
         : step === 3
-          ? computer === 'lan' && Boolean(
-              connection.hostname.trim() &&
-                connection.user.trim() &&
-                connection.key.trim() &&
-                connection.hostKey.trim().split(/\s+/).length >= 2 &&
-                Number.isInteger(port) &&
-                port > 0 &&
-                port <= 65535
-            )
+          ? computer === 'lan' &&
+            (lanReady ||
+              Boolean(
+                connection.hostname.trim() &&
+                  connection.user.trim() &&
+                  connection.key.trim() &&
+                  connection.hostKey.trim().split(/\s+/).length >= 2 &&
+                  Number.isInteger(port) &&
+                  port > 0 &&
+                  port <= 65535
+              ))
           : true
   const submit = async () => {
-    if (saving || !canContinue) return
+    if (saving || connecting || !canContinue) return
     if (step < 4) {
       setStep(step + 1)
       return
@@ -202,53 +220,12 @@ export default function GbotSetup({
         />
       )}
       {step === 3 && computer === 'lan' && (
-        <>
-          <p className="text-sm text-muted-foreground">
-            Enter the connection details for the prepared bot computer. Verify
-            its SSH host public key on that computer.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(['hostname', 'port', 'user', 'hostKey'] as const).map((field) => (
-              <label key={field} className="space-y-1 text-sm">
-                {
-                  {
-                    hostname: 'SSH host',
-                    port: 'SSH port',
-                    user: 'SSH user',
-                    hostKey: 'SSH host public key',
-                  }[field]
-                }
-                <Input
-                  required
-                  type={field === 'port' ? 'number' : 'text'}
-                  min={field === 'port' ? 1 : undefined}
-                  max={field === 'port' ? 65535 : undefined}
-                  value={connection[field]}
-                  onChange={(event) => update(field, event.target.value)}
-                />
-              </label>
-            ))}
-          </div>
-          <label className="block space-y-1 text-sm">
-            SSH private key
-            <textarea
-              required
-              autoComplete="off"
-              className="min-h-24 w-full rounded-md border bg-background p-2 font-mono"
-              value={connection.key}
-              onChange={(event) => update('key', event.target.value)}
-            />
-          </label>
-          <label className="block space-y-1 text-sm">
-            Key passphrase
-            <Input
-              type="password"
-              autoComplete="off"
-              value={connection.passphrase}
-              onChange={(event) => update('passphrase', event.target.value)}
-            />
-          </label>
-        </>
+        <LanSetup
+          connection={connection}
+          change={setConnection}
+          ready={setLanReady}
+          busy={setConnecting}
+        />
       )}
       {step === 4 && (
         <>
@@ -265,9 +242,11 @@ export default function GbotSetup({
             <dd className="break-all font-mono">{connection.hostKey.trim()}</dd>
           </dl>
           <p className="text-sm text-muted-foreground">
-            Save imports the private key into GChat's vault. No accounts are
-            inherited. After saving, connect the computer, follow “Choose a
-            brain”, and check its desktop before running a task.
+            {connection.workspaceId
+              ? 'The bot key is saved in GChat’s vault and SSH access is verified.'
+              : 'Save imports the private key into GChat’s vault.'}{' '}
+            No accounts are inherited. Next, connect the computer, follow
+            “Choose a brain”, and check its desktop before running a task.
           </p>
         </>
       )}
@@ -278,15 +257,15 @@ export default function GbotSetup({
       )}
       <div className="flex gap-2">
         {!(step === 3 && computer === 'local') && (
-          <Button disabled={saving || !canContinue}>
+          <Button disabled={saving || connecting || !canContinue}>
             {saving ? 'Saving…' : step === 4 ? 'Save bot' : 'Continue'}
           </Button>
         )}
-        {step > 0 && !resume && (
+        {step > 0 && !resume && !connection.workspaceId && (
           <Button
             type="button"
             variant="outline"
-            disabled={saving}
+            disabled={saving || connecting}
             onClick={() => {
               setError('')
               setStep(step - 1)
@@ -298,10 +277,10 @@ export default function GbotSetup({
         <Button
           type="button"
           variant="ghost"
-          disabled={saving}
+          disabled={saving || connecting}
           onClick={cancel}
         >
-          Cancel
+          {connection.workspaceId ? 'Finish later' : 'Cancel'}
         </Button>
       </div>
     </form>

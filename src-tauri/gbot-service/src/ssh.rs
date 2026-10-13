@@ -31,7 +31,7 @@ use tokio::{
 use crate::{
     contract::{
         ContractError, GuestCapability, GuestHello, GuestReply, GuestRequest, OperationId,
-        SessionIdentity, SshConnection, SshHostPublicKey, VaultCredentialRef,
+        SessionIdentity, SshConnection, SshEndpoint, SshHostPublicKey, VaultCredentialRef,
     },
     vault::{Secret, Vault, VaultError},
 };
@@ -122,6 +122,176 @@ pub struct ImportedSshKey {
     pub public_key: SshHostPublicKey,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct SshIdentity {
+    pub public_key: SshHostPublicKey,
+    pub fingerprint: String,
+}
+
+fn public_identity(public: &PublicKey) -> Result<SshIdentity, SshError> {
+    let encoded = public
+        .to_openssh()
+        .map_err(|_| SshError::InvalidCredential)?;
+    let mut fields = encoded.split_whitespace();
+    let algorithm = fields.next().ok_or(SshError::InvalidCredential)?;
+    let public_key = fields.next().ok_or(SshError::InvalidCredential)?;
+    Ok(SshIdentity {
+        public_key: SshHostPublicKey {
+            algorithm: algorithm.into(),
+            public_key: public_key.into(),
+        },
+        fingerprint: public.fingerprint(HashAlg::Sha256).to_string(),
+    })
+}
+
+pub(crate) fn generate_ssh_key() -> Result<Secret, SshError> {
+    let private = PrivateKey::random(&mut russh::keys::key::safe_rng(), Algorithm::Ed25519)
+        .map_err(|_| SshError::ImportFailed)?;
+    let encoded = private
+        .to_openssh(russh::keys::ssh_key::LineEnding::LF)
+        .map_err(|_| SshError::ImportFailed)?;
+    Ok(Secret::new(encoded.as_bytes().to_vec()))
+}
+
+pub(crate) fn ssh_public_key(secret: &Secret) -> Result<SshHostPublicKey, SshError> {
+    let private = PrivateKey::from_openssh(secret.expose_secret())
+        .map_err(|_| SshError::InvalidCredential)?;
+    Ok(public_identity(private.public_key())?.public_key)
+}
+
+/// Discovery stops before authentication; the user must verify the offered key.
+pub async fn inspect_ssh_identity(
+    endpoint: SshEndpoint,
+    policy: SshPolicy,
+) -> Result<SshIdentity, SshError> {
+    probe_ssh(endpoint, None, policy).await
+}
+
+pub async fn check_ssh_connection(
+    connection: &SshConnection,
+    vault: &dyn Vault,
+    policy: SshPolicy,
+) -> Result<(), SshError> {
+    connection.pinned_host_key.validate()?;
+    connection.credential_ref.validate()?;
+    let pinned = PublicKey::from_openssh(&format!(
+        "{} {}",
+        connection.pinned_host_key.algorithm, connection.pinned_host_key.public_key
+    ))
+    .map_err(|_| SshError::Contract(ContractError::InvalidHostKey))?;
+    let secret = vault
+        .get(connection.credential_ref.as_uuid())
+        .await
+        .map_err(SshError::Vault)?
+        .ok_or(SshError::MissingCredential)?;
+    let private = PrivateKey::from_openssh(secret.expose_secret())
+        .map_err(|_| SshError::InvalidCredential)?;
+    validate_credential_algorithm(&private)?;
+    if private.is_encrypted() {
+        return Err(SshError::PassphraseRequired);
+    }
+    drop(secret);
+    probe_ssh(connection.endpoint.clone(), Some((pinned, private)), policy).await?;
+    Ok(())
+}
+
+async fn probe_ssh(
+    endpoint: SshEndpoint,
+    credentials: Option<(PublicKey, PrivateKey)>,
+    policy: SshPolicy,
+) -> Result<SshIdentity, SshError> {
+    endpoint.validate()?;
+    if policy.connect_timeout.is_zero()
+        || policy.keepalive_interval.is_zero()
+        || policy.keepalive_max == 0
+    {
+        return Err(SshError::InvalidPolicy);
+    }
+    let (cancel, mut cancelled) = oneshot::channel();
+    let mut cancellation = CancelConnect(Some(cancel));
+    let task = tokio::spawn(async move {
+        let deadline = tokio::time::Instant::now() + policy.connect_timeout;
+        let stream = tokio::select! {
+            result = TcpStream::connect((endpoint.hostname.as_str(), endpoint.port)) => result.map_err(|_| SshError::Transport)?,
+            _ = &mut cancelled => return Err(SshError::Closed),
+            _ = tokio::time::sleep_until(deadline) => return Err(SshError::TimedOut),
+        };
+        let standard = stream.into_std().map_err(|_| SshError::Transport)?;
+        let socket = standard.try_clone().map_err(|_| SshError::Transport)?;
+        let stream = TcpStream::from_std(standard).map_err(|_| SshError::Transport)?;
+        let mut setup = Box::pin(probe_session(stream, endpoint.user, credentials, policy));
+        let interrupted = tokio::select! {
+            result = &mut setup => return result,
+            _ = &mut cancelled => SshError::Closed,
+            _ = tokio::time::sleep_until(deadline) => SshError::TimedOut,
+        };
+        let _ = socket.shutdown(Shutdown::Both);
+        let _ = setup.await;
+        Err(interrupted)
+    });
+    let result = task.await.map_err(|_| SshError::CleanupUnproven)?;
+    cancellation.0.take();
+    result
+}
+
+async fn probe_session(
+    stream: TcpStream,
+    user: String,
+    credentials: Option<(PublicKey, PrivateKey)>,
+    policy: SshPolicy,
+) -> Result<SshIdentity, SshError> {
+    let offered = Arc::new(StdMutex::new(None));
+    let rejected = Arc::new(AtomicBool::new(false));
+    let (pinned, private) = match credentials {
+        Some((pinned, private)) => (Some(pinned), Some(private)),
+        None => (None, None),
+    };
+    let result = client::connect_stream(
+        Arc::new(client::Config {
+            keepalive_interval: Some(policy.keepalive_interval),
+            keepalive_max: policy.keepalive_max,
+            ..Default::default()
+        }),
+        stream,
+        Peer {
+            key: pinned,
+            offered: Some(offered.clone()),
+            rejected: rejected.clone(),
+        },
+    )
+    .await;
+    let identity = offered
+        .lock()
+        .expect("SSH identity lock")
+        .as_ref()
+        .map(public_identity)
+        .transpose()?;
+    match (result, private) {
+        (Err(_), None) => identity.ok_or(SshError::Transport),
+        (Err(_), Some(_)) => Err(if rejected.load(Ordering::Acquire) {
+            SshError::PeerRejected
+        } else {
+            SshError::Transport
+        }),
+        (Ok(mut client), Some(private)) => {
+            let auth = authenticate(&mut client, user, private).await;
+            let _ = client
+                .disconnect(Disconnect::ByApplication, "Connection check finished", "")
+                .await;
+            let _ = client.await;
+            auth?;
+            identity.ok_or(SshError::Protocol)
+        }
+        (Ok(client), None) => {
+            let _ = client
+                .disconnect(Disconnect::ByApplication, "Identity check finished", "")
+                .await;
+            let _ = client.await;
+            Err(SshError::Protocol)
+        }
+    }
+}
+
 fn validate_credential_algorithm(private: &PrivateKey) -> Result<(), SshError> {
     if matches!(
         private.algorithm(),
@@ -192,7 +362,8 @@ pub(crate) async fn prepare_ssh_key(
 }
 
 struct Peer {
-    key: PublicKey,
+    key: Option<PublicKey>,
+    offered: Option<Arc<StdMutex<Option<PublicKey>>>>,
     rejected: Arc<AtomicBool>,
 }
 
@@ -204,7 +375,14 @@ impl client::Handler for Peer {
         offered: &PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
         let accepted = match offered {
-            PublicKeyOrCertificate::PublicKey { key, .. } => key.key_data() == self.key.key_data(),
+            PublicKeyOrCertificate::PublicKey { key, .. } => {
+                if let Some(offered) = &self.offered {
+                    *offered.lock().expect("SSH identity lock") = Some(key.clone());
+                }
+                self.key
+                    .as_ref()
+                    .is_some_and(|pinned| key.key_data() == pinned.key_data())
+            }
             PublicKeyOrCertificate::Certificate(_) => false,
         };
         if !accepted {
@@ -599,6 +777,35 @@ async fn connect_owned(
     Err(interrupted)
 }
 
+async fn authenticate(
+    client: &mut client::Handle<Peer>,
+    user: String,
+    private: PrivateKey,
+) -> Result<(), SshError> {
+    let hash = if matches!(private.algorithm(), Algorithm::Rsa { .. }) {
+        match client
+            .best_supported_rsa_hash()
+            .await
+            .map_err(|_| SshError::Transport)?
+        {
+            Some(Some(hash)) => Some(hash),
+            Some(None) => return Err(SshError::AuthenticationRejected),
+            None => Some(HashAlg::Sha256),
+        }
+    } else {
+        None
+    };
+    let auth = client
+        .authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(private), hash))
+        .await
+        .map_err(|_| SshError::Transport)?;
+    if auth.success() {
+        Ok(())
+    } else {
+        Err(SshError::AuthenticationRejected)
+    }
+}
+
 async fn establish(
     stream: TcpStream,
     socket: Arc<std::net::TcpStream>,
@@ -618,7 +825,8 @@ async fn establish(
         config,
         stream,
         Peer {
-            key: pinned,
+            key: Some(pinned),
+            offered: None,
             rejected: rejected.clone(),
         },
     )
@@ -631,27 +839,7 @@ async fn establish(
         }
     })?;
     let inspection = async {
-        let hash = if matches!(private.algorithm(), Algorithm::Rsa { .. }) {
-            match client
-                .best_supported_rsa_hash()
-                .await
-                .map_err(|_| SshError::Transport)?
-            {
-                Some(Some(hash)) => Some(hash),
-                Some(None) => return Err(SshError::AuthenticationRejected),
-                // An absent extension permits an explicit SHA-2 attempt, never SHA-1.
-                None => Some(HashAlg::Sha256),
-            }
-        } else {
-            None
-        };
-        let auth = client
-            .authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(private), hash))
-            .await
-            .map_err(|_| SshError::Transport)?;
-        if !auth.success() {
-            return Err(SshError::AuthenticationRejected);
-        }
+        authenticate(&mut client, user, private).await?;
         guest::open(&client, expected).await
     }
     .await;
