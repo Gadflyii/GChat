@@ -13,6 +13,7 @@ export const GINFER_CONTEXT_OVERFLOW_MESSAGE =
 
 type SmartContextFailureCode =
   | 'context_turn_too_large'
+  | 'context_output_conflict'
   | 'context_checkpoint_failed'
 
 /** Read the structured local context failure through the model adapter's HTTP error wrapper. */
@@ -40,6 +41,7 @@ export function getSmartContextFailure(
     const code = envelope.error?.code
     if (
       code !== 'context_turn_too_large' &&
+      code !== 'context_output_conflict' &&
       code !== 'context_checkpoint_failed'
     ) {
       return null

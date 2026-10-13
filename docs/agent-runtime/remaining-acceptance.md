@@ -6,27 +6,14 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-Current item: the approved OI-068 installed Linux Chat worker check, branch
-`test/oi068-chat-workers-fe79`, based on main `fe79233c3`. Use the accepted
-Linux desktop artifact with isolated test state: dispatch two general workers,
-collect their results, reopen the saved conversation and cancel a worker. This
-is one functional gate, with no build or broader walkthrough. C3 supplies the
-exact current `b7b7f8594` product runtime; the selected artifact is released v1
-`qwen38_27b_nvfp4_df2.ginfer`. The local 5090 remains C3's until its actual
-FLASH-5090-INT-READY release (deadline 06:00 UTC). Book one server only after
-that release, then stop it and return the guards when the gate ends. No model is running for this item. One private Debian 13 desktop guest is
-preparing on S1 in `/ai/gbot-vms/oi068-chat-workers-20261013`, with CPUs
-48–51 booked 03:04–03:29 UTC. Its baseline DEB is installed only inside the
-guest; GChat remains unlaunched until the accepted executable refresh. Windows/Hermes and active-worker
-compaction remain outside this gate.
-
-Next unresolved action: prepare the private installed desktop, obtain C3's
-exact runtime path and release, then execute the worker check. The previous
-creation gate's corrected DEB was removed with its guest root; its executable
-is retained locally. Reuse that accepted executable with the retained baseline
-DEB rather than compile or package again. Record both installed artifact
-identities in the gate receipt. OI-073 remains parked: no new public submission
-or retry is authorized by this preparation.
+Current item: fix the reproduced OI-068 custom-launch/output-budget conflict.
+The installed fresh Chat served 8,192 context, reserved 8,192 output and
+rejected its 1,859-token prompt with a false one-token input budget.
+Custom launches now select the model's native context; incompatible output
+reservation gets an actionable settings error without changing user settings.
+Gate: focused launch/budget cases and affected lint, then one installed
+Chat two-worker retry at normal context. No broader walkthrough.
+Evidence: `out/gchat-open-items-20261013/oi068-chat-workers/result.json`.
 
 Completed source item: paired-Host Gbot brain selection merged to main
 `fe79233c3` from `9e9ef6272`. The independent service uses the shared native

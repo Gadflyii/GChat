@@ -48,6 +48,7 @@ export class SmartContextError extends Error {
   constructor(
     public readonly code:
       | 'context_turn_too_large'
+      | 'context_output_conflict'
       | 'context_checkpoint_failed',
     message: string,
     public readonly details: Record<string, number> = {}
@@ -145,6 +146,19 @@ function responseReserve(body: JsonObject): number {
   return Number.isFinite(requested) && requested > 0
     ? Math.floor(requested)
     : RESPONSE_TOKEN_DEFAULT
+}
+
+function contextInputBudget(configured: number, body: JsonObject): number {
+  const reservedOutputTokens = responseReserve(body)
+  const inputBudget = configured - reservedOutputTokens - INPUT_SAFETY_MARGIN
+  if (inputBudget <= 0) {
+    throw new SmartContextError(
+      'context_output_conflict',
+      `The server is configured for ${configured.toLocaleString('en-US')} context tokens, but this request reserves ${reservedOutputTokens.toLocaleString('en-US')} output tokens plus ${INPUT_SAFETY_MARGIN} safety tokens. Increase the server context or lower the requested output tokens before sending. GChat has not changed either setting.`,
+      { configuredContextTokens: configured, reservedOutputTokens, inputSafetyMargin: INPUT_SAFETY_MARGIN, inputBudget }
+    )
+  }
+  return inputBudget
 }
 
 function stableMessageSignature(messages: JsonObject[]): string {
@@ -714,10 +728,7 @@ async function prepareContextRequest(
 ): Promise<PreparedContextRequest> {
   const configured = Math.floor(policy.configuredContextTokens)
   const messages = validateMessages(body)
-  const inputBudget = Math.max(
-    1,
-    configured - responseReserve(body) - INPUT_SAFETY_MARGIN
-  )
+  const inputBudget = contextInputBudget(configured, body)
   if (policy.state?.manualCompactionRequested && fullInputTokens <= inputBudget) {
     return prepareManualCompaction(
       completionUrl,
@@ -912,6 +923,7 @@ export async function prepareGInferContextRequest(
     return { body: JSON.stringify(body) }
   }
   const messages = validateMessages(body)
+  const inputBudget = contextInputBudget(configured, body)
   const inputTokens = await exactInputTokens(completionUrl, body, headers, fetcher, signal)
   const usage = (count: number) => policy.onUsage?.({
     inputTokens: count,
@@ -919,7 +931,6 @@ export async function prepareGInferContextRequest(
     reservedOutputTokens: responseReserve(body),
   })
   usage(inputTokens)
-  const inputBudget = Math.max(1, configured - responseReserve(body) - INPUT_SAFETY_MARGIN)
   const cachedTools = inputTokens > inputBudget || policy.state?.manualCompactionRequested
     ? applyCachedToolResults(policy, body, messages)
     : { messages, reused: 0 }

@@ -14,7 +14,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const refresh = useEngineHosts((s) => s.refresh)
   const [modelId, setModelId] = useState('')
   const [gpus, setGpus] = useState<string[]>([])
-  const [context, setContext] = useState(8192)
+  const [context, setContext] = useState(0)
   const [concurrency, setConcurrency] = useState(1)
   const [busy, setBusy] = useState(false)
   const profiling = hardwareProfileBusy(snapshot?.hardware_profile)
@@ -120,6 +120,9 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <label className="block text-sm">Custom model<select className="mt-1 w-full rounded border bg-background p-2" value={modelId} onChange={(e) => {
         setModelId(e.target.value)
         const model = snapshot.models.find(m => m.id === e.target.value)
+        const target = model?.metadata.identity.model_id
+        setContext(target === 'qwen3.8-27b' || target === 'qwen3.8-flash-next' ? 262144
+          : target === 'muse-glimmer-30b' ? 131072 : 0)
         const occupied = new Set(snapshot.instances.filter(i => ['ready', 'starting', 'stopping'].includes(i.status) && i.instance_id !== editing).flatMap(i => i.configuration.gpu_uuids))
         const available = snapshot.gpus.filter(g => !occupied.has(g.uuid))
         setGpus(model?.metadata.tp_size === 1 && available.length === 1 ? [available[0].uuid] : [])
@@ -129,7 +132,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       </select></label>
       <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />GPU {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
       <div className="flex flex-wrap gap-4">
-        <label className="text-sm">Context tokens<Input type="number" min={1} value={context} onChange={(e) => setContext(Number(e.target.value))} /></label>
+        <label className="text-sm">Context tokens<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
         <label className="text-sm">Concurrent requests<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
       </div>
       {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">No qualified profiles are installed for these models. The controls below use custom launch settings. Reload drains this instance’s tracked requests before applying changes.</p>}

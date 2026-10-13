@@ -5,7 +5,9 @@ import {
   ginferContextPolicyForModel,
   prepareGInferContextRequest,
   SmartContextError,
+  smartContextErrorResponse,
 } from '../smart-context'
+import { getSmartContextFailure } from '@/utils/error'
 
 const completionUrl = 'http://localhost:8011/v1/chat/completions'
 const headers = { Authorization: 'Bearer test' }
@@ -114,6 +116,34 @@ function toolSummaryFetch(options: { fail?: boolean; empty?: boolean } = {}) {
 
 describe('smart GInfer context', () => {
   beforeEach(() => clearSmartContextCacheForTests())
+
+  it.each([{}, { max_tokens: 8192 }, { max_completion_tokens: 8192 }])('reports incompatible output reservation before tokenizing or compacting: %j', async (output) => {
+    const body = { model: 'qwen', messages: [{ role: 'user', content: 'Dispatch two workers.' }], ...output }
+    const fetcher = vi.fn()
+    const failure = await prepareGInferContextRequest(completionUrl, body, headers, fetcher, {
+      threadId: 'reservation-conflict', configuredContextTokens: 8192,
+    }).catch((error: SmartContextError) => error)
+    expect(failure).toBeInstanceOf(SmartContextError)
+    const error = failure as SmartContextError
+    expect(error).toMatchObject({ code: 'context_output_conflict', details: {
+      configuredContextTokens: 8192, reservedOutputTokens: 8192, inputBudget: -256,
+    } })
+    expect(error.message).toContain('Increase the server context or lower the requested output tokens')
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(body).toEqual({ model: 'qwen', messages: [{ role: 'user', content: 'Dispatch two workers.' }], ...output })
+    expect(getSmartContextFailure({ responseBody: await smartContextErrorResponse(error).text() }))
+      .toEqual({ code: 'context_output_conflict', message: error.message })
+  })
+
+  it.each([[262144, {}], [8192, { max_tokens: 1024 }]])('keeps a fitting request unchanged at %i context', async (configuredContextTokens, output) => {
+    const body = { model: 'qwen', messages: [{ role: 'user', content: 'Dispatch two workers.' }], ...output }
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ input_tokens: 1859 })))
+    const prepared = await prepareGInferContextRequest(completionUrl, body, headers, fetcher, {
+      threadId: 'fitting-reservation', configuredContextTokens,
+    })
+    expect(JSON.parse(prepared.body)).toEqual(body)
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
 
   it('selects only complete user-turn boundaries', () => {
     expect(
