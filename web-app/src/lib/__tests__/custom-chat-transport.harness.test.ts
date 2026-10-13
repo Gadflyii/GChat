@@ -1,3 +1,4 @@
+import { chatCapabilityRuns } from '../agent-run-message'
 import { EngineManager, MessageStatus, type ThreadMessage } from '@gchat/core'
 import { useContextUsage } from '@/hooks/useContextUsage'
 import type { UIMessage } from '@ai-sdk/react'
@@ -16,7 +17,7 @@ import { seedServiceHub } from '@/test/service-hub'
 import { CustomChatTransport } from '../custom-chat-transport'
 import { ModelFactory } from '../model-factory'
 import { Chat } from '@ai-sdk/react'
-import { executeChatCapability, chatCapabilityRun } from '../execute-chat-capability'
+import { executeChatCapability } from '../execute-chat-capability'
 import { executeClaimedChatToolBatch, shouldSendToolFollowUp } from '../execute-chat-tool-calls'
 import { isSessionBusy, useChatSessions } from '@/stores/chat-session-store'
 import { convertThreadMessageToUIMessage, extractContentPartsFromUIMessage } from '../messages'
@@ -306,7 +307,7 @@ describe('CustomChatTransport production harness', () => {
       })
       expect(onError).not.toHaveBeenCalled()
       expect(model.doStream).toHaveBeenCalledTimes(2)
-      const summary = chatCapabilityRun(chat.messages.at(-1)!)!
+      const summary = chatCapabilityRuns(chat.messages.at(-1)!)[0]
       expect(summary).toMatchObject({
         status: outcome.status,
         finish_reason: outcome.reason,
@@ -352,12 +353,12 @@ describe('CustomChatTransport production harness', () => {
         content: extractContentPartsFromUIMessage(message),
         created_at: 0,
         completed_at: 0,
-        metadata: { agent_run: chatCapabilityRun(message) },
+        metadata: { agent_runs: chatCapabilityRuns(message) },
       }))
       const history = (
         JSON.parse(JSON.stringify(saved)) as ThreadMessage[]
       ).map(convertThreadMessageToUIMessage)
-      expect(chatCapabilityRun(history.at(-1)!)).toEqual(summary)
+      expect(chatCapabilityRuns(history.at(-1)!)).toEqual([summary])
       const reopened = new Chat<UIMessage>({
         id: threadId,
         transport: new CustomChatTransport(undefined, threadId),

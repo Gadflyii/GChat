@@ -1,10 +1,11 @@
+import { chatCapabilityRuns } from '../agent-run-message'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { chatWorkerRunKey, useAgentRun } from '@/hooks/useAgentRun'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { useThreads } from '@/hooks/useThreads'
 import { seedServiceHub } from '@/test/service-hub'
-import { executeChatCapability, chatCapabilityRun, conversationAttachments } from '../execute-chat-capability'
+import { executeChatCapability, conversationAttachments } from '../execute-chat-capability'
 import type { CapabilitiesService } from '@/services/capabilities/types'
 import type { AgentEvent, AgentRunRecord } from '@/types/agent'
 import { newUserThreadContent } from '../completion'
@@ -102,7 +103,7 @@ describe('Chat capability execution', () => {
     const result = await executeChatCapability({ service, threadId: 'a', modelId: 'a-model', toolName: 'agent_run', arguments: { definitionId: 'team', task: 'Work' }, signal: new AbortController().signal })
     expect(execute.mock.calls[0][0]).toMatchObject({ session_id: 'a', model_id: 'a-model', auto_approve: true, working_dir: '/workspace', external_roots: [{ path: '/reference', can_edit: false }], disabled_tools: ['tools::write'] })
     expect(result.content).toMatchObject({ result: 'Saved result', agent_run: { status: 'finished', step_count: 2 } })
-    expect(chatCapabilityRun({ id: 'reply', role: 'assistant', parts: [{ type: 'tool-agent_run', toolCallId: 'call', state: 'output-available', input: {}, output: result.content }] })).toMatchObject({ status: 'finished', step_count: 2 })
+    expect(chatCapabilityRuns({ id: 'reply', role: 'assistant', parts: [{ type: 'tool-agent_run', toolCallId: 'call', state: 'output-available', input: {}, output: result.content }] })[0]).toMatchObject({ status: 'finished', step_count: 2 })
   })
 
   it('keeps asynchronous workers independent and retains their parent and collected result in saved Chat history', async () => {
@@ -271,7 +272,7 @@ describe('Chat capability execution', () => {
       })
     )
     useAgentRun.getState().clearAll()
-    expect(chatCapabilityRun(saved)).toMatchObject({
+    expect(chatCapabilityRuns(saved)[0]).toMatchObject({
       run_id: firstId,
       origin_session_id: 'parent',
       parent_run_id: 'parent-turn',

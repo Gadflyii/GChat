@@ -92,7 +92,7 @@ import { Button } from '@/components/ui/button'
 import { LinkifiedText } from '@/components/LinkifiedText'
 import { IconAlertCircle, IconRefresh } from '@tabler/icons-react'
 import { importConversationContext, isImportedConversationContext } from '@/lib/import-conversation-context'
-import { executeChatCapability, chatCapabilityRun } from '@/lib/execute-chat-capability'
+import { executeChatCapability } from '@/lib/execute-chat-capability'
 import DropdownModelProvider from '@/containers/DropdownModelProvider'
 import { ExtensionTypeEnum, VectorDBExtension } from '@gchat/core'
 import { ExtensionManager } from '@/lib/extension'
@@ -101,7 +101,7 @@ import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { AgentWorkspaceLayout } from '@/containers/AgentWorkspaceLayout'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useAgentRun } from '@/hooks/useAgentRun'
-import { buildAgentUIMessage } from '@/lib/agent-run-message'
+import { buildAgentUIMessage, chatCapabilityRuns, projectChatRunActivity } from '@/lib/agent-run-message'
 import {
   extractAgentAttachmentReferences,
   type AgentFileReference,
@@ -299,9 +299,10 @@ function ThreadDetail() {
         const contentParts = extractContentPartsFromUIMessage(message)
 
         if (contentParts.length > 0) {
+          const runs = chatCapabilityRuns(message)
           const messageMetadata: Record<string, unknown> = {
             ...((message.metadata || {}) as Record<string, unknown>),
-            ...(chatCapabilityRun(message) ? { agent_run: chatCapabilityRun(message) } : {}),
+            ...(runs.length > 0 ? { agent_runs: runs } : {}),
           }
 
           const assistantMessage: ThreadMessage = {
@@ -472,7 +473,7 @@ function ThreadDetail() {
       .messages()
       .fetchMessages(threadId)
       .then(async (fetchedMessages) => {
-        const historicalAgent = useConversationPolicy.getState().legacyAgentThreads[threadId] || fetchedMessages.some((message) => message.metadata?.agent_run)
+        const historicalAgent = useConversationPolicy.getState().legacyAgentThreads[threadId] || fetchedMessages.some((message) => (message.metadata?.agent_run || message.metadata?.agent_runs))
         if (historicalAgent) {
           fetchedMessages = await importConversationContext(threadId, fetchedMessages, serviceHub.messages(), loadAgentConversationContext)
         }
@@ -1039,6 +1040,13 @@ function ThreadDetail() {
   const requestActive = (!historyReady && !historyRestoreError) || isAgentRunning || status === CHAT_STATUS.SUBMITTED || status === CHAT_STATUS.STREAMING || pendingToolBatches > 0
   const inputStatus = requestActive ? CHAT_STATUS.SUBMITTED : status
   const visibleMessages = useMemo(() => chatMessages.filter((message) => !isImportedConversationContext(message)), [chatMessages])
+  const runActivity = useMemo(
+    () => projectChatRunActivity(visibleMessages, workerRuns),
+    [visibleMessages, workerRuns]
+  )
+  const cancelWorker = useCallback((runId: string) => {
+    void cancelAgentTurn(runId).catch(() => toast.error(t('chat:agentErrors.cancelFailed')))
+  }, [t])
   const lastChatMessage = visibleMessages[visibleMessages.length - 1]
   const hasActiveAssistantMessage = lastChatMessage?.role === 'assistant'
   const latestUserMessageId = useMemo(() => {
@@ -1057,9 +1065,7 @@ function ThreadDetail() {
       if (message.role === 'user') {
         references.push(...extractAgentAttachmentReferences(message.parts))
       }
-      if (
-        (message.metadata as { agent_run?: unknown } | undefined)?.agent_run
-      ) {
+      if (chatCapabilityRuns(message).length > 0) {
         referencesByMessageId.set(message.id, [...references])
       }
     }
@@ -1096,9 +1102,9 @@ function ThreadDetail() {
                     return (
                       <MessageItem
                         key={message.id}
-                        message={chatCapabilityRun(message)
-                          ? { ...message, metadata: { ...((message.metadata ?? {}) as Record<string, unknown>), agent_run: chatCapabilityRun(message) } }
-                          : message}
+                        message={message}
+                        agentRuns={runActivity.byMessageId.get(message.id)}
+                        onCancelAgentRun={cancelWorker}
                         isFirstMessage={isFirstMessage}
                         isLastMessage={isLastMessage}
                         status={inputStatus}
@@ -1133,10 +1139,7 @@ function ThreadDetail() {
                   {Object.entries(workerRuns)
                     .filter(
                       ([, worker]) =>
-                        !visibleMessages.some(
-                          (message) =>
-                            chatCapabilityRun(message)?.run_id === worker.runId
-                        )
+                        !runActivity.runIds.has(worker.runId ?? '')
                     )
                     .map(([key, worker]) => (
                       <div key={key}>
