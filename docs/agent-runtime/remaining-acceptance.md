@@ -4,7 +4,22 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
-## Current implementation and test plan — October 12
+## Current implementation and test plan — October 13
+
+Current item: [GCHAT-SECRET-STORE design](../decisions/2026-10-13-credential-store-tiers.md),
+prepared for review. Acceptance: one page naming tiers, retained backends,
+helper packaging and existing-grant migration. No implementation or Windows
+build before review; next action is the reviewer decision. Inventory: one reused
+source candidate, existing accepted builds/evidence; no live job or booking.
+
+Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
+Two concurrent workers finished; a third queued at full capacity and was cancelled.
+Results survived client restart; shared catalog and assignment survived coordinator restart.
+Evidence: `out/s2-acceptance-20261011/local-worker/result.json`.
+Simultaneous use from two independent workstations remains owed; the native clients ran
+sequentially with independent folders on one desktop and shared its coordinator grant.
+All disposable Hosts, clients, services, credentials/state and bookings are retired.
+The credential-store proposal above follows; no GPU is needed.
 
 Completed item: the reproduced OI-068 custom-launch/output-budget conflict.
 The old installed fresh Chat served 8,192 context, reserved 8,192 output and
