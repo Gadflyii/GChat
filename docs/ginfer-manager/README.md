@@ -52,10 +52,10 @@ the source tree is retained for review, with existing Node dependencies reused.
 
 ## Linux AppIndicator dependency deprecation
 
-`GCHAT-LINUX-APPINDICATOR-DEPRECATION`: diagnosis complete; external dependency migration is parked.
+`GCHAT-LINUX-APPINDICATOR-DEPRECATION`: closed by the approved dependency decision; warning retained.
 Locked `tray-icon` 0.21.3 → `libappindicator`/`libappindicator-sys` 0.9.0 calls Ayatana's deprecated constructor, which emits the retained warning unconditionally ([owning source](https://github.com/AyatanaIndicators/libayatana-appindicator/blob/master/src/app-indicator.c)).
 The [replacement API](https://github.com/AyatanaIndicators/libayatana-appindicator-glib/blob/main/src/ayatana-appindicator.h) requires `GMenu`/`GSimpleActionGroup`; the current backend passes `GtkMenu`, so changing a library name cannot deliver the migration.
-Dependency decision (pending bubbs): recommend keeping Tauri's current tray backend and `libayatana-appindicator3-1` for this release. `tray-icon` 0.21.3 and its `libappindicator`/`libappindicator-sys` 0.9.0 Rust wrappers are MIT/Apache-2.0; the [legacy Ayatana indicator API](https://github.com/AyatanaIndicators/libayatana-appindicator/blob/master/src/app-indicator.h) offers LGPL-2.1/LGPL-3.0. The existing loader prefers Ayatana and falls back to Canonical `libappindicator3-1`; neither needs a crate change, and disabling `backcompat` does not migrate the API or remove Ayatana's warning. Returning to Canonical is a legacy dependency choice, not the replacement API. The [new Ayatana GLib API is GPL-3.0-only](https://github.com/AyatanaIndicators/libayatana-appindicator-glib/blob/main/src/ayatana-appindicator.h); adopting it requires new Rust bindings/backend work, `GMenu`/`GSimpleActionGroup` export, and [runtime `libayatana-appindicator-glib2` plus build package `libayatana-appindicator-glib-dev`](https://github.com/AyatanaIndicators/libayatana-appindicator-glib/blob/main/debian/control). There is no existing Tauri feature switch for that migration. Its GPL license is outside our approved closure. Keep the working tray and visible warning; revisit a permitted backend when approved. No dependency, package or runtime change is authorized by this note.
+Dependency decision (approved October 13): keep Tauri's current tray backend and `libayatana-appindicator3-1` for this release. `tray-icon` 0.21.3 and its `libappindicator`/`libappindicator-sys` 0.9.0 Rust wrappers are MIT/Apache-2.0; the [legacy Ayatana indicator API](https://github.com/AyatanaIndicators/libayatana-appindicator/blob/master/src/app-indicator.h) offers LGPL-2.1/LGPL-3.0. The existing loader prefers Ayatana and falls back to Canonical `libappindicator3-1`; neither needs a crate change, and disabling `backcompat` does not migrate the API or remove Ayatana's warning. Returning to Canonical is a legacy dependency choice, not the replacement API. The [new Ayatana GLib API is GPL-3.0-only](https://github.com/AyatanaIndicators/libayatana-appindicator-glib/blob/main/src/ayatana-appindicator.h); adopting it requires new Rust bindings/backend work, `GMenu`/`GSimpleActionGroup` export, and [runtime `libayatana-appindicator-glib2` plus build package `libayatana-appindicator-glib-dev`](https://github.com/AyatanaIndicators/libayatana-appindicator-glib/blob/main/debian/control). There is no existing Tauri feature switch for that migration. Its GPL license is outside our approved closure. Keep the working tray and visible warning; revisit a permitted backend when approved. No dependency, package or runtime change is authorized by this note.
 Docs-only disposition; `git diff --check` passes. Evidence and owned source inventory: `/ai/gchat/out/gchat-focused-burndown-20261013/appindicator/result.json`.
 
 ## Closed Linux tray registration diagnosis
@@ -678,17 +678,18 @@ functional acceptance leaves the original fixed-arena
 
 ### Current Engine profile repair — OI-072
 
-October 11 decision: the source-only catalog/evidence audit is complete. Physical
+October 13 cutover audit: the source-only catalog/evidence audit is complete. Physical
 qualification is pending the release gate Ron schedules; the changing development
 Engine is not qualified tonight. The pending configuration is Muse TP1,
-C4/131,072, native NVFP4 long KV and native NVFP4 DFlash, prefill 1,024, graphs
+C4/131,072, NVFP4 long KV and all-Q4 DFlash2 from
+`muse_glimmer_30b_nvfp4_df2q4.ginfer` (`muse-glimmer-30b/nvfp4`), prefill 1,024, graphs
 and public prefix reuse enabled, Vision off and the unchanged 300 MiB guard.
 The release gate selects and records the actual Engine, exact package and GPU
 group before the retained cold four-request/full-context check. AUTO functional
 authorization stays in force; neither Ready nor a short lifecycle pass promotes
-capacity evidence. OI-072-RUNTIME remains the separate historical memory-owner
-question. No Engine, catalog value, profile tier or launch behavior changed in
-this audit.
+capacity evidence. Native-NVFP4-drafter measurements remain historical.
+OI-072-RUNTIME is separately closed as an unreproduced external residency drop.
+No Engine, catalog value, profile tier or launch behavior changed in this audit.
 
 Host validation checks the declared tier's counts/calculation/headroom facts;
 it does not read archived measurements or compare `engine_revision` with the
@@ -699,6 +700,9 @@ These checks preserve historical settings; they do not make historical evidence
 current qualification. GChat, Manager and the text launcher already show the
 recorded Engine/workload and changed-Engine disclaimer. Any future current-match
 verdict must come from Host observations, not guessed client version comparison.
+Flash filename matching now uses the completed `qwen38_flash_next_180b_*` cutover.
+Container identities, exact artifact paths and capacity settings are unchanged;
+the rename neither rebinds historical qualification nor creates a tested tier.
 Owning paths: `ginfer-host/src/{launch_profiles.rs,service.rs,engine_host.rs}`,
 `EngineProfilePicker.tsx` and `ginfer-manager/ui/manager.js`.
 

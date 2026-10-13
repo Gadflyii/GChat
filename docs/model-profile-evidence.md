@@ -15,9 +15,11 @@ release guidance. This decision does not promote any physical qualification or
 define a Muse Max Perf profile.
 
 The OI-072 disposition in the [Manager authority](ginfer-manager/README.md#current-engine-profile-repair--oi-072)
-concerns the historical Muse TP1 C4/131,072 NVFP4/native-draft profile: its
-source-only audit is complete; physical qualification waits for Ron’s release
-gate. No development Engine or artifact matrix is promoted by this audit.
+retains the historical Muse TP1 C4/131,072 NVFP4/native-draft results separately
+from the current all-Q4 DFlash2 release. The source-only audit is complete;
+qualification of `muse_glimmer_30b_nvfp4_df2q4.ginfer` on the selected release
+Engine waits for Ron’s release gate. No development Engine or artifact matrix
+is promoted by this audit.
 The September fixed C4/131,072 Muse profile stays unchanged as evidence of its
 tested `922e5a8` settings. A separate automatic candidate targets installed native
 `2ef56a52a` with the same C4/context/KV/draft/graph/headroom contract. Its cold

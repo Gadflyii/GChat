@@ -68,10 +68,7 @@ export function ginferModelProfile(modelId: string): GinferModelProfile | undefi
   }
   if (
     registeredIdentity(modelId, 'qwen3.8-flash-next', FLASH_WEIGHTS) ||
-    /^qwen38_flash_next_180b_(?:int|nvfp4|smol)_mtp(?:_tp[24])?$/.test(modelId) ||
-    // Retain old Flash stems until the release artifact rename lands.
-    /^qwen38_flash_(?:(?:int|smol)_mtp(?:_tp[24])?|nvfp4_mtp)$/.test(modelId) ||
-    /^qwen3\.8-flash-next-nvfp4-tp[124]-nv-kv$/.test(modelId)
+    /^qwen38_flash_next_180b_(?:int|nvfp4|smol)_mtp(?:_tp[24])?$/.test(modelId)
   ) {
     return {
       family: 'qwen3.8-flash-next',

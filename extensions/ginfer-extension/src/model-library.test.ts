@@ -70,7 +70,7 @@ describe('GInfer library model context and names', () => {
       'muse_glimmer_30b_nvfp4_df2',
       'muse_glimmer_30b_nvfp4_df2q4_tp2',
       'qwen38_27b_nvfp4_df2q4_tp4',
-      'qwen38_flash_smol_mtp_tp2',
+      'qwen38_flash_next_180b_smol_mtp_tp2',
       'custom',
     ].map((modelId) => ({
       modelId,
@@ -93,7 +93,7 @@ describe('GInfer library model context and names', () => {
     ['muse_glimmer_30b_nvfp4_df2', 131_072],
     ['muse_glimmer_30b_nvfp4_df2q4_tp2', 131_072],
     ['qwen38_27b_nvfp4_df2q4_tp4', 262_144],
-    ['qwen38_flash_smol_mtp_tp2', 262_144],
+    ['qwen38_flash_next_180b_smol_mtp_tp2', 262_144],
   ] as const)('keeps the adopted package ID and editable display label for %s', async (id, context) => {
     config.value = {
       model_path: `ginfer/models/${id}/${id}.ginfer`,
@@ -110,11 +110,6 @@ describe('GInfer library model context and names', () => {
     'qwen38_flash_next_180b_nvfp4_mtp',
     'qwen38_flash_next_180b_nvfp4_mtp_tp2',
     'qwen38_flash_next_180b_nvfp4_mtp_tp4',
-    'qwen38_flash_int_mtp',
-    'qwen38_flash_smol_mtp',
-    'qwen3.8-flash-next-nvfp4-tp1-nv-kv',
-    'qwen3.8-flash-next-nvfp4-tp2-nv-kv',
-    'qwen3.8-flash-next-nvfp4-tp4-nv-kv',
   ])('discovers and loads the exact Flash catalog path for %s', async (id) => {
     const path = `/linux/models/${id}/${id}.ginfer`
     config.locations = [{
