@@ -6,14 +6,33 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-Current item: fix the reproduced OI-068 custom-launch/output-budget conflict.
-The installed fresh Chat served 8,192 context, reserved 8,192 output and
+Completed item: the reproduced OI-068 custom-launch/output-budget conflict.
+The old installed fresh Chat served 8,192 context, reserved 8,192 output and
 rejected its 1,859-token prompt with a false one-token input budget.
-Custom launches now select the model's native context; incompatible output
-reservation gets an actionable settings error without changing user settings.
-Gate: focused launch/budget cases and affected lint, then one installed
-Chat two-worker retry at normal context. No broader walkthrough.
-Evidence: `out/gchat-open-items-20261013/oi068-chat-workers/result.json`.
+Custom launches now select the registered model's native context (Qwen 262,144;
+Muse 131,072), preserving explicit custom and saved values. Incompatible output
+reservation gets an actionable settings error before tokenization or compaction;
+user settings are not silently reduced.
+
+Twenty-three focused launch/budget cases, affected lint, frontend types and one
+incremental Linux desktop build pass. The isolated installed retry at Qwen's
+262,144 context dispatched two General Agent workers before waiting, collected
+both terminal results, returned Chat to idle and preserved both run records and
+results across conversation reopen and client reload. The math worker returned
+323; the document worker reported denied folder access and finished itself.
+Targeted worker cancellation was not reached and remains owed under OI-068.
+
+Client reload exposed a separate display defect: only the last worker activity
+card is restored, although both results remain saved. It is logged separately
+as GCHAT-MULTI-WORKER-CARD-RESTORE; this item does not claim that display fix.
+Evidence and exact source/runtime provenance:
+`out/gchat-open-items-20261013/oi068-chat-workers/result.json`.
+The model and Host stopped normally; canonical GPU/build guards were returned
+and both bookings canceled. The disposable private desktop guest and its disk,
+keys and staging files are retired. Inventory retains this unmerged source
+candidate, the accepted stripped desktop executable and cited evidence; no live
+job, model, guest or booking. Retired outputs freed 10.695 GiB on S1 and 1.050
+GiB locally. No Engine build, calibration, Windows change or broader walkthrough.
 
 Completed source item: paired-Host Gbot brain selection merged to main
 `fe79233c3` from `9e9ef6272`. The independent service uses the shared native
