@@ -224,7 +224,9 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
   expect(screen.getByLabelText('API key')).toHaveValue('bot-secret')
   fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
-  await waitFor(() => expect(screen.getByLabelText('API key')).toHaveValue(''))
+  await screen.findByText('Brain configured')
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  expect(screen.getByLabelText('API key')).toHaveValue('')
   expect(screen.getByLabelText('API key')).toHaveAttribute(
     'placeholder',
     'Saved in vault'
@@ -233,8 +235,23 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   cleanup()
   render(<Page />)
   await screen.findByText('Saved result')
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
   expect(screen.getByLabelText('Model ID')).toHaveValue('qwen')
   expect(screen.getByLabelText('API key')).toHaveValue('')
+  fireEvent.change(screen.getByLabelText('Model ID'), {
+    target: { value: 'muse' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('assignments/save', {
+      workspace_id: 'one',
+      api_base: 'http://host/v1',
+      model: 'muse',
+      context_tokens: 262144,
+      api_key: undefined,
+    })
+  )
+  await screen.findByText('Brain configured')
   fireEvent.click(screen.getByRole('button', { name: 'Allow', exact: true }))
   await waitFor(() =>
     expect(mocks.call).toHaveBeenCalledWith('tasks/approval', {
@@ -656,9 +673,7 @@ it('renders service session identities, holds unfinished KVM and admits actions 
   expect(screen.getByRole('button', { name: 'Take over' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Resume setup' }))
   const wizard = await screen.findByRole('form', { name: 'Set up Gbot' })
-  expect(
-    within(wizard).queryByLabelText('Bot name')
-  ).not.toBeInTheDocument()
+  expect(within(wizard).queryByLabelText('Bot name')).not.toBeInTheDocument()
   expect(
     within(wizard).queryByRole('button', { name: /Create .*computer/ })
   ).not.toBeInTheDocument()
@@ -685,17 +700,21 @@ it('renders service session identities, holds unfinished KVM and admits actions 
   await waitFor(() =>
     expect(screen.queryByText('Setup incomplete')).not.toBeInTheDocument()
   )
-  fireEvent.click(await screen.findByRole('button', { name: 'Use this computer' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Use this computer' })
+  )
   await waitFor(() =>
     expect(
       screen.queryByRole('form', { name: 'Set up Gbot' })
     ).not.toBeInTheDocument()
   )
-  expect(await screen.findByText('Connected', { exact: true })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'View bot’s desktop' })).toBeEnabled()
   expect(
-    screen.getByRole('button', { name: 'Run', exact: true })
+    await screen.findByText('Connected', { exact: true })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'View bot’s desktop' })
   ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
   await waitFor(() =>
     expect(mocks.call).toHaveBeenCalledWith('tasks/start', {
@@ -719,5 +738,7 @@ it('renders service session identities, holds unfinished KVM and admits actions 
     expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled()
   )
   expect(screen.queryByText('Setup incomplete')).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'View bot’s desktop' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'View bot’s desktop' })
+  ).toBeEnabled()
 })

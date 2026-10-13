@@ -6,29 +6,49 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 12
 
-Completed source item: `GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE`, based
-on main `bb4cde410`, branch `fix/gchat-local-hardware-gate-bb4` in
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`. Local Host bootstrap and
-post-install hardware preparation now consult the existing cached hardware
-inventory before ownership/spawn. Without NVIDIA hardware they return a clear
-local-inference unsupported message; remote connections and Gbot remain
-available. NVIDIA inventory with unreadable compute capability continues to
-Host validation, preserving its driver/inventory errors. The CLI enables the
-already locked hardware plugin and uses the same preparation entry.
+Current item: guided Gbot brain assignment, branch
+`feat/gbot-guided-brain-e428`, based on reviewed main `e42805f2a`, in
+`/ai/gchat-worktrees/gbot-browser-physical-2e735`. After computer setup the
+next step must be visible: choose a persistent inference endpoint, enter the
+model and its served context capacity, review, and save through the existing
+service-owned assignment/vault transaction. Existing configured bots retain
+an edit control. Failed saves retain inputs and remain visibly incomplete.
+Acceptance is three focused frontend flows (new setup, retained vault key on
+edit, save failure/retry), the owning route integration case, frontend types
+and affected lint. This is UI configuration acceptance; it does not prove a
+reachable model or a completed task. Paired-Host selection still needs the
+service to own the certificate/grant/session transport, and remains open.
+No new dependency, native build, VM, GPU, inference probe or credential copy.
+Implementation and acceptance are complete for this source change: three
+component flows and eight route cases pass (11 total, 1.46 seconds), frontend
+types pass, and affected production lint has zero errors. Two existing React
+act warnings remain in the route fixture; ESLint skips test files by policy.
+The first focused run exposed a duplicate React key between the new brain and
+connector panels. The brain key now has its own prefix; the successful rerun
+covers switching bots. No unchanged passing native checks were repeated.
 
-One focused inventory/admission case, desktop and CLI compiler checks, and
-strict Clippy pass. The desktop check and Clippy emit no warnings; the test and
-CLI builds emit two and four unused-function warnings in unchanged setup code.
-Evidence is
-`out/gchat-open-items-20261013/hardware-gate/result.json`. No new dependency or
-version, physical GPU qualification, Windows build or repeated installed guest
-gate. The historical Host log demonstrates inventory execution ENOENT, not its
-exact missing executable/loader. Its automatic preparation was invalid on the
-CPU-only guest; the gate removes that trigger before Host execution. The
-container and CPU booking are retired; no model/GPU was used. Retain source,
-concise evidence, the accepted desktop artifact and shared Cargo cache.
-Next action: reviewed main merge; supported-GPU installed preparation remains
-owed to its scheduled physical qualification.
+Editing a saved assignment also exposed an owning payload bug: spreading the
+saved record sent `credential_ref` to the strict save API. The route now sends
+only supported input fields. Empty key input retains the saved vault key;
+removal requires the explicit checkbox. Failed save errors stay beside the
+form and retain its inputs. Evidence:
+`out/gchat-open-items-20261013/brain-setup/result.json` and its focused logs.
+Next unresolved action: reviewed landing, then service-owned paired-Host brain
+selection and the installed real-model task gate. Saving settings alone does
+not prove connection or task readiness.
+Current inventory: one source tree, accepted installed desktop artifact and
+cited evidence; no live job, model, VM or booking. CPU booking 591 is canceled
+and its canonical build guard released.
+
+Completed hardware item: main `e42805f2a` integrates `789d089db`.
+Local Host bootstrap and post-install preparation use the existing cached
+hardware inventory before ownership/spawn, reject a missing NVIDIA GPU with
+an actionable message, and retain Host validation for unreadable NVIDIA
+capability. The focused case, desktop/CLI checks and strict Clippy pass;
+desktop/Clippy have no warnings, with two/four unchanged setup warnings in
+test/CLI builds. Evidence: `out/gchat-open-items-20261013/hardware-gate/result.json`.
+Its container and CPU booking are retired. Supported-GPU installed preparation
+remains owed; the historical ENOENT log does not identify the missing loader.
 
 Completed item: installed Linux Gbot computer creation and same-setup resume.
 Candidate `test/gbot-installed-creation-2eff` at source `6acaead46`, based on
@@ -127,22 +147,22 @@ bundles. The build-only retry used owned
 Complete build logs, the baseline and summarized receipt remain under
 `out/gchat-open-items-20261012/oi074/`. The output is retained for review;
 no desktop build, model or GPU ran. Actual END was 00:11:21 UTC on October 13;
-booking 584 is canceled and the build guard released. Next unresolved action:
-review and merge this candidate; browser-data advice remains a separate row.
+booking 584 is canceled and the build guard released. This candidate is merged
+in main `2e2edfc86`; browser-data advice remains a separate row.
 
-This reconciliation uses reviewed main `13f88c042`, including background ownership and seed repair, plus `ec21a1874`
+This reconciliation uses reviewed main `e42805f2a`, including background ownership and seed repair, plus `ec21a1874`
 (guest delivery) and `e49219967` (native reports), the master rows and saved
 receipts. A source fix, a focused fixture and an installed acceptance gate are
 separate claims. Passing evidence is reused; no broad suite or repeat GPU run
 is part of this plan. The master list remains the sole issue-status authority.
 
-### Implementation still required
+### Remaining implementation and acceptance
 
 | Item | Current behavior / remaining work | Smallest useful gate |
 | --- | --- | --- |
 | General agent delegation from Chat | Main `8440b5f7a` supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
-| Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed DEB enable/setup presentation passes on `f39961b6c`; prerequisite hold prevents creation. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
-| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Source `30a8be28a` holds operations until persisted Ready and reopens the same saved setup; 2 service/13 UI cases, check/strict Clippy/types/lint pass. Native detached bootstrap/vault/restart pass separately. Installed wizard presentation/prerequisite hold passes; completed wizard creation/resume, Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
+| Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed DEB creation and same-setup resume pass on main `bb4cde410`; prerequisite holds remain actionable. The current brain handoff adds 11 focused frontend cases. | Settings migration, conditional sidebar, disabled-route isolation, wizard validation/review/retry. |
+| Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Source `30a8be28a` holds operations until persisted Ready and reopens the same saved setup; 2 service/13 UI cases, check/strict Clippy/types/lint pass. Native detached bootstrap/vault/restart pass separately. Installed wizard creation, Computer ready and same-setup resume pass on main `bb4cde410`. Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
 | Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
 | Scheduled/background Gbot work | Main `b1502528b` owns once/interval scheduling with persisted occurrence IDs, explicit bot assignments, create/list/disable UI and conservative restart recovery. Main `500a5f2cb` includes separate service ownership `a2b0053a9`, which passes one process and eleven UI cases plus owning checks; native detached lifetime, vault and authenticated shutdown/restart now pass; installed DEB ordinary GUI close keeps the same native service alive. AppImage-specific lifetime, sleep/restart and live dispatch are unrun. | Focused injected-time due/disabled/missed-run/ambiguous-dispatch fixtures plus fake executor and UI controls pass; independent service acceptance remains separate. |
 | Browser tools | Typed browser catalog/schema and one real isolated Chromium form pass: exact native window binding, navigation, typing and trusted input submission, independently verified over pinned-host system SSH. | Broader browser tasks and installed presentation remain separate; no model or performance claim. |
@@ -154,15 +174,15 @@ is part of this plan. The master list remains the sole issue-status authority.
 | GBOT-SETUP-CREDENTIAL-ORPHAN | Main `8440b5f7a` replaces the two requests with a service-owned transaction and stable vault slot. | Five service failure/retry cases and five route cases PASS, with service check/strict Clippy. Native endpoint admission PASS. Cross-store power-loss/reload recovery is not qualified. |
 | GCHAT-GBENCH-NATIVE-V2-REPORT | Accepted `e49219967` consumes the current native report and preserves measured cold PP, warm PP per request, cached TTFT and exact-concurrency TG. Stored v1 retains its historical meaning. Native v2 public submission is refused pending the site's approved contract. | Eight owning Rust cases and 34 frontend cases, check/strict Clippy/types/lint PASS; captured real report fixture. Public schema/scoring is a site-owner decision. |
 | OI-069 | Pair/restart/grant restore passed; shared-pool queue, cancellation and recovery across two Ready hosts did not. | Resolve the worker startup/RAM blocker, then one two-host job lifecycle. |
-| OI-072-RUNTIME | Muse runtime memory loss has no demonstrated allocation owner/fix. | Reuse capture evidence; one admitted candidate and an ownership timeline only when authorized. |
+| OI-072-RUNTIME | Closed by Arch as external in master docs `33a2f02b9`: current Muse C4/131072 had no post-Ready allocation and did not reproduce the historical drop. | Reuse C4’s 1,602-sample result (641.7–674.3 MiB free against the 300 MiB guard). Follow-up only under GUARD-EXTERNAL-DROP; this does not qualify the launch catalog. |
 | OI-076 | Continued-chat context/format warning's original cause remains unknown. | Diagnostics merged in `36ac89441`; collect exact trigger on the next occurrence. No speculative fix. |
-| GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE | Local bootstrap/preparation now rejects no-NVIDIA inventory before Host spawn; unreadable NVIDIA capability continues to Host validation. Source `789d089db`; focused fixture, desktop/CLI checks and strict Clippy PASS. | Reviewed merge; supported-GPU installed preparation remains owed. Historical inventory ENOENT is retained without asserting its missing executable/loader. |
+| GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE | Local bootstrap/preparation now rejects no-NVIDIA inventory before Host spawn; unreadable NVIDIA capability continues to Host validation. Main `e42805f2a` integrates source `789d089db`; focused fixture, desktop/CLI checks and strict Clippy PASS. | Source landed; supported-GPU installed preparation remains owed. Historical inventory ENOENT is retained without asserting its missing executable/loader. |
 | OI-066 | Guard diagnosis is closed; fit-message correction `85bc3d087` is not in origin/dev/next. | Owning CPU/syntax fixtures pass; reviewed engine landing remains pending. Profile qualification is OI-072. |
 | OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; all 19 existing offline metadata cases PASS on S1. The live feed is not published. | Exact final-payload signature and signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
 | GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Main `8440b5f7a` removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
-| OI-074 / GCHAT-BROWSER-BASELINE-DATA | OI-074 candidate removes the size warning without changing language loading or the advisory limit. Browser-data advice remains separate. | Production/loading evidence above; reviewed merge pending, no unrelated upgrades. |
+| OI-074 / GCHAT-BROWSER-BASELINE-DATA | Main `2e2edfc86` removes the size warning without changing language loading or the advisory limit. Browser-data advice remains separate. | Production/loading evidence above is accepted; no unrelated upgrades. |
 | GCHAT-WEB-TEST-DIAGNOSTICS | Main `b1502528b` incorporates `2c1bb9c41`, fixing fixture ownership and asynchronous settling; all 26 selected cases have passing evidence, with zero diagnostics in the final affected cases. Product code is unchanged. | Focused evidence `web-warning-note.md`; no full-suite or real Shiki/browser qualification claim. |
 
 ### Updater offline metadata gate — October 12

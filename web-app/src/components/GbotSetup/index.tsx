@@ -266,8 +266,8 @@ export default function GbotSetup({
           </dl>
           <p className="text-sm text-muted-foreground">
             Save imports the private key into GChat's vault. No accounts are
-            inherited. After saving, connect the computer, assign a brain and
-            check its desktop before running a task.
+            inherited. After saving, connect the computer, follow “Choose a
+            brain”, and check its desktop before running a task.
           </p>
         </>
       )}
