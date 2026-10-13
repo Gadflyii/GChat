@@ -6,16 +6,14 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
-Current item: GCHAT-MULTI-WORKER-CARD-RESTORE. Restore all durable worker
-activity cards after reload; merge current live updates by run ID without
-repeating cards or changing saved answers. Gates: focused history/rendering
-cases and one isolated installed reload; no model, native Windows or dependency
-change. Source and 25 focused cases, frontend types and affected lint pass.
-Next: one isolated native reload of two generated saved runs.
-Inventory: candidate `fix/gchat-worker-card-restore-ca45` in
-`/ai/gchat-worktrees/gbot-browser-physical-2e735`, baseline `ca45da2a0`;
-accepted worker evidence/executable retained; CPU-only booking 604 ends08:14Z;
-one incremental desktop embed follows, no model or GPU job.
+Completed GCHAT-MULTI-WORKER-CARD-RESTORE: source `177d574e6` restores
+all saved workers once, merges live progress by run ID and preserves answers.
+Twenty-five focused cases, frontend types/lint and the native embed pass.
+One isolated Linux/WSLg reload restores two cards exactly once, one saved
+answer, and zero Working/Stop controls for completed workers; generated history only.
+Evidence: `out/worker-card-restore-20261013/result.json`; no model or Windows change.
+Candidate `fix/gchat-worker-card-restore-ca45` retains source/executable/evidence;
+private fixture retired, owned processes absent, bookings604/605 canceled; merge owed.
 
 Completed GCHAT-SECRET-STORE Linux tiers merged to main `ca45da2a0`.
 Core 5, Chat 8, Manager 3 and Gbot 1 focused cases, check, strict Clippy,

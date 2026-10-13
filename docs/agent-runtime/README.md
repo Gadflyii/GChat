@@ -67,6 +67,11 @@ exit during the interval; there is no complete-group total or cross-OS gain.
 The [current OI-075 record](remaining-acceptance.md#current-oi-075-linux-rendering-observation)
 owns metadata-only generation, exact results, limitations and deleted fixture.
 
+The delegated Chat worker-card restoration now passes 25 focused cases and one
+isolated native Linux reload: every saved run returns once, with live updates
+merged by run ID and terminal state preserved. Source `177d574e6` is ready for
+merge; [the acceptance record](remaining-acceptance.md) owns scope and evidence.
+
 ## Current acceptance
 
 OI-073's new public-removal control passes its focused source/native gates and
