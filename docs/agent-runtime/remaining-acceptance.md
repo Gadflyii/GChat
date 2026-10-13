@@ -19,10 +19,12 @@ are excluded. The master list remains the status authority.
 | Manager vault success style | Merged correction; success/failure/retry DOM case passed. Native presentation remains a release check. |
 | Shared application icon | Merged canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. Compare installed window/tray appearance at release. |
 | Linux tray accessible name | Approved tooltip backend compiled and checked; own SNI/Hide passed. Native name/Open/Exit remain release checks; no more finder loops. |
-| AppIndicator deprecation | Diagnosed external API migration; new library/menu binding needs a dependency decision. Warning remains visible. |
+| AppIndicator deprecation | Dependency comparison in the Manager authority recommends retaining the existing backend; replacement API is GPL-3.0-only and needs new bindings/menu export. Await bubbs decision; no runtime change. |
 | DRI3 startup warning | Diagnosed Mesa/Xwayland device-open failure. Retained rendering/input passed; no GChat correction demonstrated. |
 | Browser baseline data | Updated the two existing metadata packages; unchanged Browserslist consumer passed both queries with no stale-data warnings. No frontend build or browser qualification claimed. |
 | OI-072 catalog and Flash alias cutover | Await C3's explicit rename cutover. Current exact Muse qualification remains a scheduled release gate. |
+| Gbot readiness failure detail | Already fixed on main `13f88c042`; operation and safe reason survive restart. Existing focused receipt reused. |
+| Gbot seed asset symlinks | Already fixed on main `a5490907d`; canonical archive bytes reach the guest. Existing focused and physical seed receipts reused. |
 
 The compiled icon receipt is
 `out/remaining-acceptance-20261009/oi068-windows-20261010/compiled-desktop-code-380-proof.json`.
