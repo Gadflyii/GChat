@@ -8,6 +8,8 @@ use std::{
     },
 };
 use tokio::sync::Mutex;
+#[cfg(target_os = "linux")]
+use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
 use crate::{
@@ -119,6 +121,36 @@ pub struct WorkspaceRuntime {
     inference: std::sync::OnceLock<Arc<dyn InferenceHost>>,
     #[cfg(target_os = "linux")]
     kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) struct WorkspaceRemoval<'a> {
+    runtime: &'a WorkspaceRuntime,
+    _guard: OwnedMutexGuard<()>,
+    workspace: WorkspaceId,
+    session: Option<SessionIdentity>,
+}
+
+#[cfg(target_os = "linux")]
+impl WorkspaceRemoval<'_> {
+    pub(crate) fn session(&self) -> Option<SessionIdentity> {
+        self.session
+    }
+
+    pub(crate) async fn disconnect(&self) -> Result<(), WorkspaceError> {
+        let media_result = self.runtime.close_media_locked(self.workspace).await;
+        self.runtime
+            .resume_observations
+            .lock()
+            .await
+            .remove(&self.workspace);
+        let session = self.runtime.sessions.lock().await.remove(&self.workspace);
+        if let Some(session) = session {
+            session.close().await?;
+        }
+        self.runtime.media.lock().await.remove(&self.workspace);
+        media_result
+    }
 }
 
 #[derive(Serialize)]
@@ -965,6 +997,33 @@ impl WorkspaceRuntime {
             return Err(ServiceError::SessionMismatch.into());
         }
         self.disconnect_locked(identity.workspace_id).await
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn lock_for_removal(
+        &self,
+        identity: SessionIdentity,
+    ) -> Result<WorkspaceRemoval<'_>, WorkspaceError> {
+        let guard = self
+            .lifecycle_lock(identity.workspace_id)
+            .await
+            .lock_owned()
+            .await;
+        let session = self
+            .sessions
+            .lock()
+            .await
+            .get(&identity.workspace_id)
+            .map(|session| session.hello().identity);
+        if session.is_some_and(|session| session != identity) {
+            return Err(ServiceError::SessionMismatch.into());
+        }
+        Ok(WorkspaceRemoval {
+            runtime: self,
+            _guard: guard,
+            workspace: identity.workspace_id,
+            session,
+        })
     }
 
     async fn disconnect_locked(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
