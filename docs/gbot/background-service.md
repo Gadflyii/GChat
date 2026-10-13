@@ -2,8 +2,8 @@
 
 Independent service ownership is merged in main `500a5f2cb`. Current AppImage acceptance uses the accepted `edb4235bf` desktop and packaged
 Cua runtime in `/ai/gchat/out/gchat-open-items-20261013/paired-brain-installed/`.
-The source candidate is `fix/gbot-remove-refusal-e56` in
-`/ai/gchat-worktrees/gchat-focused-burndown-c36a`.
+The current scheduled-recovery candidate is `fix/gbot-scheduled-recovery-6351`
+in `/ai/gchat-worktrees/gbot-scheduled-recovery-6351`, based on main `63513aee2`.
 The coordinator owns the current [Gbot record](README.md) and master work ledger.
 This implementation supplies the missing independent lifetime while retaining
 existing runtime, executor, workspace, account and approval ownership.
@@ -104,3 +104,24 @@ mounts. The original GUI mount remains while the background owner runs.
 The disposable guest and dev image are retired. Sleep/restart and live scheduled
 dispatch remain unqualified. Evidence:
 `out/gchat-open-items-20261013/appimage-lifetime/result.json`.
+
+
+## Scheduled recovery gate
+
+The October 13 gate passes on fixture source `51638ecda`: three selected cases,
+zero failures, 1.41 seconds of test execution (34 seconds including compilation).
+It exercises actual scheduled TaskRunner dispatch using the
+existing in-process SSH guest and executor protocol mock. Its three cases cover
+client exit, a simulated sleep/time jump, and cold service reopening. RunLatest
+coalesces missed intervals, SkipMissed discards the backlog, and reopening must
+reconnect without a GUI and retain the completed task receipt without another
+effect. Existing unknown-outcome review behavior remains authoritative.
+
+Acceptance is one focused mock case per lifetime boundary, with no model, VM,
+physical sleep, OS login startup, Windows build or new harness. Existing production
+scheduler and task recovery required no change. Results are in
+`/ai/gchat/out/gbot-scheduled-recovery/result.json`; `focused.log` retains the three
+case names. The test container is retired and CPU booking 644 cancelled. This
+candidate owns no build copy or live service; it reused the accepted Cargo cache.
+Mock lifetime/recovery acceptance is complete. Physical sleep and model-backed
+scheduled dispatch remain release qualification, rather than claims of this gate.
