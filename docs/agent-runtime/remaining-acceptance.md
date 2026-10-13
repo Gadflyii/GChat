@@ -29,7 +29,7 @@ resources; successful installation settled at 23:46:30 UTC. All 668 runtime
 payloads matched their manifest hashes and lengths, with packaged manifests,
 runtime-set, Host and Gbot assets also verified; no staging paths remained.
 Guest/domain/disk/keys/private daemons were retired at 23:49:00 UTC, booking
-1433 canceled and 13.33 GB freed. Source and documentation await reviewed merge.
+1433 canceled and 13.33 GB freed. Source and documentation merged as `8d268fc11`.
 Automatic hardware preparation later failed with Host exit 1/no local owner
 ready in the CPU-only guest. Its cause remains unverified because the Host log
 was not retained; `GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE` tracks diagnosis.
@@ -39,6 +39,25 @@ acceptance, with no Engine or performance qualification claim.
 Evidence, screenshots, guest-only closure and cleanup:
 `out/gchat-open-items-20261012/installed-wizard/desktop-guest/receipt.json`.
 Earlier guest/disks are retired and their saved evidence remains valid.
+
+Completed source item: OI-074 in `fix/gchat-chat-bundle-8d268`, based on
+`8d268fc11`, at `/ai/gchat-worktrees/gbot-browser-physical-2e735`. English
+remains an eager fallback in one shared leaf chunk; other languages remain
+lazy. The production entry falls from 532,470 to 463,950 bytes; `locale-en` is
+64,991 bytes and the largest JavaScript chunk is 499,377 bytes. The unchanged
+500 kB advisory no longer fires. Four existing language-loading cases, types
+and affected lint pass; the emitted manifest confirms eager English, no catalog
+dependencies and lazy Japanese. Existing route and terminal transforms are
+unchanged. No dependencies, warning-limit change or runtime performance claim.
+
+The first build could not replace root-owned `web-app/dist` and emitted no new
+bundles. The build-only retry used owned
+`out/gchat-open-items-20261012/oi074/production/`; passing checks were reused.
+Complete build logs, the baseline and summarized receipt remain under
+`out/gchat-open-items-20261012/oi074/`. The output is retained for review;
+no desktop build, model or GPU ran. Actual END was 00:11:21 UTC on October 13;
+booking 584 is canceled and the build guard released. Next unresolved action:
+review and merge this candidate; browser-data advice remains a separate row.
 
 This reconciliation uses reviewed main `13f88c042`, including background ownership and seed repair, plus `ec21a1874`
 (guest delivery) and `e49219967` (native reports), the master rows and saved
@@ -72,7 +91,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
 | GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Main `8440b5f7a` removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
-| OI-074 / GCHAT-BROWSER-BASELINE-DATA | Large frontend chunk and stale browser-data advisories remain. | One affected bundle/tooling check after a source change; no unrelated upgrades. |
+| OI-074 / GCHAT-BROWSER-BASELINE-DATA | OI-074 candidate removes the size warning without changing language loading or the advisory limit. Browser-data advice remains separate. | Production/loading evidence above; reviewed merge pending, no unrelated upgrades. |
 | GCHAT-WEB-TEST-DIAGNOSTICS | Main `b1502528b` incorporates `2c1bb9c41`, fixing fixture ownership and asynchronous settling; all 26 selected cases have passing evidence, with zero diagnostics in the final affected cases. Product code is unchanged. | Focused evidence `web-warning-note.md`; no full-suite or real Shiki/browser qualification claim. |
 
 ### Updater offline metadata gate — October 12

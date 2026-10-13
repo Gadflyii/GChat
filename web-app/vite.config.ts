@@ -98,6 +98,8 @@ export default defineConfig(({ mode }) => {
           // Rollup also includes unassigned static dependencies in these chunks.
           manualChunks(id) {
             if (id === '\0commonjsHelpers.js') return 'module-runtime'
+            // English remains an eager fallback shared by every route.
+            if (id.includes('/src/locales/en/') && id.endsWith('.json')) return 'locale-en'
             if (!id.includes('/node_modules/')) return
             const packagePath = id.split('/node_modules/').pop()!
             const packageName = packagePath.startsWith('@')
