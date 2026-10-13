@@ -6,17 +6,31 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — GCHAT-RELEASE-NAMES
+## Current item — OI-118 Host snapshot resources
 
-Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `063b6deac`.
-Candidate `fix/gchat-release-names-063b` in `/ai/gchat-worktrees/gbot-browser-physical-2e735`.
-Accept `qwen38_flash_next_180b_<int|nvfp4|smol>_mtp[_tp2|_tp4]` in catalog/profile matching;
-retain old Flash names until the artifact-owner cutover. Engine identities and launch settings stay unchanged.
-Gate: owning filename/profile and catalog tests once, CPU only. No Engine build, model copy or publication.
-Result: both owning Vitest files pass (124 cases); catalog discovery/load retains exact paths and 262144 native context.
-Evidence: `/ai/gchat/out/release-names-20261013/result.json`. Next: reviewed merge, then remove old aliases after C3's rename.
+Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
+Candidate `fix/gchat-host-idle-39c9` in `/ai/gchat-worktrees/host-idle-39c9`.
+Outcome: reduce the remaining measured Host snapshot cost while preserving catalog,
+GPU reservations, instance state and control semantics. Accepted idle-monitor,
+exit-drain and TLS reuse fixes remain the baseline; Tokio keeps its default workers.
+Measured cause: the final `json!` copied three already-built JSON arrays.
+The snapshot now takes ownership of those arrays; no catalog cache, longer lock
+scope or stale-data reuse. Existing synthetic-process setup was aligned with the
+CPU concurrency fixture after hardware admission changed; admission is unchanged.
+Result: allocations 55,115→29,754 (−46.0%); requested bytes 5,024,911→2,622,867;
+peak bytes above the initial live set 4,944,642→2,542,586 (−48.6%). Single measured
+fixture elapsed 12.476→5.599ms. This is requested-allocation evidence, not RSS or
+installed/concurrent throughput. Final live bytes increase by 2,376 bytes.
+Gate: exact catalog/models/reservations/instance fixture and strict Host all-target
+Clippy PASS, warnings denied. CPU only, `-j6`, under five minutes; no GPU/model,
+native Windows, dependencies, new harness, signing or publication. Tokio keeps
+default workers. Physical Windows SCM acceptance remains owed to the release gate.
+Next action: reviewed merge of this change, then OI-115 request-copy attribution.
+Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; retained prior evidence
+`/ai/gchat/out/review-remaining-20261011/`; new result
+`/ai/gchat/out/oi118-host-idle-20261013/result.json`. No live jobs or model copies.
 
-## Previous item — OI-116 and OI-118 merge-ready
+## Accepted OI-116 and OI-118 — merged as 3bccdb243
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
 Candidate `/ai/gchat-worktrees/review-remaining-712d5718`, branch
@@ -106,7 +120,7 @@ Evidence and inventory: `/ai/gchat/out/review-remaining-20261011/` contains
 on `f5d88db2f` are reused after the native-fixture-only setup correction; only
 the previously unrun measurement and strict Clippy execute on `9ff45a2f3`.
 Shared Cargo caches and prior accepted resource/statvfs evidence remain.
-The candidate source above is retained until reviewed main integration.
+The accepted candidate is merged and its working tree retired.
 The gate ends06:54:20 UTC; its container is absent, the canonical build guard
 is reacquired/released and CPU446 canceled06:56:53. No model, job, booking or
 guard remains. Private fixture state and CPU children end with the passing case.
@@ -122,8 +136,7 @@ hardware admission and reattaches the actual hardware owner before measured
 Scan. Production admission is unchanged. Failure logs remain alongside accepted
 results; no failed setup is counted as measurement or qualification.
 
-Next action: push the reviewed source/documentation and master-row result for
-main integration, then retire the clean merged candidate. Physical Windows
+Physical Windows
 SCM/worker/UNC-path acceptance and prior OI-121 slow-NAS launch/hash latency
 remain release-gate obligations. No additional model qualification or count
 change follows from this Linux gate.
