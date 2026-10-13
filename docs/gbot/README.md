@@ -10,12 +10,11 @@ save retry pass in three component and eight route cases, with frontend types
 and affected production lint. Evidence is
 `out/gchat-open-items-20261013/brain-setup/result.json`. Saving settings does not
 qualify model connectivity or task execution. Paired-Host selection is implemented
-on `feat/gbot-paired-brain-b3fd`: the independent service uses shared native
+on `feat/gbot-paired-brain-b3fd`, merged to main `fe79233c3`: the independent service uses shared native
 pinned/session routing and a revocable per-task loopback connection. The selector
 uses the ready instance's model and actual served context. Its 18 focused UI, route, session, lease, vault and scheduler cases pass,
 together with frontend types/lint, native desktop check and strict Clippy.
-Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`. Reviewed
-source landing and the installed real-model brain/task gate remain open.
+Evidence is `out/gchat-open-items-20261013/paired-brain/result.json`. The installed real-model brain/task gate remains open.
 
 Gbot is an embedded GChat feature: a persistent assistant that can use a separate
 computer, shared agents, skills, tools and connectors. It also carries into paid
