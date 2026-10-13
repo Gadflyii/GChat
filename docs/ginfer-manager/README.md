@@ -535,9 +535,9 @@ Evidence: `out/remaining-acceptance-20261009/oi071/s2-tray-accessible-name-sourc
 The Pair dialog's secure-storage readiness message incorrectly used error
 styling. The reviewed correction uses neutral status text for readiness, a red
 alert only after failure, and clears the previous failure on retry. A focused
-DOM fixture covers success, failure and recovery; execution remains deferred
-until the admitted CPU window. Its only required check is
-`node --test --test-name-pattern='secure storage results' tests/ginfer-manager-ui.test.mjs`.
+DOM fixture covers success, failure and recovery and passed once on composed
+`6b199362d` (519 ms), recorded in `out/s2-acceptance-20261011/source-gates.json`.
+Native successful-vault presentation remains owed to the release walkthrough.
 No secure-storage or pairing contract changes. This source correction does not
 qualify the physical tray or saved-grant lifecycle.
 
@@ -552,11 +552,11 @@ dependency versions and edges are unchanged. The workspace override also binds
 GChat's transitive tray dependency to this source.
 
 The static lock change removes only tray-icon's registry source/checksum. Offline
-resolution, Linux Manager check/strict Clippy and package generation remain
-pending until the admitted CPU window at 22:20 UTC. Retained build365 does not
-contain this patch. Actual fresh candidate SNI properties, unique native target,
-Open focus/menu closure and Exit PID absence remain required under S2 FIFO;
-Hide/pairing/saved-grant acceptance remains unqualified. Ron selected Manager's
+resolution, Linux Manager check/strict Clippy and package generation passed on
+`6b199362d`, recorded in `out/s2-acceptance-20261011/source-gates.json` and the
+linked `manager-build-6b199362d-120030/` packet. Own SNI registration and native
+Hide passed; native accessible-name/Open/Exit remain release-walkthrough checks,
+with no further tray finder gates. Ron selected Manager's
 existing canonical `src-tauri/icons/icon.png` as the shared application icon.
 Manager already selects `../icons/icon.png` in its Tauri bundle configuration;
 locked code generation embeds that PNG as the default window icon, which the

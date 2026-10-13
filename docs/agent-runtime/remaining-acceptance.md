@@ -6,6 +6,29 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
+Current goal: finish the approved GChat standing queue using existing evidence
+and one focused check per changed behavior. Plan and acceptance are this file;
+results are in the existing `out/` tree. Source candidate:
+`/ai/gchat-worktrees/gchat-focused-burndown-c36a`; results:
+`/ai/gchat/out/gchat-focused-burndown-20261013/`. No model, build or desktop job
+is running for this item. Release signing/publication and native Windows builds
+are excluded. The master list remains the status authority.
+
+| Queue item | Current result and next unresolved action |
+| --- | --- |
+| Manager vault success style | Merged correction; success/failure/retry DOM case passed. Native presentation remains a release check. |
+| Shared application icon | Merged canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. Compare installed window/tray appearance at release. |
+| Linux tray accessible name | Approved tooltip backend compiled and checked; own SNI/Hide passed. Native name/Open/Exit remain release checks; no more finder loops. |
+| AppIndicator deprecation | Diagnosed external API migration; new library/menu binding needs a dependency decision. Warning remains visible. |
+| DRI3 startup warning | Diagnosed Mesa/Xwayland device-open failure. Retained rendering/input passed; no GChat correction demonstrated. |
+| Browser baseline data | Updated the two existing metadata packages; unchanged Browserslist consumer passed both queries with no stale-data warnings. No frontend build or browser qualification claimed. |
+| OI-072 catalog and Flash alias cutover | Await C3's explicit rename cutover. Current exact Muse qualification remains a scheduled release gate. |
+
+The compiled icon receipt is
+`out/remaining-acceptance-20261009/oi068-windows-20261010/compiled-desktop-code-380-proof.json`.
+Vault and tray source gates are `out/s2-acceptance-20261011/source-gates.json`;
+these passes do not imply an unperformed native presentation check.
+
 Completed Linux missing-provider/passphrase setup gate: the native app shows
 its missing-keyring guidance, creates the chosen vault, preserves its tier while
 locked, rejects an incorrect passphrase, and unlocks. Restart retains the selected
@@ -291,17 +314,17 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; repeat-save, definition refresh and persisted tool errors corrected. | Native Windows and Hermes, active-worker checkpoint/recovery. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; repeat-save, definition refresh and persisted tool errors corrected; two workers collected/reopened. | One targeted running-worker cancel/checkpoint check; Windows/Hermes at release. Do not replay the whole walkthrough. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
-| Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | Native successful-vault style and actual failed credential deletion presentation. |
-| GCHAT-SHARED-APP-ICON | Shared source/icon overlay accepted. | Installed GChat and Manager windows/trays show the same intended icon. |
+| Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
+| GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |
 | GCHAT-HARDWARE-PROFILE-INSTALL | Linux exact-group reuse, interrupt/resume and cancellation. | Native Windows normal/cancel/Host-loss lifetime and MSVC release build. |
 | GCHAT-UNIX-PTY-PIXEL-GEOMETRY | Source is merged; Linux TUI/input acceptance covers a different parser fix. | Named pixel-only resize fixture PASS (one case); native geometry/mouse behavior is not qualified. |
 | OI-072 model/profile qualification | Historical evidence and source binding audit. | Exact current Muse TP1 C4/131072 NVFP4 KV + Q4 DFlash2 artifact/engine at the scheduled release gate. |
-| Google / Microsoft connectors | 36 focused auth/provider/runtime/UI cases. | App registration, real OAuth consent/refresh/revocation and read operations. |
+| Google / Microsoft connectors | 36 focused auth/provider/runtime/UI cases. | App registration first; one account's consent/refresh/read/revocation and per-bot isolation, without a broad CRUD matrix. |
 | Gbot Linux executor | Exact desktop overwrite + two actual Cua file evaluators passed. | Broader task set and Vision; new cua-bench dependency closure is not approved. |
-| Gbot runtime/media | Linux packaged runtime; physical frame, 440 Hz audio, view-only/takeover/revocation passed. | Browser playback/audio permission behavior; Windows/M365 runtime and media. |
-| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed. | Guest reboot/reconnect, AppImage-specific client-exit, sleep and live scheduled dispatch; native detached process/vault/restart and installed DEB GUI-exit continuity PASS. |
+| Gbot runtime/media | Linux packaged runtime; physical frame, 440 Hz audio, view-only/takeover/revocation passed. | One browser playback/permission check; Windows/M365 connection/runtime at release. Reuse physical Linux media evidence. |
+| Gbot guest persistence | Fresh dedicated guest setup, persisted service restart/resume to Ready and product guest/key retirement passed; installed DEB exit continuity passed. | One guest reboot/reconnect and one AppImage exit continuity check. Durable scheduling fixtures first; no long sleep harness. |
 | OI-073 public board | One disposable publish/read/delete and app delete path passed. | Broader retry/replay/concurrent/fault cases remain parked; never use official series as tests. |
 | OI-075 / OI-115 / OI-119 | Windows/generated Linux observations and focused stream/projection fixes. | Representative native memory/idle/large-media attribution; no general performance gain claimed. |
 | OI-116 / OI-118 | Catalog/statvfs/lifecycle changes and Linux control/scan/journal measurement. | Windows UNC/extended-path/error, slow-NAS/hash and SCM idle/worker-count release gates. |

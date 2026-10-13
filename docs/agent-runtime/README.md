@@ -3,6 +3,13 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+GCHAT-LINUX-DRI3-STARTUP-WARNING is an external Mesa/Xwayland diagnostic.
+Mesa's X11 EGL device-open failure emits the retained warning; current WSLg
+`:0` advertises no DRI3. Retained native TUI rendering and typed input pass.
+The existing crash-prevention DMA-BUF policy does not supply that extension.
+No product fix is demonstrated; final renderer acceleration remains unmeasured.
+Evidence: `/ai/gchat/out/gchat-focused-burndown-20261013/dri3/result.json`.
+
 [Credential-store tiers](../decisions/2026-10-13-credential-store-tiers.md) is the
 approved shared-store design. Linux now supports Secret Service or an explicit
 passphrase-encrypted vault; WSL uses these Linux tiers until the Windows helper
