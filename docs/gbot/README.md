@@ -817,9 +817,14 @@ Accepted main `500a5f2cb` includes independent service ownership and durable res
 (source `77c6cab04`) survives client disconnect, reconnects persisted state and
 drains authenticated Quit in a focused API process fixture. That fixture uses a
 memory vault, inert executor and future schedule. Native bootstrap/vault and installed DEB client-window exit now pass.
-AppImage GUI-exit/resource/shutdown lifetime passes; sleep/restart and model-backed scheduled dispatch remain owed.
-See `docs/gbot/background-service.md`; the
-master scheduled/background row remains PARTIAL.
+AppImage GUI-exit/resource/shutdown lifetime passes. October 13 fixture source
+`51638ecda` additionally passes actual scheduled dispatch after client exit,
+an injected sleep/time jump, and cold service reopening: three focused cases,
+1.41 seconds, no repeated completed effect. Both missed-interval policies and
+GUI-free SSH reconnection are covered in the existing mock. Production recovery
+needed no change. Mock acceptance is complete; physical sleep and model-backed
+scheduled dispatch remain release qualification. See
+`docs/gbot/background-service.md` and `out/gbot-scheduled-recovery/result.json`.
 
 Repository: GChat. Subject authority: `docs/gbot/README.md`. Executor acceptance
 is closed: source `3d214b772` is merged in main `918c7940b`; reuse its exact-byte
