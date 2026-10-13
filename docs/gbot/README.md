@@ -717,6 +717,15 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 ## Current record and inventory
 
+**Current queue — October 13.** Media/view, built-in Driver skill, compact
+output, guest settings and typed browser adoption are merged and accepted at
+the scopes in the [Cua map](cua-map.md#current-adoption-status). Next: review the
+missing Cua browser-task session/dependency boundary; its additional closure
+remains unapproved. Owner: GChat; source tree
+`/ai/gchat-worktrees/gchat-focused-burndown-c36a`, branch
+`docs/gbot-cua-queue-06bf`, retained for this active-authority correction.
+Existing evidence is reused; no new build, guest, model, booking or live job.
+
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at
 `/ai/gchat-worktrees/gbot-scheduled-tasks-3259`, based on `325998951` with the
