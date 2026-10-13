@@ -6,17 +6,41 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — GCHAT-RELEASE-NAMES
+## Current item — OI-115 Host request copies (merge-ready)
 
-Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `063b6deac`.
-Candidate `fix/gchat-release-names-063b` in `/ai/gchat-worktrees/gbot-browser-physical-2e735`.
-Accept `qwen38_flash_next_180b_<int|nvfp4|smol>_mtp[_tp2|_tp4]` in catalog/profile matching;
-retain old Flash names until the artifact-owner cutover. Engine identities and launch settings stay unchanged.
-Gate: owning filename/profile and catalog tests once, CPU only. No Engine build, model copy or publication.
-Result: both owning Vitest files pass (124 cases); catalog discovery/load retains exact paths and 262144 native context.
-Evidence: `/ai/gchat/out/release-names-20261013/result.json`. Next: reviewed merge, then remove old aliases after C3's rename.
+Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
+Candidate `fix/gchat-host-body-39c9` in `/ai/gchat-worktrees/host-body-39c9`.
+The Host validates a borrowed JSON-object map, preserves raw field values and
+replaces only its model field into one preallocated buffer. The benchmark path
+forwards validated original bytes. Bounded admission and headers are unchanged.
+The coordinator approved the existing `serde_json/raw_value` feature; no package,
+version or lock changes. Strict Host Clippy and the three focused forwarding,
+raw-field and actual-byte-limit fixtures pass. No new harness or model/GPU run.
 
-## Previous item — OI-116 and OI-118 merge-ready
+One 64 MiB request: allocated bytes714,299,696→435,356,476; peak above initial
+255,244,537→149,259,224; elapsed1.188→0.333s. One 1 MiB request: allocated bytes
+12,624,806→9,090,074; peak4,515,107→3,549,922; elapsed21.555→7.664ms. These are
+instrumented same-process mock-upstream samples, not isolated Host RSS or real
+media qualification. Unknown numeric/string JSON representations stay exact.
+The fixture-only CPU child setup uses the accepted concurrent resource pattern;
+production admission is unchanged. Prior SSE/tail/auth checks remain accepted.
+
+Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; no live jobs or model
+copies. Evidence `/ai/gchat/out/oi115-host-body-20261013/result.json`; fixture
+wall time2.11s baseline/1.24s candidate, each control under1s, strict Clippy PASS.
+Next: reviewed merge; OI-116's remaining Windows/NAS gate stays release-gated,
+then OI-119's native desktop idle/private-byte obligation using existing tools.
+
+## Accepted OI-118 — snapshot ownership (merge-ready a5be0c8af)
+
+Three owned JSON arrays now move into the final snapshot. Same 174-profile/four-
+CPU-instance fixture allocations55,115→29,754; requested peak above initial
+4,944,642→2,542,586. One instrumented elapsed12.476→5.599ms, not RSS or concurrency
+throughput. Exact catalog/models/reservations/instances and strict Clippy PASS.
+Evidence `/ai/gchat/out/oi118-host-idle-20261013/result.json`. Default workers kept;
+physical Windows SCM qualification remains owed to the release gate.
+
+## Accepted OI-116 and OI-118 lifecycle review
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.
 Candidate `/ai/gchat-worktrees/review-remaining-712d5718`, branch
