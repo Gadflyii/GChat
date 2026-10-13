@@ -9,10 +9,13 @@ use std::time::Duration;
 
 use gbot_service::api::Api;
 use gbot_service::contract::*;
+use gbot_service::executor::{ExecutorProcesses, ProcessSpec, TaskState};
+use gbot_service::schedules::{self, CreateSchedule, MissedRunPolicy, OccurrenceState, Timing};
 use gbot_service::service::{OperationState, ReviewReason, Service, ServiceError};
 use gbot_service::ssh::{
     check_ssh_connection, import_ssh_key, inspect_ssh_identity, SshError, SshPolicy, SshSession,
 };
+use gbot_service::tasks::TaskRunner;
 use gbot_service::vault::{Secret, Vault, VaultFuture};
 use gbot_service::workspace::{WorkspaceError, WorkspaceRuntime};
 use hyper::{
@@ -362,6 +365,7 @@ struct Peer {
     user_key: PublicKey,
     guest: Arc<Guest>,
     buffers: BTreeMap<ChannelId, Input>,
+    identity: Option<SessionIdentity>,
 }
 
 // Decode the client's quoted argv without running a shell in the fixture.
@@ -496,7 +500,7 @@ impl server::Handler for Peer {
                         "tools/call" => {
                             assert_eq!(
                                 request["params"]["arguments"]["session"],
-                                self.guest.hello.identity.session_id.as_uuid().to_string()
+                                self.identity.unwrap().session_id.as_uuid().to_string()
                             );
                             if request["params"]["name"] == "start_session" {
                                 let rejected = self
@@ -594,10 +598,10 @@ impl server::Handler for Peer {
                     args[2],
                     guest.hello.identity.workspace_id.as_uuid().to_string()
                 );
-                assert_eq!(
-                    args[3],
-                    guest.hello.identity.session_id.as_uuid().to_string()
-                );
+                self.identity = Some(SessionIdentity {
+                    workspace_id: guest.hello.identity.workspace_id,
+                    session_id: SessionId(Uuid::parse_str(&args[3]).unwrap()),
+                });
                 handle
                     .data(
                         channel,
@@ -687,7 +691,7 @@ impl server::Handler for Peer {
             _ => panic!("unknown helper operation"),
         };
         let request = GuestRequest {
-            identity: guest.hello.identity,
+            identity: self.identity.unwrap(),
             operation_id: id,
             operation,
         };
@@ -1033,6 +1037,7 @@ impl Fixture {
                         user_key: public_key.clone(),
                         guest: guest.clone(),
                         buffers: BTreeMap::new(),
+                        identity: None,
                     };
                     let running = server::run_stream(config.clone(), stream, peer)
                         .await
@@ -1758,4 +1763,284 @@ async fn foreground_input_never_dispatches_accessibility_actions() {
         runtime.close().await.unwrap();
         fixture.shutdown().await;
     }).await.expect("bounded native input test timed out");
+}
+
+fn scheduled_processes(effect: &std::path::Path) -> ExecutorProcesses {
+    ExecutorProcesses {
+        python: ProcessSpec {
+            program: "/bin/sh".into(),
+            args: vec![
+                "-c".into(),
+                "IFS= read -r start\nprintf 'effect\\n' >> \"$1\"\nprintf '%s\\n' '{\"method\":\"done\",\"payload\":{}}'\nIFS= read -r reply".into(),
+                "fixture".into(),
+                effect.display().to_string(),
+            ],
+        },
+        context: ProcessSpec {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "while IFS= read -r line; do :; done".into()],
+        },
+    }
+}
+
+async fn scheduled_assignment(
+    fixture: &Fixture,
+    service: &Service,
+) -> gbot_service::service::ModelAssignment {
+    let assignment = gbot_service::service::ModelAssignment {
+        workspace_id: fixture.guest.hello.identity.workspace_id,
+        connection: gbot_service::inference::ModelConnection::Endpoint {
+            api_base: "http://unused/v1".into(),
+        },
+        model: "fixture".into(),
+        context_tokens: 131072,
+        credential_ref: None,
+    };
+    service
+        .save_model_assignment(assignment.clone())
+        .await
+        .unwrap();
+    assignment
+}
+
+async fn scheduled_completion(runner: &TaskRunner) -> Uuid {
+    let mut changes = runner.subscribe();
+    timeout(WAIT, async {
+        loop {
+            if let Some(record) = runner
+                .list()
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|record| record.state == TaskState::Completed)
+            {
+                return record.id;
+            }
+            changes.changed().await.unwrap();
+        }
+    })
+    .await
+    .expect("scheduled mock task did not complete")
+}
+
+#[tokio::test]
+async fn scheduled_dispatch_survives_client_exit() {
+    timeout(Duration::from_secs(10), async {
+        let fixture = Fixture::new().await;
+        let service = Arc::new(
+            Service::open(&fixture.directory.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = fixture.runtime(service.clone()).await;
+        scheduled_assignment(&fixture, &service).await;
+        let root = fixture.directory.path().join("tasks");
+        let effect = fixture.directory.path().join("effect");
+        let api = Api::bind(service, fixture.vault.clone(), 0)
+            .await
+            .unwrap()
+            .with_executor(root.clone(), scheduled_processes(&effect))
+            .await
+            .unwrap();
+        let client = api.client();
+        client
+            .call(
+                "/v1/connect",
+                serde_json::to_value(fixture.guest.hello.identity).unwrap(),
+            )
+            .await
+            .unwrap();
+        client.call("/v1/schedules/create", serde_json::json!({
+            "workspace_id":fixture.guest.hello.identity.workspace_id,
+            "prompt":"Scheduled mock effect", "timing":{"kind":"once","at":schedules::now()+1},
+            "missed_run_policy":"run_latest"
+        })).await.unwrap();
+        let mut changes = client.subscribe_tasks().unwrap();
+        drop(client);
+        let (stop, stopped) = oneshot::channel();
+        let server = tokio::spawn(api.serve(async {
+            let _ = stopped.await;
+        }));
+        timeout(WAIT, async {
+            loop {
+                let journal: serde_json::Value = serde_json::from_slice(
+                    &tokio::fs::read(root.join("schedules.json")).await.unwrap(),
+                )
+                .unwrap();
+                if let Some(id) = journal["schedules"][0]["occurrences"][0]["task_id"].as_str() {
+                    if let Ok(bytes) = tokio::fs::read(root.join(format!("{id}.json"))).await {
+                        let record: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                        if record["state"] == "completed" {
+                            break;
+                        }
+                    }
+                }
+                changes.changed().await.unwrap();
+            }
+        })
+        .await
+        .expect("client exit prevented scheduled dispatch");
+        stop.send(()).unwrap();
+        server.await.unwrap().unwrap();
+        assert_eq!(tokio::fs::read(&effect).await.unwrap(), b"effect\n");
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn scheduled_dispatch_coalesces_sleep_without_replaying_backlog() {
+    timeout(Duration::from_secs(10), async {
+        let fixture = Fixture::new().await;
+        let service = Arc::new(
+            Service::open(&fixture.directory.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = fixture.runtime(service.clone()).await;
+        let assignment = scheduled_assignment(&fixture, &service).await;
+        let effect = fixture.directory.path().join("effect");
+        let runner = TaskRunner::new(
+            fixture.directory.path().join("tasks"),
+            runtime.clone(),
+            scheduled_processes(&effect),
+        )
+        .await
+        .unwrap();
+        let first = schedules::now() + 10;
+        for policy in [MissedRunPolicy::RunLatest, MissedRunPolicy::SkipMissed] {
+            runner
+                .schedules
+                .create(
+                    CreateSchedule {
+                        workspace_id: assignment.workspace_id,
+                        prompt: "Scheduled mock effect".into(),
+                        timing: Timing::Interval {
+                            first_at: first,
+                            every_seconds: 60,
+                        },
+                        missed_run_policy: policy,
+                    },
+                    assignment.clone(),
+                )
+                .await
+                .unwrap();
+        }
+        let resumed = first + 3600;
+        runner
+            .schedules
+            .tick(resumed, &runner, &service, &runtime)
+            .await
+            .unwrap();
+        runner
+            .schedules
+            .tick(resumed, &runner, &service, &runtime)
+            .await
+            .unwrap();
+        let task = scheduled_completion(&runner).await;
+        runner
+            .schedules
+            .tick(resumed, &runner, &service, &runtime)
+            .await
+            .unwrap();
+        let saved = runner.schedules.list().await;
+        assert_eq!(saved[0].occurrences.len(), 1);
+        assert_eq!(saved[0].occurrences[0].task_id, task);
+        assert_eq!(saved[0].occurrences[0].due_at, resumed);
+        assert_eq!(saved[0].occurrences[0].state, OccurrenceState::Completed);
+        assert_eq!(saved[0].next_at, Some(resumed + 60));
+        assert_eq!(saved[1].occurrences[0].state, OccurrenceState::Skipped);
+        assert_eq!(runner.list().await.unwrap().len(), 1);
+        assert_eq!(tokio::fs::read(&effect).await.unwrap(), b"effect\n");
+        runner.close().await.unwrap();
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn scheduled_dispatch_recovers_restart_and_keeps_completed_receipt() {
+    timeout(Duration::from_secs(10), async {
+        let fixture = Fixture::new().await;
+        let path = fixture.directory.path().join("service.json");
+        let root = fixture.directory.path().join("tasks");
+        let effect = fixture.directory.path().join("effect");
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let runtime = fixture.runtime(service.clone()).await;
+        let assignment = scheduled_assignment(&fixture, &service).await;
+        let runner = TaskRunner::new(root.clone(), runtime.clone(), scheduled_processes(&effect))
+            .await
+            .unwrap();
+        let due = schedules::now() + 10;
+        let schedule = runner
+            .schedules
+            .create(
+                CreateSchedule {
+                    workspace_id: assignment.workspace_id,
+                    prompt: "Scheduled mock effect".into(),
+                    timing: Timing::Once { at: due },
+                    missed_run_policy: MissedRunPolicy::RunLatest,
+                },
+                assignment,
+            )
+            .await
+            .unwrap();
+        runner.close().await.unwrap();
+        runtime.close().await.unwrap();
+        drop(runner);
+        drop(runtime);
+        drop(service);
+
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        assert!(service.live_sessions().await.is_empty());
+        let runtime = Arc::new(WorkspaceRuntime::new(
+            service.clone(),
+            fixture.vault.clone(),
+        ));
+        let runner = TaskRunner::new(root.clone(), runtime.clone(), scheduled_processes(&effect))
+            .await
+            .unwrap();
+        runner
+            .schedules
+            .tick(due, &runner, &service, &runtime)
+            .await
+            .unwrap();
+        assert_eq!(
+            service.live_sessions().await.len(),
+            1,
+            "restart must reconnect without a GUI"
+        );
+        let reserved = runner.schedules.list().await[0].occurrences[0].task_id;
+        runner
+            .schedules
+            .tick(due, &runner, &service, &runtime)
+            .await
+            .unwrap();
+        assert_eq!(scheduled_completion(&runner).await, reserved);
+        runner.close().await.unwrap();
+        runtime.close().await.unwrap();
+        drop(runner);
+        let runner = TaskRunner::new(root, runtime.clone(), scheduled_processes(&effect))
+            .await
+            .unwrap();
+        runner
+            .schedules
+            .tick(due + 60, &runner, &service, &runtime)
+            .await
+            .unwrap();
+        let saved = runner.schedules.list().await;
+        assert_eq!(saved[0].id, schedule.id);
+        assert_eq!(saved[0].occurrences.len(), 1);
+        assert_eq!(saved[0].occurrences[0].task_id, reserved);
+        assert_eq!(saved[0].occurrences[0].state, OccurrenceState::Completed);
+        assert_eq!(tokio::fs::read(&effect).await.unwrap(), b"effect\n");
+        runner.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .unwrap();
 }

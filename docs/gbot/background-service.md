@@ -104,3 +104,19 @@ mounts. The original GUI mount remains while the background owner runs.
 The disposable guest and dev image are retired. Sleep/restart and live scheduled
 dispatch remain unqualified. Evidence:
 `out/gchat-open-items-20261013/appimage-lifetime/result.json`.
+
+
+## Scheduled recovery gate
+
+The October 13 gate exercises actual scheduled TaskRunner dispatch using the
+existing in-process SSH guest and executor protocol mock. Its three cases cover
+client exit, a simulated sleep/time jump, and cold service reopening. RunLatest
+coalesces missed intervals, SkipMissed discards the backlog, and reopening must
+reconnect without a GUI and retain the completed task receipt without another
+effect. Existing unknown-outcome review behavior remains authoritative.
+
+Acceptance is one focused mock case per lifetime boundary, with no model, VM,
+physical sleep, OS login startup, Windows build or new harness. Results belong
+in `/ai/gchat/out/gbot-scheduled-recovery/result.json`. This candidate owns no
+build copy or live service; it reuses the accepted Cargo cache. The next action
+is the three-case gate, then updating its measured outcome and the master row.
