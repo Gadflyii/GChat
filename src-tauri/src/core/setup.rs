@@ -39,6 +39,7 @@ pub(crate) struct BundledResources {
 }
 
 impl BundledResources {
+    #[cfg(any(not(feature = "cli"), test))]
     pub(crate) fn pending() -> (
         Self,
         tokio::sync::watch::Sender<InstallationResult>,
@@ -70,7 +71,7 @@ pub(crate) async fn wait_for_bundled_resources<R: Runtime>(
         .await
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(all(target_os = "linux", not(feature = "cli")), test))]
 async fn install_bundled_resources(
     completion: tokio::sync::watch::Sender<InstallationResult>,
     install: impl FnOnce() -> Result<bool, String> + Send + 'static,
@@ -192,7 +193,7 @@ fn install_linux_runtimes_from(source: &Path, data_folder: &Path) -> std::io::Re
     Ok(true)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "cli")))]
 pub(crate) fn start_bundled_ginfer_linux<R: Runtime>(
     app: tauri::AppHandle<R>,
     completion: tokio::sync::watch::Sender<InstallationResult>,
@@ -266,7 +267,7 @@ pub async fn prepare_installed_hardware_from_resources(
     ).await
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(all(not(feature = "cli"), any(target_os = "windows", target_os = "linux")))]
 fn prepare_hardware_after_runtime_install<R: Runtime>(app: tauri::AppHandle<R>) {
     // Installation hands work to the shared Host. Unchanged ordinary startup
     // never requests measurement, and the desktop does not own the profiler.
@@ -448,7 +449,7 @@ fn install_bundled_ginfer_from(source: &Path, data_folder: &Path) -> std::io::Re
     Ok(true)
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(feature = "cli")))]
 pub fn install_bundled_ginfer<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<bool, Box<dyn std::error::Error>> {

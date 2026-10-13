@@ -3,6 +3,12 @@
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+GCHAT-CLI-FEATURE-CLIPPY is fixed: desktop startup helpers compile only for
+the desktop feature; shared headless installation and completion remain available.
+The three existing bundled-resource fixtures and strict CLI/desktop Clippy pass.
+Evidence: `/ai/gchat/out/gchat-cli-feature-clippy/result.json`. The candidate
+`fix/gchat-cli-setup-ownership-357c` awaits reviewed merge; retire its tree afterwards.
+
 GCHAT-LINUX-DRI3-STARTUP-WARNING is an external Mesa/Xwayland diagnostic.
 Mesa's X11 EGL device-open failure emits the retained warning; current WSLg
 `:0` advertises no DRI3. Retained native TUI rendering and typed input pass.
