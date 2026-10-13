@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-13** — [Own Gbot paired inference in the service](2026-10-13-own-gbot-paired-inference-in-service.md)
+
 - **2026-10-12** — [Own Gbot lifetime in a native background process](2026-10-12-own-gbot-background-service-lifetime.md)
 
 - **2026-10-12** — [Deliver pinned Gbot guest resources through the installer](2026-10-12-deliver-pinned-gbot-guest-resources.md)

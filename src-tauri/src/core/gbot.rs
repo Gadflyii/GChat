@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::Mutex;
 
 mod background;
+mod inference;
 pub use background::run_service_mode;
 pub(crate) use background::Client;
 
@@ -197,6 +198,7 @@ fn supported_route(path: &str) -> bool {
             | "/v1/workspaces/ssh"
             | "/v1/assignments/save"
             | "/v1/assignments/get"
+            | "/v1/assignments/models"
             | "/v1/connectors/get"
             | "/v1/connectors/save"
             | "/v1/connect"

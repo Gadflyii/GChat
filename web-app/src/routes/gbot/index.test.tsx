@@ -40,7 +40,10 @@ vi.mock('@/containers/HeaderPage', () => ({
 }))
 vi.mock('@/services/gbot', async (original) => ({
   ...(await original<object>()),
-  gbot: mocks.call,
+  gbot: (path: string, body?: unknown) =>
+    path === 'assignments/models'
+      ? Promise.resolve([])
+      : mocks.call(path, body),
   quitGbotService: mocks.quitService,
   startGbotService: mocks.startService,
 }))
@@ -205,6 +208,7 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   render(<Page />)
   await screen.findByText('Saved result')
   expect(screen.queryByText(/file_remove/)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByLabelText('API endpoint'))
   fireEvent.change(screen.getByLabelText('GInfer API URL'), {
     target: { value: 'http://host/v1' },
   })
@@ -218,6 +222,7 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
     target: { value: 'bot-secret' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  fireEvent.click(screen.getByLabelText('API endpoint'))
   expect(screen.getByLabelText('API key')).toHaveValue('')
   expect(screen.getByLabelText('Model ID')).toHaveValue('')
   expect(screen.queryByText('Saved result')).not.toBeInTheDocument()
@@ -245,7 +250,7 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   await waitFor(() =>
     expect(mocks.call).toHaveBeenCalledWith('assignments/save', {
       workspace_id: 'one',
-      api_base: 'http://host/v1',
+      connection: { kind: 'endpoint', api_base: 'http://host/v1' },
       model: 'muse',
       context_tokens: 262144,
       api_key: undefined,
@@ -622,7 +627,7 @@ it('renders service session identities, holds unfinished KVM and admits actions 
           assignments: [
             {
               workspace_id: identity.workspace_id,
-              api_base: 'http://host/v1',
+              connection: { kind: 'endpoint', api_base: 'http://host/v1' },
               model: 'qwen',
               context_tokens: 262144,
               credential_ref: null,

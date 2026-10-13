@@ -21,6 +21,8 @@ import {
   startGbotService,
   type Approval,
   type Assignment,
+  emptyPairedConnection,
+  validBrainConnection,
   type BotState,
   type HelpRequest,
   type Identity,
@@ -229,7 +231,7 @@ function GbotPage() {
   const draft = assignments[workspaceId || '']
   const assignment = draft ||
     savedAssignment || {
-      api_base: '',
+      connection: emptyPairedConnection,
       model: '',
       context_tokens: 0,
     }
@@ -239,7 +241,9 @@ function GbotPage() {
   }
   const isKvm =
     bot?.bot_pc?.kind === 'local_vm' && bot.bot_pc.hypervisor === 'kvm'
-  const setup = isKvm ? setups?.find((record) => record.id === bot.id) : undefined
+  const setup = isKvm
+    ? setups?.find((record) => record.id === bot.id)
+    : undefined
   const setupBlocked = Boolean(
     isKvm && (setups === undefined || (setup && setup.stage !== 'ready'))
   )
@@ -249,7 +253,8 @@ function GbotPage() {
       !setupBlocked &&
       !executorError &&
       !draft &&
-      savedAssignment?.api_base.trim() &&
+      savedAssignment &&
+      validBrainConnection(savedAssignment.connection) &&
       savedAssignment.model.trim() &&
       savedAssignment.context_tokens > 0
   )
@@ -330,8 +335,7 @@ function GbotPage() {
                   decorative
                   state={
                     !state.live_sessions.some(
-                      (session) =>
-                        session.workspace_id === workspace.id
+                      (session) => session.workspace_id === workspace.id
                     )
                       ? 'sleeping'
                       : tasks.some(
@@ -490,7 +494,8 @@ function GbotPage() {
                           })
                         }
                       >
-                        {control?.state === 'human' || control?.state === 'paused'
+                        {control?.state === 'human' ||
+                        control?.state === 'paused'
                           ? 'Hand back'
                           : 'Take over'}
                       </Button>
@@ -532,7 +537,7 @@ function GbotPage() {
                       try {
                         await gbot('assignments/save', {
                           workspace_id: workspaceId,
-                          api_base: assignment.api_base,
+                          connection: assignment.connection,
                           model: assignment.model,
                           context_tokens: assignment.context_tokens,
                           api_key: assignment.api_key,
@@ -599,7 +604,9 @@ function GbotPage() {
                         <span className="text-sm capitalize">
                           {task.state.replaceAll('_', ' ')}
                         </span>
-                        {['running', 'waiting_for_human'].includes(task.state) ? (
+                        {['running', 'waiting_for_human'].includes(
+                          task.state
+                        ) ? (
                           <Button
                             variant="ghost"
                             disabled={busy}
@@ -639,7 +646,10 @@ function GbotPage() {
                             message.role === 'assistant'
                         )
                         .map((message, index) => (
-                          <p key={index} className="whitespace-pre-wrap text-sm">
+                          <p
+                            key={index}
+                            className="whitespace-pre-wrap text-sm"
+                          >
                             {messageText(message.content)}
                           </p>
                         ))}

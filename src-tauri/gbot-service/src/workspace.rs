@@ -21,6 +21,7 @@ use crate::{
         WorkspaceId,
     },
     executor::Assignment,
+    inference::{InferenceHost, ModelConnection, PairedModel, ResolvedAssignment},
     media::{CloseView, MediaError, MediaLease, OpenView, ViewTicket},
     service::{
         ModelAssignment, OperationCompletion, Service, ServiceError, SessionControl,
@@ -45,6 +46,7 @@ pub enum WorkspaceError {
     Vault(VaultError),
     CredentialCleanup(VaultError),
     Connector(String),
+    Inference(String),
 }
 
 impl std::fmt::Display for WorkspaceError {
@@ -69,7 +71,7 @@ impl std::fmt::Display for WorkspaceError {
                 f,
                 "Model assignment was saved, but the old credential could not be removed: {error}"
             ),
-            Self::Connector(error) => f.write_str(error),
+            Self::Connector(error) | Self::Inference(error) => f.write_str(error),
         }
     }
 }
@@ -114,6 +116,7 @@ pub struct WorkspaceRuntime {
     resume_observations: Mutex<BTreeMap<WorkspaceId, GuestReply>>,
     stopping: AtomicBool,
     connectors: Option<Arc<dyn ConnectorHost>>,
+    inference: std::sync::OnceLock<Arc<dyn InferenceHost>>,
     #[cfg(target_os = "linux")]
     kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
 }
@@ -135,6 +138,7 @@ impl WorkspaceRuntime {
             resume_observations: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
             connectors: None,
+            inference: std::sync::OnceLock::new(),
             #[cfg(target_os = "linux")]
             kvm_setup: std::sync::OnceLock::new(),
         }
@@ -370,12 +374,56 @@ impl WorkspaceRuntime {
         Ok(())
     }
 
-    /// Missing API key preserves this bot's key; an empty API key removes it.
+    pub fn configure_inference(&self, host: Arc<dyn InferenceHost>) -> Result<(), WorkspaceError> {
+        self.inference
+            .set(host)
+            .map_err(|_| WorkspaceError::Inference("Host inference is already configured".into()))
+    }
+
+    pub async fn paired_models(&self) -> Result<Vec<PairedModel>, WorkspaceError> {
+        self.accepting()?;
+        self.inference
+            .get()
+            .ok_or_else(|| WorkspaceError::Inference("Host inference is unavailable".into()))?
+            .models()
+            .await
+            .map_err(WorkspaceError::Inference)
+    }
+
+    async fn validate_paired(&self, saved: &ModelAssignment) -> Result<(), WorkspaceError> {
+        if let ModelConnection::PairedHost { target } = &saved.connection {
+            let models = self.paired_models().await?;
+            if !models.iter().any(|model| {
+                model.target == *target
+                    && model.model == saved.model
+                    && model.context_tokens == saved.context_tokens
+            }) {
+                return Err(WorkspaceError::Inference("The selected model is offline or restarted. Refresh and select its ready session again.".into()));
+            }
+        }
+        Ok(())
+    }
+
+    /// Missing endpoint key preserves this bot's key; an empty key removes it.
     pub async fn save_model_assignment(
         &self,
         workspace_id: WorkspaceId,
+        connection: ModelConnection,
         assignment: Assignment,
     ) -> Result<ModelAssignment, WorkspaceError> {
+        if matches!(connection, ModelConnection::PairedHost { .. }) && assignment.api_key.is_some()
+        {
+            return Err(ServiceError::InvalidAssignment.into());
+        }
+        let candidate = ModelAssignment {
+            workspace_id,
+            connection: connection.clone(),
+            model: assignment.model.clone(),
+            context_tokens: assignment.context_tokens,
+            credential_ref: None,
+        };
+        candidate.validate()?;
+        self.validate_paired(&candidate).await?;
         self.accepting()?;
         let lock = self.lifecycle_lock(workspace_id).await;
         let service = self.service.clone();
@@ -385,14 +433,15 @@ impl WorkspaceRuntime {
             let _guard = lock.lock().await;
             let previous = service.model_assignment(workspace_id).await?;
             let old_reference = previous.and_then(|saved| saved.credential_ref);
-            let credential_ref = match assignment.api_key.as_deref() {
-                None => old_reference,
-                Some("") => None,
-                Some(_) => Some(VaultCredentialRef::new()),
+            let credential_ref = match (&connection, assignment.api_key.as_deref()) {
+                (ModelConnection::PairedHost { .. }, _) => None,
+                (_, None) => old_reference,
+                (_, Some("")) => None,
+                (_, Some(_)) => Some(VaultCredentialRef::new()),
             };
             let saved = ModelAssignment {
                 workspace_id,
-                api_base: assignment.api_base,
+                connection,
                 model: assignment.model,
                 context_tokens: assignment.context_tokens,
                 credential_ref,
@@ -438,7 +487,7 @@ impl WorkspaceRuntime {
     pub async fn resolve_model_assignment(
         &self,
         workspace_id: WorkspaceId,
-    ) -> Result<Assignment, WorkspaceError> {
+    ) -> Result<ResolvedAssignment, WorkspaceError> {
         self.accepting()?;
         let lock = self.lifecycle_lock(workspace_id).await;
         let _guard = lock.lock().await;
@@ -447,6 +496,19 @@ impl WorkspaceRuntime {
             .model_assignment(workspace_id)
             .await?
             .ok_or(ServiceError::AssignmentNotFound)?;
+        self.validate_paired(&saved).await?;
+        if let ModelConnection::PairedHost { target } = &saved.connection {
+            return ResolvedAssignment::paired(
+                saved.clone(),
+                self.inference.get().unwrap().clone(),
+                target.clone(),
+            )
+            .await
+            .map_err(WorkspaceError::Inference);
+        }
+        let ModelConnection::Endpoint { api_base } = &saved.connection else {
+            unreachable!()
+        };
         let api_key = match saved.credential_ref {
             Some(reference) => {
                 let secret = self
@@ -463,12 +525,15 @@ impl WorkspaceRuntime {
             }
             None => None,
         };
-        Ok(Assignment {
-            api_base: saved.api_base,
-            api_key,
-            model: saved.model,
-            context_tokens: saved.context_tokens,
-        })
+        Ok(ResolvedAssignment::endpoint(
+            Assignment {
+                api_base: api_base.clone(),
+                api_key,
+                model: saved.model.clone(),
+                context_tokens: saved.context_tokens,
+            },
+            saved,
+        ))
     }
 
     pub async fn connect(&self, identity: SessionIdentity) -> Result<GuestHello, WorkspaceError> {

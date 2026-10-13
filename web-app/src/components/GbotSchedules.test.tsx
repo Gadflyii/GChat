@@ -14,7 +14,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => vi.fn()) }))
 
 const assignment = {
   workspace_id: 'bot-one',
-  api_base: 'http://localhost:1337/v1',
+  connection: { kind: 'endpoint', api_base: 'http://localhost:1337/v1' },
   model: 'fixture',
   context_tokens: 131072,
   credential_ref: null,
