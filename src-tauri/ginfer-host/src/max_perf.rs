@@ -103,6 +103,7 @@ impl MaxPerfProfile {
             concurrency: 8,
             tp: 1,
             options: LaunchOptions {
+                wait_for_residency_fill: !dense,
                 spec: if dense { "dflash" } else { "mtp" }.into(),
                 draft_policy: "fixed".into(),
                 draft_tokens: if dense { 7 } else { 3 },
@@ -307,6 +308,13 @@ mod tests {
             assert!(profile.options.kv_arena_bytes.is_none());
             assert!(profile.options.host_kv_cache_bytes.is_none());
             assert_eq!(profile.options.prefill_chunk, 0);
+            assert_eq!(
+                profile.options.wait_for_residency_fill,
+                matches!(
+                    class,
+                    MaxPerfModelClass::FlashSmolMtp | MaxPerfModelClass::FlashIntMtp
+                )
+            );
             assert!(profile.options.vision && profile.options.structured_outputs);
             let gpus = vec![
                 Gpu {

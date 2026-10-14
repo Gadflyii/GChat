@@ -13,14 +13,31 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
-## CMP 170HX settled startup
+## Flash-Next and CMP 170HX settled startup
 
-Current item: `GCHAT-CMP-SETTLED-READY`, baseline main `2e735624f`, candidate
-`/ai/gchat-worktrees/cmp-residency-fill-2e735`, branch
-`fix/cmp-residency-fill-2e735`. The shared Host generates
+Current OI-072 source follow-up: all Flash-Next deployments wait for residency
+fill before Ready, including custom, catalog, restored and GBench Max Perf
+launches. The shared Host derives this from the inspected artifact identity;
+the Flash Max Perf profile also records the option explicitly. Dense models
+retain the selected-CMP rule below. Context, concurrency, memory sizing,
+speculation and the Engine default remain unchanged. This startup policy does
+not qualify the current release Engine/artifact matrix.
+
+Candidate `/ai/gchat-worktrees/flash-settled-profile-cf2`, branch
+`feat/gchat-flash-settled-profile-cf2`, baseline `cf2dd919c`. Acceptance:
+existing focused Host cases check all three Flash weight classes, restored
+requests, argv, and dense selected/unselected CMP behavior; the existing Max
+Perf case checks its per-class option. Strict Host Clippy checks the affected
+crate. No GPU, Windows build or physical qualification. Evidence is retained
+under `/ai/gchat/out/flash-settled-profile-20261014/`; the candidate uses the
+shared Cargo cache, with no artifacts or separate build allocation. All three
+focused cases and strict Host Clippy passed; the check phase took about 15 s.
+Next action: reviewed merge. The candidate remains retained for that review.
+
+Accepted `GCHAT-CMP-SETTLED-READY` (`bfd42e530`): the shared Host generates
 `--wait-for-residency-fill` when the selected GPU group includes a CMP 170HX,
 including the Host's PCI alias for `NVIDIA Graphics Device`. GChat, Manager,
-the CLI and restored deployments use this same preparation path. Other GPUs
+the CLI and restored deployments use this same preparation path. Other GPUs with dense models
 retain progressive Ready by default. Effective launch options report the wait;
 saved requests are resolved against the selected GPUs on every launch.
 
@@ -32,7 +49,7 @@ aliased CMP, another selected card with an unselected CMP, and restored requests
 The focused Host preparation/argv fixture passed on Linux (1/1, 0.06 s), including
 serialized effective options and the default for omitted saved fields. Evidence:
 `out/cmp-residency-fill-20261012/profile.log`. This is source verification; no
-physical startup or throughput claim is made. Next action: reviewed merge to main.
+physical startup or throughput claim is made.
 No GPU, native Windows build, release or publication. The candidate reuses the
 existing Host build cache; no model/artifact copies or disposable guest are needed.
 
@@ -301,6 +318,24 @@ claim that a saved OFF works by omission against a default-ON Engine. The Linux
 tray diagnosis is already merged/closed; Open/Exit is owed to Ron's desktop
 release walkthrough. Gbot's design is approved separately, with source-only
 SSH/vault/session work allowed while development VMs await setup.
+
+## Draft-width calibration after installation — queued
+
+The approved follow-up uses the Engine's offline `ginfer MODEL
+--calibrate-draft-width` command after the selected deployment's complete v2
+hardware profile. It belongs to the shared Host setup job and must preserve the
+deployment's artifact, GPU order, TP, KV/graph/Vision settings and concurrency
+through cancel/resume; ordinary model startup must not calibrate. The Engine
+owns the real-text recipe, cache identity, completeness and publication.
+
+Blocked before implementation: current GInfer `ca4f89a64` CLI rejects
+`--max-concurrency`, so its default C1 admission cannot calibrate a configured
+C4/C8 deployment. Removing that argument would produce the wrong policy.
+The engine owner must supply the capacity parser/propagation fix; see GInfer
+`docs/draft-width-policy/README.md` and the `DRAFT-WIDTH-PRO` master row.
+Next action: bind that corrected CLI to the existing Host job lifetime, then
+check the exact argv, failure, cancellation and resume with focused fixtures.
+No capacity substitution, new calibration recipe or GPU run is authorized here.
 
 ## Accepted hardware profile installation
 

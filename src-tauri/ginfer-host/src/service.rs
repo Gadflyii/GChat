@@ -998,14 +998,15 @@ impl Host {
             return Err(format!("context exceeds model maximum of {limit}"));
         }
         let mut options = request.options.clone();
-        options.wait_for_residency_fill |= self.gpus.iter().any(|gpu| {
-            request.gpu_uuids.contains(&gpu.uuid)
-                && (gpu.name.eq_ignore_ascii_case("NVIDIA CMP 170HX")
-                    || gpu
-                        .display_name
-                        .as_deref()
-                        .is_some_and(|name| name.eq_ignore_ascii_case("NVIDIA CMP 170HX")))
-        });
+        options.wait_for_residency_fill |= metadata.identity.model_id == "qwen3.8-flash-next"
+            || self.gpus.iter().any(|gpu| {
+                request.gpu_uuids.contains(&gpu.uuid)
+                    && (gpu.name.eq_ignore_ascii_case("NVIDIA CMP 170HX")
+                        || gpu
+                            .display_name
+                            .as_deref()
+                            .is_some_and(|name| name.eq_ignore_ascii_case("NVIDIA CMP 170HX")))
+            });
         let socket = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let port = socket.local_addr().map_err(|e| e.to_string())?.port();
         drop(socket);
@@ -2029,6 +2030,14 @@ mod target_launch_tests {
         weights: &str,
         calibrated: bool,
     ) -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
+        installed_target("qwen3.8-flash-next", weights, calibrated).await
+    }
+
+    async fn installed_target(
+        family: &str,
+        weights: &str,
+        calibrated: bool,
+    ) -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
         let dir = tempfile::tempdir().unwrap();
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
@@ -2043,7 +2052,7 @@ mod target_launch_tests {
             serde_json::json!([{"kind":"tensor","rank":"all","name":"fixture"}])
         };
         let metadata = serde_json::json!({
-            "identity":{"model_id":"qwen3.8-flash-next","weights_id":weights},
+            "identity":{"model_id":family,"weights_id":weights},
             "tp_size":1,"draft_tp":0,"objects":objects
         })
         .to_string();
@@ -2148,7 +2157,8 @@ mod target_launch_tests {
 
     #[tokio::test]
     async fn cmp_serving_profile_waits_for_residency_only_for_selected_cmp() {
-        let (_dir, mut host, request) = installed_flash("groupwise-int", false).await;
+        let (_dir, mut host, request) =
+            installed_target("qwen3.8-27b", "groupwise-int-dflash2-q4", false).await;
         assert!(!request.options.wait_for_residency_fill);
         assert!(
             !serde_json::from_value::<LaunchOptions>(serde_json::json!({}))
@@ -2208,6 +2218,25 @@ mod target_launch_tests {
             let (_dir, host, mut request) = installed_flash(weights, false).await;
             let launch = host.prepare_launch(&request).await.unwrap();
             assert_eq!(launch.model_id, format!("qwen3.8-flash-next/{weights}"));
+            assert!(launch.options.wait_for_residency_fill);
+            assert_eq!(
+                launch
+                    .options
+                    .args()
+                    .iter()
+                    .filter(|arg| arg.as_str() == "--wait-for-residency-fill")
+                    .count(),
+                1
+            );
+            let restored: LaunchRequest =
+                serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+            assert!(
+                host.prepare_launch(&restored)
+                    .await
+                    .unwrap()
+                    .options
+                    .wait_for_residency_fill
+            );
             assert_eq!(launch.options.spec, "auto");
             assert_eq!(launch.options.draft_tokens, 0);
             for vision in [false, true] {

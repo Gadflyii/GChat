@@ -464,3 +464,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-13** — [Review cloud costs before Gbot provisioning](2026-10-13-review-cloud-costs-before-gbot-provisioning.md)
 - **2026-10-13** — [Own Gbot cloud resource creation and recovery](2026-10-13-own-cloud-resource-creation-and-recovery.md)
 - **2026-10-13** — [Use assigned Cloud PCs for Gbot setup](2026-10-13-use-assigned-cloud-pcs-for-gbot-setup.md)
+
+- **2026-10-14** — [Wait for Flash-Next residency before Ready](2026-10-14-wait-for-flash-residency-before-ready.md)
