@@ -9,20 +9,15 @@ import shutil
 from urllib.parse import unquote, urlsplit
 
 ARCHITECTURES = {'8.0': 'sm80', '8.6': 'sm86', '8.9': 'sm89', '12.0': 'sm120a'}
-OPERATOR_DOCS = {'README.md', 'docs/README.md', 'docs/cli.md', 'docs/serving.md',
-                 'docs/operations.md', 'docs/versioning.md'}
+OPERATOR_DOCS = {'README.md', 'VERSION', 'docs/cli.md', 'docs/serving.md',
+                 'docs/release-names/README.md'}
 
 
-def verify_operator_docs(source, commit):
+def verify_operator_docs(source, manifest):
     source = source.resolve(strict=True)
-    provenance = json.loads((source / 'provenance.json').read_text())
-    if (provenance.get('schema') != 'ginfer-operator-docs-v1'
-            or provenance.get('source_commit') != commit):
-        raise ValueError('operator documentation must match the selected runtime source commit')
-    entries = provenance.get('files', [])
-    if (len(entries) != len(OPERATOR_DOCS)
-            or {entry['path'] for entry in entries} != OPERATOR_DOCS):
-        raise ValueError('operator documentation requires exactly the six offline Markdown entries')
+    entries = [entry for entry in manifest['files'] if entry['path'] in OPERATOR_DOCS]
+    if {entry['path'] for entry in entries} != OPERATOR_DOCS:
+        raise ValueError('runtime is missing its five offline operator documentation entries')
     for entry in entries:
         member = source / entry['path']
         if member.is_symlink() or not member.resolve(strict=True).is_relative_to(source):
@@ -43,11 +38,12 @@ def verify_operator_docs(source, commit):
                 raise ValueError(f'operator documentation link escapes offline set: {member}: {link}')
             if resolved.relative_to(source).as_posix() not in OPERATOR_DOCS:
                 raise ValueError(f'operator documentation link is not bundled: {member}: {link}')
-    return provenance
+    return entries
 
 
-def stage_operator_docs(source, destination, commit):
-    provenance = verify_operator_docs(source, commit)
+def stage_operator_docs(source, destination):
+    manifest = json.loads((source / 'runtime-manifest.json').read_text())
+    verify_operator_docs(source, manifest)
     source, destination = source.resolve(), destination.resolve()
     if destination == source or destination in source.parents or source in destination.parents:
         raise ValueError('operator documentation input and staging directories must be separate')
@@ -56,15 +52,14 @@ def stage_operator_docs(source, destination, commit):
     if temporary.exists():
         raise ValueError(f'previous documentation staging requires inspection: {temporary}')
     temporary.mkdir()
-    for name in sorted(OPERATOR_DOCS | {'provenance.json'}):
+    for name in sorted(OPERATOR_DOCS):
         target = temporary / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source / name, target)
-    verify_operator_docs(temporary, commit)
+    verify_operator_docs(temporary, manifest)
     if destination.exists():
         shutil.rmtree(destination)
     temporary.rename(destination)
-    return provenance
 
 
 def verify(source):
@@ -77,6 +72,7 @@ def verify(source):
     commit = contract.get('source_commit', '')
     if len(commit) != 40 or any(c not in '0123456789abcdef' for c in commit):
         raise ValueError('runtime set must identify its exact source commit')
+    documentation = None
     for directory in ARCHITECTURES.values():
         root = source / directory
         manifest = json.loads((root / 'runtime-manifest.json').read_text())
@@ -102,6 +98,10 @@ def verify(source):
                 raise ValueError(f'{directory}: integrity mismatch for {relative}')
         if not {'bin/ginfer', 'bin/ginfer-serve'} <= members:
             raise ValueError(f'{directory}: missing engine executable')
+        entries = sorted(verify_operator_docs(root, manifest), key=lambda entry: entry['path'])
+        if documentation is not None and entries != documentation:
+            raise ValueError(f'{directory}: operator documentation differs between runtime images')
+        documentation = entries
         for name in ('ginfer', 'ginfer-serve'):
             executable = root / 'bin' / name
             with executable.open('rb') as stream:
@@ -134,20 +134,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--destination', type=Path)
-    parser.add_argument('--operator-docs-directory', type=Path)
     parser.add_argument('--operator-docs-destination', type=Path)
     args = parser.parse_args()
-    if args.operator_docs_destination and not args.operator_docs_directory:
-        parser.error('--operator-docs-destination requires --operator-docs-directory')
-    if args.operator_docs_directory:
-        commit = json.loads((args.source / 'runtime-set.json').read_text())['source_commit']
-        verify_operator_docs(args.operator_docs_directory, commit)
     contract = stage(args.source, args.destination) if args.destination else verify(args.source)
-    if args.operator_docs_directory:
-        if args.operator_docs_destination:
-            stage_operator_docs(args.operator_docs_directory, args.operator_docs_destination,
-                                contract['source_commit'])
-        print(f"Verified six operator documents from {contract['source_commit']}")
+    if args.operator_docs_destination:
+        stage_operator_docs(args.source / 'sm120a', args.operator_docs_destination)
+        print(f"Staged five operator documentation entries from {contract['source_commit']}")
     print(f"Verified all four Linux runtimes from {contract['source_commit']}")
 
 

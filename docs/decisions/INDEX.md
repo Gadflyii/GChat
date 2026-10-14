@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-14** — [Package Engine documentation from its runtime manifests](2026-10-14-package-engine-docs-from-runtime-manifests.md)
+
 - **2026-10-14** — [Own idle draft-width calibration in Host](2026-10-14-own-idle-draft-width-calibration-in-host.md)
 
 - **2026-10-13** — [Own Gbot paired inference in the service](2026-10-13-own-gbot-paired-inference-in-service.md)

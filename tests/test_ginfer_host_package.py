@@ -12,6 +12,71 @@ spec = importlib.util.spec_from_file_location('host_package', SCRIPT)
 package = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(package)
 
+runtime_spec = importlib.util.spec_from_file_location(
+    'linux_runtime_set', SCRIPT.with_name('stage-linux-runtime-set.py'))
+runtime_set = importlib.util.module_from_spec(runtime_spec)
+runtime_spec.loader.exec_module(runtime_set)
+
+
+class LinuxRuntimeSet(unittest.TestCase):
+    def test_current_runtime_docs_are_verified_and_staged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'runtime-set'
+            source.mkdir()
+            commit = 'a' * 40
+            (source / 'runtime-set.json').write_text(json.dumps({
+                'schema': 'ginfer-linux-runtime-set-v1', 'platform': 'linux-x64',
+                'source_commit': commit, 'runtimes': runtime_set.ARCHITECTURES,
+            }))
+            binary = b'\x7fELF\x02' + b'\0' * 13 + b'\x3e\x00'
+            docs = {
+                'README.md': '[CLI](docs/cli.md)\n', 'VERSION': '1.0.0.3\n',
+                'docs/cli.md': '[Version](../VERSION)\n',
+                'docs/serving.md': '[CLI](cli.md)\n',
+                'docs/release-names/README.md': '[Serving](../serving.md)\n',
+            }
+            for name in runtime_set.ARCHITECTURES.values():
+                image = source / name
+                entries = []
+                for path, data in {**{k: v.encode() for k, v in docs.items()},
+                                   'bin/ginfer': binary, 'bin/ginfer-serve': binary}.items():
+                    member = image / path
+                    member.parent.mkdir(parents=True, exist_ok=True)
+                    member.write_bytes(data)
+                    if path.startswith('bin/'):
+                        member.chmod(0o755)
+                    entries.append({'path': path, 'bytes': len(data),
+                                    'sha256': hashlib.sha256(data).hexdigest()})
+                (image / 'runtime-manifest.json').write_text(json.dumps({
+                    'schema': 'ginfer-linux-runtime-v1', 'platform': 'linux-x64',
+                    'source_commit': commit, 'source_dirty': False,
+                    'cuda_architecture': name.replace('sm', 'sm_'),
+                    'build_glibc': 'glibc 2.39', 'files': entries,
+                }))
+            self.assertEqual(runtime_set.verify(source)['source_commit'], commit)
+            destination = root / 'docs'
+            runtime_set.stage_operator_docs(source / 'sm120a', destination)
+            self.assertEqual({p.relative_to(destination).as_posix()
+                              for p in destination.rglob('*') if p.is_file()}, set(docs))
+            for path, content in docs.items():
+                self.assertEqual((destination / path).read_text(), content)
+            manifest_path = source / 'sm86/runtime-manifest.json'
+            original = json.loads(manifest_path.read_text())
+            missing = {**original, 'files': [e for e in original['files'] if e['path'] != 'VERSION']}
+            manifest_path.write_text(json.dumps(missing))
+            with self.assertRaisesRegex(ValueError, 'missing its five'):
+                runtime_set.verify(source)
+            manifest_path.write_text(json.dumps(original))
+            (source / 'sm86/VERSION').write_text('different\n')
+            with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
+                runtime_set.verify(source)
+            version = next(e for e in original['files'] if e['path'] == 'VERSION')
+            version.update(bytes=10, sha256=hashlib.sha256(b'different\n').hexdigest())
+            manifest_path.write_text(json.dumps(original))
+            with self.assertRaisesRegex(ValueError, 'differs between runtime images'):
+                runtime_set.verify(source)
+
 
 class HostPackage(unittest.TestCase):
     def test_catalogs_keep_values_and_reject_cross_platform_or_duplicate_profiles(self):

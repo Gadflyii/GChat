@@ -6,22 +6,19 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 runtime_set=${GINFER_RUNTIME_SET:-}
 catalog_directory=${GINFER_PROFILE_CATALOG_DIRECTORY:-}
-operator_docs_directory=${GINFER_OPERATOR_DOCS_DIRECTORY:-}
 gbot_cua_runtime=${GBOT_CUA_RUNTIME:-}
 gbot_guest_assets=${GBOT_GUEST_ASSETS:-}
 while (($#)); do
   case "$1" in
     --runtime-set) runtime_set=$2; shift 2 ;;
     --profile-catalog-directory) catalog_directory=$2; shift 2 ;;
-    --operator-docs-directory) operator_docs_directory=$2; shift 2 ;;
     --gbot-cua-runtime) gbot_cua_runtime=$2; shift 2 ;;
     --gbot-guest-assets) gbot_guest_assets=$2; shift 2 ;;
-    *) echo "Usage: $0 --runtime-set DIR --profile-catalog-directory DIR --operator-docs-directory DIR --gbot-cua-runtime DIR --gbot-guest-assets DIR" >&2; exit 2 ;;
+    *) echo "Usage: $0 --runtime-set DIR --profile-catalog-directory DIR --gbot-cua-runtime DIR --gbot-guest-assets DIR" >&2; exit 2 ;;
   esac
 done
 : "${runtime_set:?Select the complete GInfer Linux runtime set}"
 : "${catalog_directory:?Select the GInfer launch-profile catalog directory}"
-: "${operator_docs_directory:?Select operator documentation matching the GInfer runtime source}"
 : "${gbot_cua_runtime:?Select the accepted Gbot python-runtime closure}"
 : "${gbot_guest_assets:?Select the exact accepted local Gbot guest payload directory}"
 source /etc/os-release
@@ -33,7 +30,6 @@ node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("
 python=${PYTHON:-python3}
 "$python" scripts/stage-linux-runtime-set.py --source "$runtime_set" \
   --destination src-tauri/resources/ginfer/linux \
-  --operator-docs-directory "$operator_docs_directory" \
   --operator-docs-destination src-tauri/resources/ginfer/docs
 export GINFER_PROFILE_CATALOGS
 GINFER_PROFILE_CATALOGS=$("$python" - "$catalog_directory" <<'PY'

@@ -1,8 +1,10 @@
 # GChat installer refresh
 
-## October 14 developer Linux package — local Engine blocked
+## October 14 developer Linux package — current Engine rebuild
 
 The retained Gbot walkthrough AppImage from `7e33222e8` contains the historical `05a286ba` Engine set. Its server rejects the current Host's required `--hardware-profile` flag before loading a model. These packages are usable for the accepted UI/Gbot resource checks; they cannot currently establish local-model startup. Replace the Engine closure with a Host-compatible accepted set before presenting the package as a complete local-inference installer. Source/payload verification of the historical bundle does not establish compatibility with the current Host. Evidence: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/result.json`.
+
+Ron authorized the current `415eaa2b5` Linux CLI/serve set, built sequentially for SM80/86/89/120a in the pinned Ubuntu 24.04 container. The retained desktop is reused; only its Engine payload and matching offline documentation are replaced. Current assembly reads the five operator entries already hashed in each Engine runtime manifest: README, VERSION, CLI, serving and release names. All images must carry identical documentation and every relative link must resolve within that set. GInfer's `packaging/runtime-docs.json` owns the payload; separate operations/versioning documents and external documentation provenance are retired. See [the packaging decision](../decisions/2026-10-14-package-engine-docs-from-runtime-manifests.md). Build and installed profile/cancellation acceptance remain pending.
 
 ## SectileLabs updater feed — OI-110
 
@@ -569,9 +571,9 @@ build and maximum GLIBC 2.39 are verified ABI evidence, not a fresh clean-Ubuntu
 Six offline GInfer documents match the retained `05a286ba` Engine: package
 README and the documentation index, CLI, serving, operations and versioning
 references. The packet's `operator-docs/provenance.json` records source and
-sizes/SHA256. Assembly requires `--operator-docs-directory` (or
-`GINFER_OPERATOR_DOCS_DIRECTORY`), checks the six hashes and offline links
-against the selected runtime source, and stages `resources/ginfer/docs/` for
+sizes/SHA256. That historical assembly required `--operator-docs-directory` (or
+`GINFER_OPERATOR_DOCS_DIRECTORY`), checked the six hashes and offline links
+against the selected runtime source, and staged `resources/ginfer/docs/` for
 both formats. Newer Windows Engine documentation is not substituted. Markdown
 uses normal AppImage resource bundling; verified Engine runtime directories
 bypass linuxdeploy rewriting. The immutable four-image runtime set is unchanged.
