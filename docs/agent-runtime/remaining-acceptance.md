@@ -1882,6 +1882,12 @@ consume C2's actual native-v2 report when available; otherwise take an actionabl
 non-release row. The premature native idle attribution is closed with the
 installation evidence above.
 
+The worker fixture fix is now merged in `25ac2cdb2`; its clean candidate was
+retired, reclaiming 282,525,696 bytes while preserving results and shared assets.
+The existing Rust test preparation `bab6541bf` still awaits incorporation in
+main. The remaining benchmark check needs C2's exact new runner revision and
+saved real report; the older C1 parser fixture does not cover that integration.
+
 The earlier generated twelve-message observation remains historical evidence at
 `/ai/gchat/out/remaining-acceptance-20261009/oi075/linux-shaped-20261011/result.json`:
 open 110 ms, traversal 113 ms, partial counters because image helpers ended.
