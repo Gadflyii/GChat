@@ -34,3 +34,6 @@ pub(crate) mod hardware_profile_windows;
 
 pub mod gbot_bootstrap;
 pub mod gbot_control;
+
+#[cfg(target_os = "linux")]
+pub mod gbot_login;

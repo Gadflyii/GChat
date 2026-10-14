@@ -78,6 +78,8 @@ pub struct SetupRecord {
     pub pending_model_credential: Option<VaultCredentialRef>,
     pub identity: SessionIdentity,
     pub stage: SetupStage,
+    #[serde(default)]
+    pub resume_on_start: bool,
     pub issue: Option<SetupIssue>,
     pub spec: Option<KvmSpec>,
     pub pinned_host_key: Option<SshHostPublicKey>,
@@ -194,13 +196,13 @@ impl KvmSetup {
         let service_id = service.snapshot().await.service_id;
         let mut records = BTreeMap::new();
         for mut record in saved {
-            // Readiness must be proved by this runtime, not carried across its shutdown.
             if record.stage == SetupStage::Ready {
+                record.resume_on_start = true;
                 record.stage = SetupStage::CheckingPc;
                 record.issue = Some(SetupIssue::new(
-                    "setup_resume",
-                    "GChat restarted after this computer was checked.",
-                    "Resume this setup to reconnect and verify guest readiness.",
+                    "computer_reconnecting",
+                    "Gbot is reconnecting this saved computer.",
+                    "Wait for its readiness check; setup errors will appear here.",
                 ));
             }
             if record.id.validate().is_err()
@@ -248,6 +250,21 @@ impl KvmSetup {
     }
     pub async fn status(&self) -> Vec<SetupRecord> {
         self.records.lock().await.values().cloned().collect()
+    }
+    pub async fn resume_saved(self: &Arc<Self>) -> Result<(), SetupIssue> {
+        for record in self.status().await {
+            if record.resume_on_start
+                && record.stage != SetupStage::Removing
+                && record.stage != SetupStage::Removed
+            {
+                self.start(StartSetup {
+                    id: record.id,
+                    name: record.name,
+                })
+                .await?;
+            }
+        }
+        Ok(())
     }
     pub(crate) async fn ensure_ready(
         &self,
@@ -456,6 +473,7 @@ impl KvmSetup {
                         session_id: SessionId::new(),
                     },
                     stage: SetupStage::CheckingPc,
+                    resume_on_start: false,
                     issue: None,
                     spec: None,
                     pinned_host_key: None,
@@ -494,6 +512,11 @@ impl KvmSetup {
             ));
         }
         record.stage = stage;
+        match record.stage {
+            SetupStage::Ready => record.resume_on_start = true,
+            SetupStage::Removing | SetupStage::Removed => record.resume_on_start = false,
+            _ => {}
+        }
         record.issue = None;
         self.save(record.clone()).await
     }
@@ -1198,6 +1221,7 @@ mod tests {
             identity,
             stage: SetupStage::TestingDesktop,
             issue: None,
+            resume_on_start: false,
             spec: None,
             pinned_host_key: None,
         };
@@ -1251,7 +1275,12 @@ mod tests {
             Err(WorkspaceError::NotConnected)
         ));
         record.stage = SetupStage::Ready;
-        setup.save(record).await.unwrap();
+        setup.save(record.clone()).await.unwrap();
+        let mut unfinished = record.clone();
+        unfinished.id = WorkspaceId::new();
+        unfinished.identity.workspace_id = unfinished.id;
+        unfinished.stage = SetupStage::TestingDesktop;
+        setup.save(unfinished.clone()).await.unwrap();
         assert!(matches!(
             runtime.connect(identity).await,
             Err(WorkspaceError::NotFound)
@@ -1271,17 +1300,43 @@ mod tests {
         ));
         drop(setup);
         drop(runtime);
-        let resumed = Arc::new(WorkspaceRuntime::new(service, vault));
+        let resumed = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
         resumed
             .configure_kvm_setup(root.path().to_owned())
             .await
             .unwrap();
+        let setup = resumed.kvm_setup().unwrap();
+        settled(&setup).await;
+        let recovered = setup.records.lock().await.get(&id).unwrap().clone();
+        assert_eq!(recovered.stage, SetupStage::CheckingPc);
+        assert!(recovered.resume_on_start);
+        assert!(recovered.issue.is_some());
+        assert_eq!(recovered.credential_ref, record.credential_ref);
+        assert_eq!(recovered.identity, record.identity);
         assert_eq!(
-            resumed.kvm_setup().unwrap().status().await[0].stage,
-            SetupStage::CheckingPc
+            setup
+                .records
+                .lock()
+                .await
+                .get(&unfinished.id)
+                .unwrap()
+                .stage,
+            SetupStage::TestingDesktop
         );
+        setup.close().await;
+        drop(setup);
+        drop(resumed);
+        let cold = KvmSetup::open(
+            root.path().to_owned(),
+            service.clone(),
+            vault.clone(),
+            Weak::new(),
+        )
+        .await
+        .unwrap();
+        assert!(cold.records.lock().await.get(&id).unwrap().resume_on_start);
         assert!(matches!(
-            resumed.connect(identity).await,
+            cold.ensure_ready(id).await,
             Err(WorkspaceError::SetupIncomplete)
         ));
     }
@@ -1311,6 +1366,7 @@ mod tests {
             },
             stage: SetupStage::TestingDesktop,
             issue: None,
+            resume_on_start: false,
             spec: None,
             pinned_host_key: None,
         };
@@ -1487,6 +1543,7 @@ mod tests {
             },
             stage: SetupStage::Ready,
             issue: None,
+            resume_on_start: true,
             spec: None,
             pinned_host_key: None,
         };

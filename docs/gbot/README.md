@@ -1,5 +1,28 @@
 # Gbot design
 
+Current item: Linux install-to-task walkthrough. Candidate
+`feat/gbot-linux-login-e04` in `/ai/gchat-worktrees/gbot-linux-login-e04`, based on
+main `e04e7393e`, adds opt-in service startup at desktop sign-in and recovery of
+previously Ready KVM computers. The setup owner's private connection must also
+pass its readiness check without opening admission to user operations. Acceptance
+is focused startup/recovery cases and one isolated installed walkthrough using
+the existing tools. No Windows build, cloud provisioning, new dependency,
+publication or person's desktop input is authorized. Existing installed wizard,
+task and GUI-close evidence below remains valid; OS sign-in recovery is unverified.
+Focused startup, recovery and UI cases, types, lint, strict Clippy and the cached
+desktop build pass. A delayed-write fixture protects startup-setting order; the
+frontend serializes these writes. The first developer frontend omitted
+`IS_TAURI=true`, so it could not register native startup. The corrected frontend
+and desktop are built and installed, but sign-in/reboot recovery was not verified
+before the 45-minute test budget ended at 11:11Z. This is pending acceptance,
+not a demonstrated startup race or a passed reboot check.
+The private S1 Debian guest `gbot-linux-login` at
+`/ai/gbot-vms/linux-login-20261014` is shut off; its disk and saved VM/vault state
+are retained for that check. No model, job or reservation remains. Evidence:
+`out/gbot-linux-login/result.json`. Next: enable Gbot once with the corrected
+installed artifact, verify desktop-sign-in recovery of the same saved computer,
+then retire the guest. Reuse the passing focused checks and prior task evidence.
+
 Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-13).
 Linux installed computer creation and same-setup resume passed on main
 `bb4cde410`; hardware admission merged in `e42805f2a`. Branch
@@ -793,9 +816,13 @@ PCs, saves an explicit route and dedicated-PC consent, and resumes after restart
 It opens a fresh Microsoft launch link; saved setup never claims desktop Ready.
 Two service, four native Graph/scope and ten M365 UI cases pass, with affected
 wizard/route cases, types, lint and strict Clippy. Evidence: `out/gbot-m365-setup/result.json`.
-Ron identified `rhenderson@sectilelabs.ai`; live sign-in and dedicated-session
-confirmation are still needed. No live Graph/desktop control qualification, paid
-resource, Windows build or new dependency. Tree unchanged; shared cache retained.
+Ron confirms `CPC-rhen-FNHEH` (Cloud PC name
+`Ent_Cloud_PC_Prov - Ron Henderson`, account `rhenderson@sectilelabs.ai`) is
+exclusively available for Gbot testing. It runs Windows 11 `10.0.26300.0` with
+8 vCPU, 32 GB RAM and a 512 GB disk. Dedicated-PC authorization is settled;
+live sign-in, connection-route implementation and desktop control qualification
+remain pending. Assigned-PC selection and a Microsoft launch link do not prove
+desktop Ready. No paid resource, Windows build or new dependency is claimed.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at
