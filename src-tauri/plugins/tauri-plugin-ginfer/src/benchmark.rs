@@ -890,6 +890,44 @@ mod tests {
     }
 
     #[test]
+    fn saved_v2_report_scores_measured_phases_and_rejects_profile_mismatch() {
+        let report: PointReport =
+            serde_json::from_str(include_str!("fixtures/native-v2-scoreboard-c4.json")).unwrap();
+        let request = standard_request();
+        let mut session = standard_session();
+        session.info.vision = false;
+        assert!(validate_request(&request, &session)
+            .unwrap_err()
+            .contains("vision"));
+        assert!(
+            validate_report_configuration(&request, &session, 4, &report, None)
+                .unwrap_err()
+                .contains("vision")
+        );
+        let point = score(&request, 4, report).unwrap();
+        for (actual, expected) in [
+            (point.cold_prompt_tokens_per_second, 8192.0 / 1.21249287),
+            (
+                point.warm_prefill_tokens_per_second_per_request,
+                8192.0 / 0.012974775,
+            ),
+            (point.generation_tokens_per_second, 1996.0 / 0.833157245),
+            (
+                point.per_request_generation_tokens_per_second,
+                499.0 / 0.833157245,
+            ),
+            (point.warm_cached_ttft_seconds, 0.010946281),
+        ] {
+            assert!((actual.unwrap() - expected).abs() <= expected * 1e-9);
+        }
+        assert_eq!(point.completed_requests, 4);
+        assert_eq!(point.cached_prompt_tokens, 8192);
+        assert_eq!(point.average_completion_tokens, 500.0);
+        assert_eq!(point.prompt_tokens_per_second, None);
+        assert!(point.evidence.hardware.is_some());
+    }
+
+    #[test]
     fn cached_prefill_rate_keeps_per_request_scope_at_c4() {
         let mut report = captured_report();
         report.workload.concurrency = 4;

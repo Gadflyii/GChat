@@ -21,8 +21,8 @@ The native NVFP4 drafter is historical, not the release drafter. Muse and other
 artifact classes have no Standard Max Perf definition in this decision.
 
 Flash filenames now use `qwen38_flash_next_180b_<int|smol|nvfp4>_mtp[_tp2|_tp4].ginfer`.
-The [model catalog](../model-management.md#release-package-names) accepts old names
-during the artifact rename. Max Perf matches unchanged artifact identities; filenames
+The [model catalog](../model-management.md#release-package-names) uses these release
+names after the completed artifact rename. Max Perf matches unchanged artifact identities; filenames
 do not change its settings or add an NVFP4 Flash release class.
 
 Host owns the immutable, versioned launch policy separately from the catalog of
@@ -61,38 +61,45 @@ unresolved product decision is the public site's report/scoring contract for v2,
 its metric meanings; this task does not select a conversion, change the site or publish.
 The site's MTP whitelist remains a separate row. Publishing remains disabled.
 
-Owner: native-v2-report agent on Ron-9950X3D2. Baseline source `89e4a22f4`;
-candidate `/ai/gchat-worktrees/gbench-native-v2-report-89e4`, branch
-`fix/gbench-native-v2-report-89e4`, retained for review/integration. Existing stable main
-and the earlier Max Perf candidate are not reset. No Engine build, model copy or live
-benchmark is allocated. The existing shared cache `/ai/gchat/src-tauri/target` and
-`/ai/gchat/node_modules` remain retained for existing consumers. CPU-only gate completed October 12 at 20:21:45Z after the prior owner released
-the cache. Its container is absent and the canonical build guard was reacquired
-and released. The unused 20:25–20:40Z slot was returned to the coordinator.
+The native-v2 implementation is merged in GChat main `ca4346ba2`. Its accepted
+focused gate passed eight owning Rust cases, strict library Clippy, 34 affected
+frontend cases, typecheck and affected production lint. Existing missing/invalid
+observation and persisted-v1 checks remain valid; production reader code is unchanged.
+Evidence: `/ai/gchat/out/gchat-open-items-20261012/gbench-native-v2-note.md`.
+[Decision](../decisions/2026-10-12-consume-native-v2-benchmark-phases.md).
 
-Acceptance: captured current v2 report parses and scores each supported measured phase;
-missing/invalid fields are refused; unavailable native observations stay unavailable;
-UI labels preserve scope; Standard mismatch checks and persisted/public v1 remain intact.
-Focused gate passed eight owning Rust report cases, owning check and strict library
-Clippy, 34 affected frontend cases, frontend typecheck and affected production lint.
-The first frontend attempt corrected a misplaced test insertion; the next identified
-an existing C4 profile assertion using an obsolete label. Its assertion now matches
-the current tested-profile label, and the affected frontend stages passed.
-No broad suite, native Engine/model/GPU run, public submit/delete, site edit or release.
-Evidence and disk review: `/ai/gchat/out/gchat-open-items-20261012/gbench-native-v2-note.md`.
+### Saved report verification
 
-The parser fixture `src-tauri/plugins/tauri-plugin-ginfer/src/fixtures/native-v2-c1.json`
-is a projection of the accepted saved report
-`/ai/kernel-agent/run_workdir/local/c4-dense-int-ada-38c23bf20/local5090/stagec-pair-r2/current/C1/benchmark.json`.
-It retains the original configuration, workload, corpus and consumed phase/wave values;
-only unused hardware, lanes and additive diagnostics were omitted. Its 32K context and
-three measured rounds are parser evidence, not Standard or physical qualification.
-The producer authority is `src/serve/benchmark.cpp` in
-`/ai/ginfer-worktrees/c4-oi126-next-2d162` at `2685ee10f`, especially `prefill_measurements` and phase
-execution. Owned disk at handoff: 269 MiB candidate source, 12 KiB fixture; no
-local build/model allocation. Disposable Vitest/TypeScript cache (56 KiB) was removed;
-the root dependency symlink and shared caches remain for review/replay. Gate logs
-and recipe under the handoff folder are retained as evidence. [Decision](../decisions/2026-10-12-consume-native-v2-benchmark-phases.md).
+The requested `gbench.py` producer was cancelled on October 14; no new tooling
+is required. The gate uses an unmodified real native-v2 `benchmark.json` linked
+from GInfer `docs/tip-scoreboard/gbench-scoreboard.md`:
+`/ai/kernel-agent/run_workdir/local/c4-gbench-scoreboard-20261011/results/local5090-r1/dense-qwen-int/C4/benchmark.json`.
+Its engine is `2cc592d4`, SM120a, dense Qwen INT. Its session is TP1,
+8,181 context, capacity 8, INT8 KV, fixed DFlash2 K7, graphs and prefix reuse on,
+Vision off. The C4 workload is 2,048 input / 500 output tokens per lane, one
+warmup and one measured wave. Its workload matches Standard, but Vision off
+does not match GChat's Max Perf profile. The gate preserves this report and
+checks the expected rejection rather than treating it as submit-ready Standard.
+This checks report consumption, not current-engine physical qualification or
+a new performance result.
+
+Acceptance: one owning Rust case must deserialize the full saved report, validate
+its workload, reject the Vision profile mismatch, and score measured cold PP,
+warm PP per request, cached TTFT and committed decode throughput. Warmup is excluded;
+the historical v1 PP field remains null. The fixture is
+`src-tauri/plugins/tauri-plugin-ginfer/src/fixtures/native-v2-scoreboard-c4.json`.
+The prior projected C1 fixture remains separate non-Standard parser evidence.
+
+Owner: GChat; candidate `/ai/gchat-worktrees/gbench-native-v2-saved-099`, branch
+`fix/gchat-native-v2-saved-099`, baseline `099989c29`. The saved-report case
+passed: deserialization, measured-phase scores, retained hardware evidence and
+Vision-mismatch refusal. The initial fixture incorrectly expected Vision-off to
+match Max Perf; the corrected fixture checks the intended rejection. Compilation
+took 1.18 seconds with the accepted build container/cache; the case took 0.02
+seconds. No production code, dependencies, Engine build, GPU run or public
+submission changed. Evidence: `/ai/gchat/out/gbench-native-v2-saved-20261014/result.json`.
+Next action: reviewed merge; retire the candidate after merge. Retained data is
+the 54 KB real report fixture and concise verification evidence.
 
 ## Previous Max Perf gate evidence
 
