@@ -1,14 +1,14 @@
 # Chat and Agent runtime
 
-## OI-068 live-worker cancellation — runtime rebuild authorized
+## OI-068 live-worker cancellation — passed; paused for reboot
 
-Complete installed Linux active-worker cancellation and durable checkpoint/continuation. Prior dispatch, collect and reopen remain accepted. The retained package's historical Engine rejects the current Host's required `--hardware-profile`; the previous donor rejects the retained hardware inventory. Neither reached Ready. Prior evidence: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/{result.json,summary.md}`.
+The four-image current Linux CLI/serve runtime set and Engine-only DEB/AppImage refresh pass. Engine source is `38ff80e0c` on requested `415eaa2b5`; accepted desktop/CLI/Host bytes remain `7e33222e8`. The packaged CLI generated the exact local5090 profile in 760.4 seconds.
 
-Ron's October 14 instruction authorizes current `origin/dev/next` CLI/serve builds for SM80/86/89/120a, bundling into the developer package, and hardware profiling on this host. Source starts at `415eaa2b5` in `/ai/ginfer-worktrees/gchat-oi068-linux-415eaa`; its owned `out/linux/` holds sequential six-worker builds and the staged runtime set. The pinned Ubuntu 24.04 build image preserves the package's glibc 2.39 contract. Build booking: local CPU 20:56–23:56Z; no GPU used during compilation.
+The unchanged normal model configuration reached Ready. Cancelling an actively generating General Agent worker stopped its Engine request and finished its parent Chat turn. The cancelled run and exact Chat history survived reopening. Studio's **Continue as new run** completed in nine steps, returned its final answer and preserved its finished record across reopening. Normal Host Stop passed. This qualifies first-step cancellation and new-run continuation, not broader active-worker compaction or Windows.
 
-Packaging now consumes the Engine-owned five-document runtime manifests instead of the retired six-document external input. The focused runtime-document staging fixture passes (1 case, 0.007 seconds); shell syntax and diff checks pass. No desktop source changed.
+Current results, evidence and exact reboot resume steps: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/{result.json,summary.md}`. Package manifests/integrity and the focused runtime-document staging fixture pass. No desktop source, saved model setting, signing or publication changed.
 
-Next unresolved action: finish and stage the compatible runtime, update the existing dev package, generate its exact local-5090 profile, then run only active cancellation and supported continuation with the existing installed tools. Build duration is expected up to three hours; the model gate is bounded to 20 minutes. No Windows, signing, publication, setting reduction or personal history access. Candidate `test/gchat-worker-cancel-859` owns this account and retains concise results; superseded disposable packages and test roots are retired after acceptance.
+Ron requested a reboot pause. Owned app/Host/Engine/profile jobs are absent; bookings and canonical build/GPU locks are released. Source branches are retained for review. Disposable package stages and isolated client state remain until the documented cleanup. Next action: update remaining acceptance, the master rows and package guide from the saved PASS evidence, remove disposable outputs, then send reviewed-merge handoff. Do not rebuild or repeat passing gates.
 
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
