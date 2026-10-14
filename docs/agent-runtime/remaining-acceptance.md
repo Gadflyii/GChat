@@ -1827,15 +1827,21 @@ changed during traversal, so the final bottom was resolved from current geometry
 This measures wrapper observation and programmatic traversal, not GPU-present
 or native wheel/input latency. Cache state is unknown.
 
-A settled, passive 30-second foreground idle observation retained the route,
+A passive 30-second foreground DOM observation retained the route,
 viewport, collapsed states and all 120 wrappers, with no running DOM animations.
 The complete endpoint-observed descendant group was stable: GChat,
 WebKitNetworkProcess and WebKitWebProcess. Total CPU was 100.1123% of one logical
 core: GChat 99.8457%, WebKit Web 0.26661%, Network 0%. Private resident bytes
 were 419,319,808→418,545,664; PSS 530,434,048→529,660,928. These are endpoint
 resident counters, not private commit or peak memory. WebKit long-task support
-is unavailable, not zero. The high native-process CPU is a separate open defect;
-its cause is unproven and no rendering cause or performance gain is claimed.
+is unavailable, not zero. Native installation had not completed, so these counters do not establish
+native idle. A follow-up located finite bundled-resource verification/copying;
+after installation completed in 82 seconds, desktop threads used 0–0.4% of one
+core (six five-second samples, mean 0.2%). That empty-history follow-up excludes
+separate Host/Gbot services and does not repeat this many-message workload.
+Correction: `/ai/gchat/out/native-idle-20261014/result.json`. Raw evidence remains
+unchanged; no rendering cause, cross-OS comparison or gain is claimed. Future
+native idle observations must wait for installation completion.
 
 Earlier capture failures were observer issues: window focus, cached scroll-height
 assumptions and a final JavaScript scope reference. Native focus, per-frame
@@ -1850,7 +1856,8 @@ was deleted and CPU booking 659 cancelled. Accepted installers remain retained.
 No GPU, original-history, Windows, S2 or cross-OS qualification is implied.
 Broader Windows coverage remains owed to the release walkthrough. Next action:
 consume C2's actual native-v2 report when available; otherwise take an actionable
-non-release row. Track the native idle CPU finding independently.
+non-release row. The premature native idle attribution is closed with the
+installation evidence above.
 
 The earlier generated twelve-message observation remains historical evidence at
 `/ai/gchat/out/remaining-acceptance-20261009/oi075/linux-shaped-20261011/result.json`:
@@ -1889,9 +1896,10 @@ group counters are:
 Private bytes are commit, not resident physical RAM; passive/debug observer
 overhead is unmeasured. This qualifies the observed Windows long-content
 baseline only, with no performance-gain, many-message scaling or polling
-attribution claim. Linux native open/scroll/idle remains unmeasured. Preserve the
-same selected history and record the actual Linux build/window/workload before
-comparison; no numerical performance floor or conversation cap is set. The
+attribution claim. Generated Linux open/traversal coverage is now recorded above;
+matched cross-OS idle coverage is not established. Never copy the user's history
+for Linux qualification; generate its content-free shape and record the actual
+build/window/workload. No numerical performance floor or conversation cap is set. The
 older unselected-view idle observation remains historical in `idle-sample.json`.
 
 ## Original diagnostic preservation
