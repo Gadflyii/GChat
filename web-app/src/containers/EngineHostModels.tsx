@@ -76,7 +76,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
       }}>Forget</Button>}
     </div>
-    {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} gpus={snapshot.gpus} offline={!!error} disabled={busy}
+    {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
       action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} />}
       {host.local && snapshot && <EngineGbotControl clients={snapshot.clients} disabled={busy || !!error} change={(client_id, action) => act('gbot_grant', { body: { client_id, action } })} />}

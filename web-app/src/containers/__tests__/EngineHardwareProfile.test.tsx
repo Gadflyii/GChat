@@ -4,6 +4,25 @@ import { EngineHardwareProfile } from '../EngineHardwareProfile'
 import type { EngineHardwareProfile as HardwareProfileStatus } from '@/services/engines'
 
 afterEach(cleanup)
+
+it('shows calibration failures and offline status without blocking model or hardware controls', () => {
+  const action = vi.fn().mockResolvedValue(undefined)
+  const calibrations = [{ key: 'recipe', model_id: 'Qwen', gpu_uuids: ['GPU-one'],
+    max_context: 131072, concurrency: 4, status: 'failed' as const, pid: null,
+    error: 'Calibration rejected', diagnostic_tail: 'Native capacity error' }]
+  const view = render(<EngineHardwareProfile gpus={gpus} profile={profile('completed')}
+    offline={false} disabled={false} action={action} calibrations={calibrations} />)
+  const region = screen.getByRole('region', { name: 'Draft-width calibration' })
+  expect(region).toHaveTextContent('Qwen · C4 · 131,072 tokens · failed')
+  expect(region).toHaveTextContent('GPU 1: RTX 5090 (GPU-one)')
+  expect(screen.getByRole('alert')).toHaveTextContent('Calibration rejected')
+  expect(region).toHaveTextContent('Native capacity error')
+  expect(screen.getByRole('checkbox')).toBeEnabled()
+  view.rerender(<EngineHardwareProfile gpus={gpus} profile={profile('completed')}
+    offline disabled={false} action={action} calibrations={calibrations} />)
+  expect(region).toHaveTextContent('last reported, host offline')
+  expect(action).not.toHaveBeenCalled()
+})
 const gpus = [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32000, compute_capability: '12.0' }]
 const profile = (status: HardwareProfileStatus['status']): HardwareProfileStatus => ({
   status, pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: null, reprofile: false, started_unix_ms: 1000,

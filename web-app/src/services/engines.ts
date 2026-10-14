@@ -65,10 +65,17 @@ export type EngineHardwareProfile = {
 export const hardwareProfileBusy = (profile?: EngineHardwareProfile) =>
   profile?.status === 'running' || profile?.status === 'cancelling'
 
+export type EngineDraftWidthCalibration = {
+  key: string; model_id: string; gpu_uuids: string[]; max_context: number; concurrency: number;
+  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed';
+  pid: number | null; error: string | null; diagnostic_tail: string
+}
+
 export type EngineSnapshot = {
   clients?: { client_id: string; name: string; local: boolean; gbot_control?: import('@/services/gbot').GbotControlGrant }[]
   max_perf_profiles?: EngineMaxPerfProfile[]
   hardware_profile?: EngineHardwareProfile
+  draft_width_calibrations?: EngineDraftWidthCalibration[]
   lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
