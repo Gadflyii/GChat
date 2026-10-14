@@ -1,14 +1,14 @@
 # Native background service lifetime
 
-Independent service ownership is merged in main `500a5f2cb`. Existing AppImage
-lifetime and scheduled recovery receipts remain the baseline. Candidate
-`feat/gbot-linux-login-e04` adds opt-in Linux desktop sign-in startup and automatic
-reconnection of previously Ready KVM computers. Its installed reboot/sign-in gate
-passes: the service starts without GChat and restores the same VM/session and
-native-vault credentials (`out/gbot-linux-login/sign-in-recovery.json`).
+Independent service ownership is merged in main `500a5f2cb`; opt-in Linux
+desktop sign-in startup and automatic reconnection of previously Ready KVM
+computers are merged in `7e33222e8`. The installed reboot/sign-in gate passed:
+the service starts without GChat and restores the same VM/session and native-vault
+credentials (`out/gbot-linux-login/sign-in-recovery.json`). Existing AppImage
+lifetime and scheduled recovery receipts remain accepted. Physical sleep and
+model-backed scheduled recovery are separate obligations.
 The coordinator owns the current [Gbot record](README.md) and master work ledger.
-This implementation supplies the missing independent lifetime while retaining
-existing runtime, executor, workspace, account and approval ownership.
+Existing runtime, executor, workspace, account and approval ownership is retained.
 
 GChat launches its installed executable in `--gbot-service` mode, before Tauri
 single-instance/window startup. The detached process acquires the existing

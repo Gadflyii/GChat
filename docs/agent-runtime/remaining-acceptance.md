@@ -6,23 +6,42 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
-Completed item **GBOT-INSTALL-WALKTHROUGH**: opt-in Linux service startup at desktop
-sign-in and automatic recovery of the same saved Ready VM. Candidate
-`/ai/gchat-worktrees/gbot-linux-login-e04` (`feat/gbot-linux-login-e04`, base
-`e04e7393e`); results go to `out/gbot-linux-login/result.json`. Acceptance is
-focused startup/recovery/UI cases and one private installed Linux walkthrough,
-using existing tools. Prior wizard, task and GUI-close passes are reused below.
-No Windows build, cloud/user desktop input, new dependency, signing or publication.
-Focused checks and the corrected native desktop build pass. The developer frontend
-now uses `IS_TAURI=true`, which the first artifact omitted. Installed enablement and
-desktop sign-in after OS reboot pass: the background service starts without GChat,
-restores the same Ready VM/session and native-vault credentials, and retains
-authenticated control. Receipt: `out/gbot-linux-login/sign-in-recovery.json`.
-The private S1 guest and disk are retired; the corrected developer installer is
-retained at `/ai/gbot-vms/linux-login-20261014/GChat-linux-login-e04.deb`, with
-`out/gbot-linux-login/package-receipt.json`. No live job, model or reservation
-remains. Next: reviewed merge. This gate does not qualify physical sleep recovery,
-unattended startup before sign-in, Windows or M365.
+Completed **GBOT-INSTALL-WALKTHROUGH**, merged in main `7e33222e8`: opt-in
+Linux service startup at desktop sign-in and automatic recovery of the same saved
+Ready VM. Focused startup/recovery/UI cases, types/lint, strict Clippy and the
+native desktop build passed. Installed enablement and desktop sign-in after OS
+reboot passed: Gbot starts without GChat, restores the same VM/session and
+native-vault credentials, and retains authenticated control. The developer
+frontend uses `IS_TAURI=true`; the first omitted-flag artifact was superseded.
+Evidence: `out/gbot-linux-login/{result,sign-in-recovery,package-receipt}.json`.
+The private S1 guest and disk are retired; prior wizard/task/GUI-close passes
+below remain accepted. Physical sleep recovery, pre-login startup, Windows and
+M365 are not qualified by this gate.
+
+Current deliverable: unsigned `.deb` and AppImage from main `7e33222e8`, plus
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/README.md` for install, Gbot
+selection, wizard, VM, brain, task and reboot/sign-in. Current native GChat/Host/
+CLI and extensions/skills reuse accepted Gbot resources and historical GInfer
+engine images; package checks establish contents, not engine qualification.
+Inventory: documentation branch `docs/gbot-linux-package-7e332` at
+`/ai/gchat-worktrees/gbot-linux-package-7e332`; package results at the fixed output
+path above. Both package contents checks passed. Final packages/guide/results
+remain; copied inputs and staging are retired.
+No signing, feed entry, publication, new dependencies or repeated walkthrough.
+
+Remaining physical guided-setup routes: LAN service/tool installation, real cloud
+cost/create/reconcile/remove, Azure/AWS/GCP attachment, M365 assigned-PC sign-in
+and driver/media control, Windows/Hyper-V and installer choices. Ron's dedicated
+M365 test PC `CPC-rhen-FNHEH` (`rhenderson@sectilelabs.ai`) is authorized for Gbot;
+consent is settled, connectivity and Windows qualification remain owed.
+OI-115 source work is merged in `cf2dd919c`; isolated installed-Host RSS and real
+large-media qualification remain release obligations. OI-116 source fixes are
+complete, with Windows UNC/extended-path/errors and slow-NAS/hash qualification
+reserved for Ron's release gate. OI-119 larger-fleet native idle/private-memory
+and remote paired-client timestamp rendering remain open after its limited
+Linux/WSLg observation. Next unresolved action: decide whether its larger-fleet
+native measurement belongs in the scheduled release walkthrough or needs an
+approved private fixture; no additional source defect is demonstrated.
 
 Installed paired-Host brain/task acceptance **PASS**: select a Ready model, save
 its actual served context, create `~/hello.txt` through the desktop editor,
@@ -45,7 +64,7 @@ session can be detached. Refusal preserves Ready, its live session, brain and
 control/operation state. Six affected removal cases and strict service Clippy pass
 in 16 seconds; no physical guest or model gate.
 Results: `out/gchat-open-items-20261013/remove-refusal-state/result.json`.
-Next unresolved action: reviewed merge, then the next open GChat/Gbot item.
+Both removal corrections are merged; their receipts remain accepted.
 Signing/publication, native Windows builds, personal desktop input and Engine
 rebuild/calibration are excluded. The master list remains the status authority.
 

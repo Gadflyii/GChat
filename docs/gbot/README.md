@@ -1,22 +1,31 @@
 # Gbot design
 
-Linux install-to-task acceptance is complete on candidate
-`feat/gbot-linux-login-e04` (`62c467446`, base main `e04e7393e`) in
-`/ai/gchat-worktrees/gbot-linux-login-e04`. Focused startup/recovery/UI cases,
-types, lint and strict Clippy pass. Existing installed wizard, real desktop task,
-result reopen and GUI-close receipts below remain valid.
-The corrected installed app enabled desktop sign-in startup. After an OS reboot,
-Gbot started without opening GChat and restored the same saved Ready KVM computer,
-session and native-vault credentials; authenticated access passed and unauthenticated
-access was refused. Evidence: `out/gbot-linux-login/{result,sign-in-recovery}.json`.
-The initial developer frontend omitted `IS_TAURI=true`, compiling out native
-startup registration. The corrected native build and developer installer use that
-flag; package details are in `out/gbot-linux-login/package-receipt.json`.
-The private S1 guest is retired; the corrected developer package remains at
-`/ai/gbot-vms/linux-login-20261014/GChat-linux-login-e04.deb`. No live guest, model,
-job or reservation remains. Next: reviewed merge of this candidate. Windows/M365,
-physical sleep recovery and unattended startup before desktop sign-in remain owed.
-No signing or publication is included.
+Linux install-to-task acceptance is merged in main `7e33222e8`. Installed
+wizard creation/resume, a paired-Host editor task with exact SSH readback,
+saved-result reopen and AppImage background lifetime passed on the accepted
+builds linked below. After an OS reboot, desktop sign-in started Gbot without
+opening GChat and restored the same saved Ready KVM computer, session and
+native-vault credentials. Authenticated access passed; unauthenticated access
+was refused. Evidence: `out/gbot-linux-login/{result,sign-in-recovery}.json`.
+
+The current unsigned Linux package refresh uses main `7e33222e8`, with
+`IS_TAURI=true` for the embedded native frontend. The two packages and one-page
+install/wizard/VM/brain/task/reboot guide are at
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/README.md`; package provenance and
+contents checks are in that folder's `result.json`. Current GChat, Host, CLI,
+extensions and skills reuse the accepted pinned Gbot guest/runtime and historical
+GInfer engine closure. This refresh does not qualify a new engine snapshot or
+repeat the accepted walkthrough.
+
+Inventory: main `/ai/gchat`; documentation candidate
+`/ai/gchat-worktrees/gbot-linux-package-7e332`, branch
+`docs/gbot-linux-package-7e332`; current package outputs at the fixed path above.
+The private acceptance guest, package staging and copied inputs are retired.
+Both package contents checks passed; the two packages, guide and concise results
+remain. Next: the remaining OI-119 larger-fleet measurement decision; OI-116
+source work is complete and its physical checks belong to the release gate.
+Windows/M365, physical sleep recovery and unattended pre-login startup remain
+unqualified. No signing or publication is included.
 
 Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-13).
 Linux installed computer creation and same-setup resume passed on main

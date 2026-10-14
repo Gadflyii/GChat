@@ -6,35 +6,42 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-115 Host request copies (merge-ready)
+## Accepted OI-115 — Host request copies (merged cf2dd919c)
 
-Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
-Candidate `fix/gchat-host-body-39c9` in `/ai/gchat-worktrees/host-body-39c9`.
-Origin main `f0db75362` is merged without rebasing; both request-body and snapshot
-ownership changes are retained. All four focused fixtures and strict Host all-target
-Clippy pass on the composition; CPU only, under one minute. The first container
-command lacked Cargo and stopped before compilation; the established native WSL
-Cargo route completed the gate. No package/version or lock-file change.
 The Host validates a borrowed JSON-object map, preserves raw field values and
 replaces only its model field into one preallocated buffer. The benchmark path
-forwards validated original bytes. Bounded admission and headers are unchanged.
-The coordinator approved the existing `serde_json/raw_value` feature; no package,
-version or lock changes. Strict Host Clippy and the three focused forwarding,
-raw-field and actual-byte-limit fixtures pass. No new harness or model/GPU run.
+forwards validated original bytes. Bounded admission, headers, unknown numeric/
+string representations, SSE/tail/authentication behavior remain unchanged.
+The composed OI-115/OI-118 change passed four focused fixtures and strict Host
+all-target Clippy. No package/version/lock change or new harness was needed.
 
-One 64 MiB request: allocated bytes714,299,696→435,356,476; peak above initial
-255,244,537→149,259,224; elapsed1.188→0.333s. One 1 MiB request: allocated bytes
-12,624,806→9,090,074; peak4,515,107→3,549,922; elapsed21.555→7.664ms. These are
-instrumented same-process mock-upstream samples, not isolated Host RSS or real
-media qualification. Unknown numeric/string JSON representations stay exact.
-The fixture-only CPU child setup uses the accepted concurrent resource pattern;
-production admission is unchanged. Prior SSE/tail/auth checks remain accepted.
+One 64 MiB mock-upstream request: allocated bytes 714,299,696 → 435,356,476;
+peak above initial 255,244,537 → 149,259,224; elapsed 1.188 → 0.333 s. One
+1 MiB request: allocated bytes 12,624,806 → 9,090,074; peak 4,515,107 →
+3,549,922; elapsed 21.555 → 7.664 ms. These instrumented same-process samples
+do not qualify isolated installed-Host RSS or real large-media behavior.
+Evidence: `/ai/gchat/out/oi115-host-body-20261013/result.json`.
 
-Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; no live jobs or model
-copies. Evidence `/ai/gchat/out/oi115-host-body-20261013/result.json`; fixture
-wall time2.11s baseline/1.24s candidate, each control under1s, strict Clippy PASS.
-Next: reviewed merge. OI-116's Windows/NAS checks remain release-gated;
-OI-119's larger-fleet native qualification remains open after the limited sample below.
+Next remaining scope: OI-116's Windows UNC/extended-path/error and slow-NAS/hash
+checks belong to Ron's release gate. Its listed source findings are fixed in
+main `2ad018261` (journal/hash/catalog/Windows free space), the approved Linux
+statvfs change, and `3bccdb243` (scan-local payload observations). Exact full-SHA,
+fresh all-rank output and per-path errors remain preserved. TP1/2/4 reader opens
+7 → 4 and bytes 4,937 → 2,847; allocations 172 → 122, but peak 11,354 → 12,606,
+so no overall memory gain is claimed. Existing focused/Clippy evidence is
+`out/review-remaining-20261011/result.json`; no unchanged checks are repeated.
+
+OI-119's projection/UI source corrections are merged in `2ad018261`. Eight-host
+× 174-profile projection allocations 71,051 → 16,026 and exact output/focus/action
+controls passed. The limited native observation below does not qualify larger
+fleets or remote paired timestamps. No additional source defect is demonstrated;
+remaining measurement uses existing tools without expanding into a new harness.
+
+Inventory: current unsigned package/guide at
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/`; documentation candidate
+`/ai/gchat-worktrees/gbot-linux-package-7e332`. Shared Cargo cache remains owned
+by GChat. Both package contents checks passed; staging and copied inputs are
+retired. No live model, GPU, container or build job.
 
 ## Accepted OI-118 — snapshot ownership (merged f0db75362)
 
