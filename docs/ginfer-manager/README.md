@@ -15,24 +15,36 @@ the accepted binaries.
 
 ## Flash-Next and CMP 170HX settled startup
 
-Current OI-072 source follow-up: all Flash-Next deployments wait for residency
-fill before Ready, including custom, catalog, restored and GBench Max Perf
-launches. The shared Host derives this from the inspected artifact identity;
-the Flash Max Perf profile also records the option explicitly. Dense models
-retain the selected-CMP rule below. Context, concurrency, memory sizing,
+Current OI-072 source follow-up: Flash-Next deployments wait for residency
+fill before Ready only when every selected GPU has known VRAM of at most
+32 GiB. Larger classes, including the 96 GiB PRO, retain progressive Ready
+until the Engine fill-throughput fix lands. The measured 24 GiB 4090 Ready
+changed from 21.9 to 25.0 s; the 96 GiB PRO changed from 42.9 to 66.5 s,
+exceeding its 60 s Ready gate. These coordinator measurements invalidate the
+previous all-Flash default; this change makes no new performance claim.
+
+The shared Host resolves this policy from the artifact identity and selected
+GPUs' memory, covering custom, catalog and restored launches. GBench Max Perf
+advertises and applies the same option per GPU group. Explicit custom waits and
+the selected-CMP rule remain supported. Context, concurrency, memory sizing,
 speculation and the Engine default remain unchanged. This startup policy does
 not qualify the current release Engine/artifact matrix.
 
 Candidate `/ai/gchat-worktrees/flash-settled-profile-cf2`, branch
 `feat/gchat-flash-settled-profile-cf2`, baseline `cf2dd919c`. Acceptance:
-existing focused Host cases check all three Flash weight classes, restored
-requests, argv, and dense selected/unselected CMP behavior; the existing Max
-Perf case checks its per-class option. Strict Host Clippy checks the affected
-crate. No GPU, Windows build or physical qualification. Evidence is retained
-under `/ai/gchat/out/flash-settled-profile-20261014/`; the candidate uses the
-shared Cargo cache, with no artifacts or separate build allocation. All three
-focused cases and strict Host Clippy passed; the check phase took about 15 s.
-Next action: reviewed merge. The candidate remains retained for that review.
+the three existing focused Host/Max Perf cases plus one large-VRAM case cover
+Flash weight classes, restored requests, argv, selected/unselected CMP, and
+per-GPU benchmark options. Strict Host Clippy checks the affected crate.
+No GPU, Windows build or physical qualification. Evidence is retained under
+`/ai/gchat/out/flash-settled-profile-20261014/`; the candidate reuses the shared
+Cargo cache, with no model copies or separate build allocation. All four focused
+cases passed (0.42 s total fixture time), along with strict Host Clippy (1.96 s).
+Next action: send the corrected tip for review; retain the candidate until merge.
+
+Draft setup candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch
+`feat/gchat-draft-width-setup-4884`, baseline `4884a214a`, remains clean while
+C2 completes CLI concurrency propagation and bubbs names the calibration
+recipe for models without a saved deployment. No build or job is allocated.
 
 Accepted `GCHAT-CMP-SETTLED-READY` (`bfd42e530`): the shared Host generates
 `--wait-for-residency-fill` when the selected GPU group includes a CMP 170HX,

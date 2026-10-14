@@ -1,13 +1,21 @@
-# Wait for Flash-Next residency before Ready
+# Wait for small-VRAM Flash-Next residency before Ready
 
-Status: implementation requested by bubbs in the October 14, 2026 GChat queue.
+Status: implementation requested by bubbs in the October 14, 2026 GChat queue;
+VRAM scope corrected at 01:44 UTC.
 
-The shared Host adds `--wait-for-residency-fill` to every Flash-Next launch,
-using the inspected `.ginfer` model identity. Custom, catalog and restored
-deployments therefore share the same Ready behavior. GBench's Flash Max Perf
-profiles also declare this option so their expected and effective options agree.
+The shared Host adds `--wait-for-residency-fill` to Flash-Next launches when
+every selected GPU has known VRAM of at most 32 GiB. Larger VRAM classes,
+including the 96 GiB PRO, retain progressive Ready until C4's fill-throughput
+fix lands. This rule uses device memory, never a card-name list. Unknown VRAM
+does not opt into the wait. Explicit custom waits remain available.
 
-The existing selected-CMP policy remains applicable to dense models. The Engine
-default, context, concurrency, memory sizing and speculative settings are unchanged.
-The Engine owns the residency wait and its warmup timeout. This startup policy
-is separate from physical qualification of release artifacts and devices.
+Bubbs reports Ready 21.9 → 25.0 s on the 24 GiB 4090, versus 42.9 → 66.5 s
+on the 96 GiB PRO. The latter exceeds its 60 s gate, invalidating the earlier
+all-Flash default. These are supplied measurements, not a new Host benchmark.
+
+Custom, catalog and restored deployments share the policy. GBench's Flash
+Max Perf profiles resolve the same option per selected GPU group so their
+advertised and effective options agree. The existing selected-CMP policy is
+unchanged. Context, concurrency, memory sizing, speculative settings and the
+Engine default stay unchanged. The Engine owns the wait and its timeout;
+this policy does not establish release-artifact or device qualification.
