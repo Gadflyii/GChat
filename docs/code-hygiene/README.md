@@ -6,7 +6,25 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-116 catalog/download resources (merge-ready)
+## Current item — Host, Manager and Chat engineering hygiene
+
+Baseline main `8ca43a14a`; candidate `chore/gchat-engineering-hygiene-20261014`
+at `/ai/gchat-worktrees/engineering-hygiene-20261014`. Remove proven unused
+direct dependencies and dead assignments, and fix compiler/Clippy warnings
+without changing behavior. Check platform-specific uses before removal.
+Acceptance: strict Clippy for the three crates and existing affected tests.
+CPU only, shared `/ai/gchat/src-tauri/target`; no new dependencies, GPU,
+native Windows build, release, signing or publication.
+Source ready: removed unused direct dependencies, unreachable proxy fallback,
+redundant copies/cfg attributes and historical comments; scoped the test mutex
+lexically. Strict Host/Manager all-target and Chat desktop/CLI production Clippy
+PASS; existing proxy44 and process-cleanup2 cases PASS. Chat default-feature
+all-target check hits the existing CLI-feature fixture error (pending bab6541bf).
+The existing worker mock lacks GbotState and cannot bootstrap a real service;
+no runtime change or mock-bootstrap workaround is included. Evidence and exact
+limitations: `/ai/gchat/out/engineering-hygiene-20261014/result.json`.
+
+## Accepted OI-116 catalog/download resources (merged 8ca43a14a)
 
 Baseline main `7e33222e8`; candidate `fix/gchat-catalog-resources-7e332` at
 `/ai/gchat-worktrees/catalog-resources-7e332`. The Host borrows its catalog and
@@ -24,11 +42,10 @@ PASS. The focused measurements ran under one second each; no dependency change,
 new harness, GPU or native Windows run. Full package hashes and ordered download
 journaling retain their accepted source behavior.
 
-Evidence: `/ai/gchat/out/oi116-catalog-20261014/result.json`. Candidate source
-and concise results remain until reviewed merge; shared Cargo target
-`/ai/gchat/src-tauri/target` remains active. No live jobs or model copies.
-Next: reviewed merge, then OI-119's remaining larger-fleet native UI scope.
-Windows/NAS release qualification remains owed.
+Evidence: `/ai/gchat/out/oi116-catalog-20261014/result.json`. Merged clean source
+tree is retired; evidence and shared Cargo target `/ai/gchat/src-tauri/target`
+remain. No live jobs or model copies.
+Source merged; Windows/NAS release qualification remains owed.
 
 ## Accepted OI-118 — snapshot ownership (merged f0db75362)
 
@@ -46,7 +63,8 @@ Accepted source0705f31a6 includes the merged projection/UI fix2ad018261.
 One isolated local Host/client, no models/profiles:30s Manager idle0.13% of one
 core, privateRSS306.27MiB (WebKit content226.26MiB); Host0.00%,4.52MiB.
 This is Linux/WSLg, not a before/after gain or Windows private-commit result.
-Large-fleet idle/private-memory qualification remains open. Own processes and
+Source merged `2ad018261`; larger-fleet/remote qualification is release-gated.
+Own processes and
 private state are retired; accepted binaries remain. No rebuild/model/GPU run.
 Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
 

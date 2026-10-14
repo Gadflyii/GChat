@@ -330,12 +330,8 @@ fn build_remote_http_client(
         .map_err(|e| format!("Failed to build MCP HTTP client: {e}"))
 }
 
-/// Whether a `taskkill` failure just means the process had already exited.
-///
-/// Windows reports "the process ... not found" as an error; on unix the same
-/// condition (`ESRCH`) is already treated as success. Kept platform-independent
-/// so it can be tested anywhere.
-#[cfg_attr(not(windows), allow(dead_code))]
+/// Recognizes taskkill's already-exited-process errors.
+#[cfg(any(windows, test))]
 pub(crate) fn is_process_already_gone(stderr: &str) -> bool {
     let lower = stderr.to_ascii_lowercase();
     lower.contains("not found") || lower.contains("no running instance")
@@ -962,13 +958,11 @@ async fn kill_process_by_pid(pid: u32) -> Result<(), String> {
 async fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     use std::process::Command;
 
-    #[cfg(windows)]
     use std::os::windows::process::CommandExt;
 
     let mut cmd = Command::new("taskkill");
     cmd.args(["/F", "/T", "/PID", &pid.to_string()]);
 
-    #[cfg(windows)]
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
     let output = cmd
@@ -977,11 +971,7 @@ async fn kill_process_by_pid(pid: u32) -> Result<(), String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        // "There is no running instance of the task" / "process not found" is
-        // the outcome we were asking for: the process is already gone. The unix
-        // path treats the same condition (ESRCH) as success; Windows reported
-        // it as a failure, and the shutdown sweep — which runs after servers
-        // have already stopped — filed one crash per PID on every exit.
+        // An already-exited process needs no cleanup.
         if is_process_already_gone(&stderr) {
             log::debug!("taskkill: PID {pid} was already gone");
             return Ok(());
