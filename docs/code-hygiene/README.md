@@ -6,7 +6,19 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — Host, Manager and Chat engineering hygiene
+## Current item — Rust test preparation
+
+Baseline main `f3d77b8f0`; candidate `fix/gchat-rust-test-preparation-f3d` at
+`/ai/gchat-worktrees/rust-test-preparation-f3d`, now composed with main
+`25ac2cdb2`. The documented Rust command selects shared desktop/CLI library
+tests and prepares missing Linux Gbot resource stubs without overwriting assets.
+No dependencies or runtime behavior change. Accepted existing OpenCode fixture
+PASS (38.88 s compile, 0.02 s test) and resource-preparation checks are retained;
+the merge changes documentation only relative to the accepted preparation patch.
+Evidence: `/ai/gchat/out/rust-test-preparation-20261014/result.json`.
+Next: reviewed merge; no live jobs, model, package or release run.
+
+## Accepted Host, Manager and Chat engineering hygiene (merged 165353e58)
 
 Baseline main `8ca43a14a`; candidate `chore/gchat-engineering-hygiene-20261014`
 at `/ai/gchat-worktrees/engineering-hygiene-20261014`. Remove proven unused
@@ -15,14 +27,16 @@ without changing behavior. Check platform-specific uses before removal.
 Acceptance: strict Clippy for the three crates and existing affected tests.
 CPU only, shared `/ai/gchat/src-tauri/target`; no new dependencies, GPU,
 native Windows build, release, signing or publication.
-Source ready: removed unused direct dependencies, unreachable proxy fallback,
+Source merged: removed unused direct dependencies, unreachable proxy fallback,
 redundant copies/cfg attributes and historical comments; scoped the test mutex
 lexically. Strict Host/Manager all-target and Chat desktop/CLI production Clippy
-PASS; existing proxy44 and process-cleanup2 cases PASS. Chat default-feature
-all-target check hits the existing CLI-feature fixture error (pending bab6541bf).
-The existing worker mock lacks GbotState and cannot bootstrap a real service;
-no runtime change or mock-bootstrap workaround is included. Evidence and exact
-limitations: `/ai/gchat/out/engineering-hygiene-20261014/result.json`.
+PASS; existing proxy44 and process-cleanup2 cases PASS. Its earlier Chat
+all-target check lacked the CLI feature; the preparation change above fixes the
+owning command. The worker mock bootstrap defect is separately fixed in main
+`25ac2cdb2`, with the existing worker case and strict library Clippy passing.
+No full-suite rerun is claimed. Evidence:
+`/ai/gchat/out/engineering-hygiene-20261014/result.json` and
+`/ai/gchat/out/worker-fixture-gbot-20261014/result.json`.
 
 ## Accepted OI-116 catalog/download resources (merged 8ca43a14a)
 
