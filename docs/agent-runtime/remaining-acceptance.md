@@ -4,6 +4,14 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+Completed **GCHAT-GENERAL-WORKER-TEST-GBOT-BOOTSTRAP**: the existing mock app and
+reopened app manage explicitly stopped Gbot state; an empty connector catalog no
+longer launches a real service. The dispatch/cancel/policy/reopen fixture passes
+(0.17 s), and strict library Clippy passes. The helper is test-only; production
+behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-20261014/result.json`.
+Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
+`GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
+
 ## Current implementation and test plan — October 13
 
 Completed item **GBOT-INSTALL-WALKTHROUGH**: opt-in Linux service startup at desktop
