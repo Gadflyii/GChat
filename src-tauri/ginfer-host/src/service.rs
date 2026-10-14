@@ -767,7 +767,7 @@ impl Host {
         };
         let models = self.inventory.read().await.clone();
         drop(data);
-        let launch_profiles = self.launch_profiles.read().await.clone();
+        let launch_profiles = self.launch_profiles.read().await;
         let mut model_index: BTreeMap<_, Vec<_>> = BTreeMap::new();
         for model in &models {
             let metadata = &model.metadata;
@@ -783,7 +783,8 @@ impl Host {
                 .push(model);
         }
         let mut available_profiles = vec![];
-        for profile in &launch_profiles {
+        let mut gpu_choices = BTreeMap::new();
+        for profile in launch_profiles.iter() {
             let key = (
                 profile.identity.model_id.as_str(),
                 profile.identity.weights_id.as_str(),
@@ -792,8 +793,16 @@ impl Host {
                 profile.artifact_bytes,
             );
             if let Some(matching) = model_index.get(&key) {
-                let groups = profile.gpu_groups(&self.gpus, &reserved);
-                let compatible = profile.gpu_groups(&self.gpus, &Default::default());
+                let (groups, compatible) = gpu_choices.entry((
+                    profile.platform.as_str(),
+                    profile.gpu_name.as_str(),
+                    profile.compute_capability.as_str(),
+                    profile.min_memory_mib_per_gpu,
+                    profile.tp,
+                )).or_insert_with(|| (
+                    serde_json::json!(profile.gpu_groups(&self.gpus, &reserved)),
+                    serde_json::json!(profile.gpu_groups(&self.gpus, &Default::default())),
+                ));
                 for model in matching {
                     available_profiles
                         .push(serde_json::json!({"profile":profile,"model_id":model.id,
@@ -801,6 +810,8 @@ impl Host {
                 }
             }
         }
+        drop(gpu_choices);
+        drop(launch_profiles);
         let mut max_perf_profiles = vec![];
         for model in &models {
             let metadata = &model.metadata;
@@ -3075,6 +3086,63 @@ mod resource_tests {
         assert_eq!(recovered["inventory_errors"][0]["path"], missing.to_string_lossy().as_ref());
         assert_eq!(recovered["models"].as_array().unwrap().len(), 14);
         assert!(host.inventory.read().await.iter().filter(|model| model.metadata.tp_size == 4).all(|model| model.metadata.nvfp4_kv_available));
+    }
+
+    #[tokio::test]
+    async fn catalog_snapshot_keeps_gpu_filters_and_fresh_reservations() {
+        let (dir, host, request) = fixture().await;
+        let model = host.inventory.read().await[0].clone();
+        let base: crate::launch_profiles::LaunchProfile = serde_json::from_value(serde_json::json!({
+            "id":"base", "name":"Fixture", "platform":std::env::consts::OS,
+            "identity":model.metadata.identity, "artifact_sha256":"a".repeat(64), "artifact_bytes":4096,
+            "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU", "compute_capability":"12.0", "vram_tier_gib":32,
+            "min_memory_mib_per_gpu":32768, "max_context":8192, "concurrency":1, "options":{},
+            "qualification":{"tier":"full-context-tested", "evidence":"fixture", "engine_revision":"fixture", "full_context_requests":1}
+        })).unwrap();
+        let mut catalog = vec![base.clone(); 7];
+        catalog[1].platform = "other".into();
+        catalog[2].gpu_name = "other".into();
+        catalog[3].compute_capability = "8.6".into();
+        catalog[4].min_memory_mib_per_gpu = 32769;
+        catalog[5].tp = 2;
+        catalog[6].tp = 4;
+        for profile in &catalog[5..] {
+            let mut member = model.clone();
+            member.id = Uuid::new_v4();
+            member.metadata.tp_size = profile.tp;
+            host.inventory.write().await.push(member);
+        }
+        *host.launch_profiles.write().await = catalog;
+        let compatible = serde_json::json!([["GPU-fixture-0"], ["GPU-fixture-1"], ["GPU-fixture-2"], ["GPU-fixture-3"]]);
+        let first = host.snapshot().await;
+        assert_eq!(first["launch_profiles"][0]["gpu_groups"], compatible);
+        for entry in &first["launch_profiles"].as_array().unwrap()[1..5] {
+            assert_eq!(entry["gpu_groups"], serde_json::json!([]));
+            assert_eq!(entry["compatible_gpu_groups"], serde_json::json!([]));
+        }
+        assert_eq!(first["launch_profiles"][5]["gpu_groups"].as_array().unwrap().len(), 6);
+        assert_eq!(first["launch_profiles"][6]["gpu_groups"], serde_json::json!([["GPU-fixture-0", "GPU-fixture-1", "GPU-fixture-2", "GPU-fixture-3"]]));
+        let launch = host.prepare_launch(&request).await.unwrap();
+        // CPU children exercise reservations without native hardware admission.
+        let mut processes = HostProcesses::new(
+            dir.path().join("engine"),
+            host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
+            Duration::from_secs(600),
+        ).unwrap();
+        processes.configure_runtimes(Default::default(), host.gpus.iter().filter_map(|gpu| {
+            gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))
+        }).collect()).unwrap();
+        processes.launch(launch).unwrap();
+        *host.processes.lock().await = processes;
+        let reserved = host.snapshot().await;
+        assert_eq!(reserved["launch_profiles"][0]["gpu_groups"], serde_json::json!([["GPU-fixture-1"], ["GPU-fixture-2"], ["GPU-fixture-3"]]));
+        assert_eq!(reserved["launch_profiles"][0]["compatible_gpu_groups"], compatible);
+        assert_eq!(reserved["launch_profiles"][5]["gpu_groups"].as_array().unwrap().len(), 3);
+        assert_eq!(reserved["launch_profiles"][6]["gpu_groups"], serde_json::json!([]));
+        host.processes.lock().await.shutdown().await.unwrap();
+        assert_eq!(host.snapshot().await["launch_profiles"][0]["gpu_groups"], compatible);
+        *host.launch_profiles.write().await = vec![base];
+        assert_eq!(host.snapshot().await["launch_profiles"].as_array().unwrap().len(), 1);
     }
 
     #[tokio::test]
