@@ -770,8 +770,12 @@ impl Host {
             ) {
                 let groups = profile.gpu_groups(&self.gpus, &reserved);
                 let compatible = profile.gpu_groups(&self.gpus, &Default::default());
-                max_perf_profiles.push(serde_json::json!({"profile":profile,"model_id":model.id,
-                    "gpu_groups":groups,"compatible_gpu_groups":compatible}));
+                for group in compatible {
+                    let resolved = profile.clone().for_gpu_group(&self.gpus, &group);
+                    let available: Vec<_> = groups.iter().filter(|candidate| **candidate == group).collect();
+                    max_perf_profiles.push(serde_json::json!({"profile":resolved,"model_id":model.id,
+                        "gpu_groups":available,"compatible_gpu_groups":[group]}));
+                }
             }
         }
         let instance_ids: BTreeSet<_> = observations.iter().map(|(id, ..)| *id).collect();
@@ -936,7 +940,8 @@ impl Host {
             }
             let profile = crate::max_perf::profile_for_identity(&metadata.identity,
                 metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available)
-                .map_err(|error| error.to_string())?;
+                .map_err(|error| error.to_string())?
+                .for_gpu_group(&self.gpus, &request.gpu_uuids);
             if profile.reference != *reference || profile.max_context != request.max_context
                 || profile.concurrency != request.concurrency || profile.options != request.options
             {
@@ -1000,14 +1005,9 @@ impl Host {
             return Err(format!("context exceeds model maximum of {limit}"));
         }
         let mut options = request.options.clone();
-        options.wait_for_residency_fill |= self.gpus.iter().any(|gpu| {
-            request.gpu_uuids.contains(&gpu.uuid)
-                && (gpu.name.eq_ignore_ascii_case("NVIDIA CMP 170HX")
-                    || gpu
-                        .display_name
-                        .as_deref()
-                        .is_some_and(|name| name.eq_ignore_ascii_case("NVIDIA CMP 170HX")))
-        });
+        options.wait_for_residency_fill |= crate::launch_profiles::residency_wait_default(
+            &metadata.identity, &self.gpus, &request.gpu_uuids,
+        );
         let socket = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let port = socket.local_addr().map_err(|e| e.to_string())?.port();
         drop(socket);
@@ -1779,7 +1779,8 @@ impl Host {
                     let metadata = &model.metadata;
                     let profile = crate::max_perf::profile_for_identity(&metadata.identity,
                         metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available)
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| error.to_string())?
+                        .for_gpu_group(&self.gpus, &selection.gpu_uuids);
                     if profile.id != selection.profile_id {
                         return Err("unknown GBench Max Perf profile for this artifact".into());
                     }
@@ -2036,6 +2037,14 @@ mod target_launch_tests {
         weights: &str,
         calibrated: bool,
     ) -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
+        installed_target("qwen3.8-flash-next", weights, calibrated).await
+    }
+
+    async fn installed_target(
+        family: &str,
+        weights: &str,
+        calibrated: bool,
+    ) -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
         let dir = tempfile::tempdir().unwrap();
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
@@ -2050,7 +2059,7 @@ mod target_launch_tests {
             serde_json::json!([{"kind":"tensor","rank":"all","name":"fixture"}])
         };
         let metadata = serde_json::json!({
-            "identity":{"model_id":"qwen3.8-flash-next","weights_id":weights},
+            "identity":{"model_id":family,"weights_id":weights},
             "tp_size":1,"draft_tp":0,"objects":objects
         })
         .to_string();
@@ -2155,7 +2164,8 @@ mod target_launch_tests {
 
     #[tokio::test]
     async fn cmp_serving_profile_waits_for_residency_only_for_selected_cmp() {
-        let (_dir, mut host, request) = installed_flash("groupwise-int", false).await;
+        let (_dir, mut host, request) =
+            installed_target("qwen3.8-27b", "groupwise-int-dflash2-q4", false).await;
         assert!(!request.options.wait_for_residency_fill);
         assert!(
             !serde_json::from_value::<LaunchOptions>(serde_json::json!({}))
@@ -2210,11 +2220,72 @@ mod target_launch_tests {
     }
 
     #[tokio::test]
+    async fn flash_large_vram_profile_keeps_progressive_ready() {
+        for weights in ["groupwise-int", "smol-q2g64", "nvfp4"] {
+            let (_dir, mut host, mut request) = installed_flash(weights, false).await;
+            Arc::get_mut(&mut host).unwrap().gpus.push(Gpu {
+                uuid: "GPU-small".into(),
+                name: "Unselected fixture".into(),
+                display_name: None,
+                memory_mib: 24576,
+                compute_capability: Some("12.0".into()),
+            });
+            for memory_mib in [0, 49152, 98304] {
+                Arc::get_mut(&mut host).unwrap().gpus[0].memory_mib = memory_mib;
+                let launch = host.prepare_launch(&request).await.unwrap();
+                assert!(!launch.options.wait_for_residency_fill);
+                assert!(!launch.options.args().iter().any(|arg| arg == "--wait-for-residency-fill"));
+            }
+            let restored: LaunchRequest =
+                serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+            assert!(!host.prepare_launch(&restored).await.unwrap().options.wait_for_residency_fill);
+            let snapshot = host.snapshot().await;
+            for entry in snapshot["max_perf_profiles"].as_array().unwrap() {
+                let small = entry["compatible_gpu_groups"][0][0] == "GPU-small";
+                assert_eq!(entry["profile"]["options"]["wait_for_residency_fill"], small);
+            }
+            if weights != "nvfp4" {
+                let metadata = &host.inventory.read().await[0].metadata;
+                let profile = crate::max_perf::profile_for_identity(
+                    &metadata.identity, metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available,
+                ).unwrap().for_gpu_group(&host.gpus, &request.gpu_uuids);
+                request.benchmark_profile = Some(profile.reference);
+                request.options = profile.options;
+                request.max_context = profile.max_context;
+                request.concurrency = profile.concurrency;
+                assert!(!host.prepare_launch(&request).await.unwrap().options.wait_for_residency_fill);
+                request.benchmark_profile = None;
+            }
+            request.options.wait_for_residency_fill = true;
+            assert!(host.prepare_launch(&request).await.unwrap().options.wait_for_residency_fill);
+        }
+    }
+
+    #[tokio::test]
     async fn prepare_flash_launch_preserves_auto_and_admits_mtp_above_dflash_limit() {
         for weights in ["groupwise-int", "smol-q2g64", "nvfp4"] {
             let (_dir, host, mut request) = installed_flash(weights, false).await;
             let launch = host.prepare_launch(&request).await.unwrap();
             assert_eq!(launch.model_id, format!("qwen3.8-flash-next/{weights}"));
+            assert!(launch.options.wait_for_residency_fill);
+            assert_eq!(
+                launch
+                    .options
+                    .args()
+                    .iter()
+                    .filter(|arg| arg.as_str() == "--wait-for-residency-fill")
+                    .count(),
+                1
+            );
+            let restored: LaunchRequest =
+                serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+            assert!(
+                host.prepare_launch(&restored)
+                    .await
+                    .unwrap()
+                    .options
+                    .wait_for_residency_fill
+            );
             assert_eq!(launch.options.spec, "auto");
             assert_eq!(launch.options.draft_tokens, 0);
             for vision in [false, true] {

@@ -10,6 +10,31 @@ use std::{collections::BTreeSet, path::Path};
 pub const HEADROOM_BYTES: u64 = 1 << 30;
 pub const MIN_PROFILE_HEADROOM_BYTES: u64 = 300 * 1024 * 1024;
 
+const MAX_FLASH_SETTLED_VRAM_MIB: u64 = 32 * 1024;
+
+pub fn residency_wait_default(
+    identity: &ArtifactIdentity,
+    gpus: &[Gpu],
+    selected: &[String],
+) -> bool {
+    let small_flash_group = identity.model_id == "qwen3.8-flash-next"
+        && !selected.is_empty()
+        && selected.iter().all(|uuid| {
+            gpus.iter().find(|gpu| gpu.uuid == *uuid).is_some_and(|gpu| {
+                gpu.memory_mib > 0 && gpu.memory_mib <= MAX_FLASH_SETTLED_VRAM_MIB
+            })
+        });
+    small_flash_group
+        || gpus.iter().any(|gpu| {
+            selected.contains(&gpu.uuid)
+                && (gpu.name.eq_ignore_ascii_case("NVIDIA CMP 170HX")
+                    || gpu
+                        .display_name
+                        .as_deref()
+                        .is_some_and(|name| name.eq_ignore_ascii_case("NVIDIA CMP 170HX")))
+        })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LaunchProfile {
