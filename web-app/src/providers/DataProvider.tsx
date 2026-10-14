@@ -8,7 +8,7 @@ import { localStorageKey } from '@/constants/localStorage'
 import { EMBEDDING_MODEL_ID } from '@/constants/models'
 
 import { useServiceHub } from '@/hooks/useServiceHub'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useMCPServers, DEFAULT_MCP_SETTINGS } from '@/hooks/useMCPServers'
 import { useAssistant, defaultAssistant } from '@/hooks/useAssistant'
 import { useNavigate } from '@tanstack/react-router'
@@ -16,21 +16,17 @@ import { route } from '@/constants/routes'
 import { useThreads } from '@/hooks/useThreads'
 import { ensureProjectsLoaded } from '@/hooks/useThreadManagement'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
-import { useEngineHosts, hasReadyHostInstance } from '@/stores/engine-hosts-store'
+import {
+  useEngineHosts,
+  hasReadyHostInstance,
+} from '@/stores/engine-hosts-store'
 import { useAppState } from '@/hooks/useAppState'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { switchToModel } from '@/utils/switchModel'
 import { useModelLoad } from '@/hooks/useModelLoad'
 import { consumeSilentImport } from '@/utils/backgroundImports'
-import {
-  isDev,
-  LOCAL_GINFER_PROVIDER,
-} from '@/lib/utils'
-import {
-  AppEvent,
-  events,
-  type Assistant as CoreAssistant,
-} from '@gchat/core'
+import { isDev, LOCAL_GINFER_PROVIDER } from '@/lib/utils'
+import { AppEvent, events, type Assistant as CoreAssistant } from '@gchat/core'
 import { migrateGlobalSamplingToAssistants } from '@/lib/samplingParams'
 import { SystemEvent } from '@/types/events'
 import {
@@ -48,6 +44,9 @@ import { ensureLocalApiServerRunning } from '@/utils/ensureLocalApiServerRunning
 import { ensureRemoteProviderReady } from '@/utils/ensureRemoteProviderReady'
 import { reconcileLaunchAtStartup } from '@/lib/launchAtStartup'
 import { getLastUsedModel } from '@/utils/getModelToStart'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import { setGbotStartupEnabled } from '@/services/gbot'
+import { toast } from 'sonner'
 
 const safeRegisterRemoteProvider = async (provider: ModelProvider) => {
   try {
@@ -100,6 +99,19 @@ export function DataProvider() {
   const { checkForUpdate } = useAppUpdater()
 
   const setServerStatus = useAppState((state) => state.setServerStatus)
+  const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
+  const gbotStartupUpdate = useRef(Promise.resolve())
+
+  useEffect(() => {
+    // Resource preparation may delay the first write past a later selection.
+    gbotStartupUpdate.current = gbotStartupUpdate.current
+      .then(() => setGbotStartupEnabled(gbotEnabled))
+      .catch((error: unknown) => {
+        toast.error('Could not update Gbot sign-in startup', {
+          description: String(error),
+        })
+      })
+  }, [gbotEnabled])
 
   useEffect(() => {
     if (localStorage.getItem(localStorageKey.factoryResetPending) === 'true') {
@@ -496,7 +508,10 @@ export function DataProvider() {
 
         const runningModels = await serviceHub.models().getActiveModels()
         if (!current()) return
-        if (!runningModels?.length && !hasReadyHostInstance(useEngineHosts.getState())) {
+        if (
+          !runningModels?.length &&
+          !hasReadyHostInstance(useEngineHosts.getState())
+        ) {
           console.log(
             '[LocalAPI:startup] No model currently running; leaving server stopped'
           )
@@ -507,7 +522,10 @@ export function DataProvider() {
           '[LocalAPI:startup] Raising server for already-running model(s):',
           runningModels
         )
-        if (await ensureLocalApiServerRunning(serviceHub, current) && current()) {
+        if (
+          (await ensureLocalApiServerRunning(serviceHub, current)) &&
+          current()
+        ) {
           await hydrateActiveModelsForRunningServer(serviceHub.models())
         }
       } catch (error) {
@@ -521,17 +539,23 @@ export function DataProvider() {
     let pending = Promise.resolve()
     const schedule = () => {
       const stopSequence = useAppState.getState().modelStopSequence
-      const current = () => !disposed && useAppState.getState().pendingModelStops === 0 &&
+      const current = () =>
+        !disposed &&
+        useAppState.getState().pendingModelStops === 0 &&
         useAppState.getState().modelStopSequence === stopSequence
       pending = pending.then(async () => {
         await autoStartServer(current)
       })
     }
     const unsubscribe = useEngineHosts.subscribe((state, previous) => {
-      if (hasReadyHostInstance(state) && !hasReadyHostInstance(previous)) schedule()
+      if (hasReadyHostInstance(state) && !hasReadyHostInstance(previous))
+        schedule()
     })
     schedule()
-    return () => { disposed = true; unsubscribe() }
+    return () => {
+      disposed = true
+      unsubscribe()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceHub])
 

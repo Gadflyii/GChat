@@ -194,6 +194,10 @@ export const getGbotServiceTarget = () =>
   invoke<ServiceTarget>('gbot_service_target')
 export const selectGbotService = (target: ServiceTarget) =>
   invoke<void>('gbot_service_select', { target })
+export const setGbotStartupEnabled = (enabled: boolean): Promise<void> =>
+  IS_TAURI
+    ? invoke<void>('gbot_service_set_enabled', { enabled })
+    : Promise.resolve()
 export const gbotControlGrant = (
   hostId: string,
   action: 'status' | 'request'

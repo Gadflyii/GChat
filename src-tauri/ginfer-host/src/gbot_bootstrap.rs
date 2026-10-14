@@ -2,13 +2,14 @@
 use crate::service_owner::ServiceOwner;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use uuid::Uuid;
 use std::{
+    ffi::OsString,
     path::{Path, PathBuf},
     process::Stdio,
     sync::Arc,
     time::Duration,
 };
+use uuid::Uuid;
 
 pub fn credential_store() -> Result<&'static jan_utils::credential_store::Store, String> {
     let registry = crate::local_host_registry::locator_path()?;
@@ -25,6 +26,22 @@ pub struct Bootstrap {
     pub appimage_resources: Option<PathBuf>,
 }
 impl Bootstrap {
+    pub fn arguments(&self) -> Vec<OsString> {
+        let mut args = vec![
+            "--gbot-service".into(),
+            "--data-folder".into(),
+            self.data_folder.as_os_str().to_owned(),
+        ];
+        if let Some(relative) = &self.appimage_resources {
+            args.extend([
+                "--appimage-resources".into(),
+                relative.as_os_str().to_owned(),
+            ]);
+        } else {
+            args.extend(["--resources".into(), self.resources.as_os_str().to_owned()]);
+        }
+        args
+    }
     pub fn capture(root: &Path, resources: &Path) -> Result<Self, String> {
         let executable = std::env::current_exe().map_err(|e| e.to_string())?;
         let appimage_resources = None;
@@ -182,7 +199,6 @@ pub async fn connect(root: &Path) -> Result<LocalClient, String> {
 pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String> {
     bootstrap.validate()?;
     let root = &bootstrap.data_folder;
-    let resources = &bootstrap.resources;
     if let Ok(client) = connect(root).await {
         return Ok(client);
     }
@@ -190,12 +206,7 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
     let mut child = None;
     if let Ok(owner) = ServiceOwner::acquire(&directory) {
         let mut command = tokio::process::Command::new(&bootstrap.executable);
-        command.arg("--gbot-service").arg("--data-folder").arg(root);
-        if let Some(relative) = &bootstrap.appimage_resources {
-            command.arg("--appimage-resources").arg(relative);
-        } else {
-            command.arg("--resources").arg(resources);
-        }
+        command.args(bootstrap.arguments());
         #[cfg(target_os = "linux")]
         let session_key = {
             command.arg("--credential-session-stdin");

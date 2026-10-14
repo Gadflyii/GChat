@@ -93,6 +93,7 @@ pub fn run() {
         core::gbot::gbot_service_start,
         core::gbot::gbot_service_target,
         core::gbot::gbot_service_select,
+        core::gbot::gbot_service_set_enabled,
         core::gbot::gbot_service_grant,
         core::benchmark_submission::submit_benchmark,
         core::benchmark_submission::delete_benchmark,

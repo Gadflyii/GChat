@@ -1,5 +1,23 @@
 # Gbot design
 
+Linux install-to-task acceptance is complete on candidate
+`feat/gbot-linux-login-e04` (`62c467446`, base main `e04e7393e`) in
+`/ai/gchat-worktrees/gbot-linux-login-e04`. Focused startup/recovery/UI cases,
+types, lint and strict Clippy pass. Existing installed wizard, real desktop task,
+result reopen and GUI-close receipts below remain valid.
+The corrected installed app enabled desktop sign-in startup. After an OS reboot,
+Gbot started without opening GChat and restored the same saved Ready KVM computer,
+session and native-vault credentials; authenticated access passed and unauthenticated
+access was refused. Evidence: `out/gbot-linux-login/{result,sign-in-recovery}.json`.
+The initial developer frontend omitted `IS_TAURI=true`, compiling out native
+startup registration. The corrected native build and developer installer use that
+flag; package details are in `out/gbot-linux-login/package-receipt.json`.
+The private S1 guest is retired; the corrected developer package remains at
+`/ai/gbot-vms/linux-login-20261014/GChat-linux-login-e04.deb`. No live guest, model,
+job or reservation remains. Next: reviewed merge of this candidate. Windows/M365,
+physical sleep recovery and unattended startup before desktop sign-in remain owed.
+No signing or publication is included.
+
 Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-13).
 Linux installed computer creation and same-setup resume passed on main
 `bb4cde410`; hardware admission merged in `e42805f2a`. Branch
@@ -793,9 +811,13 @@ PCs, saves an explicit route and dedicated-PC consent, and resumes after restart
 It opens a fresh Microsoft launch link; saved setup never claims desktop Ready.
 Two service, four native Graph/scope and ten M365 UI cases pass, with affected
 wizard/route cases, types, lint and strict Clippy. Evidence: `out/gbot-m365-setup/result.json`.
-Ron identified `rhenderson@sectilelabs.ai`; live sign-in and dedicated-session
-confirmation are still needed. No live Graph/desktop control qualification, paid
-resource, Windows build or new dependency. Tree unchanged; shared cache retained.
+Ron confirms `CPC-rhen-FNHEH` (Cloud PC name
+`Ent_Cloud_PC_Prov - Ron Henderson`, account `rhenderson@sectilelabs.ai`) is
+exclusively available for Gbot testing. It runs Windows 11 `10.0.26300.0` with
+8 vCPU, 32 GB RAM and a 512 GB disk. Dedicated-PC authorization is settled;
+live sign-in, connection-route implementation and desktop control qualification
+remain pending. Assigned-PC selection and a Microsoft launch link do not prove
+desktop Ready. No paid resource, Windows build or new dependency is claimed.
 
 **Accepted scheduled work — October 12.** Owner: scheduling agent. Repository
 `/ai/gchat`; branch `feat/gbot-scheduled-tasks-3259` at
