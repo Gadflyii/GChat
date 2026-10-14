@@ -504,7 +504,7 @@ async fn run(
                 connections.spawn(async move {
                     let Ok(Ok(tls)) = tokio::time::timeout(Duration::from_secs(10),acceptor.accept(socket)).await else { return };
                     let service = hyper::service::service_fn(move |req| host.clone().route(req));
-                    let _ = hyper::server::conn::Http::new().serve_connection(tls, service).await;
+                    let _ = hyper::server::conn::Http::new().serve_connection(tls, service).with_upgrades().await;
                 });
             },
         }

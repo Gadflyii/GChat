@@ -147,15 +147,7 @@ pub fn pinned_client_with_headers(
     fingerprint: &str,
     headers: reqwest::header::HeaderMap,
 ) -> Result<reqwest::Client, String> {
-    let bytes =
-        hex::decode(fingerprint).map_err(|_| "certificate fingerprint must be hexadecimal")?;
-    let digest: [u8; 32] = bytes
-        .try_into()
-        .map_err(|_| "certificate fingerprint must contain 32 bytes")?;
-    let config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_custom_certificate_verifier(Arc::new(PinnedCertificate(digest)))
-        .with_no_client_auth();
+    let config = pinned_tls_config(fingerprint)?;
     reqwest::Client::builder()
         .default_headers(headers)
         .use_preconfigured_tls(config)
@@ -165,6 +157,18 @@ pub fn pinned_client_with_headers(
         .connect_timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| e.to_string())
+}
+
+pub(crate) fn pinned_tls_config(fingerprint: &str) -> Result<rustls::ClientConfig, String> {
+    let bytes =
+        hex::decode(fingerprint).map_err(|_| "certificate fingerprint must be hexadecimal")?;
+    let digest: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| "certificate fingerprint must contain 32 bytes")?;
+    Ok( rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_custom_certificate_verifier(Arc::new(PinnedCertificate(digest)))
+        .with_no_client_auth())
 }
 
 /// Enroll a certificate on explicit first pairing; never use this to recover saved connections.

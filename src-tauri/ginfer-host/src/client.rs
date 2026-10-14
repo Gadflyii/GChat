@@ -1,5 +1,6 @@
 //! Shared native paired-host client. Discovery proposes addresses; enrollment owns trust.
 //! Desktop adapters inject their credential vault; tokens never enter metadata or UI state.
+mod gbot;
 use crate::{
     discovery::Discovery,
     engine_registry::{EngineRegistry, RegisteredHost},
@@ -1079,10 +1080,11 @@ impl Client {
                 let status = self.hardware_profile(id, request).await.map_err(String::from)?;
                 serde_json::to_value(status).map_err(|error| error.to_string())
             }
-            "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action"
+            "gbot_grant" | "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action"
             | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
                 let id = argument_id(&args, "host_id")?;
                 let path = match action {
+                    "gbot_grant" => "/host/v1/gbot/grant".into(),
                     "host_name" => "/host/v1/name".into(),
                     "lan_sharing" => "/host/v1/lan-sharing".into(),
                     "launch" => "/host/v1/instances".into(),
@@ -1123,6 +1125,8 @@ impl Client {
                 let previous = remove_registration(&mut state, id)?;
                 drop(state);
                 let warning = self.credentials.delete(previous.client_id).await.err();
+                let gbot_warning = self.credentials.delete(gbot::credential_slot(&previous)).await.err();
+                let warning = warning.or(gbot_warning);
                 Ok(json!({"forgotten":id,"credential_cleanup_warning":warning}))
             }
             _ => Err("unknown engine-host command".into()),

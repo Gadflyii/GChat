@@ -7,7 +7,11 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import M365Setup from './M365Setup'
-import { gbot, type M365SetupRecord } from '@/services/gbot'
+import {
+  gbot,
+  getGbotServiceTarget,
+  type M365SetupRecord,
+} from '@/services/gbot'
 import {
   beginConnectorAuth,
   cancelConnectorAuth,
@@ -17,7 +21,10 @@ import {
 } from '@/services/workspace-connectors'
 
 const opener = vi.hoisted(() => vi.fn())
-vi.mock('@/services/gbot', () => ({ gbot: vi.fn() }))
+vi.mock('@/services/gbot', () => ({
+  gbot: vi.fn(),
+  getGbotServiceTarget: vi.fn(),
+}))
 vi.mock('@/hooks/useServiceHub', () => ({
   getServiceHub: () => ({ opener: () => ({ open: opener }) }),
 }))
@@ -79,6 +86,7 @@ function accounts(permission = true): ConnectorAccountsView {
   }
 }
 beforeEach(() => {
+  vi.mocked(getGbotServiceTarget).mockResolvedValue({ kind: 'local' })
   vi.mocked(connectorAccounts).mockResolvedValue(accounts())
   opener.mockResolvedValue(undefined)
 })
@@ -420,4 +428,22 @@ it('keeps the same setup ID and exact route through a failed save retry', async 
       },
     ])
   )
+})
+
+it('uses Microsoft accounts on the selected LAN service and keeps sign-in there', async () => {
+  vi.mocked(getGbotServiceTarget).mockResolvedValue({
+    kind: 'paired_host',
+    host_id: 'remote-host',
+  })
+  vi.mocked(gbot).mockImplementation(async (path) =>
+    path === 'setup/m365/accounts' ? accounts() : []
+  )
+  mount()
+  await screen.findByLabelText('Microsoft account')
+  expect(connectorAccounts).not.toHaveBeenCalled()
+  expect(gbot).toHaveBeenCalledWith('setup/m365/accounts')
+  expect(
+    screen.getByRole('button', { name: /Sign in with Microsoft/ })
+  ).toBeDisabled()
+  expect(beginConnectorAuth).not.toHaveBeenCalled()
 })

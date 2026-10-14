@@ -909,6 +909,95 @@ async fn lan_tools_require_consent_stage_over_pinned_ssh_and_preserve_retry_erro
     fixture.shutdown().await;
 }
 
+#[tokio::test]
+async fn guided_cloud_uses_consent_and_pinned_ssh_without_provider_credentials() {
+    for provider in [CloudProvider::Azure, CloudProvider::Aws, CloudProvider::Gcp] {
+        let fixture = Fixture::new().await;
+        let service = Arc::new(
+            Service::open(fixture.directory.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = fixture
+            .runtime_for_bot_pc(
+                service,
+                BotPc::Cloud {
+                    provider,
+                    resource_id: "user-created-vm".into(),
+                },
+            )
+            .await;
+        let identity = fixture.guest.hello.identity;
+        let assets = fixture.directory.path().join("assets");
+        tokio::fs::create_dir(&assets).await.unwrap();
+        for asset in &gbot_service::guest_assets::accepted()[1..] {
+            tokio::fs::write(assets.join(&asset.filename), b"fixture archive")
+                .await
+                .unwrap();
+        }
+        runtime.configure_guest_assets(assets).unwrap();
+        assert!(matches!(
+            runtime
+                .prepare_lan_tools(identity.workspace_id, false)
+                .await,
+            Err(WorkspaceError::GuestSetup(_))
+        ));
+        let staged = runtime
+            .prepare_lan_tools(identity.workspace_id, true)
+            .await
+            .unwrap();
+        assert!(staged.command.unwrap().starts_with("sudo -- sh "));
+        assert!(!staged.installed);
+        fixture
+            .guest
+            .setup_installed
+            .store(true, std::sync::atomic::Ordering::Release);
+        assert!(
+            runtime
+                .check_lan_tools(identity.workspace_id)
+                .await
+                .unwrap()
+                .installed
+        );
+        runtime.connect(identity).await.unwrap();
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    }
+}
+
+#[tokio::test]
+async fn automated_cloud_still_requires_its_owned_running_deployment() {
+    for provider in [CloudProvider::Hetzner, CloudProvider::DigitalOcean] {
+        let fixture = Fixture::new().await;
+        let service = Arc::new(
+            Service::open(fixture.directory.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = fixture
+            .runtime_for_bot_pc(
+                service,
+                BotPc::Cloud {
+                    provider,
+                    resource_id: "not-owned-vm".into(),
+                },
+            )
+            .await;
+        assert!(matches!(
+            runtime.connect(fixture.guest.hello.identity).await,
+            Err(WorkspaceError::GuestSetup(_))
+        ));
+        assert!(fixture
+            .guest
+            .authenticated_algorithms
+            .lock()
+            .unwrap()
+            .is_empty());
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    }
+}
+
 struct Fixture {
     directory: TempDir,
     address: SocketAddr,
@@ -1091,15 +1180,27 @@ impl Fixture {
     }
 
     async fn runtime(&self, service: Arc<Service>) -> Arc<WorkspaceRuntime> {
+        self.runtime_for_bot_pc(
+            service,
+            BotPc::Lan {
+                computer_id: Uuid::new_v4(),
+            },
+        )
+        .await
+    }
+
+    async fn runtime_for_bot_pc(
+        &self,
+        service: Arc<Service>,
+        bot_pc: BotPc,
+    ) -> Arc<WorkspaceRuntime> {
         let runtime = Arc::new(WorkspaceRuntime::new(service, self.vault.clone()));
         runtime
             .register_workspace(WorkspaceConfig {
                 id: self.guest.hello.identity.workspace_id,
                 name: "Disposable SSH guest".into(),
                 service_pc: ServicePc::Local,
-                bot_pc: BotPc::Lan {
-                    computer_id: Uuid::new_v4(),
-                },
+                bot_pc,
                 connection: WorkspaceConnection::Ssh(self.connection.clone()),
             })
             .await

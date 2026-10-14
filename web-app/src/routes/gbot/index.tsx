@@ -11,6 +11,7 @@ import GbotSetup, {
   type SetupResume,
 } from '@/components/GbotSetup'
 import { BrainSetup } from '@/components/GbotSetup/BrainSetup'
+import ServiceSetup from '@/components/GbotSetup/ServiceSetup'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
   type DesktopViewHandle,
@@ -22,6 +23,9 @@ import {
   messageText,
   quitGbotService,
   startGbotService,
+  getGbotServiceTarget,
+  selectGbotService,
+  type ServiceTarget,
   type Approval,
   type Assignment,
   emptyPairedConnection,
@@ -110,6 +114,22 @@ function GbotPage() {
   const desktop = useRef<DesktopViewHandle>(null)
   const [busy, setBusy] = useState(false)
   const [serviceStopped, setServiceStopped] = useState(false)
+  const [serviceTarget, setServiceTarget] = useState<ServiceTarget>({
+    kind: 'local',
+  })
+  const [choosingService, setChoosingService] = useState(false)
+  const [serviceDraft, setServiceDraft] = useState<ServiceTarget>({
+    kind: 'local',
+  })
+  const [serviceReady, setServiceReady] = useState(false)
+  const [serviceError, setServiceError] = useState('')
+  const changeServiceDraft = useCallback(
+    (target: ServiceTarget, ready: boolean) => {
+      setServiceDraft(target)
+      setServiceReady(ready)
+    },
+    []
+  )
   const stopped = useRef(false)
   const [error, setError] = useState('')
   const [executorError, setExecutorError] = useState('')
@@ -131,6 +151,9 @@ function GbotPage() {
     const version = ++refreshVersion.current
     setSetups(undefined)
     try {
+      const target = await getGbotServiceTarget()
+      if (stopped.current || version !== refreshVersion.current) return
+      setServiceTarget(target)
       const value = await gbot<BotState>('state')
       if (stopped.current || version !== refreshVersion.current) return
       const hasKvm = value.workspaces.some(
@@ -228,6 +251,35 @@ function GbotPage() {
       setBusy(false)
     }
   }
+  const chooseService = async () => {
+    if (busy || !serviceReady) return
+    setBusy(true)
+    setServiceError('')
+    try {
+      await selectGbotService(serviceDraft)
+      refreshVersion.current += 1
+      setServiceTarget(serviceDraft)
+      setChoosingService(false)
+      setState(undefined)
+      setTasks([])
+      setApprovals([])
+      setSelected('')
+      setAssignments({})
+      setCloudReviews([])
+      setM365Setups([])
+      setAdding(false)
+      setResuming(undefined)
+      setupIdentity.current = null
+      setupOffered.current = false
+      stopped.current = false
+      setServiceStopped(false)
+      await refresh()
+    } catch (cause) {
+      setServiceError(String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
   const perform = async (action: () => Promise<unknown>) => {
     if (busy) return
     setBusy(true)
@@ -306,7 +358,10 @@ function GbotPage() {
       id: identity.id,
       name: connection.name,
       service_pc: { kind: 'local' },
-      bot_pc: { kind: 'lan', computer_id: identity.computerId },
+      bot_pc: connection.cloud ?? {
+        kind: 'lan',
+        computer_id: identity.computerId,
+      },
       endpoint: {
         hostname: connection.hostname,
         port: Number(connection.port),
@@ -339,20 +394,69 @@ function GbotPage() {
           variant="outline"
           size="sm"
           disabled={busy}
+          onClick={() => {
+            setServiceDraft(serviceTarget)
+            setServiceReady(serviceTarget.kind === 'local')
+            setServiceError('')
+            setChoosingService(true)
+          }}
+        >
+          Service computer
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
           onClick={() => void changeService(serviceStopped || Boolean(error))}
         >
-          {serviceStopped || error ? 'Start Gbot service' : 'Quit Gbot service'}
+          {serviceTarget.kind === 'paired_host'
+            ? serviceStopped || error
+              ? 'Connect Gbot service'
+              : 'Disconnect Gbot service'
+            : serviceStopped || error
+              ? 'Start Gbot service'
+              : 'Quit Gbot service'}
         </Button>
       </HeaderPage>
+      {choosingService && (
+        <section
+          aria-label="Choose service computer"
+          className="space-y-3 overflow-y-auto border-b p-5"
+        >
+          <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
+          {serviceError && (
+            <p role="alert" className="text-sm text-destructive">
+              {serviceError}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              disabled={busy || !serviceReady}
+              onClick={() => void chooseService()}
+            >
+              Use this service
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setChoosingService(false)}
+            >
+              Cancel service change
+            </Button>
+          </div>
+        </section>
+      )}
       {serviceStopped ? (
         <div className="space-y-3 p-5">
           <p>
-            Gbot service is stopped. Tasks and schedules will resume when you
-            start it again.
+            {serviceTarget.kind === 'paired_host'
+              ? 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
+              : 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'}
           </p>
           <p className="text-sm text-muted-foreground">
-            Connected account operations also use this service. Saved
-            workspaces, schedules and accounts are retained.
+            {serviceTarget.kind === 'paired_host'
+              ? 'Connect again or choose another service computer. Ordinary Chat accounts remain on this PC.'
+              : 'Connected account operations also use this service. Saved workspaces, schedules and accounts are retained.'}
           </p>
         </div>
       ) : (
@@ -617,7 +721,11 @@ function GbotPage() {
                           : 'Disconnected'}
                     </span>
                     {!identity &&
-                      bot.bot_pc?.kind === 'lan' &&
+                      (bot.bot_pc?.kind === 'lan' ||
+                        (bot.bot_pc?.kind === 'cloud' &&
+                          ['azure', 'aws', 'gcp'].includes(
+                            bot.bot_pc.provider ?? ''
+                          ))) &&
                       bot.connection?.kind === 'ssh' && (
                         <Button
                           variant="outline"
@@ -627,6 +735,7 @@ function GbotPage() {
                               id: bot.id,
                               name: bot.name,
                               connection: bot.connection,
+                              bot_pc: bot.bot_pc,
                             })
                             setAdding(true)
                           }}

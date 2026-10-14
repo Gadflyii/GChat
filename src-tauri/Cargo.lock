@@ -2952,6 +2952,7 @@ dependencies = [
  "hex",
  "hmac 0.12.1",
  "hyper 0.14.32",
+ "jan-utils",
  "mdns-sd",
  "rcgen",
  "reqwest 0.11.27",
