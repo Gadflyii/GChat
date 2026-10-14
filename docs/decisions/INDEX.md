@@ -468,3 +468,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-13** — [Use assigned Cloud PCs for Gbot setup](2026-10-13-use-assigned-cloud-pcs-for-gbot-setup.md)
 
 - **2026-10-13** — [Approve LAN Gbot control separately](2026-10-13-approve-lan-gbot-control-separately.md)
+- **2026-10-14** — [Wait for small-VRAM Flash-Next residency before Ready](2026-10-14-wait-for-flash-residency-before-ready.md)

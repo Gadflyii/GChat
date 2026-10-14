@@ -145,6 +145,19 @@ impl MaxPerfProfile {
         validate_configuration(&self.reference, configuration).map_err(|error| error.to_string())
     }
 
+    pub fn for_gpu_group(mut self, gpus: &[Gpu], selected: &[String]) -> Self {
+        let (model, weights) = self.reference.model_class.identity();
+        self.options.wait_for_residency_fill = crate::launch_profiles::residency_wait_default(
+            &ArtifactIdentity {
+                model_id: model.into(),
+                weights_id: weights.into(),
+            },
+            gpus,
+            selected,
+        );
+        self
+    }
+
     pub fn gpu_groups(&self, gpus: &[Gpu], reserved: &BTreeSet<String>) -> Vec<Vec<String>> {
         gpus.iter()
             .filter(|gpu| {
@@ -307,20 +320,21 @@ mod tests {
             assert!(profile.options.kv_arena_bytes.is_none());
             assert!(profile.options.host_kv_cache_bytes.is_none());
             assert_eq!(profile.options.prefill_chunk, 0);
+            assert!(!profile.options.wait_for_residency_fill);
             assert!(profile.options.vision && profile.options.structured_outputs);
             let gpus = vec![
                 Gpu {
                     uuid: "GPU-Ampere".into(),
                     name: "Fixture Ampere".into(),
                     display_name: None,
-                    memory_mib: 1,
+                    memory_mib: 24576,
                     compute_capability: Some("8.6".into()),
                 },
                 Gpu {
                     uuid: "GPU-Blackwell".into(),
                     name: "Fixture Blackwell".into(),
                     display_name: None,
-                    memory_mib: 1,
+                    memory_mib: 98304,
                     compute_capability: Some("12.0".into()),
                 },
             ];
@@ -334,6 +348,14 @@ mod tests {
                 }
             );
             assert!(groups.iter().all(|group| group.len() == 1));
+            for group in &groups {
+                let resolved = profile.clone().for_gpu_group(&gpus, group);
+                assert_eq!(
+                    resolved.options.wait_for_residency_fill,
+                    group[0] == "GPU-Ampere"
+                        && matches!(class, MaxPerfModelClass::FlashSmolMtp | MaxPerfModelClass::FlashIntMtp)
+                );
+            }
         }
         for (model, weights, tp, draft_tp) in [
             ("muse-glimmer-30b", "groupwise-int-dflash-q4", 1, 1),

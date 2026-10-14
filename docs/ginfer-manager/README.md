@@ -21,17 +21,43 @@ Launches cancel and reap calibration first; interrupted jobs resume queued, comp
 The engine owns the calibration corpus (mixed real text), policy and matching record; its shipped default applies until that record exists.
 Source gate: 4 Host cases, 1 Manager case and 1 Chat case PASS; TypeScript, affected lint and strict Host Clippy PASS.
 Evidence and owned inventory: `out/draft-width-setup-20261014/result.json`; [decision](../decisions/2026-10-14-own-idle-draft-width-calibration-in-host.md).
-Next: reviewed source merge, then the native integration gate after C2’s CLI concurrency-capacity fix; no physical calibration or Windows lifetime claim yet.
+Candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch `feat/gchat-draft-width-setup-4884`, retains the saved deployment recipe and composes with accepted main `f3d77b8f0`. No separate build or model copy is allocated.
+Next: the native integration gate after C2’s CLI concurrency-capacity fix, then source review; no physical calibration or Windows lifetime claim yet.
 No new dependencies, model copies, native Windows build, release or publication.
 
-## CMP 170HX settled startup
+## Flash-Next and CMP 170HX settled startup
 
-Current item: `GCHAT-CMP-SETTLED-READY`, baseline main `2e735624f`, candidate
-`/ai/gchat-worktrees/cmp-residency-fill-2e735`, branch
-`fix/cmp-residency-fill-2e735`. The shared Host generates
+Current OI-072 source follow-up: Flash-Next deployments wait for residency
+fill before Ready only when every selected GPU has known VRAM of at most
+32 GiB. Larger classes, including the 96 GiB PRO, retain progressive Ready
+until the Engine fill-throughput fix lands. The measured 24 GiB 4090 Ready
+changed from 21.9 to 25.0 s; the 96 GiB PRO changed from 42.9 to 66.5 s,
+exceeding its 60 s Ready gate. These coordinator measurements invalidate the
+previous all-Flash default; this change makes no new performance claim.
+
+The shared Host resolves this policy from the artifact identity and selected
+GPUs' memory, covering custom, catalog and restored launches. GBench Max Perf
+advertises and applies the same option per GPU group. Explicit custom waits and
+the selected-CMP rule remain supported. Context, concurrency, memory sizing,
+speculation and the Engine default remain unchanged. This startup policy does
+not qualify the current release Engine/artifact matrix.
+
+Accepted source tip `414caecec`, merged to main as `f3d77b8f0`. Acceptance:
+the three existing focused Host/Max Perf cases plus one large-VRAM case cover
+Flash weight classes, restored requests, argv, selected/unselected CMP, and
+per-GPU benchmark options. Strict Host Clippy checks the affected crate.
+No GPU, Windows build or physical qualification. Evidence is retained under
+`/ai/gchat/out/flash-settled-profile-20261014/`; the source candidate has been
+retired, with no model copies or separate build allocation. All four focused
+cases passed again after merging main `4884a214a` (0.47 s total fixture time),
+along with strict Host Clippy (5.22 s). The composed Host retains the LAN Gbot
+control grant and the per-GPU residency policy; both ADRs remain indexed.
+Current Engine/artifact physical qualification remains owed to the scheduled release gate.
+
+Accepted `GCHAT-CMP-SETTLED-READY` (`bfd42e530`): the shared Host generates
 `--wait-for-residency-fill` when the selected GPU group includes a CMP 170HX,
 including the Host's PCI alias for `NVIDIA Graphics Device`. GChat, Manager,
-the CLI and restored deployments use this same preparation path. Other GPUs
+the CLI and restored deployments use this same preparation path. Other GPUs with dense models
 retain progressive Ready by default. Effective launch options report the wait;
 saved requests are resolved against the selected GPUs on every launch.
 
@@ -43,7 +69,7 @@ aliased CMP, another selected card with an unselected CMP, and restored requests
 The focused Host preparation/argv fixture passed on Linux (1/1, 0.06 s), including
 serialized effective options and the default for omitted saved fields. Evidence:
 `out/cmp-residency-fill-20261012/profile.log`. This is source verification; no
-physical startup or throughput claim is made. Next action: reviewed merge to main.
+physical startup or throughput claim is made.
 No GPU, native Windows build, release or publication. The candidate reuses the
 existing Host build cache; no model/artifact copies or disposable guest are needed.
 
