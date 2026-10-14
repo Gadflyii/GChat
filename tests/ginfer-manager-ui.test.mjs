@@ -1004,6 +1004,30 @@ test('hardware profiling updates through shared snapshots, blocks launch and kee
   assert.equal(app.calls.length, calls, 'closing the UI does not cancel the Host job')
 })
 
+test('draft-width calibration remains visible without blocking model start and reports offline snapshots', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.hardware_profile = { status: 'completed', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-local'],
+    engine_path: '/bin/ginfer', job_id: 'hardware-job', pid: null, reprofile: false, available: true,
+    started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: false, diagnostic_tail: '', error: null }
+  view.hosts[0].snapshot.draft_width_calibrations = [{ key: 'recipe', model_id: 'Qwen', gpu_uuids: ['GPU-local'],
+    max_context: 131072, concurrency: 4, status: 'running', pid: 42, error: null, diagnostic_tail: '' }]
+  const app = await manager(t, view)
+  assert.equal(button(app.document, 'Start a model…').disabled, false)
+  assert.match(app.document.querySelector('[aria-label="Draft-width calibration"]').textContent, /Qwen · C4 · 131,072 tokens · running/)
+  const next = structuredClone(app.view)
+  next.hosts[0].snapshot.draft_width_calibrations[0] = { ...next.hosts[0].snapshot.draft_width_calibrations[0],
+    status: 'failed', pid: null, error: 'Calibration rejected', diagnostic_tail: 'Native capacity error' }
+  await app.publish(next)
+  const region = app.document.querySelector('[aria-label="Draft-width calibration"]')
+  assert.equal(region.querySelector('[role="alert"]').textContent, 'Calibration rejected')
+  assert.match(region.textContent, /Native capacity error/)
+  next.hosts[0].online = false
+  await app.publish(next)
+  assert.match(app.document.querySelector('[aria-label="Draft-width calibration"]').textContent, /last reported, host offline/)
+  assert.equal(requests(app).length, 0)
+})
+
 test('a launch dialog opened before profiling starts cannot submit a model launch', async (t) => {
   const app = await manager(t)
   button(app.document, 'Start a model…').click()

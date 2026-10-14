@@ -22,7 +22,7 @@ const renderKey = (view) => JSON.stringify([
     return [host.host_id, host.name, host.local, host.online, host.offline, host.error,
       host.base_url, host.certificate_sha256, snapshot && [
         snapshot.display_name, snapshot.gpus, snapshot.models, snapshot.launch_profiles,
-        snapshot.lan_sharing, snapshot.model_management, snapshot.hardware_profile,
+        snapshot.lan_sharing, snapshot.model_management, snapshot.hardware_profile, snapshot.draft_width_calibrations,
         host.online && ['running', 'cancelling'].includes(snapshot.hardware_profile?.status) && snapshot.hardware_profile.started_unix_ms != null
           ? Math.floor((Date.now() - snapshot.hardware_profile.started_unix_ms) / 1000) : null,
         snapshot.inventory_errors,
@@ -541,6 +541,14 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       running ? h('progress', { 'aria-label': 'Hardware profiling in progress' }) : null,
       note('Recent full installs took 22–73 minutes; time varies by hardware. Closing this window leaves the Host job running. Model launches wait until profiling stops.'),
       profile.status === 'completed' ? note('Hardware profiling completed. This does not qualify a model or its full-context capacity.') : null,
+      array(host.snapshot?.draft_width_calibrations).length ? h('section', { 'aria-label': 'Draft-width calibration' },
+        h('h3', {}, 'Draft-width calibration'),
+        note('Runs when models are stopped. Starting a model cancels calibration; the engine uses its default policy until calibration completes.'),
+        array(host.snapshot.draft_width_calibrations).map(job => h('div', {},
+          h('p', { role: 'status' }, `${job.model_id} · C${job.concurrency} · ${job.max_context.toLocaleString()} tokens · ${job.status}${online(host) ? '' : ' · last reported, host offline'}`),
+          note(groupLabel(job.gpu_uuids)),
+          job.error ? h('p', { class: 'section-error', role: 'alert' }, job.error) : null,
+          job.diagnostic_tail ? h('details', {}, h('summary', {}, 'Calibration log'), h('pre', { class: 'mono' }, job.diagnostic_tail)) : null))) : null,
       resumable ? note(profile.checkpoint_available
         ? 'A saved checkpoint is available. Resume validates its inputs before continuing; checkpoint presence alone does not prove compatibility.'
         : 'Resume retries the saved job inputs. The producer validates any retained progress before continuing.') : null,

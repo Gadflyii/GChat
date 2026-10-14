@@ -534,6 +534,9 @@ async fn monitor_processes(host: &Host) {
         tokio::pin!(notified);
         // Register before inspecting ownership so a launch cannot lose its wake.
         notified.as_mut().enable();
+        if let Err(error) = host.idle_maintenance().await {
+            eprintln!("Draft calibration: {error}");
+        }
         if !host.processes.lock().await.needs_monitoring() {
             tick = None;
             notified.await;

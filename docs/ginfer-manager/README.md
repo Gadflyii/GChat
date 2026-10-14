@@ -13,6 +13,17 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Idle draft-width calibration
+
+`GCHAT-DRAFT-WIDTH-SETUP`: Host queues native calibration for saved AUTO DFlash deployments after their exact GPU group has a complete hardware profile.
+Artifact/runtime, GPU group, context, concurrency, TP, KV, graph and Vision changes queue a new recipe; no saved profile means no guessed calibration.
+Launches cancel and reap calibration first; interrupted jobs resume queued, completed jobs persist, and failures remain visible in GChat and Manager.
+The engine owns the calibration corpus (mixed real text), policy and matching record; its shipped default applies until that record exists.
+Source gate: 4 Host cases, 1 Manager case and 1 Chat case PASS; TypeScript, affected lint and strict Host Clippy PASS.
+Evidence and owned inventory: `out/draft-width-setup-20261014/result.json`; [decision](../decisions/2026-10-14-own-idle-draft-width-calibration-in-host.md).
+Next: reviewed source merge, then the native integration gate after C2’s CLI concurrency-capacity fix; no physical calibration or Windows lifetime claim yet.
+No new dependencies, model copies, native Windows build, release or publication.
+
 ## CMP 170HX settled startup
 
 Current item: `GCHAT-CMP-SETTLED-READY`, baseline main `2e735624f`, candidate

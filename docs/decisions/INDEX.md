@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-14** — [Own idle draft-width calibration in Host](2026-10-14-own-idle-draft-width-calibration-in-host.md)
+
 - **2026-10-13** — [Own Gbot paired inference in the service](2026-10-13-own-gbot-paired-inference-in-service.md)
 
 - **2026-10-12** — [Own Gbot lifetime in a native background process](2026-10-12-own-gbot-background-service-lifetime.md)

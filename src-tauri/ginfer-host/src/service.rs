@@ -132,6 +132,7 @@ pub struct Host {
     pub downloads: Arc<crate::model_downloads::ModelDownloads>,
     pub data: Mutex<Persistent>,
     pub processes: Mutex<HostProcesses>,
+    pub(crate) draft_width: Arc<crate::draft_width::DraftWidths>,
     pub inventory: RwLock<Vec<ModelEntry>>,
     pub inventory_errors: RwLock<Vec<serde_json::Value>>,
     inventory_dirty: AtomicBool,
@@ -363,6 +364,11 @@ impl Host {
             directory.clone(),
             revision.clone(),
         )?);
+        let process_activity = processes.activity_notification();
+        processes.hardware_profile.as_ref().unwrap()
+            .set_activity_notification(process_activity.clone());
+        let draft_width = crate::draft_width::DraftWidths::open(
+            &directory, revision.clone(), process_activity)?;
         let downloads = match desktop_provider {
             Some(provider) => crate::model_downloads::ModelDownloads::open_local(
                 provider.join("models"),
@@ -391,6 +397,7 @@ impl Host {
             downloads,
             data: Mutex::new(data),
             processes: Mutex::new(processes),
+            draft_width,
             inventory: RwLock::new(vec![]),
             inventory_errors: RwLock::new(vec![]),
             inventory_dirty: AtomicBool::new(false),
@@ -408,11 +415,43 @@ impl Host {
         Ok(host)
     }
     pub async fn shutdown_hardware_profile(&self) -> Result<(), String> {
+        self.draft_width.cancel().await?;
         let job = self.processes.lock().await.hardware_profile.clone();
         if let Some(job) = job {
             job.shutdown().await?;
         }
         Ok(())
+    }
+    pub async fn idle_maintenance(&self) -> Result<(), String> {
+        let _lifecycle = self.lifecycle.lock().await;
+        let job = {
+            let processes = self.processes.lock().await;
+            if processes.has_children() || self.draft_width.busy() { return Ok(()); }
+            let Some(job) = &processes.hardware_profile else { return Ok(()); };
+            if job.busy() { return Ok(()); }
+            job.clone()
+        };
+        let stale = job.status(None).stale_groups;
+        let saved: Vec<_> = self.data.lock().await.profiles.values().cloned().collect();
+        let inventory = self.inventory.read().await.clone();
+        let mut recipes = Vec::new();
+        for request in saved {
+            if !matches!(request.options.spec.as_str(), "auto" | "dflash")
+                || !matches!(request.options.draft_policy.as_str(), "auto" | "adaptive")
+                || request.options.draft_tokens != 0
+                || !inventory.iter().any(|model| model.id == request.model_id && model.metadata.draft_tp > 0)
+                || stale.iter().any(|group| crate::hardware_profile::group_key(&group.gpu_uuids)
+                    == crate::hardware_profile::group_key(&request.gpu_uuids)) { continue; }
+            let cli = self.processes.lock().await.profiling_cli(&request.gpu_uuids);
+            let configuration = job.configuration(cli, &request.gpu_uuids)?;
+            if !configuration.profile_path.is_file() { continue; }
+            let launch = self.prepare_launch(&request).await?;
+            let recipe = tokio::task::spawn_blocking(move || crate::draft_width::Recipe::new(launch, configuration))
+                .await.map_err(|e| e.to_string())??;
+            recipes.push(recipe);
+        }
+        self.draft_width.reconcile(&recipes)?;
+        self.draft_width.start_next(&recipes)
     }
     pub async fn save(&self) -> Result<(), String> {
         let data = self.data.lock().await;
@@ -819,6 +858,7 @@ impl Host {
             "fleet_membership":membership,
             "clients":usage["clients"],"local_administrator":usage["local_administrator"],
             "hardware_profile":hardware_profile,
+            "draft_width_calibrations":self.draft_width.status(),
             "gpus":self.gpus,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "profile_error":*self.profile_error.read().await,
@@ -1040,6 +1080,7 @@ impl Host {
         launch: EngineLaunch,
     ) -> Result<Uuid, String> {
         let id = launch.instance_id;
+        self.draft_width.cancel().await?;
         self.processes.lock().await.launch(launch)?;
         request.instance_id = Some(id);
         let previous = self.data.lock().await.profiles.insert(id, request);
@@ -1625,6 +1666,8 @@ impl Host {
             ("POST", "/host/v1/hardware-profile") => {
                 let request: crate::hardware_profile::HardwareProfileRequest =
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+                let _lifecycle = self.lifecycle.lock().await;
+                self.draft_width.cancel().await?;
                 let saved = self
                     .data
                     .lock()
@@ -1669,6 +1712,7 @@ impl Host {
                 let executable: PathBuf =
                     serde_json::from_value(body["path"].clone()).map_err(|e| e.to_string())?;
                 let _lifecycle = self.lifecycle.lock().await;
+                self.draft_width.cancel().await?;
                 self.processes
                     .lock()
                     .await
@@ -1836,6 +1880,7 @@ impl Host {
                     .find(|m| m.id == id)
                     .cloned()
                     .ok_or("unknown model")?;
+                self.draft_width.cancel().await?;
                 let mut affected_paths = BTreeSet::from([model.path.clone()]);
                 affected_paths.extend(
                     inventory
@@ -1985,6 +2030,8 @@ impl Host {
             }
             ("GET", "/host/v1/snapshot") => Ok(json(StatusCode::OK, self.snapshot().await)),
             ("POST", "/host/v1/scan") => {
+                let _lifecycle = self.lifecycle.lock().await;
+                self.draft_width.cancel().await?;
                 self.scan().await?;
                 let groups = self
                     .data
@@ -1998,6 +2045,7 @@ impl Host {
                     .lock()
                     .await
                     .ensure_hardware_if_idle(groups)?;
+                self.processes.lock().await.activity_notification().notify_one();
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
             ("POST", "/host/v1/instances") => {

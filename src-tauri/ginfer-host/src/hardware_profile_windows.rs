@@ -396,12 +396,17 @@ pub(crate) fn spawn(command: &Command) -> Result<Child, String> {
 fn spawn_native(command: &Command) -> io::Result<Child> {
     let program = Path::new(command.get_program());
     let args: Vec<_> = command.get_args().collect();
+    let hardware = (args.len() == 3 || args.len() == 4)
+        && args[0] == "profile-hardware" && args[1] == "--hardware-profile"
+        && (args.len() == 3 || args[3] == "--reprofile");
+    let draft = args.iter().any(|arg| *arg == "--calibrate-draft-width")
+        && args.windows(2).any(|pair| pair[0] == "--hardware-profile" && Path::new(pair[1]).is_absolute())
+        && (args.first().is_some_and(|arg| Path::new(arg).is_absolute())
+            || args.windows(2).any(|pair| pair[0] == "--tp-artifact-set" && Path::new(pair[1]).is_absolute()));
     if !program.is_absolute() || program.file_name() != Some(OsStr::new("ginfer.exe"))
-        || !(args.len() == 3 || args.len() == 4)
-        || args[0] != "profile-hardware" || args[1] != "--hardware-profile"
-        || (args.len() == 4 && args[3] != "--reprofile")
+        || !(hardware || draft)
     {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "expected the prepared native ginfer profiling command"));
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "expected a prepared native ginfer profiling or calibration command"));
     }
     let application = wide(command.get_program())?;
     let directory = command.get_current_dir().map(|path| wide(path.as_os_str())).transpose()?;
