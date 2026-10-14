@@ -6,7 +6,29 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — Host, Manager and Chat engineering hygiene
+## Accepted Linux native CPU attribution correction
+
+The accepted Linux package `7e33222e8` was still verifying and copying bundled
+VM/runtime resources during the earlier OI-075 99.8457% native CPU observation.
+File descriptors and rising read counters identify this finite work in
+`gbot_assets::install_from` and `setup::install_linux_runtimes_from`, also present
+in inspected source `e971730fd`. No idle-loop code defect was demonstrated.
+
+Installation completed after 82 seconds. The final six five-second desktop
+thread samples averaged 0.2% of one core, maximum 0.4%. This empty-history
+follow-up excludes separate Host/Gbot services; it is not a repeated many-message
+sample, current-main package qualification, cross-OS comparison or gain claim.
+Original raw counters and rendering/traversal evidence remain unchanged.
+Wait for installation completion before labelling native counters idle, and
+report installation latency separately.
+
+Evidence: `/ai/gchat/out/native-idle-20261014/result.json` and `summary.md`.
+Owner GChat; candidate `/ai/gchat-worktrees/native-idle-20261014`, branch
+`fix/gchat-native-idle-e971`. The private desktop, Host and Gbot processes are
+absent; generated vault entry and extracted resources/state are retired.
+Accepted installers remain. No GPU/model, Windows, user history or new dependency.
+
+## Accepted Host, Manager and Chat engineering hygiene (merged 165353e58)
 
 Baseline main `8ca43a14a`; candidate `chore/gchat-engineering-hygiene-20261014`
 at `/ai/gchat-worktrees/engineering-hygiene-20261014`. Remove proven unused
