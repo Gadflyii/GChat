@@ -106,6 +106,18 @@ impl Default for GbotState {
     }
 }
 impl GbotState {
+    #[cfg(test)]
+    pub(crate) fn stopped_for_test() -> Self {
+        Self {
+            connection: Mutex::new(Connection {
+                stopped: true,
+                local_stopped: true,
+                ..Connection::default()
+            }),
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn connector_client_id(&self) -> uuid::Uuid {
         self.connector_client_id
     }

@@ -1575,6 +1575,7 @@ mod tests {
         let app = tauri::test::mock_builder()
             .manage(state)
             .manage(fleet.client.clone())
+            .manage(crate::core::gbot::GbotState::stopped_for_test())
             .manage(AppState::default())
             .manage(crate::test_support::TestDataRoot(data.clone()))
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
@@ -1697,6 +1698,7 @@ mod tests {
         }
         let reopened = tauri::test::mock_app();
         reopened.manage(AppState::default());
+        reopened.manage(crate::core::gbot::GbotState::stopped_for_test());
         reopened.manage(crate::test_support::TestDataRoot(data.clone()));
         let restored = execute_with_sink(
             reopened.handle().clone(),
