@@ -1,5 +1,9 @@
 # GChat installer refresh
 
+## October 14 developer Linux package — local Engine blocked
+
+The retained Gbot walkthrough AppImage from `7e33222e8` contains the historical `05a286ba` Engine set. Its server rejects the current Host's required `--hardware-profile` flag before loading a model. These packages are usable for the accepted UI/Gbot resource checks; they cannot currently establish local-model startup. Replace the Engine closure with a Host-compatible accepted set before presenting the package as a complete local-inference installer. Source/payload verification of the historical bundle does not establish compatibility with the current Host. Evidence: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/result.json`.
+
 ## SectileLabs updater feed — OI-110
 
 All GChat check/download paths and release asset URLs use the configured feed:

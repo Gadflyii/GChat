@@ -1,5 +1,11 @@
 # Chat and Agent runtime
 
+## OI-068 live-worker cancellation — blocked
+
+Complete only installed Linux active-worker cancellation and saved checkpoint/continuation; prior dispatch, collect and reopen remain accepted. The October 14 AppImage's historical Engine rejects the current Host's required `--hardware-profile`; the prior accepted runtime rejects the retained profile's host inventory. Neither reached Ready, so the missing worker transitions did not run. Evidence: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/{result.json,summary.md}`.
+
+Next: obtain an accepted Host-compatible Linux CLI/serve closure and a complete hardware profile matching current inventory, then use the existing installed tools for that gap alone. No Windows, Engine rebuild, calibration, publication, setting reduction or personal history access. Candidate `test/gchat-worker-cancel-859` owns this record; disposable app/data roots are retired after retaining the result. All owned processes are stopped; canonical guards and booking663 are returned.
+
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
