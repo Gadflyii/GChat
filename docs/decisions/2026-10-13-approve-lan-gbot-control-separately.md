@@ -1,6 +1,6 @@
 # Approve LAN Gbot control separately
 
-Status: approved for implementation by Ron, October 13, 2026.
+Status: approved for implementation by bubbs (coordinator) at 23:10 UTC on October 13, 2026, with the conditions recorded below.
 
 A paired computer may request a separate Gbot-only grant from the service Host.
 Only the local owner can approve or revoke it, explicitly per paired device.
