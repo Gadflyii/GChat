@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import KvmSetup from './KvmSetup'
 import LanSetup from './LanSetup'
 import CloudSetup from './CloudSetup'
 import M365Setup from './M365Setup'
+import ServiceSetup from './ServiceSetup'
+import {
+  getGbotServiceTarget,
+  selectGbotService,
+  type ServiceTarget,
+} from '@/services/gbot'
 import type {
   CloudReview,
   GuidedCloudComputer,
@@ -88,6 +94,28 @@ export default function GbotSetup({
   const [error, setError] = useState('')
   const [lanReady, setLanReady] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [service, setService] = useState<ServiceTarget>({ kind: 'local' })
+  const [serviceReady, setServiceReady] = useState(false)
+  useEffect(() => {
+    let current = true
+    void getGbotServiceTarget()
+      .then((target) => {
+        if (current) {
+          setService(target)
+          setServiceReady(target.kind === 'local')
+        }
+      })
+      .catch((cause) => {
+        if (current) setError(String(cause))
+      })
+    return () => {
+      current = false
+    }
+  }, [])
+  const changeService = useCallback((target: ServiceTarget, ready: boolean) => {
+    setService(target)
+    setServiceReady(ready)
+  }, [])
   const [connection, setConnection] = useState<BotConnection>({
     name: resume?.name ?? '',
     hostname: resume?.connection?.endpoint?.hostname ?? '',
@@ -112,13 +140,28 @@ export default function GbotSetup({
   const canContinue =
     step === 0
       ? Boolean(connection.name.trim())
-      : step === 2
-        ? ['lan', 'local', 'cloud', 'm365'].includes(computer)
-        : step === 3
-          ? (computer === 'lan' || guidedCloud) && lanReady
-          : true
+      : step === 1
+        ? serviceReady
+        : step === 2
+          ? ['lan', 'local', 'cloud', 'm365'].includes(computer)
+          : step === 3
+            ? (computer === 'lan' || guidedCloud) && lanReady
+            : true
   const submit = async () => {
     if (saving || connecting || !canContinue) return
+    if (step === 1) {
+      setSaving(true)
+      setError('')
+      try {
+        await selectGbotService(service)
+        setStep(2)
+      } catch (cause) {
+        setError(String(cause))
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     if (step < 4) {
       setStep(step + 1)
       return
@@ -176,37 +219,7 @@ export default function GbotSetup({
           />
         </label>
       )}
-      {step === 1 && (
-        <>
-          <p className="text-sm text-muted-foreground">
-            The service keeps your bot's tasks and schedules running. Its
-            computer is a separate choice in the next step.
-          </p>
-          <fieldset className="space-y-2">
-            <legend className="mb-2 text-sm font-medium">
-              Where should the Gbot service run?
-            </legend>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="service"
-                checked
-                readOnly
-                className="size-4 accent-primary"
-              />
-              This PC (recommended)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input type="radio" name="service" disabled className="size-4" />
-              Another PC on the LAN — setup not available yet
-            </label>
-          </fieldset>
-          <p className="text-sm text-muted-foreground">
-            On this PC, the service continues after you close GChat. Tasks pause
-            while this PC is asleep or turned off.
-          </p>
-        </>
-      )}
+      {step === 1 && <ServiceSetup target={service} change={changeService} />}
       {step === 2 && (
         <>
           <fieldset className="space-y-2">

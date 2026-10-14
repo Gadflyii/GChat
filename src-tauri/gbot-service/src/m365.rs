@@ -78,6 +78,32 @@ impl M365Setup {
         self.load().await
     }
 
+    pub async fn accounts(&self) -> Result<serde_json::Value, String> {
+        let view = self
+            .accounts
+            .native_operation("accounts", json!({}))
+            .await?;
+        let microsoft = |key: &str| -> Vec<serde_json::Value> {
+            view[key]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|item| item["provider"] == "microsoft")
+                .cloned()
+                .collect()
+        };
+        let services: Vec<_> = view["services"]["microsoft"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|item| item["id"] == "cloud_pc")
+            .cloned()
+            .collect();
+        Ok(
+            json!({"configs":microsoft("configs"),"accounts":microsoft("accounts"),"active_flows":[],"selected_accounts":{},"services":{"google":[],"microsoft":services}}),
+        )
+    }
+
     async fn load(&self) -> Result<Vec<SetupRecord>, String> {
         let records: Vec<SetupRecord> = self
             .store
@@ -207,6 +233,11 @@ mod tests {
             args: serde_json::Value,
         ) -> ConnectorFuture<'a, serde_json::Value> {
             Box::pin(async move {
+                if operation == "accounts" {
+                    return Ok(
+                        json!({"configs":[{"provider":"microsoft","client_id":"registered"},{"provider":"google"}],"accounts":[{"provider":"microsoft","id":"explicit-account"},{"provider":"google","id":"other"}],"active_flows":[{"secret":"not remote metadata"}],"selected_accounts":{"google":"other"},"services":{"microsoft":[{"id":"cloud_pc"},{"id":"outlook"}]}}),
+                    );
+                }
                 if args["account_id"] != "explicit-account" {
                     return Err("Account permission unavailable".into());
                 }
@@ -245,6 +276,32 @@ mod tests {
             route: Route::GuestWorker,
             dedicated: true,
         }
+    }
+
+    #[tokio::test]
+    async fn remote_setup_metadata_comes_from_service_accounts_without_auth_flows() {
+        let root = tempfile::tempdir().unwrap();
+        let setup = M365Setup::open(
+            root.path().into(),
+            Arc::new(Accounts {
+                assigned: true.into(),
+                pc: Uuid::new_v4(),
+            }),
+        )
+        .await
+        .unwrap();
+        let view = setup.accounts().await.unwrap();
+        assert_eq!(
+            view["accounts"],
+            json!([{"provider":"microsoft","id":"explicit-account"}])
+        );
+        assert_eq!(
+            view["configs"],
+            json!([{"provider":"microsoft","client_id":"registered"}])
+        );
+        assert_eq!(view["services"]["microsoft"], json!([{"id":"cloud_pc"}]));
+        assert_eq!(view["active_flows"], json!([]));
+        assert_eq!(view["selected_accounts"], json!({}));
     }
 
     #[tokio::test]

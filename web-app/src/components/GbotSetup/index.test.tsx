@@ -5,11 +5,25 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotSetup from './index'
-import { gbot } from '@/services/gbot'
+import { gbot, getGbotServiceTarget, selectGbotService } from '@/services/gbot'
 
-vi.mock('@/services/gbot', () => ({ gbot: vi.fn() }))
+vi.mock('@/stores/engine-hosts-store', () => ({
+  useEngineHosts: (select: (state: unknown) => unknown) =>
+    select({ hosts: [], errors: {}, refresh: async () => {} }),
+}))
+
+vi.mock('@/services/gbot', () => ({
+  gbot: vi.fn(),
+  getGbotServiceTarget: vi.fn(),
+  selectGbotService: vi.fn(),
+  gbotControlGrant: vi.fn(),
+}))
+beforeEach(() => {
+  vi.mocked(getGbotServiceTarget).mockResolvedValue({ kind: 'local' })
+  vi.mocked(selectGbotService).mockResolvedValue(undefined)
+})
 
 afterEach(() => {
   cleanup()
@@ -37,12 +51,16 @@ async function checkTools() {
   await screen.findByRole('status')
 }
 
-function chooseLan() {
+async function chooseLan() {
   fireEvent.change(screen.getByLabelText('Bot name'), {
     target: { value: ' Writer ' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByLabelText(/A separate local VM/)
   fireEvent.click(screen.getByLabelText(/Another computer on the LAN/))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 }
@@ -73,7 +91,11 @@ it.each([
       target: { value: 'Writer' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByLabelText(/Cloud hosted/)
     fireEvent.click(screen.getByLabelText(/Cloud hosted/))
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.click(screen.getByLabelText(label))
@@ -152,7 +174,7 @@ it('resumes guided cloud setup with the same resource and vault key', async () =
   expect(gbot).not.toHaveBeenCalledWith('workspaces/ssh', expect.anything())
 })
 
-it('asks separately where the service runs and where the bot computer lives', () => {
+it('asks separately where the service runs and where the bot computer lives', async () => {
   const save = vi.fn()
   const cancel = vi.fn()
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={cancel} />)
@@ -164,8 +186,12 @@ it('asks separately where the service runs and where the bot computer lives', ()
   expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
   expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
   expect(screen.queryByLabelText(/A separate local VM/)).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByLabelText(/Cloud hosted/)
+  expect(selectGbotService).toHaveBeenCalledWith({ kind: 'local' })
   expect(screen.getByText('Step 3 of 5 · Computer')).toBeInTheDocument()
   expect(
     screen.queryByLabelText('This PC (recommended)')
@@ -184,7 +210,7 @@ it('reviews a valid LAN connection without showing secrets and saves only on con
   preparedApi()
   const save = vi.fn().mockResolvedValue(undefined)
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
-  chooseLan()
+  await chooseLan()
   fillConnection()
   fireEvent.change(screen.getByLabelText('SSH port'), {
     target: { value: '65536' },
@@ -223,7 +249,7 @@ it('keeps a failed save reviewable and allows retry', async () => {
     .mockRejectedValueOnce(new Error('Vault unavailable'))
     .mockResolvedValueOnce(undefined)
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
-  chooseLan()
+  await chooseLan()
   fillConnection()
   fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
   await checkTools()
@@ -250,7 +276,7 @@ it('verifies the fingerprint, saves a vault key and requires SSH authentication 
     .mockResolvedValueOnce({ installed: true, command: null, issue: null })
   const save = vi.fn().mockResolvedValue(undefined)
   render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
-  chooseLan()
+  await chooseLan()
   fireEvent.change(screen.getByLabelText('SSH host'), {
     target: { value: 'bot.local' },
   })

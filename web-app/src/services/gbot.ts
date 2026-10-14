@@ -182,6 +182,23 @@ export function gbot<T>(path: string, body?: unknown): Promise<T> {
   return invoke<T>('gbot_command', { path: `/v1/${path}`, body })
 }
 
+export type ServiceTarget =
+  | { kind: 'local' }
+  | { kind: 'paired_host'; host_id: string }
+export type GbotControlGrant = {
+  status: 'not_requested' | 'pending' | 'approved' | 'revoked'
+  service_configured?: boolean
+}
+
+export const getGbotServiceTarget = () =>
+  invoke<ServiceTarget>('gbot_service_target')
+export const selectGbotService = (target: ServiceTarget) =>
+  invoke<void>('gbot_service_select', { target })
+export const gbotControlGrant = (
+  hostId: string,
+  action: 'status' | 'request'
+) => invoke<GbotControlGrant>('gbot_service_grant', { hostId, action })
+
 export function quitGbotService(): Promise<void> {
   return invoke('gbot_service_quit')
 }

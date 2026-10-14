@@ -665,6 +665,7 @@ async fn m365_route(runtime: Arc<WorkspaceRuntime>, request: Request<Body>) -> R
         );
     };
     let result = match request.uri().path() {
+        "/v1/setup/m365/accounts" => setup.accounts().await,
         "/v1/setup/m365/status" => setup
             .status()
             .await

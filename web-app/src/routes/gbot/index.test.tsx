@@ -13,6 +13,9 @@ import { connectorAccounts } from '@/services/workspace-connectors'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
+  getTarget: vi.fn(),
+  selectService: vi.fn(),
+  grant: vi.fn(),
   quitService: vi.fn(),
   startService: vi.fn(),
   listen: vi.fn(),
@@ -51,6 +54,9 @@ vi.mock('@/services/gbot', async (original) => ({
     path === 'assignments/models'
       ? Promise.resolve([])
       : mocks.call(path, body),
+  getGbotServiceTarget: mocks.getTarget,
+  selectGbotService: mocks.selectService,
+  gbotControlGrant: mocks.grant,
   quitGbotService: mocks.quitService,
   startGbotService: mocks.startService,
 }))
@@ -59,6 +65,8 @@ import { Route } from './index'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 const Page = Route.options.component as ComponentType
 beforeEach(() => {
+  mocks.getTarget.mockResolvedValue({ kind: 'local' })
+  mocks.selectService.mockResolvedValue(undefined)
   useGeneralSetting.setState({ gbotEnabled: true })
 })
 afterEach(() => {
@@ -286,7 +294,7 @@ it('imports an SSH workspace and preserves setup identity on retry', async () =>
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  fireEvent.click(screen.getByLabelText(/Another computer on the LAN/))
+  fireEvent.click(await screen.findByLabelText(/Another computer on the LAN/))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByLabelText('Use an existing SSH key'))
   for (const [label, value] of [

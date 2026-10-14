@@ -6,6 +6,7 @@ license = "Apache-2.0"
 description = "GInfer LAN host service and shared host protocol"
 
 [dependencies]
+jan-utils = { path = "../utils" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 uuid = { version = "1", features = ["v4", "serde"] }

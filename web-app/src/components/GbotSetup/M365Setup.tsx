@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { getServiceHub } from '@/hooks/useServiceHub'
 import {
   gbot,
+  getGbotServiceTarget,
   type CloudPc,
   type M365Route,
   type M365SetupRecord,
@@ -29,6 +30,7 @@ export default function M365Setup({
 }) {
   const [id] = useState(() => initial?.id ?? crypto.randomUUID())
   const [view, setView] = useState<ConnectorAccountsView>()
+  const [remote, setRemote] = useState(false)
   const [accountId, setAccountId] = useState(initial?.account_id ?? '')
   const [pcs, setPcs] = useState<CloudPc[]>()
   const [pcId, setPcId] = useState(initial?.cloud_pc.id ?? '')
@@ -44,20 +46,24 @@ export default function M365Setup({
 
   useEffect(() => {
     active.current = true
-    connectorAccounts().then(
-      (next) => {
+    getGbotServiceTarget()
+      .then(async (target) => {
+        const remote = target.kind === 'paired_host'
+        const next = remote
+          ? await gbot<ConnectorAccountsView>('setup/m365/accounts')
+          : await connectorAccounts()
         if (!active.current) return
+        setRemote(remote)
         setView(next)
         setFlow(
           next.active_flows.find(
             (item) => item.provider === 'microsoft' && item.status === 'waiting'
           )
         )
-      },
-      (cause) => {
+      })
+      .catch((cause) => {
         if (active.current) setError(String(cause))
-      }
-    )
+      })
     return () => {
       active.current = false
     }
@@ -118,7 +124,9 @@ export default function M365Setup({
     }
   }
   const refreshAccounts = async () => {
-    const next = await connectorAccounts()
+    const next = remote
+      ? await gbot<ConnectorAccountsView>('setup/m365/accounts')
+      : await connectorAccounts()
     if (active.current) setView(next)
   }
   const acceptFlow = async (next: ConnectorAuthFlow) => {
@@ -143,6 +151,13 @@ export default function M365Setup({
         control still need to be connected.
       </p>
       {!view && !error && <p role="status">Loading Microsoft accounts…</p>}
+      {remote && (
+        <p role="status" className="text-muted-foreground">
+          These accounts belong to the service computer. Connect Microsoft there
+          in Settings → Workspace connections, then refresh here. Sign-in and
+          Microsoft’s desktop client run on the service computer.
+        </p>
+      )}
       <Button
         type="button"
         variant="outline"
@@ -159,9 +174,13 @@ export default function M365Setup({
       {view && !configured && (
         <p role="alert">
           Microsoft app registration is missing. Configure it in{' '}
-          <a className="underline" href="/settings/workspace-connections">
-            Settings → Workspace connections
-          </a>
+          {remote ? (
+            'Settings → Workspace connections on the service computer'
+          ) : (
+            <a className="underline" href="/settings/workspace-connections">
+              Settings → Workspace connections
+            </a>
+          )}
           , then refresh accounts.
         </p>
       )}
@@ -218,7 +237,7 @@ export default function M365Setup({
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || !configured}
+            disabled={disabled || !configured || remote}
             onClick={() =>
               void perform(async () => {
                 setPcs(undefined)
@@ -239,7 +258,7 @@ export default function M365Setup({
           </Button>
         </>
       )}
-      {flow && (
+      {flow && !remote && (
         <div role="status" className="space-y-2 rounded-md border p-3">
           {waiting && (
             <>
@@ -433,6 +452,7 @@ export default function M365Setup({
           variant="outline"
           disabled={
             disabled ||
+            remote ||
             !permission ||
             !record ||
             !unchanged ||
