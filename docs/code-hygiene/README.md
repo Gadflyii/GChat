@@ -6,35 +6,29 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-115 Host request copies (merge-ready)
+## Current item — OI-116 catalog/download resources (merge-ready)
 
-Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
-Candidate `fix/gchat-host-body-39c9` in `/ai/gchat-worktrees/host-body-39c9`.
-Origin main `f0db75362` is merged without rebasing; both request-body and snapshot
-ownership changes are retained. All four focused fixtures and strict Host all-target
-Clippy pass on the composition; CPU only, under one minute. The first container
-command lacked Cargo and stopped before compilation; the established native WSL
-Cargo route completed the gate. No package/version or lock-file change.
-The Host validates a borrowed JSON-object map, preserves raw field values and
-replaces only its model field into one preallocated buffer. The benchmark path
-forwards validated original bytes. Bounded admission and headers are unchanged.
-The coordinator approved the existing `serde_json/raw_value` feature; no package,
-version or lock changes. Strict Host Clippy and the three focused forwarding,
-raw-field and actual-byte-limit fixtures pass. No new harness or model/GPU run.
+Baseline main `7e33222e8`; candidate `fix/gchat-catalog-resources-7e332` at
+`/ai/gchat-worktrees/catalog-resources-7e332`. The Host borrows its catalog and
+reuses GPU combinations within one snapshot, keyed by platform, GPU name,
+compute capability, minimum memory and TP. Reservation changes and catalog
+replacement remain fresh; the catalog guard drops before later awaits.
 
-One 64 MiB request: allocated bytes714,299,696→435,356,476; peak above initial
-255,244,537→149,259,224; elapsed1.188→0.333s. One 1 MiB request: allocated bytes
-12,624,806→9,090,074; peak4,515,107→3,549,922; elapsed21.555→7.664ms. These are
-instrumented same-process mock-upstream samples, not isolated Host RSS or real
-media qualification. Unknown numeric/string JSON representations stay exact.
-The fixture-only CPU child setup uses the accepted concurrent resource pattern;
-production admission is unchanged. Prior SSE/tail/auth checks remain accepted.
+One existing 174-profile/four-CPU-instance snapshot: allocations 29,755→25,632
+(13.9% fewer), requested bytes 2,622,891→2,448,907 and peak above initial
+2,542,610→2,430,134. Final live bytes are unchanged. Instrumented elapsed
+5.527→4.662 ms is one sample, not an established latency or native RSS gain.
+Exact catalog/reservations, all GPU eligibility filters, TP1/2/4 choices,
+reservation release and catalog replacement PASS; strict Host all-target Clippy
+PASS. The focused measurements ran under one second each; no dependency change,
+new harness, GPU or native Windows run. Full package hashes and ordered download
+journaling retain their accepted source behavior.
 
-Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; no live jobs or model
-copies. Evidence `/ai/gchat/out/oi115-host-body-20261013/result.json`; fixture
-wall time2.11s baseline/1.24s candidate, each control under1s, strict Clippy PASS.
-Next: reviewed merge. OI-116's Windows/NAS checks remain release-gated;
-OI-119's larger-fleet native qualification remains open after the limited sample below.
+Evidence: `/ai/gchat/out/oi116-catalog-20261014/result.json`. Candidate source
+and concise results remain until reviewed merge; shared Cargo target
+`/ai/gchat/src-tauri/target` remains active. No live jobs or model copies.
+Next: reviewed merge, then OI-119's remaining larger-fleet native UI scope.
+Windows/NAS release qualification remains owed.
 
 ## Accepted OI-118 — snapshot ownership (merged f0db75362)
 
