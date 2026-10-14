@@ -19,6 +19,11 @@ folder. Reopening GChat validates these values and reconnects to the same
 service. Concurrent starters serialize through ownership; a losing process
 never opens mutable service/account state. No alternative data root is inferred.
 
+If a spawned service exits before becoming ready and no concurrent service owns
+the data folder, bootstrap reports its exit status and the `service.log` path.
+If another starter holds ownership, bootstrap keeps waiting for that service
+within the existing 30-second readiness deadline.
+
 The service owns `AccountsState` at the existing
 `<data>/workspace-connections.json` path and its native Google/Microsoft provider
 and credential implementations. UI settings and ordinary Chat/Code calls proxy

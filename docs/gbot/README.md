@@ -1,5 +1,14 @@
 # Gbot design
 
+Gbot bootstrap now reports a child's exit status and log path promptly when no
+concurrent service owns the data folder. Concurrent-owner waiting remains intact.
+Two focused Host cases, compilation and strict all-target Clippy pass on
+`fix/gbot-bootstrap-timeout-165353`. Results and retained inventory:
+`/ai/gchat/out/gbot-bootstrap-timeout-20261014/result.json`.
+The original timeout arose in a misconfigured worker fixture; it does not prove
+an installed service hang. Next: reviewed merge; worker-fixture isolation remains
+a separate open item. No model or Windows run.
+
 Linux install-to-task acceptance is complete on candidate
 `feat/gbot-linux-login-e04` (`62c467446`, base main `e04e7393e`) in
 `/ai/gchat-worktrees/gbot-linux-login-e04`. Focused startup/recovery/UI cases,
