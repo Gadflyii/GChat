@@ -38,13 +38,17 @@ per-GPU benchmark options. Strict Host Clippy checks the affected crate.
 No GPU, Windows build or physical qualification. Evidence is retained under
 `/ai/gchat/out/flash-settled-profile-20261014/`; the candidate reuses the shared
 Cargo cache, with no model copies or separate build allocation. All four focused
-cases passed (0.42 s total fixture time), along with strict Host Clippy (1.96 s).
-Next action: send the corrected tip for review; retain the candidate until merge.
+cases passed again after merging main `4884a214a` (0.47 s total fixture time),
+along with strict Host Clippy (5.22 s). The composed Host retains the LAN Gbot
+control grant and the per-GPU residency policy; both ADRs remain indexed.
+Next action: send the composed tip for review; retain the candidate until merge.
 
 Draft setup candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch
-`feat/gchat-draft-width-setup-4884`, baseline `4884a214a`, remains clean while
-C2 completes CLI concurrency propagation and bubbs names the calibration
-recipe for models without a saved deployment. No build or job is allocated.
+`feat/gchat-draft-width-setup-4884`, baseline `4884a214a`, uses the approved per-saved-deployment calibration recipe: exact context,
+concurrency, TP, KV, graph and Vision settings, idle after hardware profiling,
+cancelled on user activity. Profile key or GPU-group changes requeue work; an
+install without a saved profile retains the default policy. C2 CLI concurrency
+propagation remains required for execution. No build or job is allocated.
 
 Accepted `GCHAT-CMP-SETTLED-READY` (`bfd42e530`): the shared Host generates
 `--wait-for-residency-fill` when the selected GPU group includes a CMP 170HX,
