@@ -58,12 +58,14 @@ function Choice({
 
 export default function CloudCosts({
   name,
+  provider: initialProvider,
   initial,
   busy,
   reviewed,
   connected = async () => {},
 }: {
   name: string
+  provider?: CloudProvider
   initial?: CloudReview
   busy: (value: boolean) => void
   reviewed: () => Promise<void>
@@ -71,12 +73,16 @@ export default function CloudCosts({
 }) {
   const [id, setId] = useState(initial?.id ?? crypto.randomUUID())
   const [provider, setProvider] = useState<CloudProvider>(
-    initial?.provider ?? 'hetzner'
+    initial?.provider ?? initialProvider ?? 'hetzner'
   )
   const [token, setToken] = useState('')
   const [review, setReview] = useState(initial)
-  const [region, setRegion] = useState(initial?.deployment?.plan.region ?? initial?.quote?.plan.region ?? '')
-  const [plan, setPlan] = useState(initial?.deployment?.plan.id ?? initial?.quote?.plan.id ?? '')
+  const [region, setRegion] = useState(
+    initial?.deployment?.plan.region ?? initial?.quote?.plan.region ?? ''
+  )
+  const [plan, setPlan] = useState(
+    initial?.deployment?.plan.id ?? initial?.quote?.plan.id ?? ''
+  )
   const [acknowledged, setAcknowledged] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -125,7 +131,9 @@ export default function CloudCosts({
   const quote = review?.quote
   const matches = quote?.plan.region === region && quote?.plan.id === plan
   const valid = Boolean(review && !expired && !refreshFailed)
-  const deployed = Boolean(review?.deployment && review.deployment.phase !== 'deleted')
+  const deployed = Boolean(
+    review?.deployment && review.deployment.phase !== 'deleted'
+  )
   const money = (amount: CloudAmount) =>
     `${review?.catalog.currency} ${amount.net} before tax${amount.gross === null ? '' : ` · ${review?.catalog.currency} ${amount.gross} including tax`}`
   return (
@@ -134,23 +142,22 @@ export default function CloudCosts({
         Connect your own provider account, review live prices, then create a
         dedicated bot computer with a separate billing confirmation.
       </p>
-      <Choice
-        label="Provider"
-        value={provider}
-        disabled={pending || Boolean(initial || review)}
-        items={[
-          { id: 'hetzner', name: 'Hetzner (low-cost recommendation)' },
-          { id: 'digital_ocean', name: 'DigitalOcean' },
-        ]}
-        change={(value) => {
-          setProvider(value as CloudProvider)
-          setToken('')
-          setId(crypto.randomUUID())
-        }}
-      />
-      <p className="text-xs text-muted-foreground">
-        Azure, AWS and GCP guided setup is not available yet.
-      </p>
+      {!initialProvider && (
+        <Choice
+          label="Provider"
+          value={provider}
+          disabled={pending || Boolean(initial || review)}
+          items={[
+            { id: 'hetzner', name: 'Hetzner (low-cost recommendation)' },
+            { id: 'digital_ocean', name: 'DigitalOcean' },
+          ]}
+          change={(value) => {
+            setProvider(value as CloudProvider)
+            setToken('')
+            setId(crypto.randomUUID())
+          }}
+        />
+      )}
       <label className="block space-y-1 text-sm">
         Provider API token
         <Input
@@ -266,7 +273,11 @@ export default function CloudCosts({
             {new Date(quote.expires_at * 1000).toLocaleString()}.
           </p>
           {review.confirmed ? (
-            <p role="status">{deployed ? 'Costs confirmed for this computer.' : 'Cost review saved. No VM has been created.'}</p>
+            <p role="status">
+              {deployed
+                ? 'Costs confirmed for this computer.'
+                : 'Cost review saved. No VM has been created.'}
+            </p>
           ) : (
             <>
               <label className="flex items-start gap-2">
@@ -301,15 +312,19 @@ export default function CloudCosts({
           )}
         </div>
       )}
-      {review && (review.deployment || (review.confirmed && quote && matches)) && (
-        <CloudComputer
-          review={review}
-          updated={setReview}
-          canCreate={valid && Boolean(review.confirmed && quote && matches)}
-          busy={(value) => { setPending(value); busy(value) }}
-          connected={connected}
-        />
-      )}
+      {review &&
+        (review.deployment || (review.confirmed && quote && matches)) && (
+          <CloudComputer
+            review={review}
+            updated={setReview}
+            canCreate={valid && Boolean(review.confirmed && quote && matches)}
+            busy={(value) => {
+              setPending(value)
+              busy(value)
+            }}
+            connected={connected}
+          />
+        )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

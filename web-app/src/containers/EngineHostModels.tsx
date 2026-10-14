@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { engineCommand, hardwareProfileBusy, type EngineHost, type EngineSnapshot, type EngineLaunchOptions } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineHostSharing } from '@/containers/EngineHostSharing'
+import { EngineGbotControl } from '@/containers/EngineGbotControl'
 import { EngineInstanceSettings } from '@/containers/EngineInstanceSettings'
 import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
 import { EngineHardwareProfile } from '@/containers/EngineHardwareProfile'
@@ -78,6 +79,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} gpus={snapshot.gpus} offline={!!error} disabled={busy}
       action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} />}
+      {host.local && snapshot && <EngineGbotControl clients={snapshot.clients} disabled={busy || !!error} change={(client_id, action) => act('gbot_grant', { body: { client_id, action } })} />}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
       <summary className="cursor-pointer font-medium">Launch Server Instance</summary>
       <EngineProfilePicker hideHeading key={active?.instance_id ?? 'additional'} instanceId={active?.instance_id ?? ''} labelPrefix={host.name}

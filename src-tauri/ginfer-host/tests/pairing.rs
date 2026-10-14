@@ -182,6 +182,25 @@ async fn tls_one_click_pairing_authentication_revocation_and_persistence() {
         .body(hyper::Body::empty())
         .unwrap();
     assert!(reloaded.authenticated(&request).await);
+
+    let grant_url = format!("{base}/host/v1/gbot/grant");
+    let control_url = format!("{base}/host/v1/gbot/control");
+    let pending: serde_json::Value = client.post(&grant_url).bearer_auth(token).json(&serde_json::json!({"action":"request"})).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    assert_eq!(pending["status"], "pending");
+    assert_eq!(client.post(&grant_url).bearer_auth(token).json(&serde_json::json!({"action":"claim"})).send().await.unwrap().status(), 400);
+    assert_eq!(client.post(&grant_url).bearer_auth(token).json(&serde_json::json!({"action":"approve"})).send().await.unwrap().status(), 403);
+    assert_eq!(client.post(&control_url).bearer_auth(token).json(&serde_json::json!({"path":"/v1/state"})).send().await.unwrap().status(), 401);
+    launcher.request("/host/v1/gbot/grant", Some(serde_json::json!({"action":"approve","client_id":paired["client_id"]}))).await.unwrap();
+    let approved: serde_json::Value = client.post(&grant_url).bearer_auth(token).json(&serde_json::json!({"action":"claim"})).send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+    let gbot_token = approved["token"].as_str().unwrap();
+    assert_ne!(gbot_token, token);
+    assert_eq!(client.get(format!("{base}/host/v1/snapshot")).bearer_auth(gbot_token).send().await.unwrap().status(), 401);
+    assert_eq!(client.post(&control_url).bearer_auth(gbot_token).json(&serde_json::json!({"path":"/v1/native/accounts"})).send().await.unwrap().status(), 400);
+    launcher.request("/host/v1/gbot/grant", Some(serde_json::json!({"action":"revoke","client_id":paired["client_id"]}))).await.unwrap();
+    assert_eq!(client.post(&control_url).bearer_auth(gbot_token).json(&serde_json::json!({"path":"/v1/state"})).send().await.unwrap().status(), 401);
+    let events = std::fs::read_to_string(directory.path().join("gbot-control-events.jsonl")).unwrap();
+    assert!(events.contains("approve") && events.contains("revoke") && events.contains("use"));
+    assert!(!events.contains(gbot_token) && !events.contains(token));
     let client_id = paired["client_id"].as_str().unwrap();
     assert_eq!(
         client

@@ -717,6 +717,28 @@ ordering and the no-relay LAN route are decided; they are not open questions.
 
 ## Current record and inventory
 
+**Accepted source: guided cloud attachment. Active: LAN service authorization.** Candidate
+`feat/gbot-guided-service-36ce`, tree
+`/ai/gchat-worktrees/gbot-guided-service-36ce`, baseline main `cf2dd919c`.
+Azure/AWS/GCP attach a user-created dedicated Debian 13 VM through the existing
+vault-key, pinned SSH and consented guest-tools flow. Provider/resource identity
+survives Finish later. GChat does not purchase or delete these manually created
+VMs; automatic Hetzner/DigitalOcean resource reconciliation remains unchanged.
+Acceptance: focused mocked wizard/resume cases and the existing hermetic SSH
+fixture for guided-vs-owned provider admission and preparation, types/lint and
+strict service Clippy. No real accounts, tokens, sign-ins, purchases or desktop
+input. PASS: all 16 affected wizard/cost cases (resume corrected and checked
+separately), two hermetic SSH provider cases, frontend types/lint and strict
+service Clippy. Evidence: `out/gbot-guided-cloud-20261013/result.json`.
+The attachment flow is implemented; physical provider installation is not claimed.
+Next: implement the separate paired-device Gbot grant and service connection.
+
+LAN service setup is separately approved: a Host-owned Gbot-only control grant
+on the existing paired-TLS connection, explicitly approved per device, revocable,
+and with grant/use events logged. SSH and inference grants do not authorize it.
+No new packages; the Host/Gbot bootstrap dependency edge needs review. Its radio
+remains disabled until the full grant/proxy/UI path lands.
+
 **Current queue — October 13.** The earlier Cua adoption items are merged
 and accepted at the scopes in the [Cua map](cua-map.md#current-adoption-status).
 The next product queue is guided LAN SSH connection, consented LAN guest-tools
@@ -1699,3 +1721,11 @@ Concise failed-attempt evidence remains in S1 `diagnostic-evidence`,
 retired. Disks `4c75…`, `3cc2…` and `c49b…` freed 13.91 GiB; `802d…` freed
 5.15 GiB. The final guest freed another 2.688 GiB. Booking 1362 is cancelled;
 no person's desktop or Windows installation was accessed.
+
+### LAN service control — current work
+
+Approved scope: select Local or a paired LAN Gbot service, with a separate per-device owner approval/revocation and private grant/use log. Pairing, SSH and inference credentials grant no Gbot control; revocation closes the client's views while service tasks continue.
+Service selection persists and M365 account metadata comes from that service; remote sign-in is performed there. Azure/AWS/GCP attachment is mocked. No physical LAN, live-account, Windows, VM, GPU or release qualification is claimed.
+Acceptance: focused grant/lease/TLS, saved selection, account metadata and wizard/owner-control cases; affected types/lint and strict Clippy. Host adds only the existing `jan-utils` dependency edge, with no new packages or versions.
+Status: Host 4, TLS 1, M365 3, native 4 and UI 33 cases pass; types/lint and strict Clippy pass. Next action: reviewed main merge; physical paired-LAN qualification remains owed. [Control-grant decision](../decisions/2026-10-13-approve-lan-gbot-control-separately.md).
+Inventory: GChat-owned `/ai/gchat-worktrees/gbot-guided-service-36ce`, branch `feat/gbot-guided-service-36ce`, baseline `cf2dd919c`; borrowed cache `/ai/gchat/src-tauri/target`; retained checks `/ai/gchat/out/gbot-guided-service-20261013/result.json`. All checks ended; no owned job, guest or model.

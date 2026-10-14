@@ -30,3 +30,6 @@ pub mod hardware_profile;
 
 #[cfg(windows)]
 pub(crate) mod hardware_profile_windows;
+
+pub mod gbot_bootstrap;
+pub mod gbot_control;

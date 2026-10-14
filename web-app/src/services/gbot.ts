@@ -13,10 +13,21 @@ export type ViewTicket = {
   media_session_id: string
   interactive: boolean
 }
+export type GuidedCloudProvider = 'azure' | 'aws' | 'gcp'
+export type GuidedCloudComputer = {
+  kind: 'cloud'
+  provider: GuidedCloudProvider
+  resource_id: string
+}
 export type Workspace = {
   id: string
   name: string
-  bot_pc?: { kind: string; hypervisor?: string }
+  bot_pc?: {
+    kind: string
+    hypervisor?: string
+    provider?: CloudProvider | GuidedCloudProvider
+    resource_id?: string
+  }
   connection?: {
     kind: string
     endpoint?: { hostname: string; port: number; user: string }
@@ -170,6 +181,23 @@ export type Approval = {
 export function gbot<T>(path: string, body?: unknown): Promise<T> {
   return invoke<T>('gbot_command', { path: `/v1/${path}`, body })
 }
+
+export type ServiceTarget =
+  | { kind: 'local' }
+  | { kind: 'paired_host'; host_id: string }
+export type GbotControlGrant = {
+  status: 'not_requested' | 'pending' | 'approved' | 'revoked'
+  service_configured?: boolean
+}
+
+export const getGbotServiceTarget = () =>
+  invoke<ServiceTarget>('gbot_service_target')
+export const selectGbotService = (target: ServiceTarget) =>
+  invoke<void>('gbot_service_select', { target })
+export const gbotControlGrant = (
+  hostId: string,
+  action: 'status' | 'request'
+) => invoke<GbotControlGrant>('gbot_service_grant', { hostId, action })
 
 export function quitGbotService(): Promise<void> {
   return invoke('gbot_service_quit')

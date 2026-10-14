@@ -50,7 +50,7 @@ export default function LanSetup({
       id: ids.id,
       name: connection.name.trim(),
       service_pc: { kind: 'local' },
-      bot_pc: { kind: 'lan', computer_id: ids.computerId },
+      bot_pc: connection.cloud ?? { kind: 'lan', computer_id: ids.computerId },
       endpoint,
       pinned_host_key: importKey
         ? { algorithm, public_key }

@@ -69,11 +69,8 @@ async fn native<R: Runtime>(
     arguments: Value,
 ) -> Result<Value, String> {
     app.state::<super::gbot::GbotState>()
-        .call(
-            app,
-            &format!("/v1/native/connectors/{operation}"),
-            arguments,
-        )
+        .local_client(app).await?
+        .call(&format!("/v1/native/connectors/{operation}"), arguments)
         .await
 }
 
@@ -558,7 +555,7 @@ pub async fn execute<R: Runtime>(
     args: Value,
     cancellation: &CancellationToken,
 ) -> Result<Value, String> {
-    let client = app.state::<super::gbot::GbotState>().client(app).await?;
+    let client = app.state::<super::gbot::GbotState>().local_client(app).await?;
     let id = uuid::Uuid::new_v4().to_string();
     client
         .call(

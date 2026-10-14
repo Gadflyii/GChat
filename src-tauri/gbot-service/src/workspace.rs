@@ -719,7 +719,14 @@ impl WorkspaceRuntime {
             let bundle =
                 crate::lan_setup::Bundle::new(root, id.as_uuid(), connection.endpoint.user.clone())
                     .map_err(|error| WorkspaceError::GuestSetup(error.to_string()))?;
-            if matches!(config.bot_pc, BotPc::Cloud { .. }) {
+            if matches!(
+                config.bot_pc,
+                BotPc::Cloud {
+                    provider: crate::contract::CloudProvider::Hetzner
+                        | crate::contract::CloudProvider::DigitalOcean,
+                    ..
+                }
+            ) {
                 crate::ssh::GuestPreparation::CloudInstall(bundle)
             } else {
                 crate::ssh::GuestPreparation::Stage(bundle)
@@ -937,7 +944,9 @@ impl WorkspaceRuntime {
             .find(|w| w.id == workspace)
         {
             if let BotPc::Cloud {
-                provider,
+                provider:
+                    provider @ (crate::contract::CloudProvider::Hetzner
+                    | crate::contract::CloudProvider::DigitalOcean),
                 resource_id,
             } = &config.bot_pc
             {

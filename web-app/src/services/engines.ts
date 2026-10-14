@@ -66,6 +66,7 @@ export const hardwareProfileBusy = (profile?: EngineHardwareProfile) =>
   profile?.status === 'running' || profile?.status === 'cancelling'
 
 export type EngineSnapshot = {
+  clients?: { client_id: string; name: string; local: boolean; gbot_control?: import('@/services/gbot').GbotControlGrant }[]
   max_perf_profiles?: EngineMaxPerfProfile[]
   hardware_profile?: EngineHardwareProfile
   lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };

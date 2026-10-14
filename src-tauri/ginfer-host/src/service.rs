@@ -123,6 +123,7 @@ pub struct Persistent {
     pub managed_model_root: Option<PathBuf>,
 }
 pub struct Host {
+    pub gbot: crate::gbot_control::Control,
     pub lan_sharing: Mutex<crate::lan_sharing::LanSharing>,
     inference_client: reqwest::Client,
     local_inference: Mutex<BTreeMap<Uuid, crate::local_inference::LocalInference>>,
@@ -377,6 +378,7 @@ impl Host {
             downloads.set_root(root.canonicalize().map_err(|e| e.to_string())?);
         }
         let host = Arc::new(Self {
+            gbot: crate::gbot_control::Control::open(directory.clone())?,
             lan_sharing: Mutex::new(Default::default()),
             inference_client: reqwest::Client::builder()
                 .no_proxy()
@@ -868,7 +870,7 @@ impl Host {
         let clients:Vec<_>=data.clients.iter().map(|(id,grant)|{
             let usage=activity.get(&Principal::Client(*id));
             serde_json::json!({"client_id":id,"name":grant.name,"local":data.local_client_id==Some(*id),
-                "active_requests":usage.map(|u|u.instances.values().sum::<usize>()).unwrap_or(0),
+                "gbot_control":self.gbot.status(*id),"active_requests":usage.map(|u|u.instances.values().sum::<usize>()).unwrap_or(0),
                 "active_instances":usage.map(|u|&u.instances),"last_seen_unix_ms":usage.and_then(|u|u.last_seen_unix_ms)})
         }).collect();
         let administrator = activity.get(&Principal::LocalAdministrator);
@@ -1213,6 +1215,7 @@ impl Host {
     }
     async fn handle(self: &Arc<Self>, req: &mut Request<Body>) -> Result<Response<Body>, String> {
         let path = req.uri().path().to_string();
+        if path.starts_with("/host/v1/gbot/") { return self.gbot_route(req).await; }
         if req.method() == hyper::Method::GET && path == "/.well-known/ginfer" {
             let data = self.data.lock().await;
             return Ok(json(
@@ -1594,22 +1597,26 @@ impl Host {
                 let mut next_fleet = data.fleet.clone();
                 next_fleet.remove_client(id)?;
                 let previous_revision = data.fleet_revision;
+                self.gbot.change(id, "revoke")?;
                 if let crate::fleet::FleetState::Coordinator { fleet } = &next_fleet {
                     data.fleet_revision = data.fleet_revision.max(fleet.revision);
                 }
                 let previous_fleet = std::mem::replace(&mut data.fleet, next_fleet);
                 let previous = data.clients.remove(&id);
-                if let Err(error) = write_private(
+                let saved = write_private(
                     &self.directory.join("host.json"),
                     &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
-                ) {
+                );
+                if saved.is_err() {
                     if let Some(previous) = previous {
                         data.clients.insert(id, previous);
                     }
                     data.fleet = previous_fleet;
                     data.fleet_revision = previous_revision;
-                    return Err(error);
                 }
+                drop(data);
+                self.gbot.close_client_views(id).await;
+                saved?;
                 self.revision.fetch_add(1, Ordering::SeqCst);
                 return Ok(json(StatusCode::OK, serde_json::json!({"revoked":id})));
             }
@@ -2018,7 +2025,7 @@ pub fn json(status: StatusCode, body: serde_json::Value) -> Response<Body> {
         .body(Body::from(body.to_string()))
         .unwrap()
 }
-async fn body_json(req: &mut Request<Body>) -> Result<serde_json::Value, String> {
+pub(crate) async fn body_json(req: &mut Request<Body>) -> Result<serde_json::Value, String> {
     serde_json::from_slice(&bounded_body(req, 1024 * 1024).await?).map_err(|e| e.to_string())
 }
 
