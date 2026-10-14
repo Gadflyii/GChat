@@ -4799,7 +4799,7 @@ pub fn launch_editor(editor_id: String) -> Result<(), String> {
 /// (returns `false`) on non-macOS.
 #[tauri::command]
 pub fn migrate_macos_autostart_launchagent<R: Runtime>(
-    #[allow(unused_variables)] app: AppHandle<R>,
+    app: AppHandle<R>,
 ) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {

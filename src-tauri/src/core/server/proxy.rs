@@ -1389,11 +1389,7 @@ async fn proxy_request<R: Runtime>(
         body
     };
 
-    // Codex CLI (and other Responses-only clients) hit `/responses`, which
-    // ginfer does not implement. Handle it in a self-contained branch:
-    // passthrough for remote providers that serve it natively, translate to
-    // `/chat/completions` for ginfer. Returns early so it never threads
-    // through the chat-completions retry machinery.
+    // Responses requests use their own routing and translation path.
     if method == hyper::Method::POST && path == "/responses" {
         return handle_responses_request(
             &mut state,
@@ -1413,10 +1409,8 @@ async fn proxy_request<R: Runtime>(
     let original_path = parts.uri.path();
     let destination_path = get_destination_path(original_path, &config.prefix);
 
-    // Initialize variables that will be set in the match
     let mut session_api_key: Option<String> = None;
-    #[allow(unused_assignments)]
-    let mut buffered_body: Option<Bytes> = None;
+    let buffered_body: Bytes;
     let mut target_base_url: Option<String> = None;
     let mut is_anthropic_messages = false;
 
@@ -1444,7 +1438,7 @@ async fn proxy_request<R: Runtime>(
                         .unwrap());
                 }
             };
-            buffered_body = Some(body_bytes.clone());
+            buffered_body = body_bytes.clone();
 
             // Parse body to get model_id for routing (don't transform yet)
             match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
@@ -1566,7 +1560,7 @@ async fn proxy_request<R: Runtime>(
                         .unwrap());
                 }
             };
-            buffered_body = Some(body_bytes.clone());
+            buffered_body = body_bytes.clone();
 
             match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
                 Ok(json_body) => {
@@ -1966,30 +1960,13 @@ async fn proxy_request<R: Runtime>(
         }
     }
 
-    let session_api_key_for_req = session_api_key.clone();
-    let buffered_body_for_req = buffered_body.clone();
-
-    if let Some(key) = session_api_key_for_req {
+    if let Some(key) = &session_api_key {
         outbound_req = outbound_req.header("Authorization", format!("Bearer {key}"));
     } else {
         log::debug!("No session API key available for this request");
     }
 
-    let outbound_req_with_body = if let Some(bytes) = buffered_body_for_req {
-        outbound_req.body(bytes)
-    } else {
-        log::error!("Internal logic error: Request reached proxy stage without a buffered body.");
-        let mut error_response = Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR);
-        error_response = add_cors_headers_with_host_and_origin(
-            error_response,
-            &host_header,
-            &origin_header,
-            &config.trusted_hosts,
-        );
-        return Ok(error_response
-            .body(Body::from("Internal server error: unhandled request path"))
-            .unwrap());
-    };
+    let outbound_req_with_body = outbound_req.body(buffered_body.clone());
 
     // For Anthropic /messages, we need to track if we should transform the response
     let destination_path = path.clone();
@@ -2011,19 +1988,16 @@ async fn proxy_request<R: Runtime>(
                     .await
                     .unwrap_or_else(|e| format!("Failed to read error body: {}", e));
 
-                // Clone what we need for the fallback request
                 let fallback_url = target_base_url.clone().map(|url| {
                     url.trim_end_matches("/messages")
                         .trim_end_matches('/')
                         .to_string()
                 });
-                let fallback_api_key = session_api_key.clone();
-                let fallback_body = buffered_body.clone();
-
                 // Transform body to OpenAI format for fallback
                 if let Some((url, openai_body)) =
-                    fallback_url.zip(fallback_body).and_then(|(url, body)| {
-                        let json_body = serde_json::from_slice::<serde_json::Value>(&body).ok()?;
+                    fallback_url.and_then(|url| {
+                        let json_body =
+                            serde_json::from_slice::<serde_json::Value>(&buffered_body).ok()?;
                         match transform_anthropic_to_openai(&json_body) {
                             Some(transformed) => Some((url, transformed)),
                             None => {
@@ -2071,7 +2045,7 @@ async fn proxy_request<R: Runtime>(
                             fallback_req = fallback_req.header(name, value);
                         }
                     }
-                    if let Some(key) = fallback_api_key {
+                    if let Some(key) = &session_api_key {
                         fallback_req =
                             fallback_req.header("Authorization", format!("Bearer {key}"));
                     }

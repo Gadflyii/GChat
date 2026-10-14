@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { hardwareProfileBusy, type EngineHardwareProfile as HardwareProfileStatus, type EngineHardwareProfileAction } from '@/services/engines'
+import { hardwareProfileBusy, type EngineHardwareProfile as HardwareProfileStatus, type EngineHardwareProfileAction, type EngineDraftWidthCalibration } from '@/services/engines'
 import type { ModelGpu } from '@/lib/model-release'
 
-export function EngineHardwareProfile({ profile, gpus, offline, disabled, action }: {
+export function EngineHardwareProfile({ profile, gpus, offline, disabled, action, calibrations = [] }: {
   profile: HardwareProfileStatus; offline: boolean; disabled: boolean;
   gpus: ModelGpu[];
+  calibrations?: EngineDraftWidthCalibration[];
   action: (action: EngineHardwareProfileAction, gpuUuids?: string[]) => Promise<unknown>
 }) {
   const known = gpus.filter(gpu => gpu.name && gpu.compute_capability)
@@ -49,6 +50,16 @@ export function EngineHardwareProfile({ profile, gpus, offline, disabled, action
       ? 'A saved checkpoint is available. Resume validates its inputs before continuing; checkpoint presence alone does not prove compatibility.'
       : 'Resume retries the saved job inputs. The producer validates any retained progress before continuing.'}</p>}
     {!profile.available && !running && <p className="text-sm text-muted-foreground">Choose a GPU group; the Host checks that a compatible hardware profiler is installed.</p>}
+    {calibrations.length > 0 && <section aria-label="Draft-width calibration" className="space-y-2 text-sm">
+      <p>Draft-width calibration</p>
+      <p className="text-muted-foreground">Runs when models are stopped. Starting a model cancels calibration; the engine uses its default policy until calibration completes.</p>
+      {calibrations.map(job => <div key={job.key}>
+        <p role="status">{job.model_id} · C{job.concurrency} · {job.max_context.toLocaleString()} tokens · {job.status}{offline ? ' · last reported, host offline' : ''}</p>
+        <p className="text-muted-foreground">{groupLabel(job.gpu_uuids)}</p>
+        {job.error && <p role="alert" className="text-destructive whitespace-pre-wrap break-all">{job.error}</p>}
+        {job.diagnostic_tail && <details><summary className="cursor-pointer">Calibration log</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">{job.diagnostic_tail}</pre></details>}
+      </div>)}
+    </section>}
     {profile.error && <p role="alert" className="text-sm text-destructive whitespace-pre-wrap break-all">{profile.error}</p>}
     {profile.diagnostic_tail && <details><summary className="cursor-pointer text-sm">Profiling log</summary><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">{profile.diagnostic_tail}</pre></details>}
     {!running && <fieldset disabled={blocked} className="space-y-2 text-sm">

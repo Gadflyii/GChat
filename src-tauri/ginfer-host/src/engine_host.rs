@@ -94,7 +94,7 @@ impl ExitDrain {
     }
 }
 
-fn capture_output(
+pub(crate) fn capture_output(
     reader: impl AsyncRead + Unpin + Send + 'static,
     diagnostics: Diagnostics,
 ) -> tokio::task::JoinHandle<()> {
@@ -464,6 +464,9 @@ impl HostProcesses {
             "ginfer"
         });
         cli.is_file().then_some(cli)
+    }
+    pub(crate) fn has_children(&self) -> bool {
+        self.instances.values().any(|instance| instance.child.is_some())
     }
     pub(crate) fn hardware_profile_action(
         &self,

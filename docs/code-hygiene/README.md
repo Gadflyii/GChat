@@ -9,43 +9,57 @@ and pushed; current candidate inventory is below.
 ## Current item — Rust test preparation
 
 Baseline main `f3d77b8f0`; candidate `fix/gchat-rust-test-preparation-f3d` at
-`/ai/gchat-worktrees/rust-test-preparation-f3d`; shared Cargo cache retained.
-Deliverable: the documented Rust command includes shared CLI tests and missing
-Linux Gbot resource stubs; no dependencies or runtime behavior change.
-PASS: one existing desktop/CLI OpenCode fixture (38.88 s compile, 0.02 s test)
-and non-overwriting resource preparation in the accepted Cua build environment.
+`/ai/gchat-worktrees/rust-test-preparation-f3d`, now composed with main
+`25ac2cdb2`. The documented Rust command selects shared desktop/CLI library
+tests and prepares missing Linux Gbot resource stubs without overwriting assets.
+No dependencies or runtime behavior change. Accepted existing OpenCode fixture
+PASS (38.88 s compile, 0.02 s test) and resource-preparation checks are retained;
+the merge changes documentation only relative to the accepted preparation patch.
 Evidence: `/ai/gchat/out/rust-test-preparation-20261014/result.json`.
 Next: reviewed merge; no live jobs, model, package or release run.
 
-## OI-115 Host request-copy evidence
+## Accepted Host, Manager and Chat engineering hygiene (merged 165353e58)
 
-Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
-Candidate `fix/gchat-host-body-39c9` in `/ai/gchat-worktrees/host-body-39c9`.
-Origin main `f0db75362` is merged without rebasing; both request-body and snapshot
-ownership changes are retained. All four focused fixtures and strict Host all-target
-Clippy pass on the composition; CPU only, under one minute. The first container
-command lacked Cargo and stopped before compilation; the established native WSL
-Cargo route completed the gate. No package/version or lock-file change.
-The Host validates a borrowed JSON-object map, preserves raw field values and
-replaces only its model field into one preallocated buffer. The benchmark path
-forwards validated original bytes. Bounded admission and headers are unchanged.
-The coordinator approved the existing `serde_json/raw_value` feature; no package,
-version or lock changes. Strict Host Clippy and the three focused forwarding,
-raw-field and actual-byte-limit fixtures pass. No new harness or model/GPU run.
+Baseline main `8ca43a14a`; candidate `chore/gchat-engineering-hygiene-20261014`
+at `/ai/gchat-worktrees/engineering-hygiene-20261014`. Remove proven unused
+direct dependencies and dead assignments, and fix compiler/Clippy warnings
+without changing behavior. Check platform-specific uses before removal.
+Acceptance: strict Clippy for the three crates and existing affected tests.
+CPU only, shared `/ai/gchat/src-tauri/target`; no new dependencies, GPU,
+native Windows build, release, signing or publication.
+Source merged: removed unused direct dependencies, unreachable proxy fallback,
+redundant copies/cfg attributes and historical comments; scoped the test mutex
+lexically. Strict Host/Manager all-target and Chat desktop/CLI production Clippy
+PASS; existing proxy44 and process-cleanup2 cases PASS. Its earlier Chat
+all-target check lacked the CLI feature; the preparation change above fixes the
+owning command. The worker mock bootstrap defect is separately fixed in main
+`25ac2cdb2`, with the existing worker case and strict library Clippy passing.
+No full-suite rerun is claimed. Evidence:
+`/ai/gchat/out/engineering-hygiene-20261014/result.json` and
+`/ai/gchat/out/worker-fixture-gbot-20261014/result.json`.
 
-One 64 MiB request: allocated bytes714,299,696→435,356,476; peak above initial
-255,244,537→149,259,224; elapsed1.188→0.333s. One 1 MiB request: allocated bytes
-12,624,806→9,090,074; peak4,515,107→3,549,922; elapsed21.555→7.664ms. These are
-instrumented same-process mock-upstream samples, not isolated Host RSS or real
-media qualification. Unknown numeric/string JSON representations stay exact.
-The fixture-only CPU child setup uses the accepted concurrent resource pattern;
-production admission is unchanged. Prior SSE/tail/auth checks remain accepted.
+## Accepted OI-116 catalog/download resources (merged 8ca43a14a)
 
-Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; no live jobs or model
-copies. Evidence `/ai/gchat/out/oi115-host-body-20261013/result.json`; fixture
-wall time2.11s baseline/1.24s candidate, each control under1s, strict Clippy PASS.
-OI-116's Windows/NAS checks remain release-gated;
-OI-119's larger-fleet native qualification remains open after the limited sample below.
+Baseline main `7e33222e8`; candidate `fix/gchat-catalog-resources-7e332` at
+`/ai/gchat-worktrees/catalog-resources-7e332`. The Host borrows its catalog and
+reuses GPU combinations within one snapshot, keyed by platform, GPU name,
+compute capability, minimum memory and TP. Reservation changes and catalog
+replacement remain fresh; the catalog guard drops before later awaits.
+
+One existing 174-profile/four-CPU-instance snapshot: allocations 29,755→25,632
+(13.9% fewer), requested bytes 2,622,891→2,448,907 and peak above initial
+2,542,610→2,430,134. Final live bytes are unchanged. Instrumented elapsed
+5.527→4.662 ms is one sample, not an established latency or native RSS gain.
+Exact catalog/reservations, all GPU eligibility filters, TP1/2/4 choices,
+reservation release and catalog replacement PASS; strict Host all-target Clippy
+PASS. The focused measurements ran under one second each; no dependency change,
+new harness, GPU or native Windows run. Full package hashes and ordered download
+journaling retain their accepted source behavior.
+
+Evidence: `/ai/gchat/out/oi116-catalog-20261014/result.json`. Merged clean source
+tree is retired; evidence and shared Cargo target `/ai/gchat/src-tauri/target`
+remain. No live jobs or model copies.
+Source merged; Windows/NAS release qualification remains owed.
 
 ## Accepted OI-118 — snapshot ownership (merged f0db75362)
 
@@ -63,7 +77,8 @@ Accepted source0705f31a6 includes the merged projection/UI fix2ad018261.
 One isolated local Host/client, no models/profiles:30s Manager idle0.13% of one
 core, privateRSS306.27MiB (WebKit content226.26MiB); Host0.00%,4.52MiB.
 This is Linux/WSLg, not a before/after gain or Windows private-commit result.
-Large-fleet idle/private-memory qualification remains open. Own processes and
+Source merged `2ad018261`; larger-fleet/remote qualification is release-gated.
+Own processes and
 private state are retired; accepted binaries remain. No rebuild/model/GPU run.
 Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
 

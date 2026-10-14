@@ -81,6 +81,7 @@ pub struct HardwareProfiles {
     state: Mutex<State>,
     idle: Notify,
     revision: Arc<AtomicU64>,
+    activity: Mutex<Option<Arc<Notify>>>,
 }
 fn now() -> u64 {
     SystemTime::now()
@@ -223,7 +224,11 @@ impl HardwareProfiles {
             }),
             idle: Notify::new(),
             revision,
+            activity: Mutex::new(None),
         }))
+    }
+    pub(crate) fn set_activity_notification(&self, activity: Arc<Notify>) {
+        *self.activity.lock().unwrap() = Some(activity);
     }
     fn save(&self, record: &Record) -> Result<(), String> {
         crate::service::write_private(
@@ -821,6 +826,7 @@ impl HardwareProfiles {
             }
             drop(state);
             owner.idle.notify_waiters();
+            if let Some(activity) = &*owner.activity.lock().unwrap() { activity.notify_one(); }
         });
         request_error.map_or(Ok(()), Err)
     }
@@ -1344,7 +1350,7 @@ mod tests {
 }
 
 #[cfg(target_os = "linux")]
-fn bind_parent_death(command: &mut Command) {
+pub(crate) fn bind_parent_death(command: &mut Command) {
     use std::os::unix::process::CommandExt;
     let parent = std::process::id();
     unsafe {

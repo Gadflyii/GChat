@@ -265,13 +265,14 @@ impl WorkspaceRuntime {
             )
             .await?,
         );
-        self.kvm_setup.set(owner).map_err(|_| {
+        self.kvm_setup.set(owner.clone()).map_err(|_| {
             crate::kvm_setup::SetupIssue::new(
                 "setup_configured",
                 "The local setup owner already exists.",
                 "Reuse the service's existing setup owner.",
             )
-        })
+        })?;
+        owner.resume_saved().await
     }
     #[cfg(target_os = "linux")]
     pub fn kvm_setup(&self) -> Option<Arc<crate::kvm_setup::KvmSetup>> {
@@ -918,8 +919,7 @@ impl WorkspaceRuntime {
     }
 
     pub async fn connect(&self, identity: SessionIdentity) -> Result<GuestHello, WorkspaceError> {
-        self.ensure_workspace_ready(identity.workspace_id).await?;
-        self.connect_session(identity).await
+        self.connect_session(identity, false).await
     }
 
     #[cfg(target_os = "linux")]
@@ -927,7 +927,7 @@ impl WorkspaceRuntime {
         &self,
         identity: SessionIdentity,
     ) -> Result<GuestHello, WorkspaceError> {
-        self.connect_session(identity).await
+        self.connect_session(identity, true).await
     }
 
     async fn ensure_workspace_ready(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
@@ -975,12 +975,15 @@ impl WorkspaceRuntime {
     async fn connect_session(
         &self,
         identity: SessionIdentity,
+        setup: bool,
     ) -> Result<GuestHello, WorkspaceError> {
         self.accepting()?;
         let lock = self.lifecycle_lock(identity.workspace_id).await;
         let _guard = lock.lock().await;
         self.accepting()?;
-        self.ensure_workspace_ready(identity.workspace_id).await?;
+        if !setup {
+            self.ensure_workspace_ready(identity.workspace_id).await?;
+        }
         let previous = self
             .sessions
             .lock()

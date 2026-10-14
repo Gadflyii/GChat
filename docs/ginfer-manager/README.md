@@ -13,6 +13,18 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Idle draft-width calibration
+
+`GCHAT-DRAFT-WIDTH-SETUP`: Host queues native calibration for saved AUTO DFlash deployments after their exact GPU group has a complete hardware profile.
+Artifact/runtime, GPU group, context, concurrency, TP, KV, graph and Vision changes queue a new recipe; no saved profile means no guessed calibration.
+Launches cancel and reap calibration first; interrupted jobs resume queued, completed jobs persist, and failures remain visible in GChat and Manager.
+The engine owns the calibration corpus (mixed real text), policy and matching record; its shipped default applies until that record exists.
+Source gate: 4 Host cases, 1 Manager case and 1 Chat case PASS; TypeScript, affected lint and strict Host Clippy PASS.
+Evidence and owned inventory: `out/draft-width-setup-20261014/result.json`; [decision](../decisions/2026-10-14-own-idle-draft-width-calibration-in-host.md).
+Candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch `feat/gchat-draft-width-setup-4884`, retains the saved deployment recipe and composes with accepted main `f3d77b8f0`. The native gate reuses the shared Host build cache and C2’s tested SM80 CLI; no model copy is allocated.
+Native Host gate PASS: S2 CMP 170HX, saved TP1/C8/8181/INT8 deployment, using merged capacity fix `43d524da2` (`7d80cd51f`). The unchanged native mixed-real-text corpus completed in 434.74 seconds; Host persisted the calibration record and completed job with no child PID or error. The isolated Host stopped normally, guards returned and its test root retired. Evidence: `native-result.json` and `native-cleanup.json` under the result folder above. Next: review and merge this candidate. Windows normal/cancel/Host-loss lifetime cases remain owed to the release gate.
+No new dependencies, model copies, native Windows build, release or publication.
+
 ## Flash-Next and CMP 170HX settled startup
 
 Current OI-072 source follow-up: Flash-Next deployments wait for residency
@@ -30,19 +42,17 @@ the selected-CMP rule remain supported. Context, concurrency, memory sizing,
 speculation and the Engine default remain unchanged. This startup policy does
 not qualify the current release Engine/artifact matrix.
 
-Accepted main `f3d77b8f0` includes composed tip `414caecec`, preserving the LAN
-Gbot control grant and both ADRs. Four focused Host/Max Perf cases passed after
-merging main (0.47 s), with strict Host Clippy (5.22 s). No GPU, Windows build
-or physical qualification. The clean merged candidate
-`/ai/gchat-worktrees/flash-settled-profile-cf2` is retired; shared Cargo cache and
-`/ai/gchat/out/flash-settled-profile-20261014/result.json` are retained.
-
-Draft setup candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch
-`feat/gchat-draft-width-setup-4884`, baseline `4884a214a`, uses the approved per-saved-deployment calibration recipe: exact context,
-concurrency, TP, KV, graph and Vision settings, idle after hardware profiling,
-cancelled on user activity. Profile key or GPU-group changes requeue work; an
-install without a saved profile retains the default policy. C2 CLI concurrency
-propagation remains required for execution. No build or job is allocated.
+Accepted source tip `414caecec`, merged to main as `f3d77b8f0`. Acceptance:
+the three existing focused Host/Max Perf cases plus one large-VRAM case cover
+Flash weight classes, restored requests, argv, selected/unselected CMP, and
+per-GPU benchmark options. Strict Host Clippy checks the affected crate.
+No GPU, Windows build or physical qualification. Evidence is retained under
+`/ai/gchat/out/flash-settled-profile-20261014/`; the source candidate has been
+retired, with no model copies or separate build allocation. All four focused
+cases passed again after merging main `4884a214a` (0.47 s total fixture time),
+along with strict Host Clippy (5.22 s). The composed Host retains the LAN Gbot
+control grant and the per-GPU residency policy; both ADRs remain indexed.
+Current Engine/artifact physical qualification remains owed to the scheduled release gate.
 
 Accepted `GCHAT-CMP-SETTLED-READY` (`bfd42e530`): the shared Host generates
 `--wait-for-residency-fill` when the selected GPU group includes a CMP 170HX,
@@ -328,24 +338,6 @@ claim that a saved OFF works by omission against a default-ON Engine. The Linux
 tray diagnosis is already merged/closed; Open/Exit is owed to Ron's desktop
 release walkthrough. Gbot's design is approved separately, with source-only
 SSH/vault/session work allowed while development VMs await setup.
-
-## Draft-width calibration after installation — queued
-
-The approved follow-up uses the Engine's offline `ginfer MODEL
---calibrate-draft-width` command after the selected deployment's complete v2
-hardware profile. It belongs to the shared Host setup job and must preserve the
-deployment's artifact, GPU order, TP, KV/graph/Vision settings and concurrency
-through cancel/resume; ordinary model startup must not calibrate. The Engine
-owns the real-text recipe, cache identity, completeness and publication.
-
-Blocked before implementation: current GInfer `ca4f89a64` CLI rejects
-`--max-concurrency`, so its default C1 admission cannot calibrate a configured
-C4/C8 deployment. Removing that argument would produce the wrong policy.
-The engine owner must supply the capacity parser/propagation fix; see GInfer
-`docs/draft-width-policy/README.md` and the `DRAFT-WIDTH-PRO` master row.
-Next action: bind that corrected CLI to the existing Host job lifetime, then
-check the exact argv, failure, cancellation and resume with focused fixtures.
-No capacity substitution, new calibration recipe or GPU run is authorized here.
 
 ## Accepted hardware profile installation
 

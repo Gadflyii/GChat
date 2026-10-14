@@ -1,9 +1,11 @@
 # Native background service lifetime
 
-Independent service ownership is merged in main `500a5f2cb`. Current AppImage acceptance uses the accepted `edb4235bf` desktop and packaged
-Cua runtime in `/ai/gchat/out/gchat-open-items-20261013/paired-brain-installed/`.
-The current scheduled-recovery candidate is `fix/gbot-scheduled-recovery-6351`
-in `/ai/gchat-worktrees/gbot-scheduled-recovery-6351`, based on main `63513aee2`.
+Independent service ownership is merged in main `500a5f2cb`. Existing AppImage
+lifetime and scheduled recovery receipts remain the baseline. Candidate
+`feat/gbot-linux-login-e04` adds opt-in Linux desktop sign-in startup and automatic
+reconnection of previously Ready KVM computers. Its installed reboot/sign-in gate
+passes: the service starts without GChat and restores the same VM/session and
+native-vault credentials (`out/gbot-linux-login/sign-in-recovery.json`).
 The coordinator owns the current [Gbot record](README.md) and master work ledger.
 This implementation supplies the missing independent lifetime while retaining
 existing runtime, executor, workspace, account and approval ownership.
@@ -16,6 +18,11 @@ opening state. Its native vault-backed bearer authenticates loopback clients;
 folder. Reopening GChat validates these values and reconnects to the same
 service. Concurrent starters serialize through ownership; a losing process
 never opens mutable service/account state. No alternative data root is inferred.
+
+If a spawned service exits before becoming ready and no concurrent service owns
+the data folder, bootstrap reports its exit status and the `service.log` path.
+If another starter holds ownership, bootstrap keeps waiting for that service
+within the existing 30-second readiness deadline.
 
 The service owns `AccountsState` at the existing
 `<data>/workspace-connections.json` path and its native Google/Microsoft provider
@@ -44,7 +51,11 @@ connector OAuth/operations and workspace/setup jobs, then waits for ownership
 release. Saved state is retained and the current GUI will not implicitly restart
 the explicitly stopped service. `Start Gbot service` reconnects/starts it again.
 Shared account operations also stop with this service, stated in the stopped UI.
-No OS login startup or inference process owner changes are introduced.
+Linux Gbot enablement registers a separate desktop sign-in entry for the
+local service, independent of GChat's window autostart. Disablement or selection
+of a LAN service removes that entry. This does not run before user sign-in or
+change inference process ownership. A passphrase-protected vault still requires
+unlocking after sign-in; no key or passphrase is placed in the startup entry.
 
 Bot brain assignment creation still starts with an empty API URL, model and
 context. Its explicit inputs preserve saved URLs and vault-backed keys. Adjacent

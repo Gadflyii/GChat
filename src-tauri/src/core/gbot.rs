@@ -106,6 +106,18 @@ impl Default for GbotState {
     }
 }
 impl GbotState {
+    #[cfg(test)]
+    pub(crate) fn stopped_for_test() -> Self {
+        Self {
+            connection: Mutex::new(Connection {
+                stopped: true,
+                local_stopped: true,
+                ..Connection::default()
+            }),
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn connector_client_id(&self) -> uuid::Uuid {
         self.connector_client_id
     }
@@ -291,6 +303,17 @@ impl GbotState {
             hosts.gbot_call(*host_id, "/v1/state", Value::Null).await?;
         }
         let mut connection = self.connection.lock().await;
+        #[cfg(target_os = "linux")]
+        {
+            let bootstrap = ginfer_host::gbot_bootstrap::Bootstrap::capture(
+                &root,
+                &app.path().resource_dir().map_err(|e| e.to_string())?,
+            )?;
+            ginfer_host::gbot_login::reconcile(
+                &bootstrap,
+                ginfer_host::gbot_login::enabled(&root)? && target == ServiceTarget::Local,
+            )?;
+        }
         save_service_target(&root, &target)?;
         let views = connection.detach();
         connection.stopped = false;
@@ -347,6 +370,32 @@ pub async fn gbot_service_select<R: Runtime>(
     target: ServiceTarget,
 ) -> Result<(), String> {
     state.select(&app, target).await
+}
+#[tauri::command]
+pub async fn gbot_service_set_enabled<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, GbotState>,
+    enabled: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let root = state.root(&app).await?;
+        let _connection = state.connection.lock().await;
+        let bootstrap = ginfer_host::gbot_bootstrap::Bootstrap::capture(
+            &root,
+            &app.path().resource_dir().map_err(|e| e.to_string())?,
+        )?;
+        ginfer_host::gbot_login::configure(
+            &bootstrap,
+            enabled,
+            service_target(&root)? == ServiceTarget::Local,
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (app, state, enabled);
+        Ok(())
+    }
 }
 #[tauri::command]
 pub async fn gbot_service_grant(host_id: uuid::Uuid, action: String) -> Result<Value, String> {

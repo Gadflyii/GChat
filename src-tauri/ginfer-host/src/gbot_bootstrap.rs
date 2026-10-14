@@ -2,13 +2,14 @@
 use crate::service_owner::ServiceOwner;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use uuid::Uuid;
 use std::{
+    ffi::OsString,
     path::{Path, PathBuf},
     process::Stdio,
     sync::Arc,
     time::Duration,
 };
+use uuid::Uuid;
 
 pub fn credential_store() -> Result<&'static jan_utils::credential_store::Store, String> {
     let registry = crate::local_host_registry::locator_path()?;
@@ -25,6 +26,22 @@ pub struct Bootstrap {
     pub appimage_resources: Option<PathBuf>,
 }
 impl Bootstrap {
+    pub fn arguments(&self) -> Vec<OsString> {
+        let mut args = vec![
+            "--gbot-service".into(),
+            "--data-folder".into(),
+            self.data_folder.as_os_str().to_owned(),
+        ];
+        if let Some(relative) = &self.appimage_resources {
+            args.extend([
+                "--appimage-resources".into(),
+                relative.as_os_str().to_owned(),
+            ]);
+        } else {
+            args.extend(["--resources".into(), self.resources.as_os_str().to_owned()]);
+        }
+        args
+    }
     pub fn capture(root: &Path, resources: &Path) -> Result<Self, String> {
         let executable = std::env::current_exe().map_err(|e| e.to_string())?;
         let appimage_resources = None;
@@ -182,7 +199,6 @@ pub async fn connect(root: &Path) -> Result<LocalClient, String> {
 pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String> {
     bootstrap.validate()?;
     let root = &bootstrap.data_folder;
-    let resources = &bootstrap.resources;
     if let Ok(client) = connect(root).await {
         return Ok(client);
     }
@@ -190,12 +206,7 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
     let mut child = None;
     if let Ok(owner) = ServiceOwner::acquire(&directory) {
         let mut command = tokio::process::Command::new(&bootstrap.executable);
-        command.arg("--gbot-service").arg("--data-folder").arg(root);
-        if let Some(relative) = &bootstrap.appimage_resources {
-            command.arg("--appimage-resources").arg(relative);
-        } else {
-            command.arg("--resources").arg(resources);
-        }
+        command.args(bootstrap.arguments());
         #[cfg(target_os = "linux")]
         let session_key = {
             command.arg("--credential-session-stdin");
@@ -256,7 +267,16 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
                 .map_err(|_| "Gbot credential channel closed")?;
         }
     }
+    wait_for_service(root, child).await
+}
+
+async fn wait_for_service(
+    root: &Path,
+    mut child: Option<tokio::process::Child>,
+) -> Result<LocalClient, String> {
+    let directory = root.join("gbot");
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    let mut exited = None;
     loop {
         if let Ok(client) = connect(root).await {
             if let Some(mut child) = child {
@@ -267,12 +287,18 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
             return Ok(client);
         }
         if let Some(process) = child.as_mut() {
-            if process
-                .try_wait()
-                .map_err(|error| error.to_string())?
-                .is_some()
-            {
+            if let Some(status) = process.try_wait().map_err(|error| error.to_string())? {
+                exited = Some(status);
                 child = None;
+            }
+        }
+        if let Some(status) = exited {
+            // A concurrent starter may own the service after our child loses the lock.
+            if let Ok(_owner) = ServiceOwner::acquire(&directory) {
+                return Err(format!(
+                    "Gbot service exited before becoming ready ({status}); see {}",
+                    directory.join("service.log").display()
+                ));
             }
         }
         if tokio::time::Instant::now() >= deadline {
@@ -287,5 +313,53 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
             ));
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn child_exit_is_reported_without_waiting_for_the_startup_timeout() {
+        let root = tempfile::tempdir().unwrap();
+        for code in [0, 17] {
+            let child = tokio::process::Command::new("/bin/sh")
+                .args(["-c", &format!("exit {code}")])
+                .spawn()
+                .unwrap();
+            let result = tokio::time::timeout(
+                Duration::from_secs(3),
+                wait_for_service(root.path(), Some(child)),
+            )
+            .await
+            .expect("Exited children must not wait for the 30-second readiness deadline");
+            let error = result.err().expect("An exited service cannot be ready");
+            assert!(error.contains(&format!("exit status: {code}")), "{error}");
+            assert!(error.contains("service.log"), "{error}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_losing_child_keeps_waiting_for_the_other_service_owner() {
+        let root = tempfile::tempdir().unwrap();
+        let owner = ServiceOwner::acquire(&root.path().join("gbot")).unwrap();
+        let child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "exit 17"])
+            .spawn()
+            .unwrap();
+        let waiting = wait_for_service(root.path(), Some(child));
+        tokio::pin!(waiting);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), &mut waiting)
+                .await
+                .is_err()
+        );
+        drop(owner);
+        let result = tokio::time::timeout(Duration::from_secs(3), waiting)
+            .await
+            .expect("Failure must be reported when no service owner remains");
+        let error = result.err().expect("Neither service became ready");
+        assert!(error.contains("exit status: 17"), "{error}");
     }
 }

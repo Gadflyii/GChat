@@ -6,6 +6,7 @@ import { seedServiceHub } from '@/test/service-hub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import type { EngineSnapshot } from '@/services/engines'
 import { useAppState } from '@/hooks/useAppState'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 
 const mocks = vi.hoisted(() => ({
   switchToModel: vi.fn(),
@@ -21,6 +22,11 @@ const mocks = vi.hoisted(() => ({
   autoStart: true,
   startServer: vi.fn().mockResolvedValue(1444),
   setServerPort: vi.fn(),
+  setGbotStartupEnabled: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/services/gbot', () => ({
+  setGbotStartupEnabled: mocks.setGbotStartupEnabled,
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -167,8 +173,14 @@ describe('DataProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    useGeneralSetting.setState({ gbotEnabled: false })
     mocks.autoStart = true
-    useAppState.setState({ serverStatus: 'stopped', activeModels: [], pendingModelStops: 0, intentionallyStoppedModels: new Set() })
+    useAppState.setState({
+      serverStatus: 'stopped',
+      activeModels: [],
+      pendingModelStops: 0,
+      intentionallyStoppedModels: new Set(),
+    })
     useEngineHosts.setState({ snapshots: {}, errors: {} })
     Object.assign(window.core.api, { startServer: mocks.startServer })
     localStorage.clear()
@@ -211,6 +223,31 @@ describe('DataProvider', () => {
     })
   })
 
+  it('reconciles Gbot sign-in startup when its selection changes', async () => {
+    let finishInitial!: () => void
+    mocks.setGbotStartupEnabled.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishInitial = resolve
+        })
+    )
+    const { unmount } = render(<DataProvider />)
+    await waitFor(() =>
+      expect(mocks.setGbotStartupEnabled).toHaveBeenLastCalledWith(false)
+    )
+    act(() => useGeneralSetting.getState().setGbotEnabled(true))
+    expect(mocks.setGbotStartupEnabled).toHaveBeenCalledTimes(1)
+    await act(async () => finishInitial())
+    await waitFor(() =>
+      expect(mocks.setGbotStartupEnabled).toHaveBeenLastCalledWith(true)
+    )
+    act(() => useGeneralSetting.getState().setGbotEnabled(false))
+    await waitFor(() =>
+      expect(mocks.setGbotStartupEnabled).toHaveBeenLastCalledWith(false)
+    )
+    unmount()
+  })
+
   it('hydrates startup stores from service data while rendering no UI', async () => {
     const { container, unmount } = render(<DataProvider />)
 
@@ -231,55 +268,118 @@ describe('DataProvider', () => {
   it.each([
     ['local', true],
     ['paired', false],
-  ])('starts the facade when a %s host instance becomes ready and retains the assigned port', async (_kind, local) => {
-    const view = render(<DataProvider />)
-    await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
-    expect(mocks.startServer).not.toHaveBeenCalled()
-    const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
-    act(() => useEngineHosts.setState({ hosts: [{ host_id: 'lan', local, name: 'Host', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot } }))
-    await waitFor(() => expect(useAppState.getState().serverStatus).toBe('running'))
-    expect(mocks.startServer).toHaveBeenCalledOnce()
-    expect(mocks.setServerPort).toHaveBeenCalledWith(1444)
-    act(() => useEngineHosts.setState({ snapshots: { lan: { ...snapshot } } }))
-    expect(mocks.startServer).toHaveBeenCalledOnce()
-    view.unmount()
-  })
-
-  it.each([
-    ['local', true], ['paired', false],
-  ])('discards startup status read when an explicit %s Stop finishes while it is pending', async (_kind, local) => {
-    let releaseStatus: (running: boolean) => void = () => {}
-    getServerStatus.mockImplementationOnce(() => new Promise<boolean>(resolve => { releaseStatus = resolve }))
-    const view = render(<DataProvider />)
-    await waitFor(() => expect(getServerStatus).toHaveBeenCalledOnce())
-    act(() => {
-      useAppState.getState().reserveModelStop()
-      if (local) useAppState.getState().setIntentionalModelStop('ginfer-lan', 'ginfer/local/instance', true)
-      useAppState.getState().setServerStatus('stopped')
-      useAppState.getState().releaseModelStop()
-    })
-    await act(async () => { releaseStatus(true) })
-    expect(useAppState.getState().serverStatus).toBe('stopped')
-    expect(getActiveModels).not.toHaveBeenCalled()
-    expect(mocks.startServer).not.toHaveBeenCalled()
-    view.unmount()
-  })
+  ])(
+    'starts the facade when a %s host instance becomes ready and retains the assigned port',
+    async (_kind, local) => {
+      const view = render(<DataProvider />)
+      await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
+      expect(mocks.startServer).not.toHaveBeenCalled()
+      const snapshot = {
+        host_id: 'lan',
+        instances: [{ status: 'ready' }],
+      } as EngineSnapshot
+      act(() =>
+        useEngineHosts.setState({
+          hosts: [
+            {
+              host_id: 'lan',
+              local,
+              name: 'Host',
+              base_url: '',
+              certificate_sha256: '',
+              client_id: 'client',
+            },
+          ],
+          snapshots: { lan: snapshot },
+        })
+      )
+      await waitFor(() =>
+        expect(useAppState.getState().serverStatus).toBe('running')
+      )
+      expect(mocks.startServer).toHaveBeenCalledOnce()
+      expect(mocks.setServerPort).toHaveBeenCalledWith(1444)
+      act(() =>
+        useEngineHosts.setState({ snapshots: { lan: { ...snapshot } } })
+      )
+      expect(mocks.startServer).toHaveBeenCalledOnce()
+      view.unmount()
+    }
+  )
 
   it.each([
     ['local', true],
     ['paired', false],
-  ])('does not auto-start for an offline or disabled %s host instance', async (_kind, local) => {
-    const snapshot = { host_id: 'lan', instances: [{ status: 'ready' }] } as EngineSnapshot
-    useEngineHosts.setState({ hosts: [{ host_id: 'lan', local, name: 'Host', base_url: '', certificate_sha256: '', client_id: 'client' }], snapshots: { lan: snapshot }, errors: { lan: 'offline' } })
-    const view = render(<DataProvider />)
-    await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
-    expect(mocks.startServer).not.toHaveBeenCalled()
-    mocks.autoStart = false
-    act(() => useEngineHosts.setState({ errors: {} }))
-    await act(async () => { await Promise.resolve() })
-    expect(mocks.startServer).not.toHaveBeenCalled()
-    view.unmount()
-  })
+  ])(
+    'discards startup status read when an explicit %s Stop finishes while it is pending',
+    async (_kind, local) => {
+      let releaseStatus: (running: boolean) => void = () => {}
+      getServerStatus.mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            releaseStatus = resolve
+          })
+      )
+      const view = render(<DataProvider />)
+      await waitFor(() => expect(getServerStatus).toHaveBeenCalledOnce())
+      act(() => {
+        useAppState.getState().reserveModelStop()
+        if (local)
+          useAppState
+            .getState()
+            .setIntentionalModelStop(
+              'ginfer-lan',
+              'ginfer/local/instance',
+              true
+            )
+        useAppState.getState().setServerStatus('stopped')
+        useAppState.getState().releaseModelStop()
+      })
+      await act(async () => {
+        releaseStatus(true)
+      })
+      expect(useAppState.getState().serverStatus).toBe('stopped')
+      expect(getActiveModels).not.toHaveBeenCalled()
+      expect(mocks.startServer).not.toHaveBeenCalled()
+      view.unmount()
+    }
+  )
+
+  it.each([
+    ['local', true],
+    ['paired', false],
+  ])(
+    'does not auto-start for an offline or disabled %s host instance',
+    async (_kind, local) => {
+      const snapshot = {
+        host_id: 'lan',
+        instances: [{ status: 'ready' }],
+      } as EngineSnapshot
+      useEngineHosts.setState({
+        hosts: [
+          {
+            host_id: 'lan',
+            local,
+            name: 'Host',
+            base_url: '',
+            certificate_sha256: '',
+            client_id: 'client',
+          },
+        ],
+        snapshots: { lan: snapshot },
+        errors: { lan: 'offline' },
+      })
+      const view = render(<DataProvider />)
+      await waitFor(() => expect(getActiveModels).toHaveBeenCalled())
+      expect(mocks.startServer).not.toHaveBeenCalled()
+      mocks.autoStart = false
+      act(() => useEngineHosts.setState({ errors: {} }))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(mocks.startServer).not.toHaveBeenCalled()
+      view.unmount()
+    }
+  )
 
   it('preserves saved settings when migrating the built-in assistant', async () => {
     const savedAssistant = {
