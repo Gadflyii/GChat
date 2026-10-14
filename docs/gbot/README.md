@@ -1,27 +1,22 @@
 # Gbot design
 
-Current item: Linux install-to-task walkthrough. Candidate
-`feat/gbot-linux-login-e04` in `/ai/gchat-worktrees/gbot-linux-login-e04`, based on
-main `e04e7393e`, adds opt-in service startup at desktop sign-in and recovery of
-previously Ready KVM computers. The setup owner's private connection must also
-pass its readiness check without opening admission to user operations. Acceptance
-is focused startup/recovery cases and one isolated installed walkthrough using
-the existing tools. No Windows build, cloud provisioning, new dependency,
-publication or person's desktop input is authorized. Existing installed wizard,
-task and GUI-close evidence below remains valid; OS sign-in recovery is unverified.
-Focused startup, recovery and UI cases, types, lint, strict Clippy and the cached
-desktop build pass. A delayed-write fixture protects startup-setting order; the
-frontend serializes these writes. The first developer frontend omitted
-`IS_TAURI=true`, so it could not register native startup. The corrected frontend
-and desktop are built and installed, but sign-in/reboot recovery was not verified
-before the 45-minute test budget ended at 11:11Z. This is pending acceptance,
-not a demonstrated startup race or a passed reboot check.
-The private S1 Debian guest `gbot-linux-login` at
-`/ai/gbot-vms/linux-login-20261014` is shut off; its disk and saved VM/vault state
-are retained for that check. No model, job or reservation remains. Evidence:
-`out/gbot-linux-login/result.json`. Next: enable Gbot once with the corrected
-installed artifact, verify desktop-sign-in recovery of the same saved computer,
-then retire the guest. Reuse the passing focused checks and prior task evidence.
+Linux install-to-task acceptance is complete on candidate
+`feat/gbot-linux-login-e04` (`62c467446`, base main `e04e7393e`) in
+`/ai/gchat-worktrees/gbot-linux-login-e04`. Focused startup/recovery/UI cases,
+types, lint and strict Clippy pass. Existing installed wizard, real desktop task,
+result reopen and GUI-close receipts below remain valid.
+The corrected installed app enabled desktop sign-in startup. After an OS reboot,
+Gbot started without opening GChat and restored the same saved Ready KVM computer,
+session and native-vault credentials; authenticated access passed and unauthenticated
+access was refused. Evidence: `out/gbot-linux-login/{result,sign-in-recovery}.json`.
+The initial developer frontend omitted `IS_TAURI=true`, compiling out native
+startup registration. The corrected native build and developer installer use that
+flag; package details are in `out/gbot-linux-login/package-receipt.json`.
+The private S1 guest is retired; the corrected developer package remains at
+`/ai/gbot-vms/linux-login-20261014/GChat-linux-login-e04.deb`. No live guest, model,
+job or reservation remains. Next: reviewed merge of this candidate. Windows/M365,
+physical sleep recovery and unattended startup before desktop sign-in remain owed.
+No signing or publication is included.
 
 Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-13).
 Linux installed computer creation and same-setup resume passed on main

@@ -1,9 +1,11 @@
 # Native background service lifetime
 
 Independent service ownership is merged in main `500a5f2cb`. Existing AppImage
-lifetime and scheduled recovery receipts remain the baseline. Current work on
+lifetime and scheduled recovery receipts remain the baseline. Candidate
 `feat/gbot-linux-login-e04` adds opt-in Linux desktop sign-in startup and automatic
-reconnection of previously Ready KVM computers; its installed gate is pending.
+reconnection of previously Ready KVM computers. Its installed reboot/sign-in gate
+passes: the service starts without GChat and restores the same VM/session and
+native-vault credentials (`out/gbot-linux-login/sign-in-recovery.json`).
 The coordinator owns the current [Gbot record](README.md) and master work ledger.
 This implementation supplies the missing independent lifetime while retaining
 existing runtime, executor, workspace, account and approval ownership.

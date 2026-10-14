@@ -6,19 +6,23 @@ owns acceptance scope, preserved evidence and actual prerequisites.
 
 ## Current implementation and test plan — October 13
 
-Current item **GBOT-INSTALL-WALKTHROUGH**: opt-in Linux service startup at desktop
+Completed item **GBOT-INSTALL-WALKTHROUGH**: opt-in Linux service startup at desktop
 sign-in and automatic recovery of the same saved Ready VM. Candidate
 `/ai/gchat-worktrees/gbot-linux-login-e04` (`feat/gbot-linux-login-e04`, base
 `e04e7393e`); results go to `out/gbot-linux-login/result.json`. Acceptance is
 focused startup/recovery/UI cases and one private installed Linux walkthrough,
 using existing tools. Prior wizard, task and GUI-close passes are reused below.
 No Windows build, cloud/user desktop input, new dependency, signing or publication.
-Focused checks and the cached desktop build pass. The initial developer frontend
-omitted `IS_TAURI=true`; its corrected desktop is installed, but sign-in recovery
-remains unverified at the 11:11Z hard test end. The private guest is shut off and
-its disk/state retained; no live job, model or reservation remains. Next: enable
-Gbot once on the corrected install, verify sign-in recovery without duplicating
-VM/credentials, then retire the guest. Do not repeat the passing focused cases.
+Focused checks and the corrected native desktop build pass. The developer frontend
+now uses `IS_TAURI=true`, which the first artifact omitted. Installed enablement and
+desktop sign-in after OS reboot pass: the background service starts without GChat,
+restores the same Ready VM/session and native-vault credentials, and retains
+authenticated control. Receipt: `out/gbot-linux-login/sign-in-recovery.json`.
+The private S1 guest and disk are retired; the corrected developer installer is
+retained at `/ai/gbot-vms/linux-login-20261014/GChat-linux-login-e04.deb`, with
+`out/gbot-linux-login/package-receipt.json`. No live job, model or reservation
+remains. Next: reviewed merge. This gate does not qualify physical sleep recovery,
+unattended startup before sign-in, Windows or M365.
 
 Installed paired-Host brain/task acceptance **PASS**: select a Ready model, save
 its actual served context, create `~/hello.txt` through the desktop editor,
