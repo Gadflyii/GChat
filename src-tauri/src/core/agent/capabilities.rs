@@ -1650,16 +1650,17 @@ mod tests {
             second_done.content["record"]["finalReply"],
             "Second independent result"
         );
-        let captured = first_events.lock().unwrap();
-        assert!(captured.iter().any(|event| {
-            let event = match event {
-                AgentEvent::StageActivity { event, .. } => event.as_ref(),
-                event => event,
-            };
-            matches!(event, AgentEvent::ToolCallExecuted { result }
-                if result.call.tool == "os.fs.write" && result.outcome.status == ToolStatus::Denied)
-        }), "Worker events: {captured:?}");
-        drop(captured);
+        {
+            let captured = first_events.lock().unwrap();
+            assert!(captured.iter().any(|event| {
+                let event = match event {
+                    AgentEvent::StageActivity { event, .. } => event.as_ref(),
+                    event => event,
+                };
+                matches!(event, AgentEvent::ToolCallExecuted { result }
+                    if result.call.tool == "os.fs.write" && result.outcome.status == ToolStatus::Denied)
+            }), "Worker events: {captured:?}");
+        }
         assert!(!root.path().join("disabled.txt").exists());
         execute_with_sink(
             app.handle().clone(),

@@ -2697,18 +2697,16 @@ dependencies = [
  "jan-utils",
  "json5",
  "keyring",
- "libc",
  "libloading 0.8.9",
  "log",
  "nix 0.30.1",
  "notify-rust",
- "once_cell",
  "png 0.18.1",
  "portable-pty",
  "rand 0.8.5",
  "regex",
  "reqwest 0.11.27",
- "rfd 0.15.4",
+ "rfd",
  "rmcp",
  "serde",
  "serde_json",
@@ -2721,7 +2719,6 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-autostart",
  "tauri-plugin-deep-link",
- "tauri-plugin-dialog",
  "tauri-plugin-ginfer",
  "tauri-plugin-hardware",
  "tauri-plugin-http",
@@ -2974,7 +2971,6 @@ version = "0.1.0"
 dependencies = [
  "ginfer-host",
  "jan-utils",
- "keyring",
  "png 0.18.1",
  "reqwest 0.11.27",
  "serde",
@@ -6819,27 +6815,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rfd"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a15ad77d9e70a92437d8f74c35d99b4e4691128df018833e99f90bcd36152672"
-dependencies = [
- "block2",
- "dispatch2",
- "js-sys",
- "log",
- "objc2",
- "objc2-app-kit",
- "objc2-core-foundation",
- "objc2-foundation",
- "raw-window-handle 0.6.2",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "windows-sys 0.60.2",
-]
-
-[[package]]
 name = "ring"
 version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8709,24 +8684,6 @@ dependencies = [
  "url",
  "windows-registry 0.5.3",
  "windows-result 0.3.4",
-]
-
-[[package]]
-name = "tauri-plugin-dialog"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9204b425d9be8d12aa60c2a83a289cf7d1caae40f57f336ed1155b3a5c0e359b"
-dependencies = [
- "log",
- "raw-window-handle 0.6.2",
- "rfd 0.16.0",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "tauri-plugin-fs",
- "thiserror 2.0.18",
- "url",
 ]
 
 [[package]]
