@@ -30,18 +30,12 @@ the selected-CMP rule remain supported. Context, concurrency, memory sizing,
 speculation and the Engine default remain unchanged. This startup policy does
 not qualify the current release Engine/artifact matrix.
 
-Candidate `/ai/gchat-worktrees/flash-settled-profile-cf2`, branch
-`feat/gchat-flash-settled-profile-cf2`, baseline `cf2dd919c`. Acceptance:
-the three existing focused Host/Max Perf cases plus one large-VRAM case cover
-Flash weight classes, restored requests, argv, selected/unselected CMP, and
-per-GPU benchmark options. Strict Host Clippy checks the affected crate.
-No GPU, Windows build or physical qualification. Evidence is retained under
-`/ai/gchat/out/flash-settled-profile-20261014/`; the candidate reuses the shared
-Cargo cache, with no model copies or separate build allocation. All four focused
-cases passed again after merging main `4884a214a` (0.47 s total fixture time),
-along with strict Host Clippy (5.22 s). The composed Host retains the LAN Gbot
-control grant and the per-GPU residency policy; both ADRs remain indexed.
-Next action: send the composed tip for review; retain the candidate until merge.
+Accepted main `f3d77b8f0` includes composed tip `414caecec`, preserving the LAN
+Gbot control grant and both ADRs. Four focused Host/Max Perf cases passed after
+merging main (0.47 s), with strict Host Clippy (5.22 s). No GPU, Windows build
+or physical qualification. The clean merged candidate
+`/ai/gchat-worktrees/flash-settled-profile-cf2` is retired; shared Cargo cache and
+`/ai/gchat/out/flash-settled-profile-20261014/result.json` are retained.
 
 Draft setup candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch
 `feat/gchat-draft-width-setup-4884`, baseline `4884a214a`, uses the approved per-saved-deployment calibration recipe: exact context,

@@ -6,7 +6,18 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — OI-115 Host request copies (merge-ready)
+## Current item — Rust test preparation
+
+Baseline main `f3d77b8f0`; candidate `fix/gchat-rust-test-preparation-f3d` at
+`/ai/gchat-worktrees/rust-test-preparation-f3d`; shared Cargo cache retained.
+Deliverable: the documented Rust command includes shared CLI tests and missing
+Linux Gbot resource stubs; no dependencies or runtime behavior change.
+PASS: one existing desktop/CLI OpenCode fixture (38.88 s compile, 0.02 s test)
+and non-overwriting resource preparation in the accepted Cua build environment.
+Evidence: `/ai/gchat/out/rust-test-preparation-20261014/result.json`.
+Next: reviewed merge; no live jobs, model, package or release run.
+
+## OI-115 Host request-copy evidence
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`; baseline main `39c9bbc26`.
 Candidate `fix/gchat-host-body-39c9` in `/ai/gchat-worktrees/host-body-39c9`.
@@ -33,7 +44,7 @@ production admission is unchanged. Prior SSE/tail/auth checks remain accepted.
 Inventory: shared Cargo cache `/ai/gchat/src-tauri/target`; no live jobs or model
 copies. Evidence `/ai/gchat/out/oi115-host-body-20261013/result.json`; fixture
 wall time2.11s baseline/1.24s candidate, each control under1s, strict Clippy PASS.
-Next: reviewed merge. OI-116's Windows/NAS checks remain release-gated;
+OI-116's Windows/NAS checks remain release-gated;
 OI-119's larger-fleet native qualification remains open after the limited sample below.
 
 ## Accepted OI-118 — snapshot ownership (merged f0db75362)

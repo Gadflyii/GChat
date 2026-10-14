@@ -194,6 +194,12 @@ make test-rust  # Rust suites with inert Tauri resource stubs
 yarn test      # Root Vitest projects only
 ```
 
+The application suite targets its library with the desktop test and CLI features,
+so shared OpenCode configuration tests compile without building the desktop entry point.
+Resource stubs include Gbot and never replace installed binaries or assets.
+Cua media also needs `protoc` on `PATH` or in `PROTOC`; the
+[Cua build record](docs/gbot/cua-map.md) lists its container prerequisites.
+
 `make test-all` is the broadest developer command. Live sidecars and cloud
 providers are skipped when their environment variables are absent; pass
 `REQUIRE=1` to fail on missing live prerequisites. Its final summary aggregates
