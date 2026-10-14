@@ -1822,89 +1822,84 @@ reference import is needed for this measured result copy.
 
 ## Current OI-075 Linux rendering observation
 
-Repository `/ai/gchat`, subject `docs/agent-runtime/`, owner GChat coordinator.
-Candidate `/ai/gchat-worktrees/oi075-linux-93e2`, branch
-`docs/gchat-oi075-linux-93e2`, from reviewed source/documentation `93e2ba9b9`.
-The preceding OI-116/118 change is merge-ready; no failing check remains.
+Linux render/traversal and post-install native idle observations are complete.
+C2's actual new native-v2 runner output is the next unresolved input; the passing
+render/traversal checks and accepted package were reused without rebuilding.
 
-Ron/bubbs's October 11 07:05 decision authorizes a generated Linux history matching
-the selected twelve-message history's shape: message count, per-message byte
-sizes, attachment/code-block kinds and total bytes. Original content is excluded;
-no Windows history copy, shared user-data-folder launch or synthetic inference.
-Use one isolated folder, run one native WebKitGTK open/programmatic traversal/
-30-second foreground idle observation under WSLg, then delete that folder.
-The output qualifies the generated Linux/WSLg WebKit workload only, not S2,
-the original conversation, cross-OS equivalence, many-message scaling or a gain.
+The October 14 Linux-only rendering coverage is complete for a generated 120-message
+conversation on Linux/WSLg WebKitGTK 2.52.6. The accepted October 14 package
+(7e33222e8) was reused without rebuilding. Ten repetitions of the earlier
+content-free twelve-message shape produced 1,037,320 JSONL bytes and 120 tool
+parts, with no original conversation content or attachments. No model ran.
 
-Reuse accepted desktop/frontend `54c931c68`, packaged by `02d369e8a`, from
-`/ai/gchat/out/linux/GChat_2.0.42_amd64.deb`; prior X11 extraction/fixture paths
-are retired. No rebuild, install, dependency change, model load, calibration or
-Windows run is selected. The existing six OI-075 browser phase expressions own
-the measurement. Adapt only native inspector transport and process endpoint
-counters; unknown WebKit long-task support is unavailable, never zero.
-The actual native WebKitGTK 2.52.6 page is `tauri://localhost`, title GChat,
-with the Tauri bridge, sole generated sidebar link and a 1200×800/DPR1 viewport.
-Its loopback HTTP inspector supplies one WebPage over a persistent WebSocket;
-page-target multiplexing and `Runtime.awaitPromise` execute the existing phases.
-No inspector window is opened. Fixture-only saved startup flags are off before
-measurement; no original settings or data are used.
+At 1200×800/DPR1, the first sidebar open reached all 120 wrappers and another
+frame in 301 ms. Settled programmatic traversal took 1,003 ms over 73 steps;
+frame gaps were median 16 ms, p95 17 ms and maximum 36 ms. The scroll height
+changed during traversal, so the final bottom was resolved from current geometry.
+This measures wrapper observation and programmatic traversal, not GPU-present
+or native wheel/input latency. Cache state is unknown.
 
-Acceptance: metadata-only generated shape check, actual native page/build/window
-identity, completed opening and full traversal, stable foreground/viewport/
-expansion through the30s idle interval, pinned process-group CPU/memory endpoint
-counts and observer/process/data cleanup. No new performance floor or cap.
-CPU counters use actual monotonic elapsed and PID/start identities; Linux
-private resident/PSS retain their meanings rather than Windows private commit.
+A passive 30-second foreground DOM observation retained the route,
+viewport, collapsed states and all 120 wrappers, with no running DOM animations.
+The complete endpoint-observed descendant group was stable: GChat,
+WebKitNetworkProcess and WebKitWebProcess. Total CPU was 100.1123% of one logical
+core: GChat 99.8457%, WebKit Web 0.26661%, Network 0%. Private resident bytes
+were 419,319,808→418,545,664; PSS 530,434,048→529,660,928. These are endpoint
+resident counters, not private commit or peak memory. WebKit long-task support
+is unavailable, not zero. Native installation had not completed, so these counters do not establish
+native idle. A follow-up located finite bundled-resource verification/copying;
+after installation completed in 82 seconds, desktop threads used 0–0.4% of one
+core (six five-second samples, mean 0.2%). That empty-history follow-up excludes
+separate Host/Gbot services and does not repeat this many-message workload.
+Correction: `/ai/gchat/out/native-idle-20261014/result.json`. Raw evidence remains
+unchanged; no rendering cause, cross-OS comparison or gain is claimed. Future
+native idle observations must wait for installation completion.
 
-The one requested observation runs October 11 at 07:20:26–07:20:57 UTC.
-Generated shape verification passes: 12 messages, 107,089 JSONL bytes,
-101,857 compact content bytes, largest 79,574, reasoning parts, 12 tool calls,
-one unknown-language code fence and no attachments. Per-message row/content
-sizes match the read-only metadata; every identifier/body/tool payload is
-generated. This does not establish equivalent semantic/rendering content.
+The missing many-message idle observation completed at 17:51:18Z after bundled
+installation finished at 17:46:07Z (about 85 seconds after launch). This fresh
+generated 120-message fixture contains 1,041,550 JSONL bytes, so it is not a
+byte-matched comparison with the earlier render/traversal fixture. The 30-second
+foreground observation retained its route, all 120 wrappers, viewport and
+collapsed states. All five endpoint-observed descendant identities remained
+stable and their native counters were complete: GChat 1.0664%, WebKit Web
+0.9998%, Network 0.0333%, Gbot 0.0333% and Host 0.1000%, totalling 2.2328% of
+one logical core. PSS was 666,037,248→658,471,936 bytes; private resident bytes
+497,082,368→489,517,056. These are endpoint resident counters, not private
+commit or peaks; helpers that started and ended between endpoints are excluded.
+Passive observer overhead is unmeasured and WebKit long-task support is
+unavailable. No idle-loop defect or performance gain is established.
 
-First sidebar open reaches all 12 wrappers plus another frame in 110 ms; cache
-state is unknown, and this is not GPU-present timing. Settled full programmatic
-traversal takes 113 ms, six scroll steps, seven retained frame gaps with median
-and maximum 16 ms. It does not measure wheel/input latency. Passive browser idle
-lasts 30.047 s around the native 30.0001 s sample with no continuous frame sampling;
-route, 12 wrappers, viewport, foreground/focus and collapsed expansion remain
-unchanged. WebKit long-task support is unavailable, not zero.
+Earlier capture failures were observer issues: window focus, cached scroll-height
+assumptions and a final JavaScript scope reference. Native focus, per-frame
+bottom resolution and a validated final expression corrected them before the
+successful capture. Those failed attempts are not product qualification.
+The final idle capture also corrected a twelve-message fixture/count mismatch
+and an inspector selector that excluded the selected conversation's URL path.
 
-Native counters are **partial**. The sampler exits 1 `FAIL_UNSTABLE_COHORT`:
-two `bwrap` wrappers and their `glycin-image-rs` image loader are present at the
-first endpoint and absent at the second. Their final CPU/memory cannot be
-recovered. The three stable processes (GChat, WebKitNetwork and WebKitWeb) use
-a summed 2.06616% of one logical core; their private resident bytes are
-320,131,072 before and 307,961,856 after. Those are partial-component counters,
-not full descendant-group totals, private commit, a peak or a memory-gain claim.
-No rendering cause, cross-OS improvement or physical S2 qualification follows.
+Owner GChat; source candidate `/ai/gchat-worktrees/oi075-linux-many-20261014`
+(branch `docs/oi075-linux-many-e971`). Evidence and retained existing tools:
+`/ai/gchat/out/oi075-linux-many-20261014/result.json` and `native-idle.json`.
+The final idle evidence is `settled-idle/result.json` and
+`settled-idle/native-idle.json` in the same folder. All five final owned process
+identities are absent; its private vault entry and package/data fixture were
+removed, freeing 5,031,550,976 allocated bytes, and CPU booking 661 cancelled.
+The earlier fixture was also retired (booking 659). Accepted installers remain retained.
+No GPU, original-history, Windows, S2 or cross-OS qualification is implied.
+Broader Windows coverage remains owed to the release walkthrough. Next action:
+consume C2's actual native-v2 report when available; otherwise take an actionable
+non-release row. The premature native idle attribution is closed with the
+installation evidence above.
 
-The runner stops before phase 05 because the sampler rejects the cohort.
-Phase 06 cleanup preserves the actual passive idle observation as `interrupted`;
-its retained state checks pass. Raw sampler/runner failure remains unchanged;
-the derived result is `ONE_REQUESTED_OBSERVATION_COMPLETE_WITH_PARTIAL_PROCESS_COUNTERS`,
-not an overall performance-gate PASS. No opening, traversal or idle rerun occurs.
-Any future complete-group measurement must finish transient image loading
-before its endpoint bracket; it is not part of this one-observation mandate.
+The worker fixture fix is now merged in `25ac2cdb2`; its clean candidate was
+retired, reclaiming 282,525,696 bytes while preserving results and shared assets.
+The existing Rust test preparation `bab6541bf` still awaits incorporation in
+main. The remaining benchmark check needs C2's exact new runner revision and
+saved real report; the older C1 parser fixture does not cover that integration.
 
-Inventory: accepted package and previous Windows results retained. Metadata,
-generator/measurement inputs, exact raw observations and derived result belong to
-`/ai/gchat/out/remaining-acceptance-20261009/oi075/linux-shaped-20261011/`;
-`shape-verification.json`, `result.json`, `native-idle.json` and phase01–04/06
-receipts support the scope above. Exact owned application/WebKit/image-loader
-identities are absent at 07:21:54.883 UTC; the canonical build guard is returned
-and CPU booking 450 cancelled. No GPU/model/Windows run occurs.
-After live-reference checks, the entire isolated `fixture/` data/runtime/package
-folder is deleted at 07:22:51.536, removing 3,532,132,352 allocated bytes; 508 KiB
-of metadata/scripts/evidence remains. `process-return.json` and
-`resource-return.json` record cleanup. Shared caches, original conversation/
-settings, accepted packages, models and other owners are untouched.
-The requested generated Linux/WSLg observation is complete with the stated
-counter limitation. Broader original-content, many-message and complete-group
-qualification stays incomplete; no new rendering fix is justified by this screen.
-Next authorized item after this docs/master handoff: OI-073 app public-delete
-control, with its prepared source and unrun focused gates recovered first.
+The earlier generated twelve-message observation remains historical evidence at
+`/ai/gchat/out/remaining-acceptance-20261009/oi075/linux-shaped-20261011/result.json`:
+open 110 ms, traversal 113 ms, partial counters because image helpers ended.
+It is not a matched performance comparison with this larger workload.
 
 ## Accepted Windows native idle observation
 
@@ -1938,9 +1933,10 @@ group counters are:
 Private bytes are commit, not resident physical RAM; passive/debug observer
 overhead is unmeasured. This qualifies the observed Windows long-content
 baseline only, with no performance-gain, many-message scaling or polling
-attribution claim. Linux native open/scroll/idle remains unmeasured. Preserve the
-same selected history and record the actual Linux build/window/workload before
-comparison; no numerical performance floor or conversation cap is set. The
+attribution claim. Generated Linux open/traversal coverage is now recorded above;
+matched cross-OS idle coverage is not established. Never copy the user's history
+for Linux qualification; generate its content-free shape and record the actual
+build/window/workload. No numerical performance floor or conversation cap is set. The
 older unselected-view idle observation remains historical in `idle-sample.json`.
 
 ## Original diagnostic preservation
