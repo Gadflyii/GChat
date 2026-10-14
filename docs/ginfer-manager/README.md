@@ -21,8 +21,8 @@ Launches cancel and reap calibration first; interrupted jobs resume queued, comp
 The engine owns the calibration corpus (mixed real text), policy and matching record; its shipped default applies until that record exists.
 Source gate: 4 Host cases, 1 Manager case and 1 Chat case PASS; TypeScript, affected lint and strict Host Clippy PASS.
 Evidence and owned inventory: `out/draft-width-setup-20261014/result.json`; [decision](../decisions/2026-10-14-own-idle-draft-width-calibration-in-host.md).
-Candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch `feat/gchat-draft-width-setup-4884`, retains the saved deployment recipe and composes with accepted main `f3d77b8f0`. No separate build or model copy is allocated.
-Next: the native integration gate after C2’s CLI concurrency-capacity fix, then source review; no physical calibration or Windows lifetime claim yet.
+Candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch `feat/gchat-draft-width-setup-4884`, retains the saved deployment recipe and composes with accepted main `f3d77b8f0`. The native gate reuses the shared Host build cache and C2’s tested SM80 CLI; no model copy is allocated.
+Native Host gate PASS: S2 CMP 170HX, saved TP1/C8/8181/INT8 deployment, using merged capacity fix `43d524da2` (`7d80cd51f`). The unchanged native mixed-real-text corpus completed in 434.74 seconds; Host persisted the calibration record and completed job with no child PID or error. The isolated Host stopped normally, guards returned and its test root retired. Evidence: `native-result.json` and `native-cleanup.json` under the result folder above. Next: review and merge this candidate. Windows normal/cancel/Host-loss lifetime cases remain owed to the release gate.
 No new dependencies, model copies, native Windows build, release or publication.
 
 ## Flash-Next and CMP 170HX settled startup
