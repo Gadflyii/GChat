@@ -1814,7 +1814,11 @@ reference import is needed for this measured result copy.
 
 ## Current OI-075 Linux rendering observation
 
-The October 14 Linux-only coverage is complete for a generated 120-message
+Linux render/traversal and post-install native idle observations are complete.
+C2's actual new native-v2 runner output is the next unresolved input; the passing
+render/traversal checks and accepted package were reused without rebuilding.
+
+The October 14 Linux-only rendering coverage is complete for a generated 120-message
 conversation on Linux/WSLg WebKitGTK 2.52.6. The accepted October 14 package
 (7e33222e8) was reused without rebuilding. Ten repetitions of the earlier
 content-free twelve-message shape produced 1,037,320 JSONL bytes and 120 tool
@@ -1843,16 +1847,35 @@ Correction: `/ai/gchat/out/native-idle-20261014/result.json`. Raw evidence remai
 unchanged; no rendering cause, cross-OS comparison or gain is claimed. Future
 native idle observations must wait for installation completion.
 
+The missing many-message idle observation completed at 17:51:18Z after bundled
+installation finished at 17:46:07Z (about 85 seconds after launch). This fresh
+generated 120-message fixture contains 1,041,550 JSONL bytes, so it is not a
+byte-matched comparison with the earlier render/traversal fixture. The 30-second
+foreground observation retained its route, all 120 wrappers, viewport and
+collapsed states. All five endpoint-observed descendant identities remained
+stable and their native counters were complete: GChat 1.0664%, WebKit Web
+0.9998%, Network 0.0333%, Gbot 0.0333% and Host 0.1000%, totalling 2.2328% of
+one logical core. PSS was 666,037,248→658,471,936 bytes; private resident bytes
+497,082,368→489,517,056. These are endpoint resident counters, not private
+commit or peaks; helpers that started and ended between endpoints are excluded.
+Passive observer overhead is unmeasured and WebKit long-task support is
+unavailable. No idle-loop defect or performance gain is established.
+
 Earlier capture failures were observer issues: window focus, cached scroll-height
 assumptions and a final JavaScript scope reference. Native focus, per-frame
 bottom resolution and a validated final expression corrected them before the
 successful capture. Those failed attempts are not product qualification.
+The final idle capture also corrected a twelve-message fixture/count mismatch
+and an inspector selector that excluded the selected conversation's URL path.
 
 Owner GChat; source candidate `/ai/gchat-worktrees/oi075-linux-many-20261014`
 (branch `docs/oi075-linux-many-e971`). Evidence and retained existing tools:
 `/ai/gchat/out/oi075-linux-many-20261014/result.json` and `native-idle.json`.
-All three owned process identities are absent; the private package/data fixture
-was deleted and CPU booking 659 cancelled. Accepted installers remain retained.
+The final idle evidence is `settled-idle/result.json` and
+`settled-idle/native-idle.json` in the same folder. All five final owned process
+identities are absent; its private vault entry and package/data fixture were
+removed, freeing 5,031,550,976 allocated bytes, and CPU booking 661 cancelled.
+The earlier fixture was also retired (booking 659). Accepted installers remain retained.
 No GPU, original-history, Windows, S2 or cross-OS qualification is implied.
 Broader Windows coverage remains owed to the release walkthrough. Next action:
 consume C2's actual native-v2 report when available; otherwise take an actionable
