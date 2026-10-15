@@ -1,5 +1,18 @@
 # Gbot design
 
+The Gbot menu retains settings, setup and controls. Bot avatars above Work open
+a right-side companion over the current Chat, Code or Studio view. Its hidden,
+compact and expanded states preserve the main workspace; each bot retains its
+Conversation/Agents/Desktop selection and unsent conversation draft. Agents
+shows the assigned model and reported task/tool activity. Hiding the pane or
+leaving Desktop closes its media and input leases without cancelling tasks.
+A bot paused for human takeover stays paused until explicit Hand back.
+All seven supplied avatar animations now have activity mappings, with the
+existing light/dark and reduced-motion styles. See the
+[overlay decision](../decisions/2026-10-15-open-gbot-in-a-workspace-overlay.md).
+The agreed “Help with this page” bridge for main-view context and draft actions
+is recorded there as follow-up; it is not implemented by the companion pane.
+
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.
 Two focused Host cases, compilation and strict all-target Clippy pass on

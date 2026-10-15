@@ -30,6 +30,8 @@ const HermesTerminalHost = lazy(() => import('@/containers/HermesTerminalHost').
 import { EmbeddedIntegrationProvisioner } from '@/containers/EmbeddedIntegrationProvisioner'
 import { EngineDiscovery } from '@/containers/EngineDiscovery'
 import { StudioActivity } from '@/containers/StudioActivity'
+import GbotCompanion from '@/containers/GbotCompanion'
+import { useGbotCompanion } from '@/stores/gbot-companion-store'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -39,6 +41,7 @@ export const Route = createRootRoute({
 })
 
 const AppLayout = () => {
+  const botExpanded = useGbotCompanion(s => s.mode === 'expanded')
   const { pathname } = useLocation()
   const codeVisible = pathname.startsWith('/code')
   const hermesVisible = pathname.startsWith('/hermes')
@@ -75,12 +78,15 @@ const AppLayout = () => {
         <StudioActivity />
         <LeftSidebar />
         <SidebarInset>
-          <div className="relative bg-background size-full">
-            <Outlet />
-            <Suspense fallback={null}>
-              {(codeVisible || codeVisited) && <CodeTerminalHost visible={codeVisible} />}
-              {(hermesVisible || hermesVisited) && <HermesTerminalHost visible={hermesVisible} />}
-            </Suspense>
+          <div className="relative bg-background size-full overflow-hidden">
+            <div className="size-full" inert={botExpanded}>
+              <Outlet />
+              <Suspense fallback={null}>
+                {(codeVisible || codeVisited) && <CodeTerminalHost visible={codeVisible} />}
+                {(hermesVisible || hermesVisited) && <HermesTerminalHost visible={hermesVisible} />}
+              </Suspense>
+            </div>
+            <GbotCompanion />
           </div>
         </SidebarInset>
 

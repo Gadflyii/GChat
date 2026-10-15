@@ -475,3 +475,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-14** — [Wait for small-VRAM Flash-Next residency before Ready](2026-10-14-wait-for-flash-residency-before-ready.md)
 
 - **2026-10-14** — [Resume local Gbot at Linux sign-in](2026-10-14-resume-local-gbot-at-linux-sign-in.md)
+- **2026-10-15** — [Open Gbot in a workspace overlay](2026-10-15-open-gbot-in-a-workspace-overlay.md)

@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
+import { IconChevronDown } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { DeleteModelAction } from '@/containers/hub/DeleteModelAction'
 import { useHardware } from '@/hooks/useHardware'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -98,9 +106,22 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
 
   return <div className="flex h-full flex-col">
     <HeaderPage><div className="flex w-full flex-wrap items-center justify-between gap-3"><h1>Models</h1>
-      <label className="flex items-center gap-2 text-sm">Host<select aria-label="Model destination" disabled={busy} className="max-w-64 rounded border bg-background p-2" value={destination} onChange={e => { setDestination(e.target.value); setError(null) }}>
-        <option value="local">This computer</option>{hosts.map(h => <option key={h.host_id} value={h.host_id}>{h.name}{hostErrors[h.host_id] ? ' (offline)' : ''}</option>)}
-      </select></label></div></HeaderPage>
+      <div className="flex items-center gap-2 text-sm">Host
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button aria-label="Model destination" disabled={busy} variant="outline" className="max-w-64 justify-between bg-background text-foreground">
+              <span className="truncate">{local ? 'This computer' : `${host?.name ?? 'Choose a host'}${hostErrors[destination] ? ' (offline)' : ''}`}</span>
+              <IconChevronDown size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuRadioGroup value={destination} onValueChange={id => { setDestination(id); setError(null) }}>
+              <DropdownMenuRadioItem value="local">This computer</DropdownMenuRadioItem>
+              {hosts.map(h => <DropdownMenuRadioItem key={h.host_id} value={h.host_id}>{h.name}{hostErrors[h.host_id] ? ' (offline)' : ''}</DropdownMenuRadioItem>)}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div></div></HeaderPage>
     <main className="space-y-5 overflow-y-auto p-5">
       <div className="flex flex-wrap gap-2">{gpus.map(g => <span key={g.uuid} className="rounded border px-3 py-1 text-sm">{g.name} · {(g.memory_mib / 1024).toFixed(0)} GiB · {g.compute_capability ? `SM ${g.compute_capability}` : 'SM unknown'}</span>)}</div>
       <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected host'}, not this computer.`} GPU memory is evaluated per device, never added together.</p>
