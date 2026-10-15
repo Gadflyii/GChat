@@ -16,9 +16,48 @@ unqualified.
 Inference-server hosted retrieval, `file_search`, `web_search` and MCP are
 unsupported. Unsupported tool, input-content and output-format declarations
 return an explicit error; adapters must not remove them and continue generation.
-GChat's client-side web search, document retrieval and MCP release scope remains
-under review in OI-055. Configured GChat MCP connectors execute client function
-tools through the shared executor.
+GChat client tools execute separately from unsupported inference-server hosted
+tools; the following Linux qualifications define their accepted scope.
+
+The separate `MCP-CLIENT-QUALIFY` Linux release item covers
+trusted STDIO and HTTP/SSE connectors with static credentials. Linux native
+development GUI checks pass with real servers: discovery, approval and denial,
+disabled-tool enforcement, invocation, Stop cancellation and saved configuration
+across normal app restart. The shared Chat executor drives these model-free
+checks; model-led tool selection and installer qualification are separate.
+OAuth is outside scope. Configured connectors
+execute client function tools through the shared approval and cancellation
+executor. STDIO servers run with the user's permissions, and saved environment
+variables and headers are plaintext configuration, not a credential vault.
+See the [MCP setup guide](../src/pages/docs/desktop/integrations/mcp-servers.mdx)
+for the current GUI and trust boundaries.
+
+The separate `WEB-SEARCH-QUALIFY` Linux item covers native `os.web.search` and
+`os.web.fetch` from ordinary Chat and saved Standard Agents. The globe controls
+both tools and persists their thread setting; availability reflects the selected
+model and native catalog. Real-network primary Exa search/page reading and an
+induced Exa transport failure with DuckDuckGo search/direct-HTTP page reading
+pass in both. A missing public page returns HTTP 404 and an honest Chat error.
+Agent Network Ask approval, denial, Network Block, public-address rejection
+and in-flight Stop are checked separately. Regression checks cover cancellation
+before fallback. Direct connections retain all validated DNS addresses. Initial fetch targets are validated before Exa; redirects
+followed by hosted extraction remain outside local visibility. These are native
+Linux development checks; Windows and installer qualification are separate.
+Evidence: `/ai/gchat/out/web-search-qualify-20261015/{verification-34e61720c.json,summary.md}`.
+
+The separate `LOCAL-FILE-SEARCH-QUALIFY` Linux item covers client-side direct
+PDF/DOCX/spreadsheet text extraction and filename/text search through
+`gchat-native` tools. It uses the shared Chat/Agent executor and workspace folder
+permissions; an outside-folder Allow grants the displayed folder **CAN EDIT**
+access. Short text PDFs are valid; textless PDFs explicitly require unsupported
+OCR. Malformed DOCX and unreadable worksheets or directory traversal return
+errors rather than silently reporting partial success. Native reads cap returned
+text, but document parsing still reads the full input and does not immediately
+observe cancellation. Pending permission requests can be cancelled with Stop.
+Semantic indexed retrieval remains unavailable without embeddings. See the
+[file guide](../src/pages/docs/desktop/file-upload.mdx) for Auto references,
+inline fallback, disabled tools and privacy boundaries. Model-led answers and
+installer qualification are separate from model-free native GUI checks.
 
 The Host checks unsupported hosted-tool and output declarations for Manager,
 standalone and registered GChat instances. Native engine validation owns the
