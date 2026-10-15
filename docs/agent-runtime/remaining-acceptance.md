@@ -12,6 +12,43 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## OI-068 targeted worker cancellation and continuation — October 14
+
+The installed/extracted Linux developer AppImage passes the missing targeted
+transitions. Desktop/CLI/Host source remains `7e33222e8`; the four-image Engine
+closure is clean `38ff80e0c` (requested `415eaa2b5` plus the FFmpeg worker-cap
+control). Its packaged SM120a CLI generated the current local5090 hardware
+profile in 760.4 seconds. The Host reached Ready at 21:45:52 UTC with Qwen
+`qwen3.8-27b/nvfp4-dflash2-nvfp4`, normal 262,144 context and unchanged saved
+configuration. This supersedes the earlier pre-Ready bundle/profile blockers.
+
+**Stop worker** cancelled run `6a0eb23b-9f4e-40cc-84f0-4ad45e0fdc52` while
+its first model step was generating (21:48:28 UTC). Its parent Chat finished
+at 21:48:32; the cancelled record, result and exact conversation survived
+reopening. No completed worker step or partial article is claimed. The UI
+snapshot also contains a false “could not be cancelled” toast; the distinct
+`GCHAT-WORKER-CANCEL-FALSE-ERROR` row records this presentation defect.
+
+Studio's **Continue as new run** created
+`1b9975bd-8972-425a-9511-e368eb8ab3d2`, completed nine steps with finish reason
+`reply` at 21:59:22 UTC and wrote 7,324 output bytes. Reopening at 22:02:26
+preserved the exact finished record. Normal Host Stop then passed. This
+accepts first-step cancellation and supported continuation as a separate run;
+it does not establish checkpoint resume, broader active-worker compaction,
+Hermes, Windows, performance or all-image physical acceptance. OI-068 stays PARTIAL.
+
+Evidence: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/`
+contains `result.json`, `package-result.json`, `hardware-profile-result.json`,
+`ui-cancel-current.json`, `ui-worker-reopen-current.json`,
+`ui-continuation-reopen.json` and `ui-normal-stop-current.json`. Current unsigned
+DEB/AppImage paths are in the [installer record](../installer-refresh/README.md).
+Package integrity/manifests and the focused runtime-document staging fixture
+pass. Resume-time `make verify` stops before checks at missing Yarn dependency
+state (`make-verify-resume.log`); no install or repeated live gate ran.
+No owned job, model, booking or lock remains. Disposable stages, isolated client
+state and superseded installers are retired; current packages/profile/runtime
+and acceptance receipts remain. Signing and publication were not performed.
+
 ## Current implementation and test plan — October 13
 
 Completed item **GBOT-INSTALL-WALKTHROUGH**: opt-in Linux service startup at desktop
@@ -122,7 +159,8 @@ incremental Linux desktop build pass. The isolated installed retry at Qwen's
 both terminal results, returned Chat to idle and preserved both run records and
 results across conversation reopen and client reload. The math worker returned
 323; the document worker reported denied folder access and finished itself.
-Targeted worker cancellation was not reached and remains owed under OI-068.
+That earlier run did not reach targeted cancellation; the October 14 targeted
+gate above accepts first-step cancellation and continuation as a new run.
 
 Client reload exposed a separate display defect: only the last worker activity
 card is restored, although both results remain saved. It is logged separately
@@ -359,7 +397,7 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; repeat-save, definition refresh and persisted tool errors corrected; two workers collected/reopened. | One targeted running-worker cancel/checkpoint check; Windows/Hermes at release. Do not replay the whole walkthrough. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; repeat-save, definition refresh and persisted tool errors corrected; two workers collected/reopened; active first-step cancellation, parent completion, cancelled-record reopen and nine-step new-run continuation/reopen. | Broader active-worker compaction/checkpoint resume; Windows/Hermes at release. False cancellation toast tracked separately. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |

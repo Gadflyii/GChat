@@ -1,10 +1,47 @@
 # GChat installer refresh
 
-## October 14 developer Linux package — current Engine rebuild
+## October 14 developer Linux package — current Engine accepted
 
-The retained Gbot walkthrough AppImage from `7e33222e8` contains the historical `05a286ba` Engine set. Its server rejects the current Host's required `--hardware-profile` flag before loading a model. These packages are usable for the accepted UI/Gbot resource checks; they cannot currently establish local-model startup. Replace the Engine closure with a Host-compatible accepted set before presenting the package as a complete local-inference installer. Source/payload verification of the historical bundle does not establish compatibility with the current Host. Evidence: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/result.json`.
+The Engine-only refreshed developer DEB/AppImage passes package integrity,
+runtime-manifest and installed SM120a Host compatibility checks. It replaces the
+historical `05a286ba` Engine set, which rejected the current Host's required
+`--hardware-profile`. `GCHAT-LINUX-BUNDLE-HOST-CONTRACT` is closed for this
+accepted developer composition. The retained desktop, CLI, Host and Gbot
+payloads from `7e33222e8` are unchanged.
 
-Ron authorized the current `415eaa2b5` Linux CLI/serve set, built sequentially for SM80/86/89/120a in the pinned Ubuntu 24.04 container. The retained desktop is reused; only its Engine payload and matching offline documentation are replaced. Current assembly reads the five operator entries already hashed in each Engine runtime manifest: README, VERSION, CLI, serving and release names. All images must carry identical documentation and every relative link must resolve within that set. GInfer's `packaging/runtime-docs.json` owns the payload; separate operations/versioning documents and external documentation provenance are retired. See [the packaging decision](../decisions/2026-10-14-package-engine-docs-from-runtime-manifests.md). Build and installed profile/cancellation acceptance remain pending.
+The four Linux CLI/serve images (`sm_120a`, `sm_86`, `sm_89`, `sm_80`) are clean
+`38ff80e0c`, based on authorized `415eaa2b5` plus FFmpeg's worker-cap control.
+Sequential pinned Ubuntu 24.04 builds, native help/server-version, ABI closure
+and staging pass. The packaged CLI generated the current local5090 hardware
+profile; normal Qwen 262,144-context startup reached Ready. Active worker
+cancellation, parent completion, durable reopen, nine-step **Continue as new
+run**, exact finished-record reopen and normal Host Stop pass. The false
+cancellation-failure toast is tracked separately; no checkpoint-resume or
+broader active-worker compaction acceptance is claimed.
+
+Current unsigned installers, retained in
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/`:
+
+- `GChat_2.0.42+oi06820261014.38ff80e0c_amd64.deb`
+- `GChat_2.0.42_oi06820261014.38ff80e0c_amd64.AppImage`
+
+Evidence and exact package hashes:
+`/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/{result.json,package-result.json,summary.md}`.
+The runtime set and current profile remain retained. Disposable stages, isolated
+client data and superseded package copies are retired. No Windows build,
+signing, update-feed entry or publication occurred; all-image physical and
+release qualification remain separate.
+
+Assembly reads the five operator entries already hashed in each Engine runtime
+manifest: README, VERSION, CLI, serving and release names. All images must carry
+identical documentation and every relative link must resolve within that set.
+GInfer's `packaging/runtime-docs.json` owns the payload; separate
+operations/versioning documents and external documentation provenance are
+retired. The focused staging fixture passes. See [the packaging
+decision](../decisions/2026-10-14-package-engine-docs-from-runtime-manifests.md).
+Resume-time `make verify` cannot start lint without this worktree's Yarn
+dependency state; no dependencies were installed and no passing live gate was
+repeated.
 
 ## SectileLabs updater feed — OI-110
 

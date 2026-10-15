@@ -1,14 +1,14 @@
 # Chat and Agent runtime
 
-## OI-068 live-worker cancellation — passed; paused for reboot
+## OI-068 live-worker cancellation and new-run continuation — accepted
 
 The four-image current Linux CLI/serve runtime set and Engine-only DEB/AppImage refresh pass. Engine source is `38ff80e0c` on requested `415eaa2b5`; accepted desktop/CLI/Host bytes remain `7e33222e8`. The packaged CLI generated the exact local5090 profile in 760.4 seconds.
 
-The unchanged normal model configuration reached Ready. Cancelling an actively generating General Agent worker stopped its Engine request and finished its parent Chat turn. The cancelled run and exact Chat history survived reopening. Studio's **Continue as new run** completed in nine steps, returned its final answer and preserved its finished record across reopening. Normal Host Stop passed. This qualifies first-step cancellation and new-run continuation, not broader active-worker compaction or Windows.
+The unchanged normal model configuration reached Ready. Cancelling an actively generating General Agent worker stopped its Engine request and finished its parent Chat turn. The cancelled run and exact Chat history survived reopening. Studio's **Continue as new run** completed in nine steps, returned its final answer and preserved its finished record across reopening. Normal Host Stop passed. This qualifies first-step cancellation and new-run continuation; broader active-worker compaction and Windows remain unqualified. The UI also displayed an erroneous cancellation-failure toast despite the durable cancelled outcome; `GCHAT-WORKER-CANCEL-FALSE-ERROR` tracks that separate defect.
 
-Current results, evidence and exact reboot resume steps: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/{result.json,summary.md}`. Package manifests/integrity and the focused runtime-document staging fixture pass. No desktop source, saved model setting, signing or publication changed.
+Results and retained receipts: `/ai/gchat/out/gchat-open-items-20261013/oi068-chat-workers/live-cancel-20261014/{result.json,summary.md}`. Package manifests/integrity and the focused runtime-document staging fixture pass. The resume-time `make verify` attempt stops at lint because this worktree lacks Yarn's dependency state; no dependency installation was performed. No desktop source, saved model setting, signing or publication changed.
 
-Ron requested a reboot pause. Owned app/Host/Engine/profile jobs are absent; bookings and canonical build/GPU locks are released. Source branches are retained for review. Disposable package stages and isolated client state remain until the documented cleanup. Next action: update remaining acceptance, the master rows and package guide from the saved PASS evidence, remove disposable outputs, then send reviewed-merge handoff. Do not rebuild or repeat passing gates.
+Owned app/Host/Engine/profile jobs are absent; bookings and canonical build/GPU locks are released. Disposable package stages, isolated client state and superseded installers are retired; current installers, the generated profile, runtime set and evidence remain. Source branches are ready for coordinator review. Do not rebuild or repeat passing gates.
 
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
