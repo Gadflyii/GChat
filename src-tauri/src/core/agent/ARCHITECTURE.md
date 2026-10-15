@@ -173,6 +173,11 @@ The execution loop is:
 Approval-gated tools cannot share a batch. A terminal tool is valid only once,
 as the final call, after all preceding calls complete.
 
+Successful file reads, grep, document extraction and archive-entry reads retain
+their tool-bounded content in the next prompt and durable session. Other tool
+observations retain the existing summary compression. Full outputs remain
+archived; context budgeting and checkpoints still bound represented history.
+
 ## Safety and tools
 
 The runtime applies bounded call/step counts, resource-class validation,

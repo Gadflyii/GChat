@@ -85,10 +85,21 @@ impl AgentSessionState {
 
     pub fn push_tool_observations(&mut self, calls: &[ToolCallPayload], outcomes: &[ToolOutcome]) {
         for (call, outcome) in calls.iter().zip(outcomes) {
-            let prompt_summary = if should_compress_tool(&call.tool) {
-                compress_tool_result(&call.tool, outcome.status, &outcome.summary).summary
-            } else {
+            let prompt_summary = if outcome.status == ToolStatus::Ok
+                && matches!(
+                    call.tool.as_str(),
+                    "os.fs.read" | "os.fs.grep" | "os.fs.read_document" | "os.fs.archive.read_entry"
+                )
+            {
+                // These tools already bound retrieval; keep the requested excerpt for inference.
                 outcome.summary.clone()
+            } else {
+                let summary = if should_compress_tool(&call.tool) {
+                    compress_tool_result(&call.tool, outcome.status, &outcome.summary).summary
+                } else {
+                    outcome.summary.clone()
+                };
+                truncate_chars(&summary, tool_summary_limit(&call.tool))
             };
             self.push_turn(AgentSessionTurn::AssistantToolCall {
                 tool: call.tool.clone(),
@@ -97,7 +108,7 @@ impl AgentSessionState {
             self.push_turn(AgentSessionTurn::ToolResult {
                 tool: call.tool.clone(),
                 status: outcome.status,
-                summary: truncate_chars(&prompt_summary, tool_summary_limit(&call.tool)),
+                summary: prompt_summary,
             });
         }
     }
@@ -477,8 +488,8 @@ mod tests {
         let outcome = ToolOutcome::ok(detailed.clone());
         state.push_tool_observations(
             &[ToolCallPayload {
-                tool: "os.fs.read".into(),
-                args: serde_json::json!({"path": "large.txt"}),
+                tool: "os.shell.run".into(),
+                args: serde_json::json!({"cmd": "test"}),
             }],
             std::slice::from_ref(&outcome),
         );

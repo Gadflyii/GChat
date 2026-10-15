@@ -5,6 +5,9 @@ title: "Compress verbose Agent observations only at the session boundary"
 
 # 2026-07-20 — Compress verbose Agent observations only at the session boundary
 
+Successful bounded content retrieval is superseded by
+[the October 15 decision](2026-10-15-preserve-bounded-agent-retrieval-content.md).
+
 - **Context:** Rust Agent retained bounded tool output for frontend activity
   events but copied up to 1,200 characters of every observation into the
   active prompt and durable session. Verbose reads, searches, logs, HTTP

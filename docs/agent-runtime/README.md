@@ -27,6 +27,44 @@ The composed `make verify` gate, `cargo check` and strict Clippy pass.
 The failed eight-file review remains separate work
 under `GCHAT-WORKER-UNSUPPORTED-REPLY-MARKUP`.
 
+## Worker retrieval content — October 15
+
+`GCHAT-WORKER-FRESH-READ-COMPRESSION`: successful file reads, grep,
+document extraction and archive-entry reads now retain their tool-bounded
+content in the next model request and durable session. Previously, the session
+boundary reduced a fresh 16000-byte excerpt to a 400-character summary,
+including when the worker reread its full-result artifact. Other tool
+observations retain their existing compression. Context budgeting and
+safe-boundary checkpoint compaction continue to bound inference history.
+
+The real-tool regression checks complete retrieved text in the next completion
+and saved-session reopening for all four retrieval tools and a full-result JSON
+reread. It fails before the change and passes after it. Full `make verify` passes
+(2309 root and 114 extension tests; 850 Rust tests, 25 ignored). Production
+frontend, native desktop check, strict Clippy and build also pass. The existing
+Protobuf compiler wrapper and host OpenSSL avoid a foreign-owned vendored
+OpenSSL cache without changing that cache.
+
+One native default-worker review on S1's PRO reached `finished` / `reply` after
+10 decisions. All eight requested files were inspected; all 11 successful read
+results (7157–16000 characters each) survive verbatim in the durable working
+context, with their full-result artifact pointers. The finished record and exact
+answer survive ordinary Studio navigation and reopening.
+
+The strict review task still failed: two decisions batched reads despite the
+sequential instruction, and the answer incorrectly says a manual Compact request
+returns `nothing_to_compact` whenever input already fits. The implementation
+first tries to install a smaller safe-boundary checkpoint. This remaining review
+quality is tracked separately as `GCHAT-WORKER-REVIEW-INSTRUCTION-FOLLOWING`.
+No new compaction, restart recovery or successful post-compaction task is claimed.
+
+Evidence: `/ai/gchat/out/worker-fresh-reads-20261015/{result.json,summary.md}`.
+The desktop is source `35640ed50` in an extracted accepted resource closure;
+the remote Host is `44e80b7c1` and Engine `9f8fb8ff9`. This is a native functional
+gate, not installer acceptance. Normal Host Stop passed with zero requests;
+private pairing and owned processes are retired, 9.21 GB of disposable state
+is removed, and S1 booking 1832 is returned.
+
 ## Worker repair markup — October 15
 
 `GCHAT-WORKER-UNSUPPORTED-REPLY-MARKUP`: the retained eight-file review's first
