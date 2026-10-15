@@ -94,6 +94,177 @@ it('opens first-bot setup after opt-in and makes no service calls while disabled
   ).not.toBeInTheDocument()
 })
 
+it('discovers a saved KVM setup without a workspace after remount and resumes only its identity', async () => {
+  const record: KvmSetupRecord = {
+    id: 'saved-local-computer',
+    name: 'Saved researcher',
+    stage: 'connecting',
+    issue: {
+      code: 'guest_not_ready',
+      message: 'Guest setup is still connecting.',
+      next_action: 'Repair the guest connection and resume this setup.',
+    },
+  }
+  let prerequisitesReady = false
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state')
+      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+    if (path === 'setup/kvm/status') return [record]
+    if (path === 'setup/kvm/preflight')
+      return {
+        ready: prerequisitesReady,
+        issues: prerequisitesReady
+          ? []
+          : [
+              {
+                code: 'kvm_unavailable',
+                message: 'KVM access is not ready.',
+                next_action: 'Restore KVM access and check prerequisites again.',
+              },
+            ],
+      }
+    if (path === 'setup/kvm/start') return record
+    return []
+  })
+  const first = render(<Page />)
+  await screen.findByRole('region', { name: 'Local setup Saved researcher' })
+  expect(
+    screen.queryByRole('form', { name: 'Set up Gbot' })
+  ).not.toBeInTheDocument()
+  first.unmount()
+
+  render(<Page />)
+  const card = await screen.findByRole('region', {
+    name: 'Local setup Saved researcher',
+  })
+  expect(within(card).getByText('Computer connecting')).toBeInTheDocument()
+  expect(within(card).getByText(record.issue!.message)).toBeInTheDocument()
+  expect(within(card).getByText(record.issue!.next_action)).toBeInTheDocument()
+  expect(screen.queryByLabelText('Bot name')).not.toBeInTheDocument()
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'setup/kvm/start',
+    expect.anything()
+  )
+
+  fireEvent.click(within(card).getByRole('button', { name: 'Resume setup' }))
+  const wizard = await screen.findByRole('form', { name: 'Set up Gbot' })
+  expect(within(wizard).queryByLabelText('Bot name')).not.toBeInTheDocument()
+  expect(
+    within(wizard).queryByRole('button', { name: /Create .*computer/ })
+  ).not.toBeInTheDocument()
+  await screen.findByText('KVM access is not ready.')
+  expect(
+    within(wizard).getByRole('button', { name: 'Resume setup' })
+  ).toBeDisabled()
+  fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'setup/kvm/start',
+    expect.anything()
+  )
+
+  prerequisitesReady = true
+  fireEvent.click(
+    within(wizard).getByRole('button', { name: 'Check prerequisites again' })
+  )
+  await waitFor(() =>
+    expect(
+      within(wizard).getByRole('button', { name: 'Resume setup' })
+    ).toBeEnabled()
+  )
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'setup/kvm/start',
+    expect.anything()
+  )
+  fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+      id: record.id,
+      name: record.name,
+    })
+  )
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/kvm/start')
+  ).toHaveLength(1)
+  expect(
+    within(wizard).queryByRole('button', { name: 'Use this computer' })
+  ).not.toBeInTheDocument()
+  for (const path of [
+    'workspaces',
+    'workspaces/ssh',
+    'connect',
+    'tasks/start',
+    'tasks/resume',
+    'view/open',
+  ])
+    expect(mocks.call).not.toHaveBeenCalledWith(path, expect.anything())
+})
+
+it('does not offer removed KVM setups and permits first-bot setup', async () => {
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state')
+      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+    if (path === 'setup/kvm/status')
+      return [
+        {
+          id: 'removed-local',
+          name: 'Removed researcher',
+          stage: 'removed',
+          issue: null,
+        },
+      ]
+    return []
+  })
+  render(<Page />)
+  await screen.findByLabelText('Bot name')
+  expect(
+    screen.queryByRole('region', { name: 'Local setup Removed researcher' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Resume setup' })
+  ).not.toBeInTheDocument()
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'setup/kvm/start',
+    expect.anything()
+  )
+})
+
+it('retains a KVM status error instead of assuming no saved setup and discovers it on retry', async () => {
+  let unavailable = true
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state')
+      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+    if (path === 'setup/kvm/status') {
+      if (unavailable) throw new Error('Saved setup status could not be read')
+      return [
+        {
+          id: 'saved-local',
+          name: 'Recovered researcher',
+          stage: 'connecting',
+          issue: null,
+        },
+      ]
+    }
+    return []
+  })
+  render(<Page />)
+  await screen.findByText('Error: Saved setup status could not be read')
+  expect(
+    screen.queryByRole('form', { name: 'Set up Gbot' })
+  ).not.toBeInTheDocument()
+  unavailable = false
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+  await screen.findByRole('region', { name: 'Local setup Recovered researcher' })
+  expect(
+    screen.queryByRole('form', { name: 'Set up Gbot' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText('Error: Saved setup status could not be read')
+  ).not.toBeInTheDocument()
+})
+
 it('resumes a saved cloud price review without creating a workspace or offering first setup', async () => {
   mocks.listen.mockResolvedValue(() => {})
   const now = Math.floor(Date.now() / 1000)

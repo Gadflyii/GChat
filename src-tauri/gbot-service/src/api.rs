@@ -535,6 +535,9 @@ async fn setup_route(
     }
     #[cfg(not(target_os = "linux"))]
     {
+        if request.uri().path() == "/v1/setup/kvm/status" {
+            return json_response(StatusCode::OK, &Vec::<serde_json::Value>::new());
+        }
         let _ = (runtime, tasks, request);
         error_response(
             StatusCode::NOT_IMPLEMENTED,
@@ -1454,6 +1457,84 @@ mod tests {
     }
 
     struct LockedVault(bool);
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn kvm_discovery_preserves_unavailable_and_empty_status_without_preflight() {
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let api = Api::bind(service.clone(), Arc::new(MemoryVault::default()), 0)
+            .await
+            .unwrap();
+        let response = setup_route(
+            api.runtime.clone(),
+            None,
+            Request::builder()
+                .method(Method::POST)
+                .uri("/v1/setup/kvm/status")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body: serde_json::Value =
+            serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                .unwrap();
+        assert_eq!(body["error"]["code"], "setup_unavailable");
+
+        let api = api.with_kvm_setup(root.path().to_owned()).await.unwrap();
+        let client = api.client();
+        // Discovery must work without KVM tools or staged guest assets.
+        assert_eq!(
+            client
+                .call("/v1/setup/kvm/status", serde_json::json!({}))
+                .await
+                .unwrap(),
+            serde_json::json!([])
+        );
+        assert!(service.snapshot().await.workspaces.is_empty());
+        assert!(tokio::fs::read_dir(root.path().join("vms"))
+            .await
+            .unwrap()
+            .next_entry()
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[tokio::test]
+    async fn kvm_discovery_is_empty_on_unsupported_hosts_but_other_operations_stay_unsupported() {
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let api = Api::bind(service, Arc::new(MemoryVault::default()), 0)
+            .await
+            .unwrap();
+        assert_eq!(
+            api.client()
+                .call("/v1/setup/kvm/status", serde_json::json!({}))
+                .await
+                .unwrap(),
+            serde_json::json!([])
+        );
+        for path in ["preflight", "start", "remove"] {
+            let response = setup_route(
+                api.runtime.clone(),
+                None,
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/v1/setup/kvm/{path}"))
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+            let body: serde_json::Value =
+                serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                    .unwrap();
+            assert_eq!(body["error"]["code"], "unsupported_host");
+        }
+    }
 
     #[cfg(target_os = "linux")]
     #[tokio::test]
