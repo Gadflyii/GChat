@@ -31,6 +31,18 @@ if [ ! -d "${APP_DIR}" ]; then
   exit 1
 fi
 
+# GStreamer pulls in libraries also used by host libvirt/SSH tools. Keep those
+# tools on their host ABI instead of shadowing it with older bundled libraries.
+# Only prune the AppDir library root; engine and Cua private libraries stay intact.
+HOST_LIBRARIES=(
+  libapparmor.so.1 libcrypto.so.3 libcurl-gnutls.so.4 liblber.so.2
+  libldap.so.2 libnuma.so.1 libreadline.so.8 librtmp.so.1
+  libsasl2.so.2 libssh.so.4 libssl.so.3 libtinfo.so.6
+)
+for library in "${HOST_LIBRARIES[@]}"; do
+  rm -f -- "${APP_DIR}/usr/lib/${library}" "${APP_DIR}/usr/lib/${library}".*
+done
+
 install -m755 src-tauri/resources/bin/bun "${RESOURCE_DIR}/bin/bun"
 install -m755 src-tauri/resources/bin/uv "${RESOURCE_DIR}/bin/uv"
 

@@ -4,6 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential make git python3 pkg-config libgtk-3-dev \
     libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+    gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl \
     libssl-dev libxdo-dev patchelf curl wget file squashfs-tools \
     ca-certificates xdg-utils desktop-file-utils && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
