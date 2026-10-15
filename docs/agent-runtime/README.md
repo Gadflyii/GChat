@@ -1,5 +1,13 @@
 # Chat and Agent runtime
 
+General Agent dispatch from Chat is accepted for Linux: the native two-worker
+fixture covers inherited policy, result collection, independent cancellation
+and persisted reopening. Installed model-backed two-worker collection/reopen
+and the corrected October 15 targeted Stop replay qualify those transitions
+separately. The [acceptance record](remaining-acceptance.md#accepted-general-agent-dispatch-from-chat--october-15)
+closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`; active-worker restart recovery and
+compaction/checkpoint resume remain under OI-068.
+
 ## OI-068 live-worker cancellation and new-run continuation — accepted
 
 The four-image current Linux CLI/serve runtime set and Engine-only DEB/AppImage refresh pass. Engine source is `38ff80e0c` on requested `415eaa2b5`; accepted desktop/CLI/Host bytes remain `7e33222e8`. The packaged CLI generated the exact local5090 profile in 760.4 seconds.

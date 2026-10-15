@@ -12,6 +12,42 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## Accepted General Agent dispatch from Chat — October 15
+
+`GCHAT-CHAT-GENERAL-AGENT-DISPATCH` is closed for Linux dispatch, result
+collection, targeted cancellation and saved-run reopening. Source `325998951`,
+the normal-context correction `1eba42a27`, card restoration `177d574e6` and
+idempotent Stop `22ae47c0b` are ancestors of reviewed main `1825d964e`.
+
+The existing native `chat_general_workers_collect_cancel_and_reopen_with_parent_policy`
+fixture creates two independent sessions, collects one result, cancels the other
+and reopens its persisted record. It verifies inherited disabled tools, human
+approval, pool placement and parent identity. Its October 14 stopped-Gbot
+fixture correction passes 1/1 with strict library Clippy; the October 15
+631-case Chat suite also passes (seven ignored). Retained frontend checks cover
+dispatch and worker presentation.
+
+The installed real-model retry at Qwen's normal 262144 configuration dispatched
+two workers before waiting, collected both terminal results and returned Chat
+to idle. Both records and results survived conversation reopening and client
+reload: the math worker returned `323`; the document worker respected denied
+folder access. That run did not reach cancellation. The separate October 15
+production native replay on `22ae47c0b` cancelled a generating worker with one
+Stop click, completed the parent without a failure toast and preserved the exact
+Chat and cancelled record after reopening. The native fixture covers the combined
+two-worker/cancel lifecycle; these installed runs qualify its model-backed
+transitions separately.
+
+Evidence is reused without a new build or model run:
+`out/worker-fixture-gbot-20261014/result.json`,
+`out/test-quality-20261015/{result.json,worker-cancel-result.json}`,
+`out/gchat-open-items-20261013/oi068-chat-workers/result.json`,
+`out/worker-card-restore-20261013/result.json` and
+`/ai/gchat-worktrees/worker-replay-22ae/out/worker-acceptance-20261015/{result.json,summary.md}`.
+Active-worker restart recovery, compaction/checkpoint resume, Windows and the
+broader walkthrough remain outside this row's accepted scope under OI-068.
+Ordinary Chat workers still stop with the app; Gbot service lifetime is separate.
+
 ## OI-068 targeted worker cancellation and continuation — October 14
 
 The installed/extracted Linux developer AppImage passes the missing targeted
@@ -397,7 +433,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 
 | Item | Current behavior / remaining work | Smallest useful gate |
 | --- | --- | --- |
-| General agent delegation from Chat | Main `8440b5f7a` supports asynchronous independent workers through the shared runner, inherited permissions/placement, result collection and targeted cancellation. One native lifecycle case and nine frontend cases PASS. | Real-model/installed Chat check remains; native persisted result/reopen and independent cancellation are covered. |
+| General agent delegation from Chat | CLOSED for the original dispatch/collect/cancel/reopen scope. The native two-worker policy/lifecycle fixture and retained installed two-worker result/reopen and October 15 targeted Stop replays pass on source incorporated in main `1825d964e`. | [Accepted evidence and scope](#accepted-general-agent-dispatch-from-chat--october-15). Model-backed transitions were checked in separate runs; active-worker restart/compaction/checkpoint recovery and Windows remain under OI-068. |
 | Gbot enable and guided setup | Baseline sidebar ignored enablement and Add bot was a manual SSH form. Main `8440b5f7a` adds opt-in and a guided existing-LAN connection with review; 39 focused cases pass. Settings enable now navigates to Gbot, where first setup opens; disable/startup leave it closed. Three focused cases, types and affected lint PASS. Installed DEB creation and same-setup resume pass on main `bb4cde410`; prerequisite holds remain actionable. The current brain handoff adds 11 focused frontend cases. | PASS October 15: current Linux native desktop shows the Gbot switch in Settings and Integrations under Native integrations. Enable opens first setup and the sidebar entry; disable synchronizes both controls, hides the entry and survives a full disabled-route reload. Existing installed and focused receipts are reused; no fresh installer gate. See [Gbot evidence](../gbot/README.md). |
 | Automatic bot computer setup | Main `b1502528b` wires the KVM adapter to resumable product onboarding; accepted bundle/seed and diagnostic fixes provide pinned delivery and actionable failures. Corrected readiness keyboard arguments pass the owning adapter case, check and strict Clippy. One dedicated S1 guest reached Ready through the authenticated API after service restart/resume; input/save, independent readback and view-only media pass. Guest and private roots are retired. Source `30a8be28a` holds operations until persisted Ready and reopens the same saved setup; 2 service/13 UI cases, check/strict Clippy/types/lint pass. Native detached bootstrap/vault/restart pass separately. Installed wizard creation, Computer ready and same-setup resume pass on main `bb4cde410`. Hyper-V, cloud creation/live cost review, M365 and remote service selection remain unfinished. | Installed wizard presentation separately; Windows/M365 at the release window. No person's desktop. |
 | Per-bot connectors and research | Main `8440b5f7a` links explicit existing accounts per bot, scopes native tools and persists provider receipts; none are inherited. Two native/service cases and six frontend cases PASS, with combined types/check/Clippy. | Live OAuth read after app registration; research reuses shared tools. |
