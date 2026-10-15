@@ -72,19 +72,32 @@ do not qualify simultaneous placement of all selected packages or full-context
 operation. Changing settings requests another quote. Finishing setup does not
 start inference.
 
-Candidate evidence: composed `make verify` passes, including the frontend gates
+Candidate `bbcf3e3d3` passes composed `make verify`, including the frontend gates
 and 865 Rust tests; affected all-target Cargo check and Clippy also pass. Focused
 Host workflow, storage and managed-move tests pass on S1, including move
 cancellation and inventory identity across restart. The existing CPU-only Engine
-`hardware_profile_reader` CTest passes from source `09aadd9c5`. Both opt-in native
-acceptance tests compile; two-disk recommendation, explicit override and verified
-move execution remain pending. One disk-only preflight exposed a native affinity fingerprint
-defect and rejected the captured inventory before measurement; both profile
-hashes stayed unchanged. Native acceptance awaits the merged C5 Engine correction
-and the authorized disk-only refresh, which preserves CPU/GPU calibration.
-Evidence is retained under `/ai/gchat/out/first-run-wizard-20261015/`. Windows
-shares this implementation's source; no new Windows binary or runtime acceptance
-is claimed.
+`hardware_profile_reader` CTest passes from source `09aadd9c5`.
+
+Both opt-in Linux native tests pass against the same saved profile after one
+disk-only refresh from merged Engine `265514f0a`. Its two distinct live filesystems
+have genuine saved direct-I/O read rates: NVMe 7,257,700,420 bytes/second and RAID
+1,178,819,146 bytes/second. Live identity, free-space and write checks select the
+eligible NVMe disk; the recommendation API retains exact override paths on both
+filesystems without creating directories. One actual Host storage override leaves
+the existing model untouched until an explicit move. The cross-filesystem move
+verifies a valid 4,096-byte package and retains its inventory UUID and saved stopped
+instance references across Host restart. These tests execute no model or GPU work;
+the rates are storage-policy inputs under recorded concurrency, not an inference
+performance comparison.
+
+The original donor profile remains unchanged. CPU, GPU, NUMA, calibration and
+fingerprint fields are exact after refresh; disk timing metadata changes as
+expected. Full non-disk equality does not pass: the Engine also adds the diagnostic
+`CPU/NUMA traffic path unknown or different; dependent costs require live-path validation or explicit installation refresh`.
+Codex 5 owns this producer warning issue; no manual profile edit or second refresh
+was used. Evidence, including that preservation limitation, is retained under
+`/ai/gchat/out/first-run-wizard-20261015/`. Windows shares this implementation's
+source; no new Windows binary or runtime acceptance is claimed.
 
 ## Multiple instances on one GPU — October 15
 
