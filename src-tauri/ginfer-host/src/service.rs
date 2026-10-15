@@ -1126,16 +1126,37 @@ impl Host {
     }
     // The caller owns lifecycle through quote, launch and Ready so another
     // placement cannot quote memory still being allocated by this process.
-    async fn start_placement(&self, mut request: LaunchRequest, mut launch: EngineLaunch, remaining: u32) -> Result<Uuid, String> {
+    async fn start_placement(&self, request: LaunchRequest, launch: EngineLaunch, remaining: u32) -> Result<Uuid, String> {
         use crate::engine_registry::InstanceStatus;
         if remaining == 0 { return Err("remaining instances must be positive".into()); }
         self.processes.lock().await.validate_launch(&launch, false)?;
         let sharing = self.processes.lock().await.reserved_gpus(None)
             .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
-        if remaining == 1 && !sharing {
-            return self.start_prepared(request, launch).await;
+        let id = self.start_prepared(request, launch, remaining).await?;
+        if remaining == 1 && !sharing { return Ok(id); }
+        loop {
+            self.refresh_processes().await?;
+            let processes = self.processes.lock().await;
+            let instance = processes.instances().find(|instance| instance.instance_id == id).ok_or("new instance disappeared")?;
+            match instance.status {
+                InstanceStatus::Ready => return Ok(id),
+                InstanceStatus::Starting => {},
+                _ => return Err(format!("Instance {id} did not become Ready: {}", instance.last_error.as_deref().unwrap_or("Engine stopped during startup"))),
+            }
+            drop(processes);
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        if launch.model_id.starts_with("qwen3.8-flash-next/") && launch.options.vram_budget_bytes.is_none() {
+    }
+    async fn start_prepared(
+        &self,
+        mut request: LaunchRequest,
+        mut launch: EngineLaunch,
+        remaining: u32,
+    ) -> Result<Uuid, String> {
+        use crate::engine_registry::InstanceStatus;
+        let sharing = self.processes.lock().await.reserved_gpus(Some(launch.instance_id))
+            .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
+        if (sharing || remaining > 1) && launch.model_id.starts_with("qwen3.8-flash-next/") && launch.options.vram_budget_bytes.is_none() {
             return Err("Flash sharing needs a per-instance weight residency budget: set it in Custom settings, start the package once by itself with that budget and wait for Ready to save its graph-memory receipt, then add instances with the same settings".into());
         }
         self.draft_width.cancel().await?;
@@ -1164,35 +1185,20 @@ impl Host {
         }
         let quote: crate::engine_host::StartupQuote = serde_json::from_slice(&output.stdout)
             .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
-        let budget = quote.kv_budget(&launch, remaining)?;
-        launch.options.kv_arena_bytes = Some(budget);
-        if request.options.kv_arena_bytes != Some(budget) {
+        // A first solo Flash start measures graph memory. Unknown graph cost
+        // cannot authorize an explicit allocation; let the Engine size AUTO.
+        quote.validate(&launch)?;
+        if !(launch.model_id.starts_with("qwen3.8-flash-next/") && remaining == 1 && !sharing
+            && launch.options.kv_arena_bytes.is_none() && quote.unknown_graph_allowance()) {
+            let budget = quote.kv_budget(&launch, remaining)?;
+            launch.options.kv_arena_bytes = Some(budget);
+        }
+        if request.options.kv_arena_bytes != launch.options.kv_arena_bytes {
             request.qualified_profile_id = None;
             request.benchmark_profile = None;
             launch.benchmark_profile = None;
         }
-        request.options = launch.options.clone();
-        let id = self.start_prepared(request, launch).await?;
-        loop {
-            self.refresh_processes().await?;
-            let processes = self.processes.lock().await;
-            let instance = processes.instances().find(|instance| instance.instance_id == id).ok_or("new instance disappeared")?;
-            match instance.status {
-                InstanceStatus::Ready => return Ok(id),
-                InstanceStatus::Starting => {},
-                _ => return Err(format!("Instance {id} did not become Ready: {}", instance.last_error.as_deref().unwrap_or("Engine stopped during startup"))),
-            }
-            drop(processes);
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    }
-    async fn start_prepared(
-        &self,
-        mut request: LaunchRequest,
-        launch: EngineLaunch,
-    ) -> Result<Uuid, String> {
         let id = launch.instance_id;
-        self.draft_width.cancel().await?;
         self.processes.lock().await.launch(launch)?;
         request.instance_id = Some(id);
         let previous = self.data.lock().await.profiles.insert(id, request);
@@ -1793,7 +1799,7 @@ impl Host {
                         return Err("unknown instance".into());
                     }
                     if let Some((profile, launch)) = reload {
-                        self.start_prepared(profile, launch).await?;
+                        self.start_prepared(profile, launch, 1).await?;
                     }
                     return Ok(json(StatusCode::OK, self.snapshot().await));
                 }
@@ -2033,29 +2039,16 @@ impl Host {
                     launch.options.structured_outputs = enabled;
                     request.qualified_profile_id = None;
                 }
-                if selection.instance_id.is_none() {
-                    // The profile supplies execution settings; placement owns
-                    // KV sizing. Blank means quote/split when sharing a GPU.
-                    let sharing = selection.remaining_instances > 1 || self.processes.lock().await.reserved_gpus(None)
-                        .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
-                    if sharing || selection.kv_arena_bytes.is_some() {
-                        launch.options.kv_arena_bytes = selection.kv_arena_bytes;
-                        if launch.options.kv_arena_bytes != request.options.kv_arena_bytes {
-                            request.qualified_profile_id = None;
-                            request.benchmark_profile = None;
-                            launch.benchmark_profile = None;
-                        }
-                        request.options.kv_arena_bytes = launch.options.kv_arena_bytes;
-                    }
-                } else if let Some(bytes) = selection.kv_arena_bytes {
-                    if request.options.kv_arena_bytes != Some(bytes) {
-                        request.options.kv_arena_bytes = Some(bytes);
-                        launch.options.kv_arena_bytes = Some(bytes);
-                        request.qualified_profile_id = None;
-                        request.benchmark_profile = None;
-                        launch.benchmark_profile = None;
-                    }
+                // Catalog KV bytes describe historical qualification, not
+                // current capacity. Only an explicit user override is retained;
+                // every spawn quotes the final settings against the live Engine.
+                if request.options.kv_arena_bytes != selection.kv_arena_bytes {
+                    request.qualified_profile_id = None;
+                    request.benchmark_profile = None;
+                    launch.benchmark_profile = None;
                 }
+                request.options.kv_arena_bytes = selection.kv_arena_bytes;
+                launch.options.kv_arena_bytes = selection.kv_arena_bytes;
                 self.processes
                     .lock()
                     .await
@@ -2072,11 +2065,11 @@ impl Host {
                     }
                 }
                 let id = if selection.instance_id.is_some() {
-                    self.start_prepared(request, launch).await?
+                    self.start_prepared(request, launch, 1).await?
                 } else {
                     self.start_placement(request, launch, selection.remaining_instances).await?
                 };
-                let kv_arena_bytes = self.data.lock().await.profiles.get(&id).and_then(|profile| profile.options.kv_arena_bytes);
+                let kv_arena_bytes = self.processes.lock().await.instances().find(|instance| instance.instance_id == id).and_then(|instance| instance.launch.options.kv_arena_bytes);
                 Ok(json(StatusCode::OK, serde_json::json!({"instance_id":id,"kv_arena_bytes":kv_arena_bytes})))
             }
             ("POST", "/host/v1/remove-model") => {
@@ -2244,7 +2237,7 @@ impl Host {
                 }
                 let placement: Placement = serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
                 let id = self.place(placement.request, placement.remaining_instances).await?;
-                let kv_arena_bytes = self.data.lock().await.profiles.get(&id).and_then(|profile| profile.options.kv_arena_bytes);
+                let kv_arena_bytes = self.processes.lock().await.instances().find(|instance| instance.instance_id == id).and_then(|instance| instance.launch.options.kv_arena_bytes);
                 Ok(json(
                     StatusCode::ACCEPTED,
                     serde_json::json!({"instance_id":id,"kv_arena_bytes":kv_arena_bytes}),
@@ -2377,6 +2370,9 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert!(error.contains("graph memory is unknown"), "{error}");
         assert!(host.data.lock().await.graph_receipts.is_empty());
         assert_eq!(host.processes.lock().await.instances().count(), 0);
+        let error = host.launch(request.clone()).await.unwrap_err();
+        assert!(error.contains("graph memory is unknown"), "{error}");
+        request.options.kv_arena_bytes = None;
         let id = host.launch(request.clone()).await.unwrap();
         assert!(host.data.lock().await.graph_receipts.is_empty());
         tokio::time::timeout(Duration::from_secs(5), async {
@@ -2388,6 +2384,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         }).await.unwrap();
         assert_eq!(host.data.lock().await.graph_receipts.values().copied().collect::<Vec<_>>(), [1200]);
         host.processes.lock().await.stop(id).await.unwrap();
+        request.options.kv_arena_bytes = Some(1024);
         let reopened = Host::open(dir.path().join("state"), "Test".into(), engine.clone(),
             vec![dir.path().join("models")], vec![], host.gpus.clone()).await.unwrap();
         reopened.processes.lock().await.hardware_profile = None;
@@ -2571,7 +2568,20 @@ mod resource_tests {
     async fn fixture() -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
         let dir = tempfile::tempdir().unwrap();
         let engine = dir.path().join("engine");
-        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        std::fs::write(&engine, r#"#!/usr/bin/env python3
+import json, sys, time
+args = sys.argv[1:]
+def arg(name): return args[args.index(name)+1]
+if '--quote-only' in args:
+    model, weights = arg('--model-id').split('/', 1)
+    print(json.dumps(dict(schema='ginfer-startup-quote-v1', model_id=model, weights_id=weights,
+        tensor_parallel_size=1, ranks=[dict(rank=0, free_bytes=4294967296, weights_bytes=8192,
+        state_bytes=2048, graph_allowance_bytes=1024, minimum_kv_arena_bytes=1024,
+        kv_arena_alignment_bytes=256, headroom_bytes=int(arg('--kv-arena-headroom-bytes')),
+        startup_peak_bytes=12288)])))
+    sys.exit(0)
+time.sleep(60)
+"#).unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
@@ -2667,7 +2677,7 @@ http.server.HTTPServer(('127.0.0.1', port), Handler).serve_forever()
             let instance = snapshot["instances"].as_array().unwrap().iter()
                 .find(|instance| instance["instance_id"] == id.to_string()).unwrap();
             assert_eq!(instance["status"], "ready");
-            assert_eq!(instance["profile"]["kv_arena_bytes"], 4096);
+            assert_eq!(instance["configuration"]["kv_arena_bytes"], 4096);
             assert_eq!(instance["configuration"]["concurrency"], 4);
             assert!(ports.insert(instance["configuration"]["port"].as_u64().unwrap()));
             assert!(sessions.insert(instance["session_id"].as_str().unwrap().to_owned()));
@@ -2698,6 +2708,250 @@ http.server.HTTPServer(('127.0.0.1', port), Handler).serve_forever()
             .map(|instance| Uuid::parse_str(instance["instance_id"].as_str().unwrap()).unwrap()).collect();
         assert_eq!(restored, ids);
         assert!(snapshot["instances"].as_array().unwrap().iter().all(|instance| instance["status"] == "stopped"));
+    }
+
+    #[tokio::test]
+    async fn profile_and_saved_launches_quote_current_settings_without_persisting_auto_bytes() {
+        let (dir, host, request) = fixture().await;
+        host.processes.lock().await.hardware_profile = None;
+        std::fs::write(dir.path().join("engine"), r#"#!/usr/bin/env python3
+import http.server, json, os, pathlib, sys
+args = sys.argv[1:]
+def arg(name): return args[args.index(name)+1]
+root = pathlib.Path(__file__).parent
+assert os.environ['CUDA_VISIBLE_DEVICES'] == 'GPU-fixture-0'
+if '--quote-only' in args:
+    memory = json.loads((root/'memory.json').read_text())
+    model, weights = arg('--model-id').split('/', 1)
+    quote = dict(schema='ginfer-startup-quote-v1', model_id=model, weights_id=weights,
+        tensor_parallel_size=1, ranks=[dict(rank=0, free_bytes=memory['free'], weights_bytes=8192,
+        state_bytes=memory['state'], graph_allowance_bytes=1024, minimum_kv_arena_bytes=1024,
+        kv_arena_alignment_bytes=256, headroom_bytes=int(arg('--kv-arena-headroom-bytes')),
+        startup_peak_bytes=10240+memory['state'])])
+    with (root/'quotes.jsonl').open('a') as out: out.write(json.dumps(dict(args=args, quote=quote))+'\n')
+    print(json.dumps(quote))
+    sys.exit(0)
+with (root/'loads.jsonl').open('a') as out: out.write(json.dumps(args)+'\n')
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != '/health' and self.headers.get('Authorization') != 'Bearer '+arg('--api-key'):
+            self.send_response(401); self.end_headers(); return
+        body=json.dumps(dict(data=[dict(id=arg('--model-id'))])).encode()
+        self.send_response(200); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self,*args): pass
+http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
+"#).unwrap();
+        let headroom = crate::launch_profiles::HEADROOM_BYTES;
+        let memory = |extra, state| {
+            std::fs::write(
+                dir.path().join("memory.json"),
+                serde_json::json!({"free":headroom+extra,"state":state}).to_string(),
+            )
+            .unwrap();
+        };
+        memory(65536_u64, 2048_u64);
+        let model = host.inventory.read().await[0].clone();
+        let artifact_sha256 = {
+            use sha2::Digest;
+            hex::encode(Sha256::digest(std::fs::read(&model.path).unwrap()))
+        };
+        let profile: crate::launch_profiles::LaunchProfile = serde_json::from_value(serde_json::json!({
+                "id":"stale-arena", "name":"Synthetic fresh-quote fixture", "platform":std::env::consts::OS,
+                "identity":model.metadata.identity, "artifact_sha256":artifact_sha256, "artifact_bytes":4096,
+                "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU", "compute_capability":"12.0", "vram_tier_gib":32,
+                "min_memory_mib_per_gpu":32768, "max_context":131072, "concurrency":1,
+                "options":{"kv_arena_bytes":4294967296_u64,"structured_outputs":false},
+                "qualification":{"tier":"full-context-tested","evidence":"synthetic fixture only",
+                    "engine_revision":"fixture","free_bytes_per_gpu":headroom,"full_context_requests":1}
+            })).unwrap();
+        profile.validate().unwrap();
+        host.launch_profiles.write().await.push(profile);
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        async fn post(
+            host: &Arc<Host>,
+            token: &str,
+            path: &str,
+            body: serde_json::Value,
+        ) -> (StatusCode, serde_json::Value) {
+            let response = host
+                .clone()
+                .route(
+                    Request::post(path)
+                        .header("authorization", format!("Bearer {token}"))
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status();
+            let body =
+                serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                    .unwrap();
+            (status, body)
+        }
+        async fn ready(host: &Arc<Host>, id: Uuid) -> serde_json::Value {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    host.refresh_processes().await.unwrap();
+                    let snapshot = host.snapshot().await;
+                    let instance = snapshot["instances"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|instance| instance["instance_id"] == id.to_string())
+                        .unwrap()
+                        .clone();
+                    if instance["status"] == "ready" {
+                        return instance;
+                    }
+                    assert_eq!(instance["status"], "starting", "{instance}");
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap()
+        }
+        let logs = |name: &str| -> Vec<serde_json::Value> {
+            std::fs::read_to_string(dir.path().join(name))
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect()
+        };
+        // A catalog's old explicit bytes and structured-output setting must
+        // not replace the user's default Automatic + structured-ON selection.
+        let (status, launched) = post(
+            &host,
+            &token,
+            "/host/v1/profile-launch",
+            serde_json::json!({
+                "profile_id":"stale-arena","model_id":request.model_id,"gpu_uuids":request.gpu_uuids
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{launched}");
+        assert_eq!(launched["kv_arena_bytes"], 54272);
+        let id = Uuid::parse_str(launched["instance_id"].as_str().unwrap()).unwrap();
+        let first = ready(&host, id).await;
+        assert_eq!(first["configuration"]["max_context"], 131072);
+        assert_eq!(first["configuration"]["concurrency"], 1);
+        assert_eq!(first["configuration"]["structured_outputs"], true);
+        assert_eq!(first["configuration"]["kv_arena_headroom_bytes"], headroom);
+        assert!(first["profile"]
+            .as_object()
+            .unwrap()
+            .contains_key("kv_arena_bytes"));
+        assert!(first["profile"]["kv_arena_bytes"].is_null());
+        assert!(first["profile"]["qualified_profile_id"].is_null());
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join("state/host.json")).unwrap())
+                .unwrap();
+        assert!(saved["profiles"][id.to_string()]["kv_arena_bytes"].is_null());
+
+        // Restart must quote again even though its saved settings did not
+        // change: another process or a new Engine can change free/state bytes.
+        memory(57344, 4096);
+        let restart_path = format!("/host/v1/instances/{id}/restart");
+        let (status, response) = post(&host, &token, &restart_path, serde_json::json!({})).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        let restarted = ready(&host, id).await;
+        assert_ne!(restarted["session_id"], first["session_id"]);
+        assert_eq!(restarted["configuration"]["kv_arena_bytes"], 44032);
+        assert!(restarted["profile"]["kv_arena_bytes"].is_null());
+
+        memory(61440, 6144);
+        let mut configuration = restarted["profile"].clone();
+        configuration["max_context"] = 65536.into();
+        configuration["concurrency"] = 2.into();
+        configuration["structured_outputs"] = false.into();
+        configuration["kv_arena_headroom_bytes"] = (headroom + 4096).into();
+        let reload_path = format!("/host/v1/instances/{id}/reload");
+        let (status, response) = post(
+            &host,
+            &token,
+            &reload_path,
+            serde_json::json!({"configuration":configuration}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        let reloaded = ready(&host, id).await;
+        assert_eq!(reloaded["configuration"]["kv_arena_bytes"], 41984);
+        assert!(reloaded["profile"]["kv_arena_bytes"].is_null());
+        configuration = reloaded["profile"].clone();
+        configuration["kv_arena_bytes"] = 4096.into();
+        let (status, response) = post(
+            &host,
+            &token,
+            &reload_path,
+            serde_json::json!({"configuration":configuration}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        let explicit = ready(&host, id).await;
+        assert_eq!(explicit["configuration"]["kv_arena_bytes"], 4096);
+        assert_eq!(explicit["profile"]["kv_arena_bytes"], 4096);
+
+        // An exact positive override is not silently shrunk when it cannot
+        // fit. Quote refusal must occur before a fifth model process exists.
+        configuration = explicit["profile"].clone();
+        configuration["instance_id"] = serde_json::Value::Null;
+        configuration["kv_arena_bytes"] = (1_u64 << 40).into();
+        let (status, response) = post(&host, &token, "/host/v1/instances", configuration).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let error = response["error"].as_str().unwrap();
+        assert!(
+            error.contains("cannot fit 1 new instance") && error.contains("choose Automatic"),
+            "{error}"
+        );
+        let unchanged = ready(&host, id).await;
+        assert_eq!(unchanged["session_id"], explicit["session_id"]);
+        assert_eq!(
+            host.snapshot().await["instances"].as_array().unwrap().len(),
+            1
+        );
+        let quotes = logs("quotes.jsonl");
+        let loads = logs("loads.jsonl");
+        assert_eq!(quotes.len(), 5);
+        assert_eq!(loads.len(), 4);
+        for (index, quote) in quotes.iter().enumerate() {
+            let args = quote["args"].as_array().unwrap();
+            let value = |flag: &str| {
+                args[args.iter().position(|arg| arg == flag).unwrap() + 1]
+                    .as_str()
+                    .unwrap()
+            };
+            assert!(args.contains(&serde_json::json!("--quote-only")));
+            assert!(!args.contains(&serde_json::json!("--api-key")));
+            assert_eq!(
+                value("--max-context"),
+                if index < 2 { "131072" } else { "65536" }
+            );
+            assert_eq!(
+                value("--max-concurrency"),
+                if index < 2 { "1" } else { "2" }
+            );
+            assert_eq!(
+                value("--kv-arena-headroom-bytes"),
+                if index < 2 { headroom } else { headroom + 4096 }.to_string()
+            );
+            assert_eq!(
+                args.contains(&serde_json::json!("--structured-outputs")),
+                index < 2
+            );
+            assert_eq!(
+                args.contains(&serde_json::json!("--kv-arena-bytes")),
+                index >= 3
+            );
+        }
+        for (load, expected) in loads.iter().zip([54272_u64, 44032, 41984, 4096]) {
+            let args = load.as_array().unwrap();
+            let position = args
+                .iter()
+                .position(|arg| arg == "--kv-arena-bytes")
+                .unwrap();
+            assert_eq!(args[position + 1], expected.to_string());
+        }
+        host.processes.lock().await.shutdown().await.unwrap();
     }
 
     #[cfg(target_os = "linux")]
@@ -3572,6 +3826,38 @@ mod lifecycle_tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
+    fn write_engine_fixture(engine: &Path) {
+        std::fs::write(engine, r#"#!/usr/bin/env python3
+import http.server, json, pathlib, sys, time
+args = sys.argv[1:]
+def arg(name): return args[args.index(name)+1]
+root = pathlib.Path(__file__).parent
+if '--quote-only' in args:
+    model, weights = arg('--model-id').split('/', 1)
+    unknown = model == 'qwen3.8-flash-next' and '--no-cuda-graph' not in args
+    graph = 0 if unknown else 1024
+    print(json.dumps(dict(schema='ginfer-startup-quote-v1', model_id=model, weights_id=weights,
+        tensor_parallel_size=1, ranks=[dict(rank=0, free_bytes=4294967296, weights_bytes=8192,
+        state_bytes=2048, graph_allowance_bytes=graph,
+        graph_allowance_source='unknown' if unknown else 'planner', minimum_kv_arena_bytes=1024,
+        kv_arena_alignment_bytes=256, headroom_bytes=int(arg('--kv-arena-headroom-bytes')),
+        startup_peak_bytes=11264+graph)])))
+    sys.exit(0)
+(root/'argv').write_text('\n'.join(args)+'\n')
+(root/'argv-ready').touch()
+if not (root/'serve-ready').exists():
+    time.sleep(60)
+    sys.exit(0)
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body=json.dumps(dict(data=[dict(id=arg('--model-id'))])).encode()
+        self.send_response(200); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self,*args): pass
+http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
+"#).unwrap();
+        std::fs::set_permissions(engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
     #[tokio::test]
     async fn max_perf_profile_selection_persists_and_refuses_modified_or_stale_session() {
         let dir = tempfile::tempdir().unwrap();
@@ -3579,9 +3865,7 @@ mod lifecycle_tests {
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
         let engine = dir.path().join("ginfer-serve");
-        std::fs::write(&engine,
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/argv\"\n: > \"$(dirname \"$0\")/argv-ready\"\nexec sleep 60\n").unwrap();
-        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        write_engine_fixture(&engine);
         std::fs::write(dir.path().join("ginfer"), b"fixture profiling CLI").unwrap();
         let hardware = crate::hardware_profile::group_profile_path(&state, &["GPU-test".into()]);
         std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
@@ -3741,8 +4025,7 @@ mod lifecycle_tests {
     async fn invalid_reload_preserves_session_and_restart_preserves_profile() {
         let dir = tempfile::tempdir().unwrap();
         let engine = dir.path().join("ginfer-serve");
-        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
-        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        write_engine_fixture(&engine);
         std::fs::write(dir.path().join("ginfer"), b"fixture profiling CLI").unwrap();
         for gpu in ["GPU-test", "GPU-second"] {
             let path = crate::hardware_profile::group_profile_path(
@@ -4065,12 +4348,9 @@ mod lifecycle_tests {
             .is_success());
         let snapshot = host.snapshot().await;
         assert_eq!(snapshot["instances"][0]["profile"]["concurrency"], 4);
-        assert_eq!(
-            snapshot["instances"][0]["profile"]["qualified_profile_id"],
-            "fixture-c4"
-        );
+        assert!(snapshot["instances"][0]["profile"]["qualified_profile_id"].is_null());
         assert_ne!(snapshot["instances"][0]["session_id"], session);
-        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
+        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].as_u64().unwrap() > 0);
         let saved: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.path().join("state/host.json")).unwrap())
                 .unwrap();
@@ -4087,7 +4367,7 @@ mod lifecycle_tests {
             .status()
             .is_success());
         let snapshot = host.snapshot().await;
-        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
+        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].as_u64().unwrap() > 0);
         let mut recorded = serde_json::to_value(&qualified).unwrap();
         recorded["options"].as_object_mut().unwrap().remove("structured_outputs");
         let recorded: crate::launch_profiles::LaunchProfile = serde_json::from_value(recorded).unwrap();
@@ -4331,17 +4611,18 @@ mod lifecycle_tests {
         assert!(restored.clone().route(restart).await.unwrap().status().is_success());
         assert_eq!(restored.snapshot().await["instances"][0]["configuration"]["structured_outputs"], true);
         restored.processes.lock().await.shutdown().await.unwrap();
+        std::fs::write(dir.path().join("serve-ready"), b"").unwrap();
         let mut replacement = profile.clone();
         replacement.concurrency = 2;
         let fresh = restored.prepare_launch(&replacement).await.unwrap();
         let fresh_id = fresh.instance_id;
         assert_ne!(fresh_id, id);
-        restored.start_prepared(replacement.clone(), fresh).await.unwrap();
+        restored.start_prepared(replacement.clone(), fresh, 1).await.unwrap();
         assert_eq!(restored.data.lock().await.profiles.len(), 3);
         let peer = restored.prepare_launch(&replacement).await.unwrap();
         let peer_id = peer.instance_id;
         assert_ne!(fresh_id, peer_id);
-        restored.start_prepared(replacement.clone(), peer).await.unwrap();
+        restored.start_prepared(replacement.clone(), peer, 1).await.unwrap();
         assert_eq!(restored.data.lock().await.profiles.len(), 4);
         replacement.instance_id = Some(fresh_id);
         assert!(restored.launch(replacement).await.is_err());

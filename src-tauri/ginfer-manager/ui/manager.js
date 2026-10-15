@@ -540,17 +540,11 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         const place = async (operation, args) => {
           let result
           let started = 0
-          let placement = args
           try {
             for (let remaining = count; remaining > 0; remaining--) {
-              result = await run(hostRequest(host, operation, { ...placement,
+              result = await run(hostRequest(host, operation, { ...args,
                 ...(remaining > 1 ? { remaining_instances: remaining } : {}) }),
               count > 1 ? `${started + 1} of ${count} instances ready` : instance ? 'Instance reloaded' : 'Model starting')
-              // Keep the first equal share for the batch. Every subsequent
-              // placement still checks the Engine's current free-memory quote.
-              if (started === 0 && count > 1 && kvBytes === null && result?.kv_arena_bytes != null) {
-                placement = { ...placement, kv_arena_bytes: result.kv_arena_bytes }
-              }
               started++
             }
           } catch (error) {

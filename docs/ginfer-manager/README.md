@@ -13,6 +13,58 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Fresh startup quotes — October 15
+
+Candidate `fix/gchat-host-fresh-kv-quotes`, based on `81bc9be62`, addresses
+`GINFER-HOST-PROFILE-DEFAULT-STARTUP-20261015`. Single-instance starts on idle
+GPUs and saved-instance Start, Restart and Reload previously bypassed the
+placement quote. Selecting a catalog profile could also retain historical KV
+bytes after the Host enabled structured outputs, changing startup memory needs.
+
+Every serving start now obtains `ginfer-serve --quote-only` from the selected
+runtime with the final GPU group, package, context, concurrency and startup
+options, including structured outputs and headroom. Replacements quote after
+the old instance stops. No quote is reused across starts, so an Engine build or
+settings change is accounted for on the next start. Catalog KV bytes are
+historical evidence, not a current allocation: profile selection uses Automatic
+unless the user explicitly supplies a byte budget.
+
+Automatic sizing derives an aligned explicit arena from the fresh quote and
+passes it only to that Engine launch. The saved request retains Automatic, so
+later starts quote and size again. A positive user budget retains its exact
+meaning; Host checks it against the fresh quote and refuses an oversized value
+before loading the model. Existing saved positive values have no provenance
+that distinguishes a user choice from an older derived value. If one no longer
+fits, select Custom settings and clear the GPU KV budget to return to Automatic.
+Host does not silently shrink an exact request. Changed runtime options do not
+inherit historical profile qualification.
+
+Flash with graphs enabled has one bootstrap exception. If a solo Automatic
+start has no matching graph-memory receipt, its quote reports an unknown graph
+allowance. Host leaves the arena automatic for that Engine start; a successful
+Ready receipt then permits quote-derived explicit sizing with the same recipe.
+An explicit arena or shared placement requires known graph memory. No unknown
+graph allowance is treated as measured capacity.
+
+One native RTX 5090 startup passes with production Host `93143951d` and current
+Engine `5af502f1`: C1, context 262144, structured outputs on, unchanged
+524288000-byte headroom and a fresh 7004386304-byte effective KV arena. Saved
+state retains Automatic. Ready and normal Host Stop pass with zero active
+requests and no remaining engine child. The earlier historical-arena failures
+remain retained. No input count, inference or fresh-install acceptance is claimed;
+OI-068 remains PARTIAL. Ada 149069-context, structured-outputs-off startup and the
+final fresh-install package gate remain separate.
+
+Production source is unchanged by fixture corrections. `611fc26e9` passes all
+11 plugin tests; `7d92bad30` passes the complete Host suite, with 172 tests passed
+and 19 ignored. The composed Linux source gate passes using these full affected
+suite reruns and retained passing `make verify` targets from `93143951d`.
+This is a composed gate, not one final `make verify` invocation.
+The [runtime acceptance record](../agent-runtime/remaining-acceptance.md#oi-068-native-near-full-context-startup--october-15)
+links the startup, Stop, cleanup and verification evidence. A quote samples free
+memory and planner allowances; it does not reserve VRAM, guarantee startup
+against other allocations or qualify full-context inference.
+
 ## Shared first-run setup — October 15
 
 `FIRST-RUN-WIZARD` and `MODEL-STORAGE-FASTEST-DISK` share one Host-owned workflow on branch
@@ -118,8 +170,8 @@ each with its own identity, port and per-instance concurrency. Existing instance
 retain their allocations. The Engine's `ginfer-serve --quote-only` owns the
 startup memory facts; Host reserves each remaining sibling's weights/state/graph
 requirement and headroom before splitting the remaining KV equally. Manager
-keeps that first equal share for the rest of the batch and Host checks every
-placement against a fresh quote. A user may instead enter
+keeps Automatic selected throughout the batch; Host freshly splits the current
+remaining capacity at each placement. A user may instead enter
 an explicit KV byte budget per new instance. Startup is serialized through Ready
 so the next quote sees the preceding allocation. A changed KV allocation is a
 custom deployment and does not inherit the profile's qualification claim.

@@ -398,15 +398,33 @@ struct StartupQuoteRank {
     startup_peak_bytes: u64,
 }
 impl StartupQuote {
-    pub(crate) fn kv_budget(&self, launch: &EngineLaunch, remaining: u32) -> Result<u64, String> {
-        if remaining == 0 || self.schema != "ginfer-startup-quote-v1"
+    pub(crate) fn unknown_graph_allowance(&self) -> bool {
+        self.ranks.iter().any(|rank| rank.graph_allowance_source.as_deref() == Some("unknown"))
+    }
+    pub(crate) fn validate(&self, launch: &EngineLaunch) -> Result<(), String> {
+        if self.schema != "ginfer-startup-quote-v1"
             || self.tensor_parallel_size != launch.tp || self.ranks.len() != launch.tp as usize
             || format!("{}/{}", self.model_id, self.weights_id) != launch.model_id
         {
             return Err("Engine startup quote does not match this launch; update the Engine runtime".into());
         }
-        let mut budget = u64::MAX;
         for (index, rank) in self.ranks.iter().enumerate() {
+            let non_kv = rank.weights_bytes.checked_add(rank.state_bytes)
+                .and_then(|n| n.checked_add(rank.graph_allowance_bytes));
+            if rank.rank as usize != index || rank.minimum_kv_arena_bytes == 0
+                || rank.kv_arena_alignment_bytes == 0
+                || non_kv.and_then(|n| n.checked_add(rank.minimum_kv_arena_bytes)) != Some(rank.startup_peak_bytes)
+            {
+                return Err("Engine startup quote has invalid or overflowing memory facts".into());
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn kv_budget(&self, launch: &EngineLaunch, remaining: u32) -> Result<u64, String> {
+        self.validate(launch)?;
+        if remaining == 0 { return Err("remaining instances must be positive".into()); }
+        let mut budget = u64::MAX;
+        for rank in &self.ranks {
             if rank.graph_allowance_source.as_deref() == Some("unknown")
                 || (launch.model_id.starts_with("qwen3.8-flash-next/")
                     && !matches!(rank.graph_allowance_source.as_deref(), Some("planner" | "receipt"))) {
@@ -415,10 +433,6 @@ impl StartupQuote {
             let invalid = || "Engine startup quote has invalid or overflowing memory facts".to_owned();
             let non_kv = rank.weights_bytes.checked_add(rank.state_bytes)
                 .and_then(|n| n.checked_add(rank.graph_allowance_bytes)).ok_or_else(invalid)?;
-            if rank.rank as usize != index || rank.minimum_kv_arena_bytes == 0
-                || rank.kv_arena_alignment_bytes == 0
-                || non_kv.checked_add(rank.minimum_kv_arena_bytes) != Some(rank.startup_peak_bytes)
-            { return Err(invalid()); }
             let reserved = non_kv.checked_add(rank.headroom_bytes)
                 .and_then(|n| n.checked_mul(u64::from(remaining))).ok_or_else(invalid)?;
             let available = rank.free_bytes.saturating_sub(reserved) / u64::from(remaining);
@@ -427,7 +441,7 @@ impl StartupQuote {
             if chosen < rank.minimum_kv_arena_bytes || chosen > available || reserved > rank.free_bytes {
                 return Err(format!("GPU rank {} cannot fit {remaining} new instance(s): Engine quotes {} free bytes, {non_kv} non-KV bytes and {} headroom bytes per instance; KV needs at least {} bytes per instance, with {aligned} bytes available per instance{}",
                     rank.rank, rank.free_bytes, rank.headroom_bytes, rank.minimum_kv_arena_bytes,
-                    launch.options.kv_arena_bytes.map(|n| format!(", requested {n}")).unwrap_or_default()));
+                    launch.options.kv_arena_bytes.map(|n| format!(", requested {n}; choose Automatic or reduce the explicit KV override using the current quote")).unwrap_or_default()));
             }
             budget = budget.min(chosen);
         }

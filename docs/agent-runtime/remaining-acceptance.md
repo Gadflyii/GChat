@@ -12,6 +12,62 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## OI-068 native near-full-context startup — October 15
+
+The local RTX 5090 native Standard Agent gate selected Qwen3.8-27b NVFP4-DFlash2,
+C1, context 262144, NVFP4 KV, headroom 524288000 bytes, graphs on and host cache 0.
+Normal Host defaults enable structured outputs, which clears historical catalog
+qualification. This functional gate does not requalify that historical profile.
+
+The first two attempts used accepted Host `44e80b7c1`, which supplied the catalog's
+historical explicit KV arena of 9141485568 bytes. Packaged Engine `9f8fb8ff9`
+loaded weights but failed before Ready: its post-startup maximum was 7383592960
+bytes. The one unchanged current-Engine `5af502f1` retest also failed before Ready,
+with maximum 7307931648 bytes and unchanged headroom 524288000 bytes. Normal Host
+Stop completed with zero active requests for both attempts. No native input count
+or inference ran. The current reservation default did not resolve the failure;
+its underlying capacity difference remains unestablished. The complete current
+runtime had 171 verified payloads and ten changed libraries, so this was not a
+binary-only causal test.
+
+Host source `93143951d` obtains a fresh selected-runtime quote before every serving
+start. One authorized retest through the existing isolated desktop began at
+17:52:24Z with the same execution settings and no KV override. Startup passed:
+Ready was observed at 17:58:39.677Z with an effective 7004386304-byte KV arena and
+saved `kv_arena_bytes: null` (Automatic). C1, context 262144, structured outputs
+on and headroom 524288000 bytes were retained. Normal Host Stop at 17:58:52.799Z
+was observed stopped at 17:59:32.324Z, with zero active requests and the engine
+child absent. No input count or inference ran. This Host-only replacement is
+separate from the final fresh-install package gate and Ada 149069-context,
+structured-outputs-off retest.
+
+Production source remains `93143951d`. Fixture-only correction `611fc26e9`
+passes all 11 plugin tests. After a further quote-unaware client sleeper is
+corrected in `7d92bad30`, the full Host suite passes: 172 tests, 19 ignored,
+including 144 library, 5 main, 11 client, 11 fleet and 1 pairing test. The stale
+4-GiB first-run and inference-usage regressions both pass; the remaining Host
+integration and doc targets complete. The quality guard passes across 312 files.
+
+The composed Linux source gate passes, combining those corrected suites with
+the passing unaffected `make verify` targets from `93143951d`: lint, typecheck,
+2343 app tests (6 skipped), 114 extension tests, 41 Manager UI tests and critical
+coverage floors. Unique Rust results total 869 passed and 27 ignored. This is a
+composed gate with fixture-only follow-ups, not one final `make verify` invocation.
+The exact 2996-file source check and per-target results are retained in
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/final-refresh-20261015/verification-7d92bad3.json`.
+
+The private desktop and helpers are retired, local GPU/CPU resources are
+released and disposable private payloads totaling 6.48 GB logical are removed.
+Gchat 2 copied and hash-verified the Host binary locally and on Ada for its
+separate retest; the original handoff copy is retired. Source donors, models and
+shared caches are untouched.
+
+The predeclared native gate requires a measured whole-input count of 240000–241664
+tokens, the correct three-code Reply and zero compactions. Ready at 262144 alone
+does not qualify it. OI-068 remains PARTIAL. Evidence:
+`/ai/gchat/out/native-full-context-20261015/{result.json,summary.md}` and
+`/ai/gchat/out/host-fresh-kv-quotes-20261015/{ready.json,stopped.json,cleanup.json,result.json,summary.md}`.
+
 ## OI-068 Linux Hermes home override — October 15
 
 The shared Hermes resolver ignored a nonempty `HERMES_HOME` on Linux even though

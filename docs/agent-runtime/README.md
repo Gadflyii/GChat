@@ -11,6 +11,23 @@ normal app exit/restart. Active-worker cancellation, durable state and ordinary
 Studio reopening also pass after normal exit; broader restart recovery remains
 unqualified.
 
+## Native near-full-context startup — October 15
+
+The local RTX 5090 native full-input gate failed before Ready with both packaged
+Engine `9f8fb8ff9` and current Engine `5af502f1` while Host supplied a historical
+explicit KV arena. Normal Host Stop completed for both attempts. Host source
+`93143951d` now quotes current startup settings. Its one native startup retest
+reached Ready with an effective 7004386304-byte KV arena while saved state kept
+Automatic. C1, context 262144, structured outputs and 524288000-byte headroom
+were unchanged; normal Host Stop left zero active requests and no engine child.
+Production source remains `93143951d`. Fixture correction `611fc26e9` passes all
+11 plugin tests; `7d92bad30` passes the complete 172-test Host suite after a further
+client-fixture correction. The composed Linux source gate passes using those
+reruns and the retained passing checks of unchanged production source. No native
+full-input count, inference or fresh-install acceptance is claimed; OI-068 remains
+PARTIAL.
+[Exact scope and retained evidence](remaining-acceptance.md#oi-068-native-near-full-context-startup--october-15).
+
 ## Linux Hermes home override — October 15
 
 GChat previously ignored a nonempty `HERMES_HOME` on Linux while the Hermes
