@@ -9,6 +9,20 @@ closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has separate Linux passes
 a correct eight-file task after compaction. The finished record also survives a
 normal app exit/restart. Active-worker restart recovery remains unqualified.
 
+## Studio worker exit persistence — October 15
+
+Normal app exit now tracks direct Studio turns alongside Chat and Code workers,
+closes admission and cancels active turns before model teardown. The shared
+shutdown waits up to 15 seconds for their run records, semantic sessions and
+pending-request cleanup. A closed Studio event channel during exit no longer
+changes a cancelled run into failed history.
+
+The existing mock-app, TestFleet and scripted-engine regression checks an
+active Studio turn through a completed file read, pending approval, window-channel
+closure, cancelled persistence and fresh-app reopening without replay. This is
+source and regression coverage; native active-worker exit/restart acceptance
+remains pending. [Remaining scope](remaining-acceptance.md#oi-068-studio-worker-exit-persistence--october-15).
+
 ## Current worker review follow-up
 
 `GCHAT-WORKER-REVIEW-INSTRUCTION-FOLLOWING` owns the remaining task-quality

@@ -1,14 +1,15 @@
 //! Tauri commands for starting and cancelling an isolated agent turn.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tauri::{ipc::Channel, AppHandle, Manager, Runtime, State};
 use tauri_plugin_ginfer::state::GinferState;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -33,6 +34,123 @@ use crate::core::state::{AgentSessionLocks, AppState};
 
 const DEFAULT_WORKSPACE_TEXT_BYTES: usize = 512 * 1024;
 const MAX_WORKSPACE_TEXT_BYTES: usize = 1024 * 1024;
+
+/// Application-owned lifetime of every Studio, Chat and Code turn, including
+/// preflight. Completion means the shared runner has persisted and cleaned up.
+#[derive(Clone, Default)]
+pub struct AgentRunRegistry {
+    inner: Arc<Mutex<AgentRunRegistryState>>,
+}
+
+#[derive(Default)]
+struct AgentRunRegistryState {
+    shutting_down: bool,
+    runs: HashMap<String, ActiveAgentRun>,
+}
+
+struct ActiveAgentRun {
+    cancellation: CancellationToken,
+    finished: watch::Receiver<bool>,
+}
+
+struct AgentRunGuard {
+    registry: AgentRunRegistry,
+    run_id: String,
+    finished: watch::Sender<bool>,
+}
+
+impl AgentRunRegistry {
+    fn register(
+        &self,
+        run_id: &str,
+        cancellation: CancellationToken,
+    ) -> Result<AgentRunGuard, String> {
+        let mut state = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        if state.shutting_down {
+            return Err("GChat is shutting down; new Agent runs cannot start".into());
+        }
+        if state.runs.contains_key(run_id) {
+            return Err(format!("Agent run '{run_id}' is already active"));
+        }
+        let (finished, receiver) = watch::channel(false);
+        state.runs.insert(
+            run_id.to_owned(),
+            ActiveAgentRun {
+                cancellation,
+                finished: receiver,
+            },
+        );
+        Ok(AgentRunGuard {
+            registry: self.clone(),
+            run_id: run_id.to_owned(),
+            finished,
+        })
+    }
+
+    fn is_shutting_down(&self) -> bool {
+        self.inner
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .shutting_down
+    }
+
+    /// Close admission before other application-exit cleanup can yield. The
+    /// asynchronous shutdown still collects and waits for unfinished turns.
+    pub fn close_admission(&self) {
+        let mut state = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        state.shutting_down = true;
+        for run in state.runs.values() {
+            run.cancellation.cancel();
+        }
+    }
+
+    fn begin_shutdown(&self) -> Vec<(String, watch::Receiver<bool>)> {
+        self.close_admission();
+        let state = self.inner.lock().unwrap_or_else(|error| error.into_inner());
+        state
+            .runs
+            .iter()
+            .map(|(id, run)| (id.clone(), run.finished.clone()))
+            .collect()
+    }
+}
+
+impl Drop for AgentRunGuard {
+    fn drop(&mut self) {
+        self.registry
+            .inner
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .runs
+            .remove(&self.run_id);
+        self.finished.send_replace(true);
+    }
+}
+
+/// Fence admission and wait for all shared turns before model teardown. Unlike
+/// cancellation senders, completion remains pending through durable writes.
+pub async fn shutdown<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    let pending = state.agent_runs.begin_shutdown();
+    let joined = tokio::time::timeout(std::time::Duration::from_secs(15), async {
+        for (id, _) in &pending {
+            if let Err(error) = agent_cancel_turn(app.state(), id.clone()).await {
+                log::warn!("Could not clear Agent run '{id}' during shutdown: {error}");
+            }
+        }
+        for (_, mut finished) in pending {
+            while !*finished.borrow_and_update() {
+                if finished.changed().await.is_err() {
+                    break;
+                }
+            }
+        }
+    })
+    .await;
+    if joined.is_err() {
+        log::warn!("Agent run shutdown exceeded the shared runtime exit grace period");
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -679,6 +797,18 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
 ) -> Result<(), String> {
     let state = app_handle.state::<AppState>();
     validate_request(&request)?;
+    let cancellation = CancellationToken::new();
+    let _run_guard = state
+        .agent_runs
+        .register(&request.run_id, cancellation.clone())?;
+    let event_registry = state.agent_runs.clone();
+    let emit: Arc<dyn Fn(AgentEvent) -> Result<(), String> + Send + Sync> =
+        Arc::new(move |event| match emit(event) {
+            // The window may already be gone at normal app exit. Losing its
+            // event channel must not turn cancellation into failed history.
+            Err(_) if event_registry.is_shutting_down() => Ok(()),
+            result => result,
+        });
     if request.selected_skill.as_deref() == Some("agent-builder") {
         request.auto_approve = false;
         request.definition_id = Some("general".into());
@@ -720,7 +850,6 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
     {
         return Err("This task includes images. Assign Vision to the role that will inspect them in Run setup.".into());
     }
-    let cancellation = CancellationToken::new();
     let started_at_ms = now_ms();
     let storage_id = Uuid::new_v4().to_string();
     super::session::initialize_session(&data_folder, &request.session_id).await?;
@@ -1261,6 +1390,218 @@ mod tests {
     use super::*;
     use crate::core::agent::test_support::TestWorkspace;
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shutdown_waits_for_direct_studio_durability_after_window_closes() {
+        use crate::core::agent::ginfer_client::GinferConnection;
+        use crate::core::agent::test_support::{ScriptedGinferServer, ScriptedResponse, TestFleet};
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::time::Duration;
+        use tauri_plugin_ginfer::state::{GinferSession, SessionInfo, SessionOwner};
+
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        fs::create_dir_all(&data).unwrap();
+        fs::write(root.path().join("source.txt"), "DURABLE_STUDIO_OBSERVATION").unwrap();
+        let server = ScriptedGinferServer::start(vec![
+            ScriptedResponse::tool_call("os_fs_read", serde_json::json!({"path":"source.txt"})),
+            ScriptedResponse::tool_call(
+                "os_shell_run",
+                serde_json::json!({"cmd":"touch must-not-run.txt"}),
+            ),
+        ])
+        .await;
+        let GinferConnection::Local { port, .. } = server.client().target().connection else {
+            unreachable!()
+        };
+        let fleet = TestFleet::start().await;
+        let owner = SessionOwner {
+            control: Arc::new(
+                ginfer_host::launcher::LocalControl::open(
+                    &fleet.directory.path().join("host"),
+                    &fleet.origin,
+                )
+                .unwrap(),
+            ),
+            connection: ginfer_host::launcher::LocalConnection {
+                instance_id: Uuid::new_v4(),
+                session_id: Uuid::new_v4(),
+                model_id: "scripted-test-model".into(),
+                port: port.try_into().unwrap(),
+                api_key: String::new(),
+            },
+        };
+        let model = ginfer_host::engine_registry::InstanceRef {
+            host_id: owner.control.host_id(),
+            instance_id: owner.connection.instance_id,
+        }
+        .model_alias();
+        let info: SessionInfo = serde_json::from_value(serde_json::json!({
+            "pid":1,"port":port,"model_id":"scripted-test-model","model_path":"test.ginfer",
+            "is_embedding":false,"vision":false,"api_key":"","max_concurrency":1,"max_context":32768
+        }))
+        .unwrap();
+        let ginfer = GinferState::default();
+        ginfer.ginfer_process.lock().await.insert(
+            1,
+            GinferSession {
+                owner,
+                info,
+                endpoint: None,
+            },
+        );
+        let app = tauri::test::mock_builder()
+            .manage(ginfer)
+            .manage(fleet.client.clone())
+            .manage(crate::core::gbot::GbotState::stopped_for_test())
+            .manage(AppState::default())
+            .manage(crate::test_support::TestDataRoot(data.clone()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let run_id = Uuid::new_v4().to_string();
+        let session_id = Uuid::new_v4().to_string();
+        let task = "Inspect source.txt before asking to run the shell command";
+        let request: AgentTurnRequest = serde_json::from_value(serde_json::json!({
+            "run_id":run_id,"session_id":session_id,"model_id":model,
+            "user_message":task,"working_dir":root.path()
+        }))
+        .unwrap();
+        let approval = Arc::new(tokio::sync::Notify::new());
+        let approval_arrived = approval.clone();
+        let closed = Arc::new(AtomicBool::new(false));
+        let sink_closed = closed.clone();
+        let rejected_events = Arc::new(AtomicUsize::new(0));
+        let rejected = rejected_events.clone();
+        let run = run_turn_with_sink(
+            app.handle().clone(),
+            request.clone(),
+            Arc::new(move |event| {
+                if sink_closed.load(Ordering::SeqCst) {
+                    rejected.fetch_add(1, Ordering::SeqCst);
+                    return Err("Studio window is closed".into());
+                }
+                if matches!(event, AgentEvent::ApprovalRequested { .. }) {
+                    approval_arrived.notify_one();
+                }
+                Ok(())
+            }),
+        );
+        let exit = async {
+            approval.notified().await;
+            assert!(!app
+                .state::<AppState>()
+                .agent_pending_approvals
+                .lock()
+                .await
+                .is_empty());
+            app.state::<AppState>().agent_runs.close_admission();
+            closed.store(true, Ordering::SeqCst);
+            shutdown(app.handle()).await;
+
+            // Check before joining the caller: shutdown itself must wait for
+            // the history and semantic session writes, not just cancellation.
+            let records = super::super::runs::list_runs(&data).unwrap();
+            let record = records
+                .iter()
+                .find(|record| record.run_id == run_id)
+                .unwrap();
+            assert_eq!(record.status, "cancelled");
+            assert_eq!(record.finish_reason, "cancelled");
+            assert_eq!(record.session_id, session_id);
+            assert_eq!(record.user_message, task);
+            let session = load_session(&data, &session_id).await.unwrap();
+            assert_eq!(session.current_goal, task);
+            assert_eq!(session.turn_count, 1);
+            assert!(session
+                .render_conversation()
+                .contains("DURABLE_STUDIO_OBSERVATION"));
+            assert!(!session.archive_roots.is_empty());
+            assert!(session
+                .archive_roots
+                .iter()
+                .all(|path| path.join("transcript.jsonl").is_file()));
+            let state = app.state::<AppState>();
+            assert!(state.agent_runs.inner.lock().unwrap().runs.is_empty());
+            assert!(state.tool_call_cancellations.lock().await.is_empty());
+            assert!(state.agent_pending_approvals.lock().await.is_empty());
+            assert!(state.agent_pending_folder_access.lock().await.is_empty());
+
+            let mut late = request.clone();
+            late.run_id = Uuid::new_v4().to_string();
+            assert!(
+                run_turn_with_sink(app.handle().clone(), late, Arc::new(|_| Ok(())))
+                    .await
+                    .unwrap_err()
+                    .contains("shutting down")
+            );
+        };
+        let (result, ()) =
+            tokio::time::timeout(Duration::from_secs(5), async { tokio::join!(run, exit) })
+                .await
+                .expect("normal exit must unwind the approval wait and persist before returning");
+        result.unwrap();
+        assert!(rejected_events.load(Ordering::SeqCst) > 0);
+        assert!(!root.path().join("must-not-run.txt").exists());
+
+        let reopened = tauri::test::mock_app();
+        reopened.manage(AppState::default());
+        reopened.manage(crate::test_support::TestDataRoot(data.clone()));
+        let history = super::super::runs::agent_list_runs(reopened.handle().clone())
+            .await
+            .unwrap();
+        let restored = history
+            .iter()
+            .find(|record| record.run_id == run_id)
+            .unwrap();
+        assert_eq!(restored.status, "cancelled");
+        assert_eq!(restored.session_id, session_id);
+        assert_eq!(restored.user_message, task);
+        assert_eq!(
+            server.requests().len(),
+            2,
+            "reopening must not replay execution"
+        );
+        assert!(reopened
+            .state::<AppState>()
+            .agent_runs
+            .inner
+            .lock()
+            .unwrap()
+            .runs
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn failed_studio_preflight_releases_exit_tracking() {
+        let root = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(root.path().to_owned()));
+        let request: AgentTurnRequest = serde_json::from_value(serde_json::json!({
+            "run_id":"preflight-failure","session_id":Uuid::new_v4().to_string(),
+            "model_id":"unused","definition_id":"missing-definition","user_message":"not started"
+        }))
+        .unwrap();
+        let error = run_turn_with_sink(app.handle().clone(), request, Arc::new(|_| Ok(())))
+            .await
+            .unwrap_err();
+        assert!(error.contains("missing-definition"), "{error}");
+        tokio::time::timeout(std::time::Duration::from_secs(1), shutdown(app.handle()))
+            .await
+            .expect("early preflight errors must not leave shutdown waiting for completion");
+        assert!(app
+            .state::<AppState>()
+            .agent_runs
+            .inner
+            .lock()
+            .unwrap()
+            .runs
+            .is_empty());
+        assert!(super::super::runs::list_runs(root.path())
+            .unwrap()
+            .is_empty());
+    }
+
     #[tokio::test]
     async fn repeated_stop_clears_pending_prompts_and_preserves_other_runs() {
         use crate::core::state::{PendingAgentApproval, PendingAgentFolderAccess};
@@ -1311,7 +1652,10 @@ mod tests {
         let cancellations = state.tool_call_cancellations.lock().await;
         assert!(!cancellations.contains_key("worker"));
         assert!(cancellations.contains_key("other-worker"));
-        assert_eq!(other_rx.try_recv(), Err(oneshot::error::TryRecvError::Empty));
+        assert_eq!(
+            other_rx.try_recv(),
+            Err(oneshot::error::TryRecvError::Empty)
+        );
     }
 
     #[cfg(windows)]

@@ -450,6 +450,7 @@ pub fn run() {
             mcp_active_servers: Arc::new(Mutex::new(HashMap::new())),
             server_handle: Arc::new(Mutex::new(None)),
             tool_call_cancellations: Arc::new(Mutex::new(HashMap::new())),
+            agent_runs: Default::default(),
             agent_pending_approvals: Arc::new(Mutex::new(HashMap::new())),
             agent_pending_folder_access: Arc::new(Mutex::new(HashMap::new())),
             agent_approval_allowlist: Arc::new(Mutex::new(Default::default())),
@@ -656,6 +657,7 @@ pub fn run() {
 
         match event {
             RunEvent::ExitRequested { .. } => {
+                app.state::<AppState>().agent_runs.close_admission();
                 log::info!("Application exit requested");
             }
             RunEvent::WindowEvent {
@@ -664,6 +666,10 @@ pub fn run() {
                 ..
             } => match window_event {
                 tauri::WindowEvent::CloseRequested { .. } => {
+                    #[cfg(any(target_os = "linux", target_os = "windows"))]
+                    if label == "main" {
+                        app.state::<AppState>().agent_runs.close_admission();
+                    }
                     log::info!("Window close requested: {label}");
                 }
                 tauri::WindowEvent::Destroyed => {
@@ -673,6 +679,8 @@ pub fn run() {
             },
             RunEvent::Exit => {
                 let app_handle = app.clone();
+                // Fence turns before other cleanup can close their event sink.
+                app_handle.state::<AppState>().agent_runs.close_admission();
 
                 #[cfg(not(any(target_os = "ios", target_os = "android")))]
                 app_handle
@@ -716,10 +724,28 @@ pub fn run() {
 
                         let state = app_handle.state::<AppState>();
 
-                        core::agent::capabilities::shutdown(&app_handle).await;
-
-                        #[cfg(not(any(target_os = "ios", target_os = "android")))]
-                        core::code_bridge::shutdown(&app_handle).await;
+                        let worker_shutdown = async {
+                            tokio::join!(
+                                biased;
+                                core::agent::commands::shutdown(&app_handle),
+                                core::agent::capabilities::shutdown(&app_handle),
+                                async {
+                                    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+                                    core::code_bridge::shutdown(&app_handle).await;
+                                },
+                            );
+                        };
+                        if tokio::time::timeout(
+                            tokio::time::Duration::from_secs(15),
+                            worker_shutdown,
+                        )
+                        .await
+                        .is_err()
+                        {
+                            log::warn!(
+                                "Agent shutdown exceeded the shared runtime exit grace period"
+                            );
+                        }
 
                         if let Err(e) =
                             crate::core::server::proxy::stop_server(state.server_handle.clone())

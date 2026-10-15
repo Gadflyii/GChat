@@ -63,6 +63,7 @@ pub struct AppState {
     pub mcp_active_servers: Arc<Mutex<HashMap<String, serde_json::Value>>>,
     pub server_handle: Arc<Mutex<Option<ServerHandle>>>,
     pub tool_call_cancellations: Arc<Mutex<HashMap<String, oneshot::Sender<()>>>>,
+    pub agent_runs: crate::core::agent::commands::AgentRunRegistry,
     pub agent_pending_approvals: Arc<Mutex<HashMap<String, PendingAgentApproval>>>,
     pub agent_pending_folder_access: Arc<Mutex<HashMap<String, PendingAgentFolderAccess>>>,
     pub agent_approval_allowlist: Arc<Mutex<ApprovalAllowlist>>,
