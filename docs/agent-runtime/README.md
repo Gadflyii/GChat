@@ -16,11 +16,22 @@ unqualified.
 The local RTX 5090 native full-input gate failed before Ready with both packaged
 Engine `9f8fb8ff9` and current Engine `5af502f1` while Host supplied a historical
 explicit KV arena. Normal Host Stop completed for both attempts. Host source
-`93143951d` now quotes current startup settings. Its one native startup retest
-reached Ready with an effective 7004386304-byte KV arena while saved state kept
-Automatic. C1, context 262144, structured outputs and 524288000-byte headroom
-were unchanged; normal Host Stop left zero active requests and no engine child.
-Production source remains `93143951d`. Fixture correction `611fc26e9` passes all
+`93143951d`, merged on `16a338aff`, now quotes current startup settings. The
+merged Host (SHA `d4863c80…`) passes one standalone native Host/Manager API startup
+with Engine `5af502f1` and an effective 7080309760-byte KV arena while saved state
+keeps Automatic. C1, context 262144, structured outputs and 524288000-byte headroom
+are unchanged. The observed quote and serving arguments match; normal session-bound
+Host Stop leaves zero active requests, owned processes absent and locks released.
+The engine reports maximum request context 261632, below configured 262144.
+
+Ada's installed UI startup and normal Stop pass separately with production Host
+`93143951d` (SHA `66caef75…`), Engine `5af502f1`, C1, context 149069, structured
+outputs off, 314572800-byte headroom and effective KV 4695700992. Saved state keeps
+Automatic after catalog reselection. Its engine reports maximum request context
+132096, below configured 149069. This is a frozen installed DEB with isolated
+Host/runtime replacements; the owned fixture and resources are released.
+
+Production implementation is unchanged by fixture corrections. `611fc26e9` passes all
 11 plugin tests; `7d92bad30` passes the complete 172-test Host suite after a further
 client-fixture correction. The composed Linux source gate passes using those
 reruns and the retained passing checks of unchanged production source. No native

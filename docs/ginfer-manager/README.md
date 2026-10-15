@@ -15,7 +15,7 @@ the accepted binaries.
 
 ## Fresh startup quotes — October 15
 
-Candidate `fix/gchat-host-fresh-kv-quotes`, based on `81bc9be62`, addresses
+Merged source `16a338aff` addresses
 `GINFER-HOST-PROFILE-DEFAULT-STARTUP-20261015`. Single-instance starts on idle
 GPUs and saved-instance Start, Restart and Reload previously bypassed the
 placement quote. Selecting a catalog profile could also retain historical KV
@@ -46,16 +46,28 @@ Ready receipt then permits quote-derived explicit sizing with the same recipe.
 An explicit arena or shared placement requires known graph memory. No unknown
 graph allowance is treated as measured capacity.
 
-One native RTX 5090 startup passes with production Host `93143951d` and current
-Engine `5af502f1`: C1, context 262144, structured outputs on, unchanged
-524288000-byte headroom and a fresh 7004386304-byte effective KV arena. Saved
-state retains Automatic. Ready and normal Host Stop pass with zero active
-requests and no remaining engine child. The earlier historical-arena failures
-remain retained. No input count, inference or fresh-install acceptance is claimed;
-OI-068 remains PARTIAL. Ada 149069-context, structured-outputs-off startup and the
-final fresh-install package gate remain separate.
+One merged-Host RTX 5090 startup passes with source `16a338aff` (Host SHA
+`d4863c80…`) and Engine `5af502f1`: C1, context 262144, structured outputs on,
+unchanged 524288000-byte headroom and a fresh 7080309760-byte effective KV arena.
+Saved state retains Automatic. The observed quote and serving arguments match
+the selected settings; Ready and normal session-bound Host Stop pass with zero
+active requests. The engine reports a maximum request context of 261632 tokens,
+below the configured 262144. Owned engine, Host and guard processes are absent
+and resource locks are released. This is standalone native Host/Manager API
+startup acceptance.
 
-Production source is unchanged by fixture corrections. `611fc26e9` passes all
+Ada's installed UI startup also passes with production Host `93143951d` (SHA
+`66caef75…`) and Engine `5af502f1`: C1, context 149069, structured outputs off,
+314572800-byte headroom and an effective 4695700992-byte KV arena after catalog
+reselection. Saved state retains Automatic. UI Ready, normal UI Stop and owned
+process/resource release pass. The engine reports a maximum request context of
+132096 tokens, below the configured 149069. This uses the frozen installed DEB
+with isolated Host/runtime replacements. The earlier historical-arena failures
+remain retained. Neither startup qualifies inference, full-context capacity or a
+fresh installer; OI-068 remains PARTIAL.
+
+The merged production implementation is `93143951d`, unchanged by fixture
+corrections. `611fc26e9` passes all
 11 plugin tests; `7d92bad30` passes the complete Host suite, with 172 tests passed
 and 19 ignored. The composed Linux source gate passes using these full affected
 suite reruns and retained passing `make verify` targets from `93143951d`.
