@@ -62,19 +62,21 @@ struct Connection {
     client: Option<ServiceClient>,
     local_client: Option<background::Client>,
     updates: Option<tauri::async_runtime::JoinHandle<()>>,
-    views: BTreeMap<uuid::Uuid, RemoteView>,
+    views: BTreeMap<uuid::Uuid, ViewLease>,
     generation: u64,
     stopped: bool,
     local_stopped: bool,
 }
-struct RemoteView {
+struct ViewLease {
     client: ServiceClient,
-    bridge: tokio::task::JoinHandle<()>,
+    bridge: Option<tokio::task::JoinHandle<()>>,
     close: Value,
 }
-async fn close_views(views: BTreeMap<uuid::Uuid, RemoteView>) {
+async fn close_views(views: BTreeMap<uuid::Uuid, ViewLease>) {
     let closes = views.into_values().map(|view| async move {
-        view.bridge.abort();
+        if let Some(bridge) = view.bridge {
+            bridge.abort();
+        }
         let _ = view.client.call("/v1/view/close", view.close).await;
     });
     let _ = tokio::time::timeout(
@@ -84,7 +86,7 @@ async fn close_views(views: BTreeMap<uuid::Uuid, RemoteView>) {
     .await;
 }
 impl Connection {
-    fn detach(&mut self) -> BTreeMap<uuid::Uuid, RemoteView> {
+    fn detach(&mut self) -> BTreeMap<uuid::Uuid, ViewLease> {
         self.client = None;
         self.generation += 1;
         if let Some(updates) = self.updates.take() {
@@ -95,12 +97,14 @@ impl Connection {
 }
 pub struct GbotState {
     connection: Mutex<Connection>,
+    view_operations: Mutex<()>,
     connector_client_id: uuid::Uuid,
 }
 impl Default for GbotState {
     fn default() -> Self {
         Self {
             connection: Mutex::new(Connection::default()),
+            view_operations: Mutex::new(()),
             connector_client_id: uuid::Uuid::new_v4(),
         }
     }
@@ -214,44 +218,74 @@ impl GbotState {
         path: &str,
         body: Value,
     ) -> Result<Value, String> {
-        let generation = self.connection.lock().await.generation;
+        // Serialize explicit opens/closes, while disconnect and selection can still
+        // detach an in-flight open and fence its returned ticket by generation.
+        let _view_operation = if matches!(path, "/v1/view/open" | "/v1/view/close") {
+            Some(self.view_operations.lock().await)
+        } else {
+            None
+        };
+        let generation = self.call_generation().await?;
         let client = self.client(app).await?;
+        if path == "/v1/view/open" {
+            self.retire_views(&body["identity"], generation, |client, close| async move {
+                client.call("/v1/view/close", close).await
+            })
+            .await?;
+        }
         let mut result = client.call(path, body.clone()).await;
         if path == "/v1/view/open" {
-            if let (ServiceClient::Remote { hosts, host_id }, Ok(ticket)) = (&client, &mut result) {
+            if let Ok(ticket) = &mut result {
                 let lease = serde_json::from_value::<uuid::Uuid>(ticket["lease_id"].clone())
                     .map_err(|_| "Invalid view lease")?;
                 let close = ginfer_host::gbot_bootstrap::view_close_request(&body, lease);
-                let endpoint = ticket["ws_url"].as_str().ok_or("View endpoint missing")?;
-                match hosts.gbot_view_bridge(*host_id, endpoint).await {
-                    Ok((url, bridge)) => {
-                        ticket["ws_url"] = Value::String(url);
-                        let mut connection = self.connection.lock().await;
-                        if connection.generation != generation {
-                            bridge.abort();
-                            drop(connection);
-                            let _ = client.call("/v1/view/close", close).await;
-                            return Err("Gbot service changed while opening the desktop".into());
+                let bridge = match &client {
+                    ServiceClient::Local(_) => Ok(None),
+                    ServiceClient::Remote { hosts, host_id } => {
+                        match ticket["ws_url"].as_str() {
+                            Some(endpoint) => hosts.gbot_view_bridge(*host_id, endpoint).await.map(
+                                |(url, bridge)| {
+                                    ticket["ws_url"] = Value::String(url);
+                                    Some(bridge)
+                                },
+                            ),
+                            None => Err("View endpoint missing".into()),
                         }
-                        connection.views.insert(
-                            lease,
-                            RemoteView {
-                                client: client.clone(),
-                                bridge,
-                                close,
-                            },
-                        );
                     }
+                };
+                let bridge = match bridge {
+                    Ok(bridge) => bridge,
                     Err(error) => {
                         let _ = client.call("/v1/view/close", close).await;
                         return Err(error);
                     }
+                };
+                let view = ViewLease {
+                    client: client.clone(),
+                    bridge,
+                    close,
+                };
+                if let Err(view) = self.track_view(lease, view, generation).await {
+                    let mut views = BTreeMap::new();
+                    views.insert(lease, view);
+                    close_views(views).await;
+                    return Err("Gbot service changed while opening the desktop".into());
                 }
             }
         } else if path == "/v1/view/close" && result.is_ok() {
             if let Ok(lease) = serde_json::from_value::<uuid::Uuid>(body["lease_id"].clone()) {
-                if let Some(view) = self.connection.lock().await.views.remove(&lease) {
-                    view.bridge.abort();
+                let mut connection = self.connection.lock().await;
+                if connection.generation == generation
+                    && connection
+                        .views
+                        .get(&lease)
+                        .is_some_and(|view| view.close == body)
+                {
+                    if let Some(view) = connection.views.remove(&lease) {
+                        if let Some(bridge) = view.bridge {
+                            bridge.abort();
+                        }
+                    }
                 }
             }
         }
@@ -264,9 +298,73 @@ impl GbotState {
         }
         result
     }
+    async fn call_generation(&self) -> Result<u64, String> {
+        let connection = self.connection.lock().await;
+        if connection.stopped {
+            return Err("Gbot service disconnected. Connect to the service to continue.".into());
+        }
+        Ok(connection.generation)
+    }
+    async fn track_view(
+        &self,
+        lease: uuid::Uuid,
+        view: ViewLease,
+        generation: u64,
+    ) -> Result<(), ViewLease> {
+        let mut connection = self.connection.lock().await;
+        if connection.generation != generation {
+            return Err(view);
+        }
+        connection.views.insert(lease, view);
+        Ok(())
+    }
+    async fn retire_views<F, Fut>(
+        &self,
+        identity: &Value,
+        generation: u64,
+        close: F,
+    ) -> Result<(), String>
+    where
+        F: Fn(ServiceClient, Value) -> Fut,
+        Fut: std::future::Future<Output = Result<Value, String>>,
+    {
+        let prior = {
+            let connection = self.connection.lock().await;
+            if connection.generation != generation {
+                return Err("Gbot service changed while opening the desktop".into());
+            }
+            connection
+                .views
+                .iter()
+                .filter(|(_, view)| &view.close["identity"] == identity)
+                .map(|(lease, view)| (*lease, view.client.clone(), view.close.clone()))
+                .collect::<Vec<_>>()
+        };
+        for (lease, client, body) in prior {
+            // Use the recorded owner's exact close request, never the new
+            // renderer's owner, and retain a failed lease for an explicit retry.
+            close(client, body).await.map_err(|error| {
+                format!("Could not close the previous desktop view; reconnect and retry: {error}")
+            })?;
+            let mut connection = self.connection.lock().await;
+            if connection.generation != generation {
+                return Err("Gbot service changed while opening the desktop".into());
+            }
+            if let Some(view) = connection.views.remove(&lease) {
+                if let Some(bridge) = view.bridge {
+                    bridge.abort();
+                }
+            }
+        }
+        if self.connection.lock().await.generation != generation {
+            return Err("Gbot service changed while opening the desktop".into());
+        }
+        Ok(())
+    }
     pub async fn disconnect(&self) {
         let (client, root, views) = {
             let mut connection = self.connection.lock().await;
+            connection.stopped = true;
             let views = connection.detach();
             (
                 connection.local_client.take(),
@@ -441,6 +539,168 @@ pub async fn gbot_command<R: Runtime>(
 
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod tests {
+    use super::{GbotState, ServiceClient, ViewLease};
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    struct UnusedCredentials;
+    impl ginfer_host::client::CredentialStore for UnusedCredentials {
+        fn get(&self, _: Uuid) -> ginfer_host::client::CredentialFuture<'_, String> {
+            Box::pin(async { Err("unexpected credential access".into()) })
+        }
+        fn set<'a>(&'a self, _: Uuid, _: &'a str) -> ginfer_host::client::CredentialFuture<'a, ()> {
+            Box::pin(async { Err("unexpected credential write".into()) })
+        }
+        fn delete(&self, _: Uuid) -> ginfer_host::client::CredentialFuture<'_, ()> {
+            Box::pin(async { Err("unexpected credential deletion".into()) })
+        }
+    }
+    fn view_fixture(identity: Value, owner: Uuid, lease: Uuid) -> ViewLease {
+        ViewLease {
+            client: ServiceClient::Remote {
+                hosts: Arc::new(ginfer_host::client::Client::new(
+                    None,
+                    Arc::new(UnusedCredentials),
+                )),
+                host_id: Uuid::new_v4(),
+            },
+            bridge: None,
+            close: json!({"identity":identity,"owner":owner,"lease_id":lease}),
+        }
+    }
+
+    #[tokio::test]
+    async fn replacing_view_closes_recorded_owner_only_for_the_same_session() {
+        let state = GbotState::default();
+        let identity = json!({"workspace_id":Uuid::new_v4(),"session_id":Uuid::new_v4()});
+        let other_session =
+            json!({"workspace_id":identity["workspace_id"],"session_id":Uuid::new_v4()});
+        let lease = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let recorded_owner = Uuid::new_v4();
+        let mut view = view_fixture(identity.clone(), recorded_owner, lease);
+        let expected_close = view.close.clone();
+        let bridge = tokio::spawn(std::future::pending::<()>());
+        let aborted = bridge.abort_handle();
+        view.bridge = Some(bridge);
+        assert!(state.track_view(lease, view, 0).await.is_ok());
+        assert!(state
+            .track_view(other, view_fixture(other_session, Uuid::new_v4(), other), 0)
+            .await
+            .is_ok());
+        state
+            .retire_views(&identity, 0, |_, body| {
+                assert_eq!(body, expected_close);
+                async { Ok(Value::Null) }
+            })
+            .await
+            .unwrap();
+        tokio::task::yield_now().await;
+        assert!(aborted.is_finished());
+        let connection = state.connection.lock().await;
+        assert_eq!(connection.views.len(), 1);
+        assert!(connection.views.contains_key(&other));
+    }
+
+    #[tokio::test]
+    async fn failed_previous_view_close_blocks_replacement_and_preserves_exact_retry() {
+        let state = GbotState::default();
+        let identity = json!({"workspace_id":Uuid::new_v4(),"session_id":Uuid::new_v4()});
+        let lease = Uuid::new_v4();
+        let view = view_fixture(identity.clone(), Uuid::new_v4(), lease);
+        let expected_close = view.close.clone();
+        assert!(state.track_view(lease, view, 0).await.is_ok());
+        let error = state
+            .retire_views(&identity, 0, |_, body| {
+                assert_eq!(body, expected_close);
+                async { Err("close refused".into()) }
+            })
+            .await
+            .unwrap_err();
+        assert!(error.contains("close refused"));
+        assert_eq!(
+            state.connection.lock().await.views[&lease].close,
+            expected_close
+        );
+        state
+            .retire_views(&identity, 0, |_, body| {
+                assert_eq!(body, expected_close);
+                async { Ok(Value::Null) }
+            })
+            .await
+            .unwrap();
+        assert!(state.connection.lock().await.views.is_empty());
+    }
+
+    #[tokio::test]
+    async fn detach_retires_unbridged_tickets_and_rejects_late_open_completion() {
+        let state = GbotState::default();
+        let identity = json!({"workspace_id":Uuid::new_v4(),"session_id":Uuid::new_v4()});
+        let lease = Uuid::new_v4();
+        let view = view_fixture(identity.clone(), Uuid::new_v4(), lease);
+        let expected_close = view.close.clone();
+        assert!(state.track_view(lease, view, 0).await.is_ok());
+        let detached = state.connection.lock().await.detach();
+        assert_eq!(detached[&lease].close, expected_close);
+        assert!(detached[&lease].bridge.is_none());
+        let late = Uuid::new_v4();
+        let rejected = state
+            .track_view(late, view_fixture(identity, Uuid::new_v4(), late), 0)
+            .await;
+        let rejected = match rejected {
+            Err(view) => view,
+            Ok(()) => panic!("late view must be returned for cleanup"),
+        };
+        assert_eq!(rejected.close["lease_id"], json!(late));
+        let connection = state.connection.lock().await;
+        assert_eq!(connection.generation, 1);
+        assert!(connection.views.is_empty());
+    }
+
+    #[tokio::test]
+    async fn disconnect_during_previous_close_cannot_admit_a_replacement() {
+        let state = GbotState::default();
+        let identity = json!({"workspace_id":Uuid::new_v4(),"session_id":Uuid::new_v4()});
+        let lease = Uuid::new_v4();
+        assert!(state
+            .track_view(
+                lease,
+                view_fixture(identity.clone(), Uuid::new_v4(), lease),
+                0
+            )
+            .await
+            .is_ok());
+        let error = state
+            .retire_views(&identity, 0, |_, _| async {
+                let detached = state.connection.lock().await.detach();
+                assert_eq!(detached.len(), 1);
+                Ok(Value::Null)
+            })
+            .await
+            .unwrap_err();
+        assert!(error.contains("service changed"));
+        let connection = state.connection.lock().await;
+        assert_eq!(connection.generation, 1);
+        assert!(connection.views.is_empty());
+    }
+
+    #[tokio::test]
+    async fn queued_view_open_is_rejected_after_native_disconnect() {
+        let state = Arc::new(GbotState::default());
+        let active_open = state.view_operations.lock().await;
+        let queued_state = state.clone();
+        let queued_open = tokio::spawn(async move {
+            let _operation = queued_state.view_operations.lock().await;
+            queued_state.call_generation().await
+        });
+        state.disconnect().await;
+        drop(active_open);
+        let error = queued_open.await.unwrap().unwrap_err();
+        assert!(error.contains("disconnected"));
+        assert!(state.connection.lock().await.views.is_empty());
+    }
+
     #[test]
     fn saved_service_target_survives_restart_without_silent_local_fallback() {
         let root = tempfile::tempdir().unwrap();
