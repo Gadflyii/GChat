@@ -170,6 +170,44 @@ it('saves the ready Host session with its served model and context', async () =>
   fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
   await waitFor(() => expect(save).toHaveBeenCalledWith(initial))
 })
+it('keeps an explicitly selected Muse 2-bit mix through refresh and saving', async () => {
+  // Muse 2-bit mix: 9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c.
+  const mix = {
+    ...ready,
+    model: 'muse-glimmer-30b/smol-q2g64-mix-dflash-q4',
+  }
+  // Muse INT: 46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66.
+  const int = {
+    ...ready,
+    target: { ...ready.target, instance_id: 'integer', session_id: 'int-session' },
+    model: 'muse-glimmer-30b/groupwise-int-dflash-q4',
+  }
+  call.mockResolvedValueOnce([mix, int]).mockResolvedValueOnce([int, mix])
+  const save = vi.fn().mockResolvedValue(undefined)
+  const initial: Assignment = {
+    connection: { kind: 'paired_host', target: mix.target },
+    model: mix.model,
+    context_tokens: mix.context_tokens,
+  }
+  render(<Setup initial={initial} save={save} />)
+  expect(
+    screen.getByText(
+      /For vision and Gbot, prefer Muse INT if it fits your GPU, or Qwen/
+    )
+  ).toHaveTextContent('Use at least 128K context.')
+  const picker = screen.getByRole('button', { name: 'Ready Host model' })
+  const refresh = screen.getByRole('button', { name: 'Refresh hosts' })
+  await waitFor(() => expect(refresh).toBeEnabled())
+  expect(picker).toHaveTextContent(mix.model)
+  fireEvent.click(refresh)
+  await waitFor(() => expect(call).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(refresh).toBeEnabled())
+  expect(picker).toHaveTextContent(mix.model)
+  expect(screen.getByLabelText('Model ID')).toHaveValue(mix.model)
+  expect(screen.getByLabelText('Model context tokens')).toHaveValue(262144)
+  fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
+  await waitFor(() => expect(save).toHaveBeenCalledWith(initial))
+})
 it('refuses a restarted Host session and keeps an empty selection incomplete', async () => {
   call.mockResolvedValue([
     { ...ready, target: { ...ready.target, session_id: 'new-session' } },

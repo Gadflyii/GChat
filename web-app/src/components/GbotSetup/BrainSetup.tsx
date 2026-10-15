@@ -308,7 +308,8 @@ export function BrainSetup({
           {paired
             ? 'Model and served context come from the selected Host instance.'
             : 'Enter the model ID and context capacity served by that endpoint.'}{' '}
-          Qwen or Muse SMOL with at least 128K context is recommended.
+          For vision and Gbot, prefer Muse INT if it fits your GPU, or Qwen. Use
+          at least 128K context.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
