@@ -1122,11 +1122,18 @@ flow, opens setup for the first bot after opt-in and hides the sidebar entry
 while disabled. Unimplemented computer routes remain visibly unavailable. This
 includes resumable Linux KVM provisioning and a qualified dedicated-guest API
 path; installed novice presentation remains to be checked. The
-service transaction uses a stable workspace ID and matching vault slot. It deletes
-its imported key when persistence fails before publication and preserves it when
-the workspace was published but durability confirmation failed. Retrying the same
-form operation resolves the same workspace. This is not a cross-store power-loss
-atomicity claim; native presentation remains unqualified.
+service transaction uses a stable workspace ID and matching vault slot. A retry
+with that same ID can recover a valid SSH key retained without workspace metadata
+after a restart or failed rollback. It neither writes nor deletes that retained
+key, including when the retry cannot publish the workspace. An imported retry
+must match the retained normalized key; a mismatched or corrupt slot is refused
+without changing the slot or publishing a workspace. Newly written keys still
+roll back after a confirmed pre-publication save failure and remain retained when
+publication succeeded or its outcome is uncertain. Retrying the same form
+operation resolves the same workspace. Hermetic API fixtures cover the retained
+slot with reopened state and a memory vault. Native-vault recovery, physical
+power-loss, browser reload with a new setup UUID and native presentation remain
+unqualified; this is not a cross-store power-loss atomicity claim.
 Linux x86-64 release packaging now includes the accepted Ubuntu 24.04
 CPython 3.12.3 interpreter, its unchanged 61-package Cua closure, native libraries
 and license notices. Native GChat discovers that resource automatically and

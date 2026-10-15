@@ -285,7 +285,7 @@ impl fmt::Display for ServiceError {
 
 impl std::error::Error for ServiceError {}
 
-/// Creation owns the key until persistence confirms that the workspace references it.
+/// Creation owns a newly written key until persistence confirms its workspace reference.
 #[derive(Debug)]
 pub enum SshWorkspaceCreationError {
     State(ServiceError),
@@ -549,7 +549,7 @@ impl Service {
         .map_err(|_| ServiceError::Persistence)?
     }
 
-    /// A stable setup ID owns one vault slot. Retrying never allocates another key.
+    /// A stable setup ID owns one vault slot. Retries preserve any retained key.
     pub(crate) async fn create_ssh_workspace(
         &self,
         config: WorkspaceConfig,
@@ -608,25 +608,45 @@ impl Service {
             let mut next = state.durable.clone();
             next.workspaces.push(config.clone());
             next.validate()?;
-            let key = match key {
-                Some(key) => key,
-                None => crate::ssh::generate_ssh_key()
-                    .map_err(|_| SshWorkspaceCreationError::State(ServiceError::InvalidState))?,
-            };
-            if let Err(error) = vault.put(reference, key).await {
-                vault
-                    .delete(reference)
-                    .await
-                    .map_err(SshWorkspaceCreationError::Cleanup)?;
-                return Err(SshWorkspaceCreationError::Vault(error));
+            let retained = vault
+                .get(reference)
+                .await
+                .map_err(SshWorkspaceCreationError::Vault)?;
+            let new_key = retained.is_none();
+            if let Some(retained) = retained {
+                // A restart or failed rollback may leave the owned slot without metadata.
+                // Reconcile that key rather than replacing it or owning its rollback.
+                if crate::ssh::ssh_public_key(&retained).is_err()
+                    || key
+                        .as_ref()
+                        .is_some_and(|key| retained.expose_secret() != key.expose_secret())
+                {
+                    return Err(ServiceError::WorkspaceConflict.into());
+                }
+            } else {
+                let key = match key {
+                    Some(key) => key,
+                    None => crate::ssh::generate_ssh_key().map_err(|_| {
+                        SshWorkspaceCreationError::State(ServiceError::InvalidState)
+                    })?,
+                };
+                if let Err(error) = vault.put(reference, key).await {
+                    vault
+                        .delete(reference)
+                        .await
+                        .map_err(SshWorkspaceCreationError::Cleanup)?;
+                    return Err(SshWorkspaceCreationError::Vault(error));
+                }
             }
             if let Err(error) = store.save_with_outcome(&next).await {
                 match error {
                     SaveError::NotPublished(error) => {
-                        vault
-                            .delete(reference)
-                            .await
-                            .map_err(SshWorkspaceCreationError::Cleanup)?;
+                        if new_key {
+                            vault
+                                .delete(reference)
+                                .await
+                                .map_err(SshWorkspaceCreationError::Cleanup)?;
+                        }
                         return Err(SshWorkspaceCreationError::State(error));
                     }
                     SaveError::Published => {
