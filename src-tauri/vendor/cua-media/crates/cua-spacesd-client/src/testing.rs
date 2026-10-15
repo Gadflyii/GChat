@@ -46,7 +46,8 @@ use tokio::{
     sync::{Notify, mpsc, oneshot},
 };
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Status, body::Body};
+use tonic::body::Body;
+pub use tonic::{Code, Status};
 
 type Stream<T> = Pin<Box<dyn futures_util::Stream<Item = Result<T, Status>> + Send>>;
 
@@ -134,6 +135,8 @@ impl Proc {
 pub struct MockState {
     /// Dedicated desktop targets for downstream media fixtures.
     pub stream_targets: Mutex<Vec<pb::StreamTarget>>,
+    /// Raw `CloseMedia` failure to return after recording its request.
+    pub media_close_error: Mutex<Option<Status>>,
     files: Mutex<HashMap<String, Vec<u8>>>,
     uploads: Mutex<HashMap<String, Upload>>,
     procs: Mutex<HashMap<u32, Proc>>,
@@ -2245,7 +2248,15 @@ impl StreamService for Svc {
         &self,
         req: tonic::Request<pb::CloseMediaRequest>,
     ) -> Result<tonic::Response<pb::CloseMediaResponse>, Status> {
-        self.0.observed.media_close.lock().unwrap().push(req.into_inner());
+        self.0
+            .observed
+            .media_close
+            .lock()
+            .unwrap()
+            .push(req.into_inner());
+        if let Some(error) = self.0.media_close_error.lock().unwrap().clone() {
+            return Err(error);
+        }
         Ok(tonic::Response::new(pb::CloseMediaResponse {}))
     }
 }

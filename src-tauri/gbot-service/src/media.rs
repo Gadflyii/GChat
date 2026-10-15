@@ -196,13 +196,21 @@ impl MediaLease {
                 .map_err(|error| MediaError::at("stop view gateway", error))?;
         }
         self.task = None;
-        self.client
+        if let Err(error) = self
+            .client
             .stream()
             .close_media(pb::CloseMediaRequest {
                 media_session_id: self.ticket.media_session_id.clone(),
             })
             .await
-            .map_err(|error| MediaError::at("close media", error))?;
+        {
+            // The authenticated guest may already have expired this exact session.
+            // gRPC NOT_FOUND (5) confirms that no remote media remains to revoke.
+            const GRPC_NOT_FOUND: i32 = 5;
+            if error.code() as i32 != GRPC_NOT_FOUND {
+                return Err(MediaError::at("close media", error));
+            }
+        }
         Ok(())
     }
 }

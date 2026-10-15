@@ -106,6 +106,16 @@ complete: UI 3/3, media policy/revocation 1/1 and guest installation 6/6
 pass, together with frontend types and strict Rust Clippy. The pinned guest
 daemon's cached container build and native/audio package passed. The audio-toggle
 UI case and SSH reconnect/ownership regression also pass.
+The expired-media cleanup candidate accepts authenticated `CloseMedia`
+`NOT_FOUND` for the lease's exact session ID after stopping the local gateway.
+Other close failures remain errors, and hand-back still requires its existing
+owner checks and fresh desktop observation. Four focused media tests, the
+hand-back observation guard, service check, strict all-target Clippy and the
+full Linux `make verify` rerun pass. The first full run's unrelated Host transfer
+timing-test failure is retained separately in
+`out/gbot-expired-media-close-20261015/result.json`. Installed recovery remains
+unqualified; this does not identify the cause of the October 15 hand-back failure. See the
+[cleanup decision](../decisions/2026-10-15-treat-expired-gbot-media-as-closed.md).
 The physical Linux viewer gate passed: a real desktop frame, 440 Hz PCM tone,
 view-only input refusal, takeover input and revocation on hand-back. The accepted
 BGRA negotiation and seed provisioning fixes are merged in `2e735624f`; evidence
