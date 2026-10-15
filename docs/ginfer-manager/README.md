@@ -91,19 +91,47 @@ physical startup or throughput claim is made.
 No GPU, native Windows build, release or publication. The candidate reuses the
 existing Host build cache; no model/artifact copies or disposable guest are needed.
 
-## Current credential cleanup warning fix
+## Accepted native credential cleanup warning — October 15
 
-`GCHAT-MANAGER-FORGET-CREDENTIAL-WARNING` uses baseline main `254c0f8fd`,
-candidate `/ai/gchat-worktrees/manager-forget-credential-warning-254`, branch
-`fix/manager-forget-credential-warning-254`. Manager must preserve successful
-saved-host removal while displaying returned OS credential cleanup warnings,
-including alongside refresh errors and across unrelated snapshots. The owning
-UI and two existing DOM-fixture cases pass (2/2, 566 ms total). The actual Forget
-interaction removes the host, retains the warning across an unrelated snapshot,
-shows refresh failure separately, and preserves null-warning success. No
-Host/vault behavior, native application or user credential changes
-are included. Evidence belongs in `out/manager-forget-credential-warning-20261011/`;
-the source tree is retained for review, with existing Node dependencies reused.
+`GCHAT-MANAGER-FORGET-CREDENTIAL-WARNING` is closed for its original Linux
+Manager presentation scope. Source `b6bc99f2f`, finalized by `82e6411b2`, is
+incorporated in current main. The existing two owning DOM cases remain accepted
+(2/2, 566 ms): successful host removal with a warning, persistence across unrelated
+snapshots and refresh errors, and ordinary null-warning success.
+
+The remaining native failure gate passed at **2026-10-15T10:14:57.764Z** using
+retained standalone Manager/Host binaries from accepted source `0705f31a6`.
+Their SHA-256 values match the existing Linux package receipt:
+Manager `6e4e76e853cfe670c79f54596a477f63f5805ad6302136c0e0a1240cca88dc1c`;
+Host `7c15bba0e5f3e9a53d07552bb15ab9a15ab598ea7e600d7b8b47d7bf788ee659`.
+The Manager embeds the exact fixed UI bytes. No rebuild was needed.
+
+Actual native Pair saved one remote host and a credential in a private, unlocked
+Secret Service. Reloading that private D-Bus session's policy denied only
+`org.freedesktop.Secret.Item.Delete`; it kept the session alive and used the
+unchanged native vault. Ordinary **Forget this host → Forget host** removed saved
+metadata from one host to zero and rendered **Host forgotten** together with
+**OS credential cleanup needs attention: Platform secure storage failure: DBus
+error: Rejected send message…**. Both remained through automatic native
+snapshots. The credential still existed after Forget, independently confirming
+the deletion failure. Responses were not mocked.
+
+Setup corrections are retained in the result: a loopback-only standalone Host
+correctly refused pairing before ordinary discoverable sharing was enabled;
+disconnecting the initial private bus exited Manager before Forget was reached.
+The corrected live-session policy gate ran the Forget action once. Afterward,
+the scoped grants were revoked and the orphaned private credential was deleted
+through Secret Service after restoring the private policy. Exact owned native
+processes/helpers were terminated and private state retired (100,876 bytes).
+CPU bookings 713/714 were returned; the physical desktop keyring was untouched.
+Window-close/Exit and tray behavior are not qualified by this gate.
+
+Evidence: `out/manager-forget-native-20261015/{result.json,summary.md}`;
+original focused evidence: `out/manager-forget-credential-warning-20261011/result.json`;
+package receipt: `out/oi057-linux-packages-20261011/manager/SHA256SUMS`.
+The accepted shared baseline binaries remain in `src-tauri/target/release/`.
+No source/test change, model, GPU workload, package-manager install, newer
+credential-tier, Windows, signing or publication qualification is claimed.
 
 ## Linux AppIndicator dependency deprecation
 
