@@ -1056,6 +1056,20 @@ KVM cases, strict Clippy and example build pass; reuse
 ENOSPC writing `/run/cloud-init/instance-data-sensitive.json`, followed by
 NoCloud fallback and broken SSH. No pin bypass, RAM workaround or offline repair.
 
+The standalone post-fix **guest reboot passed on October 15 at 09:48:18 UTC**.
+One fresh Debian 13 guest used the retained Gbot CLI, the same pinned archives
+and 12,481-byte user-data. An ACPI reboot changed its boot ID while preserving
+its instance ID and strictly pinned SSH host key. NoCloud completed without
+errors; sensitive metadata was rewritten successfully (33,558 bytes), and both
+private desktop/media units returned active. This closes the seed metadata
+exhaustion gate; Gbot task recovery across reboot remains separate.
+Evidence: `/ai/gchat/out/gbot-cua-media-20261012/seed-reboot-20261015/result.json`.
+The result records the CLI SHA-256; its source revision is not embedded, so this
+is observed retained-binary behavior rather than a new source build. The owned
+guest was stopped/unregistered, its temporary SSH key and CLI copy deleted, and
+2.706 GiB of guest files removed. S1 CPU0–3 booking1815 was returned at09:49Z;
+no GPU, host installation, baseline guest or human desktop was involved.
+
 Guest `bd5614ed-e14a-40b5-b566-aaef3ee9d847` is stopped and unregistered, its
 native-vault key deleted, and its disposable root removed (2.688 GiB freed).
 The CPU booking is returned; no live guest, model, GPU job or owned build
