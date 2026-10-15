@@ -7,7 +7,9 @@ and the corrected October 15 targeted Stop replay qualify those transitions
 separately. The [acceptance record](remaining-acceptance.md#accepted-general-agent-dispatch-from-chat--october-15)
 closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has separate Linux passes for live-worker checkpoint continuity and
 a correct eight-file task after compaction. The finished record also survives a
-normal app exit/restart. Active-worker restart recovery remains unqualified.
+normal app exit/restart. Active-worker cancellation, durable state and ordinary
+Studio reopening also pass after normal exit; broader restart recovery remains
+unqualified.
 
 ## Studio worker exit persistence — October 15
 
@@ -19,9 +21,12 @@ changes a cancelled run into failed history.
 
 The existing mock-app, TestFleet and scripted-engine regression checks an
 active Studio turn through a completed file read, pending approval, window-channel
-closure, cancelled persistence and fresh-app reopening without replay. This is
-source and regression coverage; native active-worker exit/restart acceptance
-remains pending. [Remaining scope](remaining-acceptance.md#oi-068-studio-worker-exit-persistence--october-15).
+closure, cancelled persistence and fresh-app reopening without replay. One native
+Standard Agent also read a file and reached shell approval before normal window
+Close. The cancelled record, original task and completed read survived same-data
+relaunch and ordinary Studio Runs reopening; the unapproved command never ran.
+Automatic continuation and crash recovery remain unqualified.
+[Evidence and remaining scope](remaining-acceptance.md#oi-068-studio-worker-exit-persistence--october-15).
 
 ## Current worker review follow-up
 
