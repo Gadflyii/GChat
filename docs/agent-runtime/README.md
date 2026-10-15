@@ -31,8 +31,14 @@ approved shared-store design. Linux now supports Secret Service or an explicit
 passphrase-encrypted vault; WSL uses these Linux tiers until the Windows helper
 release gate. The native Linux missing-provider/passphrase setup gate passes, including
 lock, rejected passphrase and unlock after restart; physical locked desktop-provider
-and Windows release checks remain owed. Evidence is in the acceptance record. OI-069's two-Host
-worker gate passes; simultaneous independent-workstation clients remain owed.
+and Windows release checks remain owed. Evidence is in the acceptance record.
+OI-069's two-Host worker gate and October 15 independent-workstation gate pass.
+Two native Linux clients with distinct grants share one instance-wide worker
+limit: the second queues, queued cancellation completes, and a fresh request
+finishes after the first releases its slot. Both native clients retain their
+finished replies and return to zero usage. The coordinator accounting correction
+and exact producer/evidence are recorded in the
+[acceptance record](remaining-acceptance.md#accepted-oi-069-independent-workstation-capacity).
 
 The [updater offline metadata gate](remaining-acceptance.md#updater-offline-metadata-gate--october-12)
 passes all 19 existing cases against accepted source `874cbc98d` using existing

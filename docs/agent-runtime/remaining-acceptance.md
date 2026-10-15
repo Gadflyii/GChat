@@ -145,6 +145,38 @@ sequentially with independent folders on one desktop and shared its coordinator 
 All disposable Hosts, clients, services, credentials/state and bookings are retired.
 The credential-store implementation above follows; no GPU is needed.
 
+## Accepted OI-069 independent-workstation capacity
+
+The October 15 follow-up passes using native Linux GChat clients on
+Ron-9950X3D2 and DESKTOP-DG588BU, each with a private passphrase vault and its
+own coordinator grant. Both observe revision 4 of the same catalog, pool and
+assignments. The served instance has concurrency 3; its Manager pool-member
+worker limit is 1 across both clients.
+
+Source `d1dc7e621` corrects per-client capacity accounting by admitting pooled
+workers at the coordinator before tools or inference. One real TLS two-client
+test covers concurrent admission, overlapping-pool limits, disconnect release
+and revocation. It passes, as do affected Rust check, strict Clippy and the
+desktop/Host build. The existing dispatch release/queue case passes. The other
+preflight fixture lacks managed Gbot state; a temporary fixture setup attempt
+timed out and was removed. Full `make verify` in this isolated tree stops at
+missing Yarn installation state; no dependencies were installed.
+
+Live acceptance at 04:52–04:56Z: the first client's worker finishes normally;
+the second client's worker stays queued with zero Engine request, cancels
+durably, and a fresh queued worker starts only after the first releases its
+slot. The second worker returns `OI069 Ada independent client completed.`
+Both clients save normal final replies and report zero usage. Native Gbot Quit,
+window Close and normal Host Stop complete. The earlier two-Host concurrent
+dispatch, durable reopen and coordinator restart evidence above is reused.
+No Windows, signing, publication or Engine change is included.
+
+Rebuilt desktop SHA-256:
+`de48d58b5796839a0270061e033a8d079ca06c8d3827b4536e62f9be4db8597c`;
+Host: `cb7f13c6d7b219a855bec96d3073c5b5dc71cb9ab2fe0aa4e713a74360a74b2c`.
+The accepted four-architecture Engine runtime remains `38ff80e0c`.
+Receipts: `out/oi069-independent-clients-20261015/{result.json,summary.md}`.
+
 Completed item: the reproduced OI-068 custom-launch/output-budget conflict.
 The old installed fresh Chat served 8,192 context, reserved 8,192 output and
 rejected its 1,859-token prompt with a false one-token input budget.
