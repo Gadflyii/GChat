@@ -655,6 +655,134 @@ it('opens view-only and closes interactive input before handing back to the bot'
   )
 })
 
+it.each([false, true])(
+  'reconnects paused control before explicit hand-back (disconnect media failure: %s)',
+  async (mediaFailure) => {
+    const identity = { workspace_id: 'one', session_id: 'retained-session' }
+    const owner = 'retained-owner'
+    sessionStorage.setItem('gbot-control-owner', owner)
+    let live = true
+    let control = 'human'
+    mocks.listen.mockResolvedValue(() => {})
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+        if (path === 'state')
+          return {
+            workspaces: [{ id: 'one', name: 'Writer' }],
+            live_sessions: live ? [identity] : [],
+            assignments: [
+              {
+                workspace_id: 'one',
+                connection: { kind: 'endpoint', api_base: 'http://host/v1' },
+                model: 'qwen',
+                context_tokens: 262144,
+              },
+            ],
+            controls: [
+              {
+                identity: { workspace_id: 'two', session_id: 'other-session' },
+                state: 'paused',
+                owner: 'other-owner',
+              },
+              {
+                identity,
+                state: control,
+                owner: control === 'bot' ? null : owner,
+              },
+            ],
+          }
+        if (path === 'tasks')
+          return [
+            {
+              id: 'task',
+              identity,
+              state: 'paused',
+              messages: [{ role: 'assistant', content: 'Saved result' }],
+            },
+          ]
+        if (path === 'tasks/approvals') return []
+        if (path === 'disconnect') {
+          live = false
+          control = 'paused'
+          if (mediaFailure) throw new Error('Guest media could not close')
+        }
+        if (path === 'connect') {
+          if (
+            body.workspace_id !== identity.workspace_id ||
+            body.session_id !== identity.session_id
+          )
+            throw new Error('Session does not match retained control')
+          live = true
+        }
+        if (path === 'control/hand-back') {
+          const session = body.identity as typeof identity
+          if (
+            session.workspace_id !== identity.workspace_id ||
+            session.session_id !== identity.session_id ||
+            body.owner !== owner ||
+            !live
+          )
+            throw new Error('Current session and control owner required')
+          control = 'bot'
+        }
+        return {}
+      }
+    )
+    render(<Page />)
+    await screen.findByText('Bot paused · you have control')
+    await screen.findByText('Saved result')
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Connect', exact: true })
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+    )
+    expect(screen.getByText('Saved result')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Next task' },
+    })
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Resume', exact: true })
+    ).toBeDisabled()
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'control/hand-back',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/start',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/resume',
+      expect.anything()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled()
+    )
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Resume', exact: true })
+    ).toBeEnabled()
+    expect(screen.getByText('Saved result')).toBeInTheDocument()
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/start',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/resume',
+      expect.anything()
+    )
+  }
+)
+
 it('links existing accounts per bot without inherited selection', async () => {
   const linked: Record<string, string[]> = { one: [], two: [] }
   const accounts = [

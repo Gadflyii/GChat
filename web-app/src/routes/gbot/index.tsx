@@ -696,10 +696,13 @@ function GbotPage() {
                         void perform(() =>
                           gbot(
                             identity ? 'disconnect' : 'connect',
-                            identity || {
-                              workspace_id: bot.id,
-                              session_id: crypto.randomUUID(),
-                            }
+                            identity ||
+                              (control && control.state !== 'bot'
+                                ? control.identity
+                                : {
+                                    workspace_id: bot.id,
+                                    session_id: crypto.randomUUID(),
+                                  })
                           )
                         )
                       }
