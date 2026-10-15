@@ -1,12 +1,162 @@
 # GChat remediation and code hygiene
 
+## GCHAT-RELEASE-CODE-REVIEW (C7, complete; merge-ready)
+
+Bubbs assigned this review on October 15 at 23:15Z; deadline October 16
+03:00Z. Repository `/ai/gchat`, subject `docs/code-hygiene/`, owned worktree
+`/ai/gchat-worktrees/c7-release-review-20261015`, branch
+`review/c7-gchat-release-20261015`. The shared checkout remains on `main`;
+its existing untracked `avatar/` is another owner's data and is untouched.
+
+Deliverable completed: inspect every first-parent integration of `origin/main`
+since `2026-10-15T00:00:00Z` that changes source, tests, build or package
+inputs, compare each with its first parent, and check suspected defects against
+current source. Review covered correctness, races/lifetimes, error paths,
+credentials/permissions/network security, realistic missing regressions and
+Windows portability. Each confirmed finding has a distinct master open-work
+row with current file:line and an owner lane. No fixes were made.
+
+Final source cutoff, fetched October 15 at 23:26:43Z:
+`0ae041b101415df1154ab3885cf109baba2644fc`; main had not advanced from the
+initial cutoff. The UTC window contains **55 first-parent integrations,
+40 source-bearing integrations and 128 distinct source paths**; 15 docs-only
+integrations were skipped. The earliest is
+`99666704b46117a086c63ced11ea4c9a423a1d4e`, first parent
+`859fb496ac75f081578e242847fce5de8c5b75ce`. The UTC boundary includes
+integrations displayed locally on October 14. Direct commits are included.
+Subsequent source merges require separate review.
+
+Four independent read-only area reviewers completed the work: Host/Manager/
+wizard; agent runtime/tools/MCP/search and Chat proxy; Gbot/KVM/viewer;
+packaging/installers. Two available worker slots required two parallel waves.
+C7 reconciled mixed integrations, checked the remaining cross-area hunks and
+independently verified all three findings and their existing-test gaps.
+Existing tests were read; no test execution or passing-runtime claim is made.
+
+### Confirmed findings
+
+**P2 — AUTO KV sizing removes the Max Perf session identity.**
+`src-tauri/ginfer-host/src/service.rs:1196–1199` clears saved/live
+`benchmark_profile` when a normal dense Max Perf launch derives a concrete
+arena from saved Automatic (`None`) sizing. The Standard Benchmark then
+rejects the otherwise matching session at
+`src-tauri/plugins/tauri-plugin-ginfer/src/benchmark.rs:435–438`.
+Restart repeats the loss because the saved AUTO setting remains `None`.
+Integration `16a338aff` moved fresh quoting onto every spawn; its first
+parent bypassed this branch for a solo start. AUTO defaults are at
+`src-tauri/ginfer-host/src/max_perf.rs:105–120`. The existing lifecycle fixture
+at `service.rs:3933` uses first-start Flash with unknown graph cost, retaining
+AUTO and missing the dense case. Required regression: dense AUTO launch and
+normal restart preserve the versioned identity and pass Standard Benchmark
+session validation; incompatible explicit custom settings still invalidate it.
+Master row **`GCHAT-MAX-PERF-AUTO-KV-IDENTITY`**, **W8 / Gchat**, filed in
+`docs/open-work` commit `6b484c49b`.
+
+**P3 — outage recovery loses a New reply notification.**
+`web-app/src/stores/gbot-companion-store.ts:172` requires `available` before
+comparing a retained reply baseline. After an established same-target snapshot,
+a transient outer state/target read failure sets `available=false` at line202.
+Recovery skips comparison and replaces the baseline at line179, permanently
+losing unread/avatar notification for a reply completed during the outage.
+Conversation history remains intact. Introduced in `c8d410470`; `ae4ba6201`
+repairs inner tasks/approvals failures only, which are the failures exercised
+by the current test at line214. Required regression: outer state/target failure
+then same-target recovery with a new reply sets unread; initial startup and
+target-switch history remain silent. Master row
+**`GCHAT-GBOT-REPLY-OUTAGE-NOTIFICATION`**, **W9 / Gchat2**, filed in commit
+`1da7ebc0a`.
+
+**P2 — Windows setup rejects generated nested vendor-license members
+(pre-existing, outside this review window).**
+`scripts/setup-ginfer-windows.ps1:49` permits only flat `licenses/*.txt`.
+`scripts/package-ginfer-host.py:51` carries nested licenses from the runtime;
+GInfer `packaging/windows/build.ps1:260` creates
+`licenses/llguidance-crates/<crate>/LICENSE-APACHE` and lines299–313 manifest
+them recursively. A standard generated bundle therefore fails setup validation
+before installation. The GChat allowlist dates to `f175f9c6e2` (September 9)
+and the GInfer nested members to `c4fd4c6ec9` (September 25); this is not an
+October 15 regression. GInfer producer source was inspected at `db8ed3772`.
+Required work: align the supported safe member contract, retaining traversal
+and duplicate rejection, and add a nested-license fixture. Native Windows
+execution remains Ron-scheduled. Master row
+**`GCHAT-WINDOWS-NESTED-LICENSE-INSTALL`**, **W10 / Gchat**, filed in commit
+`c71c6e8d6`, distinct from broad Windows qualification work.
+
+All findings are source-confirmed; none was reproduced by executing the product.
+No other new defect was confirmed in the inspected changes. Existing AppImage
+GIO ABI work and platform qualification gates were not duplicated. Review is
+static evidence, not native Windows qualification or runtime/security certification.
+
+### First-parent coverage
+
+Each listed integration was inspected against its first parent and relevant
+current code/tests. Area names denote the four reviewers; C7 denotes the
+coordinator's additional coverage. Mixed integrations have more than one reader.
+
+| Integration | Changed area | Reviewer |
+|---|---|---|
+| `99666704b` | Linux runtime packaging and stager | Packaging |
+| `dc4173870` | Host fleet; agent dispatch and pools | Host, Agent |
+| `3983611c9` | Native integration settings | Gbot |
+| `d59ac3b61` | Host, agent and Gbot fixture updates | Host, Agent, Gbot |
+| `22ae47c0b` | Repeated Stop | Agent |
+| `967797a01` | Filesystem ranges, reasoning toggle, extension lockfile | Agent, Packaging |
+| `5c5a70749` | Reply markup | Agent |
+| `30cc7d574` | Setup screen scrolling | Host |
+| `c8d410470` | Companion, avatar, sidebar; model dropdown | Gbot, C7 |
+| `9a25287a4` | Gbot header buttons | Gbot |
+| `871a1c53d` | OAuth mock tests | Agent |
+| `d62149bdd` | Cua audio | Gbot |
+| `44e80b7c1` | Host multi-instance, Max Perf and Manager | Host |
+| `a0336f7d5` | Fresh file reads and history compression | Agent |
+| `8392d0d99` | Gbot page sharing and Studio proposals | Gbot |
+| `3681810c4` | Agent prompt | Agent |
+| `4455d773f` | Credential orphan reconciliation | Gbot |
+| `a13a4c629` | Desktop handback lifecycle | Gbot |
+| `ae4ba6201` | Reply baseline recovery | Gbot |
+| `c1f334ea5` | Studio exit and cancellation | Agent, C7 |
+| `e3d6b2b9f` | Hermes home resolution | C7 |
+| `81bc9be62` | Host/Manager wizard and Linux setup | Host, Packaging |
+| `9cd3405ae` | Host package staging and Linux setup | Packaging |
+| `16a338aff` | Fresh Host quotes and benchmark identity | Host, C7 |
+| `00068f2a8` | Gbot media and raw gRPC | Gbot |
+| `ac94483be` | Paused Gbot settings | Gbot |
+| `22b4bb45c` | Gbot reconnect | Gbot |
+| `ce4e24a26` | Resources readiness and companion setup | Gbot, C7 |
+| `96cf7d11a` | Host validation; proxy Responses/error translation | Host, Agent |
+| `eb3626bde` | KVM setup, workspace and SSH loopback | Gbot |
+| `04a4c18d9` | Host first run and Gbot Brain setup | Host, Gbot |
+| `4064a1aff` | Sidebar, companion and root route | Gbot |
+| `2923ff54a` | Incomplete KVM setup and non-Linux API | Gbot |
+| `6c641d78e` | Gbot view leases | Gbot, C7 |
+| `7c75e65b3` | CLI installer ownership | Packaging, C7 |
+| `264893c6c` | Linux shared-memory initialization | Gbot, C7 |
+| `93bf9bec0` | MCP backend, frontend and tests | Agent |
+| `4f1d91410` | AppImage media dependency closure | Packaging |
+| `b67c31c6c` | Local files, RAG parsers and attachments | Agent |
+| `0ae041b10` | Web search, fetch and Chat input | Agent |
+
+Coverage reconciliation independently recomputed the 55/40/128 counts and
+matched the complete ordered set of 40 source integrations to this table.
+Documentation link/index review and `git diff --check` pass. No builds, tests,
+installation, network qualification, credentials access, GPU/model runs or
+publication occurred. Only this documentation file changes in the owned branch.
+
+Inventory: the owned source-only review worktree is 270 MiB and retained for
+review/merge. No private build, model copy, live job or hardware reservation
+exists for this item. Shared checkout, foreign files and other owners' outputs
+remain untouched. Next: coordinator merge of this record; the three OPEN
+findings proceed in their named lanes. Review acceptance is complete.
+
+## Earlier hygiene work (retained record)
+
 Repository: `/ai/gchat`. Subject: `docs/code-hygiene/`. Owner: GChat coordinator.
 Reviewed Windows product `0f06ba433` is published on main; Linux packaging
 source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — test assertions
+## Earlier item — test assertions
 
 Baseline GChat main `3983611c9`; candidate `fix/gchat-test-quality-398` at
 `/ai/gchat`. Four test files had call-only cases rejected by the existing
