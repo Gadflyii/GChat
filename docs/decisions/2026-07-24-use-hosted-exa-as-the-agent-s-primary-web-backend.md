@@ -20,7 +20,11 @@ title: "Use hosted Exa as the Agent's primary web backend"
   It reflects the Tools menu's conversation exclusions and requires a
   tools-capable model. It does not enable inference-server hosted search.
   Fetch targets must pass the public HTTP URL policy before reaching Exa;
-  direct downloads enforce that policy again on every redirect. Stop cancels
+  direct downloads enforce that policy again on every redirect and pin all
+  validated addresses so an unreachable address does not discard other routes.
+  Saved Agent network Ask uses Manually approve mode; the explicit Skip all
+  approvals policy bypasses confirmation, while Block still denies the tool.
+  Stop cancels
   pending web requests and body reads, and prevents starting a fallback.
 - **Consequences:** Agent web operations normally receive Exa's structured
   results and extracted page content without user configuration. Exa outages

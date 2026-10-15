@@ -105,11 +105,7 @@ pub(super) async fn request_guarded(
             .host_str()
             .ok_or_else(|| ToolOutcome::error("URL has no host"))?
             .to_owned();
-        let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
-        for address in addresses {
-            builder = builder.resolve(&host, address);
-        }
-        let client = builder
+        let client = client_builder_for_addresses(&host, &addresses)
             .build()
             .map_err(|error| ToolOutcome::error(format!("Could not build HTTP client: {error}")))?;
         let response = client
@@ -149,6 +145,15 @@ pub(super) async fn request_guarded(
         url = redirected;
     }
     Err(ToolOutcome::error("HTTP redirect resolution failed"))
+}
+
+fn client_builder_for_addresses(
+    host: &str,
+    addresses: &[std::net::SocketAddr],
+) -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve_to_addrs(host, addresses)
 }
 
 fn apply_redirect_policy(
@@ -278,6 +283,43 @@ fn is_blocked_ipv6(ip: Ipv6Addr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn preserves_all_validated_addresses_when_last_address_is_unreachable() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let reachable = listener.local_addr().unwrap();
+        let unreachable = std::net::SocketAddr::from(([127, 0, 0, 2], reachable.port()));
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0; 1024];
+            assert!(stream.read(&mut request).await.unwrap() > 0);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .await
+                .unwrap();
+        });
+        let host = "validated-addresses.invalid";
+        // Repeated resolve calls would retain only the unreachable last address.
+        let client = client_builder_for_addresses(host, &[reachable, unreachable])
+            .no_proxy()
+            .timeout(Duration::from_secs(3))
+            .build()
+            .unwrap();
+
+        let response = client
+            .get(format!("http://{host}:{}/", reachable.port()))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.text().await.unwrap(), "ok");
+        server.await.unwrap();
+    }
 
     #[test]
     fn blocks_private_and_special_addresses() {
