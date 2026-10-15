@@ -15,6 +15,17 @@ title: "Use hosted Exa as the Agent's primary web backend"
   transport, HTTP, MCP, parsing, and empty-result failures. Record only a
   stable failure category in tool details; add no API key, setting, or
   dependency.
+- **Client controls:** Chat's Web search button controls the shared native
+  search and page-reading tools, including when Chat dispatches a saved Agent.
+  It reflects the Tools menu's conversation exclusions and requires a
+  tools-capable model. It does not enable inference-server hosted search.
+  Fetch targets must pass the public HTTP URL policy before reaching Exa;
+  direct downloads enforce that policy again on every redirect and pin all
+  validated addresses so an unreachable address does not discard other routes.
+  Saved Agent network Ask uses Manually approve mode; the explicit Skip all
+  approvals policy bypasses confirmation, while Block still denies the tool.
+  Stop cancels
+  pending web requests and body reads, and prevents starting a fallback.
 - **Consequences:** Agent web operations normally receive Exa's structured
   results and extracted page content without user configuration. Exa outages
   do not remove the existing keyless local paths, and internal MCP payloads

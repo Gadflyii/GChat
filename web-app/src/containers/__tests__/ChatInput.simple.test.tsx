@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatInput from '../ChatInput'
 import { NEW_THREAD_ATTACHMENT_KEY, useChatAttachments } from '@/hooks/useChatAttachments'
@@ -14,6 +14,16 @@ import { toast } from 'sonner'
 import { useThreads } from '@/hooks/useThreads'
 import { useInitialMessage } from '@/hooks/useInitialMessage'
 import { createDocumentAttachment } from '@/types/attachment'
+import { useToolAvailable } from '@/hooks/useToolAvailable'
+import type { CapabilityTool } from '@/services/capabilities/types'
+
+const webTools: CapabilityTool[] = [
+  { name: 'native_search', identity: 'os.web.search', origin: 'native', server: 'GChat', description: 'Search the web', inputSchema: {} },
+  { name: 'native_fetch', identity: 'os.web.fetch', origin: 'native', server: 'GChat', description: 'Read a page', inputSchema: {} },
+]
+const fileTool: CapabilityTool = {
+  name: 'native_read', identity: 'os.fs.read', origin: 'native', server: 'GChat', description: 'Read a file', inputSchema: {},
+}
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -152,6 +162,8 @@ describe('ChatInput', () => {
     useChatAttachments.setState({ attachmentsByThread: {} })
     useThreads.setState({ threads: {}, currentThreadId: undefined })
     useInitialMessage.setState({ byThread: {} })
+    useAppState.setState({ tools: [] })
+    useToolAvailable.setState({ disabledTools: {}, defaultDisabledTools: [], defaultsInitialized: false })
     agentDefinitions.value = []
     agentDefinitions.loading = false
     agentSkills.value = []
@@ -211,6 +223,100 @@ describe('ChatInput', () => {
       document.querySelector('[data-test-id="send-message-button"]')
     ).toBeDisabled()
     unmount()
+  })
+
+  it('toggles native web tools through the shared defaults without a hosted web-search capability', () => {
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['tools'] } }))
+    useAppState.setState({ tools: [...webTools, fileTool] })
+    useToolAvailable.setState({ defaultDisabledTools: ['GChat::native_read'], disabledTools: { other: ['GChat::native_fetch'] } })
+    const { unmount } = render(<ChatInput initialMessage />)
+    const globe = screen.getByRole('button', { name: 'Web search' })
+    expect(globe).toBeEnabled()
+    expect(globe).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(globe)
+    expect(globe).toHaveAttribute('aria-pressed', 'false')
+    expect(useToolAvailable.getState().getDefaultDisabledTools()).toEqual([
+      'GChat::native_read', 'GChat::native_search', 'GChat::native_fetch',
+    ])
+    expect(useToolAvailable.getState().disabledTools.other).toEqual(['GChat::native_fetch'])
+    unmount()
+    render(<ChatInput initialMessage />)
+    expect(screen.getByRole('button', { name: 'Web search' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('reflects individual Tools changes and enables both web tools from the partial state', () => {
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['tools'] } }))
+    useAppState.setState({ tools: [...webTools, fileTool] })
+    useThreads.setState({ currentThreadId: 'thread-web' })
+    useToolAvailable.setState({ disabledTools: { 'thread-web': ['GChat::native_read'] } })
+    render(<ChatInput />)
+    const globe = screen.getByRole('button', { name: 'Web search' })
+
+    act(() => useToolAvailable.getState().setToolDisabledForThread('thread-web', 'GChat', 'native_fetch', false))
+    expect(globe).toHaveAttribute('aria-pressed', 'mixed')
+    expect(globe).toHaveAccessibleDescription('Web search is partially enabled. Enable search and page reading.')
+    fireEvent.click(globe)
+    expect(globe).toHaveAttribute('aria-pressed', 'true')
+    expect(useToolAvailable.getState().getDisabledToolsForThread('thread-web')).toEqual(['GChat::native_read'])
+    fireEvent.click(globe)
+    expect(globe).toHaveAttribute('aria-pressed', 'false')
+    expect(useToolAvailable.getState().getDisabledToolsForThread('thread-web')).toEqual([
+      'GChat::native_read', 'GChat::native_search', 'GChat::native_fetch',
+    ])
+  })
+
+  it('preserves inherited unrelated exclusions when first changing web tools in a thread', () => {
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['tools'] } }))
+    useAppState.setState({ tools: [...webTools, fileTool] })
+    useThreads.setState({ currentThreadId: 'new-thread' })
+    const defaults = ['GChat::native_read', 'GChat::native_search', 'GChat::native_fetch']
+    useToolAvailable.setState({ defaultDisabledTools: defaults, disabledTools: { other: ['GChat::native_search'] } })
+    render(<ChatInput />)
+    const globe = screen.getByRole('button', { name: 'Web search' })
+    expect(globe).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(globe)
+    expect(useToolAvailable.getState().getDisabledToolsForThread('new-thread')).toEqual(['GChat::native_read'])
+    expect(useToolAvailable.getState().getDefaultDisabledTools()).toEqual(defaults)
+    expect(useToolAvailable.getState().disabledTools.other).toEqual(['GChat::native_search'])
+  })
+
+  it('requires ordinary model tool support even when a model advertises hosted web search', () => {
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['web_search'] } }))
+    useAppState.setState({ tools: webTools })
+    render(<ChatInput initialMessage />)
+    const globe = screen.getByRole('button', { name: 'Web search' })
+    expect(globe).toBeDisabled()
+    expect(globe).toHaveAccessibleDescription('Select a model that supports tools to use web search.')
+    fireEvent.click(globe)
+    expect(useToolAvailable.getState().getDefaultDisabledTools()).toEqual([])
+  })
+
+  it('does not present missing or MCP-shadowed native web tools as usable', () => {
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['tools'] } }))
+    useAppState.setState({ tools: [webTools[0], { ...webTools[1], origin: 'mcp' }] })
+    render(<ChatInput initialMessage />)
+    const globe = screen.getByRole('button', { name: 'Web search' })
+    expect(globe).toBeDisabled()
+    expect(globe).toHaveAccessibleDescription('Native web search and page reading tools are unavailable.')
+    act(() => useAppState.setState({ tools: webTools }))
+    expect(globe).toBeEnabled()
+    expect(globe).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('does not change defaults or another thread when no conversation is open', () => {
+    useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['tools'] } }))
+    useAppState.setState({ tools: webTools })
+    const defaults = ['GChat::native_search']
+    const otherThread = ['GChat::native_fetch']
+    useToolAvailable.setState({ defaultDisabledTools: defaults, disabledTools: { other: otherThread } })
+    render(<ChatInput />)
+    const globe = screen.getByRole('button', { name: 'Web search' })
+    expect(globe).toBeDisabled()
+    expect(globe).toHaveAccessibleDescription('Open a conversation to change web search.')
+    fireEvent.click(globe)
+    expect(useToolAvailable.getState().getDefaultDisabledTools()).toEqual(defaults)
+    expect(useToolAvailable.getState().disabledTools).toEqual({ other: otherThread })
   })
 
   it('shows folders, approvals and inline saved-agent invocation in ordinary Chat', () => {

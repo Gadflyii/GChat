@@ -813,6 +813,16 @@ mod tests {
         let mut value = standard_request();
         let paired = standard_session();
         assert!(validate_request(&value, &paired).is_ok());
+        let mut quoted_report = captured_report();
+        quoted_report.configuration = standard_configuration();
+        quoted_report.configuration["kv_arena_bytes"] = 4_294_967_296_u64.into();
+        assert!(validate_report_configuration(&value, &paired, 1, &quoted_report, None).is_ok());
+        let mut missing_profile = paired.clone();
+        missing_profile.info.benchmark_profile = None;
+        assert!(validate_request(&value, &missing_profile).is_err());
+        assert!(
+            validate_report_configuration(&value, &missing_profile, 1, &quoted_report, None).is_err()
+        );
         assert!(validate_request(&value, &session(8)).is_err());
         value.concurrencies = vec![1, 4];
         assert!(validate_request(&value, &paired).is_err());
@@ -833,6 +843,9 @@ mod tests {
             .unwrap()
             .version += 1;
         assert!(validate_request(&value, &wrong_profile).is_err());
+        assert!(
+            validate_report_configuration(&value, &wrong_profile, 1, &quoted_report, None).is_err()
+        );
         let mut unknown_facts = paired.clone();
         unknown_facts.info.tp = None;
         assert!(validate_request(&value, &unknown_facts).is_err());
