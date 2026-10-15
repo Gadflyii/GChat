@@ -1,5 +1,48 @@
 # GChat installer refresh
 
+## October 15 current Linux Engine package — accepted
+
+Bubbs's one unsigned package refresh passes. Desktop/CLI/Host/Gbot source is
+merged GChat main `44e80b7c11ba07ed43a58d69e9a97408625452ef`, including
+Ready-compatible Host `6a2cfa9e8`. All four Engine Release images use clean source
+`9f8fb8ff9514c90426e7d283ca40370799a013b9`, frozen from then-current `dev/next`.
+This includes strict admission/output reservation, MTP/KV fixes, placed-Ready and
+Qwen/Muse/Flash `--quote-only`; the removed residency-wait flag is absent.
+
+Ubuntu 24.04 CPU-only builds and native help/version, exact SM80/86/89/120a,
+dependency closure, maximum glibc2.39 and all 684 manifest entries pass. The five
+operator documents come from those same manifests and pass the existing stager.
+Native desktop/CLI/Host and production frontend are rebuilt from combined main;
+the CSP-safe 3,659-byte AudioWorklet remains exact. Existing Ubuntu24 images,
+CUDA13.3 mount, private FFmpeg recipe and shared Rust cache were reused.
+
+Final artifacts and walkthrough:
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/`:
+
+- `GChat_2.0.42+gbot20261015.engine9f8fb8ff9_amd64.deb`
+- `GChat_2.0.42_gbot20261015.engine9f8fb8ff9_amd64.AppImage`
+
+Both were assembled once. All 7,759 DEB and 8,118 AppImage regular files pass
+content/size/mode/root-ownership verification; all 7,759 shared contents match.
+DEB metadata/md5sums and the retained AppImage runtime prefix pass. The accepted
+Python3.12.3/61-package/7,010-file closure, guest assets and 174 profiles remain
+exact. Final hashes, source/test provenance and scope are in
+`engine-refresh-20261015/{result.json,summary.md}`; `README.md` is the install guide.
+
+Reuse the completed GBOT source/native-viewer gates and Manager's full
+`make verify` (2,309 root, 114 extension, 848 Rust tests) and native four Qwen
+INT/C4 instance gate on ancestor Engine `019ad0c92`. No GPU/VM walkthrough is
+repeated here; Flash model acceptance, Windows, signing and publication remain
+separate. Live provider consent remains Ron's release gate with approved existing
+registrations/accounts. No accounts or credentials were created.
+
+Gchat 2's local private Engine compilation, package stages and superseded packages
+are retired after acceptance; the accepted runtime set is retained under
+`/ai/ginfer-worktrees/gchat2-linux-engine-20261015/out/linux/runtime-set/`.
+The reused S1 source/SM120a cache was transferred to C1's Flash Ready item,
+preserving C3 sibling results and shared FFmpeg. Local Rust lock/CPUs8–15 were
+released to Gchat1; CPU-only bookings are canceled at closure.
+
 ## October 14 developer Linux package — current Engine accepted
 
 The Engine-only refreshed developer DEB/AppImage passes package integrity,
