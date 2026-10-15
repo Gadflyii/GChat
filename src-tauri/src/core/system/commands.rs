@@ -1445,11 +1445,13 @@ pub(crate) fn resolve_hermes_dir() -> Result<std::path::PathBuf, String> {
         if let Some(home) = read_windows_user_env("HERMES_HOME").filter(|s| !s.is_empty()) {
             return Ok(std::path::PathBuf::from(home));
         }
-        if let Ok(home) = std::env::var("HERMES_HOME") {
-            if !home.is_empty() {
-                return Ok(std::path::PathBuf::from(home));
-            }
+    }
+    if let Ok(home) = std::env::var("HERMES_HOME") {
+        if !home.is_empty() {
+            return Ok(std::path::PathBuf::from(home));
         }
+    }
+    if cfg!(windows) {
         let local_appdata = std::env::var("LOCALAPPDATA").map_err(|e| e.to_string())?;
         Ok(std::path::PathBuf::from(local_appdata).join("hermes"))
     } else {
@@ -4837,6 +4839,130 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn hermes_configuration_and_clear_use_the_selected_home() {
+        const FIXTURE_ROOT: &str = "GCHAT_HERMES_HOME_FIXTURE_ROOT";
+        const FIXTURE_MODE: &str = "GCHAT_HERMES_HOME_FIXTURE_MODE";
+        let root = match std::env::var_os(FIXTURE_ROOT) {
+            Some(root) => PathBuf::from(root),
+            None => {
+                // Isolate HOME/HERMES_HOME from all other tests in this process.
+                for mode in ["override", "unset", "empty"] {
+                    let root = tempfile::tempdir().unwrap();
+                    let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+                    child
+                        .args([
+                            "--exact",
+                            "core::system::commands::tests::hermes_configuration_and_clear_use_the_selected_home",
+                            "--nocapture",
+                        ])
+                        .env(FIXTURE_ROOT, root.path())
+                        .env(FIXTURE_MODE, mode)
+                        .env("HOME", root.path().join("default-home"));
+                    match mode {
+                        "override" => {
+                            child.env("HERMES_HOME", root.path().join("selected Hermes"));
+                        }
+                        "empty" => {
+                            child.env("HERMES_HOME", "");
+                        }
+                        _ => {
+                            child.env_remove("HERMES_HOME");
+                        }
+                    }
+                    let result = child.output().unwrap();
+                    assert!(
+                        result.status.success(),
+                        "{mode}: {}{}",
+                        String::from_utf8_lossy(&result.stdout),
+                        String::from_utf8_lossy(&result.stderr),
+                    );
+                    assert!(String::from_utf8_lossy(&result.stdout)
+                        .contains("test result: ok. 1 passed;"));
+                }
+                return;
+            }
+        };
+        let default = root.join("default-home/.hermes");
+        let custom = root.join("selected Hermes");
+        let (selected, untouched) = if std::env::var(FIXTURE_MODE).unwrap() == "override" {
+            (custom, default)
+        } else {
+            (default, custom)
+        };
+        fs::create_dir_all(&selected).unwrap();
+        fs::create_dir_all(&untouched).unwrap();
+        let untouched_config = b"Unrelated configuration must not be parsed or replaced.";
+        let untouched_env = b"UNRELATED_HOME=retained\n";
+        fs::write(untouched.join("config.yaml"), untouched_config).unwrap();
+        fs::write(untouched.join(".env"), untouched_env).unwrap();
+        let original = "model:\n  default: original-model\n  provider: auto\n  base_url: https://original.example/v1\ncustom_providers:\n- name: retained\n  model: retained-model\ndisplay:\n  skin: retained-skin\nproviders:\n  custom:\n    request_timeout_seconds: 321\n";
+        fs::write(selected.join("config.yaml"), original).unwrap();
+        fs::write(selected.join(".env"), "KEEP_ME=fixture\n").unwrap();
+        let original: serde_yaml::Value = serde_yaml::from_str(original).unwrap();
+
+        assert_eq!(resolve_hermes_dir().unwrap(), selected);
+        configure_hermes_agent(
+            "http://127.0.0.1:1337/v1".into(),
+            "selected-model".into(),
+            None,
+            Some(65_536),
+        )
+        .unwrap();
+        let configured: serde_yaml::Value =
+            serde_yaml::from_str(&fs::read_to_string(selected.join("config.yaml")).unwrap())
+                .unwrap();
+        assert_eq!(configured["model"]["default"], "selected-model");
+        assert_eq!(configured["model"]["provider"], "custom");
+        assert_eq!(configured["model"]["base_url"], "http://127.0.0.1:1337/v1");
+        let providers = configured["custom_providers"].as_sequence().unwrap();
+        assert_eq!(providers[0], original["custom_providers"][0]);
+        let managed = providers
+            .iter()
+            .find(|entry| entry["name"] == "gchat")
+            .unwrap();
+        assert_eq!(managed["model"], "selected-model");
+        assert_eq!(
+            managed["models"]["selected-model"]["context_length"],
+            65_536
+        );
+        assert_eq!(configured["display"], original["display"]);
+        assert_eq!(configured["providers"], original["providers"]);
+        assert!(fs::read_to_string(selected.join(".env"))
+            .unwrap()
+            .contains("NO_PROXY="));
+        assert_eq!(
+            fs::read(untouched.join("config.yaml")).unwrap(),
+            untouched_config.to_vec()
+        );
+        assert_eq!(
+            fs::read(untouched.join(".env")).unwrap(),
+            untouched_env.to_vec()
+        );
+
+        clear_hermes_agent_config().unwrap();
+        let cleared: serde_yaml::Value =
+            serde_yaml::from_str(&fs::read_to_string(selected.join("config.yaml")).unwrap())
+                .unwrap();
+        assert_eq!(cleared["model"]["default"], "anthropic/claude-opus-4.6");
+        assert_eq!(cleared["model"]["provider"], "auto");
+        assert_eq!(cleared["model"]["base_url"], "https://openrouter.ai/api/v1");
+        assert_eq!(cleared["custom_providers"], original["custom_providers"]);
+        assert_eq!(cleared["display"], original["display"]);
+        assert_eq!(cleared["providers"], original["providers"]);
+        let env = fs::read_to_string(selected.join(".env")).unwrap();
+        assert!(env.lines().any(|line| line == "KEEP_ME=fixture"));
+        assert!(!env.lines().any(|line| line.starts_with("NO_PROXY=")));
+        assert_eq!(
+            fs::read(untouched.join("config.yaml")).unwrap(),
+            untouched_config.to_vec()
+        );
+        assert_eq!(
+            fs::read(untouched.join(".env")).unwrap(),
+            untouched_env.to_vec()
+        );
+    }
 
     #[cfg(unix)]
     #[test]
