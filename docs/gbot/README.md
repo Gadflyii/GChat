@@ -216,7 +216,9 @@ skill and tool definitions remain shared. The merged account picker and
 scoped executor boundary are implemented; live OAuth still needs app registration.
 
 Gbot appears in the left menu **above Work**, only when Gbot integration is
-enabled in GChat. Ron wants a ChatGPT DOT/Grok-style bot experience, adapted to
+enabled in GChat. Its switch lives under **Native Integrations** in Settings
+and at the top of Integrations; enabling it opens guided Gbot setup.
+Ron wants a ChatGPT DOT/Grok-style bot experience, adapted to
 GChat's dark theme. Each bot uses the animated avatar supplied in `/ai/gchat/avatar`, with
 light/dark styling and reduced-motion support. Detailed channel layout and the
 guided setup remain separate UI work.

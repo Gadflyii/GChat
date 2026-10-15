@@ -61,7 +61,6 @@ vi.mock('@/containers/dialogs/ChangeDataFolderLocation', () => ({
 }))
 
 const mockSetPreloadModelOnStartup = vi.hoisted(() => vi.fn())
-const gbotSetting = vi.hoisted(() => ({ enabled: false, setEnabled: vi.fn() }))
 const mockNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
@@ -72,8 +71,6 @@ vi.mock('@/hooks/useGeneralSetting', () => ({
     setHuggingfaceToken: vi.fn(),
     preloadModelOnStartup: false,
     setPreloadModelOnStartup: mockSetPreloadModelOnStartup,
-    gbotEnabled: gbotSetting.enabled,
-    setGbotEnabled: gbotSetting.setEnabled,
   }),
 }))
 
@@ -293,7 +290,6 @@ Object.assign(navigator, {
 describe('General Settings Route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    gbotSetting.enabled = false
     useConversationPolicy.getState().setDefaultApprovalMode('manual')
     seedServiceHub({
       app: {
@@ -430,37 +426,6 @@ describe('General Settings Route', () => {
       fireEvent.click(toggle)
     })
     expect(mockSetPreloadModelOnStartup).toHaveBeenCalledWith(true)
-  })
-
-  it('opens Gbot setup when enabled from Settings', async () => {
-    const Component = GeneralRoute.component as React.ComponentType
-    await act(async () => {
-      render(<Component />)
-    })
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Gbot' }))
-    expect(gbotSetting.setEnabled).toHaveBeenCalledWith(true)
-    expect(mockNavigate).toHaveBeenCalledWith({ to: '/gbot/' })
-  })
-
-  it('stays in Settings when Gbot is disabled', async () => {
-    gbotSetting.enabled = true
-    const Component = GeneralRoute.component as React.ComponentType
-    await act(async () => {
-      render(<Component />)
-    })
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Gbot' }))
-    expect(gbotSetting.setEnabled).toHaveBeenCalledWith(false)
-    expect(mockNavigate).not.toHaveBeenCalled()
-  })
-
-  it('does not enable or open Gbot when Settings loads', async () => {
-    const Component = GeneralRoute.component as React.ComponentType
-    await act(async () => {
-      render(<Component />)
-    })
-    expect(screen.getByRole('checkbox', { name: 'Enable Gbot' })).not.toBeChecked()
-    expect(gbotSetting.setEnabled).not.toHaveBeenCalled()
-    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
   it('should handle huggingface token change', async () => {

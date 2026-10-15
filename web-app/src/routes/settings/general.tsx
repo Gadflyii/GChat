@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { invoke } from '@tauri-apps/api/core'
 import { isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart'
 import { route } from '@/constants/routes'
@@ -44,7 +44,6 @@ export const Route = createFileRoute(route.settings.general as any)({
 
 function General() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const {
     spellCheckChatInput,
     setSpellCheckChatInput,
@@ -52,8 +51,6 @@ function General() {
     setHuggingfaceToken,
     preloadModelOnStartup,
     setPreloadModelOnStartup,
-    gbotEnabled,
-    setGbotEnabled,
   } = useGeneralSetting()
   const defaultApprovalMode = useConversationPolicy(
     (state) => state.defaultApprovalMode
@@ -342,20 +339,6 @@ function General() {
                   <Switch
                     checked={preloadModelOnStartup}
                     onCheckedChange={setPreloadModelOnStartup}
-                  />
-                }
-              />
-              <CardItem
-                title="Gbot"
-                description="Enable your bot's separate computer workspace."
-                actions={
-                  <Switch
-                    aria-label="Enable Gbot"
-                    checked={gbotEnabled}
-                    onCheckedChange={(enabled) => {
-                      setGbotEnabled(enabled)
-                      if (enabled) void navigate({ to: route.gbot.index })
-                    }}
                   />
                 }
               />
