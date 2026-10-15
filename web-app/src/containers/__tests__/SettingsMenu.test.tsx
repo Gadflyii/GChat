@@ -9,6 +9,8 @@ const integrationMocks = vi.hoisted(() => ({
   setOpenCodeEnabled: vi.fn(),
   setHermesEnabled: vi.fn(),
   stopTerminal: vi.fn(() => Promise.resolve()),
+  gbotEnabled: false,
+  setGbotEnabled: vi.fn(),
 }))
 
 // Mock global platform constants - simulate desktop (Tauri) environment
@@ -34,7 +36,8 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 }))
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
-  useGeneralSetting: vi.fn(() => ({})),
+  useGeneralSetting: (selector: (state: unknown) => unknown) =>
+    selector({ gbotEnabled: integrationMocks.gbotEnabled, setGbotEnabled: integrationMocks.setGbotEnabled }),
 }))
 
 vi.mock('@/hooks/useModelProvider', () => ({
@@ -103,6 +106,7 @@ describe('SettingsMenu', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    integrationMocks.gbotEnabled = false
 
     vi.mocked(useNavigate).mockReturnValue(mockNavigate)
     vi.mocked(useMatches).mockReturnValue(mockMatches)
@@ -148,6 +152,26 @@ describe('SettingsMenu', () => {
     expect(
       screen.getByRole('switch', { name: 'Hermes integration' })
     ).toBeChecked()
+    expect(screen.getByRole('switch', { name: 'Gbot integration' })).not.toBeChecked()
+    expect(integrationMocks.setGbotEnabled).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('opens Gbot setup when enabled from native integrations', async () => {
+    const user = userEvent.setup()
+    render(<SettingsMenu />)
+    await user.click(screen.getByRole('switch', { name: 'Gbot integration' }))
+    expect(integrationMocks.setGbotEnabled).toHaveBeenCalledWith(true)
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/gbot/' })
+  })
+
+  it('stays in Settings when Gbot is disabled', async () => {
+    integrationMocks.gbotEnabled = true
+    const user = userEvent.setup()
+    render(<SettingsMenu />)
+    await user.click(screen.getByRole('switch', { name: 'Gbot integration' }))
+    expect(integrationMocks.setGbotEnabled).toHaveBeenCalledWith(false)
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
   it('persists a disabled integration and stops its managed terminal', async () => {

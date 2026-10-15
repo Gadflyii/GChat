@@ -1,17 +1,28 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { route } from '@/constants/routes'
 import { Switch } from '@/components/ui/switch'
 import { stopTerminal } from '@/services/terminal/tauri'
 import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useHermesAgentStore } from '@/stores/hermes-agent-store'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 
 export function NativeIntegrationControls() {
+  const navigate = useNavigate()
+  const gbotEnabled = useGeneralSetting(state => state.gbotEnabled)
+  const setGbotEnabled = useGeneralSetting(state => state.setGbotEnabled)
   const codeEnabled = useCodeTerminalStore(state => state.enabled)
   const setCodeEnabled = useCodeTerminalStore(state => state.setEnabled)
   const hermesEnabled = useHermesAgentStore(state => state.enabled)
   const setHermesEnabled = useHermesAgentStore(state => state.setEnabled)
   return <section className="space-y-2">
     <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Native Integrations</h2>
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span>Gbot</span>
+      <Switch aria-label="Gbot integration" checked={gbotEnabled} onCheckedChange={enabled => {
+        setGbotEnabled(enabled)
+        if (enabled) void navigate({ to: route.gbot.index })
+      }} />
+    </div>
     <div className="flex items-center justify-between gap-3 text-sm">
       <span>OpenCode</span>
       <Switch aria-label="OpenCode integration" checked={codeEnabled} onCheckedChange={enabled => {
