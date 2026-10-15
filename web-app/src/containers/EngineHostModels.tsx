@@ -9,6 +9,7 @@ import { EngineGbotControl } from '@/containers/EngineGbotControl'
 import { EngineInstanceSettings } from '@/containers/EngineInstanceSettings'
 import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
 import { EngineHardwareProfile } from '@/containers/EngineHardwareProfile'
+import { EngineFirstRun } from '@/containers/EngineFirstRun'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
@@ -78,6 +79,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     </div>
     {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
       action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}
+    {host.local && <EngineFirstRun hostId={host.host_id} />}
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} />}
       {host.local && snapshot && <EngineGbotControl clients={snapshot.clients} disabled={busy || !!error} change={(client_id, action) => act('gbot_grant', { body: { client_id, action } })} />}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">

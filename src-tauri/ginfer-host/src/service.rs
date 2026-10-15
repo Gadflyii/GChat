@@ -94,6 +94,8 @@ pub struct Persistent {
     pub local_artifacts: Vec<PathBuf>,
     #[serde(default)]
     pub managed_model_root: Option<PathBuf>,
+    #[serde(default)]
+    pub first_run: crate::first_run::Progress,
 }
 pub struct Host {
     pub gbot: crate::gbot_control::Control,
@@ -115,7 +117,8 @@ pub struct Host {
     pub directory: PathBuf,
     pub model_dirs: Vec<PathBuf>,
     pub artifact_sets: Vec<PathBuf>,
-    lifecycle: Mutex<()>,
+    pub(crate) lifecycle: Mutex<()>,
+    pub(crate) first_run_operation: Mutex<()>,
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
     worker_slots: Arc<std::sync::Mutex<BTreeMap<crate::engine_registry::InstanceRef, u32>>>,
@@ -309,6 +312,7 @@ impl Host {
                 graph_receipts: BTreeMap::new(),
                 local_artifacts: vec![],
                 managed_model_root: None,
+                first_run: Default::default(),
             },
             Err(e) => return Err(e.to_string()),
         };
@@ -399,6 +403,7 @@ impl Host {
             model_dirs,
             artifact_sets,
             lifecycle: Mutex::new(()),
+            first_run_operation: Mutex::new(()),
             traffic: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             activity: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             worker_slots: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
@@ -444,6 +449,40 @@ impl Host {
         }
         self.draft_width.reconcile(&recipes)?;
         self.draft_width.start_next(&recipes)
+    }
+    pub(crate) async fn set_model_storage(&self, root: PathBuf) -> Result<PathBuf, String> {
+        if !root.is_absolute() {
+            return Err("model storage must be an absolute path".into());
+        }
+        let checked_root = root.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::model_storage::require_native_model_storage(&checked_root)
+        }).await.map_err(|e| e.to_string())??;
+        tokio::fs::create_dir_all(&root)
+            .await
+            .map_err(|e| e.to_string())?;
+        let root = tokio::fs::canonicalize(root)
+            .await
+            .map_err(|e| e.to_string())?;
+        let probe = root.join(format!(".ginfer-write-check-{}", Uuid::new_v4()));
+        tokio::fs::write(&probe, [])
+            .await
+            .map_err(|e| format!("model storage is not writable: {e}"))?;
+        tokio::fs::remove_file(probe)
+            .await
+            .map_err(|e| e.to_string())?;
+        let _lifecycle = self.lifecycle.lock().await;
+        let mut data = self.data.lock().await;
+        let previous = data.managed_model_root.replace(root.clone());
+        if let Err(error) = write_private(
+            &self.directory.join("host.json"),
+            &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
+        ) {
+            data.managed_model_root = previous;
+            return Err(error);
+        }
+        self.downloads.set_root(root.clone());
+        Ok(root)
     }
     pub async fn save(&self) -> Result<(), String> {
         let data = self.data.lock().await;
@@ -763,6 +802,7 @@ impl Host {
             .collect();
         drop(processes);
         let profiles = data.profiles.clone();
+        let first_run_complete = data.first_run.complete;
         let host_id = data.host_id;
         let name = data.name.clone();
         let fleet = data.fleet.clone();
@@ -879,6 +919,7 @@ impl Host {
             "fleet_membership":membership,
             "clients":usage["clients"],"local_administrator":usage["local_administrator"],
             "hardware_profile":hardware_profile,
+            "first_run":{"complete":first_run_complete},
             "draft_width_calibrations":self.draft_width.status(),
             "gpus":self.gpus,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
@@ -939,7 +980,7 @@ impl Host {
     async fn local_administrator(&self, request: &Request<Body>) -> bool {
         self.principal(request).await == Some(Principal::LocalAdministrator)
     }
-    async fn prepare_launch(&self, request: &LaunchRequest) -> Result<EngineLaunch, String> {
+    pub(crate) async fn prepare_launch(&self, request: &LaunchRequest) -> Result<EngineLaunch, String> {
         let model = self
             .inventory
             .read()
@@ -1796,6 +1837,13 @@ impl Host {
             }
         }
         match (req.method().as_str(), path.as_str()) {
+            ("GET", "/host/v1/first-run") => {
+                Ok(json(StatusCode::OK, self.first_run_status().await?))
+            }
+            ("POST", "/host/v1/first-run") => Ok(json(
+                StatusCode::OK,
+                self.first_run_action(body_json(req).await?).await?,
+            )),
             ("POST", "/host/v1/hardware-profile") => {
                 let request: crate::hardware_profile::HardwareProfileRequest =
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
@@ -2127,38 +2175,11 @@ impl Host {
             }
             ("POST", "/host/v1/model-storage") => {
                 let body = body_json(req).await?;
-                let root = PathBuf::from(body["path"].as_str().ok_or("storage path required")?);
-                if !root.is_absolute() {
-                    return Err("model storage must be an absolute path".into());
-                }
-                let checked_root = root.clone();
-                tokio::task::spawn_blocking(move || {
-                    crate::model_storage::require_native_model_storage(&checked_root)
-                }).await.map_err(|e| e.to_string())??;
-                tokio::fs::create_dir_all(&root)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                let root = tokio::fs::canonicalize(root)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                let probe = root.join(format!(".ginfer-write-check-{}", Uuid::new_v4()));
-                tokio::fs::write(&probe, [])
-                    .await
-                    .map_err(|e| format!("model storage is not writable: {e}"))?;
-                tokio::fs::remove_file(probe)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                let _lifecycle = self.lifecycle.lock().await;
-                let mut data = self.data.lock().await;
-                let previous = data.managed_model_root.replace(root.clone());
-                if let Err(error) = write_private(
-                    &self.directory.join("host.json"),
-                    &serde_json::to_vec(&*data).map_err(|e| e.to_string())?,
-                ) {
-                    data.managed_model_root = previous;
-                    return Err(error);
-                }
-                self.downloads.set_root(root.clone());
+                let root = self
+                    .set_model_storage(PathBuf::from(
+                        body["path"].as_str().ok_or("storage path required")?,
+                    ))
+                    .await?;
                 Ok(json(StatusCode::OK, serde_json::json!({"path":root})))
             }
             ("GET", "/host/v1/downloads") => Ok(json(

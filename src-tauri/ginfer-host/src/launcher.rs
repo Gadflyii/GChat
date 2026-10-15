@@ -73,6 +73,10 @@ pub fn installed_configuration() -> Result<InstalledConfiguration, String> {
 impl InstalledConfiguration {
     pub async fn open_menu(self) -> Result<(), String> {
         require_terminal()?;
+        menu_control(self.connect().await?).await
+    }
+
+    pub async fn connect(self) -> Result<LocalControl, String> {
         let owner = if let Some(desktop) = self.desktop {
             if self.data_dir != desktop.provider.join("host") {
                 return Err("desktop launcher must use its provider-owned host directory".into());
@@ -104,7 +108,7 @@ impl InstalledConfiguration {
             crate::local_host_registry::Owner::Service { directory: self.data_dir, origin: self.host_url }
         };
         let owner = crate::local_host_registry::resolve(Some(owner)).await?;
-        menu_control(owner.connect().await?).await
+        owner.connect().await
     }
 }
 
@@ -114,6 +118,346 @@ pub async fn installed_menu() -> Result<(), String> {
         return menu_control(owner.connect().await?).await;
     }
     installed_configuration()?.open_menu().await
+}
+
+pub async fn installed_control() -> Result<LocalControl, String> {
+    if let Some(owner) = crate::local_host_registry::registered().await? {
+        return owner.connect().await;
+    }
+    installed_configuration()?.connect().await
+}
+
+pub async fn first_run(control: &LocalControl) -> Result<(), String> {
+    require_terminal()?;
+    println!("\nSet up local GInfer — progress is shared with GChat and GInfer Manager.");
+    println!("You can quit at any step. Profiling and downloads continue on the Host.");
+    loop {
+        let flow = control.request("/host/v1/first-run", None).await?;
+        if let Some(error) = flow["error"].as_str() {
+            println!("Setup needs attention: {error}");
+        }
+        let action = match flow["step"].as_str() {
+            Some("complete") => {
+                println!("Local setup complete. Choose Launch instance when ready.");
+                return Ok(());
+            }
+            Some("gpu") => {
+                let snapshot = control.snapshot().await?;
+                let gpus: Vec<_> = snapshot["gpus"].as_array().into_iter().flatten().collect();
+                println!("\nChoose 1, 2 or 4 matching GPUs. Profiling starts after selection.");
+                for (index, gpu) in gpus.iter().enumerate() {
+                    println!(
+                        "  {}. {} · {} MiB · {}",
+                        index + 1,
+                        gpu["display_name"]
+                            .as_str()
+                            .or_else(|| gpu["name"].as_str())
+                            .unwrap_or("GPU"),
+                        gpu["memory_mib"],
+                        gpu["uuid"].as_str().unwrap_or("unknown UUID")
+                    );
+                }
+                if gpus.is_empty() {
+                    return Err("No supported NVIDIA GPU detected. Check your GPU and CUDA 13.1 driver, or connect a network host.".into());
+                }
+                let input = prompt("Select: GPU numbers separated by spaces (q to leave): ")?;
+                if input == "q" {
+                    return Ok(());
+                }
+                let selected = match selected_indices(&input, gpus.len()) {
+                    Ok(selected) => selected,
+                    Err(error) => {
+                        println!("{error}");
+                        continue;
+                    }
+                };
+                json!({"action":"profile","gpu_uuids":selected.into_iter().map(|index| gpus[index]["uuid"].clone()).collect::<Vec<_>>()})
+            }
+            Some("profiling") => {
+                let profile = &flow["hardware_profile"];
+                println!(
+                    "\nHardware profiling: {}",
+                    profile["status"].as_str().unwrap_or("unknown")
+                );
+                println!("Recent full installs took 22–73 minutes. The Host keeps working when you close this menu.");
+                if let Some(error) = profile["error"].as_str() {
+                    println!("{error}");
+                }
+                let input = prompt("[Enter] Refresh  [r] Resume saved work  [q] Leave: ")?;
+                if input == "q" {
+                    return Ok(());
+                }
+                if input != "r" {
+                    continue;
+                }
+                json!({"action":"resume"})
+            }
+            Some("storage") => {
+                let storage = &flow["storage"];
+                let recommended = storage["recommended_path"]
+                    .as_str()
+                    .or_else(|| storage["path"].as_str())
+                    .unwrap_or("");
+                println!("\nChoose model storage. Recommended: {recommended}");
+                if let Some(error) = storage["error"].as_str() {
+                    println!("{error}");
+                }
+                for candidate in storage["candidates"].as_array().into_iter().flatten() {
+                    let capacity = candidate["available_bytes"]
+                        .as_u64()
+                        .map(|bytes| format!("{:.1} GiB free", bytes as f64 / 1073741824.0))
+                        .unwrap_or_else(|| "free space unavailable".into());
+                    println!(
+                        "  {} · {} · {}",
+                        candidate["path"].as_str().unwrap_or("unknown"),
+                        capacity,
+                        candidate["reason"].as_str().unwrap_or("")
+                    );
+                }
+                let input = prompt("Absolute model folder (Enter = recommended, q to leave): ")?;
+                if input == "q" {
+                    return Ok(());
+                }
+                json!({"action":"storage","path":if input.is_empty() { recommended } else { input.trim_matches('"') }})
+            }
+            Some("models") => {
+                let models: Vec<_> = flow["models"].as_array().into_iter().flatten().collect();
+                println!("\nChoose models to download:");
+                for (index, model) in models.iter().enumerate() {
+                    println!(
+                        "  {}. {} · {:.1} GiB{}\n     {}",
+                        index + 1,
+                        model["release"]["name"].as_str().unwrap_or("Model"),
+                        model["release"]["bytes"].as_u64().unwrap_or(0) as f64 / 1073741824.0,
+                        if model["recommended"] == true {
+                            " · Recommended"
+                        } else {
+                            ""
+                        },
+                        model["reason"].as_str().unwrap_or("")
+                    );
+                }
+                let snapshot = control.snapshot().await?;
+                let storage = flow["storage"]["path"].as_str().unwrap_or("");
+                let movable: Vec<_> = snapshot["model_management"]["downloads"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|job| {
+                        job["status"] == "installed"
+                            && job["path"]
+                                .as_str()
+                                .is_some_and(|path| !Path::new(path).starts_with(storage))
+                    })
+                    .collect();
+                if !movable.is_empty() {
+                    println!("Existing models remain in their current folders. Enter m to optionally move one into {storage}.");
+                }
+                if models.is_empty() {
+                    println!(
+                        "{}",
+                        if flow["catalog_loaded"] == false && flow["error"].is_null() {
+                            "Loading published model catalog. Press Enter to refresh saved progress."
+                        } else {
+                            "No compatible published models are available. Check the runtime, selected GPU group and model catalog, then refresh."
+                        }
+                    );
+                }
+                let input = prompt("Model numbers (Enter = recommended, r = refresh catalog, m = move existing, q = leave): ")?;
+                if input == "q" {
+                    return Ok(());
+                }
+                if models.is_empty() && input.is_empty() {
+                    continue;
+                }
+                if input == "r" {
+                    if let Err(error) = control
+                        .request(
+                            "/host/v1/first-run",
+                            Some(json!({"action":"refresh_catalog"})),
+                        )
+                        .await
+                    {
+                        println!("Catalog unavailable: {error}");
+                    }
+                    continue;
+                }
+                if input == "m" {
+                    let labels = movable
+                        .iter()
+                        .map(|job| {
+                            format!(
+                                "{} · {}",
+                                job["release"]["name"].as_str().unwrap_or("Model"),
+                                job["path"].as_str().unwrap_or("")
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    if let Some(index) =
+                        select(&labels, "Move an existing model to selected storage")?
+                    {
+                        match control
+                            .request(
+                                "/host/v1/first-run",
+                                Some(json!({"action":"move","download_id":movable[index]["id"]})),
+                            )
+                            .await
+                        {
+                            Ok(_) => println!("Model moved."),
+                            Err(error) => println!("{error}"),
+                        }
+                    }
+                    continue;
+                }
+                let selected = if input.is_empty() {
+                    models
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, model)| (model["recommended"] == true).then_some(i))
+                        .collect()
+                } else {
+                    match selected_indices(&input, models.len()) {
+                        Ok(selected) => selected,
+                        Err(error) => {
+                            println!("{error}");
+                            continue;
+                        }
+                    }
+                };
+                if selected.is_empty() {
+                    println!("Select at least one model.");
+                    continue;
+                }
+                json!({"action":"models","release_ids":selected.into_iter().map(|index| models[index]["release_id"].as_str().unwrap_or_else(|| models[index]["release"]["sha256"].as_str().unwrap_or(""))).collect::<Vec<_>>()})
+            }
+            Some("downloads") => {
+                for job in flow["selected_downloads"].as_array().into_iter().flatten() {
+                    println!(
+                        "{} · {} · {:.1}% · {:.1} MiB/s",
+                        job["release"]["name"].as_str().unwrap_or("Model"),
+                        job["status"].as_str().unwrap_or("unknown"),
+                        100.0 * job["received"].as_u64().unwrap_or(0) as f64
+                            / job["release"]["bytes"].as_u64().unwrap_or(1).max(1) as f64,
+                        job["bytes_per_second"].as_u64().unwrap_or(0) as f64 / 1048576.0
+                    );
+                    if let Some(error) = job["error"].as_str() {
+                        println!("{error}");
+                    }
+                }
+                let input = prompt("[Enter] Refresh  [r] Resume downloads  [q] Leave: ")?;
+                if input == "q" {
+                    return Ok(());
+                }
+                if input != "r" {
+                    continue;
+                }
+                json!({"action":"resume"})
+            }
+            Some("startup") => {
+                println!("\nReview startup defaults:");
+                if flow["startup_profiles"]
+                    .as_array()
+                    .is_none_or(Vec::is_empty)
+                {
+                    println!("Preparing startup settings and checking Engine memory…");
+                }
+                for profile in flow["startup_profiles"].as_array().into_iter().flatten() {
+                    let kv = profile["kv_arena_bytes"]
+                        .as_u64()
+                        .map(|bytes| format!("{:.1} GiB GPU KV cache", bytes as f64 / 1073741824.0))
+                        .unwrap_or_else(|| "Automatic GPU KV cache".into());
+                    println!(
+                        "{} · {} instance(s) · C{} · {} tokens · {}",
+                        profile["model_id"].as_str().unwrap_or("Model"),
+                        profile["instance_count"],
+                        profile["concurrency"],
+                        profile["max_context"],
+                        kv
+                    );
+                    if let Some(error) = profile["error"].as_str() {
+                        println!("{error}");
+                    }
+                    if profile["quote"].is_null() && profile["error"].is_null() {
+                        println!("Checking these settings with the Engine…");
+                    }
+                }
+                let input = prompt("[y] Save defaults and finish  [a] Adjust settings  [Enter] Refresh  [q] Leave (models stay stopped): ")?;
+                if input == "q" {
+                    return Ok(());
+                }
+                if input == "a" {
+                    let profiles = flow["startup_profiles"]
+                        .as_array()
+                        .cloned()
+                        .unwrap_or_default();
+                    let labels = profiles
+                        .iter()
+                        .map(|profile| profile["model_id"].as_str().unwrap_or("Model").to_string())
+                        .collect::<Vec<_>>();
+                    let Some(index) = select(&labels, "Adjust startup defaults")? else {
+                        continue;
+                    };
+                    let profile = &profiles[index];
+                    let mut update =
+                        json!({"action":"startup","download_id":profile["download_id"]});
+                    for (field, label) in [
+                        ("concurrency", "Concurrent requests"),
+                        ("max_context", "Context tokens"),
+                        ("instance_count", "Instances"),
+                        ("kv_arena_bytes", "GPU KV cache bytes"),
+                    ] {
+                        let answer = prompt(&format!("{label} [{}]: ", profile[field]))?;
+                        update[field] = if answer.is_empty() {
+                            profile[field].clone()
+                        } else {
+                            json!(answer
+                                .parse::<u64>()
+                                .map_err(|_| "Use positive whole numbers for startup settings")?)
+                        };
+                    }
+                    match control.request("/host/v1/first-run", Some(update)).await {
+                        Ok(_) => (),
+                        Err(error) => println!("{error}"),
+                    }
+                    continue;
+                }
+                if !input.eq_ignore_ascii_case("y") {
+                    continue;
+                }
+                json!({"action":"complete"})
+            }
+            _ => {
+                return Err(
+                    "Host returned an unknown first-run step; update GInfer before continuing"
+                        .into(),
+                )
+            }
+        };
+        match control.request("/host/v1/first-run", Some(action)).await {
+            Ok(_) => (),
+            Err(error) => println!("Setup needs attention: {error}"),
+        }
+    }
+}
+
+fn selected_indices(input: &str, count: usize) -> Result<Vec<usize>, String> {
+    let mut selected = Vec::new();
+    for number in input.split([' ', ',']).filter(|s| !s.is_empty()) {
+        let index = number
+            .parse::<usize>()
+            .ok()
+            .and_then(|n| n.checked_sub(1))
+            .filter(|i| *i < count)
+            .ok_or("Choose listed numbers")?;
+        if selected.contains(&index) {
+            return Err("Choose each item only once".into());
+        }
+        selected.push(index);
+    }
+    if selected.is_empty() {
+        return Err("Choose at least one listed item".into());
+    }
+    Ok(selected)
 }
 
 impl LocalControl {
@@ -589,6 +933,13 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn first_run_selection_preserves_order_and_rejects_invalid_items() {
+        assert_eq!(selected_indices("2, 1", 2).unwrap(), vec![1, 0]);
+        for input in ["", "0", "3", "1 1", "GPU-one"] {
+            assert!(selected_indices(input, 2).is_err(), "accepted {input}");
+        }
+    }
     #[test]
     fn menu_availability_resource_pass() {
         let snapshot = json!({"instances": [], "launch_profiles": (0..174).map(|index| {

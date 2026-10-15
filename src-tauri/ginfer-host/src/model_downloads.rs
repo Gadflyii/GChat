@@ -427,6 +427,55 @@ impl ModelDownloads {
         self.pending_journal.store(true, Ordering::SeqCst);
         Ok(RemovedPackage { journal_error: self.save(jobs).await.err() })
     }
+    /// Explicitly move one installed managed package. The caller owns the host
+    /// lifecycle lock and rejects packages used by an active model. A detached
+    /// transaction retains its locks if the HTTP caller disconnects.
+    pub async fn move_installed(&self, id: Uuid, target: PathBuf) -> Result<Download, String> {
+        let permit = self
+            .serial
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| e.to_string())?;
+        let jobs = self.jobs.clone().lock_owned().await;
+        let state_path = self.state_path.clone();
+        let pending = self.pending_journal.clone();
+        let local_layout = self.local_layout;
+        tokio::spawn(async move {
+            let _permit = permit;
+            let original = jobs.get(&id).cloned().ok_or("unknown download")?;
+            if original.status != "installed" {
+                return Err("only installed managed packages can be moved".into());
+            }
+            original.release.validate()?;
+            let checked = original.clone();
+            let prepared =
+                tokio::task::spawn_blocking(move || prepare_move(&checked, target, local_layout))
+                    .await
+                    .map_err(|e| e.to_string())??;
+            if prepared.target_root == original.storage_root {
+                return Ok(original);
+            }
+            let needed = original
+                .release
+                .bytes
+                .checked_add(64 * 1024 * 1024)
+                .ok_or("model move free-space requirement overflow")?;
+            if available_bytes(prepared.target_root.clone()).await? < needed {
+                return Err(
+                    "Not enough live free space to copy the model; the original was retained"
+                        .into(),
+                );
+            }
+            tokio::task::spawn_blocking(move || {
+                finish_move(jobs, original, prepared, state_path, pending, local_layout)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        })
+        .await
+        .map_err(|e| format!("Model move transaction failed: {e}"))?
+    }
     fn spawn(self: &Arc<Self>, id: Uuid) {
         let manager = self.clone();
         tokio::spawn(async move {
@@ -635,6 +684,245 @@ impl ModelDownloads {
     }
 }
 
+struct PreparedMove {
+    source: PathBuf,
+    target_root: PathBuf,
+    destination: PathBuf,
+}
+
+fn package_path(root: &std::path::Path, sha256: &str, local_layout: bool) -> PathBuf {
+    if local_layout {
+        root.join(sha256).join("model.ginfer")
+    } else {
+        root.join(format!("{sha256}.ginfer"))
+    }
+}
+
+fn prepare_move(
+    job: &Download,
+    target: PathBuf,
+    local_layout: bool,
+) -> Result<PreparedMove, String> {
+    if !target.is_absolute() {
+        return Err("Model move destination must be an absolute storage root".into());
+    }
+    let source = package_path(&job.storage_root, &job.release.sha256, local_layout);
+    if job.path.as_ref() != Some(&source)
+        || source.canonicalize().map_err(|e| e.to_string())? != source
+        || !std::fs::symlink_metadata(&source)
+            .map_err(|e| e.to_string())?
+            .file_type()
+            .is_file()
+    {
+        return Err(
+            "only the original regular file of an installed managed package can be moved".into(),
+        );
+    }
+    crate::model_storage::require_native_model_storage(&target)?;
+    std::fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+    let target_root = target.canonicalize().map_err(|e| e.to_string())?;
+    crate::model_storage::require_native_model_storage(&target_root)?;
+    if local_layout && target_root.starts_with(source.parent().unwrap()) {
+        return Err("Model move destination must be outside the original package directory".into());
+    }
+    let destination = package_path(&target_root, &job.release.sha256, local_layout);
+    if target_root != job.storage_root {
+        let occupied = if local_layout {
+            destination.parent().unwrap()
+        } else {
+            &destination
+        };
+        match std::fs::symlink_metadata(occupied) {
+            Ok(_) => {
+                return Err("Model move destination already exists; nothing was overwritten".into())
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(PreparedMove {
+        source,
+        target_root,
+        destination,
+    })
+}
+
+struct MoveStaging(PathBuf);
+impl Drop for MoveStaging {
+    fn drop(&mut self) {
+        // Remove only files created by this transaction; never traverse or
+        // recursively remove an existing model directory.
+        for name in ["model.ginfer", "model.yml"] {
+            let _ = std::fs::remove_file(self.0.join(name));
+        }
+        let _ = std::fs::remove_dir(&self.0);
+    }
+}
+
+fn finish_move(
+    mut jobs: OwnedMutexGuard<BTreeMap<Uuid, Download>>,
+    original: Download,
+    prepared: PreparedMove,
+    state_path: PathBuf,
+    pending: Arc<AtomicBool>,
+    local_layout: bool,
+) -> Result<Download, String> {
+    let staging =
+        prepared
+            .target_root
+            .join(format!(".model-move-{}-{}", original.id, Uuid::new_v4()));
+    std::fs::create_dir(&staging).map_err(|e| e.to_string())?;
+    let staging = MoveStaging(staging);
+    let copied_path = staging.0.join("model.ginfer");
+    let mut source = std::fs::File::open(&prepared.source).map_err(|e| e.to_string())?;
+    let mut copied = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&copied_path)
+        .map_err(|e| e.to_string())?;
+    std::io::copy(&mut source, &mut copied).map_err(|e| e.to_string())?;
+    copied.sync_all().map_err(|e| e.to_string())?;
+    drop(copied);
+    drop(source);
+    verify_package_sync(&copied_path, &original.release)
+        .map_err(|error| format!("Copied model failed verification; original retained: {error}"))?;
+    if local_layout {
+        let release = &original.release;
+        let manifest = serde_json::json!({"model_path":prepared.destination.to_string_lossy(),
+            "name":release.name,"size_bytes":release.bytes,"sha256":release.sha256,"identity":release.identity,
+            "capabilities":release.capabilities,"embedding":false,"source":"local"});
+        write_private(
+            &staging.0.join("model.yml"),
+            &serde_json::to_vec(&manifest).map_err(|e| e.to_string())?,
+        )?;
+        sync_move_directory(&staging.0)?;
+        publish_move(&staging.0, prepared.destination.parent().unwrap())?;
+    } else {
+        publish_move(&copied_path, &prepared.destination)?;
+    }
+    let mut moved = original.clone();
+    moved.storage_root = prepared.target_root;
+    moved.path = Some(prepared.destination);
+    moved.bytes_per_second = 0;
+    moved.error = None;
+    jobs.insert(moved.id, moved.clone());
+    pending.store(true, Ordering::SeqCst);
+    let journal = serde_json::to_vec(&*jobs)
+        .map_err(|e| e.to_string())
+        .and_then(|bytes| write_move_journal(&state_path, &bytes));
+    if let Err(error) = journal {
+        // Publication may already have reached disk. Retain both verified
+        // copies and restore the live job; a subsequent flush/restart can
+        // recover without deleting the only durable source.
+        jobs.insert(original.id, original);
+        return Err(format!(
+            "Cannot durably record model move; original and verified destination retained: {error}"
+        ));
+    }
+    pending.store(false, Ordering::SeqCst);
+    std::fs::remove_file(&prepared.source)
+        .map_err(|error| format!("Model move committed, but original cleanup failed: {error}"))?;
+    if local_layout {
+        let old_directory = prepared.source.parent().unwrap();
+        match std::fs::remove_file(old_directory.join("model.yml")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "Model move committed, but original manifest cleanup failed: {error}"
+                ))
+            }
+        }
+        std::fs::remove_dir(old_directory).map_err(|error| {
+            format!("Model move committed; original directory retains other files: {error}")
+        })?;
+    }
+    Ok(moved)
+}
+
+#[cfg(unix)]
+fn sync_move_directory(path: &std::path::Path) -> Result<(), String> {
+    std::fs::File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn sync_move_directory(_path: &std::path::Path) -> Result<(), String> {
+    // The publication and journal rename use MOVEFILE_WRITE_THROUGH below.
+    Ok(())
+}
+
+fn publish_move(source: &std::path::Path, target: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        rustix::fs::renameat_with(
+            rustix::fs::CWD,
+            source,
+            rustix::fs::CWD,
+            target,
+            rustix::fs::RenameFlags::NOREPLACE,
+        )
+        .map_err(|e| format!("Cannot publish model without overwriting: {e}"))?;
+        sync_move_directory(target.parent().ok_or("model destination has no parent")?)
+    }
+    #[cfg(windows)]
+    {
+        move_file_windows(source, target, false)
+    }
+    #[cfg(all(not(target_os = "linux"), not(windows)))]
+    {
+        let _ = (source, target);
+        Err("Model moves are unsupported on this platform".into())
+    }
+}
+
+pub(crate) fn write_move_journal(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    #[cfg(not(windows))]
+    {
+        write_private(path, bytes)?;
+        sync_move_directory(path.parent().ok_or("download journal has no parent")?)
+    }
+    #[cfg(windows)]
+    {
+        let temporary = path
+            .parent()
+            .ok_or("download journal has no parent")?
+            .join(format!(".model-move-journal-{}", Uuid::new_v4()));
+        write_private(&temporary, bytes)?;
+        let result = move_file_windows(&temporary, path, true);
+        if result.is_err() {
+            let _ = std::fs::remove_file(temporary);
+        }
+        result
+    }
+}
+
+#[cfg(windows)]
+fn move_file_windows(
+    source: &std::path::Path,
+    target: &std::path::Path,
+    replace: bool,
+) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "kernel32")]
+    extern "system" {
+        #[link_name = "MoveFileExW"]
+        fn move_file(source: *const u16, target: *const u16, flags: u32) -> i32;
+    }
+    let source: Vec<_> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let target: Vec<_> = target.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: both vectors are terminated UTF-16 and live throughout this call.
+    // WRITE_THROUGH makes publication durable; only the journal may replace.
+    if unsafe { move_file(source.as_ptr(), target.as_ptr(), 8 | u32::from(replace)) } == 0 {
+        return Err(format!(
+            "Cannot durably publish model move: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+
 async fn verify_package(path: PathBuf, release: &Release) -> Result<(), String> {
     let release = release.clone();
     tokio::task::spawn_blocking(move || verify_package_sync(&path, &release))
@@ -777,6 +1065,195 @@ mod tests {
                 "tier":"full-context-tested", "free_bytes_per_gpu":1_u64 << 30, "full_context_requests":1}
         })).unwrap());
         (release, bytes)
+    }
+    async fn seed_installed_move(
+        directory: &std::path::Path,
+        local_layout: bool,
+    ) -> (Arc<ModelDownloads>, Download, Vec<u8>) {
+        let root = directory.join("original");
+        let state = directory.join("downloads.json");
+        let manager = if local_layout {
+            ModelDownloads::open_local(root, state).unwrap()
+        } else {
+            ModelDownloads::open(root, state).unwrap()
+        };
+        let (release, bytes) = fixture();
+        let path = package_path(&manager.root(), &release.sha256, local_layout);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        if local_layout {
+            std::fs::write(
+                path.parent().unwrap().join("model.yml"),
+                b"managed manifest",
+            )
+            .unwrap();
+        }
+        let job = Download {
+            id: Uuid::new_v4(),
+            release,
+            status: "installed".into(),
+            received: bytes.len() as u64,
+            bytes_per_second: 0,
+            error: None,
+            path: Some(path),
+            storage_root: manager.root(),
+        };
+        let mut jobs = manager.jobs.clone().lock_owned().await;
+        jobs.insert(job.id, job.clone());
+        manager.save(jobs).await.unwrap();
+        (manager, job, bytes)
+    }
+
+    #[tokio::test]
+    async fn installed_move_verifies_both_layouts_and_reopens_at_the_new_root() {
+        for local_layout in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let (manager, original, bytes) =
+                seed_installed_move(directory.path(), local_layout).await;
+            let target = directory.path().join("chosen/models");
+            let moved = manager.move_installed(original.id, target).await.unwrap();
+            assert_eq!(moved.id, original.id);
+            assert_eq!(moved.release.sha256, original.release.sha256);
+            assert_eq!(moved.release.identity, original.release.identity);
+            assert_eq!(moved.status, "installed");
+            assert!(!original.path.as_ref().unwrap().exists());
+            assert_eq!(std::fs::read(moved.path.as_ref().unwrap()).unwrap(), bytes);
+            verify_package_sync(moved.path.as_ref().unwrap(), &moved.release).unwrap();
+            if local_layout {
+                let manifest: serde_json::Value = serde_json::from_slice(
+                    &std::fs::read(
+                        moved
+                            .path
+                            .as_ref()
+                            .unwrap()
+                            .parent()
+                            .unwrap()
+                            .join("model.yml"),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    manifest["model_path"],
+                    moved.path.as_ref().unwrap().to_string_lossy().as_ref()
+                );
+                assert_eq!(manifest["sha256"], original.release.sha256);
+                assert!(!original.path.as_ref().unwrap().parent().unwrap().exists());
+            }
+            let reopened = if local_layout {
+                ModelDownloads::open_local(original.storage_root, manager.state_path.clone())
+                    .unwrap()
+            } else {
+                ModelDownloads::open(original.storage_root, manager.state_path.clone()).unwrap()
+            };
+            let reopened_job = reopened.list().await.pop().unwrap();
+            assert_eq!(reopened_job.path, moved.path);
+            assert_eq!(reopened_job.storage_root, moved.storage_root);
+            assert!(std::fs::read_dir(&moved.storage_root)
+                .unwrap()
+                .all(|entry| {
+                    !entry
+                        .unwrap()
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(".model-move-")
+                }));
+        }
+    }
+
+    #[tokio::test]
+    async fn installed_move_never_overwrites_an_existing_destination() {
+        for local_layout in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let (manager, original, bytes) =
+                seed_installed_move(directory.path(), local_layout).await;
+            let target = directory.path().join("destination");
+            let occupied = package_path(&target, &original.release.sha256, local_layout);
+            std::fs::create_dir_all(occupied.parent().unwrap()).unwrap();
+            std::fs::write(&occupied, b"existing destination").unwrap();
+            assert!(manager
+                .move_installed(original.id, target)
+                .await
+                .unwrap_err()
+                .contains("already exists"));
+            assert_eq!(std::fs::read(occupied).unwrap(), b"existing destination");
+            assert_eq!(
+                std::fs::read(original.path.as_ref().unwrap()).unwrap(),
+                bytes
+            );
+            assert_eq!(manager.list().await[0].path, original.path);
+        }
+    }
+
+    #[tokio::test]
+    async fn installed_move_retains_the_original_on_verification_or_journal_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let (manager, original, mut bytes) = seed_installed_move(directory.path(), true).await;
+        bytes[1000] ^= 1;
+        std::fs::write(original.path.as_ref().unwrap(), &bytes).unwrap();
+        let target = directory.path().join("corrupt-copy");
+        assert!(manager
+            .move_installed(original.id, target.clone())
+            .await
+            .unwrap_err()
+            .contains("verification"));
+        assert_eq!(
+            std::fs::read(original.path.as_ref().unwrap()).unwrap(),
+            bytes
+        );
+        assert_eq!(std::fs::read_dir(target).unwrap().count(), 0);
+        assert_eq!(manager.list().await[0].path, original.path);
+
+        let directory = tempfile::tempdir().unwrap();
+        let (manager, original, bytes) = seed_installed_move(directory.path(), true).await;
+        std::fs::remove_file(&manager.state_path).unwrap();
+        std::fs::create_dir(&manager.state_path).unwrap();
+        let target = directory.path().join("journal-failed");
+        let result = manager
+            .move_installed(original.id, target.clone())
+            .await
+            .unwrap_err();
+        assert!(result.contains("original and verified destination retained"));
+        assert_eq!(
+            std::fs::read(original.path.as_ref().unwrap()).unwrap(),
+            bytes
+        );
+        let copied = package_path(&target, &original.release.sha256, true);
+        verify_package_sync(&copied, &original.release).unwrap();
+        assert_eq!(manager.list().await[0].path, original.path);
+        assert!(manager.pending_journal.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn installed_move_rejects_unfinished_and_unmanaged_sources() {
+        let directory = tempfile::tempdir().unwrap();
+        let (manager, original, _) = seed_installed_move(directory.path(), false).await;
+        let target = directory.path().join("unused");
+        manager
+            .jobs
+            .lock()
+            .await
+            .get_mut(&original.id)
+            .unwrap()
+            .status = "paused".into();
+        assert!(manager
+            .move_installed(original.id, target.clone())
+            .await
+            .unwrap_err()
+            .contains("only installed"));
+        assert!(!target.exists());
+        let mut jobs = manager.jobs.lock().await;
+        let job = jobs.get_mut(&original.id).unwrap();
+        job.status = "installed".into();
+        job.path = Some(directory.path().join("user-owned.ginfer"));
+        drop(jobs);
+        assert!(manager
+            .move_installed(original.id, target.clone())
+            .await
+            .unwrap_err()
+            .contains("original regular file"));
+        assert!(!target.exists());
+        assert!(original.path.unwrap().exists());
     }
     #[test]
     fn package_admission_uses_architecture_support_rather_than_qualification_or_vram_tiers() {

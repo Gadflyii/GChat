@@ -204,6 +204,7 @@ enum HostOperation {
     Snapshot,
     Scan,
     HardwareProfile,
+    FirstRun,
     Clients,
     Catalog,
     Storage,
@@ -313,6 +314,14 @@ impl ManagerState {
                 let (method, path) = match operation {
                     HostOperation::Snapshot => {
                         return self.client.snapshot(host_id).await.map_err(String::from)
+                    }
+                    HostOperation::FirstRun => {
+                        let method = if args.get("action").is_some() {
+                            Method::POST
+                        } else {
+                            Method::GET
+                        };
+                        (method, "/host/v1/first-run".into())
                     }
                     HostOperation::HardwareProfile => {
                         let request: ginfer_host::hardware_profile::HardwareProfileRequest =

@@ -93,6 +93,72 @@ struct PrepareHardware {
     #[arg(long)]
     reprofile: bool,
 }
+#[derive(Parser)]
+#[command(about = "Continue the shared local Host first-run setup")]
+struct FirstRun {
+    /// Drive the text wizard; automation without this flag prints JSON and never prompts.
+    #[arg(long, conflicts_with = "action")]
+    interactive: bool,
+    #[arg(long, value_parser = ["profile", "storage", "models", "refresh_catalog", "startup", "move", "complete", "resume"])]
+    action: Option<String>,
+    #[arg(long)]
+    gpu: Vec<String>,
+    #[arg(long)]
+    path: Option<PathBuf>,
+    #[arg(long)]
+    release: Vec<String>,
+    #[arg(long)]
+    download_id: Option<String>,
+    #[arg(long)]
+    concurrency: Option<u64>,
+    #[arg(long)]
+    max_context: Option<u64>,
+    #[arg(long)]
+    instance_count: Option<u64>,
+    #[arg(long)]
+    kv_arena_bytes: Option<u64>,
+}
+
+async fn first_run(args: FirstRun) -> Result<(), String> {
+    use std::io::IsTerminal;
+    if args.interactive && !std::io::stdin().is_terminal() {
+        return Err("The first-run wizard requires an interactive terminal; omit --interactive for JSON status and explicit actions.".into());
+    }
+    let control = ginfer_host::launcher::installed_control().await?;
+    if args.interactive {
+        return ginfer_host::launcher::first_run(&control).await;
+    }
+    let body = args.action.map(|action| {
+        let mut body = serde_json::json!({"action":action});
+        if !args.gpu.is_empty() {
+            body["gpu_uuids"] = serde_json::json!(args.gpu);
+        }
+        if let Some(path) = args.path {
+            body["path"] = serde_json::json!(path);
+        }
+        if !args.release.is_empty() {
+            body["release_ids"] = serde_json::json!(args.release);
+        }
+        if let Some(value) = args.download_id {
+            body["download_id"] = serde_json::json!(value);
+        }
+        if let Some(value) = args.concurrency {
+            body["concurrency"] = serde_json::json!(value);
+        }
+        if let Some(value) = args.max_context {
+            body["max_context"] = serde_json::json!(value);
+        }
+        if let Some(value) = args.instance_count {
+            body["instance_count"] = serde_json::json!(value);
+        }
+        if let Some(value) = args.kv_arena_bytes {
+            body["kv_arena_bytes"] = serde_json::json!(value);
+        }
+        body
+    });
+    println!("{}", control.request("/host/v1/first-run", body).await?);
+    Ok(())
+}
 fn store_hardware_configuration(
     configuration: &ginfer_host::hardware_profile::Configuration,
     directory: &std::path::Path,
@@ -296,6 +362,17 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "first-run")
+    {
+        let args = FirstRun::parse_from(std::env::args_os().skip(1));
+        return tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?
+            .block_on(first_run(args))
+            .map_err(|e| std::io::Error::other(e).into());
+    }
     if std::env::args_os()
         .nth(1)
         .is_some_and(|arg| arg == "prepare-hardware")
@@ -534,10 +611,13 @@ async fn monitor_processes(host: &Host) {
         tokio::pin!(notified);
         // Register before inspecting ownership so a launch cannot lose its wake.
         notified.as_mut().enable();
+        if let Err(error) = host.first_run_maintenance().await {
+            eprintln!("First-run setup: {error}");
+        }
         if let Err(error) = host.idle_maintenance().await {
             eprintln!("Draft calibration: {error}");
         }
-        if !host.processes.lock().await.needs_monitoring() {
+        if !host.processes.lock().await.needs_monitoring() && !host.first_run_pending().await {
             tick = None;
             notified.await;
             continue;

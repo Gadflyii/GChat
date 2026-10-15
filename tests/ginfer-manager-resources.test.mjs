@@ -60,6 +60,7 @@ async function setup(t, { failWrites = 0 } = {}) {
   let view = fixture()
   const runtime = createManager(root, async (command, input) => {
     if (command === 'manager_snapshot') return structuredClone(view)
+    if (input.request.operation === 'first_run' && !input.request.args?.action) return { result: { step: 'complete' } }
     requests.push(input.request)
     return { result: {}, view: structuredClone(view) }
   }, async (event, handler) => {

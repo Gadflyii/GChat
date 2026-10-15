@@ -66,7 +66,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   }
   const state = { view: { hosts: [], discovered: [], fleet: null }, selected: readPreference('host', null),
     ignored: new Set(readPreference('ignored', [])), sections: new Map(), catalogs: new Map(), profileGroups: new Map(),
-    busy: false, notice: '', warning: '', error: '', errorSource: null, dialog: null, stopped: false }
+    busy: false, notice: '', warning: '', error: '', errorSource: null, dialog: null, stopped: false,
+    firstRuns: new Map(), firstRunDrafts: new Map(), firstRunPending: new Set(), firstRunRevisions: new Map() }
   const subscriptions = []
   let snapshotKey
   let presentationKey
@@ -152,7 +153,109 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       state.selected = array(view.hosts).find((host) => host.local)?.host_id || array(view.hosts)[0]?.host_id || null
     }
     savePreference('host', state.selected)
+    for (const host of array(view.hosts)) {
+      if (host.local && online(host) && state.firstRuns.get(host.host_id)?.step !== 'complete' && !state.firstRunPending.has(host.host_id)) void readFirstRun(host)
+    }
     render(false)
+  }
+
+  async function readFirstRun(host) {
+    state.firstRunPending.add(host.host_id)
+    const revision = state.firstRunRevisions.get(host.host_id)
+    try {
+      const response = await invoke('manager_request', { request: hostRequest(host, 'first_run') })
+      if (!state.stopped && revision === state.firstRunRevisions.get(host.host_id)) { state.firstRuns.set(host.host_id, response.result); render(false) }
+    } catch (error) {
+      if (!state.stopped && revision === state.firstRunRevisions.get(host.host_id)) { state.firstRuns.set(host.host_id, { load_error: String(error) }); render(false) }
+    } finally { state.firstRunPending.delete(host.host_id) }
+  }
+
+  async function firstRunAction(host, args) {
+    state.firstRunRevisions.set(host.host_id, (state.firstRunRevisions.get(host.host_id) || 0) + 1)
+    state.firstRunPending.add(host.host_id)
+    try {
+      const result = await run(hostRequest(host, 'first_run', args), 'Setup progress saved')
+      state.firstRuns.set(host.host_id, result)
+      state.firstRunDrafts.delete(host.host_id)
+      render()
+    } finally { state.firstRunPending.delete(host.host_id) }
+  }
+
+  function firstRunSection(host) {
+    if (!host.local) return null
+    const flow = state.firstRuns.get(host.host_id)
+    if (flow?.step === 'complete') return null
+    const action = args => firstRunAction(host, args).catch(() => {})
+    const heading = h('h2', {}, 'Set up local GInfer')
+    if (!online(host)) return h('section', { class: 'card' }, heading, note('Reconnect this host to continue saved setup.'))
+    if (!flow || flow.load_error) return h('section', { class: 'card' }, heading,
+      flow?.load_error ? h('p', { class: 'section-error', role: 'alert' }, flow.load_error) : note('Reading saved setup…'),
+      flow?.load_error ? button('Retry local setup', () => readFirstRun(host)) : null)
+    let draft = state.firstRunDrafts.get(host.host_id)
+    if (!draft || draft.step !== flow.step) {
+      draft = { step: flow.step, catalogLoaded: flow.catalog_loaded, gpus: [...array(flow.gpu_uuids)],
+        path: flow.storage?.recommended_path || flow.storage?.path || '',
+        releases: array(flow.models).filter(model => model.recommended).map(model => model.release_id || model.release.sha256) }
+      state.firstRunDrafts.set(host.host_id, draft)
+    } else if (draft.catalogLoaded !== flow.catalog_loaded) {
+      draft.catalogLoaded = flow.catalog_loaded
+      if (!draft.pathEdited) draft.path = flow.storage?.recommended_path || flow.storage?.path || ''
+      draft.releases = array(flow.models).filter(model => model.recommended).map(model => model.release_id || model.release.sha256)
+    }
+    const content = []
+    const choose = (values, value, checked) => checked ? [...values, value] : values.filter(entry => entry !== value)
+    if (flow.step === 'gpu') {
+      const known = array(host.snapshot?.gpus).filter(gpu => ['8.0', '8.6', '8.9', '12.0'].includes(gpu.compute_capability))
+      const selected = known.filter(gpu => draft.gpus.includes(gpu.uuid))
+      const valid = [1, 2, 4].includes(selected.length) && selected.length === draft.gpus.length && selected.every(gpu => gpu.name === selected[0].name && gpu.compute_capability === selected[0].compute_capability)
+      content.push(h('h3', {}, 'Choose GPU group'), note('Select 1, 2 or 4 matching GPUs. Hardware profiling starts after this selection.'),
+        known.map(gpu => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: draft.gpus.includes(gpu.uuid),
+          onchange: event => { draft.gpus = choose(draft.gpus, gpu.uuid, event.target.checked); render() } }), `${gpu.display_name || gpu.name} · ${size(gpu.memory_mib * 1024 ** 2)} · ${gpu.uuid}`)),
+        !known.length ? h('p', { class: 'section-error', role: 'alert' }, 'No supported NVIDIA GPU detected. Check your GPU and CUDA 13.1 driver, or pair a network host.') : null,
+        button('Use selected GPUs and profile', () => action({ action: 'profile', gpu_uuids: draft.gpus }), !valid))
+    } else if (flow.step === 'profiling') {
+      content.push(h('h3', {}, 'Prepare hardware'), h('p', { role: 'status' }, `Hardware profiling: ${text(flow.hardware_profile?.status)}`),
+        flow.hardware_profile?.status === 'running' ? h('progress', { 'aria-label': 'Hardware profiling' }) : null,
+        note('Recent full installs took 22–73 minutes. Closing Manager leaves the shared Host job running.'),
+        flow.hardware_profile?.error ? h('p', { class: 'section-error', role: 'alert' }, flow.hardware_profile.error) : null,
+        ['failed', 'interrupted', 'cancelled'].includes(flow.hardware_profile?.status) ? button('Resume hardware profiling', () => action({ action: 'resume' })) : null,
+        flow.hardware_profile?.diagnostic_tail ? h('details', {}, h('summary', {}, 'Profiling log'), h('pre', { class: 'mono' }, flow.hardware_profile.diagnostic_tail)) : null)
+    } else if (flow.step === 'storage') {
+      const input = h('input', { value: draft.path, 'aria-label': 'Model download folder', oninput: event => { draft.pathEdited = true; draft.path = event.target.value } })
+      content.push(h('h3', {}, 'Choose model storage'), note(flow.storage?.available_bytes == null ? 'Free space is unavailable for the current folder.' : `${size(flow.storage.available_bytes)} available in the current folder.`),
+        flow.storage?.error ? h('p', { class: 'section-error', role: 'alert' }, flow.storage.error) : null,
+        flow.storage?.recommended_path ? note(`Recommended: ${flow.storage.recommended_path}`) : null,
+        h('label', {}, 'Model download folder', input), array(flow.storage?.candidates).map(candidate => h('div', {}, button(`${candidate.path} · ${candidate.available_bytes == null ? 'free space unavailable' : `${size(candidate.available_bytes)} free`}`, () => { draft.pathEdited = true; draft.path = candidate.path; render() }, candidate.eligible === false), candidate.reason ? note(candidate.reason) : null, candidate.measured_read_bytes_per_second != null ? note(`Measured read: ${(candidate.measured_read_bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s`) : null)),
+        button('Use this folder', () => action({ action: 'storage', path: draft.path })))
+    } else if (flow.step === 'models') {
+      content.push(h('h3', {}, 'Choose models to download'), array(flow.models).map(model => {
+        const id = model.release_id || model.release.sha256
+        return h('label', { class: 'card' }, h('span', { class: 'check' }, h('input', { type: 'checkbox', checked: draft.releases.includes(id),
+          onchange: event => { draft.releases = choose(draft.releases, id, event.target.checked); render() } }), `${model.release.name} · ${size(model.release.bytes)}${model.recommended ? ' · Recommended' : ''}`), note(model.reason))
+      }), !array(flow.models).length ? note(flow.catalog_loaded === false && !flow.error ? 'Loading published model catalog…' : 'No compatible published models are available. Check the model catalog and selected GPU group.') : null,
+      array(host.snapshot?.model_management?.downloads).filter(job => job.status === 'installed' && job.path && !job.path.startsWith(`${flow.storage?.path}/`) && !job.path.startsWith(`${flow.storage?.path}\\`)).map(job => h('div', { class: 'card' },
+        note(`${job.release.name} is stored at ${job.path}. Keep it there or move it to ${flow.storage?.path}.`),
+        button(`Move ${job.release.name} to selected storage`, () => action({ action: 'move', download_id: job.id })))),
+      button('Download selected models', () => action({ action: 'models', release_ids: draft.releases }), !draft.releases.length),
+      button('Refresh model catalog', () => action({ action: 'refresh_catalog' })))
+    } else if (flow.step === 'downloads') {
+      content.push(h('h3', {}, 'Downloading models'), array(flow.selected_downloads).map(job => h('div', {},
+        h('p', {}, `${job.release.name} · ${job.status} · ${(100 * job.received / Math.max(1, job.release.bytes)).toFixed(1)}% · ${(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s`),
+        h('progress', { 'aria-label': `${job.release.name} download`, max: job.release.bytes, value: job.received }),
+        job.error ? h('p', { class: 'section-error', role: 'alert' }, job.error) : null)),
+      note('Downloads continue when Manager closes.'), button('Resume downloads', () => action({ action: 'resume' })))
+    } else if (flow.step === 'startup') {
+      content.push(h('h3', {}, 'Review startup defaults'), !array(flow.startup_profiles).length ? h('p', { role: 'status' }, 'Preparing startup settings and checking Engine memory…') : null, array(flow.startup_profiles).map(profile => h('div', { class: 'card' },
+        h('strong', {}, profile.model_id), h('p', {}, `${profile.instance_count} instance(s) · ${profile.concurrency} concurrent requests · ${profile.max_context.toLocaleString()} tokens · ${profile.kv_arena_bytes == null ? 'Automatic GPU KV cache' : `${size(profile.kv_arena_bytes)} GPU KV cache`}`),
+        !profile.quote && !profile.error ? h('p', { role: 'status' }, 'Checking these settings with the Engine…') : null,
+        profile.error ? h('p', { class: 'section-error', role: 'alert' }, profile.error) : null,
+        button('Adjust startup settings…', () => dialog('Startup settings', 'The Engine checks memory requirements. Saving these settings does not start a model.',
+          [['concurrency', 'Concurrent requests', profile.concurrency], ['max_context', 'Context tokens', profile.max_context], ['instance_count', 'Instances', profile.instance_count], ['kv_arena_bytes', 'GPU KV cache bytes (blank for automatic)', profile.kv_arena_bytes ?? '']].map(([name, label, value]) => h('label', {}, label, h('input', { name, type: 'number', min: '1', ...(name === 'kv_arena_bytes' ? {} : { required: '' }), value }))),
+          'Check startup settings', form => firstRunAction(host, { action: 'startup', download_id: profile.download_id, concurrency: Number(fieldValue(form, 'concurrency')), max_context: Number(fieldValue(form, 'max_context')), instance_count: Number(fieldValue(form, 'instance_count')), kv_arena_bytes: fieldValue(form, 'kv_arena_bytes') ? Number(fieldValue(form, 'kv_arena_bytes')) : null }))))), note('The Engine checks memory requirements. Models stay stopped until you launch them.'),
+      button('Finish local setup', () => action({ action: 'complete' }), !array(flow.startup_profiles).length || array(flow.startup_profiles).some(profile => profile.error || !profile.quote)))
+    }
+    return h('section', { class: 'card', 'aria-label': 'Set up local GInfer' }, heading,
+      note('Progress is shared with GChat and the installer.'), flow.error ? h('p', { class: 'section-error', role: 'alert' }, flow.error) : null, content)
   }
 
   async function refresh() {
@@ -879,7 +982,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     if (document.hidden) { pendingRender = true; return }
     pendingRender = false
     const key = renderKey(state.view)
-    const presentation = JSON.stringify([state.selected, state.busy, state.error, state.notice, state.warning, [...state.ignored]])
+    const presentation = JSON.stringify([state.selected, state.busy, state.error, state.notice, state.warning, [...state.ignored], [...state.firstRuns]])
     if (!force && key === snapshotKey && presentation === presentationKey) {
       updateActivity()
       return
@@ -919,7 +1022,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         button('Start a model…', () => launchDialog(host), !online(host) || profiling(host) || !array(host.snapshot?.models).length, 'primary'))),
       !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
         host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,
-      hardwareProfileSection(host),
+      firstRunSection(host), hardwareProfileSection(host),
       array(host.snapshot?.instances).length ? array(host.snapshot.instances).map((instance) => instanceCard(host, instance))
         : h('div', { class: 'empty' }, h('strong', {}, 'No instances'), 'Choose an installed model to start one. Models never start automatically.'),
       modelsSection(host), sharingSection(host), clientsSection(host), fleetSection(host))
