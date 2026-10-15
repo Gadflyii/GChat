@@ -684,43 +684,93 @@ async fn muse_atem_call_executes_instead_of_becoming_a_plain_text_reply() {
 }
 
 #[tokio::test]
-async fn verbose_observation_is_compact_for_the_model_but_detailed_in_the_event() {
+async fn bounded_retrieval_content_reaches_the_next_completion_and_saved_session() {
+    use std::io::Write;
+
     let workspace = TestWorkspace::new();
-    let detailed = (0..30)
-        .map(|index| format!("EVENT_DETAIL_LINE_{index:02}"))
+    let detailed = (0..100)
+        .map(|index| format!("EVENT_DETAIL_LINE_{index:02}: requested source excerpt αβγ"))
         .collect::<Vec<_>>()
         .join("\n");
     workspace.write("verbose.txt", &detailed);
-    let run = run_script(
-        &workspace,
-        vec![
-            ScriptedResponse::completion(
-                r#"[{"tool":"os.fs.read","args":{"path":"verbose.txt"}}]"#,
-            ),
-            ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"observed"}}]"#),
-        ],
-        &RecordingApproval::deny(),
-        &CancellationToken::new(),
-        3,
-    )
-    .await;
+    workspace.write(
+        "full-result.json",
+        serde_json::json!({"summary": detailed}).to_string(),
+    );
+    let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    archive
+        .start_file("verbose.txt", zip::write::FileOptions::default())
+        .unwrap();
+    archive.write_all(detailed.as_bytes()).unwrap();
+    workspace.write("source.zip", archive.finish().unwrap().into_inner());
 
-    assert!(run.result.is_ok());
-    let event_summary = run
-        .events
-        .iter()
-        .find_map(|event| match event {
-            AgentEvent::ToolCallExecuted { result } if result.call.tool == "os.fs.read" => {
-                Some(result.outcome.summary.as_str())
-            }
-            _ => None,
-        })
-        .expect("read execution event");
-    assert_eq!(event_summary, detailed);
-    let next_prompt = request_prompt(&run.requests[1]);
-    assert!(next_prompt.contains("… [omitted 18 lines]"));
-    assert!(next_prompt.contains("EVENT_DETAIL_LINE_29"));
-    assert!(!next_prompt.contains("EVENT_DETAIL_LINE_00"));
+    for (tool, args) in [
+        ("os.fs.read", serde_json::json!({"path": "verbose.txt"})),
+        (
+            "os.fs.grep",
+            serde_json::json!({"path": "verbose.txt", "pattern": "EVENT_DETAIL"}),
+        ),
+        (
+            "os.fs.read_document",
+            serde_json::json!({"path": "verbose.txt"}),
+        ),
+        (
+            "os.fs.archive.read_entry",
+            serde_json::json!({"path": "source.zip", "entry": "verbose.txt"}),
+        ),
+        ("os.fs.read", serde_json::json!({"path": "full-result.json"})),
+    ] {
+        let call = serde_json::json!([{"tool": tool, "args": args}]).to_string();
+        let run = run_script(
+            &workspace,
+            vec![
+                ScriptedResponse::completion(&call),
+                ScriptedResponse::completion(r#"[{"tool":"reply","args":{"text":"observed"}}]"#),
+            ],
+            &RecordingApproval::deny(),
+            &CancellationToken::new(),
+            3,
+        )
+        .await;
+
+        assert!(run.result.is_ok(), "{tool}: {:?}", run.result);
+        assert_eq!(
+            executed(&run.events),
+            [(tool, ToolStatus::Ok), ("reply", ToolStatus::Ok)]
+        );
+        let event_summary = run
+            .events
+            .iter()
+            .find_map(|event| match event {
+                AgentEvent::ToolCallExecuted { result } if result.call.tool == tool => {
+                    Some(result.outcome.summary.as_str())
+                }
+                _ => None,
+            })
+            .expect("retrieval execution event");
+        assert!(event_summary.len() > 1200);
+        assert!(event_summary.contains("EVENT_DETAIL_LINE_00"));
+        assert!(event_summary.contains("EVENT_DETAIL_LINE_50"));
+        assert!(event_summary.contains("EVENT_DETAIL_LINE_99"));
+        assert!(
+            request_prompt(&run.requests[1]).contains(event_summary),
+            "{tool}"
+        );
+
+        super::session::initialize_session(workspace.path(), "test-session")
+            .await
+            .unwrap();
+        super::session::save_session(workspace.path(), &run.session)
+            .await
+            .unwrap();
+        let reopened = super::session::load_session(workspace.path(), "test-session")
+            .await
+            .unwrap();
+        assert!(
+            reopened.render_conversation().contains(event_summary),
+            "{tool}"
+        );
+    }
 }
 
 #[tokio::test]
