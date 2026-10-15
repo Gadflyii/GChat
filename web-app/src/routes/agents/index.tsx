@@ -1,5 +1,5 @@
 import { incompleteOutcomeMessage } from '@/lib/agent-outcome'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { continuationTask } from '@/lib/agent-continuation'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
@@ -59,6 +59,7 @@ import {
   formatTokensPerSecond,
 } from '@/lib/agent-metrics'
 import { getAgentDefinition } from '@/services/agent/definitions'
+import { useGbotPage } from '@/stores/gbot-page-store'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.agents.index as any)({
@@ -364,6 +365,17 @@ function AgentStudioPage() {
   const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
   const historyRevision = useStudioRuns((s) => s.historyRevision)
+  const pageId = useId()
+
+  useEffect(() => {
+    if (view === 'definitions' && draft && !saving && !creating && !runSetup) {
+      useGbotPage.getState().publish({ id: pageId, draft, update: setDraft })
+    } else {
+      useGbotPage.getState().clear(pageId)
+    }
+  }, [pageId, draft, view, saving, creating, runSetup])
+
+  useEffect(() => () => useGbotPage.getState().clear(pageId), [pageId])
 
   useEffect(() => {
     if (!draft && definitions.length > 0) {
@@ -746,6 +758,7 @@ function DefinitionEditor({
         <div className="mt-2 grid gap-4 md:grid-cols-[1fr_0.8fr]">
           <Field label="Name">
             <Input
+              aria-label="Name"
               value={draft.name}
               onChange={(event) => common({ name: event.target.value })}
             />
@@ -907,6 +920,7 @@ function DefinitionEditor({
         </details>
         <Field label={copy.instructionsLabel} help={copy.instructionsHelp}>
           <Textarea
+            aria-label={copy.instructionsLabel}
             rows={8}
             value={draft.instructions}
             placeholder={copy.instructionsPlaceholder}

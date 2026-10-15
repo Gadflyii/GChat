@@ -4,6 +4,8 @@ import { useState, type ReactNode } from 'react'
 import GbotCompanion from './GbotCompanion'
 import GbotAvatars from '@/components/GbotAvatars'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
+import { useGbotPage } from '@/stores/gbot-page-store'
+import type { AgentDefinition } from '@/types/agent'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import type { BotState, Task } from '@/services/gbot'
 
@@ -52,6 +54,7 @@ const events = new Map<string, () => void>()
 beforeEach(() => {
   vi.clearAllMocks()
   useGbotCompanion.getState().reset()
+  useGbotPage.setState({ page: null, sharing: null, requests: {} })
   useGeneralSetting.setState({ gbotEnabled: true })
   events.clear()
   snapshot = {
@@ -116,6 +119,28 @@ async function mount() {
   fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
   return view
 }
+
+it('ends page sharing when switching bots or hiding the pane', async () => {
+  await mount()
+  act(() => useGbotPage.getState().publish({
+    id: 'studio',
+    draft: {
+      schemaVersion: 3, id: '', kind: 'standard', name: 'Agent', description: '',
+      instructions: '', defaultGoal: '', skills: [], maxSteps: 25,
+      outputContract: '', modelInstanceId: null, reasoningEffort: null, builtIn: false,
+    } satisfies AgentDefinition,
+    update: vi.fn(),
+  }))
+  fireEvent.click(screen.getByRole('button', { name: 'Help with this page' }))
+  expect(useGbotPage.getState().sharing?.workspaceId).toBe('a')
+  fireEvent.click(screen.getByRole('button', { name: /Open Bramble/ }))
+  expect(useGbotPage.getState().sharing).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+  expect(screen.getByRole('button', { name: 'Help with this page' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Help with this page' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Hide bot pane' }))
+  expect(useGbotPage.getState().sharing).toBeNull()
+})
 
 it('keeps the underlying workspace and per-bot drafts through hidden, compact and expanded states', async () => {
   await mount()

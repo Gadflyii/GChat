@@ -28,7 +28,14 @@ import {
   gbotControlOwner,
   messageText,
   validBrainConnection,
+  type Task,
 } from '@/services/gbot'
+import {
+  draftFields,
+  draftProposal,
+  pageMessage,
+  useGbotPage,
+} from '@/stores/gbot-page-store'
 import {
   avatarStatus,
   botAvatarState,
@@ -45,6 +52,7 @@ const tabs: { id: CompanionTab; label: string }[] = [
 export default function GbotCompanion() {
   const enabled = useGeneralSetting((s) => s.gbotEnabled)
   const state = useGbotCompanion()
+  const pageState = useGbotPage()
   const [owner] = useState(gbotControlOwner)
   const [busy, setBusy] = useState(false)
   const desktop = useRef<DesktopViewHandle>(null)
@@ -52,6 +60,9 @@ export default function GbotCompanion() {
   const wasVisible = useRef(false)
   const visible = enabled && state.mode !== 'hidden'
   const workspaceId = state.selected
+  const sharingPage =
+    pageState.sharing?.workspaceId === workspaceId &&
+    pageState.sharing.target === state.target
   const bot = state.snapshot.workspaces.find((b) => b.id === workspaceId)
   const identity = state.snapshot.live_sessions.find(
     (i) => i.workspace_id === workspaceId
@@ -89,6 +100,19 @@ export default function GbotCompanion() {
   )
   const tab = state.tabs[workspaceId] ?? 'conversation'
   const draft = state.drafts[workspaceId] ?? ''
+
+  useEffect(() => {
+    const sharing = useGbotPage.getState().sharing
+    if (
+      sharing &&
+      (!visible ||
+        sharing.workspaceId !== workspaceId ||
+        sharing.target !== state.target)
+    )
+      useGbotPage.getState().stop()
+  }, [visible, workspaceId, state.target])
+
+  useEffect(() => () => useGbotPage.getState().stop(), [])
   const animation = botAvatarState(state, workspaceId)
 
   useEffect(() => {
@@ -402,9 +426,25 @@ export default function GbotCompanion() {
                         <p className="text-xs font-medium text-muted-foreground">
                           {message.role === 'user' ? 'You' : bot.name}
                         </p>
-                        <p className="whitespace-pre-wrap break-words text-sm">
-                          {messageText(message.content)}
-                        </p>
+                        {message.role === 'user' &&
+                          pageMessage(messageText(message.content)).shared && (
+                            <p className="text-xs text-muted-foreground">
+                              Shared Agent Studio draft
+                            </p>
+                          )}
+                        {message.role === 'user' ? (
+                          <p className="whitespace-pre-wrap break-words text-sm">
+                            {pageMessage(messageText(message.content)).text}
+                          </p>
+                        ) : (
+                          <GbotDraftProposal
+                            taskId={task.id}
+                            workspaceId={workspaceId}
+                            target={state.target}
+                            text={messageText(message.content)}
+                            busy={busy || !ready || !botHasControl}
+                          />
+                        )}
                       </div>
                     ))}
                   {task.help_requests?.map((request) => (
@@ -454,13 +494,51 @@ export default function GbotCompanion() {
                   return
                 const submitted = draft
                 void perform(async () => {
-                  await gbot('tasks/start', { identity, prompt: submitted })
+                  const request = useGbotPage
+                    .getState()
+                    .capture(workspaceId, state.target, submitted)
+                  const task = await gbot<Task>('tasks/start', {
+                    identity,
+                    prompt: request?.prompt ?? submitted,
+                  })
+                  if (request && task?.id)
+                    useGbotPage.getState().remember(task.id, request)
                   const current = useGbotCompanion.getState()
                   if (current.drafts[workspaceId] === submitted)
                     current.setDraft(workspaceId, '')
                 })
               }}
             >
+              {pageState.page && (
+                <div className="mb-2 space-y-1">
+                  {sharingPage ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        Sharing the current Agent Studio draft with {bot.name}{' '}
+                        when you send. Applied edits stay unsaved.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => pageState.stop()}
+                      >
+                        Stop sharing page
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || !ready || !botHasControl}
+                      onClick={() => pageState.share(workspaceId, state.target)}
+                    >
+                      Help with this page
+                    </Button>
+                  )}
+                </div>
+              )}
               <textarea
                 aria-label="Message bot"
                 placeholder={`Message ${bot.name}`}
@@ -509,9 +587,12 @@ export default function GbotCompanion() {
                 >
                   <p className="truncate font-medium">
                     {task.messages.find((m) => m.role === 'user')
-                      ? messageText(
-                          task.messages.find((m) => m.role === 'user')!.content
-                        )
+                      ? pageMessage(
+                          messageText(
+                            task.messages.find((m) => m.role === 'user')!
+                              .content
+                          )
+                        ).text
                       : 'Bot task'}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -603,5 +684,75 @@ export default function GbotCompanion() {
         </>
       )}
     </aside>
+  )
+}
+
+function GbotDraftProposal({
+  taskId,
+  workspaceId,
+  target,
+  text,
+  busy,
+}: {
+  taskId: string
+  workspaceId: string
+  target: string
+  text: string
+  busy: boolean
+}) {
+  const page = useGbotPage()
+  const [applied, setApplied] = useState(false)
+  const edits = draftProposal(text)
+  const canApply = edits && page.canApply(taskId, workspaceId, target, edits)
+  return (
+    <>
+      <p className="whitespace-pre-wrap break-words text-sm">
+        {edits
+          ? text.replace(/```gchat-agent-draft\s*\n[\s\S]*?\n```/, '').trim()
+          : text}
+      </p>
+      {edits && (
+        <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">
+              Review draft edits
+            </summary>
+            <dl className="mt-2 space-y-3">
+              {Object.entries(edits).map(([key, value]) => (
+                <div key={key}>
+                  <dt className="text-xs font-medium">
+                    {draftFields[key as keyof typeof draftFields]}
+                  </dt>
+                  <dd className="whitespace-pre-wrap break-words text-sm">
+                    {value || '(empty)'}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy || !canApply || applied}
+            onClick={() => {
+              if (edits && page.apply(taskId, workspaceId, target, edits)) {
+                setApplied(true)
+                toast.success(
+                  'Updated Agent Studio draft. Review it before saving.'
+                )
+              }
+            }}
+          >
+            {applied ? 'Applied to draft' : 'Apply to draft'}
+          </Button>
+          {!canApply && !applied && (
+            <p className="text-xs text-muted-foreground">
+              The shared draft has changed or sharing has ended. Share the
+              current draft and ask again to apply edits.
+            </p>
+          )}
+        </div>
+      )}
+    </>
   )
 }
