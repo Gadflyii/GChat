@@ -830,8 +830,12 @@ impl Client {
         let client = self.pinned_transport(&host).await?;
         let mut req = client
             .request(method, format!("{}{}", host.base_url, path))
-            .bearer_auth(token)
-            .timeout(std::time::Duration::from_secs(600));
+            .bearer_auth(token);
+        // Worker leases stream for the worker lifetime. Their caller bounds
+        // header acquisition and each heartbeat instead of the entire request.
+        if path != "/host/v1/fleet/worker-slot" {
+            req = req.timeout(std::time::Duration::from_secs(600));
+        }
         if let Some(body) = body {
             req = req.json(body);
         }

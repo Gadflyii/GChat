@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-15** — [Admit pool workers at the coordinator](2026-10-15-admit-pool-workers-at-the-coordinator.md)
+
 - **2026-10-14** — [Package Engine documentation from its runtime manifests](2026-10-14-package-engine-docs-from-runtime-manifests.md)
 
 - **2026-10-14** — [Own idle draft-width calibration in Host](2026-10-14-own-idle-draft-width-calibration-in-host.md)

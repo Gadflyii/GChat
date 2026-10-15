@@ -370,6 +370,149 @@ async fn independent_paired_clients_observe_the_same_authoritative_catalog() {
 }
 
 #[tokio::test]
+async fn two_clients_share_one_instance_slot_and_disconnect_releases_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let host = open(dir.path()).await;
+    let (origin, _server) = serve(&host).await;
+    let authority = locator(&host, &origin).await;
+    let admin = host.data.lock().await.pairing_admin_token.clone();
+    assert_eq!(
+        route(
+            &host,
+            &admin,
+            "/host/v1/fleet/authority",
+            Some(json!({"authority":authority}))
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    host.lan_sharing.lock().await.standalone =
+        Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
+    let first = pinned_client(&authority.certificate_sha256).unwrap();
+    let second = pinned_client(&authority.certificate_sha256).unwrap();
+    let mut grants = Vec::new();
+    for (client, name) in [(&first, "workstation one"), (&second, "workstation two")] {
+        let grant: Value = client
+            .post(format!("{origin}/host/v1/pair"))
+            .json(&json!({"client_name":name}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        grants.push(grant);
+    }
+    assert_ne!(grants[0]["client_id"], grants[1]["client_id"]);
+    let mut shared = pool(authority.host_id);
+    shared.members.truncate(1);
+    shared.members[0].worker_limit = 1;
+    assert_eq!(
+        update(
+            &host,
+            &admin,
+            1,
+            FleetOperation::SavePool {
+                pool: shared.clone()
+            }
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    // A second pool and a distinct grant must not add capacity to this instance.
+    let mut overlapping = shared.clone();
+    overlapping.id = Uuid::new_v4();
+    overlapping.members[0].worker_limit = 3;
+    assert_eq!(
+        update(
+            &host,
+            &admin,
+            2,
+            FleetOperation::SavePool { pool: overlapping }
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let token = |index: usize| grants[index]["token"].as_str().unwrap();
+    let acquire = |client: &reqwest::Client, index| {
+        client
+            .post(format!("{origin}/host/v1/fleet/worker-slot"))
+            .bearer_auth(token(index))
+            .json(&shared.members[0].instance)
+            .send()
+    };
+    let (one, two) = tokio::join!(acquire(&first, 0), acquire(&second, 1));
+    let one = one.unwrap();
+    let two = two.unwrap();
+    assert_eq!(
+        [one.status().as_u16(), two.status().as_u16()]
+            .into_iter()
+            .filter(|status| *status == 200)
+            .count(),
+        1
+    );
+    assert_eq!(
+        [one.status().as_u16(), two.status().as_u16()]
+            .into_iter()
+            .filter(|status| *status == 429)
+            .count(),
+        1
+    );
+    let (mut held, waiting_client, waiting_index) = if one.status().is_success() {
+        (one, &second, 1)
+    } else {
+        (two, &first, 0)
+    };
+    assert!(held.chunk().await.unwrap().is_some());
+    assert_eq!(
+        acquire(waiting_client, waiting_index)
+            .await
+            .unwrap()
+            .status(),
+        429
+    );
+    drop(held);
+    let mut next = tokio::time::timeout(std::time::Duration::from_secs(4), async {
+        loop {
+            let response = acquire(waiting_client, waiting_index).await.unwrap();
+            if response.status().is_success() {
+                break response;
+            }
+            assert_eq!(response.status(), 429);
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .expect("Disconnect must release the shared slot");
+    assert!(next.chunk().await.unwrap().is_some());
+    assert_eq!(acquire(&first, 0).await.unwrap().status(), 429);
+    // Revoking the holder terminates its live response rather than leaking capacity.
+    assert_eq!(
+        first
+            .delete(format!(
+                "{origin}/host/v1/clients/{}",
+                grants[waiting_index]["client_id"].as_str().unwrap()
+            ))
+            .bearer_auth(&admin)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while next.chunk().await.unwrap().is_some() {}
+    })
+    .await
+    .expect("Revoked lease must close");
+}
+
+#[tokio::test]
 async fn member_persists_only_locator_and_cannot_mutate_coordinator_catalog() {
     let dir = tempfile::tempdir().unwrap();
     let host = open(dir.path()).await;
