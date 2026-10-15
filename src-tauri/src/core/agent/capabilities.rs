@@ -1297,6 +1297,7 @@ mod tests {
         std::fs::write(root.path().join("note.txt"), "visible result").unwrap();
         let app = tauri::test::mock_app();
         app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::stopped_for_test());
         app.manage(crate::test_support::TestDataRoot(root.path().join("data")));
         let catalog = capability_list(app.handle().clone()).await.unwrap();
         let read = catalog
@@ -1400,6 +1401,7 @@ mod tests {
         zip.finish().unwrap();
         let app = tauri::test::mock_app();
         app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::stopped_for_test());
         app.manage(crate::test_support::TestDataRoot(root.path().join("data")));
         let pending = app.state::<AppState>().agent_pending_folder_access.clone();
         let events = Arc::new(Mutex::new(Vec::<AgentEvent>::new()));
@@ -1476,6 +1478,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let app = tauri::test::mock_app();
         app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::stopped_for_test());
         app.manage(GinferState::default());
         app.manage(crate::test_support::TestDataRoot(root.path().join("data")));
         let request = CapabilityExecuteRequest {

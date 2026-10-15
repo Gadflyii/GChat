@@ -267,6 +267,11 @@ fn cancelled_resume_still_starts_its_durably_admitted_transfer() {
             let id = insert(&manager, release).await;
             std::fs::write(manager.root().join(format!("{id}.part")), &bytes).unwrap();
             manager.action(id, "pause").await.unwrap();
+            let mut resume = Box::pin(manager.action(id, "resume"));
+            futures_util::future::poll_fn(|cx| {
+                assert!(matches!(resume.as_mut().poll(cx), Poll::Pending));
+                Poll::Ready(())
+            }).await;
             let (unblock, blocked) = std::sync::mpsc::channel();
             let (started, ready) = tokio::sync::oneshot::channel();
             let blocker = tokio::task::spawn_blocking(move || {
@@ -274,7 +279,6 @@ fn cancelled_resume_still_starts_its_durably_admitted_transfer() {
                 blocked.recv_timeout(Duration::from_secs(5)).unwrap();
             });
             ready.await.unwrap();
-            let mut resume = Box::pin(manager.action(id, "resume"));
             futures_util::future::poll_fn(|cx| {
                 assert!(matches!(resume.as_mut().poll(cx), Poll::Pending));
                 Poll::Ready(())
@@ -304,6 +308,11 @@ fn cancelled_enqueue_rolls_back_a_failed_journal_before_releasing_jobs() {
             let manager = ModelDownloads::open(directory.path().join("models"), journal.clone()).unwrap();
             std::fs::create_dir(&journal).unwrap();
             let (release, _) = fixture();
+            let mut enqueue = Box::pin(manager.enqueue(release));
+            futures_util::future::poll_fn(|cx| {
+                assert!(matches!(enqueue.as_mut().poll(cx), Poll::Pending));
+                Poll::Ready(())
+            }).await;
             let (unblock, blocked) = std::sync::mpsc::channel();
             let (started, ready) = tokio::sync::oneshot::channel();
             let blocker = tokio::task::spawn_blocking(move || {
@@ -311,7 +320,6 @@ fn cancelled_enqueue_rolls_back_a_failed_journal_before_releasing_jobs() {
                 blocked.recv_timeout(Duration::from_secs(5)).unwrap();
             });
             ready.await.unwrap();
-            let mut enqueue = Box::pin(manager.enqueue(release));
             futures_util::future::poll_fn(|cx| {
                 assert!(matches!(enqueue.as_mut().poll(cx), Poll::Pending));
                 Poll::Ready(())

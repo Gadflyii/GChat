@@ -166,6 +166,7 @@ vi.mock('@/components/ui/button', () => ({
 describe('HermesTerminalHost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.resizeTerminal.mockResolvedValue(undefined)
     hermesState.enabled = true
     hermesState.model = 'qwen'
     hermesState.workspace = undefined

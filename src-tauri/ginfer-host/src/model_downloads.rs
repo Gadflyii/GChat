@@ -1345,10 +1345,16 @@ mod tests {
 
         let directory = tempfile::tempdir().unwrap();
         let provider = directory.path().join("ginfer");
-        let engine = provider.join("bin/fixture-engine");
+        let engine = provider.join("bin/ginfer-serve");
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
         std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
+        let hardware = crate::hardware_profile::group_profile_path(
+            &provider.join("host"), &["GPU-test".into()],
+        );
+        std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
+        std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
         let set_path = provider.join("deployment.json");
         let host = Host::open_with_model_storage(provider.join("host"), "Test".into(), engine,
             vec![], vec![set_path.clone()], vec![Gpu {
@@ -1437,10 +1443,16 @@ mod tests {
 
         let directory = tempfile::tempdir().unwrap();
         let provider = directory.path().join("ginfer");
-        let engine = provider.join("bin/fixture-engine");
+        let engine = provider.join("bin/ginfer-serve");
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
         std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
+        let hardware = crate::hardware_profile::group_profile_path(
+            &provider.join("host"), &["GPU-test".into()],
+        );
+        std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
+        std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
         let set_path = provider.join("deployment.json");
         let host = Host::open_with_model_storage(provider.join("host"), "Test".into(), engine,
             vec![], vec![set_path.clone()], vec![Gpu {
@@ -1506,7 +1518,7 @@ mod tests {
             host.processes.lock().await.shutdown().await.unwrap();
             drop(host);
             let reopened = Host::open_with_model_storage(provider.join("host"), "Ignored".into(),
-                provider.join("bin/fixture-engine"), vec![], vec![set_path], vec![], Some(provider)).await.unwrap();
+                provider.join("bin/ginfer-serve"), vec![], vec![set_path], vec![], Some(provider)).await.unwrap();
             let restored = reopened.snapshot().await;
 
             assert_eq!(stopped_before_rewrite.unwrap().unwrap().status(), StatusCode::OK);
@@ -1592,10 +1604,16 @@ mod tests {
 
         let directory = tempfile::tempdir().unwrap();
         let provider = directory.path().join("ginfer");
-        let engine = provider.join("bin/fixture-engine");
+        let engine = provider.join("bin/ginfer-serve");
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
         std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
+        let hardware = crate::hardware_profile::group_profile_path(
+            &provider.join("host"), &["GPU-test".into()],
+        );
+        std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
+        std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
         let host = Host::open_with_model_storage(provider.join("host"), "Test".into(), engine.clone(),
             vec![], vec![], vec![Gpu {
                 uuid: "GPU-test".into(), name: "Test".into(), display_name: None,

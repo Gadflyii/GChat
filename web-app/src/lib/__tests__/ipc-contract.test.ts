@@ -31,6 +31,13 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'code_session_select',
   'code_workspace_resolve',
   'get_local_http',
+  'gbot_command',
+  'gbot_service_quit',
+  'gbot_service_start',
+  'gbot_service_target',
+  'gbot_service_select',
+  'gbot_service_set_enabled',
+  'gbot_service_grant',
   'hermes_readiness',
   'update_hermes',
   'update_code',
@@ -364,6 +371,14 @@ describe('Tauri IPC contract', () => {
       const match = command.match(/^plugin:([a-z0-9-]+)\|([a-z0-9_]+)$/)
       if (!match) continue
       const [, pluginId, commandName] = match
+      if (pluginId === 'log') {
+        expect(read(join(TAURI_ROOT, 'src/lib.rs'))).toContain(
+          'app.handle().plugin(log_builder.build())?'
+        )
+        expect(commandName).toBe('log')
+        expect(grantedPlugins.has('log')).toBe(true)
+        continue
+      }
       const plugin = pluginById.get(pluginId)
       if (!plugin) {
         errors.push(`${command}: plugin is not registered`)

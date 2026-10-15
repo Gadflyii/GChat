@@ -1649,6 +1649,7 @@ mod tests {
         project: &Path,
         policy: BridgePolicy,
     ) -> BridgeConnection {
+        app.manage(crate::core::gbot::GbotState::stopped_for_test());
         let connection = prepare_session(app, project, None, BridgePolicy::default()).unwrap();
         register_caller(app, project, &connection, "ses_test", policy);
         connection
@@ -1955,6 +1956,7 @@ mod tests {
         std::fs::write(project.path().join("note.txt"), "caller B reads this").unwrap();
         let app = tauri::test::mock_app();
         app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::stopped_for_test());
         app.manage(crate::test_support::TestDataRoot(
             project.path().join("data"),
         ));
@@ -2087,6 +2089,7 @@ mod tests {
         std::fs::write(project.path().join("note.txt"), "parent-owned file").unwrap();
         let app = tauri::test::mock_app();
         app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::stopped_for_test());
         let data = project.path().join("data");
         app.manage(crate::test_support::TestDataRoot(data.clone()));
         let connection =

@@ -197,6 +197,11 @@ describe('DropdownModelProvider - Display Name Integration', () => {
 
   it('marks the running GInfer model as the persisted default', async () => {
     useAppState.setState({ activeModels: ['muse_glimmer_30b_nvfp4_df2q4'] })
+    seedServiceHub({
+      models: {
+        getActiveModels: vi.fn().mockResolvedValue(['muse_glimmer_30b_nvfp4_df2q4']),
+      } as unknown as ModelsService,
+    })
     const selectModelProvider = vi.fn()
     const ginferProviders = [
       {

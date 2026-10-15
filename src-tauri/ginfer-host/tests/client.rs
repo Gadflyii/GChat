@@ -430,9 +430,15 @@ async fn inference_usage_releases_on_completion_cancellation_and_rejection() {
     use hyper::{Body, Request, Response};
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
-    let engine = root.path().join("inert-engine");
+    let engine = root.path().join("ginfer-serve");
     std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
     std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::write(root.path().join("ginfer"), b"fixture profiling CLI").unwrap();
+    let hardware = ginfer_host::hardware_profile::group_profile_path(
+        &root.path().join("host"), &["GPU-inert".into()],
+    );
+    std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
+    std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
     let models = root.path().join("models");
     std::fs::create_dir(&models).unwrap();
     let directory=json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();

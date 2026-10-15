@@ -6,7 +6,42 @@ source is `02d369e8a`, with native/frontend compilation at `54c931c68`.
 Retired integration branch `dev/gchat-remediation-104d4ec6` remains committed
 and pushed; current candidate inventory is below.
 
-## Current item — Rust test preparation
+## Current item — test assertions
+
+Baseline GChat main `3983611c9`; candidate `fix/gchat-test-quality-398` at
+`/ai/gchat`. Four test files had call-only cases rejected by the existing
+quality gate. Preserve their interaction checks and assert the returned model
+session, saved import metadata, cleared schedule input, disabled-hook state,
+and native connector defaults. The 40 focused tests and quality guard pass.
+
+The full gate also exposed stale fixtures for profile visibility/layout,
+active-model service state, desktop Gbot commands, upstream log registration,
+the actual RAG extension instance, and the terminal promise contract.
+Correct those fixtures; the default-model case seeds both the active-model
+store and service, and terminal resize returns its promised result.
+
+Composed verification of the corrected `make verify` stages passes lint,
+typecheck, all guards, 2,295 frontend/core tests, 114 extension tests and all six
+critical-file coverage floors; six frontend cases remain skipped. Native suites
+pass: Chat library 631 (including the separate worker Stop regression), ginfer
+plugin 11, Host 154, Manager 3, hardware 12 and utils 34. Native ignored cases:
+Chat 7, Host 17 and Manager 1. Chat library `cargo check` and strict Clippy pass.
+
+Agent and Code mock apps manage the existing stopped Gbot state. Plugin and
+Host launch fixtures supply the profiling CLI and hardware profile required by
+the current Host contract. The fingerprint rejection fixture reports the actual
+profile argument. Download cancellation fixtures complete storage validation
+before blocking journal admission, preserving the intended cancellation boundary.
+These are test changes; quality checks and production behavior are unchanged by
+this item. Initial full invocations failed before the fixture corrections, so
+this result combines the passing stages rather than claiming one clean full run.
+
+Verification completed within the October 15 06:21–06:36Z reservation on local
+CPUs 0–5. Evidence: `/ai/gchat/out/test-quality-20261015/`. Shared dependency/Cargo
+caches remain; no private build copy, GPU, Windows, signing or publication work.
+The source changes are ready for the coordinator to merge.
+
+## Earlier Rust test preparation
 
 Baseline main `f3d77b8f0`; candidate `fix/gchat-rust-test-preparation-f3d` at
 `/ai/gchat-worktrees/rust-test-preparation-f3d`, now composed with main

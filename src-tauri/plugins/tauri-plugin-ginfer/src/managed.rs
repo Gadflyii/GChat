@@ -372,9 +372,10 @@ mod tests {
     #[tokio::test]
     async fn desktop_reconnects_to_resident_and_dropping_sessions_leaves_host_running() {
         let root = tempfile::tempdir().unwrap();
-        let engine = root.path().join("engine");
+        let engine = root.path().join("ginfer-serve");
         std::fs::write(&engine, "#!/bin/sh\nexec sleep 30\n").unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(root.path().join("ginfer"), b"fixture profiling CLI").unwrap();
         let artifact = root.path().join("model.ginfer");
         let metadata =
             serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},
@@ -386,6 +387,12 @@ mod tests {
         bytes.resize(4096, 0);
         std::fs::write(&artifact, bytes).unwrap();
         let directory = root.path().join("state");
+        let hardware = ginfer_host::hardware_profile::group_profile_path(
+            &directory,
+            &["GPU-test".into()],
+        );
+        std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
+        std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
         let host = Host::open(
             directory.clone(),
             "Test".into(),

@@ -43,6 +43,7 @@ mod tests {
         let data = tempfile::tempdir().unwrap();
         let app = tauri::test::mock_builder()
             .manage(AppState::default())
+            .manage(crate::core::gbot::GbotState::stopped_for_test())
             .manage(GinferState::default())
             .manage(TestDataRoot(data.path().to_owned()))
             .manage(fleet.client.clone())

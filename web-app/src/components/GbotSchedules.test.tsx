@@ -121,6 +121,10 @@ it('creates an explicit interval prompt and missed-run policy for the selected b
       missed_run_policy: 'skip_missed',
     })
   )
+  await waitFor(() =>
+    expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
+  )
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
 })
 
 it('requires a saved bot inference assignment before schedule creation', async () => {

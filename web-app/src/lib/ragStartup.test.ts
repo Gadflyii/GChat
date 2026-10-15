@@ -1,14 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const settings = vi.hoisted(() => ({ register: vi.fn(), get: vi.fn() }))
-
-vi.mock('@gchat/core', () => ({
-  RAGExtension: class {
-    registerSettings = settings.register
-    getSetting = settings.get
-  },
-  ExtensionTypeEnum: { VectorDB: 'vector-db' },
-}))
 vi.mock(
   '../../../src-tauri/plugins/tauri-plugin-rag/guest-js/index',
   () => ({})
@@ -29,22 +20,25 @@ describe('disabled embedding startup', () => {
     vi.stubGlobal('window', {
       core: { extensionManager: { get: getExtension } },
     })
+    const extension = new RagExtension('', '@gchat/rag-extension')
     let finishRegistration!: () => void
-    settings.register.mockReturnValue(
+    vi.spyOn(extension, 'registerSettings').mockReturnValue(
       new Promise<void>((resolve) => {
         finishRegistration = resolve
       })
     )
-    settings.get.mockImplementation(async (_key, fallback) => fallback)
+    const getSetting = vi.spyOn(extension, 'getSetting')
+      .mockImplementation(async (_key, fallback) => fallback)
     let loaded = false
-    const loading = new RagExtension().onLoad().then(() => {
+    const loading = extension.onLoad().then(() => {
       loaded = true
     })
     await Promise.resolve()
     expect(loaded).toBe(false)
     finishRegistration()
     await loading
-    expect(settings.get).toHaveBeenCalledWith('enabled', true)
+    expect(loaded).toBe(true)
+    expect(getSetting).toHaveBeenCalledWith('enabled', true)
     expect(getExtension).not.toHaveBeenCalled()
     expect(status).not.toHaveBeenCalled()
   })

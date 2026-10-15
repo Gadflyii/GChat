@@ -116,13 +116,19 @@ describe('mounted Agent definition consumers', () => {
     expect(stop).toHaveBeenCalledOnce()
   })
 
-  it('releases a late subscription after its consumer is unmounted', async () => {
+  it('releases a late subscription after its consumer is disabled', async () => {
     const registration = deferred<() => void>()
     vi.mocked(listen).mockImplementationOnce(() => registration.promise)
-    const { unmount } = renderHook(() => useAgentDefinitions())
-    unmount()
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useAgentDefinitions(enabled),
+      { initialProps: { enabled: true } }
+    )
+    rerender({ enabled: false })
     await act(async () => { registration.resolve(stop); await registration.promise })
     expect(stop).toHaveBeenCalledOnce()
     expect(invoke).not.toHaveBeenCalled()
+    expect(result.current.definitions).toEqual([])
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).toBeNull()
   })
 })

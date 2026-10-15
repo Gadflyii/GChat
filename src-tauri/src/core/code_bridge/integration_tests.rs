@@ -269,6 +269,7 @@ async fn mcp_runs_a_saved_pool_agent_through_studio_and_persists_its_result() {
     let app = mock_builder()
         .manage(TestDataRoot(data.path().to_path_buf()))
         .manage(AppState::default())
+        .manage(crate::core::gbot::GbotState::stopped_for_test())
         .manage(fleet.client.clone())
         .manage(ginfer)
         .build(mock_context(noop_assets()))

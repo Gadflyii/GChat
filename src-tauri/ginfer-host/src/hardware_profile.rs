@@ -1160,7 +1160,7 @@ mod tests {
         let profile = directory.path().join("hardware.json");
         std::fs::write(&profile, br#"{"schema_version":2}"#).unwrap();
         let serve = directory.path().join("ginfer-serve");
-        std::fs::write(&serve,"#!/bin/sh\nprintf '%s\n' \"hardware profile does not match selected startup hardware: $2; selected GPU inventory changed; run ginfer profile-hardware --reprofile to update the installed profile\" >&2\nexit 1\n").unwrap();
+        std::fs::write(&serve,"#!/bin/sh\nprintf '%s\n' \"hardware profile does not match selected startup hardware: $3; selected GPU inventory changed; run ginfer profile-hardware --reprofile to update the installed profile\" >&2\nexit 1\n").unwrap();
         std::fs::set_permissions(&serve, std::fs::Permissions::from_mode(0o700)).unwrap();
         let launch = EngineLaunch {
             benchmark_profile: None,

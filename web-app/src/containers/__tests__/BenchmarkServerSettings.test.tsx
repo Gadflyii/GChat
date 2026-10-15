@@ -47,7 +47,10 @@ it('offers Max Perf separately and applies only after selection and confirmation
   const refresh = vi.fn().mockResolvedValue(undefined)
   const pending = vi.fn()
   render(<BenchmarkServerSettings sessions={[current]} selected={current} select={vi.fn()} disabled={false} refresh={refresh} onPendingChange={pending} />)
-  expect(screen.getByRole('option', { name: /Recorded capacity/ })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
+  expect(screen.getByRole('option', {
+    name: 'Untested · C1 · 128K context · Vision + text',
+  })).toBeInTheDocument()
   expect(screen.getByText(/does not claim hardware qualification/)).toBeInTheDocument()
   expect(mocks.command).not.toHaveBeenCalled()
   const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash SMOL/ }) as HTMLOptionElement

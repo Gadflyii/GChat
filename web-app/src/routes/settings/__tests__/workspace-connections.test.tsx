@@ -160,6 +160,12 @@ describe('Workspace connections', () => {
         client_id: 'microsoft-client',
       })
     )
+    await waitFor(() =>
+      expect(microsoft.getByLabelText('Tenant (optional)')).toHaveValue('common')
+    )
+    expect(
+      microsoft.getByRole('button', { name: 'Save Microsoft 365 registration' })
+    ).toBeEnabled()
   })
 
   it('requests only selected services and access through system-browser sign-in', async () => {

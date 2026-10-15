@@ -77,12 +77,17 @@ describe('GInfer library model context and names', () => {
       modelDir: `/data/ginfer/models/${modelId}`,
       manifestPath: `/data/ginfer/models/${modelId}/model.yml`,
     }))
-    invoke.mockImplementation(async (command: string, args?: { path?: string }) => {
+    invoke.mockImplementation(async (command: string, args?: {
+      path?: string; savePath?: string; data?: Record<string, unknown>
+    }) => {
       if (command === 'adopt_root_ginfer_models') return { adopted: [], rejected: [] }
       if (command === 'ginfer_model_locations') return config.locations
       if (command === 'ginfer_model_import_location') return config.imported
       if (command === 'read_yaml') return config.manifests[args!.path!] ?? config.value
-      if (command === 'write_yaml') return undefined
+      if (command === 'write_yaml') {
+        config.manifests[args!.savePath!] = args!.data!
+        return undefined
+      }
       if (command === 'delete_ginfer_model') return undefined
       throw new Error(`Unexpected command ${command}`)
     })
@@ -174,7 +179,8 @@ describe('GInfer library model context and names', () => {
   it('loads the catalog artifact rather than reconstructing the data-folder root', async () => {
     config.locations = [{ modelId: 'custom', modelDir: '/linux/models/custom', manifestPath: '/linux/models/custom/model.yml' }]
     config.value = { model_path: '/linux/models/custom/package.ginfer' }
-    await new GinferExtension().load('custom')
+    const session = await new GinferExtension().load('custom')
+    expect(session).toEqual({ pid: 1, port: 8080 })
     expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
       modelId: 'custom', modelPath: '/linux/models/custom/package.ginfer',
     }))
@@ -189,6 +195,10 @@ describe('GInfer library model context and names', () => {
     expect(invoke).toHaveBeenCalledWith('write_yaml', {
       data: expect.objectContaining({ name: 'User rename', model_path: config.imported.modelPath, capabilities: ['vision'], size_bytes: 1234 }),
       savePath: config.imported.manifestPath,
+    })
+    expect(config.manifests[config.imported.manifestPath]).toMatchObject({
+      name: 'User rename', model_path: config.imported.modelPath,
+      capabilities: ['vision'], size_bytes: 1234,
     })
   })
 
@@ -205,6 +215,9 @@ describe('GInfer library model context and names', () => {
     expect(invoke).toHaveBeenCalledWith('write_yaml', {
       data: expect.objectContaining({ name: 'Remote rename', model_path: config.imported.modelPath }),
       savePath: config.imported.manifestPath,
+    })
+    expect(config.manifests[config.imported.manifestPath]).toMatchObject({
+      name: 'Remote rename', model_path: config.imported.modelPath, size_bytes: 1234,
     })
   })
 
