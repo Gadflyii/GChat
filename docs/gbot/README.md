@@ -27,6 +27,19 @@ job or reservation remains. Next: reviewed merge of this candidate. Windows/M365
 physical sleep recovery and unattended startup before desktop sign-in remain owed.
 No signing or publication is included.
 
+Linux opt-in presentation passes on production desktop `22ae47c0b`, whose runtime
+is unchanged through main `4d4553a84`. The Gbot switch is visible under Native
+integrations in Settings and near the top of Integrations. Enabling it in
+Settings opens the first setup step and adds Gbot to the sidebar. Disabling it
+in Integrations updates Settings, hides the sidebar entry and persists across a
+full reload; opening `/gbot` while disabled shows only the enable prompt.
+The current-placement check reused accepted extracted resources and a private
+passphrase-vault profile; it created no computer or task. Earlier installed-DEB
+enable/setup and computer-creation receipts below remain valid. This closes
+`GBOT-INTEGRATION-ENABLEMENT` presentation acceptance without claiming a fresh
+installer or Windows gate. Evidence:
+`/ai/gchat-worktrees/gbot-enablement-4d455/out/gbot-enablement-20261015/result.json`.
+
 Current implementation plan: [remaining acceptance](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-13).
 Linux installed computer creation and same-setup resume passed on main
 `bb4cde410`; hardware admission merged in `e42805f2a`. Branch
