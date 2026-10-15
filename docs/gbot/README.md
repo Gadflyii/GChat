@@ -100,8 +100,9 @@ UI case and SSH reconnect/ownership regression also pass.
 The physical Linux viewer gate passed: a real desktop frame, 440 Hz PCM tone,
 view-only input refusal, takeover input and revocation on hand-back. The accepted
 BGRA negotiation and seed provisioning fixes are merged in `2e735624f`; evidence
-is linked in the current record below. Windows/M365 and browser playback remain
-release checks. Rust 1.97 is required on Windows release hosts.
+is linked in the current record below. Native Linux browser playback and
+permissions also pass after `9fa2e32b9`; Windows/M365 remain release checks.
+Rust 1.97 is required on Windows release hosts.
 
 Current work implements the reconciled October 12 list. Opt-in visibility,
 guided dedicated-LAN connection, transactional credential/workspace creation,
@@ -1777,6 +1778,27 @@ with socket revocation. It ran on one dedicated Debian/Xvnc guest on S1 CPUs
 112–113 from 17:52:44 to 17:55:38 UTC, without a GPU or model. The PNG was visually
 inspected; browser playback, Windows and M365 remain release gates. See
 `physical/seed/summary.json` and its raw receipt links.
+
+October 15 native Linux browser acceptance closes the browser playback and
+permission gate above. Vite had inlined the small AudioWorklet as a data URL,
+which the native CSP rejected. `9fa2e32b9` emits a packaged script instead,
+without changing CSP. The compiled Tauri WebKit companion replays the accepted
+1920×1080 PNG and 440 Hz stereo PCM through the production media client over a
+local `rcdp.v2` WebSocket. Service state/control RPCs are mocked; physical
+guest/SSH acceptance is reused. Frame pixels match exactly. Four real worklet
+nodes load with no CSP/audio errors; output RMS reaches 0.2591 and the FFT peak
+is 445.3125 Hz (11.71875 Hz bin resolution). This measures the audio graph,
+without claiming a new physical speaker/microphone check.
+
+View-only sends no input; takeover sends real key events. Hiding/closing ends
+sockets and audio, hiding preserves Human pause, reopening restores control,
+and hand-back closes input before the control RPC. All five leases and wire
+sessions close. Required verification passes: lint, types, quality/coverage
+gates, 2309 root tests, 114 extension tests and 851 Rust tests (6 skipped,
+25 ignored). The Rust target resumed with the existing protoc wrapper after an
+initial missing-PROTOC environment failure. Current result:
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/refresh-20261015/result.json`.
+Windows/M365 connection and runtime remain release gates.
 
 The earlier focused SSH/Cua reconnection fixture passed in 0.37 seconds:
 Human ownership survives close/reopen, a different owner is rejected and an old
