@@ -10,8 +10,17 @@ A bot paused for human takeover stays paused until explicit Hand back.
 All seven supplied avatar animations now have activity mappings, with the
 existing light/dark and reduced-motion styles. See the
 [overlay decision](../decisions/2026-10-15-open-gbot-in-a-workspace-overlay.md).
-The agreed “Help with this page” bridge for main-view context and draft actions
-is recorded there as follow-up; it is not implemented by the companion pane.
+In Agent Studio's definition editor, choose **Help with this page** in the bot's
+Conversation tab, then describe the help you need. Each message shares the current
+unsaved draft with that selected bot. The bot can explain the form and propose
+text changes; **Review draft edits** shows them and **Apply to draft** updates the
+visible form without saving or running it. Newer form edits invalidate an older
+proposal. **Stop sharing page**, leaving the editor, hiding the pane or switching
+bots ends sharing. Submitted snapshots remain in the bot's task history.
+This first slice covers definition text, including evaluator/planner/synthesis
+instructions for those compositions. Worker/stage structure and other GChat
+pages remain follow-up. See the
+[draft-sharing decision](../decisions/2026-10-15-share-agent-studio-drafts-with-gbot.md).
 
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.

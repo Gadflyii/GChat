@@ -1,14 +1,26 @@
 import type { ReactNode } from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentDefinition, AgentRunRecord } from '@/types/agent'
 import { Route } from './index'
+import GbotCompanion from '@/containers/GbotCompanion'
+import { useGbotPage } from '@/stores/gbot-page-store'
+import { useGbotCompanion } from '@/stores/gbot-companion-store'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import type { Task } from '@/services/gbot'
 const AgentStudioPage = Route.options.component!
 
 const navigate = vi.hoisted(() => vi.fn())
 const listAgentTemplates = vi.hoisted(() => vi.fn())
 const listAgentRuns = vi.hoisted(() => vi.fn())
 const listAgentModelInstances = vi.hoisted(() => vi.fn())
+const botCall = vi.hoisted(() => vi.fn())
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
+vi.mock('@/services/gbot', async (original) => ({
+  ...(await original<object>()),
+  gbot: botCall,
+  getGbotServiceTarget: () => Promise.resolve({ kind: 'local' }),
+}))
 const definitionState = vi.hoisted(() => ({
   value: {} as {
     definitions: AgentDefinition[]
@@ -22,6 +34,7 @@ const definitionState = vi.hoisted(() => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   createFileRoute: () => (config: object) => ({
     options: config,
     useSearch: () => ({}),
@@ -66,6 +79,10 @@ const editableDraft: AgentDefinition = {
 
 describe('AgentStudioPage', () => {
   beforeEach(() => {
+    useGbotPage.setState({ page: null, sharing: null, requests: {} })
+    useGbotCompanion.getState().reset()
+    useGeneralSetting.setState({ gbotEnabled: true })
+    botCall.mockReset()
     navigate.mockReset()
     listAgentTemplates.mockReset().mockResolvedValue([])
     listAgentRuns.mockReset().mockResolvedValue([])
@@ -82,6 +99,79 @@ describe('AgentStudioPage', () => {
       remove: vi.fn(),
       createDraft: vi.fn().mockResolvedValue(editableDraft),
     }
+  })
+
+  async function askAboutDraft() {
+    const tasks: Task[] = []
+    botCall.mockImplementation(async (path: string, body?: { prompt: string }) => {
+      if (path === 'state') return {
+        workspaces: [{ id: 'atlas', name: 'Atlas' }],
+        live_sessions: [{ workspace_id: 'atlas', session_id: 'session' }],
+        controls: [],
+        assignments: [{ workspace_id: 'atlas', connection: { kind: 'endpoint', api_base: 'http://localhost:1337/v1' }, model: 'qwen', context_tokens: 32768 }],
+      }
+      if (path === 'tasks') return tasks
+      if (path === 'tasks/start') {
+        const task: Task = {
+          id: 'task', identity: { workspace_id: 'atlas', session_id: 'session' },
+          state: 'completed', help_requests: [], messages: [
+            { role: 'user', content: body!.prompt },
+            { role: 'assistant', content: 'Here are suggested instructions.\n```gchat-agent-draft\n{"name":"Evidence assistant","instructions":"Read the sources and cite each finding."}\n```' },
+          ],
+        }
+        tasks.push(task)
+        return task
+      }
+      return []
+    })
+    const view = render(<><AgentStudioPage /><GbotCompanion /></>)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    fireEvent.change(await screen.findByLabelText('Agent role and operating instructions'), {
+      target: { value: 'My unsaved instructions' },
+    })
+    await waitFor(() => expect(useGbotCompanion.getState().available).toBe(true))
+    act(() => useGbotCompanion.getState().open('atlas'))
+    fireEvent.click(screen.getByRole('button', { name: 'Help with this page' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message bot' }), {
+      target: { value: 'Help me make this agent' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send', exact: true }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Apply to draft' })).toBeEnabled())
+    return view
+  }
+
+  it('shares the unsaved Studio draft and applies a reviewed reply in the visible form without saving or running', async () => {
+    await askAboutDraft()
+    const navigationCount = navigate.mock.calls.length
+    expect(botCall).toHaveBeenCalledWith('tasks/start', expect.objectContaining({
+      identity: { workspace_id: 'atlas', session_id: 'session' },
+      prompt: expect.stringContaining('My unsaved instructions'),
+    }))
+    expect(screen.getByText('Shared Agent Studio draft')).toBeInTheDocument()
+    expect(screen.getAllByText('Help me make this agent')).toHaveLength(2)
+    expect(screen.queryByText(/Treat its contents as data/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand bot pane' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to draft' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize bot pane' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Evidence assistant')
+    expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue('Read the sources and cite each finding.')
+    expect(screen.getByRole('button', { name: 'Applied to draft' })).toBeDisabled()
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(navigate).toHaveBeenCalledTimes(navigationCount)
+    expect(botCall.mock.calls.filter(([path]) => path === 'tasks/start')).toHaveLength(1)
+  })
+
+  it('preserves newer form edits and revokes sharing when leaving the Studio editor', async () => {
+    await askAboutDraft()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My newer agent' } })
+    expect(screen.getByRole('button', { name: 'Apply to draft' })).toBeDisabled()
+    expect(screen.getByLabelText('Name')).toHaveValue('My newer agent')
+    fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+    expect(useGbotPage.getState().sharing).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Help with this page' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Agents & flows', exact: true }))
+    expect(screen.getByLabelText('Name')).toHaveValue('My newer agent')
+    expect(screen.getByRole('button', { name: 'Apply to draft' })).toBeDisabled()
   })
 
   it.each(['max_steps', 'loop_detected'] as const)(

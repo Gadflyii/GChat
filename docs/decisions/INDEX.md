@@ -481,3 +481,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-15** — [Open Gbot in a workspace overlay](2026-10-15-open-gbot-in-a-workspace-overlay.md)
 
 - **2026-10-15** — [Use the Engine default for placed Ready](2026-10-15-use-engine-placed-ready-default.md)
+- **2026-10-15** — [Share Agent Studio drafts with the selected Gbot](2026-10-15-share-agent-studio-drafts-with-gbot.md)
