@@ -28,6 +28,10 @@ const task = (state: string): Task => ({
   messages: [{ role: 'user', content: 'Help me' }],
   help_requests: [],
 })
+const replyTask = (...replies: string[]): Task => ({
+  ...task('completed'),
+  messages: replies.map((content) => ({ role: 'assistant', content })),
+})
 beforeEach(() => {
   vi.resetAllMocks()
   useGbotCompanion.getState().reset()
@@ -138,6 +142,118 @@ describe('Gbot companion state', () => {
     ]
     await useGbotCompanion.getState().refresh()
     expect(useGbotCompanion.getState().unread.a).toBe(true)
+  })
+
+  it.each(['tasks', 'tasks/approvals'])(
+    'preserves read reply history when %s fails without losing genuinely new replies',
+    async (failedEndpoint) => {
+      let tasks = [replyTask('Read reply')]
+      let failing = false
+      const animation = () => botAvatarState(useGbotCompanion.getState(), 'a')
+      vi.mocked(gbot).mockImplementation(async (path) => {
+        if (failing && path === failedEndpoint)
+          throw new Error('Temporary executor failure')
+        return path === 'state' ? snapshot : path === 'tasks' ? tasks : []
+      })
+      await useGbotCompanion.getState().refresh()
+      useGbotCompanion.getState().acknowledge('a')
+      expect(animation()).toBe('idle')
+
+      failing = true
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState()).toMatchObject({
+        available: true,
+        tasks: [],
+        approvals: [],
+        executorError: 'Error: Temporary executor failure',
+        unread: { a: false },
+      })
+      expect(animation()).toBe('sleeping')
+
+      failing = false
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().executorError).toBe('')
+      expect(useGbotCompanion.getState().unread.a).toBe(false)
+      expect(animation()).toBe('idle')
+
+      failing = true
+      await useGbotCompanion.getState().refresh()
+      tasks = [replyTask('Read reply', 'Arrived while unavailable')]
+      failing = false
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().unread.a).toBe(true)
+      expect(animation()).toBe('speaking')
+
+      useGbotCompanion.getState().acknowledge('a')
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().unread.a).toBe(false)
+      expect(animation()).toBe('idle')
+    }
+  )
+
+  it.each(['disable/re-enable', 'service target change'])(
+    'starts fresh reply history after %s even when its first executor fetch fails',
+    async (contextChange) => {
+      let tasks = [replyTask('Previous context reply')]
+      let failing = false
+      const animation = () => botAvatarState(useGbotCompanion.getState(), 'a')
+      vi.mocked(gbot).mockImplementation(async (path) => {
+        if (failing && path === 'tasks/approvals')
+          throw new Error('Approvals unavailable')
+        return path === 'state' ? snapshot : path === 'tasks' ? tasks : []
+      })
+      await useGbotCompanion.getState().refresh()
+      tasks = [replyTask('Previous context reply', 'Unread previous reply')]
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().unread.a).toBe(true)
+      useGbotCompanion.getState().setDraft('a', 'Previous context draft')
+
+      if (contextChange === 'disable/re-enable')
+        useGbotCompanion.getState().reset()
+      else
+        vi.mocked(getGbotServiceTarget).mockResolvedValue({
+          kind: 'paired_host',
+          host_id: 'remote',
+        })
+      tasks = [replyTask('Historical reply in the new context')]
+      failing = true
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState()).toMatchObject({
+        mode: 'hidden',
+        tasks: [],
+        executorError: 'Error: Approvals unavailable',
+      })
+      expect(useGbotCompanion.getState().drafts).toEqual({})
+      expect(useGbotCompanion.getState().unread).toEqual({})
+      expect(animation()).toBe('sleeping')
+
+      failing = false
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().unread.a).toBeUndefined()
+      expect(animation()).toBe('idle')
+
+      tasks = [
+        replyTask('Historical reply in the new context', 'New context reply'),
+      ]
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().unread.a).toBe(true)
+      expect(animation()).toBe('speaking')
+    }
+  )
+
+  it('recognizes the first new reply after a successfully empty task snapshot', async () => {
+    let tasks: Task[] = []
+    vi.mocked(gbot).mockImplementation(async (path) =>
+      path === 'state' ? snapshot : path === 'tasks' ? tasks : []
+    )
+    await useGbotCompanion.getState().refresh()
+    expect(useGbotCompanion.getState().unread.a).toBeUndefined()
+    expect(botAvatarState(useGbotCompanion.getState(), 'a')).toBe('idle')
+
+    tasks = [replyTask('The first new reply')]
+    await useGbotCompanion.getState().refresh()
+    expect(useGbotCompanion.getState().unread.a).toBe(true)
+    expect(botAvatarState(useGbotCompanion.getState(), 'a')).toBe('speaking')
   })
 
   it('rejects stale responses after disable or a newer refresh', async () => {
