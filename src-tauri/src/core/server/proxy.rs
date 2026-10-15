@@ -111,12 +111,176 @@ fn sse_chunk_has_visible_content(chunk: &[u8]) -> bool {
         || text.contains("\"content\": \"\""))
 }
 
-/// Transform Anthropic /messages API body to OpenAI /chat/completions body
-fn transform_anthropic_to_openai(body: &serde_json::Value) -> Option<serde_json::Value> {
-    let model = body.get("model")?.as_str()?;
-    let messages = body.get("messages")?;
+/// The compatibility bridge must not silently discard native Anthropic controls.
+/// Remote providers with a native /messages endpoint receive the original body.
+fn validate_anthropic_fallback(body: &serde_json::Value) -> Result<(), String> {
+    for field in [
+        "mcp_servers",
+        "retrieval",
+        "file_search",
+        "web_search",
+        "audio",
+        "modalities",
+        "text",
+        "output_config",
+        "output_format",
+        "response_format",
+        "thinking",
+    ] {
+        if body.get(field).is_some_and(|value| !value.is_null()) {
+            return Err(format!(
+                "{field} is unsupported by the /messages compatibility bridge"
+            ));
+        }
+    }
+    if let Some(tools) = body.get("tools").filter(|value| !value.is_null()) {
+        let tools = tools.as_array().ok_or("tools must be an array")?;
+        for (index, tool) in tools.iter().enumerate() {
+            if tool
+                .get("type")
+                .is_some_and(|kind| kind.as_str() != Some("custom"))
+            {
+                return Err(format!("tools[{index}].type is unsupported; the compatibility bridge accepts custom function tools only"));
+            }
+            if !tool
+                .get("name")
+                .and_then(|value| value.as_str())
+                .is_some_and(|name| !name.is_empty())
+            {
+                return Err(format!("tools[{index}].name must be a non-empty string"));
+            }
+            if !tool
+                .get("input_schema")
+                .is_some_and(|schema| schema.is_object())
+            {
+                return Err(format!("tools[{index}].input_schema must be an object"));
+            }
+            if tool
+                .get("description")
+                .is_some_and(|value| !value.is_null() && !value.is_string())
+            {
+                return Err(format!("tools[{index}].description must be a string"));
+            }
+            if tool
+                .get("strict")
+                .is_some_and(|value| !value.is_null() && value.as_bool() != Some(false))
+            {
+                return Err(format!(
+                    "tools[{index}].strict is unsupported by the compatibility bridge"
+                ));
+            }
+        }
+    }
+    if let Some(system) = body.get("system").filter(|value| !value.is_null()) {
+        validate_anthropic_content(system, "system", "system")?;
+    }
+    let messages = body
+        .get("messages")
+        .and_then(|value| value.as_array())
+        .ok_or("messages must be an array")?;
+    for (index, message) in messages.iter().enumerate() {
+        let path = format!("messages[{index}]");
+        let role = message
+            .get("role")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| format!("{path}.role must be a string"))?;
+        if !matches!(role, "user" | "assistant" | "system" | "developer") {
+            return Err(format!(
+                "{path}.role is unsupported by the compatibility bridge"
+            ));
+        }
+        validate_anthropic_content(
+            message
+                .get("content")
+                .ok_or_else(|| format!("{path}.content is required"))?,
+            &format!("{path}.content"),
+            role,
+        )?;
+    }
+    Ok(())
+}
 
-    let openai_messages = convert_messages(messages, body.get("system"))?;
+fn validate_anthropic_content(
+    content: &serde_json::Value,
+    path: &str,
+    role: &str,
+) -> Result<(), String> {
+    if content.is_string() {
+        return Ok(());
+    }
+    let blocks = content
+        .as_array()
+        .ok_or_else(|| format!("{path} must be a string or array"))?;
+    for (index, block) in blocks.iter().enumerate() {
+        let path = format!("{path}[{index}]");
+        match block.get("type").and_then(|value| value.as_str()) {
+            Some("text") if block.get("text").is_some_and(|value| value.is_string()) => {}
+            Some("image") if matches!(role, "user" | "assistant") => {
+                let source = &block["source"];
+                if source.get("type").and_then(|value| value.as_str()) != Some("base64")
+                    || !source.get("data").is_some_and(|value| value.is_string())
+                    || !source
+                        .get("media_type")
+                        .or_else(|| block.get("media_type"))
+                        .is_some_and(|value| value.is_string())
+                {
+                    return Err(format!(
+                        "{path}.source requires a base64 image with data and media_type"
+                    ));
+                }
+            }
+            Some("tool_use") if role == "assistant" => {
+                for field in ["id", "name"] {
+                    if !block
+                        .get(field)
+                        .and_then(|value| value.as_str())
+                        .is_some_and(|value| !value.is_empty())
+                    {
+                        return Err(format!("{path}.{field} must be a non-empty string"));
+                    }
+                }
+                if !block.get("input").is_some_and(|value| value.is_object()) {
+                    return Err(format!("{path}.input must be an object"));
+                }
+            }
+            Some("tool_result") if role == "user" => {
+                if !block
+                    .get("tool_use_id")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|value| !value.is_empty())
+                {
+                    return Err(format!("{path}.tool_use_id must be a non-empty string"));
+                }
+                if block.get("is_error").is_some_and(|value| value != false) {
+                    return Err(format!(
+                        "{path}.is_error is unsupported by the compatibility bridge"
+                    ));
+                }
+                if let Some(result) = block.get("content") {
+                    validate_anthropic_content(result, &format!("{path}.content"), "tool")?;
+                }
+            }
+            _ => {
+                return Err(format!(
+                "{path}.type is unsupported or malformed for this role in the compatibility bridge"
+            ))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Transform a representable Anthropic request, or explain why conversion would lose data.
+fn transform_anthropic_to_openai(body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    validate_anthropic_fallback(body)?;
+    let model = body
+        .get("model")
+        .and_then(|value| value.as_str())
+        .ok_or("model must be a string")?;
+    let messages = &body["messages"];
+
+    let openai_messages =
+        convert_messages(messages, body.get("system")).ok_or("messages could not be converted")?;
 
     // Strict chat templates (e.g. SectileLabs/ornith-9b, Qwen3-family models)
     // `raise` "System message must be at the beginning" whenever a request
@@ -174,6 +338,29 @@ fn transform_anthropic_to_openai(body: &serde_json::Value) -> Option<serde_json:
         }
     }
 
+    if let Some(choice) = body.get("tool_choice").filter(|value| !value.is_null()) {
+        result["tool_choice"] = match choice.get("type").and_then(|value| value.as_str()) {
+            Some("auto") => serde_json::json!("auto"),
+            Some("any") => serde_json::json!("required"),
+            Some("none") => serde_json::json!("none"),
+            Some("tool") => {
+                let name = choice
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .filter(|name| !name.is_empty())
+                    .ok_or("tool_choice.name must be a non-empty string")?;
+                serde_json::json!({"type":"function", "function":{"name":name}})
+            }
+            _ => return Err("tool_choice.type is unsupported by the compatibility bridge".into()),
+        };
+        if let Some(disable_parallel) = choice.get("disable_parallel_tool_use") {
+            let disable_parallel = disable_parallel
+                .as_bool()
+                .ok_or("tool_choice.disable_parallel_tool_use must be a boolean")?;
+            result["parallel_tool_calls"] = serde_json::json!(!disable_parallel);
+        }
+    }
+
     // Pass through common parameters
     for key in &[
         // "max_tokens",
@@ -191,7 +378,7 @@ fn transform_anthropic_to_openai(body: &serde_json::Value) -> Option<serde_json:
         result["stop"] = stop.clone();
     }
 
-    Some(result)
+    Ok(result)
 }
 
 /// Convert Anthropic message format to OpenAI format
@@ -648,6 +835,28 @@ fn structure_backend_error_body(body: &str, oom: bool, ctx_overflow: bool) -> St
     structured_error_json(body, error_type, code)
 }
 
+fn unsupported_request_response(
+    message: &str,
+    host: &str,
+    origin: &str,
+    trusted_hosts: &[Vec<String>],
+) -> Response<Body> {
+    add_cors_headers_with_host_and_origin(
+        Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header(hyper::header::CONTENT_TYPE, "application/json"),
+        host,
+        origin,
+        trusted_hosts,
+    )
+    .body(Body::from(structured_error_json(
+        message,
+        "invalid_request_error",
+        "unsupported_request",
+    )))
+    .unwrap()
+}
+
 /// Wrap an upstream `reqwest::Response` into a `hyper::Response<Body>` that
 /// streams bytes as they arrive and attaches the proxy's CORS headers.
 fn build_streaming_response(
@@ -700,10 +909,9 @@ fn build_streaming_response(
 }
 
 /// Handle a POST to `/responses`. Remote OpenAI-compatible providers that
-/// serve the Responses API natively get a byte-for-byte passthrough; ginfer,
-/// which only speaks Chat Completions, is bridged through [`responses_shim`]
-/// in both directions (request body and the streamed / non-streamed reply).
-/// See the 2026-06-02 ADR in `AGENTS.md`.
+/// serve the Responses API natively get a byte-for-byte passthrough. Legacy
+/// local sessions without a Host endpoint use the checked [`responses_shim`]
+/// bridge for the request body and streamed / non-streamed reply.
 #[allow(clippy::too_many_arguments)]
 async fn handle_responses_request(
     state: &mut RoutingState,
@@ -886,7 +1094,37 @@ async fn handle_responses_request(
                 "Bridging /responses -> /chat/completions at {url} (backend={}, stream={stream})",
                 state.backend
             );
-            let chat_body = responses_shim::responses_request_to_chat(&json);
+            if let Err(error) =
+                ginfer_host::service::validate_inference_request("/responses", &json)
+            {
+                return Ok(unsupported_request_response(
+                    &error,
+                    host_header,
+                    origin_header,
+                    &config.trusted_hosts,
+                ));
+            }
+            let chat_body = match responses_shim::responses_request_to_chat(&json) {
+                Ok(body) => body,
+                Err(error) => {
+                    return Ok(unsupported_request_response(
+                        &error,
+                        host_header,
+                        origin_header,
+                        &config.trusted_hosts,
+                    ));
+                }
+            };
+            if let Err(error) =
+                ginfer_host::service::validate_inference_request("/chat/completions", &chat_body)
+            {
+                return Ok(unsupported_request_response(
+                    &error,
+                    host_header,
+                    origin_header,
+                    &config.trusted_hosts,
+                ));
+            }
             let mut req = local_client
                 .post(&url)
                 .header("Content-Type", "application/json")
@@ -1415,13 +1653,12 @@ async fn proxy_request<R: Runtime>(
     let mut is_anthropic_messages = false;
 
     match (method.clone(), destination_path.as_str()) {
-        // Anthropic /messages endpoint - tries /messages first, falls back to /chat/completions on error
+        // Native GInfer serves /messages. Only remote providers missing that
+        // endpoint may use the checked Chat Completions compatibility bridge.
         (hyper::Method::POST, "/messages") => {
             is_anthropic_messages = true;
 
-            log::info!(
-                "Handling POST request to /messages with chat/completions fallback on error",
-            );
+            log::info!("Handling POST request to /messages");
             let body_bytes = match hyper::body::to_bytes(body).await {
                 Ok(bytes) => bytes,
                 Err(_) => {
@@ -1925,6 +2162,21 @@ async fn proxy_request<R: Runtime>(
         }
     }
 
+    if is_local_backend(state.backend) {
+        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&buffered_body) {
+            if let Err(error) =
+                ginfer_host::service::validate_inference_request(&destination_path, &json)
+            {
+                return Ok(unsupported_request_response(
+                    &error,
+                    &host_header,
+                    &origin_header,
+                    &config.trusted_hosts,
+                ));
+            }
+        }
+    }
+
     let upstream_url = match target_base_url.clone() {
         Some(p) => p,
         None => {
@@ -1978,9 +2230,16 @@ async fn proxy_request<R: Runtime>(
 
             let is_error = !status.is_success();
 
-            // For Anthropic /messages requests with errors, try /chat/completions
-            if is_error && is_anthropic_messages {
-                log::warn!("Request failed for /messages with status {status}, trying /chat/completions...");
+            // A native backend error is authoritative. Retrying it as Chat
+            // Completions could discard the very field the backend rejected.
+            if is_anthropic_messages
+                && state.backend == "remote"
+                && matches!(
+                    status,
+                    StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
+                )
+            {
+                log::warn!("Remote /messages endpoint unavailable ({status}), checking compatibility fallback");
 
                 // Read the error body to return to client if fallback fails
                 let error_body = response
@@ -1993,28 +2252,22 @@ async fn proxy_request<R: Runtime>(
                         .trim_end_matches('/')
                         .to_string()
                 });
-                // Transform body to OpenAI format for fallback
-                if let Some((url, openai_body)) =
-                    fallback_url.and_then(|url| {
-                        let json_body =
-                            serde_json::from_slice::<serde_json::Value>(&buffered_body).ok()?;
-                        match transform_anthropic_to_openai(&json_body) {
-                            Some(transformed) => Some((url, transformed)),
-                            None => {
-                                // Zero-PII (ATO-113): the request body carries the
-                                // prompt; log only its top-level shape, never content.
-                                let keys: Vec<&str> = json_body
-                                    .as_object()
-                                    .map(|o| o.keys().map(String::as_str).collect())
-                                    .unwrap_or_default();
-                                log::error!(
-                                "transform_anthropic_to_openai returned None (body keys: {keys:?})"
-                            );
-                                None
+                if let Some(url) = fallback_url {
+                    let openai_body =
+                        match serde_json::from_slice::<serde_json::Value>(&buffered_body)
+                            .map_err(|_| "Invalid JSON body".to_string())
+                            .and_then(|body| transform_anthropic_to_openai(&body))
+                        {
+                            Ok(body) => body,
+                            Err(error) => {
+                                return Ok(unsupported_request_response(
+                                    &error,
+                                    &host_header,
+                                    &origin_header,
+                                    &config.trusted_hosts,
+                                ))
                             }
-                        }
-                    })
-                {
+                        };
                     let chat_url = format!("{}/chat/completions", url);
                     log::info!("Fallback to chat completions: {chat_url}");
 
@@ -2124,7 +2377,7 @@ async fn proxy_request<R: Runtime>(
                 );
                 return Ok(error_response.body(Body::from(error_body)).unwrap());
             } else if is_error {
-                // Non-/messages error - return error response with body.
+                // Preserve backend errors without retrying another API route.
                 let error_body = response
                     .text()
                     .await
@@ -2825,6 +3078,360 @@ async fn forward_non_streaming(
         // Pass through raw response
         if sender.send_data(bytes).await.is_err() {
             log::debug!("Client disconnected");
+        }
+    }
+}
+
+#[cfg(test)]
+mod request_contract_tests {
+    use super::*;
+    use serde_json::{json, Value};
+    use tauri_plugin_ginfer::state::{SessionInfo, SessionOwner};
+
+    struct Upstream {
+        port: u16,
+        seen: Arc<Mutex<Vec<(String, Value)>>>,
+        task: tokio::task::JoinHandle<()>,
+    }
+
+    impl Drop for Upstream {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    impl Upstream {
+        fn start(messages_status: StatusCode, error_body: &str) -> Self {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let seen = Arc::new(Mutex::new(Vec::new()));
+            let requests = seen.clone();
+            let error_body = error_body.to_string();
+            let service = make_service_fn(move |_| {
+                let requests = requests.clone();
+                let error_body = error_body.clone();
+                async move {
+                    Ok::<_, Infallible>(service_fn(move |request: Request<Body>| {
+                        let requests = requests.clone();
+                        let error_body = error_body.clone();
+                        async move {
+                            let path = request.uri().path().to_string();
+                            let bytes = hyper::body::to_bytes(request.into_body()).await.unwrap();
+                            let body: Value = serde_json::from_slice(&bytes).unwrap();
+                            let is_chat = path.ends_with("/chat/completions");
+                            requests.lock().await.push((path, body));
+                            let (status, body) = if is_chat {
+                                (StatusCode::OK, json!({
+                                    "id":"chat-fixture", "model":"fixture",
+                                    "choices":[{"message":{"role":"assistant", "content":"done"}, "finish_reason":"stop"}],
+                                    "usage":{"prompt_tokens":1, "completion_tokens":1}
+                                }).to_string())
+                            } else {
+                                (messages_status, error_body)
+                            };
+                            Ok::<_, Infallible>(
+                                Response::builder()
+                                    .status(status)
+                                    .header("content-type", "application/json")
+                                    .body(Body::from(body))
+                                    .unwrap(),
+                            )
+                        }
+                    }))
+                }
+            });
+            let server = Server::from_tcp(listener).unwrap().serve(service);
+            let task = tokio::spawn(async move {
+                server.await.unwrap();
+            });
+            Self { port, seen, task }
+        }
+    }
+
+    async fn request(upstream: &Upstream, local: bool, path: &str, body: Value) -> Response<Body> {
+        let sessions = Arc::new(Mutex::new(HashMap::new()));
+        let providers = Arc::new(Mutex::new(HashMap::new()));
+        // A legacy desktop session owns a control handle, but this fixture only
+        // uses its inference port. No Host service or inference process starts.
+        let directory = tempfile::tempdir().unwrap();
+        if local {
+            std::fs::write(
+                directory.path().join("host.json"),
+                serde_json::to_vec(&json!({
+                    "host_id":uuid::Uuid::new_v4(), "name":"Fixture",
+                    "certificate":ginfer_host::transport::HostCertificate::generate().unwrap(),
+                    "pairing_admin_token":"fixture-admin", "clients":{}, "models":{}, "profiles":{}
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            let control = Arc::new(
+                ginfer_host::launcher::LocalControl::open(directory.path(), "https://127.0.0.1:1")
+                    .unwrap(),
+            );
+            let info: SessionInfo = serde_json::from_value(json!({
+                "pid":1, "port":upstream.port, "model_id":"fixture", "model_path":"fixture.ginfer",
+                "is_embedding":false, "vision":false, "api_key":"fixture-key"
+            }))
+            .unwrap();
+            sessions.lock().await.insert(
+                1,
+                GinferSession {
+                    info,
+                    endpoint: None,
+                    owner: SessionOwner {
+                        control,
+                        connection: ginfer_host::launcher::LocalConnection {
+                            instance_id: uuid::Uuid::new_v4(),
+                            session_id: uuid::Uuid::new_v4(),
+                            model_id: "fixture".into(),
+                            port: upstream.port,
+                            api_key: "fixture-key".into(),
+                        },
+                    },
+                },
+            );
+        } else {
+            providers.lock().await.insert(
+                "remote".into(),
+                ProviderConfig {
+                    provider: "remote".into(),
+                    base_url: Some(format!("http://127.0.0.1:{}/v1", upstream.port)),
+                    models: vec!["fixture".into()],
+                    ..ProviderConfig::default()
+                },
+            );
+        }
+        let app = tauri::test::mock_app();
+        let client = Client::builder().no_proxy().build().unwrap();
+        proxy_request(
+            Request::post(format!("/v1{path}"))
+                .header("host", "localhost:1337")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+            client.clone(),
+            client,
+            ProxyConfig {
+                prefix: "/v1".into(),
+                proxy_api_key: String::new(),
+                trusted_hosts: vec![],
+                host: "localhost".into(),
+                port: 1337,
+            },
+            sessions,
+            providers,
+            app.handle().clone(),
+        )
+        .await
+        .unwrap()
+    }
+
+    fn message() -> Value {
+        json!({"model":"fixture", "messages":[{"role":"user", "content":"hello"}]})
+    }
+
+    async fn body(response: Response<Body>) -> Value {
+        serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn native_messages_errors_keep_the_backend_error_without_retry() {
+        for status in [
+            StatusCode::BAD_REQUEST,
+            StatusCode::NOT_FOUND,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ] {
+            let error = r#"{"error":{"type":"invalid_request_error","message":"unsupported native request type"}}"#;
+            let upstream = Upstream::start(status, error);
+            let response = request(&upstream, true, "/messages", message()).await;
+            assert_eq!(response.status(), status);
+            assert_eq!(
+                hyper::body::to_bytes(response.into_body())
+                    .await
+                    .unwrap()
+                    .as_ref(),
+                error.as_bytes()
+            );
+            let seen = upstream.seen.lock().await;
+            assert_eq!(seen.len(), 1);
+            assert_eq!(seen[0].0, "/v1/messages");
+        }
+    }
+
+    #[tokio::test]
+    async fn remote_native_messages_preserve_controls_and_do_not_retry_validation_errors() {
+        let error = r#"{"error":{"type":"invalid_request_error","message":"remote validation"}}"#;
+        let upstream = Upstream::start(StatusCode::BAD_REQUEST, error);
+        let mut original = message();
+        original["tools"] = json!([{"type":"web_search_20250305", "name":"web_search"}]);
+        original["mcp_servers"] = json!([{"type":"url", "url":"https://example.invalid/mcp"}]);
+        original["output_config"] =
+            json!({"format":{"type":"json_schema", "schema":{"type":"object"}}});
+        let response = request(&upstream, false, "/messages", original.clone()).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            hyper::body::to_bytes(response.into_body())
+                .await
+                .unwrap()
+                .as_ref(),
+            error.as_bytes()
+        );
+        let seen = upstream.seen.lock().await;
+        assert_eq!(seen.as_slice(), &[("/v1/messages".into(), original)]);
+    }
+
+    #[tokio::test]
+    async fn remote_missing_messages_endpoint_rejects_lossy_fallback_without_chat_request() {
+        let cases = [
+            (
+                "tools",
+                json!([{"type":"web_search_20250305", "name":"web_search", "input_schema":{}}]),
+                "tools[0].type",
+            ),
+            ("tools", json!([{"input_schema":{}}]), "tools[0].name"),
+            (
+                "tools",
+                json!([{"name":"lookup", "input_schema":{}, "description":{"text":"do not discard"}}]),
+                "tools[0].description",
+            ),
+            (
+                "tool_choice",
+                json!({"type":"unsupported"}),
+                "tool_choice.type",
+            ),
+            (
+                "output_config",
+                json!({"format":{"type":"json_schema"}}),
+                "output_config",
+            ),
+            ("mcp_servers", json!([]), "mcp_servers"),
+            ("retrieval", json!({"query":"record"}), "retrieval"),
+            (
+                "file_search",
+                json!({"vector_store_ids":["store-1"]}),
+                "file_search",
+            ),
+            ("web_search", json!({"query":"record"}), "web_search"),
+            ("audio", json!({"format":"wav"}), "audio"),
+            ("modalities", json!(["text", "audio"]), "modalities"),
+            (
+                "text",
+                json!({"format":{"type":"json_schema", "schema":{"type":"object"}}}),
+                "text",
+            ),
+            (
+                "messages",
+                json!([{"role":"user", "content":[{"type":"document", "text":"do not coerce"}]}]),
+                "messages[0].content[0].type",
+            ),
+            (
+                "messages",
+                json!([{"role":"user", "content":[{"type":"tool_result", "tool_use_id":"call-1", "content":[{"type":"image", "source":{"type":"base64", "data":"AA==", "media_type":"image/png"}}]}]}]),
+                "messages[0].content[0].content[0].type",
+            ),
+        ];
+        for (field, value, expected_field) in cases {
+            let upstream =
+                Upstream::start(StatusCode::NOT_FOUND, r#"{"error":"missing endpoint"}"#);
+            let mut original = message();
+            original[field] = value;
+            let response = request(&upstream, false, "/messages", original).await;
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{expected_field}"
+            );
+            assert_eq!(response.headers()["content-type"], "application/json");
+            let error = body(response).await;
+            assert_eq!(error["error"]["type"], "invalid_request_error");
+            assert_eq!(error["error"]["code"], "unsupported_request");
+            assert!(
+                error["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains(expected_field),
+                "{error}"
+            );
+            assert_eq!(upstream.seen.lock().await.len(), 1, "{expected_field}");
+        }
+    }
+
+    #[tokio::test]
+    async fn remote_missing_messages_endpoint_preserves_function_tools_and_choice_in_fallback() {
+        let upstream = Upstream::start(
+            StatusCode::METHOD_NOT_ALLOWED,
+            r#"{"error":"missing endpoint"}"#,
+        );
+        let mut original = message();
+        original["tools"] = json!([{"name":"lookup", "description":"Lookup a record", "input_schema":{"type":"object", "properties":{"key":{"type":"string"}}, "required":["key"]}}]);
+        original["tool_choice"] =
+            json!({"type":"tool", "name":"lookup", "disable_parallel_tool_use":true});
+        let response = request(&upstream, false, "/messages", original.clone()).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body(response).await["content"][0]["text"], "done");
+        let seen = upstream.seen.lock().await;
+        assert_eq!(seen.len(), 2);
+        assert_eq!(seen[0], ("/v1/messages".into(), original.clone()));
+        assert_eq!(seen[1].0, "/v1/chat/completions");
+        let translated = &seen[1].1;
+        assert_eq!(translated["messages"], original["messages"]);
+        assert_eq!(translated["tools"][0]["type"], "function");
+        assert_eq!(translated["tools"][0]["function"]["name"], "lookup");
+        assert_eq!(
+            translated["tools"][0]["function"]["parameters"],
+            original["tools"][0]["input_schema"]
+        );
+        assert_eq!(
+            translated["tool_choice"],
+            json!({"type":"function", "function":{"name":"lookup"}})
+        );
+        assert_eq!(translated["parallel_tool_calls"], false);
+    }
+
+    #[tokio::test]
+    async fn local_unsupported_requests_fail_before_upstream_send() {
+        for (path, request_body, expected_field) in [
+            (
+                "/messages",
+                json!({"model":"fixture", "messages":[{"role":"user", "content":"hello"}], "mcp_servers":[]}),
+                "mcp_servers",
+            ),
+            (
+                "/chat/completions",
+                json!({"model":"fixture", "messages":[{"role":"user", "content":"hello"}], "modalities":["audio"]}),
+                "modalities",
+            ),
+            (
+                "/responses",
+                json!({"model":"fixture", "input":"hello", "mcp_servers":[]}),
+                "mcp_servers",
+            ),
+            (
+                "/responses",
+                json!({"model":"fixture", "input":"hello", "tools":[{"type":"web_search"}]}),
+                "tools[0].type",
+            ),
+            (
+                "/responses",
+                json!({"model":"fixture", "input":[{"type":"message", "role":"user", "content":[{"type":"input_image", "image_url":"https://example.invalid/image.png"}]}]}),
+                "input[0].content[0].type",
+            ),
+        ] {
+            let upstream = Upstream::start(StatusCode::OK, "{}");
+            let response = request(&upstream, true, path, request_body).await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{path}");
+            let error = body(response).await;
+            assert_eq!(error["error"]["type"], "invalid_request_error");
+            assert!(
+                error["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains(expected_field),
+                "{error}"
+            );
+            assert!(upstream.seen.lock().await.is_empty(), "{path}");
         }
     }
 }

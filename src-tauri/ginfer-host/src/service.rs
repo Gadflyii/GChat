@@ -1336,7 +1336,12 @@ impl Host {
                 let model = (suffix != "v1/ginfer/benchmark").then_some(model.as_str());
                 upstream = upstream
                     .header(hyper::header::CONTENT_TYPE, "application/json")
-                    .body(inference_body(bytes, model)?);
+                    .body(match inference_body(bytes, model, suffix) {
+                        Ok(body) => body,
+                        Err(message) => return Ok(json(StatusCode::BAD_REQUEST, serde_json::json!({
+                            "error": {"message": message, "type": "invalid_request_error", "code": "unsupported_request"}
+                        }))),
+                    });
             }
         }
         let response = upstream.send().await.map_err(|e| e.to_string())?;
@@ -3357,21 +3362,89 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
     fn service_inference_body_preserves_raw_fields_and_object_validation() {
         use serde_json::value::RawValue;
         let source = br#"{"m\u006fdel":"first","model":"last","nested": { "n": 123456789012345678901234567890, "f": 1.2300e+40, "s": "\u0041\/" },"model2":"untouched"}"#;
-        let output = inference_body(source.to_vec(), Some("host\"model")).unwrap();
+        let output = inference_body(source.to_vec(), Some("host\"model"), "v1/chat/completions").unwrap();
         let fields: BTreeMap<String, &RawValue> = serde_json::from_slice(&output).unwrap();
         assert_eq!(fields["model"].get(), r#""host\"model""#);
         assert_eq!(fields["model2"].get(), r#""untouched""#);
         assert_eq!(fields["nested"].get(), r#"{ "n": 123456789012345678901234567890, "f": 1.2300e+40, "s": "\u0041\/" }"#);
         assert_eq!(fields.len(), 3);
-        assert_eq!(inference_body(b"{}".to_vec(), Some("host")).unwrap(), br#"{"model":"host"}"#);
+        assert_eq!(inference_body(b"{}".to_vec(), Some("host"), "v1/chat/completions").unwrap(), br#"{"model":"host"}"#);
         let benchmark = b" { \"model\" : \"benchmark-owned\" } ".to_vec();
-        assert_eq!(inference_body(benchmark.clone(), None).unwrap(), benchmark);
+        assert_eq!(inference_body(benchmark.clone(), None, "v1/ginfer/benchmark").unwrap(), benchmark);
         for source in ["[]", "null", "true", "42", "\"text\""] {
-            assert_eq!(inference_body(source.as_bytes().to_vec(), Some("host")).unwrap_err(), "inference body must be a JSON object");
+            assert_eq!(inference_body(source.as_bytes().to_vec(), Some("host"), "v1/chat/completions").unwrap_err(), "inference body must be a JSON object");
         }
         for source in ["{broken", "{} trailing", "{\"x\": NaN}"] {
-            assert!(inference_body(source.as_bytes().to_vec(), None).is_err());
+            assert!(inference_body(source.as_bytes().to_vec(), None, "v1/chat/completions").is_err());
         }
+    }
+
+    #[test]
+    fn service_inference_rejects_server_hosted_tools_on_each_protocol() {
+        for path in ["v1/chat/completions", "v1/responses", "v1/messages"] {
+            for kind in ["file_search", "web_search", "mcp"] {
+                let body = serde_json::json!({"tools":[{"type":kind,"name":"search","input_schema":{"type":"object"}}]});
+                let error = inference_body(serde_json::to_vec(&body).unwrap(), Some("model"), path).unwrap_err();
+                assert!(error.contains("tools[0].type"), "{path}: {error}");
+                assert!(error.contains(kind), "{path}: {error}");
+            }
+        }
+    }
+
+    #[test]
+    fn service_inference_rejects_server_mcp_and_retrieval_declarations() {
+        for path in ["v1/chat/completions", "v1/responses", "v1/messages"] {
+            for key in ["mcp_servers", "retrieval", "file_search", "web_search"] {
+                let mut body = serde_json::json!({"model":"model"});
+                body[key] = serde_json::json!([{"url":"https://example.invalid/tool"}]);
+                let error = inference_body(serde_json::to_vec(&body).unwrap(), None, path).unwrap_err();
+                assert!(error.contains(key) && error.contains("not supported"), "{path}: {error}");
+            }
+        }
+    }
+
+    #[test]
+    fn service_inference_rejects_audio_and_wrong_protocol_output_controls() {
+        for path in ["v1/chat/completions", "v1/responses", "v1/messages"] {
+            for body in [serde_json::json!({"modalities":["text","audio"]}), serde_json::json!({"audio":{"voice":"alloy"}})] {
+                let error = inference_body(serde_json::to_vec(&body).unwrap(), None, path).unwrap_err();
+                assert!(error.contains("audio") && error.contains("not supported"), "{path}: {error}");
+            }
+        }
+        for (path, body, field) in [
+            ("v1/messages", serde_json::json!({"response_format":{"type":"json_object"}}), "response_format"),
+            ("v1/chat/completions", serde_json::json!({"output_config":{"format":{"type":"json_schema","schema":{}}}}), "output_config"),
+            ("v1/messages", serde_json::json!({"text":{"format":{"type":"json_object"}}}), "text"),
+            ("v1/responses", serde_json::json!({"output_format":{"type":"regex","pattern":".*"}}), "output_format"),
+        ] {
+            let error = inference_body(serde_json::to_vec(&body).unwrap(), None, path).unwrap_err();
+            assert!(error.contains(field) && error.contains("not supported"), "{path}: {error}");
+        }
+    }
+
+    #[test]
+    fn service_inference_preserves_supported_tools_and_output_formats() {
+        for (path, body) in [
+            ("v1/chat/completions", serde_json::json!({"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object"}}}],"response_format":{"type":"json_object"},"modalities":["text"]})),
+            ("v1/responses", serde_json::json!({"tools":[{"type":"namespace","name":"workspace","tools":[{"type":"function","name":"read","parameters":{"type":"object"}}]}],"text":{"format":{"type":"json_schema","name":"answer","schema":{"type":"object"}}}})),
+            ("v1/messages", serde_json::json!({"tools":[{"type":"custom","name":"lookup","input_schema":{"type":"object"},"strict":false}],"output_config":{"format":{"type":"json_schema","schema":{"type":"object"}}}})),
+        ] {
+            let bytes = serde_json::to_vec(&body).unwrap();
+            assert_eq!(inference_body(bytes.clone(), None, path).unwrap(), bytes);
+        }
+        let error = inference_body(br#"{"tools":[{"name":"lookup","input_schema":{},"strict":true}]}"#.to_vec(), None, "v1/messages").unwrap_err();
+        assert!(error.contains("strict") && error.contains("not supported"));
+    }
+
+    #[test]
+    fn service_inference_rejects_unsupported_native_parallel_tool_control() {
+        for value in [serde_json::json!(true), serde_json::json!("false")] {
+            let body = serde_json::json!({"tool_choice":{"type":"auto","disable_parallel_tool_use":value}});
+            let error = inference_body(serde_json::to_vec(&body).unwrap(), None, "v1/messages").unwrap_err();
+            assert!(error.contains("tool_choice.disable_parallel_tool_use") && error.contains("not supported"));
+        }
+        let bytes = br#"{"tool_choice":{"type":"auto","disable_parallel_tool_use":false}}"#.to_vec();
+        assert_eq!(inference_body(bytes.clone(), None, "v1/messages").unwrap(), bytes);
     }
 
     #[tokio::test]
@@ -4630,7 +4703,57 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         serde_json::from_value::<crate::engine_registry::HostSnapshot>(snapshot).unwrap();
     }
 }
-fn inference_body(bytes: Vec<u8>, model: Option<&str>) -> Result<Vec<u8>, String> {
+/// Reject hosted-tool and output declarations that the native protocols cannot honor.
+/// Client function tools (including configured GChat MCP connectors) remain supported.
+pub fn validate_inference_request(suffix: &str, body: &serde_json::Value) -> Result<(), String> {
+    let path = suffix.trim_start_matches('/').trim_start_matches("v1/");
+    if !matches!(path, "chat/completions" | "chat/completions/count_tokens" | "messages" | "messages/count_tokens" | "responses" | "responses/input_tokens" | "responses/compact") {
+        return Ok(());
+    }
+    for key in ["mcp_servers", "retrieval", "file_search", "web_search", "audio", "output_format"] {
+        if body.get(key).is_some_and(|value| !value.is_null()) {
+            return Err(format!("{key} is not supported by native GInfer"));
+        }
+    }
+    if let Some(modalities) = body.get("modalities").filter(|value| !value.is_null()) {
+        if !modalities.as_array().is_some_and(|values| values.iter().all(|value| value.as_str() == Some("text"))) {
+            return Err("modalities supports only text output; audio output is not supported".into());
+        }
+    }
+    let messages = path.starts_with("messages");
+    let responses = path.starts_with("responses");
+    if messages && body.get("tool_choice")
+        .and_then(|choice| choice.get("disable_parallel_tool_use"))
+        .is_some_and(|value| !value.is_null() && value.as_bool() != Some(false))
+    {
+        return Err("tool_choice.disable_parallel_tool_use is not supported by native GInfer; parallel tool calls cannot be disabled".into());
+    }
+    for (key, supported) in [("response_format", !messages && !responses), ("output_config", messages), ("text", responses)] {
+        if !supported && body.get(key).is_some_and(|value| !value.is_null()) {
+            return Err(format!("{key} is not supported on native /{path}; use this protocol's output-format field"));
+        }
+    }
+    if let Some(tools) = body.get("tools").filter(|value| !value.is_null()) {
+        let tools = tools.as_array().ok_or("tools must be an array")?;
+        for (index, tool) in tools.iter().enumerate() {
+            let kind = tool.get("type").and_then(serde_json::Value::as_str);
+            let supported = if messages {
+                tool.is_object() && (tool.get("type").is_none() || kind == Some("custom"))
+            } else {
+                kind == Some("function") || (responses && kind == Some("namespace"))
+            };
+            if !supported {
+                return Err(format!("tools[{index}].type {} is not supported; native inference supports client function tools, not server hosted tools", tool.get("type").unwrap_or(&serde_json::Value::Null)));
+            }
+            if messages && tool.get("strict").is_some_and(|value| !value.is_null() && value.as_bool() != Some(false)) {
+                return Err(format!("tools[{index}].strict is not supported; strict function schema enforcement is unavailable"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn inference_body(bytes: Vec<u8>, model: Option<&str>, suffix: &str) -> Result<Vec<u8>, String> {
     use serde_json::value::{to_raw_value, RawValue};
     let mut fields: BTreeMap<String, &RawValue> = serde_json::from_slice(&bytes).map_err(|error| {
         if error.is_data() {
@@ -4639,6 +4762,15 @@ fn inference_body(bytes: Vec<u8>, model: Option<&str>) -> Result<Vec<u8>, String
             error.to_string()
         }
     })?;
+    // Parse only capability declarations; preserve large input arrays, exact numbers,
+    // and property order in the original raw fields during the model rewrite.
+    let mut controls = serde_json::Map::new();
+    for key in ["mcp_servers", "retrieval", "file_search", "web_search", "audio", "modalities", "output_format", "response_format", "output_config", "text", "tools", "tool_choice"] {
+        if let Some(value) = fields.get(key) {
+            controls.insert(key.into(), serde_json::from_str(value.get()).map_err(|error| error.to_string())?);
+        }
+    }
+    validate_inference_request(suffix, &serde_json::Value::Object(controls))?;
     let Some(model) = model else {
         return Ok(bytes);
     };

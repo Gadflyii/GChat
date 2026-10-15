@@ -11,6 +11,24 @@ normal app exit/restart. Active-worker cancellation, durable state and ordinary
 Studio reopening also pass after normal exit; broader restart recovery remains
 unqualified.
 
+## Native request capability errors — release scope
+
+Inference-server hosted retrieval, `file_search`, `web_search` and MCP are
+unsupported. Unsupported tool, input-content and output-format declarations
+return an explicit error; adapters must not remove them and continue generation.
+GChat's client-side web search, document retrieval and MCP release scope remains
+under review in OI-055. Configured GChat MCP connectors execute client function
+tools through the shared executor.
+
+The Host checks unsupported hosted-tool and output declarations for Manager,
+standalone and registered GChat instances. Native engine validation owns the
+supported protocol schemas and structured-output settings. Legacy Responses
+translation rejects inputs and controls it cannot represent. Native Messages
+errors are returned unchanged; remote Messages translation is attempted only
+when the provider lacks that endpoint (HTTP 404/405), and rejects unsupported
+capabilities before issuing a translated request. Remote native passthrough
+retains the provider's own capabilities and errors.
+
 ## Native near-full-input task — October 15
 
 One native Standard Agent run passes with 241364 counted input tokens at C1,
