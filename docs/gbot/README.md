@@ -3,7 +3,7 @@
 ## Outage reply notification fix — C7
 
 Current task: `GCHAT-GBOT-REPLY-OUTAGE-NOTIFICATION`, assigned by bubbs;
-deadline 2026-10-16 01:00 UTC. Baseline `c75c82483`; owned worktree
+target 2026-10-16 01:30 UTC after shared compiler release. Baseline `c75c82483`; owned worktree
 `/ai/gchat-worktrees/c7-gbot-reply-outage-20261015`, branch
 `fix/c7-gbot-reply-outage-20261015`. Shared `/ai/gchat` stays on main.
 
@@ -20,11 +20,20 @@ exactly the two added state/target cases fail at the missed-unread assertion
 (13 existing cases pass); the one-line fix passes all 15 cases. Full `make verify`
 remains pending a compiler slot; no Engine/GPU test is required (standing rule12).
 Two independent read-only agents cover source/regression and gate/cache checks;
-C7 owns source, tests and this record. Existing shared dependencies may be linked;
-no owned build/output directory allocated yet. Focused frontend tests finished
+C7 owns source, tests and this record. Existing shared dependencies may be linked.
+The full gate will use a fresh private Cargo target beneath this worktree at
+`out/gbot-reply-outage-20261015/native-target`, offline with debug and incremental
+outputs disabled, at most six native build jobs, and retained protoc29.3;
+no shared Cargo cache writes or installs.
+No native target is allocated yet. Focused frontend tests finished
 2026-10-15 23:34 UTC; CPU819 released early, no C7 lock or job remains. Full gate
-may use local CPU8–17 booked 00:30–01:00 UTC after C2 actual release, or an explicitly
-cleared earlier S1 gap. No compilers during booked GPU timing quiet.
+may use local CPU8–17 booked 00:30–01:30 UTC after C2 actual release, or an explicitly
+cleared earlier S1 gap. Local policy requires one compiler at a time; shared
+compile locks apply to S1 only. C7 cedes first priority to the prior hard-deadline
+Gchat 3 gate (12–20 minutes forecast); C7 follows, then Gchat 2. C2 confirms this
+serial queue; final Gchat 2 acknowledgment is pending. C7 holds the compiler
+lock for at most 30 minutes with waiters. No execution follows a clock time
+alone, and no compilers run during booked GPU timing quiet.
 Next unresolved action: full `make verify`, retain its outcome, then push merge-ready.
 
 
