@@ -232,42 +232,18 @@ struct Choice {
     concurrency: u64,
 }
 
-fn occupied_gpus<'a>(snapshot: &'a Value, replacing: Option<&str>) -> std::collections::BTreeSet<&'a str> {
-    snapshot["instances"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|i| {
-            i["instance_id"].as_str() != replacing
-                && matches!(
-                    i["status"].as_str(),
-                    Some("ready" | "starting" | "stopping")
-                )
-        })
-        .flat_map(|i| {
-            i["configuration"]["gpu_uuids"]
-                .as_array()
-                .into_iter()
-                .flatten()
-        })
-        .filter_map(Value::as_str)
-        .collect()
-}
-
-fn group_available(group: &[Value], occupied: &std::collections::BTreeSet<&str>) -> bool {
-    !group.iter().any(|g| g.as_str().is_none_or(|id| occupied.contains(id)))
+fn group_available(group: &[Value]) -> bool {
+    !group.is_empty() && group.iter().all(Value::is_string)
 }
 
 fn has_choices(snapshot: &Value) -> bool {
-    let occupied = occupied_gpus(snapshot, None);
     snapshot["launch_profiles"].as_array().into_iter().flatten().any(|entry| {
         entry["compatible_gpu_groups"].as_array().into_iter().flatten()
-            .filter_map(Value::as_array).any(|group| group_available(group, &occupied))
+            .filter_map(Value::as_array).any(|group| group_available(group))
     })
 }
 
 fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
-    let occupied = occupied_gpus(snapshot, replacing);
     let mut result = vec![];
     for entry in snapshot["launch_profiles"].as_array().into_iter().flatten() {
         for group in entry["compatible_gpu_groups"]
@@ -276,7 +252,7 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
             .flatten()
             .filter_map(Value::as_array)
         {
-            if !group_available(group, &occupied) {
+            if !group_available(group) {
                 continue;
             }
             let profile = &entry["profile"];
@@ -653,13 +629,13 @@ mod tests {
         assert_eq!(model_label(&models, &json!("model")), "muse-glimmer-30b / nvfp4");
     }
     #[test]
-    fn menu_uses_host_profiles_and_excludes_other_instances_gpu_groups() {
+    fn menu_uses_host_profiles_including_shared_gpu_groups() {
         let snapshot = json!({"instances":[{"instance_id":"running","status":"ready","configuration":{"gpu_uuids":["gpu0"]}}],
             "launch_profiles":[{"model_id":"model","profile":{"id":"fixture","name":"Test C4","tp":1,"concurrency":4,"max_context":32768,"qualification":{"tier":"calculated-startup-smoke","engine_revision":"922e5a879b9af12e52763d52b73362937f9dd148"}},
                 "compatible_gpu_groups":[["gpu0"],["gpu1"]]}]});
         let available = choices(&snapshot, None);
-        assert_eq!(available.len(), 1);
-        assert_eq!(available[0].body["gpu_uuids"], json!(["gpu1"]));
+        assert_eq!(available.len(), 2);
+        assert_eq!(available[0].body["gpu_uuids"], json!(["gpu0"]));
         let replacing = choices(&snapshot, Some("running"));
         assert_eq!(replacing.len(), 2);
         assert_eq!(replacing[0].body["instance_id"], "running");

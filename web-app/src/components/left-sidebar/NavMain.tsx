@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import GbotAvatars from '@/components/GbotAvatars'
 import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   SidebarMenu,
@@ -107,6 +108,7 @@ export function NavMain() {
 
   return (
     <>
+      {gbotEnabled && <GbotAvatars />}
       <SidebarMenu className="mt-3 px-2">
         <li role="presentation" className="px-2 pt-3 pb-1 font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Work</li>
 

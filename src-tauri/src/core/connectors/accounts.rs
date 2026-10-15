@@ -211,7 +211,7 @@ pub struct AccountsState {
     vault: Arc<dyn Vault>,
     http: Mutex<Option<reqwest::Client>>,
     #[cfg(test)]
-    token_endpoint_override: Option<String>,
+    oauth_base_override: Option<String>,
 }
 
 impl Default for AccountsState {
@@ -225,12 +225,20 @@ impl Default for AccountsState {
             vault: Arc::new(NativeVault),
             http: Mutex::new(None),
             #[cfg(test)]
-            token_endpoint_override: None,
+            oauth_base_override: None,
         }
     }
 }
 
 impl AccountsState {
+    #[cfg(test)]
+    fn oauth_endpoint(&self, endpoint: impl Into<String>, path: &str) -> String {
+        self.oauth_base_override
+            .as_ref()
+            .map(|base| format!("{base}/{path}"))
+            .unwrap_or_else(|| endpoint.into())
+    }
+
     pub fn initialize(&self, data: PathBuf) -> Result<(), String> {
         let path = data.join("workspace-connections.json");
         let mut known = self
@@ -615,8 +623,10 @@ impl AccountsState {
         );
         let verifier = random_secret();
         let state = random_secret();
-        let mut url = Url::parse(&authorization_endpoint(&config)?)
-            .map_err(|_| "Invalid provider registration")?;
+        let endpoint = authorization_endpoint(&config)?;
+        #[cfg(test)]
+        let endpoint = self.oauth_endpoint(endpoint, "authorize");
+        let mut url = Url::parse(&endpoint).map_err(|_| "Invalid provider registration")?;
         url.query_pairs_mut().extend_pairs([
             ("client_id", config.client_id.as_str()),
             ("redirect_uri", &redirect),
@@ -783,6 +793,8 @@ impl AccountsState {
                 "https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName"
             }
         };
+        #[cfg(test)]
+        let profile_url = self.oauth_endpoint(profile_url, "profile");
         let profile = tokio::select! { _ = cancellation.cancelled() => return Err("Sign-in cancelled".into()), result = self.http_client()?.get(profile_url).bearer_auth(&token.access_token).send() => result.map_err(|_| "Could not read the signed-in account identity")? };
         if !profile.status().is_success() {
             return Err("The provider did not authorize account identity access".into());
@@ -922,7 +934,7 @@ impl AccountsState {
         }
         let endpoint = token_endpoint(config)?;
         #[cfg(test)]
-        let endpoint = self.token_endpoint_override.clone().unwrap_or(endpoint);
+        let endpoint = self.oauth_endpoint(endpoint, "token");
         let response = tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), response = self.http_client()?.post(endpoint).form(&form).send() => response.map_err(|_| "Provider token connection failed")? };
         let status = response.status();
         let response: Value = tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), response = response.json() => response.map_err(|_| "Invalid provider token response")? };
@@ -1192,9 +1204,12 @@ impl AccountsState {
                 return Err("Microsoft local disconnect does not revoke tenant consent. Remove this app's consent in your Microsoft account/organization portal, then disconnect locally".into());
             }
             let refresh = previous.clone().ok_or("Workspace refresh token missing")?;
+            let endpoint = "https://oauth2.googleapis.com/revoke";
+            #[cfg(test)]
+            let endpoint = self.oauth_endpoint(endpoint, "revoke");
             let response = self
                 .http_client()?
-                .post("https://oauth2.googleapis.com/revoke")
+                .post(endpoint)
                 .form(&[("token", refresh)])
                 .send()
                 .await
@@ -1999,13 +2014,311 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn google_mock_oauth_connects_refreshes_isolates_and_revokes() {
+        mock_oauth_lifecycle(Provider::Google).await;
+    }
+
+    #[tokio::test]
+    async fn microsoft_mock_oauth_connects_refreshes_isolates_and_disconnects() {
+        mock_oauth_lifecycle(Provider::Microsoft).await;
+    }
+
+    async fn settled_auth(state: &AccountsState, flow: &AuthFlow) -> AuthFlow {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let current = state.auth_status(&flow.flow_id).unwrap();
+                if current.status != "waiting" {
+                    return current;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+
+    async fn mock_oauth_lifecycle(provider: Provider) {
+        let (directory, mut state, vault) = fixture();
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let fixture_state = Arc::get_mut(&mut state).unwrap();
+        fixture_state.oauth_base_override =
+            Some(format!("http://{}", listener.local_addr().unwrap()));
+        *fixture_state.http.lock().unwrap() = Some(
+            reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(5))
+                .build()
+                .unwrap(),
+        );
+        state
+            .configure(ConfigureRequest {
+                provider,
+                client_id: "fixture-public-client".into(),
+                tenant: None,
+                client_secret: None,
+            })
+            .await
+            .unwrap();
+        let server = tokio::spawn(async move {
+            let mut codes = BTreeMap::new();
+            let mut identity = 0;
+            // Two complete sign-ins, a denied sign-in, refresh and Google revocation.
+            let requests = if provider == Provider::Google { 9 } else { 8 };
+            for _ in 0..requests {
+                let (mut stream, peer) = listener.accept().await.unwrap();
+                assert!(peer.ip().is_loopback());
+                let mut request = Vec::new();
+                loop {
+                    let mut buffer = [0u8; 1024];
+                    let count = stream.read(&mut buffer).await.unwrap();
+                    assert!(count > 0);
+                    request.extend_from_slice(&buffer[..count]);
+                    if let Some(end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                        let headers = String::from_utf8_lossy(&request[..end]);
+                        let length = headers
+                            .lines()
+                            .find_map(|line| {
+                                line.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .and_then(|length| length.trim().parse::<usize>().ok())
+                            })
+                            .unwrap_or(0);
+                        if request.len() >= end + 4 + length {
+                            break;
+                        }
+                    }
+                }
+                let request = String::from_utf8(request).unwrap();
+                let (headers, body) = request.split_once("\r\n\r\n").unwrap();
+                let target = headers
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap();
+                let target = Url::parse(&format!("http://fixture{target}")).unwrap();
+                let form = Url::parse(&format!("http://fixture/?{body}"))
+                    .unwrap()
+                    .query_pairs()
+                    .into_owned()
+                    .collect::<BTreeMap<_, _>>();
+                let body = match target.path() {
+                    "/authorize" => {
+                        assert!(headers.starts_with("GET "));
+                        let query = target.query_pairs().into_owned().collect::<BTreeMap<_, _>>();
+                        assert_eq!(query["client_id"], "fixture-public-client");
+                        assert_eq!(query["response_type"], "code");
+                        assert_eq!(query["code_challenge_method"], "S256");
+                        assert!(!query["state"].is_empty());
+                        assert_eq!(
+                            query["scope"],
+                            requested_scopes(provider, &["calendar".into()], Access::ReadWrite)
+                                .unwrap()
+                                .join(" ")
+                        );
+                        if provider == Provider::Google {
+                            assert_eq!(query["access_type"], "offline");
+                            assert_eq!(query["prompt"], "consent");
+                        }
+                        let mut callback = Url::parse(&query["redirect_uri"]).unwrap();
+                        assert!(matches!(callback.host_str(), Some("localhost" | "127.0.0.1")));
+                        callback.query_pairs_mut().append_pair("state", &query["state"]);
+                        if query.contains_key("fixture_deny") {
+                            callback.query_pairs_mut().append_pair("error", "access_denied");
+                        } else {
+                            identity += 1;
+                            let code = format!("fixture-code-{identity}");
+                            codes.insert(code.clone(), (query["redirect_uri"].clone(), query["code_challenge"].clone()));
+                            callback.query_pairs_mut().append_pair("code", &code);
+                        }
+                        stream.write_all(format!("HTTP/1.1 302 Found\r\nLocation: {callback}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+                        continue;
+                    }
+                    "/token" => {
+                        assert!(headers.starts_with("POST "));
+                        assert_eq!(form["client_id"], "fixture-public-client");
+                        assert!(!form.contains_key("client_secret"));
+                        match form["grant_type"].as_str() {
+                            "authorization_code" => {
+                                let (redirect, challenge) = codes.remove(&form["code"]).unwrap();
+                                assert_eq!(form["redirect_uri"], redirect);
+                                assert_eq!(pkce_challenge(&form["code_verifier"]), challenge);
+                                json!({"access_token":format!("fixture-access-{identity}"),"refresh_token":format!("fixture-refresh-{identity}"),"expires_in":3600,"token_type":"Bearer","scope":requested_scopes(provider, &["calendar".into()], Access::ReadWrite).unwrap().join(" ")})
+                            }
+                            "refresh_token" => {
+                                assert_eq!(form["refresh_token"], "fixture-refresh-1");
+                                json!({"access_token":"fixture-rotated-access","refresh_token":"fixture-rotated-refresh","expires_in":3600,"token_type":"Bearer","scope":scopes(provider,"calendar",Access::ReadOnly).unwrap().join(" ")})
+                            }
+                            _ => panic!("Unexpected mock grant"),
+                        }
+                    }
+                    "/profile" => {
+                        assert!(headers.starts_with("GET "));
+                        assert!(headers.lines().any(|line| line.eq_ignore_ascii_case(&format!("authorization: bearer fixture-access-{identity}"))));
+                        json!({"sub":format!("fixture-subject-{identity}"),"id":format!("fixture-subject-{identity}"),"name":"Fixture account","displayName":"Fixture account","email":"fixture@example.invalid","mail":"fixture@example.invalid"})
+                    }
+                    "/revoke" => {
+                        assert_eq!(provider, Provider::Google);
+                        assert!(headers.starts_with("POST "));
+                        assert_eq!(form["token"], "fixture-rotated-refresh");
+                        json!({})
+                    }
+                    _ => panic!("Unexpected mock OAuth request"),
+                }.to_string();
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+            }
+            assert!(codes.is_empty());
+        });
+        let browser = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let request = AuthRequest {
+            provider,
+            services: vec!["calendar".into()],
+            access: Access::ReadWrite,
+            account_id: None,
+        };
+        let mut ids = Vec::new();
+        for expected_subject in ["fixture-subject-1", "fixture-subject-2"] {
+            let (flow, url) = state.begin_auth(request.clone()).await.unwrap();
+            assert!(browser.get(url).send().await.unwrap().status().is_success());
+            let connected = settled_auth(&state, &flow).await;
+            assert_eq!(connected.status, "connected", "{:?}", connected.error);
+            let id = connected.account_id.unwrap();
+            assert!(state
+                .view()
+                .unwrap()
+                .accounts
+                .iter()
+                .any(|account| account.id == id && account.subject == expected_subject));
+            ids.push(id);
+        }
+        assert_ne!(ids[0], ids[1]);
+        assert_eq!(state.view().unwrap().selected_accounts[&provider], ids[1]);
+        let links = vec![ids[0].clone()];
+        let list = format!("{}.calendar.list", provider.as_str());
+        let create = format!("{}.calendar.create", provider.as_str());
+        assert_eq!(
+            super::super::prepare_linked(&state, &links, &list, json!({})).unwrap()["account_id"],
+            ids[0]
+        );
+        assert!(
+            super::super::prepare_linked(&state, &links, &list, json!({"account_id":ids[1]}))
+                .is_err()
+        );
+        assert!(super::super::prepare_linked(&state, &links, &create, json!({})).is_ok());
+        assert!(super::super::catalog_for_accounts(&state, Some(&[]))
+            .unwrap()
+            .is_empty());
+
+        let before = serde_json::to_value(state.view().unwrap()).unwrap();
+        let (flow, url) = state.begin_auth(request.clone()).await.unwrap();
+        let mut denied = Url::parse(&url).unwrap();
+        denied.query_pairs_mut().append_pair("fixture_deny", "yes");
+        assert!(browser
+            .get(denied)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        let denied = settled_auth(&state, &flow).await;
+        assert_eq!(denied.status, "failed");
+        assert!(denied.error.unwrap().contains("denied or cancelled"));
+        let (flow, _) = state.begin_auth(request).await.unwrap();
+        assert_eq!(
+            state.cancel_auth(&flow.flow_id).await.unwrap().status,
+            "cancelled"
+        );
+        assert_eq!(serde_json::to_value(state.view().unwrap()).unwrap(), before);
+
+        let original_lease = state.tokens.lock().unwrap()[&ids[0]].lease.clone();
+        state
+            .tokens
+            .lock()
+            .unwrap()
+            .get_mut(&ids[0])
+            .unwrap()
+            .expires = Instant::now();
+        let (access, lease) = state
+            .token(&ids[0], &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(access, "fixture-rotated-access");
+        assert!(original_lease.is_cancelled());
+        assert_eq!(
+            vault
+                .get(&format!("account:{}", ids[0]))
+                .unwrap()
+                .as_deref(),
+            Some("fixture-rotated-refresh")
+        );
+        assert!(super::super::prepare_linked(&state, &links, &list, json!({})).is_ok());
+        assert!(super::super::prepare_linked(&state, &links, &create, json!({})).is_err());
+        assert!(state
+            .resolve_account_id(provider, &ids[1], "calendar", true)
+            .is_ok());
+        let metadata =
+            std::fs::read_to_string(directory.path().join("workspace-connections.json")).unwrap();
+        let public = serde_json::to_string(&state.view().unwrap()).unwrap();
+        for secret in ["fixture-access-", "fixture-refresh-", "fixture-rotated-"] {
+            assert!(!metadata.contains(secret));
+            assert!(!public.contains(secret));
+        }
+        if provider == Provider::Microsoft {
+            assert!(state
+                .disconnect(provider, &ids[0], true)
+                .await
+                .err()
+                .unwrap()
+                .contains("does not revoke tenant consent"));
+            assert!(!lease.is_cancelled());
+            assert!(vault.get(&format!("account:{}", ids[0])).unwrap().is_some());
+        }
+        state
+            .disconnect(provider, &ids[0], provider == Provider::Google)
+            .await
+            .unwrap();
+        assert!(lease.is_cancelled());
+        assert!(vault.get(&format!("account:{}", ids[0])).unwrap().is_none());
+        assert!(super::super::catalog_for_accounts(&state, Some(&links))
+            .unwrap()
+            .is_empty());
+        assert!(super::super::prepare_linked(&state, &links, &list, json!({})).is_err());
+        assert!(state
+            .resolve_account_id(provider, &ids[1], "calendar", true)
+            .is_ok());
+        let reopened = AccountsState {
+            vault: vault.clone(),
+            ..AccountsState::default()
+        };
+        reopened.initialize(directory.path().into()).unwrap();
+        assert_eq!(reopened.view().unwrap().accounts.len(), 1);
+        assert_eq!(reopened.view().unwrap().accounts[0].id, ids[1]);
+        assert_eq!(
+            reopened.view().unwrap().selected_accounts[&provider],
+            ids[1]
+        );
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn refresh_rotates_credentials_and_scopes_without_treating_rate_limit_as_revocation() {
         let (_directory, mut state, vault) = fixture();
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .await
             .unwrap();
-        Arc::get_mut(&mut state).unwrap().token_endpoint_override =
-            Some(format!("http://{}/token", listener.local_addr().unwrap()));
+        Arc::get_mut(&mut state).unwrap().oauth_base_override =
+            Some(format!("http://{}", listener.local_addr().unwrap()));
         let server = tokio::spawn(async move {
             for (status, body) in [
                 (429, json!({"error":"temporarily_unavailable"})),

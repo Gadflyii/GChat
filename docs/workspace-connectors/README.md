@@ -9,8 +9,9 @@ account connections and typed service tools in the existing shared Chat, Agent
 and Code runtime. The October 12 Gbot integration uses the same native provider
 and vault through explicit per-bot account links; it never reads global account
 selection. Scoped catalog/admission, write approvals, cancellation and durable
-effect receipts have focused service/native evidence. Live OAuth remains pending
-app registration. See [Gbot's current record](../gbot/README.md#current-record-and-inventory).
+effect receipts have focused service/native evidence. Local mock OAuth qualifies
+the source flow; live provider consent is a release gate for Ron. See
+[Gbot's current record](../gbot/README.md#current-record-and-inventory).
 User-connected SaaS accounts are integrations,
 not an expansion of GChat LAN host/workspace management or paid Arbitor features.
 
@@ -136,19 +137,37 @@ the account contract changed; UI cases were repeated after the cleanup change.
 Fourteen unselected Settings cases are excluded, not additional passes. Original
 failed logs remain alongside corrections. No unrelated full suite was run.
 
+### Local mock OAuth qualification — October 15
+
+The account owner now has two full local mock OAuth cases, one for each provider.
+They exercise authorization redirects through the real loopback callback, state
+and S256 PKCE binding, token exchange, identity lookup, denied/cancelled sign-in,
+refresh-token rotation and reduced consent. Two synthetic accounts prove that a
+bot's explicit link ignores the global default and rejects another account.
+Reduced consent removes write access; disconnect invalidates the active lease,
+removes credentials and survives metadata reopen while preserving the other
+account. Google revocation reaches the mock endpoint. Microsoft local disconnect
+retains its explicit distinction from tenant consent revocation.
+
+The endpoint override exists only under `cfg(test)`. Production provider URLs and
+HTTPS restrictions are unchanged. All credentials are synthetic and use the
+existing memory-vault fixture; no live account or app registration was created.
+The 13 account-owner cases pass, including both new lifecycles. Current check,
+strict Clippy and full verification receipts are retained in
+`/ai/gchat/out/gbot-mock-oauth-20261015/result.json`.
+
 ## Acceptance and next action
 
-Source implementation, supported-operation documentation and the named focused
-checks are complete. Native Windows/Linux OAuth and live
-read/write acceptance require real registered client IDs and a user-approved test
-account; these prerequisites are not available yet. Source fixtures cannot be
-reported as live sign-in or provider qualification.
+The source scope is complete against the local mock OAuth provider, together with
+the existing provider adapter, permission, receipt and UI fixtures. This evidence
+does not claim live sign-in, provider API acceptance or installed Windows OAuth.
 
-Next: register approved desktop clients and test accounts for native/live acceptance
-when available. No feature is installed or live-qualified. No publication,
-signing, production account mutation, new dependency or paid Arbitor
-implementation is authorized by this task. The named gates are complete; do not
-repeat terminal/defaults or other passing checks for documentation-only changes.
+**Release gate for Ron: live provider consent.** Use existing approved app
+registrations and accounts supplied for that release gate to check native consent,
+refresh, one read, revocation/local disconnect and per-bot isolation. Creating new
+credentials or accounts is outside this source task. Windows acceptance remains
+at release. No publication, signing, production account mutation, new dependency
+or paid Arbitor implementation is authorized by this task.
 
 See [connection setup and supported operations](operations.md) and the
 [account/runtime decision](../decisions/2026-10-10-own-native-workspace-connectors.md).

@@ -53,37 +53,7 @@ pub struct LaunchRequest {
     #[serde(flatten)]
     pub options: LaunchOptions,
 }
-fn gpu_group(gpus: &[String]) -> Vec<String> {
-    let mut group = gpus.to_vec();
-    group.sort();
-    group
-}
-
-fn consolidate_instances(data: &mut Persistent, directory: &Path) -> Result<(), String> {
-    let mut groups = BTreeMap::new();
-    let mut retired = BTreeMap::new();
-    for (id, profile) in &data.profiles {
-        if groups.insert(gpu_group(&profile.gpu_uuids), *id).is_some() {
-            retired.insert(*id, profile.clone());
-        }
-    }
-    if retired.is_empty() {
-        return Ok(());
-    }
-    let archive = directory.join("retired-instance-records.json");
-    let mut archived: BTreeMap<Uuid, LaunchRequest> = match std::fs::read(&archive) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|error| error.to_string())?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
-        Err(error) => return Err(error.to_string()),
-    };
-    archived.extend(retired.clone());
-    write_private(
-        &archive,
-        &serde_json::to_vec(&archived).map_err(|error| error.to_string())?,
-    )?;
-    data.profiles.retain(|id, _| !retired.contains_key(id));
-    Ok(())
-}
+fn one_instance() -> u32 { 1 }
 #[derive(Serialize, Deserialize)]
 pub struct ClientGrant {
     pub name: String,
@@ -117,6 +87,9 @@ pub struct Persistent {
     pub local_client_id: Option<Uuid>,
     pub models: BTreeMap<String, Uuid>,
     pub profiles: BTreeMap<Uuid, LaunchRequest>,
+    /// Successful Flash startup graph allowances, bound to producer and recipe.
+    #[serde(default)]
+    pub graph_receipts: BTreeMap<String, u64>,
     #[serde(default)]
     pub local_artifacts: Vec<PathBuf>,
     #[serde(default)]
@@ -333,6 +306,7 @@ impl Host {
                 local_client_id: None,
                 models: BTreeMap::new(),
                 profiles: BTreeMap::new(),
+                graph_receipts: BTreeMap::new(),
                 local_artifacts: vec![],
                 managed_model_root: None,
             },
@@ -357,7 +331,6 @@ impl Host {
         if let crate::fleet::FleetView::Coordinator { fleet } = &data.fleet {
             data.fleet_revision = data.fleet_revision.max(fleet.revision);
         }
-        consolidate_instances(&mut data, &directory)?;
         write_private(
             &path,
             &serde_json::to_vec(&data).map_err(|e| e.to_string())?,
@@ -743,6 +716,21 @@ impl Host {
         for observation in observations.into_iter().flatten() {
             processes.confirm_readiness(observation)?;
         }
+        let receipts = processes.ready_graph_receipts();
+        drop(processes);
+        if !receipts.is_empty() {
+            let mut changed = false;
+            let mut data = self.data.lock().await;
+            for (key, bytes) in receipts {
+                if data.graph_receipts.get(&key).is_none_or(|old| *old < bytes) {
+                    data.graph_receipts.insert(key, bytes);
+                    changed = true;
+                }
+            }
+            drop(data);
+            if changed { self.inventory_dirty.store(true, Ordering::SeqCst); }
+            if self.inventory_dirty.load(Ordering::SeqCst) { self.save().await?; }
+        }
         Ok(())
     }
     pub async fn snapshot(&self) -> serde_json::Value {
@@ -760,7 +748,6 @@ impl Host {
             }
             None => (None, self.revision.load(Ordering::SeqCst)),
         };
-        let reserved = processes.reserved_gpus(None);
         let observations: Vec<_> = processes
             .instances()
             .map(|i| {
@@ -819,7 +806,7 @@ impl Host {
                     profile.min_memory_mib_per_gpu,
                     profile.tp,
                 )).or_insert_with(|| (
-                    serde_json::json!(profile.gpu_groups(&self.gpus, &reserved)),
+                    serde_json::json!(profile.gpu_groups(&self.gpus, &Default::default())),
                     serde_json::json!(profile.gpu_groups(&self.gpus, &Default::default())),
                 ));
                 for model in matching {
@@ -837,10 +824,10 @@ impl Host {
             if let Ok(profile) = crate::max_perf::profile_for_identity(
                 &metadata.identity, metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available,
             ) {
-                let groups = profile.gpu_groups(&self.gpus, &reserved);
+                let groups = profile.gpu_groups(&self.gpus, &Default::default());
                 let compatible = profile.gpu_groups(&self.gpus, &Default::default());
                 for group in compatible {
-                    let resolved = profile.clone().for_gpu_group(&self.gpus, &group);
+                    let resolved = profile.clone();
                     let available: Vec<_> = groups.iter().filter(|candidate| **candidate == group).collect();
                     max_perf_profiles.push(serde_json::json!({"profile":resolved,"model_id":model.id,
                         "gpu_groups":available,"compatible_gpu_groups":[group]}));
@@ -961,22 +948,7 @@ impl Host {
             .find(|m| m.id == request.model_id)
             .cloned()
             .ok_or("model is not installed")?;
-        let group = gpu_group(&request.gpu_uuids);
-        let existing = self
-            .data
-            .lock()
-            .await
-            .profiles
-            .iter()
-            .find(|(_, saved)| gpu_group(&saved.gpu_uuids) == group)
-            .map(|(id, _)| *id);
-        if request.instance_id.is_some() && existing.is_some() && request.instance_id != existing {
-            return Err("This GPU group already has a server instance; select that instance to change its model or profile".into());
-        }
-        let id = request
-            .instance_id
-            .or(existing)
-            .unwrap_or_else(Uuid::new_v4);
+        let id = request.instance_id.unwrap_or_else(Uuid::new_v4);
         let path = model.path.clone();
         let artifact_set = model.artifact_set;
         let members = tokio::task::spawn_blocking(move || {
@@ -1003,6 +975,14 @@ impl Host {
                 "artifact changed since inventory scan; refresh inventory before loading".into(),
             );
         }
+        for uuid in &request.gpu_uuids {
+            let gpu = self.gpus.iter().find(|gpu| &gpu.uuid == uuid).ok_or("unknown GPU")?;
+            if !metadata.identity.supports_gpu(gpu.compute_capability.as_deref())
+                || (request.options.kv_dtype == "nvfp4" && gpu.compute_capability.as_deref() != Some("12.0"))
+            {
+                return Err("Select a supported GPU family (SM 80/86/89/120); NVFP4 weights or KV require Blackwell (sm_120)".into());
+            }
+        }
         if let Some(reference) = &request.benchmark_profile {
             reference.resolve().map_err(|error| error.to_string())?;
             if request.qualified_profile_id.is_some() {
@@ -1010,8 +990,7 @@ impl Host {
             }
             let profile = crate::max_perf::profile_for_identity(&metadata.identity,
                 metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available)
-                .map_err(|error| error.to_string())?
-                .for_gpu_group(&self.gpus, &request.gpu_uuids);
+                .map_err(|error| error.to_string())?;
             if profile.reference != *reference || profile.max_context != request.max_context
                 || profile.concurrency != request.concurrency || profile.options != request.options
             {
@@ -1074,10 +1053,7 @@ impl Host {
         if request.max_context > limit {
             return Err(format!("context exceeds model maximum of {limit}"));
         }
-        let mut options = request.options.clone();
-        options.wait_for_residency_fill |= crate::launch_profiles::residency_wait_default(
-            &metadata.identity, &self.gpus, &request.gpu_uuids,
-        );
+        let options = request.options.clone();
         let socket = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let port = socket.local_addr().map_err(|e| e.to_string())?.port();
         drop(socket);
@@ -1100,9 +1076,74 @@ impl Host {
         })
     }
     pub async fn launch(&self, request: LaunchRequest) -> Result<Uuid, String> {
+        self.place(request, 1).await
+    }
+    async fn place(&self, request: LaunchRequest, remaining: u32) -> Result<Uuid, String> {
         let _lifecycle = self.lifecycle.lock().await;
         let launch = self.prepare_launch(&request).await?;
-        self.start_prepared(request, launch).await
+        self.start_placement(request, launch, remaining).await
+    }
+    // The caller owns lifecycle through quote, launch and Ready so another
+    // placement cannot quote memory still being allocated by this process.
+    async fn start_placement(&self, mut request: LaunchRequest, mut launch: EngineLaunch, remaining: u32) -> Result<Uuid, String> {
+        use crate::engine_registry::InstanceStatus;
+        if remaining == 0 { return Err("remaining instances must be positive".into()); }
+        self.processes.lock().await.validate_launch(&launch, false)?;
+        let sharing = self.processes.lock().await.reserved_gpus(None)
+            .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
+        if remaining == 1 && !sharing {
+            return self.start_prepared(request, launch).await;
+        }
+        if launch.model_id.starts_with("qwen3.8-flash-next/") && launch.options.vram_budget_bytes.is_none() {
+            return Err("Flash sharing needs a per-instance weight residency budget: set it in Custom settings, start the package once by itself with that budget and wait for Ready to save its graph-memory receipt, then add instances with the same settings".into());
+        }
+        self.draft_width.cancel().await?;
+        loop {
+            self.refresh_processes().await?;
+            let starting = self.processes.lock().await.instances().any(|instance|
+                instance.status == InstanceStatus::Starting
+                && instance.launch.gpu_uuids.iter().any(|gpu| launch.gpu_uuids.contains(gpu)));
+            if !starting { break; }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let receipt_key = if launch.model_id.starts_with("qwen3.8-flash-next/") {
+            Some(self.processes.lock().await.graph_receipt_key(&launch)?)
+        } else { None };
+        let graph_allowance = match receipt_key {
+            Some(key) => self.data.lock().await.graph_receipts.get(&key).copied(),
+            None => None,
+        };
+        let mut command = self.processes.lock().await.startup_quote_command(&launch, graph_allowance)?;
+        let output = tokio::time::timeout(Duration::from_secs(600), command.output()).await
+            .map_err(|_| "Engine startup quote timed out")?
+            .map_err(|error| format!("could not run Engine startup quote: {error}"))?;
+        if !output.status.success() {
+            let tail = &output.stderr[output.stderr.len().saturating_sub(16_384)..];
+            return Err(format!("Engine startup quote failed: {}", String::from_utf8_lossy(tail).trim()));
+        }
+        let quote: crate::engine_host::StartupQuote = serde_json::from_slice(&output.stdout)
+            .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
+        let budget = quote.kv_budget(&launch, remaining)?;
+        launch.options.kv_arena_bytes = Some(budget);
+        if request.options.kv_arena_bytes != Some(budget) {
+            request.qualified_profile_id = None;
+            request.benchmark_profile = None;
+            launch.benchmark_profile = None;
+        }
+        request.options = launch.options.clone();
+        let id = self.start_prepared(request, launch).await?;
+        loop {
+            self.refresh_processes().await?;
+            let processes = self.processes.lock().await;
+            let instance = processes.instances().find(|instance| instance.instance_id == id).ok_or("new instance disappeared")?;
+            match instance.status {
+                InstanceStatus::Ready => return Ok(id),
+                InstanceStatus::Starting => {},
+                _ => return Err(format!("Instance {id} did not become Ready: {}", instance.last_error.as_deref().unwrap_or("Engine stopped during startup"))),
+            }
+            drop(processes);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
     }
     async fn start_prepared(
         &self,
@@ -1884,6 +1925,10 @@ impl Host {
                     expected_session_id: Option<Uuid>,
                     #[serde(default)]
                     structured_outputs: Option<bool>,
+                    #[serde(default = "one_instance")]
+                    remaining_instances: u32,
+                    #[serde(default)]
+                    kv_arena_bytes: Option<u64>,
                 }
                 let body = body_json(req).await?;
                 let selection: Selection =
@@ -1915,8 +1960,7 @@ impl Host {
                     let metadata = &model.metadata;
                     let profile = crate::max_perf::profile_for_identity(&metadata.identity,
                         metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available)
-                        .map_err(|error| error.to_string())?
-                        .for_gpu_group(&self.gpus, &selection.gpu_uuids);
+                        .map_err(|error| error.to_string())?;
                     if profile.id != selection.profile_id {
                         return Err("unknown GBench Max Perf profile for this artifact".into());
                     }
@@ -1941,6 +1985,29 @@ impl Host {
                     launch.options.structured_outputs = enabled;
                     request.qualified_profile_id = None;
                 }
+                if selection.instance_id.is_none() {
+                    // The profile supplies execution settings; placement owns
+                    // KV sizing. Blank means quote/split when sharing a GPU.
+                    let sharing = selection.remaining_instances > 1 || self.processes.lock().await.reserved_gpus(None)
+                        .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
+                    if sharing || selection.kv_arena_bytes.is_some() {
+                        launch.options.kv_arena_bytes = selection.kv_arena_bytes;
+                        if launch.options.kv_arena_bytes != request.options.kv_arena_bytes {
+                            request.qualified_profile_id = None;
+                            request.benchmark_profile = None;
+                            launch.benchmark_profile = None;
+                        }
+                        request.options.kv_arena_bytes = launch.options.kv_arena_bytes;
+                    }
+                } else if let Some(bytes) = selection.kv_arena_bytes {
+                    if request.options.kv_arena_bytes != Some(bytes) {
+                        request.options.kv_arena_bytes = Some(bytes);
+                        launch.options.kv_arena_bytes = Some(bytes);
+                        request.qualified_profile_id = None;
+                        request.benchmark_profile = None;
+                        launch.benchmark_profile = None;
+                    }
+                }
                 self.processes
                     .lock()
                     .await
@@ -1956,8 +2023,13 @@ impl Host {
                         self.stop_instance(id, selection.force).await?;
                     }
                 }
-                let id = self.start_prepared(request, launch).await?;
-                Ok(json(StatusCode::OK, serde_json::json!({"instance_id":id})))
+                let id = if selection.instance_id.is_some() {
+                    self.start_prepared(request, launch).await?
+                } else {
+                    self.start_placement(request, launch, selection.remaining_instances).await?
+                };
+                let kv_arena_bytes = self.data.lock().await.profiles.get(&id).and_then(|profile| profile.options.kv_arena_bytes);
+                Ok(json(StatusCode::OK, serde_json::json!({"instance_id":id,"kv_arena_bytes":kv_arena_bytes})))
             }
             ("POST", "/host/v1/remove-model") => {
                 let body = body_json(req).await?;
@@ -2098,7 +2170,7 @@ impl Host {
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
                 release.validate()?;
                 if release.compatible_group(&self.gpus).is_none() {
-                    return Err("release has no qualified homogeneous GPU group on this host; compute capability and per-GPU memory must match".into());
+                    return Err("release needs a supported homogeneous GPU group of its TP degree; NVFP4 requires Blackwell (sm_120)".into());
                 }
                 Ok(json(
                     StatusCode::OK,
@@ -2142,12 +2214,19 @@ impl Host {
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
             ("POST", "/host/v1/instances") => {
-                let request: LaunchRequest =
-                    serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
-                let id = self.launch(request).await?;
+                #[derive(Deserialize)]
+                struct Placement {
+                    #[serde(default = "one_instance")]
+                    remaining_instances: u32,
+                    #[serde(flatten)]
+                    request: LaunchRequest,
+                }
+                let placement: Placement = serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+                let id = self.place(placement.request, placement.remaining_instances).await?;
+                let kv_arena_bytes = self.data.lock().await.profiles.get(&id).and_then(|profile| profile.options.kv_arena_bytes);
                 Ok(json(
                     StatusCode::ACCEPTED,
-                    serde_json::json!({"instance_id":id}),
+                    serde_json::json!({"instance_id":id,"kv_arena_bytes":kv_arena_bytes}),
                 ))
             }
             _ => Ok(json(
@@ -2239,6 +2318,72 @@ mod target_launch_tests {
     }
 
     #[tokio::test]
+    async fn flash_graph_receipts_require_ready_and_match_the_saved_startup_recipe() {
+        let (dir, host, mut request) = installed_flash("groupwise-int", false).await;
+        let engine = dir.path().join("engine");
+        std::fs::write(&engine, r#"#!/usr/bin/env python3
+import http.server, json, pathlib, sys, time
+args = sys.argv[1:]
+def arg(name): return args[args.index(name)+1]
+root = pathlib.Path(__file__).parent
+if '--quote-only' in args:
+    graph = int(arg('--graph-allowance-bytes')) if '--graph-allowance-bytes' in args else 0
+    with (root/'quotes.jsonl').open('a') as out: out.write(json.dumps(args)+'\n')
+    print(json.dumps(dict(schema='ginfer-startup-quote-v1',model_id='qwen3.8-flash-next',weights_id='groupwise-int',
+        tensor_parallel_size=1,ranks=[dict(rank=0,free_bytes=65536,weights_bytes=8192,state_bytes=2048,
+        graph_allowance_bytes=graph,graph_allowance_source='receipt' if graph else 'unknown',
+        minimum_kv_arena_bytes=1024,kv_arena_alignment_bytes=256,headroom_bytes=1024,startup_peak_bytes=11264+graph)])))
+    sys.exit(0)
+assert arg('--vram-budget-bytes') == '4096'
+sys.stderr.write('Flash startup phase=graph-capacity rank=0 admission_'); sys.stderr.flush(); time.sleep(.01)
+sys.stderr.write('graph_bytes=1200 topology=first\nFlash startup phase=graph-capacity rank=0 admission_graph_bytes=1000 topology=last\n')
+sys.stderr.write('x'*20000+'\n'); sys.stderr.flush()
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body=json.dumps(dict(data=[dict(id=arg('--model-id'))])).encode()
+        self.send_response(200); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self,*args): pass
+http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
+"#).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        *host.processes.lock().await = HostProcesses::new(engine.clone(), BTreeSet::from(["GPU-test".into()]), Duration::from_secs(10)).unwrap();
+        request.max_context = 8192;
+        request.concurrency = 4;
+        request.options.kv_arena_bytes = Some(1024);
+        request.options.vram_budget_bytes = Some(4096);
+        let error = host.place(request.clone(), 2).await.unwrap_err();
+        assert!(error.contains("graph memory is unknown"), "{error}");
+        assert!(host.data.lock().await.graph_receipts.is_empty());
+        assert_eq!(host.processes.lock().await.instances().count(), 0);
+        let id = host.launch(request.clone()).await.unwrap();
+        assert!(host.data.lock().await.graph_receipts.is_empty());
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                host.refresh_processes().await.unwrap();
+                if !host.data.lock().await.graph_receipts.is_empty() { break; }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        assert_eq!(host.data.lock().await.graph_receipts.values().copied().collect::<Vec<_>>(), [1200]);
+        host.processes.lock().await.stop(id).await.unwrap();
+        let reopened = Host::open(dir.path().join("state"), "Test".into(), engine.clone(),
+            vec![dir.path().join("models")], vec![], host.gpus.clone()).await.unwrap();
+        reopened.processes.lock().await.hardware_profile = None;
+        let placement = reopened.place(request.clone(), 2).await;
+        if placement.is_err() { reopened.processes.lock().await.shutdown().await.unwrap(); }
+        placement.unwrap();
+        let quotes = std::fs::read_to_string(dir.path().join("quotes.jsonl")).unwrap();
+        let args: Vec<String> = serde_json::from_str(quotes.lines().last().unwrap()).unwrap();
+        assert!(args.windows(2).any(|pair| pair == ["--graph-allowance-bytes", "1200"]));
+        assert!(args.windows(2).any(|pair| pair == ["--vram-budget-bytes", "4096"]));
+        request.concurrency = 3;
+        let error = reopened.place(request, 2).await.unwrap_err();
+        reopened.processes.lock().await.shutdown().await.unwrap();
+        assert!(error.contains("graph memory is unknown"), "{error}");
+    }
+
+    #[tokio::test]
     async fn unchanged_inventory_keeps_durable_state_and_refreshes_artifact_metadata() {
         let (dir, host, _) = installed_flash("groupwise-int", false).await;
         let path = dir.path().join("state/host.json");
@@ -2303,101 +2448,26 @@ mod target_launch_tests {
     }
 
     #[tokio::test]
-    async fn cmp_serving_profile_waits_for_residency_only_for_selected_cmp() {
-        let (_dir, mut host, request) =
-            installed_target("qwen3.8-27b", "groupwise-int-dflash2-q4", false).await;
-        assert!(!request.options.wait_for_residency_fill);
-        assert!(
-            !serde_json::from_value::<LaunchOptions>(serde_json::json!({}))
-                .unwrap()
-                .wait_for_residency_fill
-        );
-        Arc::get_mut(&mut host).unwrap().gpus.push(Gpu {
-            uuid: "GPU-unselected-cmp".into(),
-            name: "NVIDIA CMP 170HX".into(),
-            display_name: None,
-            memory_mib: 65536,
-            compute_capability: Some("8.0".into()),
-        });
-        for (name, display_name, waits) in [
-            ("NVIDIA A100", None, false),
-            ("NVIDIA CMP 170HX", None, true),
-            ("NVIDIA Graphics Device", Some("NVIDIA CMP 170HX"), true),
-            ("NVIDIA Graphics Device", None, false),
-            ("NVIDIA GeForce RTX 3090", None, false),
+    async fn launches_default_to_placed_ready_and_preserve_explicit_progressive_ready() {
+        for (model, weights) in [
+            ("qwen3.8-27b", "groupwise-int-dflash2-q4"),
+            ("qwen3.8-flash-next", "groupwise-int"),
+            ("qwen3.8-flash-next", "smol-q2g64"),
+            ("qwen3.8-flash-next", "nvfp4"),
         ] {
-            let gpu = &mut Arc::get_mut(&mut host).unwrap().gpus[0];
-            gpu.name = name.into();
-            gpu.display_name = display_name.map(String::from);
-            let launch = host.prepare_launch(&request).await.unwrap();
-            assert_eq!(launch.options.wait_for_residency_fill, waits, "{name}");
-            assert_eq!(
-                launch
-                    .options
-                    .args()
-                    .iter()
-                    .filter(|arg| arg.as_str() == "--wait-for-residency-fill")
-                    .count(),
-                usize::from(waits),
-                "{name}"
-            );
-            assert_eq!(
-                serde_json::to_value(&launch).unwrap()["wait_for_residency_fill"],
-                waits
-            );
-        }
-        let gpu = &mut Arc::get_mut(&mut host).unwrap().gpus[0];
-        gpu.name = "NVIDIA CMP 170HX".into();
-        let saved: LaunchRequest =
-            serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
-        assert!(
-            host.prepare_launch(&saved)
-                .await
-                .unwrap()
-                .options
-                .wait_for_residency_fill
-        );
-    }
-
-    #[tokio::test]
-    async fn flash_large_vram_profile_keeps_progressive_ready() {
-        for weights in ["groupwise-int", "smol-q2g64", "nvfp4"] {
-            let (_dir, mut host, mut request) = installed_flash(weights, false).await;
-            Arc::get_mut(&mut host).unwrap().gpus.push(Gpu {
-                uuid: "GPU-small".into(),
-                name: "Unselected fixture".into(),
-                display_name: None,
-                memory_mib: 24576,
-                compute_capability: Some("12.0".into()),
-            });
-            for memory_mib in [0, 49152, 98304] {
-                Arc::get_mut(&mut host).unwrap().gpus[0].memory_mib = memory_mib;
-                let launch = host.prepare_launch(&request).await.unwrap();
-                assert!(!launch.options.wait_for_residency_fill);
-                assert!(!launch.options.args().iter().any(|arg| arg == "--wait-for-residency-fill"));
+            let (_dir, mut host, mut request) = installed_target(model, weights, false).await;
+            for (name, memory_mib) in [("NVIDIA CMP 170HX", 65536), ("Fixture small", 24576), ("Fixture PRO", 98304)] {
+                let gpu = &mut Arc::get_mut(&mut host).unwrap().gpus[0];
+                gpu.name = name.into();
+                gpu.memory_mib = memory_mib;
+                for progressive in [false, true] {
+                    request.options.progressive_ready = progressive;
+                    let restored: LaunchRequest = serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+                    let launch = host.prepare_launch(&restored).await.unwrap();
+                    assert_eq!(launch.options.args().iter().filter(|arg| arg.as_str() == "--progressive-ready").count(), usize::from(progressive));
+                    assert!(!launch.options.args().iter().any(|arg| arg == "--wait-for-residency-fill"));
+                }
             }
-            let restored: LaunchRequest =
-                serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
-            assert!(!host.prepare_launch(&restored).await.unwrap().options.wait_for_residency_fill);
-            let snapshot = host.snapshot().await;
-            for entry in snapshot["max_perf_profiles"].as_array().unwrap() {
-                let small = entry["compatible_gpu_groups"][0][0] == "GPU-small";
-                assert_eq!(entry["profile"]["options"]["wait_for_residency_fill"], small);
-            }
-            if weights != "nvfp4" {
-                let metadata = &host.inventory.read().await[0].metadata;
-                let profile = crate::max_perf::profile_for_identity(
-                    &metadata.identity, metadata.tp_size, metadata.draft_tp, metadata.nvfp4_kv_available,
-                ).unwrap().for_gpu_group(&host.gpus, &request.gpu_uuids);
-                request.benchmark_profile = Some(profile.reference);
-                request.options = profile.options;
-                request.max_context = profile.max_context;
-                request.concurrency = profile.concurrency;
-                assert!(!host.prepare_launch(&request).await.unwrap().options.wait_for_residency_fill);
-                request.benchmark_profile = None;
-            }
-            request.options.wait_for_residency_fill = true;
-            assert!(host.prepare_launch(&request).await.unwrap().options.wait_for_residency_fill);
         }
     }
 
@@ -2407,25 +2477,6 @@ mod target_launch_tests {
             let (_dir, host, mut request) = installed_flash(weights, false).await;
             let launch = host.prepare_launch(&request).await.unwrap();
             assert_eq!(launch.model_id, format!("qwen3.8-flash-next/{weights}"));
-            assert!(launch.options.wait_for_residency_fill);
-            assert_eq!(
-                launch
-                    .options
-                    .args()
-                    .iter()
-                    .filter(|arg| arg.as_str() == "--wait-for-residency-fill")
-                    .count(),
-                1
-            );
-            let restored: LaunchRequest =
-                serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
-            assert!(
-                host.prepare_launch(&restored)
-                    .await
-                    .unwrap()
-                    .options
-                    .wait_for_residency_fill
-            );
             assert_eq!(launch.options.spec, "auto");
             assert_eq!(launch.options.draft_tokens, 0);
             for vision in [false, true] {
@@ -2539,6 +2590,93 @@ mod resource_tests {
             options: LaunchOptions::default(),
         };
         (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn shared_gpu_placement_quotes_before_load_and_preserves_independent_instances() {
+        let (dir, host, mut request) = fixture().await;
+        // Exercise the real command/HTTP/Ready path with a controlled engine.
+        // Its ledger represents physical allocations, not Host accounting.
+        std::fs::write(dir.path().join("engine"), r#"#!/usr/bin/env python3
+import http.server, json, os, pathlib, sys
+args = sys.argv[1:]
+def arg(name): return args[args.index(name) + 1]
+root = pathlib.Path(__file__).parent
+ledger = root / 'allocations'
+ledger.mkdir(exist_ok=True)
+if '--quote-only' in args:
+    used = 0
+    for path in ledger.iterdir():
+        record = json.loads(path.read_text())
+        try: os.kill(record['pid'], 0)
+        except ProcessLookupError: continue
+        used += record['bytes']
+    quote = dict(schema='ginfer-startup-quote-v1', model_id='muse-glimmer-30b', weights_id='nvfp4',
+        tensor_parallel_size=1, ranks=[dict(rank=0, free_bytes=65536-used, weights_bytes=8192,
+        state_bytes=2048, graph_allowance_bytes=1024, minimum_kv_arena_bytes=1024,
+        kv_arena_alignment_bytes=256, headroom_bytes=1024, startup_peak_bytes=12288)])
+    with (root / 'quotes.jsonl').open('a') as out: out.write(json.dumps(dict(args=args, quote=quote))+'\n')
+    print(json.dumps(quote))
+    sys.exit(0)
+assert os.environ['CUDA_VISIBLE_DEVICES'] == 'GPU-fixture-0'
+assert arg('--max-concurrency') == '4'
+assert arg('--max-context') == '8192'
+port = int(arg('--port'))
+budget = int(arg('--kv-arena-bytes'))
+(ledger / str(port)).write_text(json.dumps(dict(pid=os.getpid(), bytes=11264+budget)))
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != '/health' and self.headers.get('Authorization') != 'Bearer '+arg('--api-key'):
+            self.send_response(401); self.end_headers(); return
+        body = json.dumps(dict(data=[dict(id=arg('--model-id'))])).encode()
+        self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self, *args): pass
+http.server.HTTPServer(('127.0.0.1', port), Handler).serve_forever()
+"#).unwrap();
+        host.processes.lock().await.hardware_profile = None;
+        request.concurrency = 4;
+        let mut ids = BTreeSet::new();
+        let mut ports = BTreeSet::new();
+        let mut sessions = BTreeSet::new();
+        for remaining in (1..=4).rev() {
+            let id = tokio::time::timeout(Duration::from_secs(5), host.place(request.clone(), remaining))
+                .await.unwrap().unwrap();
+            assert!(ids.insert(id));
+            let snapshot = host.snapshot().await;
+            let instance = snapshot["instances"].as_array().unwrap().iter()
+                .find(|instance| instance["instance_id"] == id.to_string()).unwrap();
+            assert_eq!(instance["status"], "ready");
+            assert_eq!(instance["profile"]["kv_arena_bytes"], 4096);
+            assert_eq!(instance["configuration"]["concurrency"], 4);
+            assert!(ports.insert(instance["configuration"]["port"].as_u64().unwrap()));
+            assert!(sessions.insert(instance["session_id"].as_str().unwrap().to_owned()));
+            request.options.kv_arena_bytes = Some(4096);
+        }
+        let quotes = std::fs::read_to_string(dir.path().join("quotes.jsonl")).unwrap();
+        let quotes: Vec<serde_json::Value> = quotes.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
+        assert_eq!(quotes.len(), 4);
+        assert_eq!(quotes[0]["quote"]["ranks"][0]["free_bytes"], 65536);
+        assert_eq!(quotes[3]["quote"]["ranks"][0]["free_bytes"], 19456);
+        for quote in quotes {
+            let args = quote["args"].as_array().unwrap();
+            assert!(args.contains(&serde_json::json!("--quote-only")));
+            assert!(!args.contains(&serde_json::json!("--api-key")));
+        }
+        let error = host.launch(request.clone()).await.unwrap_err();
+        assert!(error.contains("cannot fit 1 new instance"), "{error}");
+        assert_eq!(host.snapshot().await["instances"].as_array().unwrap().len(), 4);
+        let stopped = *ids.iter().next().unwrap();
+        host.processes.lock().await.stop(stopped).await.unwrap();
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["instances"].as_array().unwrap().iter().filter(|instance| instance["status"] == "ready").count(), 3);
+        host.processes.lock().await.shutdown().await.unwrap();
+        let reopened = Host::open(dir.path().join("state"), "Test".into(), dir.path().join("engine"),
+            vec![dir.path().join("models")], vec![], host.gpus.clone()).await.unwrap();
+        let snapshot = reopened.snapshot().await;
+        let restored: BTreeSet<_> = snapshot["instances"].as_array().unwrap().iter()
+            .map(|instance| Uuid::parse_str(instance["instance_id"].as_str().unwrap()).unwrap()).collect();
+        assert_eq!(restored, ids);
+        assert!(snapshot["instances"].as_array().unwrap().iter().all(|instance| instance["status"] == "stopped"));
     }
 
     #[cfg(target_os = "linux")]
@@ -3170,7 +3308,7 @@ mod resource_tests {
     }
 
     #[tokio::test]
-    async fn catalog_snapshot_keeps_gpu_filters_and_fresh_reservations() {
+    async fn catalog_snapshot_keeps_gpu_compatibility_and_shared_groups() {
         let (dir, host, request) = fixture().await;
         let model = host.inventory.read().await[0].clone();
         let base: crate::launch_profiles::LaunchProfile = serde_json::from_value(serde_json::json!({
@@ -3216,10 +3354,10 @@ mod resource_tests {
         processes.launch(launch).unwrap();
         *host.processes.lock().await = processes;
         let reserved = host.snapshot().await;
-        assert_eq!(reserved["launch_profiles"][0]["gpu_groups"], serde_json::json!([["GPU-fixture-1"], ["GPU-fixture-2"], ["GPU-fixture-3"]]));
+        assert_eq!(reserved["launch_profiles"][0]["gpu_groups"], compatible);
         assert_eq!(reserved["launch_profiles"][0]["compatible_gpu_groups"], compatible);
-        assert_eq!(reserved["launch_profiles"][5]["gpu_groups"].as_array().unwrap().len(), 3);
-        assert_eq!(reserved["launch_profiles"][6]["gpu_groups"], serde_json::json!([]));
+        assert_eq!(reserved["launch_profiles"][5]["gpu_groups"].as_array().unwrap().len(), 6);
+        assert_eq!(reserved["launch_profiles"][6]["gpu_groups"], serde_json::json!([["GPU-fixture-0", "GPU-fixture-1", "GPU-fixture-2", "GPU-fixture-3"]]));
         host.processes.lock().await.shutdown().await.unwrap();
         assert_eq!(host.snapshot().await["launch_profiles"][0]["gpu_groups"], compatible);
         *host.launch_profiles.write().await = vec![base];
@@ -4138,12 +4276,9 @@ mod lifecycle_tests {
         assert_eq!(snapshot["instances"][0]["status"], "stopped");
         assert!(snapshot["instances"][0]["session_id"].is_null());
         assert_eq!(snapshot["instances"][0]["profile"]["max_context"], 8192);
-        assert_eq!(snapshot["instances"].as_array().unwrap().len(), 1);
-        let retired: BTreeMap<Uuid, LaunchRequest> = serde_json::from_slice(
-            &std::fs::read(dir.path().join("state/retired-instance-records.json")).unwrap(),
-        )
-        .unwrap();
-        assert!(retired.contains_key(&duplicate_id));
+        assert_eq!(snapshot["instances"].as_array().unwrap().len(), 2);
+        assert_eq!(snapshot["instances"][1]["instance_id"], duplicate_id.to_string());
+        assert!(!dir.path().join("state/retired-instance-records.json").exists());
         *restored.launch_profiles.write().await = vec![recorded];
         assert_eq!(snapshot["instances"][0]["profile"]["structured_outputs"], false);
         assert_eq!(snapshot["instances"][0]["profile"]["qualified_profile_id"], "fixture-c4");
@@ -4177,17 +4312,17 @@ mod lifecycle_tests {
         restored.processes.lock().await.shutdown().await.unwrap();
         let mut replacement = profile.clone();
         replacement.concurrency = 2;
-        assert_eq!(restored.launch(replacement.clone()).await.unwrap(), id);
-        assert_eq!(restored.data.lock().await.profiles.len(), 1);
-        assert!(restored.launch(replacement.clone()).await.is_err());
-        restored.processes.lock().await.shutdown().await.unwrap();
-        assert_eq!(restored.launch(replacement.clone()).await.unwrap(), id);
-        assert_eq!(restored.data.lock().await.profiles.len(), 1);
-        replacement.gpu_uuids = vec!["GPU-second".into()];
-        let second_id = restored.launch(replacement.clone()).await.unwrap();
-        assert_ne!(second_id, id);
-        assert_eq!(restored.data.lock().await.profiles.len(), 2);
-        replacement.instance_id = Some(Uuid::new_v4());
+        let fresh = restored.prepare_launch(&replacement).await.unwrap();
+        let fresh_id = fresh.instance_id;
+        assert_ne!(fresh_id, id);
+        restored.start_prepared(replacement.clone(), fresh).await.unwrap();
+        assert_eq!(restored.data.lock().await.profiles.len(), 3);
+        let peer = restored.prepare_launch(&replacement).await.unwrap();
+        let peer_id = peer.instance_id;
+        assert_ne!(fresh_id, peer_id);
+        restored.start_prepared(replacement.clone(), peer).await.unwrap();
+        assert_eq!(restored.data.lock().await.profiles.len(), 4);
+        replacement.instance_id = Some(fresh_id);
         assert!(restored.launch(replacement).await.is_err());
         restored.processes.lock().await.shutdown().await.unwrap();
         serde_json::from_value::<crate::engine_registry::HostSnapshot>(snapshot).unwrap();

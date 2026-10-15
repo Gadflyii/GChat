@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-15** — [Place independent instances on shared GPUs](2026-10-15-place-independent-instances-on-shared-gpus.md)
+
 - **2026-10-15** — [Admit pool workers at the coordinator](2026-10-15-admit-pool-workers-at-the-coordinator.md)
 
 - **2026-10-14** — [Package Engine documentation from its runtime manifests](2026-10-14-package-engine-docs-from-runtime-manifests.md)
@@ -476,3 +478,6 @@ decision is reversed, add a new one that says which record it supersedes.
 
 - **2026-10-14** — [Resume local Gbot at Linux sign-in](2026-10-14-resume-local-gbot-at-linux-sign-in.md)
 - **2026-10-15** — [Preserve bounded Agent retrieval content](2026-10-15-preserve-bounded-agent-retrieval-content.md)
+- **2026-10-15** — [Open Gbot in a workspace overlay](2026-10-15-open-gbot-in-a-workspace-overlay.md)
+
+- **2026-10-15** — [Use the Engine default for placed Ready](2026-10-15-use-engine-placed-ready-default.md)

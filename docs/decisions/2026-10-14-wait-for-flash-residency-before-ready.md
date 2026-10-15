@@ -1,7 +1,7 @@
 # Wait for small-VRAM Flash-Next residency before Ready
 
-Status: implementation requested by bubbs in the October 14, 2026 GChat queue;
-VRAM scope corrected at 01:44 UTC.
+Status: superseded by [Engine-owned placed Ready](2026-10-15-use-engine-placed-ready-default.md).
+The historical policy below used the pre-October 15 Engine contract.
 
 The shared Host adds `--wait-for-residency-fill` to Flash-Next launches when
 every selected GPU has known VRAM of at most 32 GiB. Larger VRAM classes,

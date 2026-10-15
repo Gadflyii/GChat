@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelManagement } from '@/containers/ModelManagement'
 import type { ModelRelease } from '@/lib/model-release'
@@ -46,8 +47,10 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
   })
   it('downloads to the selected host without invoking a local transfer', async () => {
+    const user = userEvent.setup()
     render(<ModelManagement />)
-    fireEvent.change(screen.getByLabelText('Model destination'), { target: { value: 'remote' } })
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
     expect(screen.getByText('Installed on Lab server')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
     fireEvent.click(screen.getByRole('button', { name: 'Download to Lab server' }))
@@ -55,10 +58,12 @@ describe('host-scoped Models', () => {
     expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download')).toBe(false)
     expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveAttribute('aria-selected', 'true')
   })
-  it('disables mutations against an offline host even with saved inventory', () => {
+  it('disables mutations against an offline host even with saved inventory', async () => {
+    const user = userEvent.setup()
     mocks.errors = { remote: 'Connection lost' }
     render(<ModelManagement />)
-    fireEvent.change(screen.getByLabelText('Model destination'), { target: { value: 'remote' } })
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Lab server (offline)' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
     expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('Connection lost')

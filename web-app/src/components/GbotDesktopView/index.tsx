@@ -17,8 +17,9 @@ const GbotDesktopView = forwardRef<
     identity: Identity
     owner: string
     interactive: boolean
+    visible?: boolean
   }
->(function GbotDesktopView({ identity, owner, interactive }, ref) {
+>(function GbotDesktopView({ identity, owner, interactive, visible = true }, ref) {
   const [opened, setOpened] = useState(false)
   const [audio, setAudio] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -35,7 +36,7 @@ const GbotDesktopView = forwardRef<
   const { workspace_id, session_id } = identity
   useEffect(() => {
     const identity = { workspace_id, session_id }
-    if (!opened || !canvas.current) return
+    if (!visible || !opened || !canvas.current) return
     let cancelled = false
     let session: MediaSession | null = null
     let ticket: ViewTicket | null = null
@@ -92,7 +93,7 @@ const GbotDesktopView = forwardRef<
       if (media.current === session) media.current = null
       if (ticket) void close(ticket).catch(() => {})
     }
-  }, [opened, audio, attempt, workspace_id, session_id, owner, interactive])
+  }, [visible, opened, audio, attempt, workspace_id, session_id, owner, interactive])
 
   if (!opened)
     return (

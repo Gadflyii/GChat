@@ -165,6 +165,8 @@ export type Task = {
   state: string
   messages: { role: string; content: unknown }[]
   help_requests: HelpRequest[]
+  calls?: { call_id: string; name: string; reply: unknown | null; not_executed?: boolean }[]
+  connector_calls?: { call_id: string; name: string; reply: unknown | null }[]
 }
 export type HelpRequest = {
   id: string
@@ -180,6 +182,14 @@ export type Approval = {
 
 export function gbot<T>(path: string, body?: unknown): Promise<T> {
   return invoke<T>('gbot_command', { path: `/v1/${path}`, body })
+}
+
+export function gbotControlOwner(): string {
+  const saved = sessionStorage.getItem('gbot-control-owner')
+  if (saved) return saved
+  const owner = crypto.randomUUID()
+  sessionStorage.setItem('gbot-control-owner', owner)
+  return owner
 }
 
 export type ServiceTarget =
