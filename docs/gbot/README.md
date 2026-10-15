@@ -161,8 +161,9 @@ dispatch after client exit, Windows/Hyper-V, cloud/M365 creation, remote service
 selection and installer opt-in. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates these from accepted setup evidence. The CPU-only installed guest also
 exposed unguarded local Host hardware preparation; its owning native gate now rejects unsupported local hardware before Host
-bootstrap, with focused fixture/check/Clippy evidence in that plan. Remote inference and Gbot do not require a local
-NVIDIA GPU.
+bootstrap, with focused fixture/check/Clippy evidence in that plan. The same plan
+records the October 15 fresh Linux runtime/Host handoff and explicit 5090
+preparation follow-up. Remote inference and Gbot do not require a local NVIDIA GPU.
 
 Ron selected **Cua native media for the first release** on October 12. Adopt
 its Spaces guest media endpoint and browser media core through SSH; retain
@@ -982,8 +983,9 @@ UTC, booking 1433 canceled and 13.33 GB reclaimed.
 Automatic hardware preparation subsequently reported Host exit 1 with no local
 owner ready in this CPU-only guest. The original Host log was not retained. The later installed-creation gate
 retains a Host log reporting GPU inventory ENOENT in the CPU-only guest; the
-exact missing executable and supported-GPU readiness remain unverified. This
-separate master-list finding is outside startup/resource acceptance.
+exact missing executable remains unverified. The October 15 supported-GPU
+follow-up is recorded in the [acceptance plan](../agent-runtime/remaining-acceptance.md).
+This separate master-list finding is outside startup/resource acceptance.
 Accepted in main `8d268fc11`; no second startup launch or model test is required.
 Evidence and disposable outputs: `out/gchat-open-items-20261012/resource-startup/`.
 

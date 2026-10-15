@@ -260,8 +260,32 @@ an actionable message, and retain Host validation for unreadable NVIDIA
 capability. The focused case, desktop/CLI checks and strict Clippy pass;
 desktop/Clippy have no warnings, with two/four unchanged setup warnings in
 test/CLI builds. Evidence: `out/gchat-open-items-20261013/hardware-gate/result.json`.
-Its container and CPU booking are retired. Supported-GPU installed preparation
-remains owed; the historical ENOENT log does not identify the missing loader.
+Its container and CPU booking are retired. The historical ENOENT log does not
+identify the missing loader. The October 15 fresh Linux handoff below records
+the supported-GPU follow-up.
+
+Fresh Linux hardware preparation, October 15: the retained developer DEB
+(`7e33222e8` desktop/CLI/Host, `38ff80e0c` Engine) was extracted into a new
+private installation root and launched with empty private XDG managed data,
+no Host locator and no profile. Native startup installed its bundled runtimes
+and automatically attached a live local Host at 08:56:20 UTC. Preparation
+returned `idle`, as required by the
+[explicit GPU selection decision](../decisions/2026-10-11-own-hardware-profile-installation-in-host.md):
+first install chooses no default GPU, including on a singleton host.
+
+The packaged native `prepare-hardware` command then explicitly selected the
+booked RTX 5090 UUID at 09:01:36 UTC. Its first `Ensure` started one Host-owned
+job with the newly installed SM120a CLI, without a prior profile or forced
+refresh. The Host completed at 09:13:42.134 UTC and published a schema-v2
+profile in 725.317 seconds: exact 5090 UUID, CPUs 8–31, error null, available
+true and no pending/stale groups. The profile SHA-256 is
+`349bf23190fcb1860437aa368c56db4f0c450a412501f99908ccfa02e906bd60`.
+All owned fixture processes stopped after completion; private payload/data
+were retired, booking 706 canceled and the GPU guard released. Evidence:
+`/ai/gchat/out/gchat-installed-gpu-handoff-20261015/{result.json,summary.md}`.
+This gate uses the extracted DEB payload, rather than a system package-manager
+installation. GPU selection through the desktop UI, model capacity and native
+Windows release acceptance remain separate.
 
 Completed item: installed Linux Gbot computer creation and same-setup resume.
 Candidate `test/gbot-installed-creation-2eff` at source `6acaead46`, based on
@@ -389,7 +413,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-069 | Pair/restart/grant restore passed; shared-pool queue, cancellation and recovery across two Ready hosts did not. | Resolve the worker startup/RAM blocker, then one two-host job lifecycle. |
 | OI-072-RUNTIME | Closed by Arch as external in master docs `33a2f02b9`: current Muse C4/131072 had no post-Ready allocation and did not reproduce the historical drop. | Reuse C4’s 1,602-sample result (641.7–674.3 MiB free against the 300 MiB guard). Follow-up only under GUARD-EXTERNAL-DROP; this does not qualify the launch catalog. |
 | OI-076 | Continued-chat context/format warning's original cause remains unknown. | Diagnostics merged in `36ac89441`; collect exact trigger on the next occurrence. No speculative fix. |
-| GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE | Local bootstrap/preparation now rejects no-NVIDIA inventory before Host spawn; unreadable NVIDIA capability continues to Host validation. Main `e42805f2a` integrates source `789d089db`; focused fixture, desktop/CLI checks and strict Clippy PASS. | Source landed; supported-GPU installed preparation remains owed. Historical inventory ENOENT is retained without asserting its missing executable/loader. |
+| GCHAT-LINUX-HARDWARE-PREP-OWNER-UNAVAILABLE | Local bootstrap/preparation rejects no-NVIDIA inventory before Host spawn; unreadable NVIDIA capability continues to Host validation. Main `e42805f2a` integrates source `789d089db`; focused fixture, desktop/CLI checks and strict Clippy PASS. | October 15 fresh native DEB payload handoff PASS: empty managed data, bundled runtime install, automatic live Host/idle pending required explicit GPU choice, then first native 5090 Ensure completed/published v2 in 725.317 s. Private fixture retired and booking released. Desktop GPU-picker interaction and system package-manager installation are separate; historical ENOENT loader is not asserted. |
 | OI-066 | Guard diagnosis is closed; fit-message correction `85bc3d087` is not in origin/dev/next. | Owning CPU/syntax fixtures pass; reviewed engine landing remains pending. Profile qualification is OI-072. |
 | OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; all 19 existing offline metadata cases PASS on S1. The live feed is not published. | Exact final-payload signature and signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
