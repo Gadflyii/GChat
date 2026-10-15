@@ -43,7 +43,7 @@ and in-flight Stop are checked separately. Regression checks cover cancellation
 before fallback. Direct connections retain all validated DNS addresses. Initial fetch targets are validated before Exa; redirects
 followed by hosted extraction remain outside local visibility. These are native
 Linux development checks; Windows and installer qualification are separate.
-Evidence: `/ai/gchat/out/web-search-qualify-20261015/{verification-34e61720c.json,summary.md}`.
+Evidence: `/ai/gchat/out/web-search-qualify-20261015/{result.json,summary.md}`.
 
 The separate `LOCAL-FILE-SEARCH-QUALIFY` Linux item covers client-side direct
 PDF/DOCX/spreadsheet text extraction and filename/text search through
