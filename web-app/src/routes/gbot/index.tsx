@@ -94,13 +94,9 @@ function GbotPage() {
       setServiceTarget(target)
       const value = await gbot<BotState>('state')
       if (stopped.current || version !== refreshVersion.current) return
-      const hasKvm = value.workspaces.some(
-        (workspace) =>
-          workspace.bot_pc?.kind === 'local_vm' &&
-          workspace.bot_pc.hypervisor === 'kvm'
-      )
       setState(value)
       setSetupError('')
+      let kvm: KvmSetupRecord[] | undefined
       let cloud: CloudReview[] = []
       let m365: M365SetupRecord[] = []
       try {
@@ -121,19 +117,23 @@ function GbotPage() {
         if (stopped.current || version !== refreshVersion.current) return
         setSetupError(String(cause))
       }
-      if (hasKvm) {
-        try {
-          const records = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
-          if (stopped.current || version !== refreshVersion.current) return
-          setSetups(records)
-        } catch (cause) {
-          if (stopped.current || version !== refreshVersion.current) return
-          setSetupError(String(cause))
-        }
+      try {
+        const records = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
+        if (stopped.current || version !== refreshVersion.current) return
+        kvm = Array.isArray(records) ? records : []
+        setSetups(kvm)
+      } catch (cause) {
+        if (stopped.current || version !== refreshVersion.current) return
+        setSetupError(String(cause))
       }
-      if (!setupOffered.current) {
+      if (!setupOffered.current && kvm !== undefined) {
         setupOffered.current = true
-        if (!value.workspaces.length && !cloud.length && !m365.length)
+        if (
+          !value.workspaces.length &&
+          !cloud.length &&
+          !m365.length &&
+          !kvm.some((record) => record.stage !== 'removed')
+        )
           setAdding(true)
       }
       setError('')
@@ -237,6 +237,11 @@ function GbotPage() {
   const workspaceId = selected || state?.workspaces[0]?.id
   const bot = state?.workspaces.find(
     (workspace) => workspace.id === workspaceId
+  )
+  const unfinishedSetups = setups?.filter(
+    (record) =>
+      record.stage !== 'removed' &&
+      !state?.workspaces.some((workspace) => workspace.id === record.id)
   )
   const identity = state?.live_sessions.find(
     (session) => session.workspace_id === workspaceId
@@ -532,6 +537,35 @@ function GbotPage() {
                 }}
               />
             )}
+            {!adding &&
+              unfinishedSetups?.map((record) => (
+                <section
+                  key={record.id}
+                  aria-label={`Local setup ${record.name}`}
+                  className="space-y-2 rounded-md border p-3 text-sm"
+                >
+                  <p className="font-medium">
+                    {record.name} · Local computer setup
+                  </p>
+                  <p>Computer {record.stage.replaceAll('_', ' ')}</p>
+                  {record.issue && (
+                    <div role="alert">
+                      <p>{record.issue.message}</p>
+                      <p>{record.issue.next_action}</p>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    disabled={busy || record.stage === 'removing'}
+                    onClick={() => {
+                      setResuming({ id: record.id, name: record.name })
+                      setAdding(true)
+                    }}
+                  >
+                    Resume setup
+                  </Button>
+                </section>
+              ))}
             {!adding &&
               cloudReviews.map((review) => (
                 <section

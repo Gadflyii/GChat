@@ -634,6 +634,11 @@ sleep and guest reboot each need an observed recovery case before qualification.
 
 ## Durable work and status
 
+A saved local computer setup appears in **Your bots** even before its bot is
+registered. Leaving setup or closing the client retains its name, progress and
+any issue. Choose **Resume setup** on that saved computer to continue with the
+same identity; setup checks must still finish before the computer is Ready.
+
 A saved local computer may need setup checks again after service restart while
 human control remains paused. The original owner can choose **Hand back** when
 the saved setup and live control session match. Hand back closes human media and
