@@ -9,6 +9,35 @@ closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has a separate Linux
 live-worker checkpoint-continuity pass below; restart recovery and a successful
 multi-file task after compaction remain unqualified.
 
+## Current worker review follow-up
+
+`GCHAT-WORKER-REVIEW-INSTRUCTION-FOLLOWING` owns the remaining task-quality
+failures from the retained fresh-read review. The candidate clarifies that the
+task's requested order and one-call decisions take priority over general batching,
+and asks the worker to verify source conditions and return paths before stating
+behavior. This is general worker guidance; it supplies no task-specific answer.
+Prompt guidance alone does not establish the cause or correction of a model error.
+
+One native default-worker review used the same read-only eight-file task and
+unchanged normal model and worker settings. It finished in 11 decisions, inspected
+all eight files in order and made exactly one tool call per decision. The exact
+answer survived ordinary Studio navigation and saved-run reopening.
+
+The task still fails factual accuracy: the answer again says manual Compact does
+nothing whenever input fits, overlooking the earlier checkpoint attempt. It also
+misstates the cut indices. This guidance therefore qualifies sequential inspection
+in this run, not resolution of the review-quality defect. The row remains open;
+the shared first-run wizard takes priority next. No new checkpoint, restart or
+post-compaction task acceptance is claimed.
+
+Evidence: `/ai/gchat/out/worker-review-guidance-20261015/{result.json,summary.md}`.
+Full `make verify`, native check, strict Clippy and build pass. The candidate uses
+desktop base `a0336f7d5`, accepted Host `44e80b7c1` and Engine `9f8fb8ff9`; this is
+a native functional gate, not a rebuilt installer gate. Normal Host Stop returned
+zero active requests, private credential removal passed and owned processes and
+S1 booking 1841 are released. The previous retention and checkpoint evidence
+remains valid at its recorded scope.
+
 ## Worker file-read ranges — October 15
 
 `GCHAT-WORKER-FILE-READ-STRING-RANGE`: `os.fs.read` now accepts unsigned JSON

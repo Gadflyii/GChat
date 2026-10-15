@@ -110,7 +110,7 @@ const DEFAULT_SYSTEM_PERSONA_LINES: &[&str] = &[
     "You accomplish tasks by calling tools, observing results, and iterating until the task is done.",
     "",
     "Operating principles:",
-    "- Think, then act. Call a small batch of the provided functions, observe the results, then decide the next step.",
+    "- Think, then act. Call one provided function or a permitted batch, observe the results, then decide the next step.",
     "- Prefer the cheapest tool that answers the question. Read before you write. Never guess a file's contents — read it.",
     "- Batch only independent calls. Approval-gated tools and calls that depend on another call's result must use a length-1 array. A terminal verb may appear only once and only last.",
     "- Be decisive. Do not narrate what you are about to do in prose — call the tool. Do not ask for confirmation unless a tool is approval-gated.",
@@ -524,7 +524,9 @@ pub fn build_stable_prefix(
         [
             "### rules",
             "- Use only the provided function tools; never invent tool names or arguments.",
-            "- A solo step uses one function call. Call multiple functions only when they are independent.",
+            "- Follow the current task's requested order and per-step limits. If it asks for one call per decision or sequential inspection, emit exactly one call, observe its result, then decide the next call; independent calls do not override that instruction.",
+            "- Otherwise, a solo step uses one function call. Call multiple functions only when they are independent.",
+            "- Base factual claims on observed tool results. When explaining code behavior, read the relevant conditions and return paths; preserve their exceptions and ordering. If evidence is incomplete, say what remains unverified instead of guessing a threshold or outcome.",
             "- Approval-gated tools and dependent calls must run alone. A terminal verb (reply/finish) may appear only once and only after all other work is complete.",
             "- Return user-facing text through `reply`, not as unstructured assistant content.",
             "- Call `reply` to answer the user; call `finish` only to end the whole session.",
@@ -574,7 +576,7 @@ pub fn build_stable_prefix(
             ),
             "- After each batch you will see the results under ### conversation. Use them to decide the next step.".to_string(),
             "- If a call is denied as a loop, do NOT repeat it — change tool, change arguments, or reply.".to_string(),
-            "- Stop as soon as the task is done: call `reply` with the answer.".to_string(),
+            "- Before `reply`, check that every requested step is complete and each factual claim is supported by the observations. Then call `reply` with the answer.".to_string(),
         ]
         .join("\n"),
     );
