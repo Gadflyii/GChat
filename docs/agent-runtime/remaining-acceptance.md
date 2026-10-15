@@ -12,6 +12,48 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## OI-068 native near-full-input task — October 15
+
+One ordinary Linux native Standard Agent run reached a correct Reply with
+241364 measured whole-input tokens, configured context 262144, a 20480-token
+reserve and zero compactions. The task placed three codes among filler text;
+the exact answer was `North=CEDAR-74291; Central=MICA-58604; South=OTTER-19387`.
+The native UI showed finished at 19:15:03Z. Engine request 1 completed at
+19:13:47.182Z with 241364 prompt tokens, 183 generated tokens, no cache hit and
+207.33 seconds wall time. One earlier count-only calibration correctly blocked
+567284 input tokens with zero model steps and zero generated tokens.
+
+Desktop source `00068f2a8`, merged Host `16a338aff` and the complete 171-payload
+Engine `5af502f1` runtime served `qwen3.8-27b/nvfp4-dflash2-nvfp4` on S1 GPU0,
+an NVIDIA RTX PRO 6000 Blackwell Workstation Edition. The package SHA is
+`4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`.
+The ordinary Save & Run
+path created fresh run/session `c0d7ac9b-56f0-49b1-ac07-51719bdec0cb`, stored as
+record `9dbd486b-d831-443d-9604-bc87c9fee081`. Settings
+were C1, speculation disabled, NVFP4 KV, structured outputs and graphs on,
+headroom 1073741824 bytes, no host KV cache, high reasoning, Auto output and
+the default 25 steps. Saved KV remained Automatic; the effective arena was
+79365530624 bytes.
+
+Ordinary Refresh runs and selection of the saved FINISHED record reopened the
+exact final output and persisted one-step metrics at 19:15:42.800Z. Independent
+inspection confirms the finished/reply record and the same semantic session's
+single user/reply turn. Live Context count, reserve and zero compactions are
+retained separately from the saved Result overview.
+
+Normal UI Stop at 19:16:12.075Z reached stopped at 19:16:21.200Z; the engine was
+absent and GPU compute empty. The guard exited without kills. The owned remote
+Host then exited, its listeners closed, the GPU lock was free and resource
+bookings were returned. Normal desktop Close and retirement of the owned private
+Host, Gbot and helpers completed; the private FUSE mount disappeared. The private
+app also overwrote shared `~/.local/bin` CLI files despite XDG isolation. After
+exit, its private redirect was moved aside reversibly; verified CLI binaries
+were retained, with no original backup available. This qualifies the measured
+near-full-input functional gate; literal 262144 input tokens and fresh-install
+acceptance are not claimed.
+OI-068 remains PARTIAL. Evidence:
+`/ai/gchat/out/native-full-context-20261015/{full-input-recipe.json,full-input-result.json,full-input-summary.md,stop-observation.json,guard.json,release.json}`.
+
 ## OI-068 native near-full-context startup — October 15
 
 The local RTX 5090 native Standard Agent gate selected Qwen3.8-27b NVFP4-DFlash2,
@@ -84,9 +126,10 @@ Gchat 2 copied and hash-verified the Host binary locally and on Ada for its
 separate retest; the original handoff copy is retired. Source donors, models and
 shared caches are untouched.
 
-The predeclared native gate requires a measured whole-input count of 240000–241664
-tokens, the correct three-code Reply and zero compactions. Ready at 262144 alone
-does not qualify it. OI-068 remains PARTIAL. Evidence:
+These startup attempts alone do not qualify the predeclared native gate of
+240000–241664 measured whole-input tokens, the correct three-code Reply and zero
+compactions. The later [native task above](#oi-068-native-near-full-input-task--october-15)
+passes that scope. OI-068 remains PARTIAL. Historical startup evidence:
 `/ai/gchat/out/native-full-context-20261015/{result.json,summary.md}` and
 `/ai/gchat/out/host-fresh-kv-quotes-20261015/{ready.json,stopped.json,cleanup.json,result.json,summary.md}`.
 Merged retest receipts:
@@ -728,7 +771,7 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. | Automatic continuation and crash recovery; full 262144-token capacity; Windows/Hermes at release. The original harder review's factual accuracy remains open separately. Read-range defect tracked separately. Do not replay passing gates. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. One native task passed at 241364 measured input tokens with configured context 262144, reserve 20480, correct three-code Reply and zero compactions; saved Result reopening and normal Stop passed. | Automatic continuation and crash recovery; Windows/Hermes at release. The original harder review's factual accuracy remains open separately. The measured input gate does not qualify literal 262144 input tokens or fresh-install packaging. Read-range defect tracked separately. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |
