@@ -39,13 +39,21 @@ class LinuxSetup(unittest.TestCase):
                 setup.install(bundle, target, provider, config, links)
                 run.assert_not_called()
             self.assertFalse(target.exists())
-            with mock.patch.object(setup.subprocess, 'run', return_value=handoff) as run:
+            with mock.patch.object(setup.subprocess, 'run', side_effect=[
+                    handoff, mock.Mock(stdout='{"step":"gpu","gpu_uuids":[]}'),
+                    mock.Mock(stdout='{"step":"profiling","gpu_uuids":["GPU-second","GPU-first"]}')]) as run:
                 setup.install(bundle, target, provider, config, links, True, ('GPU-second', 'GPU-first'))
-                run.assert_called_once_with([
+                run.assert_has_calls([mock.call([
                     str(target / 'bin/ginfer-host'), 'prepare-hardware', '--engine',
                     str(target / 'bin/ginfer'), '--installed-configuration',
                     str(target / 'bin/ginfer-launch.json'), '--gpu', 'GPU-second', '--gpu', 'GPU-first'],
-                    check=True, capture_output=True, text=True, env=child_environment)
+                    check=True, capture_output=True, text=True, env=child_environment),
+                    mock.call([str(target / 'bin/ginfer-host'), 'first-run'],
+                              check=True, capture_output=True, text=True, env=child_environment),
+                    mock.call([str(target / 'bin/ginfer-host'), 'first-run', '--action', 'profile',
+                               '--gpu', 'GPU-second', '--gpu', 'GPU-first'],
+                              check=True, capture_output=True, text=True, env=child_environment)])
+                self.assertEqual(run.call_count, 3)
             self.assertEqual(dict(setup.os.environ), ambient_environment)
             self.assertEqual((links / 'ginfer').resolve(), target / 'bin/ginfer')
             launch = json.loads((target / 'bin/ginfer-launch.json').read_text())
@@ -69,6 +77,29 @@ class LinuxSetup(unittest.TestCase):
                     env=child_environment)
             self.assertFalse((second / 'bin/ginfer-launch.json').exists())
             self.assertEqual(json.loads(locator.read_text()), record)
+            resumed = root / 'resumed'
+            with mock.patch.object(setup.subprocess, 'run', side_effect=[
+                    handoff, mock.Mock(stdout='{"step":"profiling","gpu_uuids":["GPU-second","GPU-first"]}')]) as run:
+                setup.install(bundle, resumed, provider, config, root / 'resumed-links', True,
+                              ('GPU-second', 'GPU-first'))
+                self.assertEqual(run.call_count, 2)
+                run.assert_called_with([str(resumed / 'bin/ginfer-host'), 'first-run'],
+                                       check=True, capture_output=True, text=True, env=child_environment)
+            completed = root / 'completed'
+            with mock.patch.object(setup.subprocess, 'run', side_effect=[
+                    handoff, mock.Mock(stdout='{"step":"complete","gpu_uuids":["GPU-first"]}')]) as run:
+                setup.install(bundle, completed, provider, config, root / 'completed-links', True,
+                              ('GPU-second', 'GPU-first'))
+                self.assertEqual(run.call_count, 2)
+                run.assert_called_with([str(completed / 'bin/ginfer-host'), 'first-run'],
+                                       check=True, capture_output=True, text=True, env=child_environment)
+            interactive = root / 'interactive'
+            with mock.patch.object(setup.subprocess, 'run', return_value=handoff) as run:
+                setup.install(bundle, interactive, provider, config, root / 'interactive-links', True, interactive=True)
+                self.assertEqual(run.call_count, 2)
+                self.assertEqual(run.call_args_list[0].args[0][1], 'prepare-hardware')
+                run.assert_called_with([str(interactive / 'bin/ginfer-host'), 'first-run', '--interactive'],
+                                       check=True, env=child_environment)
             interrupted = root / 'handoff-failed'
             with mock.patch.object(setup.subprocess, 'run', side_effect=setup.subprocess.CalledProcessError(1, 'fixture')):
                 with self.assertRaises(setup.subprocess.CalledProcessError):

@@ -79,6 +79,7 @@ async function manager(t, view = fixture(), request = () => ({})) {
       calls.push({ command, input: structuredClone(input) })
       if (command === 'manager_snapshot') return structuredClone(view)
       assert.equal(command, 'manager_request')
+      if (input.request.operation === 'first_run' && !input.request.args?.action) return { result: structuredClone(view.first_run ?? { step: 'complete' }) }
       const result = await request(input.request, view)
       return { result, view: structuredClone(view) }
     } },
@@ -108,7 +109,7 @@ function button(root, name) {
 }
 
 function requests(app) {
-  return app.calls.filter(({ command }) => command === 'manager_request').map(({ input }) => input.request)
+  return app.calls.filter(({ command, input }) => command === 'manager_request' && !(input.request.operation === 'first_run' && !input.request.args?.action)).map(({ input }) => input.request)
 }
 
 async function completed(app, predicate) {
@@ -121,6 +122,100 @@ function submit(app) {
   form.dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }))
   return form
 }
+
+test('shared first-run flow selects GPUs, resumes work and approves Engine startup defaults', async (t) => {
+  const view = fixture()
+  const release = { name: 'Muse download', sha256: 'a'.repeat(64), bytes: 1024 ** 3 }
+  const initial = { gpu_uuids: [], hardware_profile: {}, storage: { path: '/models', recommended_path: '/fast', available_bytes: 1024 ** 4 }, models: [], selected_downloads: [], startup_profiles: [] }
+  const startup = { download_id: 'download', model_id: 'muse', gpu_uuids: ['GPU-local'], concurrency: 4, max_context: 32768, kv_arena_bytes: null, instance_count: 1, quote: null, error: null }
+  view.first_run = { ...initial, step: 'gpu' }
+  const app = await manager(t, view, (request) => {
+    assert.equal(request.operation, 'first_run')
+    const args = request.args
+    if (args.action === 'profile') {
+      assert.deepEqual(args.gpu_uuids, ['GPU-local'])
+      view.first_run = { ...initial, step: 'profiling', gpu_uuids: args.gpu_uuids, hardware_profile: { status: 'interrupted', error: 'Restart interrupted profiling' } }
+    } else if (args.action === 'resume' && view.first_run.step === 'profiling') {
+      view.first_run = { ...view.first_run, step: 'storage', storage: { ...initial.storage, error: 'One disk could not be measured', candidates: [{ path: '/full', available_bytes: 0, eligible: false, reason: 'Insufficient capacity' }] } }
+    } else if (args.action === 'storage') {
+      assert.equal(args.path, '/chosen')
+      view.first_run = { ...view.first_run, step: 'models', catalog_loaded: false }
+    } else if (args.action === 'refresh_catalog') {
+      view.first_run = { ...view.first_run, catalog_loaded: true, models: [{ release, recommended: true, reason: 'Fits measured memory' }] }
+    } else if (args.action === 'models') {
+      assert.deepEqual(args.release_ids, [release.sha256])
+      view.first_run = { ...view.first_run, step: 'downloads', selected_downloads: [{ id: 'download', release, status: 'failed', received: 1024, bytes_per_second: 0, error: 'Network interrupted' }] }
+    } else if (args.action === 'resume') {
+      view.first_run = { ...view.first_run, step: 'startup', startup_profiles: [] }
+    } else if (args.action === 'startup') {
+      assert.deepEqual(args, { action: 'startup', download_id: 'download', concurrency: 2, max_context: 32768, instance_count: 1, kv_arena_bytes: null })
+      view.first_run = { ...view.first_run, startup_profiles: [{ ...startup, concurrency: 2, quote: { fits: true } }] }
+    } else if (args.action === 'complete') {
+      view.first_run = { ...view.first_run, step: 'complete' }
+    } else assert.fail(`unexpected first-run action ${args.action}`)
+    return structuredClone(view.first_run)
+  })
+  await waitFor(() => app.document.querySelector('[aria-label="Set up local GInfer"] input[type="checkbox"]'), 'GPU selection must render')
+  assert.equal(button(app.document, 'Use selected GPUs and profile').disabled, true)
+  const gpu = app.document.querySelector('[aria-label="Set up local GInfer"] input[type="checkbox"]')
+  gpu.click()
+  button(app.document, 'Use selected GPUs and profile').click()
+  await waitFor(() => app.document.body.textContent.includes('Restart interrupted profiling'), 'shared profiling error must render')
+  button(app.document, 'Resume hardware profiling').click()
+  await waitFor(() => app.document.body.textContent.includes('One disk could not be measured'), 'storage evidence must render')
+  assert.equal(button(app.document, '/full · 0.0 GiB free').disabled, true)
+  const folder = app.document.querySelector('[aria-label="Model download folder"]')
+  folder.value = '/chosen'
+  folder.dispatchEvent(new app.window.Event('input', { bubbles: true }))
+  button(app.document, 'Use this folder').click()
+  await waitFor(() => app.document.body.textContent.includes('Loading published model catalog…'), 'catalog load must be visible')
+  button(app.document, 'Refresh model catalog').click()
+  await waitFor(() => button(app.document, 'Download selected models').disabled === false, 'published recommendation must initialize selection')
+  button(app.document, 'Download selected models').click()
+  await waitFor(() => app.document.body.textContent.includes('Network interrupted'), 'download failure must render')
+  button(app.document, 'Resume downloads').click()
+  await waitFor(() => app.document.body.textContent.includes('Preparing startup settings and checking Engine memory…'), 'initial quote preparation must be visible')
+  assert.equal(button(app.document, 'Finish local setup').disabled, true)
+  view.first_run.startup_profiles = [startup]
+  await app.publish(view)
+  await waitFor(() => app.document.body.textContent.includes('Checking these settings with the Engine…'), 'pending quote must render')
+  assert.equal(button(app.document, 'Finish local setup').disabled, true)
+  button(app.document, 'Adjust startup settings…').click()
+  const form = app.document.querySelector('[role="dialog"] form')
+  form.elements.namedItem('concurrency').value = '2'
+  submit(app)
+  await waitFor(() => button(app.document, 'Finish local setup').disabled === false, 'successful quote must permit completion')
+  button(app.document, 'Finish local setup').click()
+  await waitFor(() => !app.document.querySelector('[aria-label="Set up local GInfer"]'), 'completed wizard must close')
+  assert.ok(requests(app).every(request => request.operation === 'first_run'))
+})
+
+test('first-run storage preserves typed and candidate choices when the catalog arrives', async (t) => {
+  for (const choice of ['typed', 'candidate']) {
+    const view = fixture()
+    view.first_run = { step: 'storage', gpu_uuids: ['GPU-local'], catalog_loaded: false,
+      storage: { path: '/models', recommended_path: '/fast', candidates: [{ path: '/candidate', available_bytes: 1024 ** 4, eligible: true }] }, models: [] }
+    const expected = choice === 'typed' ? '/my-selected-disk' : '/candidate'
+    const app = await manager(t, view, request => {
+      assert.deepEqual(request.args, { action: 'storage', path: expected })
+      return { step: 'complete' }
+    })
+    await waitFor(() => app.document.querySelector('[aria-label="Model download folder"]'), 'storage must render')
+    if (choice === 'typed') {
+      const folder = app.document.querySelector('[aria-label="Model download folder"]')
+      folder.value = expected
+      folder.dispatchEvent(new app.window.Event('input', { bubbles: true }))
+    } else button(app.document, '/candidate · 1024.0 GiB free').click()
+    view.first_run.catalog_loaded = true
+    view.first_run.storage.recommended_path = '/new-recommendation'
+    await app.publish(view)
+    await waitFor(() => app.document.body.textContent.includes('Recommended: /new-recommendation'), 'catalog poll must finish')
+    assert.equal(app.document.querySelector('[aria-label="Model download folder"]').value, expected)
+    button(app.document, 'Use this folder').click()
+    await completed(app, calls => calls.length === 1)
+    assert.equal(requests(app)[0].args.path, expected)
+  }
+})
 
 test('secure storage results show neutral success and an error alert only on failure', async (t) => {
   let failure = null
@@ -1087,7 +1182,7 @@ test('a launch dialog opened before profiling starts cannot submit a model launc
   await app.publish(next)
   submit(app)
   await flush()
-  assert.equal(app.calls.filter(({ command }) => command === 'manager_request').length, 0)
+  assert.equal(requests(app).length, 0)
   assert.match(app.document.body.textContent, /hardware profiling has stopped/)
 })
 
@@ -1154,7 +1249,7 @@ test('pending and exact stale profile groups update in shared snapshots and requ
   const stale = app.document.querySelector('section[aria-label*="Stale GPU group"][aria-label*="GPU-two"]')
   assert.match(stale.textContent, /group-two\/hardware.json/)
   button(stale, 'Select group to re-profile').click()
-  assert.equal(app.calls.filter(({ command }) => command === 'manager_request').length, 0)
+  assert.equal(requests(app).length, 0)
   button(app.document, 'Refresh hardware profile').click()
   await waitFor(() => app.calls.some(({ input }) => input?.request?.args?.action === 'refresh'), 'explicit refresh reaches the selected stale group')
   assert.deepEqual(app.calls.find(({ input }) => input?.request?.args?.action === 'refresh').input.request.args,

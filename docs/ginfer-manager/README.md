@@ -13,6 +13,101 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Shared first-run setup — October 15
+
+`FIRST-RUN-WIZARD` and `MODEL-STORAGE-FASTEST-DISK` share one Host-owned workflow on branch
+`feat/gchat-shared-first-run-wizard`, based on `3681810c4`. Linux installer
+continuation, Manager's **Set up local GInfer** and GChat Welcome use the same
+durable state. The sequence is explicit GPU-group selection, native profiling,
+storage selection, published package selection and download, startup review, then
+completion. No GPU is selected automatically. Selected release identities are
+saved before download admission; reopening a client resumes partial admission and
+existing jobs. The workflow saves instances stopped and leaves Start explicit.
+See the [decision](../decisions/2026-10-15-own-first-run-setup-and-measured-model-storage-in-host.md)
+and [operator steps](guide.md#complete-local-setup).
+
+Authenticated `GET /host/v1/first-run` returns `step`, `gpu_uuids`,
+`hardware_profile`, `storage`, `models`, `selected_downloads` and
+`startup_profiles`. Storage includes the requested `path`, `recommended_path`,
+live `available_bytes`, existing downloads and candidate eligibility/reasons.
+`POST /host/v1/first-run` accepts these actions:
+
+| Action | Inputs and behavior |
+| --- | --- |
+| `profile` | Explicit `gpu_uuids`; require a compatible supported group of 1, 2 or 4 GPUs and prepare its saved native profile. |
+| `storage` | Absolute `path`; persist a writable native managed-download root. |
+| `move` | Installed managed `download_id`; explicitly move it to the selected storage root, rejecting active sources. |
+| `refresh_catalog` | Refresh the configured published release catalog. |
+| `models` | Exact `release_ids`; durably retain selection and admit compatible downloads after a live capacity check. |
+| `resume` | Continue interrupted profiling, download admission or startup review. |
+| `startup` | `download_id`, `concurrency`, `max_context`, `instance_count`, optional `kv_arena_bytes`; obtain a fresh Engine quote. |
+| `complete` | Save reviewed startup configurations as stopped instances. |
+
+Storage ranking reads native `schema_version: 2` disk rows, using
+`disks[].sequential_read.value` in bytes/second only when its status is
+`measured`, `direct_io` is true and `sequential_read_supported` is true. Saved
+filesystem UUID, model and a live serial when available must match the actual
+disk; a path or device number alone cannot authorize reuse of a rate. Live free
+space, a native filesystem check and a temporary zero-byte write check determine
+eligibility. Unmeasured, replaced, ambiguous, full or unwritable candidates show
+their reason. There is no recommendation-time read benchmark. A requested root
+on the winning filesystem keeps its exact path; another measured disk offers
+`<measured-directory>/ginfer/models`. A writable native override remains available.
+WSL Windows-backed storage is ineligible for managed placement.
+
+Changing storage leaves existing models at their current locations. An explicit
+managed move copies and syncs into owned staging, verifies size, SHA-256 and
+artifact identities, publishes without overwriting a target, and commits the
+download journal durably before deleting the original. Host retains its lifecycle
+lock through an admitted move even if the calling client disconnects. The original
+inventory UUID and saved instance references survive relocation and restart.
+External discovered models are not moved by this action. An error before journal
+commit retains the original; an error removing it after commit reports the
+remaining copy.
+
+Model suggestions use saved native RAM/VRAM facts and current disk capacity.
+Startup review uses Engine `ginfer-serve --quote-only` for each package's own
+context, concurrency and instance count. These are per-package estimates; they
+do not qualify simultaneous placement of all selected packages or full-context
+operation. Changing settings requests another quote. Finishing setup does not
+start inference.
+
+Candidate `bbcf3e3d3` passes composed `make verify`, including the frontend gates
+and 865 Rust tests; affected all-target Cargo check and Clippy also pass. Focused
+Host workflow, storage and managed-move tests pass on S1, including move
+cancellation and inventory identity across restart. The existing CPU-only Engine
+`hardware_profile_reader` CTest passes from source `09aadd9c5`.
+
+Both opt-in Linux native tests pass against the same saved profile after the
+authorized disk-only refresh from merged Engine `16e5aca45`, which contains the
+tested warning-preservation fix `38b8dce5d`. Its two distinct live filesystems have
+genuine saved direct-I/O read rates: NVMe 7,252,739,669 bytes/second and RAID
+1,178,470,152 bytes/second. Live identity, free-space and write checks select the
+eligible NVMe disk; the recommendation API retains exact override paths on both
+filesystems without creating directories. One actual Host storage override leaves
+the existing model untouched until an explicit move. The cross-filesystem move
+verifies a valid 4,096-byte package and retains its inventory UUID and saved stopped
+instance references across Host restart. These tests execute no model or GPU work;
+the rates are storage-policy inputs under recorded background build and C1
+activity, with no isolated performance or inference speed comparison claimed.
+
+The protected donor remains unchanged. Strict non-disk equality passes: only disk
+rows, the exact `disk_elapsed_seconds` and `disk_timestamp_utc` source stamps, and
+the exact obsolete `/mnt/ssd2` unmeasured-disk warning are excluded. Every other
+field and saved warning value, order and count remains exact, including CPU, GPU,
+NUMA, calibration and fingerprint data. The passive CPU/NUMA diagnostic remains
+visible in producer output without being added to saved warnings. Both Host tests
+leave the refreshed profile unchanged.
+
+The earlier Engine `265514f0a` capture remains historical: both functional tests
+passed, while strict warning preservation failed because an additional CPU/NUMA
+diagnostic was saved. That capture is retained unchanged beside the newly
+authorized corrected-source result; no profile was manually edited. New evidence
+uses `warning-fix-*` receipts under
+`/ai/gchat/out/first-run-wizard-20261015/`. Linux acceptance passes and the GChat
+candidate awaits merge. Windows shares this implementation's source; no new
+Windows binary or runtime acceptance is claimed.
+
 ## Multiple instances on one GPU — October 15
 
 Active `MULTI-INSTANCE`, Gchat, deadline 17:00Z. Candidate

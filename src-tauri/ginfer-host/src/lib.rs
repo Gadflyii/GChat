@@ -27,6 +27,7 @@ pub mod client;
 pub(crate) mod resource_measurement;
 
 pub mod hardware_profile;
+pub mod first_run;
 pub(crate) mod draft_width;
 
 #[cfg(windows)]

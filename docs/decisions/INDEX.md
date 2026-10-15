@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-15** — [Own first-run setup and measured model storage in Host](2026-10-15-own-first-run-setup-and-measured-model-storage-in-host.md)
+
 - **2026-10-15** — [Place independent instances on shared GPUs](2026-10-15-place-independent-instances-on-shared-gpus.md)
 
 - **2026-10-15** — [Admit pool workers at the coordinator](2026-10-15-admit-pool-workers-at-the-coordinator.md)

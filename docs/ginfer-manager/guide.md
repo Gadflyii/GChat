@@ -14,7 +14,8 @@ The application uses GChat's default dark theme on both platforms.
 
 Install and configure GInfer first if this computer will serve models. Manager
 reuses its registered host, engine paths and model storage. It does not replace
-a running host or copy model files. A service-owned host must be started through
+a running host. Existing model files stay in place unless you explicitly move an
+installed managed download during setup. A service-owned host must be started through
 its OS service manager. Computers without a local host can still pair with other
 hosts from the sidebar.
 
@@ -51,6 +52,43 @@ saved connection; **Revoke** under Paired clients invalidates a host grant.
 
 An offline host shows **GInfer offline** and its last-known inventory. Reconnect
 before starting, changing or stopping an instance there.
+
+## Complete local setup
+
+Open **Set up local GInfer** for this computer. GChat Welcome and the Linux
+installer continuation use the same Host-owned setup, so you can close a client
+and continue later without discarding progress.
+
+1. Select a compatible group of 1, 2 or 4 supported GPUs, then choose **Use
+   selected GPUs and profile**. The Host selects no GPU automatically. Stop active
+   models before profiling and allow the native job to finish.
+2. Review **Choose model storage**. The recommendation uses saved measured read
+   speeds from the hardware profile, matched to the disks currently present, plus
+   current free space and write access. Candidates without a usable measurement
+   or enough space explain why. Keep the recommendation or enter another native
+   writable folder, then choose **Use this folder**.
+3. Select one or more compatible published packages and choose **Download selected
+   models**. Capacity suggestions use this computer's saved memory facts and live
+   storage capacity. Progress survives closing Manager or restarting the Host.
+4. Under **Review startup defaults**, review each package's context, concurrency,
+   instance count and optional GPU KV budget. The Engine supplies a fresh startup
+   estimate for that package. It does not prove that every selected package fits
+   together or that full context is qualified.
+5. Choose **Finish local setup**. The Host saves stopped instances. Use **Start**
+   when you want to load a model.
+
+Choosing a storage folder does not relocate existing models. For an installed
+managed download, use its explicit move action after stopping active models. The
+Host copies and verifies the package, saves its new location durably, then removes
+the original; existing targets are rejected. Saved instances retain their model
+identity. Models registered from an external folder remain there.
+
+For terminal continuation, run `ginfer-host first-run --interactive` from the
+installed Host's binary directory. Without `--interactive`, `ginfer-host first-run`
+returns JSON status without prompting. The
+[shared workflow reference](README.md#shared-first-run-setup--october-15) lists
+the authenticated API and explicit actions. Windows follows the same source
+workflow; acceptance of this new setup on Windows remains pending.
 
 ## Prepare the hardware profile
 

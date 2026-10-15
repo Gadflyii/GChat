@@ -9,6 +9,7 @@ vi.mock('@/services/engines', async (original) => ({
 }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: () => vi.fn().mockResolvedValue(undefined) }))
 vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
+vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId }: { hostId: string }) => <section aria-label={`First-run setup for ${hostId}`} /> }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 it.each([
@@ -25,6 +26,7 @@ it.each([
     instances: [], launch_profiles: [],
   }
   render(<HostCard host={host} snapshot={snapshot} />)
+  expect(screen.getByRole('region', { name: 'First-run setup for host' })).toBeInTheDocument()
   fireEvent.click(screen.getByText('Server details'))
   fireEvent.click(screen.getByText('Custom server settings'))
   expect(screen.getByLabelText('Context tokens')).toHaveDisplayValue('')

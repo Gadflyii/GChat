@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a bundled Linux runtime with editable per-user paths; never start inference."""
+"""Install a bundled Linux runtime and continue the shared Host first-run setup."""
 import argparse
 import hashlib
 import json
@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 
-def install(bundle, destination, provider, config_root, link_dir, apply=False, gpu_uuids=()):
+def install(bundle, destination, provider, config_root, link_dir, apply=False, gpu_uuids=(), interactive=False):
     for path in (destination, provider, config_root, link_dir):
         if not path.is_absolute() or path == Path('/'):
             raise ValueError('choose absolute dedicated directories, not filesystem roots')
@@ -92,6 +92,23 @@ def install(bundle, destination, provider, config_root, link_dir, apply=False, g
     print(f"Hardware preparation: {status['status']} (owned by the shared Host).")
     if not status.get('gpu_uuids'):
         print('Choose GPU group in GChat or GInfer Manager. No calibration was started.')
+    if gpu_uuids:
+        host_command = [str(destination / 'bin/ginfer-host'), 'first-run']
+        saved = subprocess.run(host_command, check=True, capture_output=True, text=True, env=environment)
+        progress = json.loads(saved.stdout)
+        if progress['step'] != 'complete' and progress.get('gpu_uuids') != list(gpu_uuids):
+            # Ensure retains the profile job already started by prepare-hardware.
+            # A completed setup belongs to its existing settings on reinstall.
+            selection = host_command + ['--action', 'profile']
+            for uuid in gpu_uuids:
+                selection += ['--gpu', uuid]
+            subprocess.run(selection, check=True, capture_output=True, text=True, env=environment)
+    if interactive:
+        subprocess.run([str(destination / 'bin/ginfer-host'), 'first-run', '--interactive'],
+                       check=True, env=environment)
+    else:
+        print(f'Continue setup: {destination / "bin/ginfer-host"} first-run --interactive')
+        print('Noninteractive installation does not prompt. GChat and Manager resume the same setup.')
     print(f'Installed. Launch: {link}')
     if str(link_dir) not in os.environ.get('PATH', '').split(os.pathsep):
         print(f'Add {link_dir} to your shell PATH to use the bare ginfer command.')
@@ -104,6 +121,8 @@ def main():
                         default=Path(os.environ.get('XDG_DATA_HOME') or Path.home() / '.local/share') / 'ginfer')
     parser.add_argument('--link-directory', type=Path, default=Path.home() / '.local/bin')
     parser.add_argument('--install', action='store_true')
+    parser.add_argument('--no-wizard', action='store_true',
+                        help='install without opening the interactive first-run wizard')
     parser.add_argument('--gpu', action='append', default=[],
                         help='exact ordered deployment GPU UUID; repeat for TP2/TP4')
     args = parser.parse_args()
@@ -121,7 +140,8 @@ def main():
             return
         args.install = True
     install(Path(__file__).resolve().parent, args.install_directory, args.provider_directory,
-            config, args.link_directory, args.install, args.gpu)
+            config, args.link_directory, args.install, args.gpu,
+            interactive=sys.stdin.isatty() and not args.no_wizard)
 
 
 if __name__ == '__main__':

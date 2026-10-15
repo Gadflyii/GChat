@@ -1080,6 +1080,22 @@ impl Client {
                 .snapshot(argument_id(&args, "host_id")?)
                 .await
                 .map_err(String::from),
+            "first_run" => {
+                let id = argument_id(&args, "host_id")?;
+                let method = if args.get("action").is_some() {
+                    reqwest::Method::POST
+                } else {
+                    reqwest::Method::GET
+                };
+                self.request_json(
+                    id,
+                    method.clone(),
+                    "/host/v1/first-run",
+                    (method == reqwest::Method::POST).then_some(&args),
+                )
+                .await
+                .map_err(String::from)
+            }
             "hardware_profile" => {
                 let id = argument_id(&args, "host_id")?;
                 let request: crate::hardware_profile::HardwareProfileRequest = serde_json::from_value(

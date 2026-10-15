@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate }))
 vi.mock('@/containers/HeaderPage', () => ({ default: () => <header /> }))
+vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ onComplete }: { onComplete: () => void }) => <button onClick={onComplete}>Finish shared local setup</button> }))
 vi.mock('@/containers/EngineIntake', () => ({
   EngineIntake: ({ onConnect }: { onConnect: () => void }) => (
     <button onClick={onConnect}>Connect a network host</button>
@@ -50,6 +51,12 @@ describe('model intake', () => {
     })
     expect(localStorage.getItem(localStorageKey.setupCompleted)).toBe('true')
     expect(useGeneralSetting.getState().gbotEnabled).toBe(false)
+  })
+  it('finishes onboarding when the shared local setup is approved', () => {
+    render(<SetupScreen />)
+    fireEvent.click(screen.getByRole('button', { name: 'Finish shared local setup' }))
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/engines/', replace: true })
+    expect(localStorage.getItem(localStorageKey.setupCompleted)).toBe('true')
   })
   it('allows an explicit exit without an automatic timeout or model load', () => {
     const skipped = vi.fn()

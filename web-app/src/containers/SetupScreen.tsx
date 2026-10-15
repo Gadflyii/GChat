@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import HeaderPage from '@/containers/HeaderPage'
 import { EngineIntake } from '@/containers/EngineIntake'
+import { EngineFirstRun } from '@/containers/EngineFirstRun'
 import { Button } from '@/components/ui/button'
 import { localStorageKey } from '@/constants/localStorage'
 import { route } from '@/constants/routes'
@@ -44,6 +45,7 @@ export default function SetupScreen({ onSkipped }: { onSkipped?: () => void }) {
               Chat with a model, connect a GInfer host, or set up Gbot.
             </p>
           </div>
+          <EngineFirstRun onComplete={() => finish(route.engines.index)} />
           <section className="space-y-3 rounded-xl border p-5">
             <h2 className="font-medium">Find a model for this computer</h2>
             <p className="text-sm text-muted-foreground">

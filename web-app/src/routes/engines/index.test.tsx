@@ -11,8 +11,7 @@ vi.mock('@/services/engines', async (importOriginal) => ({
 }))
 vi.mock('@/stores/engine-discovery-store', () => ({ useEngineDiscovery: () => ({ enabled: mocks.nearby.length > 0, ignored: {}, setEnabled: vi.fn(), ignore: vi.fn(), restore: vi.fn() }) }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector?: (state: { refresh: typeof mocks.refresh }) => unknown) => {
-  if (selector) return selector({ refresh: mocks.refresh })
-  return {
+  const state = {
     hosts: [{ host_id: 'host', name: 'Lab host', base_url: 'https://host:7443', local: mocks.local }],
     nearby: mocks.nearby, errors: mocks.error ? { host: mocks.error } : {}, refresh: mocks.refresh,
     refreshing: false, discoveryError: null,
@@ -24,6 +23,7 @@ vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector?: (sta
       } }],
     } },
   }
+  return selector ? selector(state) : state
 } }))
 import { Route } from './index'
 const Page = Route.options.component as ComponentType
@@ -40,7 +40,9 @@ beforeEach(() => {
   mocks.local = false
   mocks.nearby = []
   mocks.instances = []
-  mocks.command.mockReset().mockImplementation(async (action: string) => action === 'credential_status' ? { ready: true, platform: 'linux', can_install: false } : {})
+  mocks.command.mockReset().mockImplementation(async (action: string) => action === 'credential_status'
+    ? { ready: true, platform: 'linux', can_install: false }
+    : action === 'first_run' ? { step: 'complete', gpu_uuids: [], storage: { path: '/models' }, models: [] } : {})
   mocks.refresh.mockReset().mockResolvedValue(undefined)
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })

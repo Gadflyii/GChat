@@ -4,10 +4,10 @@ Development status: real two-machine discovery, pairing, GPU lifecycle, and
 Windows desktop-to-LAN routing checks pass, as do Windows SCM and Linux systemd
 installation/lifecycle checks. Packages are local, unsigned, and unpublished;
 current installed-app acceptance is tracked in [open work](open-work.md).
-Use an explicitly selected `ginfer-serve` build; host installation never updates
-the engine or downloads/repackages models. After pairing, the Models page can
-explicitly download verified published packages into dedicated managed storage;
-see [model management](model-management.md). Existing model roots remain read-only.
+Use an explicitly selected `ginfer-serve` build. The shared first-run wizard and
+the Models page can explicitly download selected verified published packages into
+dedicated managed storage; see [model management](model-management.md). Existing
+external model roots remain read-only.
 
 ## Prebuilt host packages
 
@@ -84,6 +84,31 @@ directories; Enter accepts the defaults. Explicit `--install-directory`,
 without `--install`, explicit arguments only preview changes. The launcher symlink
 defaults to `~/.local/bin/ginfer`; setup reports if that directory is not on PATH
 and does not rewrite shell startup files. Existing paths are not overwritten.
+
+Interactive Linux setup continues with the shared Host first-run wizard after
+installation. It explicitly selects the GPU group, prepares its native hardware
+profile, recommends measured native model storage, downloads selected published
+packages and saves reviewed startup configurations as stopped instances. Manager
+and GChat Welcome resume the same Host-owned progress. Unattended installation
+prints the continuation command instead of prompting; `--no-wizard` suppresses
+the continuation.
+
+Continue from the installed binary directory at any time:
+
+```bash
+bin/ginfer-host first-run --interactive
+```
+
+Omit `--interactive` for JSON status. Automation can use explicit `--action`
+commands or authenticated `GET`/`POST /host/v1/first-run`; see the
+[workflow and API reference](ginfer-manager/README.md#shared-first-run-setup--october-15)
+and [operator guide](ginfer-manager/guide.md#complete-local-setup). Storage uses
+saved native measured rates with stable disk identity and live free-space checks;
+choosing a new root leaves existing files in place. Only an explicit managed move
+copies, verifies and journals its target before deleting its source. Engine
+startup quotes are per-package estimates, and completing setup leaves instances
+stopped. Windows shares the workflow source; native acceptance of this new flow
+is still pending there.
 
 Linux runtime staging belongs to GInfer's `tools/stage_linux_runtime.py`. It
 copies explicitly selected executables, FFmpeg and CUDA runtime libraries and
