@@ -1,6 +1,7 @@
 # Engineering Decisions (ADR)
 
 - **2026-10-15** — [Expose retained bundled resource readiness](2026-10-15-expose-retained-bundled-resource-readiness.md)
+- **2026-10-15** — [Reject unsupported native request capabilities](2026-10-15-reject-unsupported-native-request-capabilities.md)
 
 - **2026-10-15** — [Treat expired Gbot media as closed](2026-10-15-treat-expired-gbot-media-as-closed.md)
 

@@ -2,16 +2,17 @@
 //! Chat Completions API (`/v1/chat/completions`).
 //!
 //! Codex CLI speaks only the Responses wire protocol — `wire_api = "responses"`
-//! is its sole supported value as of v0.135 — but our ginfer backend
-//! implements only Chat Completions. This module converts a Responses request
+//! is its sole supported value as of v0.135. Legacy ginfer sessions use this
+//! bridge; Host-owned sessions use the engine's native Responses endpoint.
+//! This module converts a representable Responses request
 //! into a Chat Completions request and converts the Chat Completions reply
 //! (both the single-shot JSON form and the streamed SSE form) back into
 //! Responses objects/events, so Codex — and any other Responses-only client —
 //! works against a local model.
 //!
 //! Remote providers serve `/v1/responses` natively, so the proxy forwards
-//! those untouched (see the passthrough branch in `proxy.rs`); ginfer sessions
-//! go through this shim.
+//! those untouched (see the passthrough branch in `proxy.rs`). Unsupported
+//! bridge inputs fail explicitly instead of losing part of the request.
 
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -30,12 +31,17 @@ fn new_fc_id() -> String {
 }
 
 /// Convert a Responses API request body into a Chat Completions request body.
-pub fn responses_request_to_chat(body: &Value) -> Value {
+pub fn responses_request_to_chat(body: &Value) -> Result<Value, String> {
+    if !body.is_object() {
+        return Err("request body must be an object".into());
+    }
+    validate_responses_controls(body)?;
     let mut messages: Vec<Value> = Vec::new();
 
     // `instructions` (the system prompt in the Responses API) becomes a leading
     // system message.
-    if let Some(instr) = body.get("instructions").and_then(|v| v.as_str()) {
+    if let Some(value) = non_null(body, "instructions") {
+        let instr = value.as_str().ok_or("instructions must be a string")?;
         if !instr.is_empty() {
             messages.push(json!({"role": "system", "content": instr}));
         }
@@ -46,13 +52,14 @@ pub fn responses_request_to_chat(body: &Value) -> Value {
             messages.push(json!({"role": "user", "content": s}));
         }
         Some(Value::Array(items)) => {
-            for item in items {
-                if let Some(msg) = responses_input_item_to_chat(item) {
-                    messages.push(msg);
-                }
+            if items.is_empty() {
+                return Err("input must not be empty".into());
+            }
+            for (index, item) in items.iter().enumerate() {
+                messages.push(responses_input_item_to_chat(item, index)?);
             }
         }
-        _ => {}
+        _ => return Err("input must be a string or an array of input items".into()),
     }
 
     let messages = merge_system_messages(messages);
@@ -84,25 +91,116 @@ pub fn responses_request_to_chat(body: &Value) -> Value {
     if let Some(v) = body.get("parallel_tool_calls") {
         obj.insert("parallel_tool_calls".into(), v.clone());
     }
-
-    if let Some(tools) = body.get("tools").and_then(|t| t.as_array()) {
-        let chat_tools: Vec<Value> = tools.iter().filter_map(responses_tool_to_chat).collect();
-        if !chat_tools.is_empty() {
-            obj.insert("tools".into(), Value::Array(chat_tools));
+    for key in [
+        "chat_template_kwargs",
+        "max_reasoning_tokens",
+        "preserve_thinking",
+        "retain_turn_checkpoint",
+    ] {
+        if let Some(value) = body.get(key) {
+            obj.insert(key.into(), value.clone());
         }
     }
-    if let Some(tc) = body.get("tool_choice") {
-        obj.insert("tool_choice".into(), responses_tool_choice_to_chat(tc));
+
+    if let Some(value) = non_null(body, "tools") {
+        let tools = value.as_array().ok_or("tools must be an array")?;
+        let chat_tools: Result<Vec<_>, _> = tools
+            .iter()
+            .enumerate()
+            .map(|(index, tool)| responses_tool_to_chat(tool, index))
+            .collect();
+        obj.insert("tools".into(), Value::Array(chat_tools?));
+    }
+    if let Some(tc) = non_null(body, "tool_choice") {
+        obj.insert("tool_choice".into(), responses_tool_choice_to_chat(tc)?);
     }
 
     // Structured output: Responses `text.format` -> Chat `response_format`.
-    if let Some(format) = body.get("text").and_then(|t| t.get("format")) {
-        if let Some(rf) = responses_text_format_to_chat(format) {
-            obj.insert("response_format".into(), rf);
+    if let Some(text) = non_null(body, "text") {
+        require_only_members(text, "text", &["format"])?;
+        if let Some(format) = non_null(text, "format") {
+            obj.insert(
+                "response_format".into(),
+                responses_text_format_to_chat(format)?,
+            );
         }
     }
 
-    out
+    Ok(out)
+}
+
+fn non_null<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+    value.get(key).filter(|value| !value.is_null())
+}
+
+fn require_string<'a>(value: &'a Value, key: &str, path: &str) -> Result<&'a str, String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| format!("{path}.{key} must be a non-empty string"))
+}
+
+fn require_only_members(value: &Value, path: &str, allowed: &[&str]) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("{path} must be an object"))?;
+    for (key, value) in object {
+        if !value.is_null() && !allowed.contains(&key.as_str()) {
+            return Err(format!(
+                "{path}.{key} is not supported by the Responses bridge"
+            ));
+        }
+    }
+    Ok(())
+}
+
+// These controls cannot be represented by a single Chat Completions request.
+// Explicit inert values and client hints remain usable by existing clients.
+fn validate_responses_controls(body: &Value) -> Result<(), String> {
+    for (key, value) in body.as_object().unwrap() {
+        if value.is_null() {
+            continue;
+        }
+        let valid = match key.as_str() {
+            "model"
+            | "input"
+            | "instructions"
+            | "stream"
+            | "temperature"
+            | "top_p"
+            | "max_output_tokens"
+            | "tools"
+            | "tool_choice"
+            | "text"
+            | "chat_template_kwargs"
+            | "max_reasoning_tokens"
+            | "preserve_thinking"
+            | "retain_turn_checkpoint" => true,
+            "store" | "background" => value.as_bool() == Some(false),
+            "include" => value.as_array().is_some_and(Vec::is_empty),
+            "truncation" => value.as_str() == Some("disabled"),
+            "parallel_tool_calls" => value.as_bool() == Some(true),
+            "top_logprobs" => value.as_u64() == Some(0),
+            "service_tier" => matches!(value.as_str(), Some("auto" | "default")),
+            "metadata" | "client_metadata" | "prompt_cache_options" => value.is_object(),
+            "prompt_cache_key" | "prompt_cache_retention" => value.is_string(),
+            "stream_options" => {
+                require_only_members(value, "stream_options", &["include_obfuscation"])?;
+                matches!(
+                    non_null(value, "include_obfuscation"),
+                    None | Some(Value::Bool(false))
+                )
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err(format!(
+                "{key} value is not supported by the Responses bridge"
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Collapse every `system`/`developer` message into a single leading `system`
@@ -140,29 +238,39 @@ pub(crate) fn merge_system_messages(messages: Vec<Value>) -> Vec<Value> {
     out
 }
 
-fn responses_input_item_to_chat(item: &Value) -> Option<Value> {
-    let ty = item
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("message");
+fn responses_input_item_to_chat(item: &Value, index: usize) -> Result<Value, String> {
+    let path = format!("input[{index}]");
+    if !item.is_object() {
+        return Err(format!("{path} must be an object"));
+    }
+    let ty = match item.get("type") {
+        None if item.get("role").is_some() => "message",
+        Some(Value::String(ty)) => ty,
+        _ => return Err(format!("{path}.type must be a string")),
+    };
     match ty {
         "message" => {
-            let role = item.get("role").and_then(|v| v.as_str()).unwrap_or("user");
-            let text = flatten_content_to_text(item.get("content"));
-            Some(json!({"role": role, "content": text}))
+            require_only_members(item, &path, &["type", "id", "status", "role", "content"])?;
+            let role = require_string(item, "role", &path)?;
+            if !matches!(role, "user" | "assistant" | "system" | "developer") {
+                return Err(format!("{path}.role '{role}' is not supported"));
+            }
+            let text = responses_content_to_text(item.get("content"), &format!("{path}.content"))?;
+            Ok(json!({"role": role, "content": text}))
         }
         "function_call" => {
-            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            require_only_members(
+                item,
+                &path,
+                &["type", "id", "status", "name", "arguments", "call_id"],
+            )?;
+            let name = require_string(item, "name", &path)?;
             let args = item
                 .get("arguments")
-                .and_then(|v| v.as_str())
-                .unwrap_or("{}");
-            let call_id = item
-                .get("call_id")
-                .or_else(|| item.get("id"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            Some(json!({
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!("{path}.arguments must be a string"))?;
+            let call_id = require_string(item, "call_id", &path)?;
+            Ok(json!({
                 "role": "assistant",
                 "content": Value::Null,
                 "tool_calls": [{
@@ -173,26 +281,50 @@ fn responses_input_item_to_chat(item: &Value) -> Option<Value> {
             }))
         }
         "function_call_output" => {
-            let call_id = item.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
-            let content = match item.get("output") {
-                Some(Value::String(s)) => s.clone(),
-                Some(other) => other.to_string(),
-                None => String::new(),
-            };
-            Some(json!({
+            require_only_members(item, &path, &["type", "id", "status", "call_id", "output"])?;
+            let call_id = require_string(item, "call_id", &path)?;
+            let content = item.get("output").and_then(Value::as_str).ok_or_else(|| {
+                format!("{path}.output must be a string; structured tool outputs are not supported by the Responses bridge")
+            })?;
+            Ok(json!({
                 "role": "tool",
                 "tool_call_id": call_id,
                 "content": content
             }))
         }
-        // Reasoning items (and any other Responses-only item) have no Chat
-        // Completions equivalent; drop them from the replayed conversation.
-        _ => None,
+        _ => Err(format!(
+            "{path}.type '{ty}' is not supported by the Responses bridge"
+        )),
     }
 }
 
-/// Flatten Responses content (a string, or an array of typed parts) to plain
-/// text. Non-text parts (images/files) are ignored on the text-only Chat path.
+fn responses_content_to_text(content: Option<&Value>, path: &str) -> Result<String, String> {
+    match content {
+        Some(Value::String(text)) => Ok(text.clone()),
+        Some(Value::Array(parts)) => {
+            let mut text = String::new();
+            for (index, part) in parts.iter().enumerate() {
+                let path = format!("{path}[{index}]");
+                let ty = require_string(part, "type", &path)?;
+                if !matches!(ty, "input_text" | "output_text") {
+                    return Err(format!(
+                        "{path}.type '{ty}' is not supported by the Responses bridge"
+                    ));
+                }
+                require_only_members(part, &path, &["type", "text", "annotations", "logprobs"])?;
+                let part_text = part
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| format!("{path}.text must be a string"))?;
+                text.push_str(part_text);
+            }
+            Ok(text)
+        }
+        _ => Err(format!("{path} must be a string or an array of text parts")),
+    }
+}
+
+/// Flatten already-validated text messages while merging system messages.
 fn flatten_content_to_text(content: Option<&Value>) -> String {
     match content {
         Some(Value::String(s)) => s.clone(),
@@ -209,56 +341,103 @@ fn flatten_content_to_text(content: Option<&Value>) -> String {
     }
 }
 
-fn responses_tool_to_chat(tool: &Value) -> Option<Value> {
-    // A Responses function tool is flat: {type, name, description, parameters}.
-    // Built-in tools (web_search, etc.) have no Chat equivalent and are dropped.
-    if tool.get("type").and_then(|v| v.as_str()) != Some("function") {
-        return None;
+fn responses_tool_to_chat(tool: &Value, index: usize) -> Result<Value, String> {
+    let path = format!("tools[{index}]");
+    let ty = require_string(tool, "type", &path)?;
+    if ty != "function" {
+        return Err(format!(
+            "{path}.type '{ty}' is not supported by the Responses bridge; use function tools"
+        ));
     }
-    let name = tool.get("name")?.clone();
+    require_only_members(
+        tool,
+        &path,
+        &["type", "name", "description", "parameters", "strict"],
+    )?;
+    let name = require_string(tool, "name", &path)?;
     let mut func = Map::new();
-    func.insert("name".into(), name);
-    if let Some(d) = tool.get("description") {
+    func.insert("name".into(), json!(name));
+    if let Some(d) = non_null(tool, "description") {
+        if !d.is_string() {
+            return Err(format!("{path}.description must be a string"));
+        }
         func.insert("description".into(), d.clone());
     }
-    if let Some(p) = tool.get("parameters") {
+    if let Some(p) = non_null(tool, "parameters") {
+        if !p.is_object() {
+            return Err(format!("{path}.parameters must be an object"));
+        }
         func.insert("parameters".into(), p.clone());
     }
-    Some(json!({"type": "function", "function": Value::Object(func)}))
+    if let Some(strict) = non_null(tool, "strict") {
+        if !strict.is_boolean() {
+            return Err(format!("{path}.strict must be a boolean"));
+        }
+        // Preserve enforcement intent: the engine must accept it or explicitly
+        // reject it, rather than receiving a weakened function definition.
+        func.insert("strict".into(), strict.clone());
+    }
+    Ok(json!({"type": "function", "function": Value::Object(func)}))
 }
 
-fn responses_tool_choice_to_chat(tc: &Value) -> Value {
+fn responses_tool_choice_to_chat(tc: &Value) -> Result<Value, String> {
     match tc {
-        // "auto" | "none" | "required" pass through unchanged.
-        Value::String(_) => tc.clone(),
-        Value::Object(_) => {
-            if let Some(name) = tc.get("name").and_then(|v| v.as_str()) {
-                json!({"type": "function", "function": {"name": name}})
-            } else {
-                tc.clone()
-            }
+        Value::String(choice) if matches!(choice.as_str(), "auto" | "none" | "required") => {
+            Ok(tc.clone())
         }
-        _ => json!("auto"),
+        Value::Object(_) => {
+            let ty = require_string(tc, "type", "tool_choice")?;
+            if ty != "function" {
+                return Err(format!(
+                    "tool_choice.type '{ty}' is not supported by the Responses bridge"
+                ));
+            }
+            require_only_members(tc, "tool_choice", &["type", "name"])?;
+            let name = require_string(tc, "name", "tool_choice")?;
+            Ok(json!({"type": "function", "function": {"name": name}}))
+        }
+        _ => Err("tool_choice must be 'auto', 'none', 'required', or a function choice".into()),
     }
 }
 
-fn responses_text_format_to_chat(format: &Value) -> Option<Value> {
-    match format.get("type").and_then(|v| v.as_str())? {
+fn responses_text_format_to_chat(format: &Value) -> Result<Value, String> {
+    let ty = require_string(format, "type", "text.format")?;
+    match ty {
         "json_schema" => {
+            require_only_members(
+                format,
+                "text.format",
+                &["type", "name", "schema", "strict", "description"],
+            )?;
+            let name = require_string(format, "name", "text.format")?;
+            let schema = format
+                .get("schema")
+                .filter(|schema| schema.is_object())
+                .ok_or("text.format.schema must be an object")?;
             let mut js = Map::new();
-            if let Some(n) = format.get("name") {
-                js.insert("name".into(), n.clone());
+            js.insert("name".into(), json!(name));
+            js.insert("schema".into(), schema.clone());
+            if let Some(description) = non_null(format, "description") {
+                if !description.is_string() {
+                    return Err("text.format.description must be a string".into());
+                }
+                js.insert("description".into(), description.clone());
             }
-            if let Some(s) = format.get("schema") {
-                js.insert("schema".into(), s.clone());
-            }
-            if let Some(strict) = format.get("strict") {
+            if let Some(strict) = non_null(format, "strict") {
+                if !strict.is_boolean() {
+                    return Err("text.format.strict must be a boolean".into());
+                }
                 js.insert("strict".into(), strict.clone());
             }
-            Some(json!({"type": "json_schema", "json_schema": Value::Object(js)}))
+            Ok(json!({"type": "json_schema", "json_schema": Value::Object(js)}))
         }
-        "json_object" => Some(json!({"type": "json_object"})),
-        _ => None,
+        "text" | "json_object" => {
+            require_only_members(format, "text.format", &["type"])?;
+            Ok(json!({"type": ty}))
+        }
+        _ => Err(format!(
+            "text.format.type '{ty}' is not supported; use text, json_object, or json_schema"
+        )),
     }
 }
 

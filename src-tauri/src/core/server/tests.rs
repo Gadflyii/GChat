@@ -424,7 +424,7 @@ fn responses_request_string_input_to_chat() {
         "input": "hello",
         "stream": true
     });
-    let chat = responses_request_to_chat(&req);
+    let chat = responses_request_to_chat(&req).unwrap();
     assert_eq!(chat["model"], "m");
     assert_eq!(chat["stream"], true);
     // Streaming requests must opt into usage so we can fill response.completed.
@@ -454,7 +454,7 @@ fn responses_request_merges_multiple_system_messages() {
              "content": [{"type": "input_text", "text": "late system"}]}
         ]
     });
-    let chat = responses_request_to_chat(&req);
+    let chat = responses_request_to_chat(&req).unwrap();
     let msgs = chat["messages"].as_array().unwrap();
     // Exactly one system message, at index 0; all system/developer text merged.
     assert_eq!(msgs.len(), 2);
@@ -478,20 +478,20 @@ fn responses_request_items_and_tools_to_chat() {
              "content": [{"type": "input_text", "text": "run ls"}]},
             {"type": "function_call", "name": "shell",
              "arguments": "{\"cmd\":\"ls\"}", "call_id": "call_1"},
-            {"type": "function_call_output", "call_id": "call_1", "output": "file.txt"},
-            {"type": "reasoning", "summary": []}
+            {"type": "function_call_output", "call_id": "call_1", "output": "file.txt"}
         ],
         "tools": [{
             "type": "function", "name": "shell",
             "description": "run a shell command",
-            "parameters": {"type": "object"}
+            "parameters": {"type": "object"},
+            "strict": false
         }],
         "tool_choice": "auto",
         "max_output_tokens": 256
     });
-    let chat = responses_request_to_chat(&req);
+    let chat = responses_request_to_chat(&req).unwrap();
     let msgs = chat["messages"].as_array().unwrap();
-    // reasoning item dropped -> user + assistant(tool_call) + tool
+    // User + assistant(tool_call) + tool, with every input item retained.
     assert_eq!(msgs.len(), 3);
     assert_eq!(msgs[0]["content"], "run ls");
     assert_eq!(msgs[1]["tool_calls"][0]["id"], "call_1");
@@ -502,8 +502,274 @@ fn responses_request_items_and_tools_to_chat() {
     // tool flattened into chat schema
     assert_eq!(chat["tools"][0]["type"], "function");
     assert_eq!(chat["tools"][0]["function"]["name"], "shell");
+    assert_eq!(chat["tools"][0]["function"]["strict"], false);
     assert_eq!(chat["tool_choice"], "auto");
     assert_eq!(chat["max_tokens"], 256);
+}
+
+#[test]
+fn responses_request_rejects_unsupported_tools_without_partial_conversion() {
+    for tool_type in ["file_search", "web_search", "mcp", "namespace", "custom"] {
+        let req = json!({
+            "input": "find it",
+            "tools": [
+                {"type": "function", "name": "safe", "parameters": {}},
+                {"type": tool_type, "name": "unsupported"}
+            ]
+        });
+        let error = responses_request_to_chat(&req).unwrap_err();
+        assert!(error.contains("tools[1].type"), "{error}");
+        assert!(error.contains(tool_type), "{error}");
+        assert!(error.contains("not supported"), "{error}");
+    }
+    for (tools, field) in [
+        (json!({"type": "function"}), "tools must be an array"),
+        (json!([{}]), "tools[0].type"),
+        (json!([{"type": 4}]), "tools[0].type"),
+        (json!([{"type": "function"}]), "tools[0].name"),
+        (json!([{"type": "function", "name": 5}]), "tools[0].name"),
+        (
+            json!([{"type": "function", "name": "f", "strict": "true"}]),
+            "tools[0].strict",
+        ),
+        (
+            json!([{"type": "function", "name": "f", "parameters": []}]),
+            "tools[0].parameters",
+        ),
+    ] {
+        let error =
+            responses_request_to_chat(&json!({"input":"hello", "tools":tools})).unwrap_err();
+        assert!(error.contains(field), "{error}");
+    }
+}
+
+#[test]
+fn responses_request_preserves_function_strict_enforcement_intent() {
+    let chat = responses_request_to_chat(&json!({
+        "input": "call f", "tools": [{"type":"function", "name":"f", "strict":true}]
+    }))
+    .unwrap();
+    // The engine can reject strict=true; the bridge must not silently weaken it.
+    assert_eq!(chat["tools"][0]["function"]["strict"], true);
+}
+
+#[test]
+fn responses_request_rejects_malformed_body_and_instructions() {
+    let error = responses_request_to_chat(&json!([])).unwrap_err();
+    assert_eq!(error, "request body must be an object");
+    let error =
+        responses_request_to_chat(&json!({"input":"hi", "instructions":["policy"]})).unwrap_err();
+    assert_eq!(error, "instructions must be a string");
+    let error = responses_request_to_chat(&json!({"instructions":"policy"})).unwrap_err();
+    assert!(error.contains("input must be"), "{error}");
+}
+
+#[test]
+fn responses_request_rejects_unsupported_and_malformed_input_items() {
+    for item_type in [
+        "reasoning",
+        "input_file",
+        "web_search_call",
+        "mcp_call",
+        "custom_tool_call",
+    ] {
+        let error = responses_request_to_chat(&json!({"input":[
+            {"role":"user", "content":"keep this"}, {"type":item_type}
+        ]}))
+        .unwrap_err();
+        assert!(error.contains("input[1].type"), "{error}");
+        assert!(error.contains(item_type), "{error}");
+    }
+    for (input, field) in [
+        (json!(42), "input must be"),
+        (json!([]), "input must not be empty"),
+        (json!([false]), "input[0] must be an object"),
+        (json!([{"type":7}]), "input[0].type"),
+        (json!([{"type":"message", "content":"hi"}]), "input[0].role"),
+        (
+            json!([{"type":"message", "role":"tool", "content":"hi"}]),
+            "input[0].role",
+        ),
+        (
+            json!([{"type":"function_call", "call_id":"c", "arguments":"{}"}]),
+            "input[0].name",
+        ),
+        (
+            json!([{"type":"function_call", "name":"f", "id":"fc_1", "arguments":"{}"}]),
+            "input[0].call_id",
+        ),
+        (
+            json!([{"type":"function_call", "name":"f", "call_id":"c", "arguments":{}}]),
+            "input[0].arguments",
+        ),
+        (
+            json!([{"type":"function_call_output", "output":"ok"}]),
+            "input[0].call_id",
+        ),
+        (
+            json!([{"type":"function_call_output", "call_id":"c", "output":[{"type":"input_text","text":"ok"}]}]),
+            "input[0].output",
+        ),
+    ] {
+        let error = responses_request_to_chat(&json!({"input":input})).unwrap_err();
+        assert!(error.contains(field), "{error}");
+    }
+}
+
+#[test]
+fn responses_request_rejects_content_that_would_otherwise_be_lost_or_relabelled() {
+    for part_type in ["input_file", "input_image", "refusal", "unknown"] {
+        let error = responses_request_to_chat(&json!({"input":[{
+            "role":"user", "content":[
+                {"type":"input_text", "text":"preserved text"},
+                {"type":part_type, "text":"must not become ordinary text"}
+            ]
+        }]}))
+        .unwrap_err();
+        assert!(error.contains("input[0].content[1].type"), "{error}");
+        assert!(error.contains(part_type), "{error}");
+    }
+    for (content, field) in [
+        (json!(null), "input[0].content must be"),
+        (json!({"text":"hi"}), "input[0].content must be"),
+        (json!([{"text":"hi"}]), "input[0].content[0].type"),
+        (
+            json!([{"type":"input_text", "text":5}]),
+            "input[0].content[0].text",
+        ),
+    ] {
+        let error =
+            responses_request_to_chat(&json!({"input":[{"role":"user", "content":content}]}))
+                .unwrap_err();
+        assert!(error.contains(field), "{error}");
+    }
+    let chat = responses_request_to_chat(&json!({"input":[
+        {"role":"user", "content":[{"type":"input_text", "text":"hi"}]},
+        {"type":"message", "role":"assistant", "content":[{"type":"output_text", "text":"hello", "annotations":[]}]}
+    ]})).unwrap();
+    assert_eq!(chat["messages"][0]["content"], "hi");
+    assert_eq!(chat["messages"][1]["content"], "hello");
+}
+
+#[test]
+fn responses_request_validates_tool_choice_without_coercing_it() {
+    for choice in [
+        json!(false),
+        json!(7),
+        json!([]),
+        json!("sometimes"),
+        json!({"name":"f"}),
+        json!({"type":"web_search", "name":"f"}),
+        json!({"type":"function"}),
+        json!({"type":"function", "name":5}),
+    ] {
+        let error =
+            responses_request_to_chat(&json!({"input":"hi", "tool_choice":choice})).unwrap_err();
+        assert!(error.contains("tool_choice"), "{error}");
+    }
+    for choice in ["auto", "none", "required"] {
+        let chat = responses_request_to_chat(&json!({"input":"hi", "tool_choice":choice})).unwrap();
+        assert_eq!(chat["tool_choice"], choice);
+    }
+    let chat = responses_request_to_chat(
+        &json!({"input":"hi", "tool_choice":{"type":"function", "name":"f"}}),
+    )
+    .unwrap();
+    assert_eq!(
+        chat["tool_choice"],
+        json!({"type":"function", "function":{"name":"f"}})
+    );
+}
+
+#[test]
+fn responses_request_translates_supported_output_formats_without_losing_constraints() {
+    let schema = json!({"type":"object", "properties":{"answer":{"type":"string"}}, "required":["answer"], "additionalProperties":false});
+    let chat = responses_request_to_chat(&json!({
+        "input":"hi", "text":{"format":{"type":"json_schema", "name":"answer",
+            "description":"one answer", "schema":schema, "strict":true}}
+    }))
+    .unwrap();
+    assert_eq!(
+        chat["response_format"],
+        json!({"type":"json_schema", "json_schema":{
+            "name":"answer", "description":"one answer", "schema":schema, "strict":true
+        }})
+    );
+    for format_type in ["text", "json_object"] {
+        let chat = responses_request_to_chat(
+            &json!({"input":"hi", "text":{"format":{"type":format_type}}}),
+        )
+        .unwrap();
+        assert_eq!(chat["response_format"], json!({"type":format_type}));
+    }
+}
+
+#[test]
+fn responses_request_rejects_unsupported_and_malformed_output_formats() {
+    for (text, field) in [
+        (json!("json"), "text must be an object"),
+        (json!({"format":"json"}), "text.format.type"),
+        (
+            json!({"format":{"type":"regex", "pattern":".*"}}),
+            "text.format.type 'regex'",
+        ),
+        (json!({"format":{"type":7}}), "text.format.type"),
+        (
+            json!({"format":{"type":"json_object", "schema":{}}}),
+            "text.format.schema",
+        ),
+        (
+            json!({"format":{"type":"json_schema", "schema":{}}}),
+            "text.format.name",
+        ),
+        (
+            json!({"format":{"type":"json_schema", "name":"x", "schema":[]}}),
+            "text.format.schema",
+        ),
+        (
+            json!({"format":{"type":"json_schema", "name":"x", "schema":{}, "strict":"true"}}),
+            "text.format.strict",
+        ),
+        (json!({"verbosity":"low"}), "text.verbosity"),
+    ] {
+        let error = responses_request_to_chat(&json!({"input":"hi", "text":text})).unwrap_err();
+        assert!(error.contains(field), "{error}");
+    }
+}
+
+#[test]
+fn responses_request_rejects_unrepresentable_controls_but_accepts_inert_client_hints() {
+    for (field, value) in [
+        ("previous_response_id", json!("resp_prior")),
+        ("conversation", json!("conversation_1")),
+        ("reasoning", json!({"effort":"high"})),
+        ("include", json!(["file_search_call.results"])),
+        ("background", json!(true)),
+        ("store", json!(true)),
+        ("truncation", json!("auto")),
+        ("parallel_tool_calls", json!(false)),
+        ("mcp_servers", json!([])),
+        ("response_format", json!({"type":"json_object"})),
+    ] {
+        let mut req = json!({"input":"hi"});
+        req[field] = value;
+        let error = responses_request_to_chat(&req).unwrap_err();
+        assert!(error.contains(field), "{error}");
+    }
+    let chat = responses_request_to_chat(&json!({
+        "input":"hi", "store":false, "background":false, "include":[],
+        "truncation":"disabled", "service_tier":"auto", "top_logprobs":0,
+        "stream_options":{"include_obfuscation":false}, "parallel_tool_calls":true,
+        "metadata":{"client":"codex"}, "client_metadata":{},
+        "prompt_cache_key":"stable", "prompt_cache_retention":"in-memory", "prompt_cache_options":{},
+        "chat_template_kwargs":{"enable_thinking":true}, "max_reasoning_tokens":512,
+        "preserve_thinking":true, "retain_turn_checkpoint":false
+    })).unwrap();
+    assert_eq!(chat["messages"][0]["content"], "hi");
+    assert_eq!(chat["chat_template_kwargs"]["enable_thinking"], true);
+    assert_eq!(chat["max_reasoning_tokens"], 512);
+    assert_eq!(chat["preserve_thinking"], true);
+    assert_eq!(chat["retain_turn_checkpoint"], false);
 }
 
 #[test]
