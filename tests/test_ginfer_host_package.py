@@ -2,6 +2,7 @@ import importlib.util
 import hashlib
 import json
 from pathlib import Path
+import re
 import tarfile
 import tempfile
 import unittest
@@ -142,18 +143,31 @@ class HostPackage(unittest.TestCase):
             binary = root / 'ginfer-host.exe'
             binary.write_bytes(pe)
             entries = []
-            for name in ('bin/ginfer.exe', 'bin/ginfer-serve.exe'):
-                (runtime / name).write_bytes(pe)
-                entries.append({'path': name, 'bytes': len(pe),
-                                'sha256': hashlib.sha256(pe).hexdigest()})
-            (runtime / 'runtime-manifest.json').write_text(json.dumps({
+            licenses = {
+                'licenses/llguidance.txt': b'Original flat license\n',
+                'licenses/llguidance-crates/syn-2.0.119/LICENSE-APACHE': b'Apache license\n',
+                'licenses/llguidance-crates/syn-2.0.119/LICENSE-MIT': b'MIT license\n',
+                'licenses/llguidance-crates/memchr/COPYING': b'Copying terms\n',
+                'licenses/llguidance-crates/memchr/UNLICENSE': b'Public domain terms\n',
+            }
+            for name, data in {**dict.fromkeys(('bin/ginfer.exe', 'bin/ginfer-serve.exe'),
+                                             bytes(pe)), **licenses}.items():
+                member = runtime / name
+                member.parent.mkdir(parents=True, exist_ok=True)
+                member.write_bytes(data)
+                entries.append({'path': name, 'bytes': len(data),
+                                'sha256': hashlib.sha256(data).hexdigest()})
+            manifest = {
                 'schema': 'ginfer-windows-runtime-v1', 'platform': 'windows-x64',
                 'files': entries,
-            }))
+            }
+            manifest_path = runtime / 'runtime-manifest.json'
+            manifest_path.write_text(json.dumps(manifest))
             (runtime / 'private-model.ginfer').write_bytes(b'not part of the runtime')
             output = root / 'output'
             result = package.package(binary, 'windows-x86_64', output, runtime)
             with zipfile.ZipFile(result) as archive:
+                prefix = archive.namelist()[0].split('/', 1)[0] + '/'
                 names = {name.split('/', 1)[1] for name in archive.namelist()}
                 self.assertIn('bin/ginfer-host.exe', names)
                 self.assertIn('runtime/bin/ginfer.exe', names)
@@ -162,6 +176,43 @@ class HostPackage(unittest.TestCase):
                 self.assertIn('scripts/setup-ginfer-windows.ps1', names)
                 self.assertIn('setup.cmd', names)
                 self.assertNotIn('runtime/private-model.ginfer', names)
+                for name, content in licenses.items():
+                    self.assertEqual(archive.read(f'{prefix}runtime/{name}'), content)
+                self.assertEqual(json.loads(archive.read(
+                    f'{prefix}runtime/runtime-manifest.json')), manifest)
+                consumer = archive.read(
+                    f'{prefix}scripts/setup-ginfer-windows.ps1').decode('utf-8-sig')
+                match = re.search(r"\$name\s+-notmatch\s+'([^']+)'", consumer)
+                self.assertIsNotNone(match, 'Bundled installer must validate runtime paths')
+                pattern = match.group(1)
+                # Check the actual consumer regex on ASCII paths, not PowerShell execution.
+                # Python 3.11 spells .NET's strict terminal \\z anchor \\Z.
+                compatible = pattern[:-2] + r'\Z' if pattern.endswith(r'\z') else pattern
+                allowed = re.compile(compatible, re.IGNORECASE | re.ASCII)
+                for entry in entries:
+                    with self.subTest(accepted=entry['path']):
+                        self.assertIsNotNone(allowed.search(entry['path']))
+                for forbidden in (
+                    '', '/licenses/vendor/LICENSE', 'C:/licenses/vendor/LICENSE',
+                    'licenses\\vendor\\LICENSE', 'licenses', 'licenses/',
+                    'licenses//LICENSE', 'licenses/./LICENSE', 'licenses/../LICENSE',
+                    'licenses/vendor/../LICENSE', 'licenses/vendor//LICENSE',
+                    'licenses/vendor./LICENSE', 'licenses/vendor/LICENSE.',
+                    'licenses/vendor/LICENSE/', 'licenses/vendor/LICENSE\n',
+                    'README.md\n',
+                ):
+                    with self.subTest(rejected=forbidden):
+                        self.assertIsNone(allowed.search(forbidden))
+            for forbidden in ('../README.md', 'licenses/../README.md',
+                              'licenses\\vendor\\LICENSE', '/licenses/vendor/LICENSE',
+                              entries[-1]['path']):
+                manifest['files'] = entries + [{'path': forbidden, 'bytes': 0, 'sha256': ''}]
+                manifest_path.write_text(json.dumps(manifest))
+                with self.subTest(generator_rejected=forbidden):
+                    with self.assertRaisesRegex(ValueError, 'runtime member'):
+                        package.runtime_entries(runtime, 'windows-x86_64')
+            manifest['files'] = entries
+            manifest_path.write_text(json.dumps(manifest))
             (runtime / 'bin/ginfer.exe').write_bytes(pe + b'changed')
             with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
                 package.package(binary, 'windows-x86_64', root / 'rejected', runtime)
