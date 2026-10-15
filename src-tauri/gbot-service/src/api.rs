@@ -1996,21 +1996,130 @@ mod tests {
         std::fs::rename(&path, &retained).unwrap();
         std::fs::create_dir(&path).unwrap();
         vault.2.store(true, Ordering::Release);
-        for _ in 0..2 {
-            assert!(client
-                .call("/v1/workspaces/ssh", input.clone())
-                .await
-                .unwrap_err()
-                .contains("SSH key could not be removed"));
-            assert_eq!(vault.0.lock().unwrap().len(), 2);
-            assert!(service.snapshot().await.workspaces.is_empty());
-        }
+        assert!(client
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap_err()
+            .contains("SSH key could not be removed"));
+        let entries = vault.0.lock().unwrap().clone();
+        assert_eq!(entries.len(), 2);
+        // A later retry must not take rollback ownership of the retained key.
+        vault.1.store(true, Ordering::Release);
+        assert!(client
+            .call("/v1/workspaces/ssh", input.clone())
+            .await
+            .unwrap_err()
+            .contains("could not persist"));
+        assert_eq!(*vault.0.lock().unwrap(), entries);
+        assert!(service.snapshot().await.workspaces.is_empty());
         std::fs::remove_dir(&path).unwrap();
         std::fs::rename(&retained, &path).unwrap();
+        drop(client);
+        drop(api);
+        drop(service);
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        assert!(service.snapshot().await.workspaces.is_empty());
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        // Reconciliation needs no vault write even after reopening the disk state.
         vault.2.store(false, Ordering::Release);
         client.call("/v1/workspaces/ssh", input).await.unwrap();
-        assert_eq!(vault.0.lock().unwrap().len(), 2);
+        assert_eq!(*vault.0.lock().unwrap(), entries);
         assert_eq!(service.snapshot().await.workspaces.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn ssh_workspace_restart_recovers_vault_only_key_without_writes() {
+        for generated in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("state.json");
+            let service = Service::open(&path).await.unwrap();
+            let vault = Arc::new(MemoryVault::default());
+            let mut input = ssh_workspace_request();
+            let reference = serde_json::from_value::<Uuid>(input["id"].clone()).unwrap();
+            let retained = crate::ssh::prepare_ssh_key(
+                Secret::new(input["private_key"].as_str().unwrap().as_bytes().to_vec()),
+                None,
+            )
+            .await
+            .unwrap()
+            .1;
+            let expected_public = crate::ssh::ssh_public_key(&retained).unwrap();
+            // Model a process loss after the external vault write but before state publication.
+            vault.put(reference, retained).await.unwrap();
+            drop(service);
+            let service = Arc::new(Service::open(&path).await.unwrap());
+            assert!(service.snapshot().await.workspaces.is_empty());
+            let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+            let client = api.client();
+            let entries = vault.0.lock().unwrap().clone();
+            vault.1.store(true, Ordering::Release);
+            vault.2.store(true, Ordering::Release);
+
+            let mut conflicting = input.clone();
+            conflicting["private_key"] = ssh_workspace_request()["private_key"].clone();
+            assert!(client
+                .call("/v1/workspaces/ssh", conflicting)
+                .await
+                .unwrap_err()
+                .contains("different workspace or SSH key"));
+            assert_eq!(*vault.0.lock().unwrap(), entries);
+            assert!(service.snapshot().await.workspaces.is_empty());
+
+            if generated {
+                input["private_key"] = serde_json::Value::Null;
+            }
+            let saved = client
+                .call("/v1/workspaces/ssh", input.clone())
+                .await
+                .unwrap();
+            assert_eq!(saved["id"], input["id"]);
+            assert_eq!(service.snapshot().await.workspaces.len(), 1);
+            assert_eq!(*vault.0.lock().unwrap(), entries);
+            assert_eq!(
+                client
+                    .call(
+                        "/v1/workspaces/ssh/key",
+                        serde_json::json!({"workspace_id": input["id"]}),
+                    )
+                    .await
+                    .unwrap(),
+                serde_json::to_value(expected_public).unwrap()
+            );
+            let persisted = std::fs::read_to_string(&path).unwrap();
+            assert!(!persisted.contains("PRIVATE KEY"));
+            assert!(!persisted.contains("passphrase"));
+        }
+    }
+
+    #[tokio::test]
+    async fn ssh_workspace_does_not_adopt_a_non_ssh_retained_slot() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = Arc::new(
+            Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap(),
+        );
+        let vault = Arc::new(MemoryVault::default());
+        let mut input = ssh_workspace_request();
+        let reference = serde_json::from_value::<Uuid>(input["id"].clone()).unwrap();
+        vault
+            .put(reference, Secret::new(b"unrelated vault value".to_vec()))
+            .await
+            .unwrap();
+        input["private_key"] = serde_json::Value::Null;
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        let entries = vault.0.lock().unwrap().clone();
+        vault.1.store(true, Ordering::Release);
+        vault.2.store(true, Ordering::Release);
+        assert!(client
+            .call("/v1/workspaces/ssh", input)
+            .await
+            .unwrap_err()
+            .contains("different workspace or SSH key"));
+        assert_eq!(*vault.0.lock().unwrap(), entries);
+        assert!(service.snapshot().await.workspaces.is_empty());
     }
 
     #[tokio::test]
