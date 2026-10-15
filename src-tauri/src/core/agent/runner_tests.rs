@@ -1027,32 +1027,36 @@ async fn repeated_repair_failure_finishes_as_tool_call_failure() {
 }
 
 #[tokio::test]
-async fn malformed_atem_repair_is_not_published_as_a_reply() {
+async fn malformed_tool_markup_repair_is_not_published_as_a_reply() {
     let workspace = TestWorkspace::new();
-    let run = run_script(
-        &workspace,
-        vec![
-            ScriptedResponse::completion("not-json"),
-            ScriptedResponse::completion(
-                r#"atem:function_calls <atem:invoke name="os.fs.list"><atem:parameter name="path">."#,
-            ),
-        ],
-        &RecordingApproval::deny(),
-        &CancellationToken::new(),
-        2,
-    )
-    .await;
+    for markup in [
+        r#"atem:function_calls <atem:invoke name="os.fs.list"><atem:parameter name="path">."#,
+        "<tool_call>\n<function=os.fs.read_document>\n<parameter=path>\ndocs/agent-runtime/README.md\n</parameter>\n</function>\n</tool_call>",
+    ] {
+        let run = run_script(
+            &workspace,
+            vec![
+                ScriptedResponse::completion("not-json"),
+                ScriptedResponse::completion(markup),
+            ],
+            &RecordingApproval::deny(),
+            &CancellationToken::new(),
+            2,
+        )
+        .await;
 
-    assert!(run.result.is_err());
-    assert!(run.events.iter().any(|event| matches!(
-        event,
-        AgentEvent::StepError { category, .. } if category == "tool_call"
-    )));
-    assert!(!run
-        .events
-        .iter()
-        .any(|event| matches!(event, AgentEvent::AssistantReply { .. })));
-    assert_eq!(finished_reason(&run.events), Some(("failed", 1)));
+        assert!(run.result.is_err());
+        assert!(run.events.iter().any(|event| matches!(
+            event,
+            AgentEvent::StepError { category, .. } if category == "tool_call"
+        )));
+        assert!(!run
+            .events
+            .iter()
+            .any(|event| matches!(event, AgentEvent::AssistantReply { .. })));
+        assert_eq!(finished_reason(&run.events), Some(("failed", 1)));
+        assert_eq!(run.requests.len(), 2);
+    }
 }
 
 #[tokio::test]
