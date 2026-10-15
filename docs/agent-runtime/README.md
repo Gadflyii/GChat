@@ -11,6 +11,26 @@ normal app exit/restart. Active-worker cancellation, durable state and ordinary
 Studio reopening also pass after normal exit; broader restart recovery remains
 unqualified.
 
+## Native near-full-input task — October 15
+
+One native Standard Agent run passes with 241364 counted input tokens at C1,
+context 262144, High reasoning, Auto output and the default 25 decisions. It
+returns the three embedded archive codes exactly in one Reply decision, with
+20480 tokens reserved and zero compactions. Engine and durable history agree on
+241364 prefilled and 183 generated tokens. Ordinary saved-run selection reopens
+the exact reply, completed stage and metrics; live Context/Working evidence and
+the full semantic transcript are retained separately.
+
+This uses S1 GPU0, an RTX PRO 6000 Blackwell Workstation Edition, and Qwen 27B
+NVFP4 package SHA `4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`,
+with speculation disabled and structured outputs enabled. Normal UI Stop leaves
+the engine absent; the owned Host and guard then exit, with compute empty and the
+GPU lock released. The private desktop closes normally and its resources are
+released. This qualifies measured near-full input; literal 262144-token input,
+full reserved output, fresh-install, Hermes, Windows and crash recovery remain
+unqualified, so OI-068 remains PARTIAL.
+[Exact recipe and evidence](remaining-acceptance.md#oi-068-native-near-full-input-task--october-15).
+
 ## Native near-full-context startup — October 15
 
 The local RTX 5090 native full-input gate failed before Ready with both packaged
@@ -34,9 +54,10 @@ Host/runtime replacements; the owned fixture and resources are released.
 Production implementation is unchanged by fixture corrections. `611fc26e9` passes all
 11 plugin tests; `7d92bad30` passes the complete 172-test Host suite after a further
 client-fixture correction. The composed Linux source gate passes using those
-reruns and the retained passing checks of unchanged production source. No native
-full-input count, inference or fresh-install acceptance is claimed; OI-068 remains
-PARTIAL.
+reruns and the retained passing checks of unchanged production source. These
+startup receipts establish Ready and normal Stop. The later near-full-input task
+above separately qualifies counting and inference; fresh-install acceptance
+remains separate and OI-068 remains PARTIAL.
 [Exact scope and retained evidence](remaining-acceptance.md#oi-068-native-near-full-context-startup--october-15).
 
 ## Linux Hermes home override — October 15
