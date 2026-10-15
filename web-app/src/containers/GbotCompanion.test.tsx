@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useState, type ReactNode } from 'react'
 import GbotCompanion from './GbotCompanion'
@@ -8,6 +15,7 @@ import { useGbotPage } from '@/stores/gbot-page-store'
 import type { AgentDefinition } from '@/types/agent'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import type { BotState, Task } from '@/services/gbot'
+import type { MediaSessionOptions } from '@/vendor/cua-media/mediaSession'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
@@ -38,9 +46,10 @@ vi.mock('@/services/gbot', async (original) => ({
 }))
 vi.mock('@/vendor/cua-media/mediaSession', () => ({
   MediaSession: class {
-    constructor(readonly options: unknown) {}
+    constructor(readonly options: MediaSessionOptions) {}
     start() {
       mocks.start(this.options)
+      this.options.onStatus?.('streaming')
     }
     stop() {
       mocks.stop()
@@ -122,21 +131,35 @@ async function mount() {
 
 it('ends page sharing when switching bots or hiding the pane', async () => {
   await mount()
-  act(() => useGbotPage.getState().publish({
-    id: 'studio',
-    draft: {
-      schemaVersion: 3, id: '', kind: 'standard', name: 'Agent', description: '',
-      instructions: '', defaultGoal: '', skills: [], maxSteps: 25,
-      outputContract: '', modelInstanceId: null, reasoningEffort: null, builtIn: false,
-    } satisfies AgentDefinition,
-    update: vi.fn(),
-  }))
+  act(() =>
+    useGbotPage.getState().publish({
+      id: 'studio',
+      draft: {
+        schemaVersion: 3,
+        id: '',
+        kind: 'standard',
+        name: 'Agent',
+        description: '',
+        instructions: '',
+        defaultGoal: '',
+        skills: [],
+        maxSteps: 25,
+        outputContract: '',
+        modelInstanceId: null,
+        reasoningEffort: null,
+        builtIn: false,
+      } satisfies AgentDefinition,
+      update: vi.fn(),
+    })
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Help with this page' }))
   expect(useGbotPage.getState().sharing?.workspaceId).toBe('a')
   fireEvent.click(screen.getByRole('button', { name: /Open Bramble/ }))
   expect(useGbotPage.getState().sharing).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
-  expect(screen.getByRole('button', { name: 'Help with this page' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Help with this page' })
+  ).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Help with this page' }))
   fireEvent.click(screen.getByRole('button', { name: 'Hide bot pane' }))
   expect(useGbotPage.getState().sharing).toBeNull()
@@ -320,6 +343,252 @@ it('updates actual tool activity from service events and stops input before hand
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
   )
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/resume', expect.anything())
+})
+
+it('reconnects a paused view-only desktop after failed hand back without resuming the task', async () => {
+  await mount()
+  const identity = snapshot.live_sessions[0]
+  snapshot = {
+    ...snapshot,
+    controls: [
+      {
+        identity,
+        owner: sessionStorage.getItem('gbot-control-owner'),
+        state: 'paused',
+      },
+    ],
+  }
+  tasks = [
+    {
+      id: 'ta',
+      identity,
+      state: 'paused',
+      messages: [{ role: 'user', content: 'Inspect project' }],
+      help_requests: [],
+    },
+  ]
+  let leases = 0
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state') return snapshot
+    if (path === 'tasks') return tasks
+    if (path === 'tasks/approvals') return []
+    if (path === 'view/open') {
+      leases += 1
+      return {
+        lease_id: `lease-${leases}`,
+        ws_url: `ws://127.0.0.1/mock-${leases}`,
+        media_session_id: `media-${leases}`,
+        interactive: false,
+      }
+    }
+    if (path === 'control/hand-back') {
+      expect(mocks.stop).toHaveBeenCalledTimes(1)
+      throw new Error('Fresh observation failed')
+    }
+    return {}
+  })
+  await act(async () => {
+    await useGbotCompanion.getState().refresh()
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+  const desktop = within(
+    await screen.findByRole('region', { name: 'Bot desktop', exact: true })
+  )
+  await waitFor(() =>
+    expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+  )
+  expect(desktop.getByText('View only')).toBeInTheDocument()
+  expect(desktop.queryByRole('button', { name: 'Reconnect view' })).toBeNull()
+  expect(mocks.call).toHaveBeenCalledWith(
+    'view/open',
+    expect.objectContaining({ identity, interactive: false })
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
+  const reconnect = await desktop.findByRole('button', {
+    name: 'Reconnect view',
+  })
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+  )
+  expect(mocks.call).toHaveBeenCalledWith(
+    'control/hand-back',
+    expect.objectContaining({ identity })
+  )
+  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(mocks.stop).toHaveBeenCalledTimes(1)
+  expect(mocks.start).toHaveBeenCalledTimes(1)
+  expect(leases).toBe(1)
+  expect(useGbotCompanion.getState().snapshot.controls[0].state).toBe('paused')
+  expect(useGbotCompanion.getState().tasks[0].state).toBe('paused')
+  expect(screen.getByText('Bot paused', { exact: true })).toBeInTheDocument()
+
+  const stopped = mocks.start.mock.calls[0][0] as MediaSessionOptions
+  act(() => stopped.onStatus?.('streaming'))
+  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(desktop.getByRole('button', { name: 'Reconnect view' })).toBe(
+    reconnect
+  )
+  expect(leases).toBe(1)
+
+  fireEvent.click(reconnect)
+  await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(2))
+  expect(leases).toBe(2)
+  expect(
+    mocks.call.mock.calls
+      .filter(([path]) => path === 'view/open')
+      .map(([, body]) => body)
+  ).toEqual([
+    expect.objectContaining({ identity, interactive: false }),
+    expect.objectContaining({ identity, interactive: false }),
+  ])
+  expect(mocks.call).toHaveBeenCalledWith(
+    'view/close',
+    expect.objectContaining({ identity, lease_id: 'lease-1' })
+  )
+  expect(mocks.start).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      ticket: {
+        wsUrl: 'ws://127.0.0.1/mock-2',
+        mediaSessionId: 'media-2',
+      },
+      interactive: false,
+    })
+  )
+  await waitFor(() =>
+    expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+  )
+  expect(desktop.getByText('View only')).toBeInTheDocument()
+  expect(desktop.queryByRole('button', { name: 'Reconnect view' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+  expect(useGbotCompanion.getState().tasks[0].state).toBe('paused')
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/resume', expect.anything())
+})
+
+it('closes a desktop ticket arriving after failed hand back and waits for manual reconnect', async () => {
+  await mount()
+  const identity = snapshot.live_sessions[0]
+  snapshot = {
+    ...snapshot,
+    controls: [
+      {
+        identity,
+        owner: sessionStorage.getItem('gbot-control-owner'),
+        state: 'paused',
+      },
+    ],
+  }
+  tasks = [
+    {
+      id: 'ta',
+      identity,
+      state: 'paused',
+      messages: [{ role: 'user', content: 'Inspect project' }],
+      help_requests: [],
+    },
+  ]
+  let leases = 0
+  let resolveTicket!: (ticket: unknown) => void
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state') return snapshot
+    if (path === 'tasks') return tasks
+    if (path === 'tasks/approvals') return []
+    if (path === 'view/open') {
+      leases += 1
+      if (leases === 1)
+        return new Promise((resolve) => {
+          resolveTicket = resolve
+        })
+      return {
+        lease_id: 'fresh-lease',
+        ws_url: 'ws://127.0.0.1/fresh',
+        media_session_id: 'fresh-media',
+        interactive: false,
+      }
+    }
+    if (path === 'control/hand-back')
+      throw new Error('Fresh observation failed')
+    return {}
+  })
+  await act(async () => {
+    await useGbotCompanion.getState().refresh()
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+  const desktop = within(
+    await screen.findByRole('region', { name: 'Bot desktop', exact: true })
+  )
+  await waitFor(() => expect(leases).toBe(1))
+  expect(desktop.getByRole('status')).toHaveTextContent(/^connecting$/)
+  expect(mocks.start).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
+  const reconnect = await desktop.findByRole('button', {
+    name: 'Reconnect view',
+  })
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+  )
+  expect(mocks.call).toHaveBeenCalledWith(
+    'control/hand-back',
+    expect.objectContaining({ identity })
+  )
+  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(leases).toBe(1)
+  expect(useGbotCompanion.getState().snapshot.controls[0].state).toBe('paused')
+  expect(useGbotCompanion.getState().tasks[0].state).toBe('paused')
+
+  await act(async () =>
+    resolveTicket({
+      lease_id: 'late-lease',
+      ws_url: 'ws://127.0.0.1/late',
+      media_session_id: 'late-media',
+      interactive: false,
+    })
+  )
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith(
+      'view/close',
+      expect.objectContaining({ identity, lease_id: 'late-lease' })
+    )
+  )
+  expect(mocks.start).not.toHaveBeenCalled()
+  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(desktop.getByRole('button', { name: 'Reconnect view' })).toBe(
+    reconnect
+  )
+  expect(leases).toBe(1)
+
+  fireEvent.click(reconnect)
+  await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+  expect(leases).toBe(2)
+  expect(
+    mocks.call.mock.calls
+      .filter(([path]) => path === 'view/open')
+      .map(([, body]) => body)
+  ).toEqual([
+    expect.objectContaining({ identity, interactive: false }),
+    expect.objectContaining({ identity, interactive: false }),
+  ])
+  expect(mocks.start).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      ticket: {
+        wsUrl: 'ws://127.0.0.1/fresh',
+        mediaSessionId: 'fresh-media',
+      },
+      interactive: false,
+    })
+  )
+  await waitFor(() =>
+    expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+  )
+  expect(desktop.getByText('View only')).toBeInTheDocument()
+  expect(desktop.queryByRole('button', { name: 'Reconnect view' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+  expect(useGbotCompanion.getState().snapshot.controls[0].state).toBe('paused')
+  expect(useGbotCompanion.getState().tasks[0].state).toBe('paused')
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/resume', expect.anything())
 })
 

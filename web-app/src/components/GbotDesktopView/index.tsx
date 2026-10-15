@@ -26,10 +26,10 @@ const GbotDesktopView = forwardRef<
   const [status, setStatus] = useState<MediaStatus>('connecting')
   const [error, setError] = useState('')
   const canvas = useRef<HTMLCanvasElement>(null)
-  const media = useRef<MediaSession | null>(null)
+  const stopMedia = useRef<(() => void) | null>(null)
   useImperativeHandle(
     ref,
-    () => ({ stopInput: () => media.current?.stop() }),
+    () => ({ stopInput: () => stopMedia.current?.() }),
     []
   )
 
@@ -40,6 +40,15 @@ const GbotDesktopView = forwardRef<
     let cancelled = false
     let session: MediaSession | null = null
     let ticket: ViewTicket | null = null
+    const stop = () => {
+      cancelled = true
+      session?.stop()
+    }
+    const stopInput = () => {
+      stop()
+      setStatus('ended')
+    }
+    stopMedia.current = stopInput
     const close = (value: ViewTicket) =>
       gbot('view/close', {
         identity,
@@ -58,7 +67,9 @@ const GbotDesktopView = forwardRef<
           h264: typeof VideoDecoder !== 'undefined',
         })
         if (cancelled) {
-          await close(ticket)
+          const lateTicket = ticket
+          ticket = null
+          await close(lateTicket)
           return
         }
         session = new MediaSession({
@@ -73,7 +84,6 @@ const GbotDesktopView = forwardRef<
             if (!cancelled) setStatus(value)
           },
         })
-        media.current = session
         session.start()
       } catch (cause) {
         session?.stop()
@@ -88,9 +98,8 @@ const GbotDesktopView = forwardRef<
       }
     })()
     return () => {
-      cancelled = true
-      session?.stop()
-      if (media.current === session) media.current = null
+      stop()
+      if (stopMedia.current === stopInput) stopMedia.current = null
       if (ticket) void close(ticket).catch(() => {})
     }
   }, [visible, opened, audio, attempt, workspace_id, session_id, owner, interactive])
