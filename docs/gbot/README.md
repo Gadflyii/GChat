@@ -1658,8 +1658,10 @@ a bundled Node bridge, including exact engine token counts and shared compaction
 This is a development-gate bridge, not a production Node dependency or a second
 compaction policy. The unchanged desktop prompt remains the acceptance task.
 
-Default recommended Gbot brain: released Qwen or Muse SMOL, with at least128K
-context and full native context where VRAM permits. Qwen SMOL is the first gate
+For vision and Gbot, prefer Qwen or Muse INT when it fits the GPU, with at
+least 128K context and full native context where VRAM permits. This guidance
+preserves the user's selected model. The following Qwen-first sequence records
+the earlier acceptance campaign. Qwen SMOL is the first gate
 at262144 context/C2 on S1 PRO GPU0; Muse SMOL is checked only after Qwen passes. Earlier dense
 INT/16384 and intermediate32768/131072 gate sizing are superseded. The Qwen
 artifact is copied once to S1 SSD and verified against the release SHA256SUMS;

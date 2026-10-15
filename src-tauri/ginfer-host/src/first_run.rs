@@ -1310,6 +1310,65 @@ mod tests {
                 .all(|r| r["recommended"] == false)
         );
     }
+
+    #[test]
+    fn vision_recommendations_prefer_fitting_muse_int_or_qwen_and_keep_mix_visible() {
+        let (mut int, _) = package(0);
+        int.name = "Muse INT".into();
+        int.identity.weights_id = "groupwise-int-dflash-q4".into();
+        int.sha256 = "46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66".into();
+        int.bytes = 20_u64 << 30;
+        int.min_vram_mib_per_gpu = 24 * 1024;
+        let mut mix = int.clone();
+        mix.name = "Muse 2-bit mix".into();
+        mix.identity.weights_id = "smol-q2g64-mix-dflash-q4".into();
+        mix.sha256 = "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c".into();
+        mix.bytes = 8_u64 << 30;
+        mix.min_vram_mib_per_gpu = 8 * 1024;
+        let mut qwen = int.clone();
+        qwen.name = "Qwen INT".into();
+        qwen.identity.model_id = "qwen3.8-27b".into();
+        qwen.identity.weights_id = "groupwise-int-dflash2-q4".into();
+        qwen.sha256 = "bcf29abd1598f5666c641da7c59ac28bd999aa98a8d6ba533ae7aa579abd06a7".into();
+        qwen.bytes = 15_u64 << 30;
+        qwen.min_vram_mib_per_gpu = 16 * 1024;
+        // Synthetic capacity thresholds exercise fit policy, not measured Engine requirements.
+        let mut profile =
+            json!({"ram_bytes":128_u64<<30,"gpus":[{"uuid":gpu().uuid,"vram_bytes":32_u64<<30}]});
+        let choices = recommendations(
+            &[mix.clone(), int.clone()],
+            &[gpu()],
+            &[gpu().uuid],
+            &profile,
+            u64::MAX,
+        );
+        assert_eq!(choices.len(), 2);
+        assert_eq!(choices[0]["release_id"], int.sha256);
+        assert_eq!(choices[0]["recommended"], true);
+        assert_eq!(choices[1]["release_id"], mix.sha256);
+        assert_eq!(choices[1]["recommended"], false);
+
+        profile["gpus"][0]["vram_bytes"] = json!(16_u64 << 30);
+        let choices = recommendations(
+            &[mix.clone(), int.clone(), qwen.clone()],
+            &[gpu()],
+            &[gpu().uuid],
+            &profile,
+            u64::MAX,
+        );
+        assert_eq!(choices.len(), 3);
+        assert_eq!(choices[0]["release_id"], qwen.sha256);
+        assert_eq!(choices[0]["recommended"], true);
+        assert_eq!(choices[1]["release_id"], mix.sha256);
+        assert_eq!(choices[1]["recommended"], false);
+        assert_eq!(choices[2]["release_id"], int.sha256);
+        assert_eq!(choices[2]["recommended"], false);
+        assert!(choices[2]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("Below the published per-GPU VRAM requirement"));
+    }
+
     #[test]
     fn group_rejects_duplicates_and_mixed_families() {
         let gpu = |id: &str, sm: &str| Gpu {
