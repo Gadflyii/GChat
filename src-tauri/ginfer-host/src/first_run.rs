@@ -1149,7 +1149,7 @@ mod tests {
                 "options":{"spec":"none", "kv_arena_bytes":1_u64 << 32},
                 "qualification":{"tier":"full-context-tested", "evidence":"synthetic fixture only",
                     "engine_revision":"fixture", "free_bytes_per_gpu":1_u64 << 30,
-                    "full_context_requests":1}
+                    "full_context_requests":3}
             }))
             .unwrap(),
         );
