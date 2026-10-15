@@ -266,6 +266,12 @@ GChat's dark theme. Each bot uses the animated avatar supplied in `/ai/gchat/ava
 light/dark styling and reduced-motion support. Detailed channel layout and the
 guided setup remain separate UI work.
 
+The avatar's **New reply** state reflects newly received assistant text. A
+temporary task or approval fetch failure clears those lists until recovery,
+but preserves reply comparison history so read replies stay read. Disabling
+Gbot or switching services clears that history; the first successful snapshot
+establishes a baseline without announcing old replies.
+
 Each bot retains a separate channel for conversation history, tasks, approvals
 and desktop view; multiple bots keep separate channels and assignments. The
 current functional channel supplies SSH key import, connection controls, saved

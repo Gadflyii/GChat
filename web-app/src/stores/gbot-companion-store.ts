@@ -27,6 +27,7 @@ type CompanionState = {
   focused: string
   greeting: string
   unread: Record<string, boolean>
+  replyBaseline: Record<string, string[]> | null
   snapshot: BotState
   tasks: Task[]
   approvals: Approval[]
@@ -67,6 +68,7 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
   focused: '',
   greeting: '',
   unread: {},
+  replyBaseline: null,
   snapshot: empty,
   tasks: [],
   approvals: [],
@@ -107,6 +109,7 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
       focused: '',
       greeting: '',
       unread: {},
+      replyBaseline: null,
       snapshot: empty,
       tasks: [],
       approvals: [],
@@ -158,12 +161,19 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
       if (get().version !== version) return
       set((s) => {
         const unread = { ...s.unread }
-        if (s.available && s.target === target && !executorError) {
-          for (const bot of snapshot.workspaces) {
-            const previous = new Set(replyKey(s.tasks, bot.id))
-            if (replyKey(tasks, bot.id).some((reply) => !previous.has(reply)))
-              unread[bot.id] = true
+        let replyBaseline = s.replyBaseline
+        if (!executorError) {
+          const next = Object.fromEntries(
+            snapshot.workspaces.map((bot) => [bot.id, replyKey(tasks, bot.id)])
+          )
+          if (s.available && s.target === target && s.replyBaseline) {
+            for (const bot of snapshot.workspaces) {
+              const previous = new Set(s.replyBaseline[bot.id] ?? [])
+              if (next[bot.id].some((reply) => !previous.has(reply)))
+                unread[bot.id] = true
+            }
           }
+          replyBaseline = next
         }
         const selected = snapshot.workspaces.some((b) => b.id === s.selected)
           ? s.selected
@@ -174,6 +184,7 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
           approvals,
           selected,
           unread,
+          replyBaseline,
           available: true,
           target,
           error: '',
