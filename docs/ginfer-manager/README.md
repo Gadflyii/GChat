@@ -53,17 +53,29 @@ supersedes the September one-instance-per-GPU-group decision.
 
 Focused Host process/HTTP placement and Flash receipt tests, all 39 Manager DOM
 cases, strict Host/Manager Clippy and full `make verify` pass on this candidate.
-The full gate passes 2,309 root tests, 114 extension tests and 849 Rust tests
-(6 JavaScript skips and 25 Rust ignores). The two old Host assertions
-about spawn argument order and occupied catalog groups were corrected in this
-candidate. Native acceptance is pending. Local CPUs 16–31 are booked to
-16:30Z; S1 PRO GPU 0 / CPUs 32–63 are booked 13:45–16:45Z. The acceptance is four
-Qwen INT C4 instances started from Manager on that single PRO, all Ready, then
-one concurrent GBench C4 per instance. Codex 1 owns the Engine quote prerequisite.
-Reuse the shared Rust build cache under its lock and existing model artifacts;
-no model copy, new harness, Windows build, signing or publication is allocated.
-Keep the resulting receipts and short summary under `out/`; retire only this
-candidate's temporary native state/processes after acceptance.
+The full gate passes 2,309 root tests, 114 extension tests and 848 Rust tests
+(6 JavaScript skips and 25 Rust ignores). The two stale Host assertions about
+spawn argument order and occupied catalog groups are fixed in `e0bd23014`.
+The Ready compatibility follow-up uses Engine `019ad0c92` without its removed flag.
+
+Native acceptance passes on S1 PRO GPU 0 using the actual Manager Start form:
+four independent Qwen 27B INT instances, all Ready, ports 40317 / 45371 / 33107 /
+43993, each with context 8181, C4, INT8 KV, DFlash fixed K7 and explicit KV
+1,564,135,168 bytes. Four concurrent native GBench C4 requests through the Host
+proxy each use prompt 2048, output 500, one warmup and one measured round.
+All 16 phase waves pass: 32,000 output token IDs have the expected lengths and
+match exactly across corresponding lanes of all four instances. HTTP execution
+overlaps by 26.82 seconds and measured warm generation by 3.61 seconds. All four
+retain their original Ready sessions with zero active requests afterwards, then
+stop normally through Manager; no engine children remain.
+
+Evidence: `out/multi-instance-manager-20261015/native-validation.json`, native
+Start/Ready/Stop receipts and the retained `s1/` native v2 reports; full gate log
+`out/multi-instance-manager-20261015-placed-ready-build-verify.log`.
+This is the requested four-server C4 shared-GPU acceptance with explicit KV,
+not the standalone C8 Max Perf scoreboard or a GChat leaderboard submission.
+No speed comparison or Flash native acceptance is claimed. Existing artifacts,
+the shared locked Rust cache and C3's handed-over Engine cache were reused.
 
 ## Shared pool capacity
 
@@ -95,53 +107,17 @@ Candidate `/ai/gchat-worktrees/draft-width-setup-4884`, branch `feat/gchat-draft
 Native Host gate PASS: S2 CMP 170HX, saved TP1/C8/8181/INT8 deployment, using merged capacity fix `43d524da2` (`7d80cd51f`). The unchanged native mixed-real-text corpus completed in 434.74 seconds; Host persisted the calibration record and completed job with no child PID or error. The isolated Host stopped normally, guards returned and its test root retired. Evidence: `native-result.json` and `native-cleanup.json` under the result folder above. Next: review and merge this candidate. Windows normal/cancel/Host-loss lifetime cases remain owed to the release gate.
 No new dependencies, model copies, native Windows build, release or publication.
 
-## Flash-Next and CMP 170HX settled startup
+## Ready waits for completed placement
 
-Current OI-072 source follow-up: Flash-Next deployments wait for residency
-fill before Ready only when every selected GPU has known VRAM of at most
-32 GiB. Larger classes, including the 96 GiB PRO, retain progressive Ready
-until the Engine fill-throughput fix lands. The measured 24 GiB 4090 Ready
-changed from 21.9 to 25.0 s; the 96 GiB PRO changed from 42.9 to 66.5 s,
-exceeding its 60 s Ready gate. These coordinator measurements invalidate the
-previous all-Flash default; this change makes no new performance claim.
-
-The shared Host resolves this policy from the artifact identity and selected
-GPUs' memory, covering custom, catalog and restored launches. GBench Max Perf
-advertises and applies the same option per GPU group. Explicit custom waits and
-the selected-CMP rule remain supported. Context, concurrency, memory sizing,
-speculation and the Engine default remain unchanged. This startup policy does
-not qualify the current release Engine/artifact matrix.
-
-Accepted source tip `414caecec`, merged to main as `f3d77b8f0`. Acceptance:
-the three existing focused Host/Max Perf cases plus one large-VRAM case cover
-Flash weight classes, restored requests, argv, selected/unselected CMP, and
-per-GPU benchmark options. Strict Host Clippy checks the affected crate.
-No GPU, Windows build or physical qualification. Evidence is retained under
-`/ai/gchat/out/flash-settled-profile-20261014/`; the source candidate has been
-retired, with no model copies or separate build allocation. All four focused
-cases passed again after merging main `4884a214a` (0.47 s total fixture time),
-along with strict Host Clippy (5.22 s). The composed Host retains the LAN Gbot
-control grant and the per-GPU residency policy; both ADRs remain indexed.
-Current Engine/artifact physical qualification remains owed to the scheduled release gate.
-
-Accepted `GCHAT-CMP-SETTLED-READY` (`bfd42e530`): the shared Host generates
-`--wait-for-residency-fill` when the selected GPU group includes a CMP 170HX,
-including the Host's PCI alias for `NVIDIA Graphics Device`. GChat, Manager,
-the CLI and restored deployments use this same preparation path. Other GPUs with dense models
-retain progressive Ready by default. Effective launch options report the wait;
-saved requests are resolved against the selected GPUs on every launch.
-
-Engine authority: GInfer `018e7b565`,
-`docs/cli.md#settled-residency-before-ready`. Its existing warmup timeout bounds
-the wait; model settings, memory limits and the universal Engine default stay
-unchanged. Acceptance: one focused Host preparation/argv case covers named and
-aliased CMP, another selected card with an unselected CMP, and restored requests.
-The focused Host preparation/argv fixture passed on Linux (1/1, 0.06 s), including
-serialized effective options and the default for omitted saved fields. Evidence:
-`out/cmp-residency-fill-20261012/profile.log`. This is source verification; no
-physical startup or throughput claim is made.
-No GPU, native Windows build, release or publication. The candidate reuses the
-existing Host build cache; no model/artifact copies or disposable guest are needed.
+GInfer `019ad0c92` owns settled Ready on every supported card. Host no longer
+injects the removed `--wait-for-residency-fill` flag or chooses a startup policy
+from GPU names or VRAM size. Custom, catalog, restored and GBench Max Perf
+launches use the Engine default. An explicit `progressive_ready` launch option
+maps to the Engine's `--progressive-ready` opt-in; omission waits for placement.
+This supersedes the October 14 small-VRAM Flash and earlier selected-CMP rules.
+Source checks cover default and explicit opt-in argv through restored launches
+for dense INT and all Flash weight classes on small, CMP and PRO fixtures.
+Engine physical qualification remains owned by the Engine lane.
 
 ## Accepted native credential cleanup warning — October 15
 
