@@ -1490,7 +1490,7 @@ mod tests {
         assert_eq!(setup.status().await[0].stage, SetupStage::CheckingPc);
         assert_eq!(
             setup.status().await[0].issue.as_ref().unwrap().code,
-            "setup_resume"
+            "computer_reconnecting"
         );
         let retry = setup
             .start(StartSetup {

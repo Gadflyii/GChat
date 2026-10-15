@@ -491,7 +491,7 @@ impl server::Handler for Peer {
                         }
                         "notifications/initialized" => continue,
                         "tools/list" => serde_json::json!({"tools":
-                            (["start_session", "get_window_state", "invoke_menu", "set_value", "click", "type_text", "press_key", "hotkey"].into_iter().map(|name|
+                            (["start_session", "get_window_state", "get_desktop_state", "invoke_menu", "set_value", "click", "type_text", "press_key", "hotkey"].into_iter().map(|name|
                                 serde_json::json!({"name":name,"description":"Pinned tool","inputSchema":{"type":"object","properties":{
                                     "session":{"type":"string"},"pid":{"type":"integer"},"window_id":{"type":"integer"},
                                     "element_token":{"type":"string"},"text":{"type":"string"},"key":{"type":"string"},"keys":{"type":"array","items":{"type":"string"}}
@@ -535,7 +535,11 @@ impl server::Handler for Peer {
                                     session.close(channel)?;
                                     return Ok(());
                                 }
-                                serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}],"structuredContent":{"pid":42,"window_id":7,"window_bounds":{"x":100,"y":200,"width":640,"height":480},"elements":[{"element_token":"fresh","frame":{"x":120,"y":230,"w":40,"h":20},"enabled":true}]}})
+                                if request["params"]["name"] == "get_desktop_state" {
+                                    serde_json::json!({"isError":false,"content":[{"type":"image","mimeType":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL1sAAAAASUVORK5CYII="}],"structuredContent":{"screenshot_width":1,"screenshot_height":1,"screen_width":1920,"screen_height":1080}})
+                                } else {
+                                    serde_json::json!({"isError":false,"content":[{"type":"text","text":"accessible result"}],"structuredContent":{"pid":42,"window_id":7,"window_bounds":{"x":100,"y":200,"width":640,"height":480},"elements":[{"element_token":"fresh","frame":{"x":120,"y":230,"w":40,"h":20},"enabled":true}]}})
+                                }
                             }
                         }
                         _ => panic!("unexpected MCP method"),
@@ -1507,6 +1511,156 @@ async fn interactive_media_reconnect_preserves_human_control() {
 }
 
 #[tokio::test]
+#[cfg(target_os = "linux")]
+async fn hand_back_recovers_paused_control_while_setup_is_incomplete() {
+    use gbot_service::kvm_setup::{SetupIssue, SetupRecord, SetupStage};
+    use gbot_service::service::SessionControlState;
+
+    timeout(Duration::from_secs(30), async {
+        let fixture = Fixture::new().await;
+        let state_path = fixture.directory.path().join("service.json");
+        let service = Arc::new(Service::open(&state_path).await.unwrap());
+        let identity = fixture.guest.hello.identity;
+        let runtime = fixture
+            .runtime_for_bot_pc(
+                service.clone(),
+                BotPc::LocalVm {
+                    host_id: service.snapshot().await.service_id,
+                    vm_id: identity.workspace_id.as_uuid().to_string(),
+                    hypervisor: Hypervisor::Kvm,
+                },
+            )
+            .await;
+        runtime.connect(identity).await.unwrap();
+        let owner = Uuid::new_v4();
+        runtime.take_over(identity, owner).await.unwrap();
+        runtime.close().await.unwrap();
+        drop(runtime);
+        drop(service);
+
+        let service = Arc::new(Service::open(&state_path).await.unwrap());
+        let paused = service.snapshot().await.controls[0].clone();
+        assert_eq!(paused.identity, identity);
+        assert_eq!(paused.state, SessionControlState::Paused);
+        assert_eq!(paused.owner, Some(owner));
+        let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), fixture.vault.clone()));
+        // Restore the transport before loading the incomplete setup gate, as the
+        // setup owner's private connection path does during readiness checks.
+        runtime.connect(identity).await.unwrap();
+        let setup_root = fixture.directory.path().join("computer");
+        tokio::fs::create_dir_all(&setup_root).await.unwrap();
+        let record = SetupRecord {
+            id: identity.workspace_id,
+            name: "Paused saved computer".into(),
+            service_id: service.snapshot().await.service_id,
+            credential_ref: fixture.connection.credential_ref,
+            pending_model_credential: None,
+            identity,
+            stage: SetupStage::TestingDesktop,
+            resume_on_start: false,
+            issue: Some(SetupIssue {
+                code: "guest_not_ready".into(),
+                message: "Readiness write failed: bot dispatch is paused for human control".into(),
+                next_action: "Hand back, then resume setup.".into(),
+            }),
+            spec: None,
+            pinned_host_key: Some(fixture.connection.pinned_host_key.clone()),
+        };
+        tokio::fs::write(
+            setup_root.join("kvm-setups.json"),
+            serde_json::to_vec(&vec![record.clone()]).unwrap(),
+        )
+        .await
+        .unwrap();
+        runtime.configure_kvm_setup(setup_root).await.unwrap();
+        let setup = runtime.kvm_setup().unwrap();
+        let setup_before = serde_json::to_value(setup.status().await).unwrap();
+        assert_eq!(setup_before, serde_json::to_value(vec![record]).unwrap());
+
+        assert!(matches!(
+            runtime.hand_back(identity, Uuid::new_v4()).await,
+            Err(WorkspaceError::State(ServiceError::ControlOwner))
+        ));
+        assert!(matches!(
+            runtime
+                .hand_back(
+                    SessionIdentity {
+                        session_id: SessionId::new(),
+                        ..identity
+                    },
+                    owner,
+                )
+                .await,
+            Err(WorkspaceError::State(ServiceError::SessionMismatch))
+        ));
+        assert_eq!(service.snapshot().await.controls, vec![paused]);
+        assert!(service.snapshot().await.operations.is_empty());
+        assert!(fixture.guest.desktop_calls.lock().unwrap().is_empty());
+        let write = fixture.request(GuestOperationKind::Write {
+            path: fixture.path("must-not-dispatch.txt"),
+            offset: 0,
+            data: b"not yet ready".to_vec(),
+            truncate: true,
+        });
+        assert!(matches!(
+            runtime.request(write.clone()).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+
+        let returned = runtime.hand_back(identity, owner).await.unwrap();
+        assert_eq!(returned.control.identity, identity);
+        assert_eq!(returned.control.state, SessionControlState::Bot);
+        assert_eq!(returned.control.owner, None);
+        assert!(matches!(
+            &returned.observation.outcome,
+            GuestOutcome::Success { result: GuestResult::Desktop { result } }
+                if result["content"][0]["type"] == "image"
+                    && result["structuredContent"]["screen_width"] == 1920
+                    && result["structuredContent"]["screen_height"] == 1080
+        ));
+        let state = service.snapshot().await;
+        assert_eq!(state.controls, vec![returned.control]);
+        assert_eq!(state.operations.len(), 1);
+        assert_eq!(state.operations[0].id, returned.observation.operation_id);
+        assert_eq!(state.operations[0].identity, identity);
+        assert_eq!(state.operations[0].capability, GuestCapability::DesktopCapture);
+        assert_eq!(state.operations[0].state, OperationState::Completed);
+        assert_eq!(
+            fixture.guest.desktop_calls.lock().unwrap().as_slice(),
+            &[serde_json::json!({"name":"get_desktop_state","arguments":{"session":identity.session_id.as_uuid().to_string()}})]
+        );
+        assert_eq!(
+            fixture.guest.dispatches.lock().unwrap()[&returned.observation.operation_id],
+            1
+        );
+        assert_eq!(
+            runtime.resume_observation(identity).await,
+            Some(returned.observation)
+        );
+        assert!(runtime.resume_observation(identity).await.is_none());
+
+        // Hand back releases control only; setup still needs its explicit Resume
+        // and successful readiness checks before ordinary work can be admitted.
+        assert_eq!(serde_json::to_value(setup.status().await).unwrap(), setup_before);
+        assert!(matches!(
+            runtime.request(write.clone()).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        assert!(matches!(
+            runtime.desktop_tools(identity).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        assert!(!fixture.guest.dispatches.lock().unwrap().contains_key(&write.operation_id));
+        assert!(!fixture.directory.path().join("must-not-dispatch.txt").exists());
+        assert_eq!(service.snapshot().await.operations, state.operations);
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .expect("bounded paused setup hand-back case timed out");
+}
+
+#[tokio::test]
 async fn vault_auth_file_command_keepalive_and_view_reconnect() {
     timeout(Duration::from_secs(30), async {
         let fixture = Fixture::new().await;
@@ -1630,7 +1784,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
             .iter()
             .all(|op| op.state == OperationState::Completed));
         runtime.ping(expected).await.unwrap();
-        assert_eq!(runtime.desktop_tools(expected).await.unwrap().len(), 5);
+        assert_eq!(runtime.desktop_tools(expected).await.unwrap().len(), 6);
         let desktop = fixture.request(GuestOperationKind::Desktop { tool:"get_window_state".into(),arguments:serde_json::json!({"session":"model-supplied-untrusted"}) });
         assert!(matches!(success(runtime.request(desktop).await.unwrap()),GuestResult::Desktop { result } if result["isError"] == false));
 
@@ -1679,7 +1833,7 @@ async fn vault_auth_file_command_keepalive_and_view_reconnect() {
         let response = client.request(post("/v1/desktop/tools", serde_json::to_vec(&expected).unwrap())).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let tools: serde_json::Value = serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
-        assert_eq!(tools.as_array().unwrap().len(), 5);
+        assert_eq!(tools.as_array().unwrap().len(), 6);
         let command = fixture.script("http.sh", "printf http\n").await;
         let response = client
             .request(post(

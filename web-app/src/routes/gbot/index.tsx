@@ -269,6 +269,29 @@ function GbotPage() {
   const setupBlocked = Boolean(
     isKvm && (setups === undefined || (setup && setup.stage !== 'ready'))
   )
+  const canHandBackDuringSetup = Boolean(
+    setupBlocked &&
+      setup &&
+      identity &&
+      setup.identity?.workspace_id === identity.workspace_id &&
+      setup.identity.session_id === identity.session_id &&
+      control?.identity.workspace_id === identity.workspace_id &&
+      control.identity.session_id === identity.session_id &&
+      (control.state === 'human' || control.state === 'paused') &&
+      control.owner === owner
+  )
+  const changeControl = () => {
+    if (!identity || (setupBlocked && !canHandBackDuringSetup)) return
+    void perform(() => {
+      const returning =
+        control?.state === 'human' || control?.state === 'paused'
+      if (returning) desktop.current?.stopInput()
+      return gbot(returning ? 'control/hand-back' : 'control/take-over', {
+        identity,
+        owner,
+      })
+    })
+  }
   const botHasControl = !control || control.state === 'bot'
   const ready = Boolean(
     identity &&
@@ -653,6 +676,18 @@ function GbotPage() {
                         Resume setup
                       </Button>
                     )}
+                    {canHandBackDuringSetup && (
+                      <div className="space-y-2">
+                        <p>Hand back control, then resume the saved setup.</p>
+                        <Button
+                          variant="outline"
+                          disabled={busy}
+                          onClick={changeControl}
+                        >
+                          Hand back
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
                 <fieldset disabled={setupBlocked} className="min-w-0 space-y-4">
@@ -711,26 +746,13 @@ function GbotPage() {
                     >
                       {identity ? 'Disconnect' : 'Connect'}
                     </Button>
-                    {identity && (
+                    {identity && !canHandBackDuringSetup && (
                       <Button
                         variant="outline"
                         disabled={
                           busy || (!!control?.owner && control.owner !== owner)
                         }
-                        onClick={() =>
-                          void perform(() => {
-                            const returning =
-                              control?.state === 'human' ||
-                              control?.state === 'paused'
-                            if (returning) desktop.current?.stopInput()
-                            return gbot(
-                              returning
-                                ? 'control/hand-back'
-                                : 'control/take-over',
-                              { identity, owner }
-                            )
-                          })
-                        }
+                        onClick={changeControl}
                       >
                         {control?.state === 'human' ||
                         control?.state === 'paused'
