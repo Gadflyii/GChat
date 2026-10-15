@@ -27,14 +27,17 @@ outputs disabled, at most six native build jobs, and retained protoc29.3;
 no shared Cargo cache writes or installs.
 No native target is allocated yet. Focused frontend tests finished
 2026-10-15 23:34 UTC; CPU819 released early, no C7 lock or job remains. Full gate
-may use local CPU8–17 booked 00:30–01:30 UTC after C2 actual release, or an explicitly
-cleared earlier S1 gap. Local policy requires one compiler at a time; shared
+has fallback local CPU8–17 booked 01:00–01:30 UTC after C2 actual release.
+C7 released the earlier 00:30–01:00 reservation for Gchat 3 to use six build
+jobs; C7 may book the returned tail after its actual terminal/release.
+Local policy requires one compiler at a time; shared
 compile locks apply to S1 only. C7 cedes first priority to the prior hard-deadline
 Gchat 3 gate (12–20 minutes forecast); C7 follows, then Gchat 2. C2 confirms this
-serial queue; final Gchat 2 acknowledgment is pending. C7 holds the compiler
+serial queue, and Gchat 2 acknowledges the same order. C7 holds the compiler
 lock for at most 30 minutes with waiters. No execution follows a clock time
 alone, and no compilers run during booked GPU timing quiet.
-Next unresolved action: full `make verify`, retain its outcome, then push merge-ready.
+Next unresolved action: obtain C2's actual release and Gchat 3's actual terminal,
+then run full `make verify`, retain its outcome, and push merge-ready.
 
 
 The Gbot menu retains settings, setup and controls. Bot avatars above Work open
